@@ -1,28 +1,23 @@
-# Werewolves of Miller's Hollow - Core Game Logic
+# Werewolves of Miller's Hollow - Moderator Helper
 
-## Overview
+A mobile app that assists a human moderator running a physical game of "The Werewolves of Miller's Hollow." The app tracks game state, guides the moderator through phases, and prompts for input.
 
-This repository contains the .NET class library (`Werewolves.Core`) responsible for implementing the core game logic, state management, and rules engine for the "The Werewolves of Miller's Hollow" board game, specifically tailored for use in a moderator helper application.
+## Repository Structure
 
-The primary goal is to provide a robust, maintainable, and efficient backend logic layer that is completely decoupled from any specific user interface (UI). This library can then be interacted with by various front-end applications (MAUI/Blazor apps, or through Web APIs) to provide a helpful tool for game moderators.
+| Project | Description |
+|---------|-------------|
+| `Werewolves.Core.StateModels` | State representation, data models, and UI communication contract |
+| `Werewolves.Core.GameLogic` | Rules engine, game flow management, and role implementations |
+| `Werewolves.Core.Tests` | Integration and unit tests for the core libraries |
+| `Werewolves.Client` | .NET MAUI Blazor Hybrid mobile app (Android/iOS) |
 
-## Initial Constraints & Goals
+## Architecture
 
-This project was initiated with the following key constraints and goals:
+- **Core** (`Werewolves.Core/`): Event-sourced game engine with a kernel-facade pattern. Completely UI-agnostic — communicates through `ModeratorInstruction` and `ModeratorResponse` data contracts.
+- **Client** (`Werewolves.Client/`): Thin "dumb terminal" that renders state from Core and collects moderator input. Uses MudBlazor with a Model-View-Adapter pattern.
 
-1.  **Efficiency & Maintainability:** Prioritize clean, understandable code that is easy to maintain and extend.
-2.  **Minimal Complexity:** Implement the required features with the least necessary complexity.
-3.  **Moderator Helper:** The core logic is designed to *assist* a human moderator, not replace them. It relies on moderator input to update the game state.
-4.  **UI Agnostic:** The `Werewolves.Core` library has no dependencies on specific UI frameworks (like ASP.NET, Blazor, MAUI). Communication happens through defined data contracts (`ModeratorInstruction`, `ModeratorInput`).
-5.  **Scope:** Initially focus on the base game roles and a specific subset of New Moon event cards as detailed during the planning phase. The "Village" (Buildings) expansion and other New Moon content are explicitly excluded *for now*.
+## Scope
 
-## Supported Features (Initial Scope)
+**Included:** Base game roles (Villager, Seer, Witch, Werewolf, Hunter, Cupid, Fox, Bear Tamer, Knight, etc.) and 19 specified New Moon event cards.
 
-*   **Base Game Roles:** As described in the rulebook pages used for planning (Simple Villager, Seer, Witch, Werewolf, Hunter, Cupid, etc., including roles like Fox, Bear Tamer, Knight).
-*   **New Moon Events:** Includes the specific list of 19 event cards provided during planning (e.g., Full Moon Rising, Somnambulism, Enthusiasm, Backfire, Nightmare, Executioner, Spiritualism, Burial, etc.).
-
-## Excluded Features (Initial Scope)
-
-*   The "Village" expansion (Buildings, associated roles like Pyromaniac/Scandalmonger).
-*   Any New Moon Event cards *not* explicitly included in the planning phase requirements.
-*   Advanced variants not directly tied to the included Roles/Events.
+**Excluded:** Village expansion (Buildings), unspecified New Moon events, advanced variants.
