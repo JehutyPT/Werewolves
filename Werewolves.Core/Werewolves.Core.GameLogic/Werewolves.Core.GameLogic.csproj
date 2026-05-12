@@ -1,0 +1,34 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- GitHub Packages requires a Repository URL to associate the package -->
+    <RepositoryUrl>https://github.com/bicheichane/Werewolves</RepositoryUrl>
+    <PackageId>bicheichane.Werewolves.Core.GameLogic</PackageId>
+    <Version>1.0</Version>
+    <!-- Namespace convention matters here -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>Werewolves.Core.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+
+  <ItemGroup>
+    <ProjectReference Include="..\Werewolves.Core.StateModels\Werewolves.Core.StateModels.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Roles\SecondaryRoles\" />
+  </ItemGroup>
+
+  <!-- Add MinVer for automatic versioning based on Git Tags -->
+  <ItemGroup>
+    <PackageReference Include="MinVer" Version="5.0.0" PrivateAssets="All" />
+  </ItemGroup>
+
+</Project>

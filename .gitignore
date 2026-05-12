@@ -1,15 +1,12 @@
-
 **/.vs/
-
 **/obj/
 **/bin/
-
+*.csproj.user
 .vscode/
 
-xml
-
-=0.2.6
-
+# Tool-specific
 cline_mcp_settings.json
-
 mcp_demo_analysis.md
+
+# MAUI
+Werewolves.Client/nuget.config
