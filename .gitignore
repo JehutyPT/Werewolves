@@ -9,5 +9,13 @@
 cline_mcp_settings.json
 mcp_demo_analysis.md
 
+# Node
+node_modules/
+package.json
+package-lock.json
+
+# Sandcastle
+.sandcastle/
+
 # MAUI
 Werewolves.Client/nuget.config
