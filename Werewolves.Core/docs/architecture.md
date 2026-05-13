@@ -634,6 +634,72 @@ The `GameFlowManager` implements automatic victory condition checking to ensure 
     *   Event-specific win conditions 
     *   Complex role interactions (Charmed players, infected players, etc.) 
 
+## Test Infrastructure
+
+All tests are integration tests that drive the full `GameService` → `GameFlowManager` → `GameSession` pipeline. The test infrastructure provides fluent helpers to reduce boilerplate when constructing games and advancing through phases.
+
+### `DiagnosticTestBase` (Base Class)
+
+Abstract base class for test classes. Provides builder creation and automatic diagnostic dumps on failure.
+
+*   `CreateBuilder()` (GameTestBuilder): Creates a `GameTestBuilder` with diagnostic output enabled.
+*   `MarkTestCompleted()`: Call at the end of a passing test to suppress the diagnostic dump.
+*   `Dispose()`: Automatically dumps the full state change log when a test fails (via xUnit's `IDisposable`).
+
+### `GameTestBuilder` (Fluent Builder)
+
+Fluent API for constructing game scenarios and advancing through phases.
+
+*   **Game Setup:**
+    *   `Create(output?)` (static): Factory method. Injects `DiagnosticStateObserver` when output is provided.
+    *   `WithPlayers(int count)` / `WithPlayers(params string[] names)`: Adds players with auto-generated or specific names in Seating Order.
+    *   `WithRoles(params MainRoleType[] roles)`: Sets the Roles for the game.
+    *   `WithSimpleGame(playerCount, werewolfCount, includeSeer)`: Shorthand for a game with Werewolves, optional Seer, and Simple Villagers.
+    *   `StartGame()` → `StartGameConfirmationInstruction`: Starts the game.
+    *   `ConfirmGameStart()` → `ProcessResult`: Confirms start, transitions to Night.
+
+*   **Game State:**
+    *   `GetGameState()` (IGameSession?): Current game state.
+    *   `GetCurrentInstruction()` (ModeratorInstruction?): Current pending instruction.
+    *   `GameId` (Guid), `PlayerNames` (IReadOnlyList\<string\>), `Roles` (IReadOnlyList\<MainRoleType\>).
+    *   `GameService`: Underlying service for advanced scenarios.
+    *   `Process(ModeratorResponse)` → `ProcessResult`: Processes any Moderator Response directly.
+
+*   **Night Phase Helpers:**
+    *   `ConfirmNightStart()` → `ProcessResult`: Confirms the "village goes to sleep" instruction.
+    *   `CompleteWerewolfNightAction(werewolfIds, victimId)` → `ProcessResult`: Full Werewolf sequence — identify → select victim → confirm sleep.
+    *   `CompleteWerewolfNightActionSubsequentNight(victimId)` → `ProcessResult`: Night 2+ Werewolf sequence — wakeup → select victim → confirm sleep (no identification).
+    *   `CompleteSeerNightAction(seerId, targetId)` → `ProcessResult`: Full Seer sequence — identify → select target → confirm sleep.
+    *   `CompleteNightPhase(NightActionInputs)` → `ProcessResult`: Completes an entire Night Phase by iterating through Roles in hook dispatch order. Skips Roles with no input provided.
+    *   `CompleteNightPhase(werewolfIds, victimId, seerId?, seerTargetId?)` → `ProcessResult`: Convenience overload with individual parameters.
+
+*   **Dawn Phase Helpers:**
+    *   `CompleteDawnPhase(roleAssignments?)` → `ProcessResult`: Completes the Dawn Phase — calculates victims, announces Eliminations, handles Role assignment (defaults to Simple Villager if not specified), transitions to Day.
+
+*   **Day Phase Helpers:**
+    *   `CompleteDayPhaseWithLynch(lynchTargetId)` → `ProcessResult`: Completes the Day Phase with a Vote resulting in Elimination — debate → vote → role assignment → transition to Night.
+    *   `CompleteDayPhaseWithTie()` → `ProcessResult`: Completes the Day Phase with a tied Vote (no Elimination) — debate → vote → transition to Night.
+
+*   **Extending for New Roles:** When implementing a new Role, add a `Complete[Role]NightAction` helper that handles the Role's full instruction/response cycle (identify → act → sleep). Then integrate it into `CompleteNightPhase` so it's called in the correct dispatch order.
+
+**`NightActionInputs`:** Data class passed to `CompleteNightPhase` with optional fields for each Role's inputs (`WerewolfIds`, `WerewolfVictimId`, `SeerId`, `SeerTargetId`). Extend this class with new fields as Roles are added.
+
+### `InstructionAssert` (Assertion Helpers)
+
+Static helpers for asserting Moderator Instruction types in tests.
+
+*   `ExpectType<TInstruction>(instruction, context?)` → `TInstruction`: Asserts the instruction is of the expected type and returns it cast. Throws with context message on mismatch.
+*   `ExpectSuccessWithType<TInstruction>(result, context?)` → `TInstruction`: Asserts the `ProcessResult` is successful and the instruction is of the expected type.
+*   `AssertType<TInstruction>(instruction, context?)`: Type assertion without returning the cast value.
+
+### `ResponseFactory` (Player Lookup)
+
+Static helpers for finding Players in test scenarios.
+
+*   `GetPlayer(session, index)` / `GetPlayer(session, name)` → `IPlayer`: Lookup by index or name.
+*   `GetPlayerByRole(session, role)` → `IPlayer?`: First Player with a specific Role.
+*   `GetPlayersByRole(session, role)` → `IEnumerable<IPlayer>`: All Players with a specific Role.
+
 ### Diagnostic State Observation
 
 For integration testing, an optional `IStateChangeObserver` can be injected into `GameSessionKernel` at construction time. This observer receives callbacks for all state mutations, enabling tests to capture a complete timeline of changes.
@@ -647,29 +713,46 @@ For integration testing, an optional `IStateChangeObserver` can be injected into
 - Pending instruction updates (`OnPendingInstructionChanged`)
 - Game log entry applications (`OnLogEntryApplied`)
 
-**Test Integration:**
-- `DiagnosticStateObserver` captures all state changes to a timestamped log
-- `GameTestBuilder.Create(output)` automatically injects the observer when an `ITestOutputHelper` is provided
-- `DiagnosticTestBase` automatically dumps the state change log when a test fails (via `IDisposable`)
-
 **Production Overhead:** Zero. The observer is null by default; null-conditional calls (`?.`) have negligible cost.
 
-**Usage Example:**
+**`DiagnosticStateObserver`:**
+*   `SetSession(session)`: Sets the session reference for resolving Player GUIDs to names in log output.
+*   `Log` (IReadOnlyList\<string\>): Raw log entries.
+*   `GetFormattedLog()` (string): Formatted table view of all state changes with type indicators.
+*   `Clear()`: Clears log entries.
+
+### Usage Example
+
 ```csharp
 public class MyTests : DiagnosticTestBase
 {
     public MyTests(ITestOutputHelper output) : base(output) { }
 
     [Fact]
-    public void MyTest()
+    public void Werewolf_attack_eliminates_victim()
     {
         var builder = CreateBuilder()
-            .WithSimpleGame(4, werewolfCount: 1);
+            .WithSimpleGame(5, werewolfCount: 1, includeSeer: true);
         builder.StartGame();
-        
-        // Test logic...
-        
-        MarkTestCompleted(); // Suppresses diagnostic dump on success
+        builder.ConfirmGameStart();
+
+        var state = builder.GetGameState()!;
+        var werewolf = ResponseFactory.GetPlayerByRole(state, MainRoleType.SimpleWerewolf)!;
+        var seer = ResponseFactory.GetPlayerByRole(state, MainRoleType.Seer)!;
+        var victim = ResponseFactory.GetPlayersByRole(state, MainRoleType.SimpleVillager).First();
+
+        builder.CompleteNightPhase(
+            werewolfIds: [werewolf.Id],
+            victimId: victim.Id,
+            seerId: seer.Id,
+            seerTargetId: victim.Id);
+
+        builder.CompleteDawnPhase();
+
+        var updatedState = builder.GetGameState()!;
+        Assert.Equal(PlayerHealth.Dead, updatedState.GetPlayerState(victim.Id).Health);
+
+        MarkTestCompleted();
     }
 }
 ```
