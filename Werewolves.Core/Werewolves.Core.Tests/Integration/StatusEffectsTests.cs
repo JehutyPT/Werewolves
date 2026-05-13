@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
+using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.Tests.Helpers;
 using Xunit;
 using Xunit.Abstractions;
@@ -217,10 +218,10 @@ public class StatusEffectsTests : DiagnosticTestBase
     }
 
     /// <summary>
-    /// SE-012: StatusEffectLogEntry with WildChildChanged also changes role to SimpleWerewolf.
+    /// SE-012: StatusEffectLogEntry with WildChildChanged only applies the status effect.
     /// </summary>
     [Fact]
-    public void StatusEffectLogEntry_WildChildChanged_AlsoChangesRole()
+    public void StatusEffectLogEntry_WildChildChanged_OnlyAppliesEffect()
     {
         // Arrange
         var playerId = Guid.NewGuid();
@@ -242,7 +243,102 @@ public class StatusEffectsTests : DiagnosticTestBase
         // Assert
         var state = mutator.GetDerivedStates()[playerId];
         state.HasStatusEffect(StatusEffectTypes.WildChildChanged).Should().BeTrue();
-        state.MainRole.Should().Be(MainRoleType.SimpleWerewolf);
+        state.MainRole.Should().Be(MainRoleType.WildChild);
+
+        MarkTestCompleted();
+    }
+
+    /// <summary>
+    /// SE-012b: Wild Child transformation is composed by the listener as separate log entries.
+    /// </summary>
+    [Fact]
+    public void WildChildModelEliminated_AppliesStatusEffectAndAssignsWerewolfRole()
+    {
+        // Arrange
+        var builder = CreateBuilder()
+            .WithPlayers("Wild Child", "Role Model", "Werewolf", "Villager A", "Villager B", "Villager C")
+            .WithRoles(
+                MainRoleType.WildChild,
+                MainRoleType.SimpleWerewolf,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager);
+
+        builder.StartGame();
+        builder.ConfirmGameStart();
+        builder.ConfirmNightStart();
+
+        var players = builder.GetGameState()!.GetPlayers().ToList();
+        var wildChild = players[0];
+        var roleModel = players[1];
+        var werewolf = players[2];
+
+        var wildChildIdentifyInstruction = InstructionAssert.ExpectType<SelectPlayersInstruction>(
+            builder.GetCurrentInstruction(),
+            "Wild Child identification");
+        var afterWildChildIdentify = builder.Process(wildChildIdentifyInstruction.CreateResponse([wildChild.Id]));
+
+        var modelSelectionInstruction = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+            afterWildChildIdentify,
+            "Wild Child model selection");
+        modelSelectionInstruction.SelectablePlayerIds.Should().NotContain(wildChild.Id);
+        var afterModelSelection = builder.Process(modelSelectionInstruction.CreateResponse([roleModel.Id]));
+
+        var wildChildSleepInstruction = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+            afterModelSelection,
+            "Wild Child sleep confirmation");
+        var afterWildChildSleep = builder.Process(wildChildSleepInstruction.CreateResponse(true));
+
+        var werewolfIdentifyInstruction = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+            afterWildChildSleep,
+            "Werewolf identification");
+        var afterWerewolfIdentify = builder.Process(werewolfIdentifyInstruction.CreateResponse([werewolf.Id]));
+
+        var victimSelectionInstruction = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+            afterWerewolfIdentify,
+            "Werewolf victim selection");
+        var afterVictimSelection = builder.Process(victimSelectionInstruction.CreateResponse([roleModel.Id]));
+
+        var werewolfSleepInstruction = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+            afterVictimSelection,
+            "Werewolf sleep confirmation");
+        var afterWerewolfSleep = builder.Process(werewolfSleepInstruction.CreateResponse(true));
+
+        var nightEndInstruction = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+            afterWerewolfSleep,
+            "Night end confirmation");
+        var afterNightEnd = builder.Process(nightEndInstruction.CreateResponse(true));
+
+        var roleRevealInstruction = InstructionAssert.ExpectSuccessWithType<AssignRolesInstruction>(
+            afterNightEnd,
+            "role reveal for eliminated model");
+
+        // Act
+        builder.Process(roleRevealInstruction.CreateResponse(new Dictionary<Guid, MainRoleType>
+        {
+            [roleModel.Id] = MainRoleType.SimpleVillager
+        }));
+
+        // Assert
+        var gameState = builder.GetGameState()!;
+        var wildChildState = gameState.GetPlayerState(wildChild.Id);
+        wildChildState.HasStatusEffect(StatusEffectTypes.WildChildChanged).Should().BeTrue();
+        wildChildState.MainRole.Should().Be(MainRoleType.SimpleWerewolf);
+
+        gameState.GameHistoryLog
+            .OfType<StatusEffectLogEntry>()
+            .Should()
+            .ContainSingle(entry =>
+                entry.PlayerId == wildChild.Id &&
+                entry.EffectType == StatusEffectTypes.WildChildChanged);
+
+        gameState.GameHistoryLog
+            .OfType<AssignRoleLogEntry>()
+            .Should()
+            .ContainSingle(entry =>
+                entry.PlayerIds.SetEquals(new[] { wildChild.Id }) &&
+                entry.AssignedMainRole == MainRoleType.SimpleWerewolf);
 
         MarkTestCompleted();
     }

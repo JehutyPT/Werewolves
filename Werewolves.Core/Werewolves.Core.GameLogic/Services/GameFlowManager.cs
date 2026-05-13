@@ -120,6 +120,7 @@ internal static class GameFlowManager
         // Define listener factories here - each invocation creates a fresh instance
         [Listener(SimpleWerewolf)] = () => new SimpleWerewolfRole(),
         [Listener(Seer)] = () => new SeerRole(),
+        [Listener(WildChild)] = () => new WildChildRole(),
         [Listener(SimpleVillager)] = () => new SimpleVillagerRole()
     };
 

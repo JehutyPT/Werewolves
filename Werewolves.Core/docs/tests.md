@@ -520,10 +520,15 @@ Tests for the unified status effects system.
   - When: `session.ApplyStatusEffect(StatusEffectTypes.LycanthropyInfection, playerId)` is called
   - Then: `player.State.HasStatusEffect(StatusEffectTypes.LycanthropyInfection)` returns `true`
 
-- **SE-022**: `ApplyStatusEffect_WildChildChanged_SetsEffectAndChangesRole`
-  - Given: Wild Child player whose model was eliminated
+- **SE-022**: `ApplyStatusEffect_WildChildChanged_SetsEffectOnly`
+  - Given: Wild Child player
   - When: `session.ApplyStatusEffect(StatusEffectTypes.WildChildChanged, playerId)` is called
-  - Then: Player has `WildChildChanged` effect AND `MainRole` is `SimpleWerewolf`
+  - Then: Player has `WildChildChanged` effect and `MainRole` remains unchanged
+
+- **SE-022b**: `WildChildModelEliminated_AppliesStatusEffectAndAssignsWerewolfRole`
+  - Given: Wild Child player whose model was eliminated
+  - When: the `PlayerRoleAssignedOnElimination` hook runs
+  - Then: the Wild Child listener applies `StatusEffectLogEntry` and `AssignRoleLogEntry` separately
 
 - **SE-023**: `ApplyStatusEffect_LynchingImmunityUsed_SetsEffect`
   - Given: Village Idiot player

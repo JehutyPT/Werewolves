@@ -302,5 +302,23 @@ namespace Werewolves.Core.StateModels.Resources {
                 return ResourceManager.GetString("WerewolvesChooseVictimPrompt", resourceCulture);
             }
         }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Wild Child, choose your role model..
+        /// </summary>
+        public static string WildChildModelSelectionPrompt {
+            get {
+                return ResourceManager.GetString("WildChildModelSelectionPrompt", resourceCulture);
+            }
+        }
+
+        /// <summary>
+        ///   Looks up a localized string similar to Wild Child.
+        /// </summary>
+        public static string WildChildRoleName {
+            get {
+                return ResourceManager.GetString("WildChildRoleName", resourceCulture);
+            }
+        }
     }
 }
