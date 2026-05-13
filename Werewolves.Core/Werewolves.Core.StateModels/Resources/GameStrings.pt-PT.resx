@@ -1,0 +1,388 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!--
+    Microsoft ResX Schema
+
+    Version 2.0
+
+    The primary goals of this format is to allow a simple XML format
+    that is mostly human readable. The generation and parsing of the
+    various data types are done through the TypeConverter classes
+    associated with the data types.
+
+    Example:
+
+    ... ado.net/XML headers & schema ...
+    <resheader name="resmimetype">text/microsoft-resx</resheader>
+    <resheader name="version">2.0</resheader>
+    <resheader name="reader">System.Resources.ResXResourceReader, System.Windows.Forms, ...</resheader>
+    <resheader name="writer">System.Resources.ResXResourceWriter, System.Windows.Forms, ...</resheader>
+    <data name="Name1"><value>this is my long string</value><comment>this is a comment</comment></data>
+    <data name="Color1" type="System.Drawing.Color, System.Drawing">Blue</data>
+    <data name="Bitmap1" mimetype="application/x-microsoft.net.object.binary.base64">
+        <value>[base64 mime encoded serialized .NET Framework object]</value>
+    </data>
+    <data name="Icon1" type="System.Drawing.Icon, System.Drawing" mimetype="application/x-microsoft.net.object.bytearray.base64">
+        <value>[base64 mime encoded string representing a byte array form of the .NET Framework object]</value>
+        <comment>This is a comment</comment>
+    </data>
+
+    There are any number of "resheader" rows that contain simple
+    name/value pairs.
+
+    Each data row contains a name, and value. The row also contains a
+    type or mimetype. Type corresponds to a .NET class that support
+    text/value conversion through the TypeConverter architecture.
+    Classes that don't support this are serialized and stored with the
+    mimetype set.
+
+    The mimetype is used for serialized objects, and tells the
+    ResXResourceReader how to depersist the object. This is currently not
+    extensible. For a given mimetype the value must be set accordingly:
+
+    Note - application/x-microsoft.net.object.binary.base64 is the format
+    that the ResXResourceWriter will generate, however the reader can
+    read any of the formats listed below.
+
+    mimetype: application/x-microsoft.net.object.binary.base64
+    value   : The object must be serialized with
+            : System.Runtime.Serialization.Formatters.Binary.BinaryFormatter
+            : and then encoded with base64 encoding.
+
+    mimetype: application/x-microsoft.net.object.soap.base64
+    value   : The object must be serialized with
+            : System.Runtime.Serialization.Formatters.Soap.SoapFormatter
+            : and then encoded with base64 encoding.
+
+    mimetype: application/x-microsoft.net.object.bytearray.base64
+    value   : The object must be serialized into a byte array
+            : using a System.ComponentModel.TypeConverter
+            : and then encoded with base64 encoding.
+    -->
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace"/>
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0"/>
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string"/>
+              <xsd:attribute name="type" type="xsd:string"/>
+              <xsd:attribute name="mimetype" type="xsd:string"/>
+              <xsd:attribute ref="xml:space"/>
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string"/>
+              <xsd:attribute name="name" type="xsd:string"/>
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1"/>
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2"/>
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1"/>
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3"/>
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4"/>
+              <xsd:attribute ref="xml:space"/>
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1"/>
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required"/>
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="GameStartPrompt" xml:space="preserve">
+    <value>Jogo pronto. Avançar para a Noite 1?</value>
+    <comment/>
+  </data>
+  <data name="NightStartsPrompt" xml:space="preserve">
+    <value>A aldeia adormece.</value>
+    <comment/>
+  </data>
+  <data name="SimpleVillagerRoleName" xml:space="preserve">
+    <value>Aldeão</value>
+    <comment/>
+  </data>
+  <data name="SimpleWerewolfRoleName" xml:space="preserve">
+    <value>Lobisomem</value>
+    <comment/>
+  </data>
+  <data name="WildChildRoleName" xml:space="preserve">
+    <value>Criança Selvagem</value>
+    <comment/>
+  </data>
+  <data name="WildChildModelSelectionPrompt" xml:space="preserve">
+    <value>Criança Selvagem, escolhe o teu modelo.</value>
+    <comment/>
+  </data>
+  <data name="WerewolvesChooseVictimPrompt" xml:space="preserve">
+    <value>Lobisomens, acordem e escolham um jogador para eliminar.</value>
+    <comment/>
+  </data>
+  <data name="SingleVictimEliminatedAnnounce" xml:space="preserve">
+    <value>O jogador {0} foi eliminado durante a noite.</value>
+    <comment/>
+  </data>
+  <data name="MultipleVictimEliminatedAnnounce" xml:space="preserve">
+    <value>Os seguintes jogadores foram eliminados durante a noite: \n{0}</value>
+    <comment/>
+  </data>
+  <data name="RevealRolePromptSpecify" xml:space="preserve">
+    <value>Especifica os papéis dos falecidos em segredo. Não os reveles publicamente nesta fase.</value>
+    <comment/>
+  </data>
+  <data name="DebateStartsPrompt" xml:space="preserve">
+    <value>O debate diurno começa. Quando terminar, confirma para avançar para a votação.</value>
+    <comment/>
+  </data>
+  <data name="VoteStartsPublicInstruction" xml:space="preserve">
+    <value>Fase de votação. Determina o resultado e reporta o jogador eliminado ou se houve empate.</value>
+    <comment/>
+  </data>
+  <data name="GameOverMessage" xml:space="preserve">
+    <value>Fim de Jogo! {0}</value>
+    <comment/>
+  </data>
+  <data name="PlayerListCannotBeEmpty" xml:space="preserve">
+    <value>A lista de jogadores não pode estar vazia.</value>
+    <comment/>
+  </data>
+  <data name="RoleListCannotBeEmpty" xml:space="preserve">
+    <value>A lista de papéis não pode estar vazia.</value>
+    <comment/>
+  </data>
+  <data name="VictoryConditionAllWerewolvesEliminated" xml:space="preserve">
+    <value>Todos os lobisomens foram eliminados.</value>
+    <comment/>
+  </data>
+  <data name="VictoryConditionWerewolvesOutnumber" xml:space="preserve">
+    <value>Os lobisomens igualaram ou ultrapassaram o número de aldeões.</value>
+    <comment/>
+  </data>
+  <data name="DefaultLogValue" xml:space="preserve">
+    <value>Desconhecido</value>
+    <comment/>
+  </data>
+  <data name="VoteStartsModeratorInstruction" xml:space="preserve">
+    <value>Fase de votação diurna. Determina o resultado e reporta o jogador eliminado (ou reporta um empate).</value>
+    <comment/>
+  </data>
+  <data name="SeerRoleName" xml:space="preserve">
+    <value>Vidente</value>
+    <comment/>
+  </data>
+  <data name="RoleSingleIdentificationPrompt" xml:space="preserve">
+    <value>Identifica o jogador que é {0}.</value>
+    <comment/>
+  </data>
+  <data name="SeerNightActionPrompt" xml:space="preserve">
+    <value>Vidente, escolhe um jogador cuja identidade desejas descobrir.</value>
+    <comment/>
+  </data>
+  <data name="SeerResultWerewolfTeam" xml:space="preserve">
+    <value>O alvo {0} É afiliado aos Lobisomens (Polegar para Cima).</value>
+    <comment/>
+  </data>
+  <data name="SeerResultNotWerewolfTeam" xml:space="preserve">
+    <value>O alvo {0} NÃO é afiliado aos Lobisomens (Polegar para Baixo).</value>
+    <comment/>
+  </data>
+  <data name="RoleGoesToSleepSingle" xml:space="preserve">
+    <value>{0} adormece.</value>
+    <comment/>
+  </data>
+  <data name="ConfirmNightStarted" xml:space="preserve">
+    <value>Confirma que todos estão de olhos fechados e em silêncio.</value>
+    <comment/>
+  </data>
+  <data name="RoleWakesUp" xml:space="preserve">
+    <value>{0} acorda.</value>
+    <comment/>
+  </data>
+  <data name="RoleMultipleIdentificationPrompt" xml:space="preserve">
+    <value>Identifica os jogadores que são {0}.</value>
+    <comment/>
+  </data>
+  <data name="DebateModeratorInstructions" xml:space="preserve">
+    <value>Tenta moderar e garantir que todos têm oportunidade de falar e intervir. Confirma quando o debate terminar.</value>
+    <comment/>
+  </data>
+  <data name="VillagerVillagerRoleName" xml:space="preserve">
+    <value>Aldeão-Aldeão</value>
+    <comment/>
+  </data>
+  <data name="CupidRoleName" xml:space="preserve">
+    <value>Cupido</value>
+    <comment/>
+  </data>
+  <data name="WitchRoleName" xml:space="preserve">
+    <value>Bruxa</value>
+    <comment/>
+  </data>
+  <data name="HunterRoleName" xml:space="preserve">
+    <value>Caçador</value>
+    <comment/>
+  </data>
+  <data name="LittleGirlRoleName" xml:space="preserve">
+    <value>Menina</value>
+    <comment/>
+  </data>
+  <data name="DefenderRoleName" xml:space="preserve">
+    <value>Protetor</value>
+    <comment/>
+  </data>
+  <data name="ElderRoleName" xml:space="preserve">
+    <value>Ancião</value>
+    <comment/>
+  </data>
+  <data name="ScapegoatRoleName" xml:space="preserve">
+    <value>Bode Expiatório</value>
+    <comment/>
+  </data>
+  <data name="VillageIdiotRoleName" xml:space="preserve">
+    <value>Idiota da Aldeia</value>
+    <comment/>
+  </data>
+  <data name="TwoSistersRoleName" xml:space="preserve">
+    <value>Duas Irmãs</value>
+    <comment/>
+  </data>
+  <data name="ThreeBrothersRoleName" xml:space="preserve">
+    <value>Três Irmãos</value>
+    <comment/>
+  </data>
+  <data name="FoxRoleName" xml:space="preserve">
+    <value>Raposa</value>
+    <comment/>
+  </data>
+  <data name="BearTamerRoleName" xml:space="preserve">
+    <value>Domador de Ursos</value>
+    <comment/>
+  </data>
+  <data name="StutteringJudgeRoleName" xml:space="preserve">
+    <value>Juiz Gago</value>
+    <comment/>
+  </data>
+  <data name="KnightWithRustySwordRoleName" xml:space="preserve">
+    <value>Cavaleiro da Espada Enferrujada</value>
+    <comment/>
+  </data>
+  <data name="BigBadWolfRoleName" xml:space="preserve">
+    <value>Grande Mau Lobo</value>
+    <comment/>
+  </data>
+  <data name="AccursedWolfFatherRoleName" xml:space="preserve">
+    <value>Infecto-Pai dos Lobos</value>
+    <comment/>
+  </data>
+  <data name="WhiteWerewolfRoleName" xml:space="preserve">
+    <value>Lobisomem Branco</value>
+    <comment/>
+  </data>
+  <data name="ThiefRoleName" xml:space="preserve">
+    <value>Ladrão</value>
+    <comment/>
+  </data>
+  <data name="DevotedServantRoleName" xml:space="preserve">
+    <value>Serventa Devotada</value>
+    <comment/>
+  </data>
+  <data name="ActorRoleName" xml:space="preserve">
+    <value>Actor</value>
+    <comment/>
+  </data>
+  <data name="WolfHoundRoleName" xml:space="preserve">
+    <value>Cão-Lobo</value>
+    <comment/>
+  </data>
+  <data name="AngelRoleName" xml:space="preserve">
+    <value>Anjo</value>
+    <comment/>
+  </data>
+  <data name="PiperRoleName" xml:space="preserve">
+    <value>Flautista</value>
+    <comment/>
+  </data>
+  <data name="PrejudicedManipulatorRoleName" xml:space="preserve">
+    <value>Manipulador</value>
+    <comment/>
+  </data>
+  <data name="GypsyRoleName" xml:space="preserve">
+    <value>Cigana</value>
+    <comment/>
+  </data>
+  <data name="TooFewPlayersValidationError" xml:space="preserve">
+    <value>São necessários pelo menos 5 jogadores.</value>
+    <comment/>
+  </data>
+  <data name="NonUniquePlayerNamesValidationError" xml:space="preserve">
+    <value>Existem nomes repetidos na lista.</value>
+    <comment/>
+  </data>
+  <data name="TooFewRolesValidationError" xml:space="preserve">
+    <value>Faltam papéis para cobrir todos os jogadores.</value>
+    <comment/>
+  </data>
+  <data name="TooManyRolesValidationError" xml:space="preserve">
+    <value>Há papéis a mais para o número de jogadores.</value>
+    <comment/>
+  </data>
+  <data name="MissingExtraThiefRolesValidationError" xml:space="preserve">
+    <value>O Ladrão requer 2 papéis extra.</value>
+    <comment/>
+  </data>
+  <data name="MissingExtraActorRolesValidationError" xml:space="preserve">
+    <value>O Actor requer 3 papéis extra.</value>
+    <comment/>
+  </data>
+  <data name="MissingExtraThiefActorRolesValidationError" xml:space="preserve">
+    <value>O Ladrão e o Actor requerem 5 papéis extra no total.</value>
+    <comment/>
+  </data>
+  <data name="VillagersGroupName" xml:space="preserve">
+    <value>Aldeões</value>
+    <comment/>
+  </data>
+  <data name="WerewolvesGroupName" xml:space="preserve">
+    <value>Lobisomens</value>
+    <comment/>
+  </data>
+  <data name="AmbiguousGroupName" xml:space="preserve">
+    <value>Ambíguos</value>
+    <comment/>
+  </data>
+  <data name="LonersGroupName" xml:space="preserve">
+    <value>Solitários</value>
+    <comment/>
+  </data>
+  <data name="NewMoonGroupName" xml:space="preserve">
+    <value>Lua Nova</value>
+    <comment/>
+  </data>
+</root>

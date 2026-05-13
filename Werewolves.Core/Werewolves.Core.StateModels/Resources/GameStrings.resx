@@ -118,11 +118,11 @@
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
   <data name="GameStartPrompt" xml:space="preserve">
-    <value>Game ready. Proceed to Night 1?</value>
+    <value>Jogo pronto. Avançar para a Noite 1?</value>
     <comment/>
   </data>
   <data name="NightStartsPrompt" xml:space="preserve">
-    <value>The village goes to sleep.</value>
+    <value>A aldeia adormece.</value>
     <comment/>
   </data>
   <data name="SimpleVillagerRoleName" xml:space="preserve">
@@ -218,7 +218,7 @@
     <comment/>
   </data>
   <data name="ConfirmNightStarted" xml:space="preserve">
-    <value>Confirm everyone is asleep and there is silence</value>
+    <value>Confirma que todos estão de olhos fechados e em silêncio.</value>
     <comment/>
   </data>
   <data name="RoleWakesUp" xml:space="preserve">
