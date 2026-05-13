@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Werewolves Moderator — Direction C v2</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<style>
+  html, body {
+    margin: 0; padding: 0;
+    background: #f0eee9;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="ios-frame.jsx"></script>
+<script type="text/babel" src="screens-c-v2.jsx"></script>
+
+<script type="text/babel">
+
+// Phone frame — accepts optional taller height to show long pages without scroll.
+function Phone({ children, height = 844 }) {
+  return (
+    <IOSDevice width={390} height={height} dark={true}>
+      {children}
+    </IOSDevice>
+  );
+}
+
+function App() {
+  return (
+    <DesignCanvas
+      title="Werewolves Moderator — Direction C v2"
+      subtitle="Cool Edge, iterated. Portugal-PT copy, no watermark glyphs, new expandable “Mais detalhes”. Scenario: Pai dos Lobos Amaldiçoado, Turno 4. Role reveal: Helena (Votação da Aldeia) → Vidente."
+    >
+      <DCSection
+        id="night-variant-a"
+        title="Night Phase · Variant A — Combined"
+        subtitle="Public + expandable + private + input + submit on one scrollable page. Mais detalhes toggles in place — tap it."
+      >
+        <DCArtboard
+          id="va"
+          label="Variant A · Combined"
+          width={390}
+          height={844}
+          data-screen-label="V-A Night Phase — Combined, expanded"
+        >
+          <Phone height={844}><Cv2NightVariantA /></Phone>
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection
+        id="night-variant-b"
+        title="Night Phase · Variant B — Two-part flow"
+        subtitle="Page 1 reads aloud, tap to advance. Page 2 acts. Trade-off: one extra tap, more room per block."
+      >
+        <DCArtboard
+          id="vb1"
+          label="Variant B · Page 1 — Em voz alta"
+          width={390}
+          height={844}
+          data-screen-label="V-B1 Night Phase — Public, collapsed"
+        >
+          <Phone><Cv2NightVariantB1 /></Phone>
+        </DCArtboard>
+
+        <DCArtboard
+          id="vb2"
+          label="Variant B · Page 2 — Privado + ação"
+          width={390}
+          height={844}
+          data-screen-label="V-B2 Night Phase — Private + input"
+        >
+          <Phone><Cv2NightVariantB2 /></Phone>
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection
+        id="role-reveal"
+        title="Role Reveal · Helena → Vidente"
+        subtitle="Eliminada por Votação da Aldeia (T4). Picker shows 8 available roles."
+      >
+        <DCArtboard
+          id="reveal"
+          label="Revelação de Papel"
+          width={390}
+          height={844}
+          data-screen-label="RR Role Reveal — Helena, Vidente"
+        >
+          <Phone><Cv2RoleReveal /></Phone>
+        </DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

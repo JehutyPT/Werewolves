@@ -1,0 +1,283 @@
+:root {
+  /* ── Background ── */
+  --ww-bg: #070C12;
+  --ww-bg-raised: #0C131D;
+  --ww-surface: #101926;
+  --ww-surface-hi: #172335;
+  --ww-surface-deeper: #0B121C;
+
+  /* ── Borders ── */
+  --ww-border: rgba(63, 224, 200, 0.10);
+  --ww-border-strong: rgba(63, 224, 200, 0.28);
+  --ww-border-neutral: rgba(255, 255, 255, 0.06);
+
+  /* ── Text ── */
+  --ww-text: #EAF4FB;
+  --ww-text-dim: #A4BACE;
+  --ww-text-muted: #56697F;
+
+  /* ── Accent ── */
+  --ww-accent: #3FE0C8;
+  --ww-accent-bright: #5FF0D8;
+  --ww-accent-soft: rgba(63, 224, 200, 0.12);
+  --ww-accent-dim: rgba(63, 224, 200, 0.40);
+
+  /* ── Factions ── */
+  --ww-faction-werewolf: #FF6478;
+  --ww-faction-werewolf-soft: rgba(255, 100, 120, 0.12);
+  --ww-faction-villager: #3FE0C8;
+  --ww-faction-loner: #B68BFF;
+  --ww-faction-loner-soft: rgba(182, 139, 255, 0.12);
+  --ww-faction-ambiguous: #FFB35A;
+
+  /* ── Typography ── */
+  --ww-font: "Sora", system-ui, sans-serif;
+
+  /* ── Radii ── */
+  --ww-radius-sm: 7px;
+  --ww-radius-md: 10px;
+  --ww-radius-card: 14px;
+  --ww-radius-button: 14px;
+
+  /* ── Shadows ── */
+  --ww-glow-accent: 0 0 40px rgba(63, 224, 200, 0.18);
+  --ww-glow-accent-strong: 0 0 40px rgba(63, 224, 200, 0.32);
+
+  /* ── Spacing ── */
+  --ww-page-px: 16px;
+  --ww-card-px: 20px;
+}
+
+
+/* ── Card variants ─────────────────────────────────────────── */
+
+.ww-card-raised {
+  background: linear-gradient(180deg, var(--ww-surface-hi) 0%, var(--ww-surface) 100%);
+  border-radius: var(--ww-radius-card);
+  border: 1px solid var(--ww-border-strong);
+}
+
+.ww-card-flat {
+  background: var(--ww-surface);
+  border-radius: 12px;
+  border: 1px solid var(--ww-border-neutral);
+}
+
+
+/* ── Label/tag pattern (uppercase small caps used everywhere) ── */
+
+.ww-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--ww-text-muted);
+}
+
+.ww-label--accent {
+  color: var(--ww-accent);
+}
+
+.ww-label--werewolf {
+  color: var(--ww-faction-werewolf);
+}
+
+
+/* ── Primary action button (solid accent fill) ── */
+
+.ww-btn-primary {
+  background: var(--ww-accent);
+  border-radius: var(--ww-radius-button);
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ww-bg);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  box-shadow: var(--ww-glow-accent-strong);
+  border: none;
+  cursor: pointer;
+  width: 100%;
+}
+
+
+/* ── Hold-to-confirm button (outline + fill progress) ── */
+
+.ww-btn-hold {
+  position: relative;
+  background: var(--ww-surface);
+  border: 1.5px solid var(--ww-accent);
+  border-radius: var(--ww-radius-button);
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  box-shadow: var(--ww-glow-accent);
+  cursor: pointer;
+  width: 100%;
+}
+
+.ww-btn-hold__fill {
+  position: absolute;
+  inset: 0;
+  width: 0%;
+  background: linear-gradient(90deg, var(--ww-accent) 0%, var(--ww-accent-bright) 100%);
+  transition: width 50ms linear;
+}
+
+.ww-btn-hold__edge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0%;
+  width: 2px;
+  background: var(--ww-accent-bright);
+  box-shadow: 0 0 12px var(--ww-accent-bright);
+  transition: left 50ms linear;
+}
+
+.ww-btn-hold__label {
+  position: relative;
+  z-index: 2;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  color: var(--ww-text);
+  text-transform: uppercase;
+}
+
+
+/* ── Player list row ── */
+
+.ww-player-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 16px;
+  border-radius: var(--ww-radius-md);
+  border: 1px solid transparent;
+  position: relative;
+}
+
+.ww-player-row--selected {
+  background: var(--ww-accent-soft);
+  border-color: var(--ww-border-strong);
+}
+
+.ww-player-row--dead {
+  opacity: 0.38;
+}
+
+.ww-player-row__indicator {
+  position: absolute;
+  left: -2px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 26px;
+  background: var(--ww-accent);
+  border-radius: 2px;
+}
+
+.ww-player-row__seat {
+  font-size: 12px;
+  font-weight: 700;
+  width: 22px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.4px;
+  color: var(--ww-text-muted);
+}
+
+.ww-player-row--selected .ww-player-row__seat {
+  color: var(--ww-accent);
+}
+
+.ww-player-row__name {
+  flex: 1;
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--ww-text);
+  letter-spacing: -0.3px;
+}
+
+.ww-player-row--selected .ww-player-row__name {
+  font-weight: 700;
+}
+
+.ww-player-row--dead .ww-player-row__name {
+  text-decoration: line-through;
+  text-decoration-color: var(--ww-text-muted);
+  color: var(--ww-text-muted);
+}
+
+
+/* ── Step progress bar ── */
+
+.ww-steps {
+  display: flex;
+  gap: 5px;
+  padding: 0 22px 16px;
+}
+
+.ww-steps__segment {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--ww-surface);
+}
+
+.ww-steps__segment--done {
+  background: var(--ww-accent);
+}
+
+.ww-steps__segment--current {
+  background: var(--ww-accent);
+  box-shadow: 0 0 12px var(--ww-accent);
+}
+
+
+/* ── Announcement text (public read-aloud) ── */
+
+.ww-announcement {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  line-height: 1.2;
+  color: var(--ww-text);
+  text-wrap: pretty;
+}
+
+
+/* ── Faction badge (dot + label) ── */
+
+.ww-faction-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ww-faction-badge__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+
+/* ── Selection checkmark ── */
+
+.ww-check {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: var(--ww-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 16px var(--ww-accent-dim);
+}
