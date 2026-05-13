@@ -13,9 +13,10 @@
 ## 2. Technology Stack
 
 *   **Framework:** .NET 10 MAUI Blazor Hybrid.
-*   **UI Component Library:** MudBlazor.
-    *   Use MudBlazor utility classes (`d-flex`, `pa-4`) for 95% of styling.
-    *   Custom CSS is permitted strictly for layout shims (e.g., `touch-action`, Safe Area Insets) where utility classes fail.
+*   **UI Components:** App-owned Blazor components styled through `wwwroot/css/design-tokens.css`.
+    *   Prefer semantic component classes and CSS variables with the `--ww-*` token set.
+    *   Shared behavior such as tabs, expansion panels, dialogs, and notifications should live behind thin app components/services rather than a comprehensive third-party design system.
+    *   Custom CSS is expected for layout, touch behavior, safe area insets, and the moderator-specific interaction patterns.
 *   **Audio:** `Plugin.Maui.Audio`.
     *   Asset location: `Resources/Raw/Audio`.
     *   Background audio must be enabled in Android Manifest / iOS Info.plist.
@@ -34,7 +35,7 @@
 *   **No duplication of game state.** Components never cache or shadow Core state.
 *   **Transient State:** UI-specific state (draft selections, accordion state) lives in the component. This draft state is ephemeral — lost on app crash during input.
 *   **IDisposable:** Any component subscribing to `StateChanged` must implement `IDisposable` and unsubscribe in `Dispose()`.
-*   **Navigation:** `MudTabs` with `KeepPanelsAlive="true"`.
+*   **Navigation:** App-owned tab component that keeps panels alive while hidden.
     *   Panels remain alive when hidden; components must subscribe to `GameClientManager.StateChanged` to refresh when the active session updates.
 
 ### 3.3. The Adapter (GameClientManager)
@@ -133,7 +134,7 @@
 ## 10. Error Handling
 
 *   **Lobby:** Inline validation messages near the relevant section. No snackbars for predictable validation failures.
-*   **Gameplay:** Snackbars for runtime errors (e.g., `ProcessResult.IsSuccess == false`).
+*   **Gameplay:** App-owned toast/snackbar notifications for runtime errors (e.g., `ProcessResult.IsSuccess == false`).
 
 ## 11. Project Structure
 
