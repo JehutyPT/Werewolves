@@ -1,6 +1,7 @@
 using Werewolves.Core.GameLogic.Interfaces;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
 using Werewolves.Core.GameLogic.Models.StateMachine;
+using Werewolves.Core.GameLogic.Queries;
 using Werewolves.Core.GameLogic.Roles.MainRoles;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
@@ -313,12 +314,12 @@ internal static class GameFlowManager
 
     private static SubPhaseHandlerResult ChoosePathAfterVoteConcluded(GameSession session, ModeratorResponse input)
     {
-        if (session.ShouldVoteRepeat())
+        if (GameSessionQueries.ShouldVoteRepeat(session))
         {
             return TransitionSubPhaseSilent(DaySubPhases.DetermineVoteType);
         }
 
-        return session.GetPlayerEliminatedThisVote().Any()
+        return GameSessionQueries.GetPlayerEliminatedThisVote(session).Any()
             ? TransitionSubPhaseSilent(DaySubPhases.ProcessVoteDeathLoop)
             : TransitionSubPhaseSilent(DaySubPhases.Finalize);
     }

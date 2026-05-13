@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using Werewolves.Core.GameLogic.Queries;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Models;
@@ -13,11 +14,11 @@ internal static class DawnPhaseHandlers
         => NightInteractionResolver.ResolveNightPhase(session);
 
     internal static bool HasVictimsToAnnounce(GameSession session)
-        => session.GetPlayersEliminatedThisDawn().Any();
+        => GameSessionQueries.GetPlayersEliminatedThisDawn(session).Any();
 
     internal static ModeratorInstruction AnnounceVictimsAndRequestRoles(GameSession session, ModeratorResponse input)
     {
-        var victimList = session.GetPlayersEliminatedThisDawn().ToImmutableHashSet();
+        var victimList = GameSessionQueries.GetPlayersEliminatedThisDawn(session).ToImmutableHashSet();
         var victimNameList = string.Join(Environment.NewLine, victimList.Select(p => p.Name));
         var announcement = GameStrings.MultipleVictimEliminatedAnnounce.Format(victimNameList);
         var victimsNeedingRoles = victimList
@@ -33,12 +34,12 @@ internal static class DawnPhaseHandlers
             publicAnnouncement: announcement,
             privateInstruction: GameStrings.RevealRolePromptSpecify,
             playersForAssignment: victimsNeedingRoles.Select(p => p.Id).ToImmutableHashSet(),
-            rolesForAssignment: session.GetUnassignedRoles());
+            rolesForAssignment: GameSessionQueries.GetUnassignedRoles(session));
     }
 
     internal static void AssignVictimRoles(GameSession session, ModeratorResponse input)
     {
-        var victimsNeedingRoles = session.GetPlayersEliminatedThisDawn()
+        var victimsNeedingRoles = GameSessionQueries.GetPlayersEliminatedThisDawn(session)
             .Where(p => p.State.MainRole == null)
             .ToList();
 

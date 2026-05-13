@@ -141,14 +141,14 @@ A lightweight, stateless wrapper that implements `IGameSession` and delegates al
         *   `ClearCurrentListenerCache(IHookSubPhaseKey key)`: Clears the current listener and its state.
     *   **Listener Instance Management** (session-scoped listener caching):
         *   `GetOrCreateListener<T>(ListenerIdentifier id, Func<T> factory)` (T): Gets or creates a listener instance for this session. Listeners are cached per-session to ensure state machine isolation between games while maintaining consistency within a game.
-    *   **Query Methods** (read derived state from log):
-        *   `GetPlayersTargetedLastNight(NightActionType actionType, NumberRangeConstraint countConstraint, NumberRangeConstraint? turnsAgoConstraint)` (IEnumerable<IPlayer>): Returns players targeted by a specific night action type.
-        *   `WasDayAbilityTriggeredThisTurn(DayPowerType powerType)` (bool): Checks if a specific day power was used this turn.
-        *   `HasPlayerBeenVotedForPreviously(Guid playerId)` (bool): Checks if a player was the vote outcome target in any previous turn.
-        *   `ShouldVoteRepeat()` (bool): Determines if the Stuttering Judge's extra vote should trigger a re-vote.
-        *   `GetPlayersEliminatedThisDawn()` (IEnumerable<IPlayer>): Returns players eliminated during the current turn's Dawn phase.
-        *   `GetPlayerEliminatedThisVote()` (IEnumerable<Guid>): Returns player IDs eliminated during the current turn's Day phase.
-        *   `GetUnassignedRoles()` (List<MainRoleType>): Returns roles from `RolesInPlay` that have not yet been assigned to any player.
+
+## `GameSessionQueries` (Rules-Layer Log Queries)
+
+Rule-specific questions over the event log live in `Werewolves.Core.GameLogic.Queries.GameSessionQueries`, not on the `GameSession` state facade. The module operates over `IGameSession` and `GameHistoryLog`, keeping `GameSession` focused on structural state access and mutation commands.
+
+*   **Purpose:** Centralize rules-layer log queries such as current-night targets, dawn eliminations, vote outcomes, unassigned role choices, and Stuttering Judge repeat-vote checks.
+*   **Boundary:** `GameSession` retains structural queries (`GetPlayers`, `GetPlayer`, `GetPlayerState`, `GameHistoryLog`, `RoleInPlayCount`) plus mutation methods. Rule concepts such as "last night", "this dawn", and "current vote target" belong in `GameSessionQueries`.
+*   **Consumers:** Phase handlers and resolvers call `GameSessionQueries` instead of duplicating log scans or adding new rule-specific methods to `GameSession`.
 
 ## `NightInteractionResolver` (Rule Engine)
 
@@ -157,7 +157,7 @@ A static helper class that serves as the "Rule Engine" for the Dawn phase, resol
 *   **Purpose:** Decouples the `GameFlowManager` from specific role logic (e.g., Witch vs. Defender vs. Infection).
 *   **Process:**
     1.  **Input:** Accepts the `GameSession` state.
-    2.  **Resolution:** Builds a map of all `NightActionType`s targeting players. Iterates through players to resolve conflicts based on the priority rules below.
+    2.  **Resolution:** Gets the current night action target map from `GameSessionQueries`. Iterates through players to resolve conflicts based on the priority rules below.
     3.  **Output:** Directly calls `session.EliminatePlayer()` or `session.ApplyStatusEffect()` based on the resolved outcome.
 
 *   **Resolution Priority & Special Rules:**

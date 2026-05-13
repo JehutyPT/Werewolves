@@ -200,93 +200,6 @@ internal class GameSession : IGameSession
     internal void PerformNightAction(NightActionType type, List<Guid> targetIds)
         => PerformNightActionCore(type, targetIds);
 
-    #endregion
-
-    #region Internal Query API
-
-    internal IEnumerable<IPlayer> GetPlayersTargetedLastNight(NightActionType actionType,
-        NumberRangeConstraint countConstraint, NumberRangeConstraint? turnsAgoConstraint = null)
-    {
-        var turnNumber = _gameSessionKernel.TurnNumber;
-		var logEntries = _gameSessionKernel.FindLogEntries<NightActionLogEntry>(NumberRangeConstraint.Exact(turnNumber), GamePhase.Night, log => log.ActionType == actionType);
-
-        var playerList = logEntries.SelectMany(log => log.TargetIds ?? new()).ToList();
-
-        countConstraint.Enforce(playerList);
-
-        return playerList.Select(GetPlayer);
-	}
-
-    internal bool WasDayAbilityTriggeredThisTurn(DayPowerType powerType)
-    {
-        var turnNumber = _gameSessionKernel.TurnNumber;
-
-        return _gameSessionKernel.FindLogEntries<DayActionLogEntry>(
-            NumberRangeConstraint.Exact(turnNumber), 
-            filter: log => log.ActionType == powerType).Any();
-    }
-
-    internal bool HasPlayerBeenVotedForPreviously(Guid playerId)
-    {
-        var turnNumber = _gameSessionKernel.TurnNumber;
-        return _gameSessionKernel.FindLogEntries<VoteOutcomeReportedLogEntry>(
-            NumberRangeConstraint.Range(1, turnNumber - 1), 
-            filter: log => log.ReportedOutcomePlayerId == playerId).Any();
-    }
-
-    internal bool ShouldVoteRepeat()
-    {
-        var hasJudgeVoted  = _gameSessionKernel.FindLogEntries<DayActionLogEntry>(
-            NumberRangeConstraint.Exact(_gameSessionKernel.TurnNumber),
-            filter: log => log.ActionType == DayPowerType.JudgeExtraVote).Any();
-
-        var currentTurnVoteCount = _gameSessionKernel.FindLogEntries<VoteOutcomeReportedLogEntry>(
-            NumberRangeConstraint.Exact(_gameSessionKernel.TurnNumber)).Count();
-
-        return hasJudgeVoted && currentTurnVoteCount == 1;
-    }
-	
-
-    internal IEnumerable<IPlayer> GetPlayersEliminatedThisDawn()
-    {
-	    var turnNumber = _gameSessionKernel.TurnNumber;
-		var logEntries = _gameSessionKernel.FindLogEntries<PlayerEliminatedLogEntry>(NumberRangeConstraint.Exact(turnNumber), phase: GamePhase.Dawn);
-
-		var playerList = logEntries.Select(log => log.PlayerId).ToList();
-
-        return playerList.Select(GetPlayer);
-    }
-
-	/// <summary>
-	/// This actually checks for all players eliminated during the Day phase of the current turn,
-	/// including those eliminated during the voting process, but also the Scapegoat or death loop eliminations.
-	/// </summary>
-	/// <returns></returns>
-	internal IEnumerable<Guid> GetPlayerEliminatedThisVote()
-    {
-	    var turnNumber = _gameSessionKernel.TurnNumber;
-		var logEntries = _gameSessionKernel.FindLogEntries<PlayerEliminatedLogEntry>(NumberRangeConstraint.Exact(turnNumber), phase: GamePhase.Day);
-
-        IEnumerable<Guid> playerIds = logEntries.Select(log => log.PlayerId);
-
-        return playerIds;
-    }
-
-    internal List<MainRoleType> GetUnassignedRoles()
-    {
-        var assignedRoles = _gameSessionKernel.GetIPlayers()
-            .Select(p => p.State.MainRole)
-            .Where(r => r.HasValue)
-            .Select(r => r!.Value)
-            .ToList();
-        var unassignedRoles = _gameSessionKernel.GetRolesInPlay().ToList();
-        foreach (var role in assignedRoles)
-        {
-            unassignedRoles.Remove(role);
-        }
-        return unassignedRoles;
-	}
-
 	internal void EliminatePlayer(Guid playerId, EliminationReason reason)
     {
         var entry = new PlayerEliminatedLogEntry
@@ -331,23 +244,6 @@ internal class GameSession : IGameSession
         };
         _gameSessionKernel.AddEntryAndUpdateState(entry);
 	}
-
-    /// <summary>
-    /// Gets the player ID that was voted for in the most recent vote of the current turn.
-    /// Returns null if the vote was a tie (Guid.Empty in the log).
-    /// </summary>
-    internal Guid? GetCurrentVoteTarget()
-    {
-        var turnNumber = _gameSessionKernel.TurnNumber;
-        var voteEntry = _gameSessionKernel.FindLogEntries<VoteOutcomeReportedLogEntry>(
-            NumberRangeConstraint.Exact(turnNumber))
-            .LastOrDefault();
-
-        if (voteEntry == null || voteEntry.ReportedOutcomePlayerId == Guid.Empty)
-            return null;
-
-        return voteEntry.ReportedOutcomePlayerId;
-    }
 
 	internal void PerformDayVote(Guid? reportedOutcomePlayerId)
     {

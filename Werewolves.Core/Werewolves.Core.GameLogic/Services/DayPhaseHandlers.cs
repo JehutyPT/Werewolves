@@ -1,3 +1,4 @@
+using Werewolves.Core.GameLogic.Queries;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
@@ -51,13 +52,13 @@ internal static class DayPhaseHandlers
 
         return new AssignRolesInstruction(
             [playerId],
-            session.GetUnassignedRoles(),
+            GameSessionQueries.GetUnassignedRoles(session),
             privateInstruction: GameStrings.RevealRolePromptSpecify);
     }
 
     internal static ModeratorInstruction ResolveNonTieVote(GameSession session, ModeratorResponse input)
     {
-        var lynchedPlayerId = session.GetCurrentVoteTarget()!.Value;
+        var lynchedPlayerId = GameSessionQueries.GetCurrentVoteTarget(session)!.Value;
         var lynchedPlayer = session.GetPlayer(lynchedPlayerId);
         var lynchedPlayerState = lynchedPlayer.State;
 

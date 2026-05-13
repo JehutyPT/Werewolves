@@ -1,20 +1,30 @@
+using Werewolves.Core.GameLogic.Queries;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
-using Werewolves.Core.StateModels.Models;
 
 namespace Werewolves.Core.GameLogic.Services;
 
 internal static class NightInteractionResolver
 {
+	private static readonly NightActionType[] DawnResolutionActionTypes =
+	[
+		NightActionType.WerewolfVictimSelection,
+		NightActionType.BigBadWolfVictimSelection,
+		NightActionType.WhiteWerewolfVictimSelection,
+		NightActionType.AccursedWolfFatherInfection,
+		NightActionType.DefenderProtect,
+		NightActionType.WitchSave,
+		NightActionType.WitchKill,
+		NightActionType.RustySword
+	];
+
 	/// <summary>
 	/// Analyzes the night's logs to determine who lives, dies, or changes status.
 	/// Applies consequences directly to the GameSession.
 	/// </summary>
 	public static void ResolveNightPhase(GameSession session)
 	{
-		// 0. Optimization: Pre-fetch actions to avoid querying the log N times per player.
-		// Maps PlayerId -> Set of ActionTypes targeting them.
-		var nightActionMap = BuildNightActionMap(session);
+		var nightActionMap = GameSessionQueries.GetNightActionMap(session, DawnResolutionActionTypes);
 
 		var targetedPlayers = session.GetPlayers().IntersectBy(nightActionMap.Keys, player => player.Id);
 
@@ -92,39 +102,5 @@ internal static class NightInteractionResolver
 				session.EliminatePlayer(player.Id, eliminationReason.Value);
 			}
 		}
-	}
-
-	/// <summary>
-	/// Helper to flatten the log queries into a dictionary for O(1) lookup during the loop.
-	/// </summary>
-	private static Dictionary<Guid, HashSet<NightActionType>> BuildNightActionMap(GameSession session)
-	{
-		var map = new Dictionary<Guid, HashSet<NightActionType>>();
-
-		// Helper to populate the map
-		void AddActions(NightActionType type)
-		{
-			var targets = session.GetPlayersTargetedLastNight(type, NumberRangeConstraint.SingleOptional);
-			foreach (var target in targets)
-			{
-				if (!map.ContainsKey(target.Id))
-				{
-					map[target.Id] = new HashSet<NightActionType>();
-				}
-				map[target.Id].Add(type);
-			}
-		}
-
-		// Register all relevant action types
-		AddActions(NightActionType.WerewolfVictimSelection);
-		AddActions(NightActionType.BigBadWolfVictimSelection);
-		AddActions(NightActionType.WhiteWerewolfVictimSelection);
-		AddActions(NightActionType.AccursedWolfFatherInfection);
-		AddActions(NightActionType.DefenderProtect);
-		AddActions(NightActionType.WitchSave);
-		AddActions(NightActionType.WitchKill);
-		AddActions(NightActionType.RustySword);
-
-		return map;
 	}
 }
