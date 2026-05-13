@@ -19,6 +19,9 @@
         <EnableDefaultCssItems>false</EnableDefaultCssItems>
         <Nullable>enable</Nullable>
 
+        <!-- Xcode 26.5 shipped before the .NET iOS workload (26.4.10259) was updated to match -->
+        <ValidateXcodeVersion>false</ValidateXcodeVersion>
+
         <!-- Display name -->
         <ApplicationTitle>Werewolves.Client</ApplicationTitle>
 
