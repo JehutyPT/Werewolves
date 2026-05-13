@@ -11,6 +11,14 @@ The skills speak in terms of five canonical triage roles. This file maps those r
 | `blocked`                  | `blocked`            | Specified but waiting on prerequisite    |
 | `wontfix`                  | `wontfix`            | Will not be actioned                     |
 
+**Document roles** (not state roles — these replace category roles for non-work-item issues):
+
+| Label in mattpocock/skills | Label in our tracker | Meaning                                  |
+| -------------------------- | -------------------- | ---------------------------------------- |
+| `prd`                      | `prd`                | Product requirements document            |
+
+PRDs only use `needs-triage` or no state label. Never apply `ready-for-agent`, `ready-for-human`, or `blocked` to a PRD.
+
 When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the corresponding label string from this table.
 
 Edit the right-hand column to match whatever vocabulary you actually use.
