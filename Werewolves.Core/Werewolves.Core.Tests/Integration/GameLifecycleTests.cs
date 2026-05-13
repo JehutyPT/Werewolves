@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Werewolves.Core.GameLogic.Roles;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Models;
@@ -29,11 +30,7 @@ public class GameLifecycleTests : DiagnosticTestBase
 
         // Assert
         metadata.MinimumPlayerCount.Should().Be(GameSessionConfig.MinimumPlayerCount);
-        metadata.AvailableRoles.Select(role => role.Role).Should().Equal(
-            MainRoleType.SimpleWerewolf,
-            MainRoleType.Seer,
-            MainRoleType.WildChild,
-            MainRoleType.SimpleVillager);
+        metadata.AvailableRoles.Select(role => role.Role).Should().Equal(SupportedRoleCatalog.Roles);
 
         var seer = metadata.AvailableRoles.Single(role => role.Role == MainRoleType.Seer);
         seer.DisplayName.Should().Be(MainRoleType.Seer.GetPublicName());
@@ -91,11 +88,14 @@ public class GameLifecycleTests : DiagnosticTestBase
     {
         // Arrange
         var gameService = new GameLogic.Services.GameService();
+        var unsupportedRole = Enum.GetValues<MainRoleType>()
+            .Except(SupportedRoleCatalog.Roles)
+            .First();
         var config = new GameSessionConfig(
             ["Alice", "Bob", "Charlie", "Diana", "Eve"],
             [
                 MainRoleType.SimpleWerewolf,
-                MainRoleType.Witch,
+                unsupportedRole,
                 MainRoleType.SimpleVillager,
                 MainRoleType.SimpleVillager,
                 MainRoleType.SimpleVillager
@@ -107,7 +107,7 @@ public class GameLifecycleTests : DiagnosticTestBase
         // Assert
         act.Should()
             .Throw<InvalidOperationException>()
-            .WithMessage("*unsupported Role*Witch*");
+            .WithMessage($"*unsupported Role*{unsupportedRole}*");
 
         MarkTestCompleted();
     }

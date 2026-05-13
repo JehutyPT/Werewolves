@@ -2,7 +2,7 @@ using Werewolves.Core.GameLogic.Interfaces;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
 using Werewolves.Core.GameLogic.Models.StateMachine;
 using Werewolves.Core.GameLogic.Queries;
-using Werewolves.Core.GameLogic.Roles.MainRoles;
+using Werewolves.Core.GameLogic.Roles;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
@@ -115,14 +115,8 @@ internal static class GameFlowManager
     /// Factory functions for creating listener instances. Each game session gets its own fresh instances.
     /// This ensures listener state machines are isolated between games (fixing test isolation bugs).
     /// </summary>
-    internal static readonly Dictionary<ListenerIdentifier, Func<IGameHookListener>> ListenerFactories = new()
-    {
-        // Define listener factories here - each invocation creates a fresh instance
-        [Listener(SimpleWerewolf)] = () => new SimpleWerewolfRole(),
-        [Listener(Seer)] = () => new SeerRole(),
-        [Listener(WildChild)] = () => new WildChildRole(),
-        [Listener(SimpleVillager)] = () => new SimpleVillagerRole()
-    };
+    internal static IReadOnlyDictionary<ListenerIdentifier, Func<IGameHookListener>> ListenerFactories =>
+        SupportedRoleCatalog.ListenerFactories;
 
     internal static readonly Dictionary<GamePhase, IPhaseDefinition> PhaseDefinitions = new()
     {

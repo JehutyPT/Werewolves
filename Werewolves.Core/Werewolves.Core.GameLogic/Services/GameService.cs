@@ -8,9 +8,9 @@
 using System.Collections.Concurrent;
 using Werewolves.Core.GameLogic.Models;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
+using Werewolves.Core.GameLogic.Roles;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
-using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using static Werewolves.Core.StateModels.Enums.ExpectedInputType;
@@ -25,23 +25,11 @@ public class GameService
 	// Simple in-memory storage for game sessions. Replaceable with DI.
 	private readonly ConcurrentDictionary<Guid, GameSession> _sessions = new();
 
-	private static readonly MainRoleType[] SupportedRoles =
-	[
-		MainRoleType.SimpleWerewolf,
-		MainRoleType.Seer,
-		MainRoleType.WildChild,
-		MainRoleType.SimpleVillager
-	];
-
-	private static readonly HashSet<MainRoleType> SupportedRoleSet = SupportedRoles.ToHashSet();
-
 	public GameService() {}
 
     public LobbySetupMetadata GetLobbySetupMetadata()
     {
-	    return new LobbySetupMetadata(
-		    GameSessionConfig.MinimumPlayerCount,
-		    SupportedRoles.Select(CreateRoleMetadata).ToArray());
+	    return SupportedRoleCatalog.CreateLobbySetupMetadata();
     }
 
     public StartGameConfirmationInstruction StartNewGame(
@@ -152,23 +140,9 @@ public class GameService
 	// --- Helper Methods ---
 	#region Helpers
 
-	private static LobbySetupRoleMetadata CreateRoleMetadata(MainRoleType role)
-	{
-		var group = role.GetRoleGroup();
-		return new LobbySetupRoleMetadata(
-			role,
-			role.GetPublicName(),
-			group,
-			group.GetDisplayName(),
-			GameSessionConfig.RoleCountConstraints[role]);
-	}
-
 	private static void EnforceRolesAreSupported(IReadOnlyCollection<MainRoleType> roles)
 	{
-		var unsupportedRoles = roles
-			.Distinct()
-			.Where(role => !SupportedRoleSet.Contains(role))
-			.ToList();
+		var unsupportedRoles = SupportedRoleCatalog.GetUnsupportedRoles(roles);
 
 		if (unsupportedRoles.Count == 0)
 		{
