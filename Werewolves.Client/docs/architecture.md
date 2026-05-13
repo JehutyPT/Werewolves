@@ -1,124 +1,144 @@
-# Architecture Requirements Document: Werewolves UI Client
+# Architecture: Werewolves UI Client
 
-## 1. Project Overview & Philosophy
+## 1. Philosophy
 
-*   **Goal:** Build a visual "Thin Client" for the `Werewolves` game engine.
+*   **Goal:** Thin client for the `Werewolves` game engine.
 *   **Role of the UI:** Render state from Core, collect input, never perform game logic.
-*   **Target Platform:** Mobile-First (Android/iOS) via **.NET MAUI Blazor Hybrid**.
+*   **Target Platform:** Mobile-first (Android/iOS) via .NET MAUI Blazor Hybrid.
+*   **Two-Tempo Model:** The UI serves two distinct usage modes on the same device:
+    *   **High-intensity (bursty):** Phase transitions, role wake-ups, vote outcomes. The moderator glances at the phone, acts, and returns attention to the table. UI must be streamlined, consistent, and operable with minimal attention.
+    *   **Low-intensity (calm):** Debate, setup. The moderator has time and attention to browse state, review the roster, and plan. Extra information surfaces are appropriate here.
+*   **Client displays only what the Core provides.** The client must not maintain its own player lists, infer game state, or supplement Core data. It renders exactly what it receives and submits only options afforded to it by the Core.
 
 ## 2. Technology Stack
 
-*   **Framework:** .NET 8/9 MAUI Blazor Hybrid.
-*   **UI Component Library:** **MudBlazor**.
-    *   *Constraint:* **Minimal Custom CSS.**
-    *   *Rule:* Use MudBlazor utility classes (`d-flex`, `pa-4`) for 95% of styling.
-    *   *Exception:* Custom CSS is permitted strictly for layout shims (e.g., `touch-action`, Safe Area Insets, Scroll Locking) where utility classes fail.
+*   **Framework:** .NET 10 MAUI Blazor Hybrid.
+*   **UI Component Library:** MudBlazor.
+    *   Use MudBlazor utility classes (`d-flex`, `pa-4`) for 95% of styling.
+    *   Custom CSS is permitted strictly for layout shims (e.g., `touch-action`, Safe Area Insets) where utility classes fail.
 *   **Audio:** `Plugin.Maui.Audio`.
-    *   *Asset Location:* `Resources/Raw/Audio` (Maui Assets).
-    *   *Capability:* **Background Audio** must be enabled in Android Manifest / iOS Info.plist.
+    *   Asset location: `Resources/Raw/Audio`.
+    *   Background audio must be enabled in Android Manifest / iOS Info.plist.
+    *   Sound effect triggers are owned by the Core (see ADR-0001). The client resolves semantic identifiers to audio files and handles playback.
 *   **Device Control:** `Microsoft.Maui.Devices.IDeviceDisplay` (Screen Wake Lock).
+*   **Theme:** Single dark theme. No dynamic switching.
+*   **Localization:** Portuguese for v1. Core uses `GameStrings.resx`; client maintains its own `.resx` for UI-only strings (button labels, validation messages, prompts).
 
 ## 3. Architecture Pattern: Model-View-Adapter (MVA)
 
 ### 3.1. The Model (Core)
-*   `GameSession` from `Werewolves.StateModels`. Immutable from client perspective.
+*   `GameSession` from `Werewolves.Core.StateModels`. Immutable from client perspective.
+*   The client accesses game state exclusively through `IGameSession` and receives directives via `ModeratorInstruction`.
 
 ### 3.2. The View (Blazor Components)
-*   **State Rule:** No duplication of game state.
-*   **Transient State:**
-    *   UI-specific state (Draft inputs, Accordion open/close) lives in the Component.
-    *   **Persistence Note:** This "Draft State" is **ephemeral**. If the App crashes or restarts during input (e.g. Assigning Roles), draft state is lost.
-*       **IDisposable Implementation**: Any component subscribing to StateChanged MUST implement IDisposable and unsubscribe in the Dispose() method.
+*   **No duplication of game state.** Components never cache or shadow Core state.
+*   **Transient State:** UI-specific state (draft selections, accordion state) lives in the component. This draft state is ephemeral — lost on app crash during input.
+*   **IDisposable:** Any component subscribing to `StateChanged` must implement `IDisposable` and unsubscribe in `Dispose()`.
 *   **Navigation:** `MudTabs` with `KeepPanelsAlive="true"`.
-    *   **State Refresh Risk:** Because panels remain alive, they may not automatically re-render when hidden.
-    *   **Solution:** Components must subscribe to `GameClientManager.StateChanged` or use a `CascadingParameter` to force `StateHasChanged()` when the Session Core Object reference updates.
+    *   Panels remain alive when hidden; components must subscribe to `GameClientManager.StateChanged` to refresh when the active session updates.
 
 ### 3.3. The Adapter (GameClientManager)
-*   Proxies input, holds active session.
-*   **Audio Ownership:** The `GameClientManager` (Singleton) holds the reference to the active `IAudioPlayer`. It is responsible for starting/stopping/looping tracks. The View only sends signals (e.g. "Mute Toggled").
-*   **Persistence Authority:** Handles writing state to disk immediately upon mutation.
+*   Singleton. Proxies moderator input to Core, holds the active session, manages audio playback, and handles persistence.
+*   Monolithic for v1 — audio, persistence, and session management live in one class. The seams for future decomposition are obvious (audio, persistence, session) but splitting is deferred until complexity warrants it.
+*   **Audio:** Holds the active `IAudioPlayer`. Responsible for starting/stopping/looping tracks. Reconciles on `App.OnResume` or `StateChanged`. The View only sends signals (e.g., "Mute Toggled").
+*   **Persistence:** Immediate write to `FileSystem.AppDataDirectory` on successful `ProcessInput()`. Single active session — one save file, overwritten on each input.
 
-## 4. The Bridge: `GameClientManager` Contract
+## 4. Navigation & Layout
 
-*   Standard contract as defined previously.
-*   **Persistence:**
-    *   Trigger: **Immediate write** on successful `ProcessInput()`.
-    *   Location: `FileSystem.AppDataDirectory`.
+### 4.1. Pages
+*   **Lobby:** Game setup. Two-step wizard — roster definition first, then role selection. Seamless back-navigation preserves role selections when returning to roster. Navigates to Dashboard once `GameSessionConfig` is fulfilled and the game is created.
+*   **Dashboard:** Gameplay. Three tabs — Roster, Action, Stats.
 
-## 5. UI Design & Behavior
+### 4.2. Tab Bar
+*   Always visible, positioned at the top of the screen.
+*   Action controls (buttons, inputs) positioned at the bottom in the thumb zone.
+*   Spatial separation between tabs (top) and action zone (bottom) prevents accidental tab switches during high-intensity moments.
 
-### 5.1. Navigation & Layout
-*   **Tab System:** `MudTabs` with `KeepPanelsAlive="true"`.
-    *   *Benefit:* This ensures the **Auto-Timer** (in the Action Tab) continues ticking even if the user views the Stats Tab.
+### 4.3. Phase & Turn Indicator
+*   Persistent bar visible across all tabs and pages showing current phase and turn number (e.g., "Night 3", "Day 2").
 
-### 5.2. Component Specifics
+## 5. Instruction Rendering
 
-#### A. Roster Tab
-*   Standard list.
+### 5.1. Two-Part Flow
+*   When a `ModeratorInstruction` has both `PublicAnnouncement` and `PrivateInstruction`:
+    1. **First screen:** Public text only (the moderator reads this aloud).
+    2. **Second screen (after tap):** Private text + input controls.
+*   When only one text field is present (public or private), show it directly with the input controls. No extra tap.
 
-#### B. Action Tab (Instruction Renderer & Audio)
-*   **Audio Logic (Singleton Managed):**
-    *   **Default Behavior:** All tracks are treated as **Looping** (Ambience/Music) for V1. One-shot SFX are out of scope for V1.
-    *   **Reconciliation:** On `App.OnResume` or `StateChanged`, the Manager checks if the correct audio for the current Instruction is playing. If not, it swaps tracks.
-*   **Timer:** A local UI timer. Resets on component initialization (new instruction).
+### 5.2. Transitions Between Instructions
+*   In-place transition: quick fade or right-to-left swipe animation.
+*   Haptic feedback fires on the navigation tap itself (not on the transition animation).
+*   Haptic is limited to taps that progress the game — not on general UI interactions (dropdowns, tab switches).
 
-#### C. Input Views
-*   **Submission:** `GameClientManager.ProcessInput`.
-*   **`AssignRolesView`:**
-    *   **Form Factor:** Single Page Form.
-    *   **Draft Data:** `Dictionary<Guid, string?>` (PlayerId -> RoleId).
-    *   **Logic:** Local "Inventory" logic tracks role counts.
-    *   **Validation:** Prevents submission until `AssignedRoles` matches `AvailableRoles`.     
-        *   **Validation Feedback**: The view must calculate the delta (Required vs. Assigned) and display a specific warning message (e.g., "Need 1 more Villager") near the disabled Submit button.
+### 5.3. Submission Behavior
+*   **Game input** (`SelectPlayersInstruction`, `SelectOptionsInstruction`, `AssignRolesInstruction`): Press-and-hold to submit (~0.5-1s). Prevents accidental commitment of game-altering decisions.
+*   **Simple confirmations** (`ConfirmationInstruction`): Standard tap. These are acknowledgments, not decisions.
 
-#### D. Lobby (Setup)
-*   **Reordering:**
-    *   **Primary:** "Move Up" / "Move Down" Buttons.
-    *   **Secondary:** `MudDropZone`.
-    *   *CSS Note:* Use `touch-action: none` on drag handles. Drag handles must be explicit, distinct icons (e.g., hamburger menu icon) on the right side of the row. The rest of the row must remain scrollable.
+### 5.4. Timer
+*   Count-up stopwatch. Resets on new instruction. Runs independently of tab focus (panels stay alive).
 
-### 5.3. Lifecycle & Persistence
-*   **Wake Lock:** Active during **Lobby** AND **Dashboard**.
-*   **Persistence Strategy:** 
-    *   **Save:** Immediately after `GameClientManager` receives a new State from Core (post-input).
-    *   **Load:** On App Start / `App.OnResume`.
+## 6. Input Views
 
-## 6. Project Structure
+### 6.1. SelectPlayersView
+*   Vertical list in seating order.
+*   Only displays players provided by the Core's `SelectablePlayerIds` — no supplementary player data.
+*   Tap to select/deselect. Submit enabled when selection meets `CountConstraint`.
 
-```text
-Werewolves.Client/
-├── MauiProgram.cs              # DI, Background Audio Config
-├── Resources/
-│   ├── Raw/
-│   │   └── Audio/              # .mp3/.wav assets
-│   └── Images/                 # Role Icons / Status Effects
-├── Services/
-│   ├── GameClientManager.cs    # Holds Session AND IAudioPlayer
-│   ├── AudioMap.cs             # Maps Instruction.Id -> Audio Filename
-│   └── ImageMap.cs             # Maps Role.Id -> Image Filename
-├── Components/
-│   ├── Layout/
-│   │   └── MainLayout.razor
-│   ├── Pages/
-│   │   ├── Lobby.razor
-│   │   └── Dashboard.razor     # MudTabs(KeepPanelsAlive=true)
-│   └── Game/
-│       ├── InstructionRenderer.razor
-│       ├── Views/
-│       │   ├── AssignRolesView.razor       # Single Page Form
-│       │   ├── SelectPlayersView.razor
-│       │   ├── SelectOptionsView.razor
-│       │   └── ConfirmationView.razor
-│       └── DashboardTabs/
-└── wwwroot/
-    └── css/
-        └── app.css             # Minimal layout shims
-```
+### 6.2. SelectOptionsView
+*   Vertical list of options. Tap to select.
 
-## 7. Implementation Guidelines
+### 6.3. AssignRolesView
+*   Used during gameplay when a role is revealed (elimination, not setup).
+*   Typically one player at a time — a simple role picker from `RolesForAssignment` (unassigned roles).
 
-*    **MudBlazor First**: Use MudBlazor components.
-*    **CSS**: Only write CSS if MudBlazor classes cannot solve a layout glitch (e.g., Safe Areas).
-*    **CSS Units**: Use Standard CSS units (px, rem). The WebView Viewport tag handles the translation to Device Independent Pixels (dp).
-*    **Reactivity**: Components must explicitly handle state refreshes when ActiveSession changes to support KeepPanelsAlive.
-*    **Error Handling**: Use Snackbars for logic errors, Crash for exceptions.        
+### 6.4. ConfirmationView
+*   Single "Proceed" button. Standard tap.
+
+## 7. Dashboard Tabs
+
+### 7.1. Roster Tab
+*   Player list showing role, health (alive/dead), and status effects.
+*   All information visible — no hidden roles. The moderator assigned the cards and learns roles during play; the app surfaces everything it knows.
+
+### 7.2. Action Tab
+*   Renders the current `ModeratorInstruction` via the two-part flow.
+*   Houses the count-up timer.
+*   Audio controls (mute/unmute).
+
+### 7.3. Stats Tab
+*   Roles remaining per faction (list/table).
+*   Elimination log (chronological).
+*   Win probability calculator: deferred, near-term future feature.
+
+## 8. Lobby
+
+### 8.1. Step 1: Roster Definition
+*   Text input to add player names.
+*   Reordering via "Move Up" / "Move Down" buttons.
+*   "Next" button navigates to role selection.
+
+### 8.2. Step 2: Role Selection
+*   Roles grouped by Role Group (Villagers, Werewolves, Ambiguous, Loners).
+*   Stepper control (+/-) per role for count.
+*   Persistent summary bar: `Selected: X/Y` (current vs. target based on player count).
+*   Submit disabled until count matches. Structural validation errors (e.g., Thief +2 rule) shown as inline messages.
+*   Back-navigation preserves selections.
+
+## 9. Lifecycle
+
+*   **Wake Lock:** Active during Lobby and Dashboard.
+*   **Persistence:** Save immediately after `ProcessInput()`. Load on app start / `App.OnResume`. If a save file exists on launch, resume; otherwise show Lobby.
+*   **Transient state is not serialized** (see ADR-0002). On process kill and rehydration, the game resets to the beginning of the current main phase.
+
+## 10. Error Handling
+
+*   **Lobby:** Inline validation messages near the relevant section. No snackbars for predictable validation failures.
+*   **Gameplay:** Snackbars for runtime errors (e.g., `ProcessResult.IsSuccess == false`).
+
+## 11. Project Structure
+
+*   Components live under `Components/` — pages, layout, game views, and dashboard tabs.
+*   Services live under `Services/` — `GameClientManager`, `AudioMap`, `ImageMap`.
+*   Client-specific localization strings live under `Resources/`.
+*   Audio assets live under `Resources/Raw/Audio/`.
+*   Minimal layout shim CSS lives under `wwwroot/css/`.
