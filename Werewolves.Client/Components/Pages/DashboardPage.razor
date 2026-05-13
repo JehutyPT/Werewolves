@@ -1,0 +1,246 @@
+@implements IDisposable
+@inject GameClientManager Game
+
+<main class="ww-dashboard-shell" aria-labelledby="dashboard-title">
+	<nav class="ww-dashboard-tabs" aria-label="Áreas do jogo">
+		<button type="button"
+				class="@TabButtonClass(DashboardTab.Roster)"
+				aria-selected="@(_activeTab == DashboardTab.Roster)"
+				@onclick="() => SelectTab(DashboardTab.Roster)">Jogadores</button>
+		<button type="button"
+				class="@TabButtonClass(DashboardTab.Action)"
+				aria-selected="@(_activeTab == DashboardTab.Action)"
+				@onclick="() => SelectTab(DashboardTab.Action)">Ação</button>
+		<button type="button"
+				class="@TabButtonClass(DashboardTab.Stats)"
+				aria-selected="@(_activeTab == DashboardTab.Stats)"
+				@onclick="() => SelectTab(DashboardTab.Stats)">Estatísticas</button>
+	</nav>
+
+	<header class="ww-phase-strip">
+		<div>
+			<p class="ww-step-label">Sessão em curso</p>
+			<h1 id="dashboard-title">@PhaseTurnLabel</h1>
+		</div>
+		<span class="ww-phase-pill">@AliveCount vivos</span>
+	</header>
+
+	<section class="ww-dashboard-panel" style="@PanelStyle(DashboardTab.Roster)" aria-hidden="@(_activeTab != DashboardTab.Roster)">
+		<div class="ww-section-head">
+			<span>Ordem de lugares</span>
+			<span>@PlayerCountLabel</span>
+		</div>
+
+		@if (Players.Count == 0)
+		{
+			<p class="ww-empty-state">Sem jogadores nesta sessão.</p>
+		}
+		else
+		{
+			<ol class="ww-dashboard-roster">
+				@for (var index = 0; index < Players.Count; index++)
+				{
+					var player = Players[index];
+					<li class="ww-dashboard-player @(player.State.Health == PlayerHealth.Dead ? "ww-dashboard-player--dead" : "")" @key="player.Id">
+						<span class="ww-seat-number">@(index + 1)</span>
+						<div class="ww-dashboard-player__main">
+							<span class="ww-player-name">@player.Name</span>
+							<span class="ww-dashboard-player__meta">@RoleLabel(player) · @HealthLabel(player.State.Health)</span>
+						</div>
+						<span class="ww-status-list">@StatusEffectsLabel(player)</span>
+					</li>
+				}
+			</ol>
+		}
+	</section>
+
+	<section class="ww-dashboard-panel ww-action-panel" style="@PanelStyle(DashboardTab.Action)" aria-hidden="@(_activeTab != DashboardTab.Action)">
+		<div class="ww-instruction-stack">
+			@if (Game.CurrentInstruction is null)
+			{
+				<p class="ww-empty-state">Sem instrução pendente.</p>
+			}
+			else
+			{
+				@if (!string.IsNullOrWhiteSpace(Game.CurrentInstruction.PublicAnnouncement))
+				{
+					<article class="ww-instruction-block">
+						<span class="ww-label ww-label--accent">Anunciar</span>
+						<p class="ww-announcement">@Game.CurrentInstruction.PublicAnnouncement</p>
+					</article>
+				}
+
+				@if (!string.IsNullOrWhiteSpace(Game.CurrentInstruction.PrivateInstruction))
+				{
+					<article class="ww-instruction-block">
+						<span class="ww-label">Moderador</span>
+						<p>@Game.CurrentInstruction.PrivateInstruction</p>
+					</article>
+				}
+			}
+		</div>
+
+		<footer class="ww-dashboard-action-zone">
+			@if (Game.CurrentInstruction is ConfirmationInstruction confirmationInstruction)
+			{
+				<button type="button" class="ww-btn-primary" @onclick="() => Confirm(confirmationInstruction)">Continuar</button>
+			}
+			else
+			{
+				<button type="button" class="ww-btn-primary" disabled>Responder</button>
+			}
+		</footer>
+	</section>
+
+	<section class="ww-dashboard-panel" style="@PanelStyle(DashboardTab.Stats)" aria-hidden="@(_activeTab != DashboardTab.Stats)">
+		<div class="ww-section-head">
+			<span>Resumo do jogo</span>
+			<span>@PhaseTurnLabel</span>
+		</div>
+
+		<div class="ww-stats-grid">
+			<div class="ww-stat-tile">
+				<span class="ww-label">Vivos</span>
+				<strong>@AliveCount</strong>
+			</div>
+			<div class="ww-stat-tile">
+				<span class="ww-label">Eliminados</span>
+				<strong>@EliminatedCount</strong>
+			</div>
+			<div class="ww-stat-tile">
+				<span class="ww-label">Papéis</span>
+				<strong>@RoleCount</strong>
+			</div>
+		</div>
+
+		<section class="ww-role-summary" aria-label="Papéis em jogo">
+			@foreach (var role in RolesInPlay)
+			{
+				<div class="ww-role-summary__row" @key="role.Role">
+					<span>@role.Name</span>
+					<strong>@role.Count</strong>
+				</div>
+			}
+		</section>
+	</section>
+</main>
+
+@using Werewolves.Client.Services
+@using Werewolves.Core.StateModels.Core
+@using Werewolves.Core.StateModels.Enums
+@using Werewolves.Core.StateModels.Extensions
+@using Werewolves.Core.StateModels.Models.Instructions
+
+@code {
+	private DashboardTab _activeTab = DashboardTab.Action;
+
+	protected override void OnInitialized()
+	{
+		Game.StateChanged += HandleStateChanged;
+	}
+
+	private IReadOnlyList<IPlayer> Players => Game.CurrentSession?.GetPlayers().ToList() ?? [];
+
+	private int AliveCount => Players.Count(player => player.State.Health == PlayerHealth.Alive);
+	private int EliminatedCount => Players.Count(player => player.State.Health == PlayerHealth.Dead);
+	private int RoleCount => Players.Count(player => player.State.MainRole is not null);
+
+	private string PlayerCountLabel => Players.Count == 1
+		? "1 jogador"
+		: $"{Players.Count} jogadores";
+
+	private string PhaseTurnLabel
+	{
+		get
+		{
+			if (Game.CurrentPhase is not { } phase || Game.TurnNumber is not { } turn)
+			{
+				return "Sem sessão";
+			}
+
+			return $"{PhaseLabel(phase)} {turn}";
+		}
+	}
+
+	private IEnumerable<(MainRoleType Role, string Name, int Count)> RolesInPlay =>
+		Players
+			.Select(player => player.State.MainRole)
+			.OfType<MainRoleType>()
+			.GroupBy(role => role)
+			.OrderBy(group => group.Key.GetRoleGroup())
+			.ThenBy(group => group.Key.GetPublicName())
+			.Select(group => (group.Key, group.Key.GetPublicName(), group.Count()));
+
+	private void SelectTab(DashboardTab tab)
+	{
+		_activeTab = tab;
+	}
+
+	private void Confirm(ConfirmationInstruction instruction)
+	{
+		Game.ProcessInput(instruction.CreateResponse(true));
+	}
+
+	private string TabButtonClass(DashboardTab tab) =>
+		_activeTab == tab ? "ww-dashboard-tab ww-dashboard-tab--active" : "ww-dashboard-tab";
+
+	private string PanelStyle(DashboardTab tab) =>
+		_activeTab == tab ? "display:block;" : "display:none;";
+
+	private static string PhaseLabel(GamePhase phase) => phase switch
+	{
+		GamePhase.Night => "Noite",
+		GamePhase.Dawn => "Amanhecer",
+		GamePhase.Day => "Dia",
+		_ => "Fase"
+	};
+
+	private static string RoleLabel(IPlayer player) =>
+		player.State.MainRole?.GetPublicName() ?? "Por atribuir";
+
+	private static string HealthLabel(PlayerHealth health) => health switch
+	{
+		PlayerHealth.Alive => "Vivo",
+		PlayerHealth.Dead => "Eliminado",
+		_ => "Estado desconhecido"
+	};
+
+	private static string StatusEffectsLabel(IPlayer player)
+	{
+		var effects = player.State.GetActiveStatusEffects();
+		return effects.Count == 0
+			? "Sem efeitos"
+			: string.Join(", ", effects.Select(StatusEffectLabel));
+	}
+
+	private static string StatusEffectLabel(StatusEffectTypes effect) => effect switch
+	{
+		StatusEffectTypes.ElderProtectionLost => "Proteção perdida",
+		StatusEffectTypes.LycanthropyInfection => "Infetado",
+		StatusEffectTypes.WildChildChanged => "Transformado",
+		StatusEffectTypes.LynchingImmunityUsed => "Imunidade usada",
+		StatusEffectTypes.Sheriff => "Capitão",
+		StatusEffectTypes.Lovers => "Apaixonado",
+		StatusEffectTypes.Charmed => "Encantado",
+		StatusEffectTypes.TownCrier => "Pregoeiro",
+		StatusEffectTypes.Executioner => "Carrasco",
+		_ => "Efeito"
+	};
+
+	private void HandleStateChanged(object? sender, EventArgs args)
+	{
+		_ = InvokeAsync(StateHasChanged);
+	}
+
+	public void Dispose()
+	{
+		Game.StateChanged -= HandleStateChanged;
+	}
+
+	private enum DashboardTab
+	{
+		Roster,
+		Action,
+		Stats
+	}
+}

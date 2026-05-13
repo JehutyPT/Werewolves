@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using Werewolves.Core.GameLogic.Services;
 using Werewolves.Client.Services;
 
 #if WINDOWS
@@ -24,6 +25,7 @@ namespace Werewolves.Client
 
             builder.Services.AddMauiBlazorWebView();
             builder.Services.AddSingleton<LobbySetupState>();
+            builder.Services.AddSingleton<GameClientManager>();
 
 #if DEBUG
     		builder.Services.AddBlazorWebViewDeveloperTools();

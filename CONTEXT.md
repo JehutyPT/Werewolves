@@ -24,9 +24,13 @@ _Avoid_: Player order, turn order
 A Player's secret identity, determining their abilities, wake-up schedule, and default allegiance. Drawn from a physical Character Card.
 _Avoid_: Character, class, card (when referring to the assigned identity)
 
-**Team**:
-A Player's current allegiance — Villagers, Werewolves, or a solo faction. Can shift during the game (e.g., Wild Child turning, infection).
-_Avoid_: Faction, side, alignment
+**Faction**:
+A distinct win condition together with the set of Players who benefit from it being met. A Faction comes into being whenever at least one Player holds a win condition not shared by any existing Faction. Membership can change during the game (e.g., Wild Child turning, infection). Examples: the Villager Faction (all Villagers win when every Werewolf is Eliminated), the Piper Faction (the Piper alone wins when all surviving Players are Charmed).
+_Avoid_: Team (implies cooperation — the Piper's Charmed targets aren't allies), side, alignment
+
+**Team** _(deprecated — use Faction for win-condition grouping)_:
+Legacy term still present in the codebase (`Team` enum). Refers to runtime allegiance — who wakes together, who can target whom. Being migrated toward Faction as the canonical concept.
+_Avoid_: Using in new domain discussions; prefer Faction
 
 **Role Group**:
 A classification bucket for Roles: Werewolves, Villagers, Ambiguous, Loners, New Moon. Used for UI grouping and validation, not for determining Team allegiance at runtime.

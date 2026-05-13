@@ -1,13 +1,21 @@
 @using Werewolves.Client.Components.Pages
+@inject LobbySetupState Lobby
+@inject GameClientManager Game
 
 @if (_currentStep == LobbyStep.Roster)
 {
 	<LobbyRosterPage OnContinue="ShowRoleSelection" />
 }
-else
+else if (_currentStep == LobbyStep.RoleSelection)
 {
 	<RoleSelectionPage OnBack="ShowRoster" OnStartGame="HandleStartGame" />
 }
+else
+{
+	<DashboardPage />
+}
+
+@using Werewolves.Client.Services
 
 @code {
 	private LobbyStep _currentStep = LobbyStep.Roster;
@@ -24,12 +32,14 @@ else
 
 	private void HandleStartGame()
 	{
-		// TODO: Create game session via GameClientManager and navigate to Dashboard
+		Game.StartGame(Lobby.PlayerNames, Lobby.GetSelectedRoles());
+		_currentStep = LobbyStep.Dashboard;
 	}
 
 	private enum LobbyStep
 	{
 		Roster,
-		RoleSelection
+		RoleSelection,
+		Dashboard
 	}
 }

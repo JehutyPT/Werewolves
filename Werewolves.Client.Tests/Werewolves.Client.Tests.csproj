@@ -9,10 +9,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="..\Werewolves.Client\Services\GameClientManager.cs" Link="Services\GameClientManager.cs" />
     <Compile Include="..\Werewolves.Client\Services\LobbySetupState.cs" Link="Services\LobbySetupState.cs" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Werewolves.Core\Werewolves.Core.GameLogic\Werewolves.Core.GameLogic.csproj" />
     <ProjectReference Include="..\Werewolves.Core\Werewolves.Core.StateModels\Werewolves.Core.StateModels.csproj" />
   </ItemGroup>
 
