@@ -25,9 +25,7 @@ namespace Werewolves.Client
 
             builder.Services.AddMauiBlazorWebView();
             builder.Services.AddSingleton<LobbySetupState>();
-            builder.Services.AddSingleton<GameService>();
             builder.Services.AddSingleton<GameClientManager>();
-            builder.Services.AddSingleton<AppRouteState>();
 
 #if DEBUG
     		builder.Services.AddBlazorWebViewDeveloperTools();

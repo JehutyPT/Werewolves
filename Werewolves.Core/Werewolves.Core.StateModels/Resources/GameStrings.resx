@@ -138,59 +138,59 @@
     <comment/>
   </data>
   <data name="WildChildModelSelectionPrompt" xml:space="preserve">
-    <value>Wild Child, choose your role model.</value>
+    <value>Criança Selvagem, escolhe o teu modelo.</value>
     <comment/>
   </data>
   <data name="WerewolvesChooseVictimPrompt" xml:space="preserve">
-    <value>Werewolves, wake up and choose one player to eliminate.</value>
+    <value>Lobisomens, acordem e escolham um jogador para eliminar.</value>
     <comment/>
   </data>
   <data name="SingleVictimEliminatedAnnounce" xml:space="preserve">
-    <value>Player {0} was eliminated during the night.</value>
+    <value>O jogador {0} foi eliminado durante a noite.</value>
     <comment/>
   </data>
   <data name="MultipleVictimEliminatedAnnounce" xml:space="preserve">
-    <value>The following players were eliminated during the night: \n{0}</value>
+    <value>Os seguintes jogadores foram eliminados durante a noite: \n{0}</value>
     <comment/>
   </data>
   <data name="RevealRolePromptSpecify" xml:space="preserve">
-    <value>Specify the roles of the deceased in secret. Do not reveal them publicly at this stage.</value>
+    <value>Indica em segredo os papéis dos eliminados. Não os reveles publicamente nesta fase.</value>
     <comment/>
   </data>
   <data name="DebateStartsPrompt" xml:space="preserve">
-    <value>Daytime debate begins. When finished, confirm to proceed to vote.</value>
+    <value>Começa o debate do dia. Quando terminar, confirma para avançar para a votação.</value>
     <comment/>
   </data>
   <data name="VoteStartsPublicInstruction" xml:space="preserve">
-    <value>Voting phase. Determine the outcome and report the eliminated player or if it was a tie.</value>
+    <value>Votação. Determina o resultado e indica o jogador eliminado ou que houve empate.</value>
     <comment/>
   </data>
   <data name="GameOverMessage" xml:space="preserve">
-    <value>Game Over! {0}</value>
+    <value>Fim do jogo! {0}</value>
     <comment/>
   </data>
   <data name="PlayerListCannotBeEmpty" xml:space="preserve">
-    <value>Player list cannot be empty.</value>
+    <value>A lista de jogadores não pode estar vazia.</value>
     <comment/>
   </data>
   <data name="RoleListCannotBeEmpty" xml:space="preserve">
-    <value>MainRole list cannot be empty.</value>
+    <value>A lista de papéis não pode estar vazia.</value>
     <comment/>
   </data>
   <data name="VictoryConditionAllWerewolvesEliminated" xml:space="preserve">
-    <value>All werewolves eliminated.</value>
+    <value>Todos os lobisomens foram eliminados.</value>
     <comment/>
   </data>
   <data name="VictoryConditionWerewolvesOutnumber" xml:space="preserve">
-    <value>Werewolves equal or outnumber villagers.</value>
+    <value>Os lobisomens igualam ou superam os aldeões.</value>
     <comment/>
   </data>
   <data name="DefaultLogValue" xml:space="preserve">
-    <value>Unknown</value>
+    <value>Desconhecido</value>
     <comment/>
   </data>
   <data name="VoteStartsModeratorInstruction" xml:space="preserve">
-    <value>Day vote phase. Please determine the outcome and report the single player eliminated (or report a tie).</value>
+    <value>Fase de votação do dia. Determina o resultado e indica o único jogador eliminado, ou indica empate.</value>
     <comment/>
   </data>
   <data name="SeerRoleName" xml:space="preserve">
@@ -198,39 +198,39 @@
     <comment/>
   </data>
   <data name="RoleSingleIdentificationPrompt" xml:space="preserve">
-    <value>Please identify the player who is the {0}.</value>
+    <value>Identifica o jogador que é {0}.</value>
     <comment/>
   </data>
   <data name="SeerNightActionPrompt" xml:space="preserve">
-    <value>Seer, choose a player whose identity you wish to discover.</value>
+    <value>Vidente, escolhe um jogador cuja identidade queres descobrir.</value>
     <comment/>
   </data>
   <data name="SeerResultWerewolfTeam" xml:space="preserve">
-    <value>Target {0} IS affiliated with the Werewolves (Thumbs Up).</value>
+    <value>O alvo {0} pertence à equipa dos Lobisomens (polegar para cima).</value>
     <comment/>
   </data>
   <data name="SeerResultNotWerewolfTeam" xml:space="preserve">
-    <value>Target {0} is NOT affiliated with the Werewolves (Thumbs Down).</value>
+    <value>O alvo {0} NÃO pertence à equipa dos Lobisomens (polegar para baixo).</value>
     <comment/>
   </data>
   <data name="RoleGoesToSleepSingle" xml:space="preserve">
-    <value>{0} goes to sleep.</value>
+    <value>{0} volta a dormir.</value>
     <comment/>
   </data>
   <data name="ConfirmNightStarted" xml:space="preserve">
-    <value>Confirma que todos estão de olhos fechados e em silêncio.</value>
+    <value>Confirma que todos estão a dormir e em silêncio.</value>
     <comment/>
   </data>
   <data name="RoleWakesUp" xml:space="preserve">
-    <value>{0} wakes up.</value>
+    <value>{0} acorda.</value>
     <comment/>
   </data>
   <data name="RoleMultipleIdentificationPrompt" xml:space="preserve">
-    <value>Please identify the players who are {0}.</value>
+    <value>Identifica os jogadores que são {0}.</value>
     <comment/>
   </data>
   <data name="DebateModeratorInstructions" xml:space="preserve">
-    <value>Try to moderate and ensure everyone has a chance to speak and intervene. Confirm once the debate has finished.</value>
+    <value>Modera para garantir que todos têm oportunidade de falar. Confirma quando o debate terminar.</value>
     <comment/>
   </data>
   <data name="VillagerVillagerRoleName" xml:space="preserve">
@@ -314,7 +314,7 @@
     <comment/>
   </data>
   <data name="ActorRoleName" xml:space="preserve">
-    <value>Actor</value>
+    <value>Ator</value>
     <comment/>
   </data>
   <data name="WolfHoundRoleName" xml:space="preserve">
@@ -358,11 +358,11 @@
     <comment/>
   </data>
   <data name="MissingExtraActorRolesValidationError" xml:space="preserve">
-    <value>O Actor requer 3 papéis extra.</value>
+    <value>O Ator requer 3 papéis extra.</value>
     <comment/>
   </data>
   <data name="MissingExtraThiefActorRolesValidationError" xml:space="preserve">
-    <value>O Ladrão e o Actor requerem 5 papéis extra no total.</value>
+    <value>O Ladrão e o Ator requerem 5 papéis extra no total.</value>
     <comment/>
   </data>
   <data name="VillagersGroupName" xml:space="preserve">

@@ -1,6 +1,5 @@
 using FluentAssertions;
 using Werewolves.Client.Services;
-using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Xunit;
@@ -10,58 +9,97 @@ namespace Werewolves.Client.Tests.Services;
 public class GameClientManagerTests
 {
 	[Fact]
-	public void StartGame_FromValidLobby_CreatesActiveSession()
+	public void StartGame_FromLobbyConfiguration_CreatesCoreSessionAndExposesInstruction()
 	{
-		var lobby = CreateValidLobby();
-		var manager = new GameClientManager(new GameService());
-		var stateChangedCount = 0;
-		manager.StateChanged += () => stateChangedCount++;
+		var manager = new GameClientManager();
+		var players = new[] { "Ana", "Bruno", "Catarina", "Diana", "Eduardo" };
+		var roles = new[]
+		{
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.Seer,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager
+		};
 
-		var instruction = manager.StartGame(lobby);
+		var instruction = manager.StartGame(players, roles);
 
-		instruction.GameGuid.Should().NotBeEmpty();
+		instruction.Should().BeOfType<StartGameConfirmationInstruction>();
+		manager.HasActiveSession.Should().BeTrue();
 		manager.ActiveGameId.Should().Be(instruction.GameGuid);
-		manager.ActiveSession.Should().NotBeNull();
-		manager.ActiveSession!.GetPlayers().Select(p => p.Name)
-			.Should().Equal("Ana", "Bruno", "Catarina", "Diana", "Eduardo");
-		manager.CurrentInstruction.Should().BeOfType<StartGameConfirmationInstruction>();
-		stateChangedCount.Should().Be(1);
+		manager.CurrentInstruction.Should().Be(instruction);
+		manager.CurrentSession.Should().NotBeNull();
+		manager.CurrentSession!.GetPlayers().Select(p => p.Name).Should().Equal(players);
+		manager.CurrentSession.RoleInPlayCount(MainRoleType.SimpleWerewolf).Should().Be(1);
+		manager.CurrentSession.RoleInPlayCount(MainRoleType.Seer).Should().Be(1);
+		manager.CurrentSession.RoleInPlayCount(MainRoleType.SimpleVillager).Should().Be(3);
 	}
 
 	[Fact]
-	public void ProcessModeratorResponse_AdvancesCurrentInstructionAndNotifies()
+	public void ProcessInput_ForCurrentInstruction_AdvancesCurrentInstruction()
 	{
-		var lobby = CreateValidLobby();
-		var manager = new GameClientManager(new GameService());
-		var startInstruction = manager.StartGame(lobby);
-		var stateChangedCount = 0;
-		manager.StateChanged += () => stateChangedCount++;
+		var manager = new GameClientManager();
+		var startInstruction = StartSimpleGame(manager);
 
-		var result = manager.ProcessModeratorResponse(startInstruction.CreateResponse(true));
+		var result = manager.ProcessInput(startInstruction.CreateResponse(true));
 
 		result.IsSuccess.Should().BeTrue();
-		manager.ActiveSession.Should().NotBeNull();
-		manager.ActiveSession!.GetCurrentPhase().Should().Be(GamePhase.Night);
-		manager.ActiveSession.TurnNumber.Should().Be(1);
-		manager.CurrentInstruction.Should().BeOfType<ConfirmationInstruction>();
-		manager.CurrentInstruction.Should().NotBeOfType<StartGameConfirmationInstruction>();
-		stateChangedCount.Should().Be(1);
+		result.ModeratorInstruction.Should().NotBeNull();
+		manager.CurrentInstruction.Should().Be(result.ModeratorInstruction);
+		manager.CurrentInstruction.Should().NotBe(startInstruction);
+		manager.CurrentPhase.Should().Be(GamePhase.Night);
+		manager.TurnNumber.Should().Be(1);
 	}
 
-	private static LobbySetupState CreateValidLobby()
+	[Fact]
+	public void StartGame_RaisesStateChangedOnceAfterSessionCreation()
 	{
-		var lobby = new LobbySetupState();
-		foreach (var playerName in new[] { "Ana", "Bruno", "Catarina", "Diana", "Eduardo" })
+		var manager = new GameClientManager();
+		var eventCount = 0;
+		manager.StateChanged += (_, _) => eventCount++;
+
+		StartSimpleGame(manager);
+
+		eventCount.Should().Be(1);
+	}
+
+	[Fact]
+	public void ProcessInput_RaisesStateChangedAfterSuccessfulProcessing()
+	{
+		var manager = new GameClientManager();
+		var startInstruction = StartSimpleGame(manager);
+		var eventCount = 0;
+		manager.StateChanged += (_, _) => eventCount++;
+
+		manager.ProcessInput(startInstruction.CreateResponse(true));
+
+		eventCount.Should().Be(1);
+	}
+
+	[Fact]
+	public void ProcessInput_WithoutActiveSession_ThrowsInvalidOperationException()
+	{
+		var manager = new GameClientManager();
+		var response = StartSimpleGame(new GameClientManager()).CreateResponse(true);
+
+		var act = () => manager.ProcessInput(response);
+
+		act.Should().Throw<InvalidOperationException>()
+			.WithMessage("Cannot process moderator response without an active game session.");
+	}
+
+	private static StartGameConfirmationInstruction StartSimpleGame(GameClientManager manager)
+	{
+		var players = new[] { "Ana", "Bruno", "Catarina", "Diana", "Eduardo" };
+		var roles = new[]
 		{
-			lobby.AddPlayer(playerName);
-		}
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.Seer,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager
+		};
 
-		lobby.IncrementRole(MainRoleType.SimpleWerewolf);
-		lobby.IncrementRole(MainRoleType.Seer);
-		lobby.IncrementRole(MainRoleType.SimpleVillager);
-		lobby.IncrementRole(MainRoleType.SimpleVillager);
-		lobby.IncrementRole(MainRoleType.SimpleVillager);
-
-		return lobby;
+		return manager.StartGame(players, roles);
 	}
 }

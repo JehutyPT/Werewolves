@@ -1,13 +1,12 @@
 @using Werewolves.Client.Components.Pages
-@implements IDisposable
-@inject AppRouteState RouteState
 @inject LobbySetupState Lobby
+@inject GameClientManager Game
 
-@if (RouteState.CurrentScreen == AppScreen.Roster)
+@if (_currentStep == LobbyStep.Roster)
 {
 	<LobbyRosterPage OnContinue="ShowRoleSelection" />
 }
-else if (RouteState.CurrentScreen == AppScreen.RoleSelection)
+else if (_currentStep == LobbyStep.RoleSelection)
 {
 	<RoleSelectionPage OnBack="ShowRoster" OnStartGame="HandleStartGame" />
 }
@@ -16,34 +15,31 @@ else
 	<DashboardPage />
 }
 
+@using Werewolves.Client.Services
+
 @code {
-	protected override void OnInitialized()
-	{
-		RouteState.StateChanged += OnRouteStateChanged;
-	}
+	private LobbyStep _currentStep = LobbyStep.Roster;
 
 	private void ShowRoleSelection()
 	{
-		RouteState.ShowRoleSelection();
+		_currentStep = LobbyStep.RoleSelection;
 	}
 
 	private void ShowRoster()
 	{
-		RouteState.ShowRoster();
+		_currentStep = LobbyStep.Roster;
 	}
 
 	private void HandleStartGame()
 	{
-		RouteState.StartGame(Lobby);
+		Game.StartGame(Lobby.PlayerNames, Lobby.GetSelectedRoles());
+		_currentStep = LobbyStep.Dashboard;
 	}
 
-	private void OnRouteStateChanged()
+	private enum LobbyStep
 	{
-		_ = InvokeAsync(StateHasChanged);
-	}
-
-	public void Dispose()
-	{
-		RouteState.StateChanged -= OnRouteStateChanged;
+		Roster,
+		RoleSelection,
+		Dashboard
 	}
 }

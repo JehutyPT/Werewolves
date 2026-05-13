@@ -9,7 +9,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="..\Werewolves.Client\Services\AppRouteState.cs" Link="Services\AppRouteState.cs" />
     <Compile Include="..\Werewolves.Client\Services\GameClientManager.cs" Link="Services\GameClientManager.cs" />
     <Compile Include="..\Werewolves.Client\Services\LobbySetupState.cs" Link="Services\LobbySetupState.cs" />
   </ItemGroup>
