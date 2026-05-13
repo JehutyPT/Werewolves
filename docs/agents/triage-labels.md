@@ -1,6 +1,8 @@
 # Triage Labels
 
-The skills speak in terms of five canonical triage roles. This file maps those roles to the actual label strings used in this repo's issue tracker.
+This file maps skill-canonical roles to the actual label strings used in this repo's issue tracker. Labels are organised into three groups: **category**, **state**, and **document**.
+
+## State roles
 
 | Label in mattpocock/skills | Label in our tracker | Meaning                                  |
 | -------------------------- | -------------------- | ---------------------------------------- |
@@ -11,7 +13,26 @@ The skills speak in terms of five canonical triage roles. This file maps those r
 | `blocked`                  | `blocked`            | Specified but waiting on prerequisite    |
 | `wontfix`                  | `wontfix`            | Will not be actioned                     |
 
-**Document roles** (not state roles — these replace category roles for non-work-item issues):
+## Category roles
+
+Every work-item issue gets exactly one category label. Skills that mention `enhancement` should map to `feature` or `architecture` depending on the nature of the work.
+
+| Label in mattpocock/skills | Label in our tracker | Meaning                                              |
+| -------------------------- | -------------------- | ---------------------------------------------------- |
+| `bug`                      | `bug`                | Something is broken                                  |
+| `enhancement`              | `feature`            | New feature or capability                            |
+| —                          | `architecture`       | Structural improvement, refactoring, or codebase health |
+| —                          | `spike`              | Time-boxed investigation or feasibility validation   |
+
+**When to use `feature`**: New capabilities, enhancements to existing behaviour, or any work that delivers user-facing value.
+
+**When to use `architecture`**: Issues raised by the `improve-codebase-architecture` skill, or any refactor / tech-debt / structural change that doesn't add user-facing functionality.
+
+**When to use `spike`**: Time-boxed exploration to answer a specific question or validate feasibility before committing to implementation.
+
+## Document roles
+
+Not state or category roles — these replace category labels for non-work-item issues:
 
 | Label in mattpocock/skills | Label in our tracker | Meaning                                  |
 | -------------------------- | -------------------- | ---------------------------------------- |
