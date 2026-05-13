@@ -1,3 +1,8 @@
+## Project structure
+
+- **Werewolves.Core** — Game engine (C#). Architecture: `Werewolves.Core/docs/architecture.md`, vision: `Werewolves.Core/docs/product-vision.md`
+- **Werewolves.Client** — Mobile client (.NET MAUI). Architecture: `Werewolves.Client/docs/architecture.md`, vision: `Werewolves.Client/docs/product-vision.md`
+
 ## Agent skills
 
 ### Issue tracker

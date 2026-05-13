@@ -23,7 +23,8 @@ Single-context repo:
 │   ├── issue-tracker.md
 │   ├── triage-labels.md
 │   └── domain.md
-└── src/
+├── Werewolves.Client/
+└── Werewolves.Core/
 ```
 
 ## Use the glossary's vocabulary
