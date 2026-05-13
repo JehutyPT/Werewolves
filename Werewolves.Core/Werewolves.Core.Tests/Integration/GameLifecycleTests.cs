@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.Tests.Helpers;
@@ -16,6 +17,32 @@ public class GameLifecycleTests : DiagnosticTestBase
 {
     public GameLifecycleTests(ITestOutputHelper output) : base(output) { }
     #region GL-001 to GL-003: Game Creation
+
+    [Fact]
+    public void GetLobbySetupMetadata_ReturnsSupportedRolesAndSetupConstants()
+    {
+        // Arrange
+        var gameService = new GameLogic.Services.GameService();
+
+        // Act
+        var metadata = gameService.GetLobbySetupMetadata();
+
+        // Assert
+        metadata.MinimumPlayerCount.Should().Be(GameSessionConfig.MinimumPlayerCount);
+        metadata.AvailableRoles.Select(role => role.Role).Should().Equal(
+            MainRoleType.SimpleWerewolf,
+            MainRoleType.Seer,
+            MainRoleType.WildChild,
+            MainRoleType.SimpleVillager);
+
+        var seer = metadata.AvailableRoles.Single(role => role.Role == MainRoleType.Seer);
+        seer.DisplayName.Should().Be(MainRoleType.Seer.GetPublicName());
+        seer.Group.Should().Be(MainRoleType.Seer.GetRoleGroup());
+        seer.GroupDisplayName.Should().Be(MainRoleType.Seer.GetRoleGroup().GetDisplayName());
+        seer.CountConstraint.Should().Be(GameSessionConfig.RoleCountConstraints[MainRoleType.Seer]);
+
+        MarkTestCompleted();
+    }
 
     /// <summary>
     /// GL-001: StartNewGame with valid roles and players returns StartGameConfirmationInstruction.
@@ -55,6 +82,32 @@ public class GameLifecycleTests : DiagnosticTestBase
 
         // Assert - GameSessionConfig.EnforceValidity throws InvalidOperationException
         act.Should().Throw<InvalidOperationException>();
+
+        MarkTestCompleted();
+    }
+
+    [Fact]
+    public void StartNewGame_WithUnsupportedRole_ThrowsInvalidOperationException()
+    {
+        // Arrange
+        var gameService = new GameLogic.Services.GameService();
+        var config = new GameSessionConfig(
+            ["Alice", "Bob", "Charlie", "Diana", "Eve"],
+            [
+                MainRoleType.SimpleWerewolf,
+                MainRoleType.Witch,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager
+            ]);
+
+        // Act
+        var act = () => gameService.StartNewGame(config);
+
+        // Assert
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*unsupported Role*Witch*");
 
         MarkTestCompleted();
     }

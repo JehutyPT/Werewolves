@@ -102,7 +102,7 @@
 	private string? _validationMessage;
 	private List<string> _rosterErrors = new();
 
-	private static int MinPlayers => GameSessionConfig.MinimumPlayerCount;
+	private int MinPlayers => Lobby.MinimumPlayerCount;
 	private bool HasEnoughPlayers => Lobby.PlayerNames.Count >= MinPlayers;
 
 	private string PlayerCountLabel => Lobby.PlayerNames.Count == 1

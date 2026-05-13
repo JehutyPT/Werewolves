@@ -1,3 +1,5 @@
+using Werewolves.Core.GameLogic.Models;
+using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Models;
@@ -9,7 +11,10 @@ public enum AddPlayerResult { Success, EmptyName, DuplicateName }
 public enum RoleAffordance { Stepper, Toggle }
 
 public record RoleInfo(
+	MainRoleType Role,
 	string DisplayName,
+	RoleGroup Group,
+	string GroupDisplayName,
 	int Count,
 	RoleAffordance Affordance,
 	int BatchSize,
@@ -20,9 +25,30 @@ public class LobbySetupState
 {
 	private readonly List<string> _playerNames = new();
 	private readonly Dictionary<MainRoleType, int> _roleCounts = new();
+	private readonly LobbySetupMetadata _setupMetadata;
+	private readonly IReadOnlyList<MainRoleType> _availableRoles;
+	private readonly Dictionary<MainRoleType, LobbySetupRoleMetadata> _availableRoleMetadata;
 
-	public static IReadOnlyList<MainRoleType> AvailableRoles { get; } =
-		GameSessionConfig.RoleCountConstraints.Keys.ToList();
+	public LobbySetupState()
+		: this(new GameService())
+	{
+	}
+
+	public LobbySetupState(GameService gameService)
+		: this(gameService.GetLobbySetupMetadata())
+	{
+	}
+
+	public LobbySetupState(LobbySetupMetadata setupMetadata)
+	{
+		_setupMetadata = setupMetadata;
+		_availableRoles = setupMetadata.AvailableRoles.Select(role => role.Role).ToArray();
+		_availableRoleMetadata = setupMetadata.AvailableRoles.ToDictionary(role => role.Role);
+	}
+
+	public int MinimumPlayerCount => _setupMetadata.MinimumPlayerCount;
+	public IReadOnlyList<MainRoleType> AvailableRoles => _availableRoles;
+	public IReadOnlyList<RoleInfo> AvailableRoleInfos => _availableRoles.Select(GetRoleInfo).ToArray();
 
 	public IReadOnlyList<string> PlayerNames => _playerNames;
 
@@ -103,7 +129,7 @@ public class LobbySetupState
 
 	public void IncrementRole(MainRoleType role)
 	{
-		var constraint = GameSessionConfig.RoleCountConstraints[role];
+		var constraint = GetAvailableRoleMetadata(role).CountConstraint;
 		var (affordance, batchSize) = ClassifyConstraint(constraint);
 		var current = GetRoleCount(role);
 
@@ -125,7 +151,7 @@ public class LobbySetupState
 		if (current <= 0)
 			return;
 
-		var constraint = GameSessionConfig.RoleCountConstraints[role];
+		var constraint = GetAvailableRoleMetadata(role).CountConstraint;
 		var (affordance, _) = ClassifyConstraint(constraint);
 
 		if (affordance == RoleAffordance.Toggle)
@@ -154,7 +180,8 @@ public class LobbySetupState
 
 	public RoleInfo GetRoleInfo(MainRoleType role)
 	{
-		var constraint = GameSessionConfig.RoleCountConstraints[role];
+		var roleMetadata = GetAvailableRoleMetadata(role);
+		var constraint = roleMetadata.CountConstraint;
 		var (affordance, batchSize) = ClassifyConstraint(constraint);
 		var count = GetRoleCount(role);
 		var canIncrement = affordance == RoleAffordance.Toggle
@@ -163,7 +190,10 @@ public class LobbySetupState
 		var canDecrement = count > 0;
 
 		return new RoleInfo(
-			role.GetPublicName(),
+			roleMetadata.Role,
+			roleMetadata.DisplayName,
+			roleMetadata.Group,
+			roleMetadata.GroupDisplayName,
 			count,
 			affordance,
 			batchSize,
@@ -181,5 +211,15 @@ public class LobbySetupState
 		if (!constraint.IsOptional)
 			return (RoleAffordance.Stepper, 1);
 		return (RoleAffordance.Toggle, constraint.Minimum);
+	}
+
+	private LobbySetupRoleMetadata GetAvailableRoleMetadata(MainRoleType role)
+	{
+		if (_availableRoleMetadata.TryGetValue(role, out var metadata))
+		{
+			return metadata;
+		}
+
+		throw new InvalidOperationException($"Role {role} is not available in lobby setup metadata.");
 	}
 }

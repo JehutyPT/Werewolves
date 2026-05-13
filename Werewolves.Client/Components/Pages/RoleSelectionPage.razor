@@ -14,17 +14,19 @@
 
 	@foreach (var group in GroupedRoles)
 	{
-		<section class="ww-role-group" aria-label="@group.Key.GetDisplayName()">
+		var firstRole = group.First();
+
+		<section class="ww-role-group" aria-label="@firstRole.GroupDisplayName">
 			<div class="ww-section-head">
 				<span class="ww-faction-badge">
 					<span class="ww-faction-badge__dot" style="background: var(@GroupCssVar(group.Key))"></span>
-					@group.Key.GetDisplayName()
+					@firstRole.GroupDisplayName
 				</span>
 			</div>
 			<div class="ww-role-list">
-				@foreach (var role in group)
+				@foreach (var info in group)
 				{
-					var info = Lobby.GetRoleInfo(role);
+					var role = info.Role;
 
 					<div class="ww-role-row @(info.Count > 0 ? "ww-role-row--active" : "")" @key="role">
 						<span class="ww-role-label">@info.DisplayName</span>
@@ -105,9 +107,9 @@
 	private static readonly RoleGroup[] GroupOrder =
 		[RoleGroup.Villagers, RoleGroup.Werewolves, RoleGroup.Ambiguous, RoleGroup.Loners, RoleGroup.NewMoon];
 
-	private static IReadOnlyList<IGrouping<RoleGroup, MainRoleType>> GroupedRoles { get; } =
-		LobbySetupState.AvailableRoles
-			.GroupBy(r => r.GetRoleGroup())
+	private IReadOnlyList<IGrouping<RoleGroup, RoleInfo>> GroupedRoles =>
+		Lobby.AvailableRoleInfos
+			.GroupBy(info => info.Group)
 			.OrderBy(g => Array.IndexOf(GroupOrder, g.Key))
 			.ToList();
 
