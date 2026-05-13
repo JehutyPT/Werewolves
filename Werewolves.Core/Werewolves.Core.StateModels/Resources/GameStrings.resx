@@ -133,6 +133,14 @@
     <value>Simple Werewolf</value>
     <comment/>
   </data>
+  <data name="WildChildRoleName" xml:space="preserve">
+    <value>Wild Child</value>
+    <comment/>
+  </data>
+  <data name="WildChildModelSelectionPrompt" xml:space="preserve">
+    <value>Wild Child, choose your role model.</value>
+    <comment/>
+  </data>
   <data name="WerewolvesChooseVictimPrompt" xml:space="preserve">
     <value>Werewolves, wake up and choose one player to eliminate.</value>
     <comment/>
