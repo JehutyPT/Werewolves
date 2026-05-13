@@ -4,6 +4,8 @@ namespace Werewolves.Core.StateModels.Models;
 
 public class GameSessionConfig
 {
+	public const int MinimumPlayerCount = 5;
+
 	public List<string> Players { get; init; } = new();
 	public List<MainRoleType> Roles { get; init; } = new();
 
@@ -80,7 +82,7 @@ public class GameSessionConfig
 		}
 
 		// Player count sanity
-		if (players.Count < 5)
+		if (players.Count < MinimumPlayerCount)
 		{
 			issues.Add(new GameConfigValidationError(GameConfigValidationErrorType.TooFewPlayers, "At least five players are required."));
 		}

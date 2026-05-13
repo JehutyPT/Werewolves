@@ -1,0 +1,163 @@
+@inject LobbySetupState Lobby
+
+<main class="ww-app-shell" aria-labelledby="roster-title">
+	<section class="ww-lobby-header">
+		<div>
+			<p class="ww-step-label">Passo 1 de 2</p>
+			<h1 id="roster-title">Jogadores</h1>
+			<p class="ww-page-copy">Adiciona os nomes pela ordem em que estão sentados à volta da mesa.</p>
+		</div>
+		<div class="ww-roster-count @(HasEnoughPlayers ? "" : "ww-roster-count--under")" aria-label="@PlayerCountLabel">
+			@Lobby.PlayerNames.Count<span class="ww-roster-count__min">&thinsp;/&thinsp;@MinPlayers</span>
+		</div>
+	</section>
+
+	<form class="ww-roster-form" @onsubmit="AddPlayer" @onsubmit:preventDefault="true">
+		<label for="player-name">Nome do jogador</label>
+		<div class="ww-add-row">
+			<input id="player-name"
+				   type="text"
+				   autocomplete="off"
+				   placeholder="Ex.: Ana"
+				   @bind="_draftPlayerName"
+				   @bind:event="oninput" />
+			<button type="submit">Adicionar</button>
+		</div>
+		@if (_validationMessage is not null)
+		{
+			<p class="ww-validation" role="alert">@_validationMessage</p>
+		}
+	</form>
+
+	<section class="ww-roster-panel" aria-label="Ordem de lugares">
+		<div class="ww-section-head">
+			<span>Ordem de lugares</span>
+			<span>@PlayerCountLabel</span>
+		</div>
+
+		@if (Lobby.PlayerNames.Count == 0)
+		{
+			<p class="ww-empty-state">Ainda não adicionaste jogadores.</p>
+		}
+		else
+		{
+			<ol class="ww-roster-list">
+				@for (var index = 0; index < Lobby.PlayerNames.Count; index++)
+				{
+					var seatIndex = index;
+					var playerName = Lobby.PlayerNames[seatIndex];
+					var rowKey = $"{seatIndex}:{playerName}";
+
+					<li class="ww-roster-item" @key="rowKey">
+						<div class="ww-seat-number">@(seatIndex + 1)</div>
+						<div class="ww-player-name">@playerName</div>
+						<div class="ww-row-actions">
+							<button type="button"
+									class="ww-icon-button"
+									title="Mover para cima"
+									aria-label="@($"Mover {playerName} para cima")"
+									disabled="@(!Lobby.CanMovePlayerUp(seatIndex))"
+									@onclick="() => MovePlayerUp(seatIndex)">↑</button>
+							<button type="button"
+									class="ww-icon-button"
+									title="Mover para baixo"
+									aria-label="@($"Mover {playerName} para baixo")"
+									disabled="@(!Lobby.CanMovePlayerDown(seatIndex))"
+									@onclick="() => MovePlayerDown(seatIndex)">↓</button>
+							<button type="button"
+									class="ww-icon-button ww-icon-button-danger"
+									title="Remover"
+									aria-label="@($"Remover {playerName}")"
+									@onclick="() => RemovePlayer(seatIndex)">×</button>
+						</div>
+					</li>
+				}
+			</ol>
+		}
+	</section>
+
+	<footer class="ww-action-bar">
+		@if (_rosterErrors.Count > 0)
+		{
+			<ul class="ww-validation" role="alert">
+				@foreach (var error in _rosterErrors)
+				{
+					<li>@error</li>
+				}
+			</ul>
+		}
+		<button type="button" class="ww-btn-primary" disabled="@(!HasEnoughPlayers)" @onclick="Continue">Avançar para papéis</button>
+	</footer>
+</main>
+
+@using Werewolves.Client.Services
+@using Werewolves.Core.StateModels.Models
+
+@code {
+	[Parameter]
+	public EventCallback OnContinue { get; set; }
+
+	private string _draftPlayerName = string.Empty;
+	private string? _validationMessage;
+	private List<string> _rosterErrors = new();
+
+	private static int MinPlayers => GameSessionConfig.MinimumPlayerCount;
+	private bool HasEnoughPlayers => Lobby.PlayerNames.Count >= MinPlayers;
+
+	private string PlayerCountLabel => Lobby.PlayerNames.Count == 1
+		? "1 jogador"
+		: $"{Lobby.PlayerNames.Count} jogadores";
+
+	private void AddPlayer()
+	{
+		var result = Lobby.AddPlayer(_draftPlayerName);
+		if (result == AddPlayerResult.Success)
+		{
+			_draftPlayerName = string.Empty;
+			_validationMessage = null;
+			_rosterErrors.Clear();
+			return;
+		}
+
+		_validationMessage = result switch
+		{
+			AddPlayerResult.EmptyName => "Escreve um nome antes de adicionar.",
+			AddPlayerResult.DuplicateName => "Já existe um jogador com este nome.",
+			_ => null
+		};
+	}
+
+	private void MovePlayerUp(int index)
+	{
+		Lobby.MovePlayerUp(index);
+	}
+
+	private void MovePlayerDown(int index)
+	{
+		Lobby.MovePlayerDown(index);
+	}
+
+	private void RemovePlayer(int index)
+	{
+		Lobby.RemovePlayerAt(index);
+		_rosterErrors.Clear();
+	}
+
+	private Task Continue()
+	{
+		if (Lobby.HasPlayerConfigIssues(out var issues))
+		{
+			_rosterErrors = issues.Select(ToPortuguese).ToList();
+			return Task.CompletedTask;
+		}
+
+		_rosterErrors.Clear();
+		return OnContinue.InvokeAsync();
+	}
+
+	private static string ToPortuguese(GameConfigValidationError error) => error.Type switch
+	{
+		GameConfigValidationErrorType.NonUniquePlayerNames => "Existem nomes repetidos na lista.",
+		_ => error.Message
+	};
+}

@@ -1,0 +1,274 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--ww-bg);
+  color: var(--ww-text);
+  font-family: var(--ww-font);
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  touch-action: manipulation;
+}
+
+.ww-app-shell {
+  min-height: 100vh;
+  padding: max(18px, env(safe-area-inset-top)) var(--ww-page-px) max(92px, env(safe-area-inset-bottom));
+  background: var(--ww-bg);
+}
+
+.ww-lobby-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 2px 24px;
+}
+
+.ww-step-label {
+  margin: 0 0 10px;
+  color: var(--ww-accent);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+}
+
+.ww-lobby-header h1 {
+  margin: 0;
+  color: var(--ww-text);
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1.05;
+}
+
+.ww-page-copy {
+  max-width: 28rem;
+  margin: 12px 0 0;
+  color: var(--ww-text-dim);
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.ww-roster-count {
+  min-width: 54px;
+  height: 54px;
+  border: 1px solid var(--ww-border-strong);
+  border-radius: var(--ww-radius-md);
+  display: grid;
+  place-items: center;
+  background: var(--ww-accent-soft);
+  color: var(--ww-accent-bright);
+  font-size: 22px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.ww-roster-count--under {
+  background: var(--ww-faction-werewolf-soft);
+  color: var(--ww-faction-werewolf);
+  border-color: var(--ww-faction-werewolf);
+}
+
+.ww-roster-count__min {
+  font-size: 14px;
+  font-weight: 600;
+  opacity: 0.7;
+}
+
+.ww-roster-form {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 22px;
+}
+
+.ww-roster-form label,
+.ww-section-head {
+  color: var(--ww-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+}
+
+.ww-add-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.ww-add-row input {
+  width: 100%;
+  min-height: 54px;
+  border: 1px solid var(--ww-border-neutral);
+  border-radius: var(--ww-radius-md);
+  padding: 0 14px;
+  background: var(--ww-surface);
+  color: var(--ww-text);
+  outline: none;
+}
+
+.ww-add-row input:focus {
+  border-color: var(--ww-border-strong);
+  box-shadow: 0 0 0 3px var(--ww-accent-soft);
+}
+
+.ww-add-row button,
+.ww-secondary-button {
+  min-height: 54px;
+  border: 1px solid var(--ww-border-strong);
+  border-radius: var(--ww-radius-md);
+  padding: 0 16px;
+  background: var(--ww-surface-hi);
+  color: var(--ww-accent);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.ww-validation {
+  margin: 0;
+  color: var(--ww-faction-werewolf);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.ww-roster-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.ww-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 2px;
+}
+
+.ww-empty-state {
+  margin: 0;
+  padding: 18px;
+  border: 1px dashed var(--ww-border-neutral);
+  border-radius: var(--ww-radius-md);
+  color: var(--ww-text-dim);
+  background: var(--ww-surface-deeper);
+  font-size: 15px;
+}
+
+.ww-roster-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ww-roster-item {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 64px;
+  padding: 10px;
+  border: 1px solid var(--ww-border-neutral);
+  border-radius: var(--ww-radius-md);
+  background: var(--ww-surface);
+}
+
+.ww-roster-item-static {
+  grid-template-columns: 34px minmax(0, 1fr);
+}
+
+.ww-seat-number {
+  color: var(--ww-text-muted);
+  font-size: 13px;
+  font-weight: 800;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.ww-player-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--ww-text);
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.ww-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ww-icon-button {
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--ww-border-neutral);
+  border-radius: var(--ww-radius-sm);
+  display: grid;
+  place-items: center;
+  background: var(--ww-surface-hi);
+  color: var(--ww-text);
+  cursor: pointer;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.ww-icon-button:disabled {
+  cursor: default;
+  opacity: 0.34;
+}
+
+.ww-icon-button-danger {
+  color: var(--ww-faction-werewolf);
+}
+
+.ww-action-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 14px var(--ww-page-px) max(14px, env(safe-area-inset-bottom));
+  background: linear-gradient(180deg, rgba(7, 12, 18, 0) 0%, var(--ww-bg) 22%);
+}
+
+.ww-secondary-button {
+  width: 100%;
+}
+
+@media (max-width: 390px) {
+  .ww-lobby-header h1 {
+    font-size: 30px;
+  }
+
+  .ww-add-row {
+    grid-template-columns: 1fr;
+  }
+
+  .ww-roster-item {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .ww-row-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
+}

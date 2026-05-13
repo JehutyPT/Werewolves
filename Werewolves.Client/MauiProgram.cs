@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using Werewolves.Client.Services;
 
 #if WINDOWS
 using Microsoft.Maui.LifecycleEvents;
@@ -22,6 +23,7 @@ namespace Werewolves.Client
                 });
 
             builder.Services.AddMauiBlazorWebView();
+            builder.Services.AddSingleton<LobbySetupState>();
 
 #if DEBUG
     		builder.Services.AddBlazorWebViewDeveloperTools();

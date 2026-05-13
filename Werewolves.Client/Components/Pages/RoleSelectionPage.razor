@@ -1,0 +1,54 @@
+@inject LobbySetupState Lobby
+
+<main class="ww-app-shell" aria-labelledby="role-selection-title">
+	<section class="ww-lobby-header">
+		<div>
+			<p class="ww-step-label">Passo 2 de 2</p>
+			<h1 id="role-selection-title">Papéis</h1>
+			<p class="ww-page-copy">Confirma a lista de jogadores antes de escolher os papéis.</p>
+		</div>
+		<div class="ww-roster-count" aria-label="@PlayerCountLabel">@Lobby.PlayerNames.Count</div>
+	</section>
+
+	<section class="ww-roster-panel" aria-label="Jogadores guardados">
+		<div class="ww-section-head">
+			<span>Jogadores guardados</span>
+			<span>@PlayerCountLabel</span>
+		</div>
+
+		@if (Lobby.PlayerNames.Count == 0)
+		{
+			<p class="ww-empty-state">A lista ainda está vazia.</p>
+		}
+		else
+		{
+			<ol class="ww-roster-list">
+				@for (var index = 0; index < Lobby.PlayerNames.Count; index++)
+				{
+					var playerName = Lobby.PlayerNames[index];
+					var rowKey = $"{index}:{playerName}";
+
+					<li class="ww-roster-item ww-roster-item-static" @key="rowKey">
+						<div class="ww-seat-number">@(index + 1)</div>
+						<div class="ww-player-name">@playerName</div>
+					</li>
+				}
+			</ol>
+		}
+	</section>
+
+	<footer class="ww-action-bar">
+		<button type="button" class="ww-secondary-button" @onclick="Back">Voltar à lista</button>
+	</footer>
+</main>
+
+@code {
+	[Parameter]
+	public EventCallback OnBack { get; set; }
+
+	private string PlayerCountLabel => Lobby.PlayerNames.Count == 1
+		? "1 jogador"
+		: $"{Lobby.PlayerNames.Count} jogadores";
+
+	private Task Back() => OnBack.InvokeAsync();
+}

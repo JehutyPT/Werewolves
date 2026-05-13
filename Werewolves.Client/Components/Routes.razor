@@ -1,0 +1,30 @@
+@using Werewolves.Client.Components.Pages
+
+@if (_currentStep == LobbyStep.Roster)
+{
+	<LobbyRosterPage OnContinue="ShowRoleSelection" />
+}
+else
+{
+	<RoleSelectionPage OnBack="ShowRoster" />
+}
+
+@code {
+	private LobbyStep _currentStep = LobbyStep.Roster;
+
+	private void ShowRoleSelection()
+	{
+		_currentStep = LobbyStep.RoleSelection;
+	}
+
+	private void ShowRoster()
+	{
+		_currentStep = LobbyStep.Roster;
+	}
+
+	private enum LobbyStep
+	{
+		Roster,
+		RoleSelection
+	}
+}
