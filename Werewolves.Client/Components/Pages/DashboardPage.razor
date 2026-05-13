@@ -1,0 +1,192 @@
+@implements IDisposable
+@inject GameClientManager GameClientManager
+
+<main class="ww-app-shell ww-dashboard" aria-labelledby="dashboard-title">
+	<header class="ww-dashboard-header">
+		<div>
+			<p class="ww-step-label">Painel</p>
+			<h1 id="dashboard-title">@PhaseTurnLabel</h1>
+		</div>
+		<div class="ww-dashboard-session" aria-label="Estado da sessão">
+			<span>@PlayerCountLabel</span>
+		</div>
+	</header>
+
+	<nav class="ww-tab-bar" aria-label="Secções do painel">
+		<button type="button" class="@TabButtonClass(DashboardTab.Roster)" @onclick="() => SelectTab(DashboardTab.Roster)">Plantel</button>
+		<button type="button" class="@TabButtonClass(DashboardTab.Action)" @onclick="() => SelectTab(DashboardTab.Action)">Ação</button>
+		<button type="button" class="@TabButtonClass(DashboardTab.Stats)" @onclick="() => SelectTab(DashboardTab.Stats)">Estatísticas</button>
+	</nav>
+
+	<section class="@PanelClass(DashboardTab.Roster)" aria-labelledby="dashboard-roster-title">
+		<div class="ww-section-head">
+			<span id="dashboard-roster-title">Jogadores</span>
+			<span>@PlayerCountLabel</span>
+		</div>
+		@if (Players.Count == 0)
+		{
+			<p class="ww-empty-state">Sem jogadores ativos.</p>
+		}
+		else
+		{
+			<ol class="ww-roster-list ww-dashboard-list">
+				@for (var index = 0; index < Players.Count; index++)
+				{
+					var player = Players[index];
+					<li class="ww-roster-item ww-roster-item-static" @key="player.Id">
+						<div class="ww-seat-number">@(index + 1)</div>
+						<div>
+							<div class="ww-player-name">@player.Name</div>
+							<div class="ww-player-meta">@PlayerStateLabel(player)</div>
+						</div>
+					</li>
+				}
+			</ol>
+		}
+	</section>
+
+	<section class="@PanelClass(DashboardTab.Action)" aria-labelledby="dashboard-action-title">
+		<div class="ww-section-head">
+			<span id="dashboard-action-title">Instrução</span>
+			<span>@InputTypeLabel</span>
+		</div>
+
+		@if (GameClientManager.CurrentInstruction is null)
+		{
+			<p class="ww-empty-state">Sem instrução ativa.</p>
+		}
+		else
+		{
+			<div class="ww-instruction-panel">
+				@if (!string.IsNullOrWhiteSpace(GameClientManager.CurrentInstruction.PublicAnnouncement))
+				{
+					<section class="ww-instruction-block">
+						<span class="ww-label">Para anunciar</span>
+						<p>@GameClientManager.CurrentInstruction.PublicAnnouncement</p>
+					</section>
+				}
+				@if (!string.IsNullOrWhiteSpace(GameClientManager.CurrentInstruction.PrivateInstruction))
+				{
+					<section class="ww-instruction-block">
+						<span class="ww-label">Só para o moderador</span>
+						<p>@GameClientManager.CurrentInstruction.PrivateInstruction</p>
+					</section>
+				}
+			</div>
+		}
+
+		@if (GameClientManager.CurrentInstruction is ConfirmationInstruction confirmation)
+		{
+			<footer class="ww-action-bar ww-action-bar--dashboard">
+				<button type="button" class="ww-btn-primary" @onclick="() => Confirm(confirmation)">Continuar</button>
+			</footer>
+		}
+	</section>
+
+	<section class="@PanelClass(DashboardTab.Stats)" aria-labelledby="dashboard-stats-title">
+		<div class="ww-section-head">
+			<span id="dashboard-stats-title">Resumo</span>
+			<span>@PhaseLabel</span>
+		</div>
+		<div class="ww-stats-grid">
+			<div class="ww-stat">
+				<span class="ww-label">Jogadores</span>
+				<strong>@Players.Count</strong>
+			</div>
+			<div class="ww-stat">
+				<span class="ww-label">Vivos</span>
+				<strong>@AliveCount</strong>
+			</div>
+			<div class="ww-stat">
+				<span class="ww-label">Registos</span>
+				<strong>@LogEntryCount</strong>
+			</div>
+		</div>
+	</section>
+</main>
+
+@using Werewolves.Core.StateModels.Core
+@using Werewolves.Core.StateModels.Enums
+@using Werewolves.Core.StateModels.Extensions
+@using Werewolves.Core.StateModels.Models.Instructions
+
+@code {
+	private DashboardTab _activeTab = DashboardTab.Action;
+
+	private IReadOnlyList<IPlayer> Players =>
+		GameClientManager.ActiveSession?.GetPlayers().ToList() ?? [];
+
+	private int AliveCount => Players.Count(p => p.State.Health == PlayerHealth.Alive);
+
+	private int LogEntryCount => GameClientManager.ActiveSession?.GameHistoryLog.Count() ?? 0;
+
+	private string PlayerCountLabel => Players.Count == 1
+		? "1 jogador"
+		: $"{Players.Count} jogadores";
+
+	private string PhaseTurnLabel => GameClientManager.ActiveSession is { } session
+		? $"{PhaseLabel} {session.TurnNumber}"
+		: "Sem sessão";
+
+	private string PhaseLabel => GameClientManager.ActiveSession?.GetCurrentPhase() switch
+	{
+		GamePhase.Night => "Noite",
+		GamePhase.Dawn => "Amanhecer",
+		GamePhase.Day => "Dia",
+		_ => "Sem fase"
+	};
+
+	private string InputTypeLabel => GameClientManager.CurrentInstruction switch
+	{
+		ConfirmationInstruction => "Confirmação",
+		AssignRolesInstruction => "Atribuição",
+		SelectPlayersInstruction => "Seleção",
+		SelectOptionsInstruction => "Opção",
+		_ => "Instrução"
+	};
+
+	protected override void OnInitialized()
+	{
+		GameClientManager.StateChanged += OnGameStateChanged;
+	}
+
+	private void SelectTab(DashboardTab tab)
+	{
+		_activeTab = tab;
+	}
+
+	private void Confirm(ConfirmationInstruction instruction)
+	{
+		GameClientManager.ProcessModeratorResponse(instruction.CreateResponse(true));
+	}
+
+	private string TabButtonClass(DashboardTab tab) =>
+		$"ww-tab-button {(tab == _activeTab ? "ww-tab-button--active" : "")}";
+
+	private string PanelClass(DashboardTab tab) =>
+		$"ww-dashboard-panel {(tab == _activeTab ? "" : "ww-dashboard-panel--hidden")}";
+
+	private static string PlayerStateLabel(IPlayer player)
+	{
+		var roleLabel = player.State.MainRole?.GetPublicName() ?? "Papel por revelar";
+		var healthLabel = player.State.Health == PlayerHealth.Alive ? "Vivo" : "Eliminado";
+		return $"{roleLabel} - {healthLabel}";
+	}
+
+	private void OnGameStateChanged()
+	{
+		_ = InvokeAsync(StateHasChanged);
+	}
+
+	public void Dispose()
+	{
+		GameClientManager.StateChanged -= OnGameStateChanged;
+	}
+
+	private enum DashboardTab
+	{
+		Roster,
+		Action,
+		Stats
+	}
+}

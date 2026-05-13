@@ -384,6 +384,138 @@ button {
   box-shadow: none;
 }
 
+
+/* ── Dashboard ─────────────────────────────────────────────── */
+
+.ww-dashboard {
+  padding-bottom: max(96px, env(safe-area-inset-bottom));
+}
+
+.ww-dashboard-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: max(18px, env(safe-area-inset-top)) 2px 16px;
+  background: var(--ww-bg);
+  box-shadow: 0 6px 8px -8px rgba(0, 0, 0, 0.4);
+}
+
+.ww-dashboard-header h1 {
+  margin: 0;
+  color: var(--ww-text);
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.05;
+}
+
+.ww-dashboard-session {
+  min-width: 84px;
+  min-height: 44px;
+  border: 1px solid var(--ww-border-strong);
+  border-radius: var(--ww-radius-md);
+  display: grid;
+  place-items: center;
+  padding: 0 12px;
+  background: var(--ww-accent-soft);
+  color: var(--ww-accent-bright);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+}
+
+.ww-tab-bar {
+  position: sticky;
+  top: 78px;
+  z-index: 9;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  padding: 8px 0 18px;
+  background: var(--ww-bg);
+}
+
+.ww-tab-button {
+  min-height: 42px;
+  border: 1px solid var(--ww-border-neutral);
+  border-radius: var(--ww-radius-sm);
+  background: var(--ww-surface);
+  color: var(--ww-text-dim);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+
+.ww-tab-button--active {
+  border-color: var(--ww-border-strong);
+  background: var(--ww-surface-hi);
+  color: var(--ww-accent-bright);
+}
+
+.ww-dashboard-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.ww-dashboard-panel--hidden {
+  display: none;
+}
+
+.ww-dashboard-list {
+  margin-top: 2px;
+}
+
+.ww-player-meta {
+  margin-top: 4px;
+  color: var(--ww-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ww-instruction-panel,
+.ww-stats-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.ww-instruction-block,
+.ww-stat {
+  border: 1px solid var(--ww-border-neutral);
+  border-radius: var(--ww-radius-md);
+  padding: 14px;
+  background: var(--ww-surface);
+}
+
+.ww-instruction-block p {
+  margin: 8px 0 0;
+  color: var(--ww-text);
+  font-size: 17px;
+  line-height: 1.45;
+}
+
+.ww-stats-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.ww-stat strong {
+  display: block;
+  margin-top: 8px;
+  color: var(--ww-text);
+  font-size: 26px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.ww-action-bar--dashboard {
+  display: block;
+}
+
 @media (max-width: 390px) {
   .ww-lobby-header h1 {
     font-size: 30px;
