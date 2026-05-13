@@ -11,9 +11,19 @@ namespace Werewolves.Client.Tests.Services;
 public class LobbySetupStateTests
 {
 	[Fact]
+	public void Construction_PublicSeamRequiresLobbySetupMetadata()
+	{
+		var publicConstructors = typeof(LobbySetupState).GetConstructors();
+
+		publicConstructors.Should().ContainSingle()
+			.Which.GetParameters().Should().ContainSingle()
+			.Which.ParameterType.Should().Be(typeof(LobbySetupMetadata));
+	}
+
+	[Fact]
 	public void AddPlayer_AppendsNamesInSeatingOrder()
 	{
-		var state = new LobbySetupState();
+		var state = CreateDefaultState();
 
 		state.AddPlayer("Ana").Should().Be(AddPlayerResult.Success);
 		state.AddPlayer("Bruno").Should().Be(AddPlayerResult.Success);
@@ -25,7 +35,7 @@ public class LobbySetupStateTests
 	[Fact]
 	public void RemovePlayerAt_RemovesNameFromSeatingOrder()
 	{
-		var state = new LobbySetupState();
+		var state = CreateDefaultState();
 		state.AddPlayer("Ana");
 		state.AddPlayer("Bruno");
 		state.AddPlayer("Catarina");
@@ -38,7 +48,7 @@ public class LobbySetupStateTests
 	[Fact]
 	public void MovePlayerUp_SwapsPlayerWithPreviousSeat()
 	{
-		var state = new LobbySetupState();
+		var state = CreateDefaultState();
 		state.AddPlayer("Ana");
 		state.AddPlayer("Bruno");
 		state.AddPlayer("Catarina");
@@ -51,7 +61,7 @@ public class LobbySetupStateTests
 	[Fact]
 	public void MovePlayerDown_SwapsPlayerWithNextSeat()
 	{
-		var state = new LobbySetupState();
+		var state = CreateDefaultState();
 		state.AddPlayer("Ana");
 		state.AddPlayer("Bruno");
 		state.AddPlayer("Catarina");
@@ -64,7 +74,7 @@ public class LobbySetupStateTests
 	[Fact]
 	public void CanMovePlayer_ReportsDisabledAtSeatingOrderBoundaries()
 	{
-		var state = new LobbySetupState();
+		var state = CreateDefaultState();
 		state.AddPlayer("Ana");
 		state.AddPlayer("Bruno");
 		state.AddPlayer("Catarina");
@@ -78,7 +88,7 @@ public class LobbySetupStateTests
 	[Fact]
 	public void HasPlayerConfigIssues_ReturnsTooFewPlayers_WhenUnderMinimum()
 	{
-		var state = new LobbySetupState();
+		var state = CreateDefaultState();
 		state.AddPlayer("Ana");
 		state.AddPlayer("Bruno");
 
@@ -89,7 +99,7 @@ public class LobbySetupStateTests
 	[Fact]
 	public void AddPlayer_RejectsDuplicateNameCaseInsensitive()
 	{
-		var state = new LobbySetupState();
+		var state = CreateDefaultState();
 		state.AddPlayer("Ana").Should().Be(AddPlayerResult.Success);
 
 		state.AddPlayer("ana").Should().Be(AddPlayerResult.DuplicateName);
@@ -101,7 +111,7 @@ public class LobbySetupStateTests
 	[Fact]
 	public void HasPlayerConfigIssues_ReturnsNoIssues_WhenRosterIsValid()
 	{
-		var state = new LobbySetupState();
+		var state = CreateDefaultState();
 		state.AddPlayer("Ana");
 		state.AddPlayer("Bruno");
 		state.AddPlayer("Catarina");
@@ -115,7 +125,7 @@ public class LobbySetupStateTests
 	[Fact]
 	public void AvailableRoles_ContainsOnlyEngineSupportedRoles()
 	{
-		var state = new LobbySetupState();
+		var state = CreateDefaultState();
 
 		state.AvailableRoles.Should().Equal(
 			MainRoleType.SimpleWerewolf,
@@ -129,7 +139,7 @@ public class LobbySetupStateTests
 	[Fact]
 	public void IncrementRole_SingleOptionalRole_CapsAtOne()
 	{
-		var state = new LobbySetupState();
+		var state = CreateDefaultState();
 
 		state.IncrementRole(MainRoleType.Seer);
 		state.GetRoleCount(MainRoleType.Seer).Should().Be(1);
@@ -141,7 +151,7 @@ public class LobbySetupStateTests
 	[Fact]
 	public void IncrementRole_StepperRole_IncrementsByOne()
 	{
-		var state = new LobbySetupState();
+		var state = CreateDefaultState();
 
 		state.IncrementRole(MainRoleType.SimpleWerewolf);
 		state.GetRoleCount(MainRoleType.SimpleWerewolf).Should().Be(1);
@@ -156,7 +166,7 @@ public class LobbySetupStateTests
 	[Fact]
 	public void DecrementRole_StepperRole_DecrementsByOneFlooredAtZero()
 	{
-		var state = new LobbySetupState();
+		var state = CreateDefaultState();
 		state.IncrementRole(MainRoleType.SimpleWerewolf);
 		state.IncrementRole(MainRoleType.SimpleWerewolf);
 
@@ -216,7 +226,7 @@ public class LobbySetupStateTests
 	[Fact]
 	public void TotalSelectedRoleCount_SumsAllRoleCounts()
 	{
-		var state = new LobbySetupState();
+		var state = CreateDefaultState();
 		state.IncrementRole(MainRoleType.SimpleWerewolf);
 		state.IncrementRole(MainRoleType.SimpleVillager);
 		state.IncrementRole(MainRoleType.SimpleVillager);
@@ -246,7 +256,7 @@ public class LobbySetupStateTests
 	[Fact]
 	public void HasConfigIssues_DetectsRoleCountMismatch()
 	{
-		var state = new LobbySetupState();
+		var state = CreateDefaultState();
 		for (var i = 0; i < 5; i++)
 			state.AddPlayer($"Player{i}");
 
@@ -260,7 +270,7 @@ public class LobbySetupStateTests
 	[Fact]
 	public void HasRoleConfigIssues_ReturnsOnlyRoleIssues_WhenPlayerIssuesAlsoExist()
 	{
-		var state = new LobbySetupState();
+		var state = CreateDefaultState();
 		state.AddPlayer("Ana");
 		state.AddPlayer("Bruno");
 
@@ -272,7 +282,7 @@ public class LobbySetupStateTests
 	[Fact]
 	public void HasConfigIssues_ReturnsNoIssues_WhenConfigIsValid()
 	{
-		var state = new LobbySetupState();
+		var state = CreateDefaultState();
 		for (var i = 0; i < 5; i++)
 			state.AddPlayer($"Player{i}");
 
@@ -289,7 +299,7 @@ public class LobbySetupStateTests
 	[Fact]
 	public void CanDecrementRole_ReturnsFalseWhenCountIsZero()
 	{
-		var state = new LobbySetupState();
+		var state = CreateDefaultState();
 
 		state.CanDecrementRole(MainRoleType.Seer).Should().BeFalse();
 
@@ -303,7 +313,7 @@ public class LobbySetupStateTests
 	[Fact]
 	public void GetRoleInfo_Seer_ReturnsToggleWithBatchSizeOne()
 	{
-		var state = new LobbySetupState();
+		var state = CreateDefaultState();
 
 		var info = state.GetRoleInfo(MainRoleType.Seer);
 
@@ -314,7 +324,7 @@ public class LobbySetupStateTests
 	[Fact]
 	public void GetRoleInfo_SimpleWerewolf_ReturnsStepper()
 	{
-		var state = new LobbySetupState();
+		var state = CreateDefaultState();
 
 		var info = state.GetRoleInfo(MainRoleType.SimpleWerewolf);
 
@@ -346,7 +356,7 @@ public class LobbySetupStateTests
 	[Fact]
 	public void GetRoleInfo_ReflectsCountAndCanFlags_AfterMutations()
 	{
-		var state = new LobbySetupState();
+		var state = CreateDefaultState();
 
 		var before = state.GetRoleInfo(MainRoleType.Seer);
 		before.Count.Should().Be(0);
@@ -364,7 +374,7 @@ public class LobbySetupStateTests
 	[Fact]
 	public void GetRoleInfo_DisplayName_MatchesPublicName()
 	{
-		var state = new LobbySetupState();
+		var state = CreateDefaultState();
 
 		var info = state.GetRoleInfo(MainRoleType.Seer);
 
@@ -376,6 +386,15 @@ public class LobbySetupStateTests
 		return new LobbySetupMetadata(
 			GameSessionConfig.MinimumPlayerCount,
 			roles.Select(CreateRoleMetadata).ToArray());
+	}
+
+	private static LobbySetupState CreateDefaultState()
+	{
+		return new LobbySetupState(CreateSetupMetadata(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.Seer,
+			MainRoleType.WildChild,
+			MainRoleType.SimpleVillager));
 	}
 
 	private static LobbySetupRoleMetadata CreateRoleMetadata(MainRoleType role)

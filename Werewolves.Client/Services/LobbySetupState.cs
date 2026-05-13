@@ -1,5 +1,4 @@
 using Werewolves.Core.GameLogic.Models;
-using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Models;
@@ -28,16 +27,6 @@ public class LobbySetupState
 	private readonly LobbySetupMetadata _setupMetadata;
 	private readonly IReadOnlyList<MainRoleType> _availableRoles;
 	private readonly Dictionary<MainRoleType, LobbySetupRoleMetadata> _availableRoleMetadata;
-
-	public LobbySetupState()
-		: this(new GameService())
-	{
-	}
-
-	public LobbySetupState(GameService gameService)
-		: this(gameService.GetLobbySetupMetadata())
-	{
-	}
 
 	public LobbySetupState(LobbySetupMetadata setupMetadata)
 	{
