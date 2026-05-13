@@ -1,4 +1,5 @@
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Resources;
 
 namespace Werewolves.Core.StateModels.Extensions;
 
@@ -15,10 +16,16 @@ public enum RoleGroup
 }
 
 /// <summary>
-/// Extension methods for <see cref="MainRoleType"/>.
+/// Extension methods for <see cref="MainRoleType"/> and <see cref="RoleGroup"/>.
 /// </summary>
 public static class MainRoleTypeExtensions
 {
+    public static string GetPublicName(this MainRoleType role) =>
+        GameStrings.ResourceManager.GetString($"{role}RoleName") ?? role.ToString();
+
+    public static string GetDisplayName(this RoleGroup group) =>
+        GameStrings.ResourceManager.GetString($"{group}GroupName") ?? group.ToString();
+
     /// <summary>
     /// Gets the role group that the specified role belongs to.
     /// </summary>

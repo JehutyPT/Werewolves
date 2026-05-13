@@ -126,15 +126,15 @@
     <comment/>
   </data>
   <data name="SimpleVillagerRoleName" xml:space="preserve">
-    <value>Simple Villager</value>
+    <value>Aldeão</value>
     <comment/>
   </data>
   <data name="SimpleWerewolfRoleName" xml:space="preserve">
-    <value>Simple Werewolf</value>
+    <value>Lobisomem</value>
     <comment/>
   </data>
   <data name="WildChildRoleName" xml:space="preserve">
-    <value>Wild Child</value>
+    <value>Criança Selvagem</value>
     <comment/>
   </data>
   <data name="WildChildModelSelectionPrompt" xml:space="preserve">
@@ -194,7 +194,7 @@
     <comment/>
   </data>
   <data name="SeerRoleName" xml:space="preserve">
-    <value>Seer</value>
+    <value>Vidente</value>
     <comment/>
   </data>
   <data name="RoleSingleIdentificationPrompt" xml:space="preserve">
@@ -231,6 +231,158 @@
   </data>
   <data name="DebateModeratorInstructions" xml:space="preserve">
     <value>Try to moderate and ensure everyone has a chance to speak and intervene. Confirm once the debate has finished.</value>
+    <comment/>
+  </data>
+  <data name="VillagerVillagerRoleName" xml:space="preserve">
+    <value>Aldeão-Aldeão</value>
+    <comment/>
+  </data>
+  <data name="CupidRoleName" xml:space="preserve">
+    <value>Cupido</value>
+    <comment/>
+  </data>
+  <data name="WitchRoleName" xml:space="preserve">
+    <value>Bruxa</value>
+    <comment/>
+  </data>
+  <data name="HunterRoleName" xml:space="preserve">
+    <value>Caçador</value>
+    <comment/>
+  </data>
+  <data name="LittleGirlRoleName" xml:space="preserve">
+    <value>Menina</value>
+    <comment/>
+  </data>
+  <data name="DefenderRoleName" xml:space="preserve">
+    <value>Protetor</value>
+    <comment/>
+  </data>
+  <data name="ElderRoleName" xml:space="preserve">
+    <value>Ancião</value>
+    <comment/>
+  </data>
+  <data name="ScapegoatRoleName" xml:space="preserve">
+    <value>Bode Expiatório</value>
+    <comment/>
+  </data>
+  <data name="VillageIdiotRoleName" xml:space="preserve">
+    <value>Idiota da Aldeia</value>
+    <comment/>
+  </data>
+  <data name="TwoSistersRoleName" xml:space="preserve">
+    <value>Duas Irmãs</value>
+    <comment/>
+  </data>
+  <data name="ThreeBrothersRoleName" xml:space="preserve">
+    <value>Três Irmãos</value>
+    <comment/>
+  </data>
+  <data name="FoxRoleName" xml:space="preserve">
+    <value>Raposa</value>
+    <comment/>
+  </data>
+  <data name="BearTamerRoleName" xml:space="preserve">
+    <value>Domador de Ursos</value>
+    <comment/>
+  </data>
+  <data name="StutteringJudgeRoleName" xml:space="preserve">
+    <value>Juiz Gago</value>
+    <comment/>
+  </data>
+  <data name="KnightWithRustySwordRoleName" xml:space="preserve">
+    <value>Cavaleiro da Espada Enferrujada</value>
+    <comment/>
+  </data>
+  <data name="BigBadWolfRoleName" xml:space="preserve">
+    <value>Grande Mau Lobo</value>
+    <comment/>
+  </data>
+  <data name="AccursedWolfFatherRoleName" xml:space="preserve">
+    <value>Infecto-Pai dos Lobos</value>
+    <comment/>
+  </data>
+  <data name="WhiteWerewolfRoleName" xml:space="preserve">
+    <value>Lobisomem Branco</value>
+    <comment/>
+  </data>
+  <data name="ThiefRoleName" xml:space="preserve">
+    <value>Ladrão</value>
+    <comment/>
+  </data>
+  <data name="DevotedServantRoleName" xml:space="preserve">
+    <value>Serventa Devotada</value>
+    <comment/>
+  </data>
+  <data name="ActorRoleName" xml:space="preserve">
+    <value>Actor</value>
+    <comment/>
+  </data>
+  <data name="WolfHoundRoleName" xml:space="preserve">
+    <value>Cão-Lobo</value>
+    <comment/>
+  </data>
+  <data name="AngelRoleName" xml:space="preserve">
+    <value>Anjo</value>
+    <comment/>
+  </data>
+  <data name="PiperRoleName" xml:space="preserve">
+    <value>Flautista</value>
+    <comment/>
+  </data>
+  <data name="PrejudicedManipulatorRoleName" xml:space="preserve">
+    <value>Manipulador</value>
+    <comment/>
+  </data>
+  <data name="GypsyRoleName" xml:space="preserve">
+    <value>Cigana</value>
+    <comment/>
+  </data>
+  <data name="TooFewPlayersValidationError" xml:space="preserve">
+    <value>São necessários pelo menos 5 jogadores.</value>
+    <comment/>
+  </data>
+  <data name="NonUniquePlayerNamesValidationError" xml:space="preserve">
+    <value>Existem nomes repetidos na lista.</value>
+    <comment/>
+  </data>
+  <data name="TooFewRolesValidationError" xml:space="preserve">
+    <value>Faltam papéis para cobrir todos os jogadores.</value>
+    <comment/>
+  </data>
+  <data name="TooManyRolesValidationError" xml:space="preserve">
+    <value>Há papéis a mais para o número de jogadores.</value>
+    <comment/>
+  </data>
+  <data name="MissingExtraThiefRolesValidationError" xml:space="preserve">
+    <value>O Ladrão requer 2 papéis extra.</value>
+    <comment/>
+  </data>
+  <data name="MissingExtraActorRolesValidationError" xml:space="preserve">
+    <value>O Actor requer 3 papéis extra.</value>
+    <comment/>
+  </data>
+  <data name="MissingExtraThiefActorRolesValidationError" xml:space="preserve">
+    <value>O Ladrão e o Actor requerem 5 papéis extra no total.</value>
+    <comment/>
+  </data>
+  <data name="VillagersGroupName" xml:space="preserve">
+    <value>Aldeões</value>
+    <comment/>
+  </data>
+  <data name="WerewolvesGroupName" xml:space="preserve">
+    <value>Lobisomens</value>
+    <comment/>
+  </data>
+  <data name="AmbiguousGroupName" xml:space="preserve">
+    <value>Ambíguos</value>
+    <comment/>
+  </data>
+  <data name="LonersGroupName" xml:space="preserve">
+    <value>Solitários</value>
+    <comment/>
+  </data>
+  <data name="NewMoonGroupName" xml:space="preserve">
+    <value>Lua Nova</value>
     <comment/>
   </data>
 </root>

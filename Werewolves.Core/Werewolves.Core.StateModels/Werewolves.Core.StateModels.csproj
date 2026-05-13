@@ -21,21 +21,13 @@
     </AssemblyAttribute>
   </ItemGroup>
 
-
-
-    <ItemGroup>
-    <Compile Update="Resources\GameStrings.Designer.cs">
-      <DependentUpon>GameStrings.resx</DependentUpon>
-      <DesignTime>True</DesignTime>
-      <AutoGen>True</AutoGen>
-    </Compile>
-  </ItemGroup>
-
   <ItemGroup>
     <EmbeddedResource Update="Resources\GameStrings.resx">
-      <SubType>Designer</SubType>
-      <LastGenOutput>GameStrings.Designer.cs</LastGenOutput>
-      <Generator>PublicResXFileCodeGenerator</Generator>
+      <StronglyTypedClassName>GameStrings</StronglyTypedClassName>
+      <StronglyTypedNamespace>Werewolves.Core.StateModels.Resources</StronglyTypedNamespace>
+      <StronglyTypedFileName>$(IntermediateOutputPath)GameStrings.Designer.cs</StronglyTypedFileName>
+      <StronglyTypedLanguage>C#</StronglyTypedLanguage>
+      <PublicClass>true</PublicClass>
     </EmbeddedResource>
   </ItemGroup>
 

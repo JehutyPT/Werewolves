@@ -8,7 +8,8 @@
 			<p class="ww-page-copy">Adiciona os nomes pela ordem em que estão sentados à volta da mesa.</p>
 		</div>
 		<div class="ww-roster-count @(HasEnoughPlayers ? "" : "ww-roster-count--under")" aria-label="@PlayerCountLabel">
-			@Lobby.PlayerNames.Count<span class="ww-roster-count__min">&thinsp;/&thinsp;@MinPlayers</span>
+			@Lobby.PlayerNames.Count@if (!HasEnoughPlayers)
+			{<span class="ww-roster-count__min">&thinsp;/&thinsp;@MinPlayers</span>}
 		</div>
 	</section>
 
@@ -90,7 +91,7 @@
 	</footer>
 </main>
 
-@using Werewolves.Client.Services
+@using Werewolves.Core.StateModels.Extensions
 @using Werewolves.Core.StateModels.Models
 
 @code {
@@ -147,7 +148,7 @@
 	{
 		if (Lobby.HasPlayerConfigIssues(out var issues))
 		{
-			_rosterErrors = issues.Select(ToPortuguese).ToList();
+			_rosterErrors = issues.Select(GameConfigValidationExtensions.GetDisplayMessage).ToList();
 			return Task.CompletedTask;
 		}
 
@@ -155,9 +156,4 @@
 		return OnContinue.InvokeAsync();
 	}
 
-	private static string ToPortuguese(GameConfigValidationError error) => error.Type switch
-	{
-		GameConfigValidationErrorType.NonUniquePlayerNames => "Existem nomes repetidos na lista.",
-		_ => error.Message
-	};
 }

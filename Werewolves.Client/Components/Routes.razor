@@ -6,7 +6,7 @@
 }
 else
 {
-	<RoleSelectionPage OnBack="ShowRoster" />
+	<RoleSelectionPage OnBack="ShowRoster" OnStartGame="HandleStartGame" />
 }
 
 @code {
@@ -20,6 +20,11 @@ else
 	private void ShowRoster()
 	{
 		_currentStep = LobbyStep.Roster;
+	}
+
+	private void HandleStartGame()
+	{
+		// TODO: Create game session via GameClientManager and navigate to Dashboard
 	}
 
 	private enum LobbyStep

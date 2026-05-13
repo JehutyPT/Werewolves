@@ -26,16 +26,21 @@ button {
 
 .ww-app-shell {
   min-height: 100vh;
-  padding: max(18px, env(safe-area-inset-top)) var(--ww-page-px) max(92px, env(safe-area-inset-bottom));
+  padding: 0 var(--ww-page-px) max(92px, env(safe-area-inset-bottom));
   background: var(--ww-bg);
 }
 
 .ww-lobby-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  padding: 8px 2px 24px;
+  padding: max(18px, env(safe-area-inset-top)) 2px 24px;
+  background: var(--ww-bg);
+  box-shadow: 0 6px 8px -8px rgba(0, 0, 0, 0.4);
 }
 
 .ww-step-label {
@@ -252,6 +257,131 @@ button {
 
 .ww-secondary-button {
   width: 100%;
+}
+
+
+/* ── Role selection ─────────────────────────────────────────── */
+
+.ww-role-group {
+  margin-bottom: 20px;
+}
+
+.ww-role-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.ww-role-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 52px;
+  padding: 8px 12px;
+  border: 1px solid var(--ww-border-neutral);
+  border-radius: var(--ww-radius-md);
+  background: var(--ww-surface);
+}
+
+.ww-role-row--active {
+  border-color: var(--ww-border-strong);
+  background: var(--ww-surface-hi);
+}
+
+.ww-role-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ww-text-dim);
+}
+
+.ww-role-row--active .ww-role-label {
+  color: var(--ww-text);
+  font-weight: 700;
+}
+
+.ww-stepper {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.ww-stepper-btn {
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--ww-border-neutral);
+  border-radius: var(--ww-radius-sm);
+  display: grid;
+  place-items: center;
+  background: var(--ww-surface-hi);
+  color: var(--ww-accent);
+  cursor: pointer;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.ww-stepper-btn:disabled {
+  cursor: default;
+  opacity: 0.34;
+}
+
+.ww-stepper-count {
+  min-width: 32px;
+  text-align: center;
+  font-size: 16px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--ww-accent-bright);
+}
+
+.ww-toggle {
+  width: 38px;
+  height: 38px;
+  border: 2px solid var(--ww-border-strong);
+  border-radius: var(--ww-radius-sm);
+  display: grid;
+  place-items: center;
+  background: var(--ww-surface);
+  color: var(--ww-text-muted);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.ww-toggle--on {
+  background: var(--ww-accent);
+  border-color: var(--ww-accent);
+  color: var(--ww-bg);
+}
+
+.ww-toggle__batch {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+}
+
+.ww-validation--role {
+  padding: 0 0 10px;
+  list-style: none;
+}
+
+.ww-action-pair {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+}
+
+.ww-action-pair .ww-btn-primary {
+  min-height: 54px;
+}
+
+.ww-btn-primary:disabled {
+  opacity: 0.34;
+  cursor: default;
+  box-shadow: none;
 }
 
 @media (max-width: 390px) {

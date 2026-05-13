@@ -5,50 +5,166 @@
 		<div>
 			<p class="ww-step-label">Passo 2 de 2</p>
 			<h1 id="role-selection-title">Papéis</h1>
-			<p class="ww-page-copy">Confirma a lista de jogadores antes de escolher os papéis.</p>
+			<p class="ww-page-copy">Escolhe os papéis para o jogo. O total tem de corresponder ao número de jogadores.</p>
 		</div>
-		<div class="ww-roster-count" aria-label="@PlayerCountLabel">@Lobby.PlayerNames.Count</div>
+		<div class="ww-roster-count @(IsCountMatching ? "" : "ww-roster-count--under")" aria-label="@CountLabel">
+			@Lobby.TotalSelectedRoleCount<span class="ww-roster-count__min">&thinsp;/&thinsp;@Lobby.ExpectedRoleCount</span>
+		</div>
 	</section>
 
-	<section class="ww-roster-panel" aria-label="Jogadores guardados">
-		<div class="ww-section-head">
-			<span>Jogadores guardados</span>
-			<span>@PlayerCountLabel</span>
-		</div>
-
-		@if (Lobby.PlayerNames.Count == 0)
-		{
-			<p class="ww-empty-state">A lista ainda está vazia.</p>
-		}
-		else
-		{
-			<ol class="ww-roster-list">
-				@for (var index = 0; index < Lobby.PlayerNames.Count; index++)
+	@foreach (var group in GroupedRoles)
+	{
+		<section class="ww-role-group" aria-label="@group.Key.GetDisplayName()">
+			<div class="ww-section-head">
+				<span class="ww-faction-badge">
+					<span class="ww-faction-badge__dot" style="background: var(@GroupCssVar(group.Key))"></span>
+					@group.Key.GetDisplayName()
+				</span>
+			</div>
+			<div class="ww-role-list">
+				@foreach (var role in group)
 				{
-					var playerName = Lobby.PlayerNames[index];
-					var rowKey = $"{index}:{playerName}";
+					var info = Lobby.GetRoleInfo(role);
 
-					<li class="ww-roster-item ww-roster-item-static" @key="rowKey">
-						<div class="ww-seat-number">@(index + 1)</div>
-						<div class="ww-player-name">@playerName</div>
-					</li>
+					<div class="ww-role-row @(info.Count > 0 ? "ww-role-row--active" : "")" @key="role">
+						<span class="ww-role-label">@info.DisplayName</span>
+						@if (info.Affordance == RoleAffordance.Stepper)
+						{
+							<div class="ww-stepper">
+								<button type="button"
+										class="ww-stepper-btn"
+										aria-label="@($"Remover {info.DisplayName}")"
+										disabled="@(!info.CanDecrement)"
+										@onclick="() => DecrementRole(role)">−</button>
+								<span class="ww-stepper-count" aria-label="@($"{info.Count} {info.DisplayName}")">@info.Count</span>
+								<button type="button"
+										class="ww-stepper-btn"
+										aria-label="@($"Adicionar {info.DisplayName}")"
+										@onclick="() => IncrementRole(role)">+</button>
+							</div>
+						}
+						else
+						{
+							<button type="button"
+									class="ww-toggle @(info.Count > 0 ? "ww-toggle--on" : "")"
+									aria-pressed="@(info.Count > 0)"
+									aria-label="@info.DisplayName"
+									@onclick="() => ToggleRole(role)">
+								@if (info.Count > 0 && info.BatchSize <= 1)
+								{
+									<span>&#x2713;</span>
+								}
+								else if (info.BatchSize > 1)
+								{
+									<span class="ww-toggle__batch">@("×")@info.BatchSize</span>
+								}
+							</button>
+						}
+					</div>
 				}
-			</ol>
-		}
-	</section>
+			</div>
+		</section>
+	}
 
 	<footer class="ww-action-bar">
-		<button type="button" class="ww-secondary-button" @onclick="Back">Voltar à lista</button>
+		@if (_validationErrors.Count > 0)
+		{
+			<ul class="ww-validation ww-validation--role" role="alert">
+				@foreach (var error in _validationErrors)
+				{
+					<li>@error</li>
+				}
+			</ul>
+		}
+		<div class="ww-action-pair">
+			<button type="button" class="ww-secondary-button" @onclick="Back">Voltar</button>
+			<button type="button" class="ww-btn-primary" disabled="@(!CanStartGame)" @onclick="StartGame">Iniciar jogo</button>
+		</div>
 	</footer>
 </main>
+
+@using Werewolves.Core.StateModels.Enums
+@using Werewolves.Core.StateModels.Extensions
 
 @code {
 	[Parameter]
 	public EventCallback OnBack { get; set; }
 
-	private string PlayerCountLabel => Lobby.PlayerNames.Count == 1
-		? "1 jogador"
-		: $"{Lobby.PlayerNames.Count} jogadores";
+	[Parameter]
+	public EventCallback OnStartGame { get; set; }
+
+	private List<string> _validationErrors = new();
+
+	protected override void OnInitialized() => RefreshValidation();
+
+	private bool IsCountMatching => Lobby.TotalSelectedRoleCount == Lobby.ExpectedRoleCount;
+	private bool CanStartGame => !Lobby.HasRoleConfigIssues(out _);
+
+	private string CountLabel => $"{Lobby.TotalSelectedRoleCount} de {Lobby.ExpectedRoleCount} papéis selecionados";
+
+	private static readonly RoleGroup[] GroupOrder =
+		[RoleGroup.Villagers, RoleGroup.Werewolves, RoleGroup.Ambiguous, RoleGroup.Loners, RoleGroup.NewMoon];
+
+	private static IReadOnlyList<IGrouping<RoleGroup, MainRoleType>> GroupedRoles { get; } =
+		LobbySetupState.AvailableRoles
+			.GroupBy(r => r.GetRoleGroup())
+			.OrderBy(g => Array.IndexOf(GroupOrder, g.Key))
+			.ToList();
+
+	private void IncrementRole(MainRoleType role)
+	{
+		Lobby.IncrementRole(role);
+		RefreshValidation();
+	}
+
+	private void DecrementRole(MainRoleType role)
+	{
+		Lobby.DecrementRole(role);
+		RefreshValidation();
+	}
+
+	private void ToggleRole(MainRoleType role)
+	{
+		if (Lobby.GetRoleCount(role) > 0)
+			Lobby.DecrementRole(role);
+		else
+			Lobby.IncrementRole(role);
+		RefreshValidation();
+	}
+
+	private void RefreshValidation()
+	{
+		if (Lobby.HasRoleConfigIssues(out var issues))
+		{
+			_validationErrors = issues.Select(GameConfigValidationExtensions.GetDisplayMessage).ToList();
+		}
+		else
+		{
+			_validationErrors.Clear();
+		}
+	}
 
 	private Task Back() => OnBack.InvokeAsync();
+
+	private Task StartGame()
+	{
+		if (Lobby.HasRoleConfigIssues(out var issues))
+		{
+			_validationErrors = issues.Select(GameConfigValidationExtensions.GetDisplayMessage).ToList();
+			return Task.CompletedTask;
+		}
+
+		_validationErrors.Clear();
+		return OnStartGame.InvokeAsync();
+	}
+
+	private static string GroupCssVar(RoleGroup group) => group switch
+	{
+		RoleGroup.Villagers => "--ww-faction-villager",
+		RoleGroup.Werewolves => "--ww-faction-werewolf",
+		RoleGroup.Ambiguous => "--ww-faction-ambiguous",
+		RoleGroup.Loners => "--ww-faction-loner",
+		RoleGroup.NewMoon => "--ww-accent",
+		_ => "--ww-accent"
+	};
 }
