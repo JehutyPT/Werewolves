@@ -294,7 +294,7 @@ Acts as a high-level phase controller and reactive hook dispatcher. It contains 
 
 *   **Core Components:**
     *   `HookListeners` (static Dictionary<GameHook, List<ListenerIdentifier>>): Declarative mapping of hooks to the ordered list of listeners that respond to them.
-    *   `ListenerFactories` (static Dictionary<ListenerIdentifier, Func<IGameHookListener>>): Factory functions for creating listener instances. Each game session gets its own fresh instances via `GameSession.GetOrCreateListener`, ensuring listener state machine isolation between games.
+    *   `ListenerFactories` (internal `IReadOnlyDictionary<ListenerIdentifier, Func<IGameHookListener>>` property): Forwarding accessor sourced from `SupportedRoleCatalog.ListenerFactories`, which owns the registry of listener factories alongside the supported-role descriptor list (so adding a new supported Role touches one place). Each game session gets its own fresh listener instances via `GameSession.GetOrCreateListener`, ensuring listener state machine isolation between games. Listener *ordering* still lives in `HookListeners` above (see ADR 0003).
     *   `PhaseDefinitions` (static Dictionary<GamePhase, IPhaseDefinition>): Declarative mapping of each main `GamePhase` to its corresponding `PhaseManager`.
 *   **Primary Methods:**
     *   `GetInitialInstruction(List<MainRoleType> rolesInPlay, Guid gameId)` (StartGameConfirmationInstruction): **Static factory method for bootstrapping.** Returns the initial instruction required to construct a valid `GameSession`. This pure function performs input validation and generates the startup instruction without creating any game state.
