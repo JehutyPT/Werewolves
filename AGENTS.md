@@ -13,6 +13,10 @@ Issues are tracked in GitHub Issues on bicheichane/Werewolves. See `docs/agents/
 
 Default label vocabulary (needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix). See `docs/agents/triage-labels.md`.
 
+### Agent briefs
+
+Template and conventions for issues moving to `ready-for-agent`. See `docs/agents/agent-brief.md`.
+
 ### Domain docs
 
 Single-context layout — one CONTEXT.md + docs/adr/ at the repo root. See `docs/agents/domain.md`.
