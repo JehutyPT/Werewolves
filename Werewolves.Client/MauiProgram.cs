@@ -1,5 +1,7 @@
 ﻿using System.Globalization;
 using Microsoft.Extensions.Logging;
+using Microsoft.Maui.Devices;
+using Plugin.Maui.Audio;
 using Werewolves.Client.Resources;
 using Werewolves.Core.GameLogic.Models;
 using Werewolves.Core.GameLogic.Services;
@@ -29,6 +31,7 @@ namespace Werewolves.Client
                 {
                     fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
                 });
+            builder.AddAudio();
 
             builder.Services.AddMauiBlazorWebView();
             builder.Services.AddSingleton<GameService>();
@@ -36,7 +39,14 @@ namespace Werewolves.Client
                 sp.GetRequiredService<GameService>().GetLobbySetupMetadata());
             builder.Services.AddSingleton<LobbySetupState>(sp =>
                 new LobbySetupState(sp.GetRequiredService<LobbySetupMetadata>()));
+            builder.Services.AddSingleton<IAudioMap, AudioMap>();
+            builder.Services.AddSingleton<IAudioAssetLoader, MauiAudioAssetLoader>();
+            builder.Services.AddSingleton<IAudioPlayerFactory, PluginAudioPlayerFactory>();
+            builder.Services.AddSingleton<IInstructionAudioPlayback, InstructionAudioPlayback>();
             builder.Services.AddSingleton<GameClientManager>();
+            builder.Services.AddSingleton<IDeviceDisplay>(DeviceDisplay.Current);
+            builder.Services.AddSingleton<IScreenWakeLock, DeviceDisplayScreenWakeLock>();
+            builder.Services.AddSingleton<GameplayWakeLockController>();
 
 #if DEBUG
             builder.Services.AddSingleton<BenchmarkClientManager>();
@@ -57,7 +67,7 @@ namespace Werewolves.Client
                     if (nativeWindow is null) return;
 
                     // 3. SET THE SIZE (Width, Height)
-                    // Note: These are physical pixels. 
+                    // Note: These are physical pixels.
                     // If your monitor is at 150% scale, 450px might look small.
                     int newWidth = 400;
                     int newHeight = 800;

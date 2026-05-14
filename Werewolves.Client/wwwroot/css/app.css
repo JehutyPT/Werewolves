@@ -7,11 +7,12 @@ body,
 #app {
   min-height: 100%;
   margin: 0;
+  background: var(--ww-bg);
+  color: var(--ww-text);
+  color-scheme: dark;
 }
 
 body {
-  background: var(--ww-bg);
-  color: var(--ww-text);
   font-family: var(--ww-font);
 }
 
@@ -40,7 +41,7 @@ button {
   gap: 16px;
   padding: max(18px, env(safe-area-inset-top)) 2px 24px;
   background: var(--ww-bg);
-  box-shadow: 0 6px 8px -8px rgba(0, 0, 0, 0.4);
+  box-shadow: var(--ww-shadow-sticky);
 }
 
 .ww-step-label {
@@ -252,7 +253,7 @@ button {
   right: 0;
   bottom: 0;
   padding: 14px var(--ww-page-px) max(14px, env(safe-area-inset-bottom));
-  background: linear-gradient(180deg, rgba(7, 12, 18, 0) 0%, var(--ww-bg) 22%);
+  background: var(--ww-bottom-scrim);
 }
 
 .ww-secondary-button {
@@ -503,6 +504,8 @@ button {
 .ww-instruction-stack {
   display: grid;
   gap: 12px;
+  align-content: start;
+  min-height: 42vh;
   padding-bottom: 88px;
 }
 
@@ -515,11 +518,31 @@ button {
   background: var(--ww-surface);
 }
 
+.ww-instruction-block--announcement {
+  border-color: var(--ww-border-strong);
+  background: var(--ww-accent-soft);
+}
+
+.ww-instruction-block--private {
+  background: var(--ww-surface-hi);
+}
+
 .ww-instruction-block p {
   margin: 0;
   color: var(--ww-text);
   font-size: 16px;
   line-height: 1.45;
+}
+
+.ww-instruction-block .ww-announcement {
+  color: var(--ww-text);
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.ww-private-instruction {
+  overflow-wrap: anywhere;
 }
 
 .ww-dashboard-action-zone {
@@ -528,8 +551,29 @@ button {
   right: 0;
   bottom: 0;
   z-index: 30;
+  display: grid;
+  gap: 10px;
   padding: 14px var(--ww-page-px) max(14px, env(safe-area-inset-bottom));
-  background: linear-gradient(180deg, rgba(7, 12, 18, 0) 0%, var(--ww-bg) 22%);
+  background: var(--ww-bottom-scrim);
+}
+
+.ww-audio-toggle {
+  min-height: 44px;
+  border: 1px solid var(--ww-border-neutral);
+  border-radius: var(--ww-radius-sm);
+  background: var(--ww-surface);
+  color: var(--ww-text-dim);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+}
+
+.ww-audio-toggle--muted {
+  border-color: var(--ww-border-strong);
+  background: var(--ww-surface-hi);
+  color: var(--ww-accent-bright);
 }
 
 .ww-stats-grid {
@@ -556,10 +600,51 @@ button {
   line-height: 1;
 }
 
+.ww-stats-section {
+  display: grid;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.ww-faction-summary {
+  display: grid;
+  gap: 10px;
+}
+
+.ww-faction-summary__group {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--ww-border-neutral);
+  border-radius: var(--ww-radius-md);
+  padding: 12px;
+  background: var(--ww-surface);
+}
+
+.ww-faction-summary__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ww-faction-summary__header strong {
+  color: var(--ww-text);
+  font-size: 24px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.ww-faction-summary__empty {
+  margin: 0;
+  color: var(--ww-text-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .ww-role-summary {
   display: grid;
   gap: 6px;
-  margin-top: 18px;
 }
 
 .ww-role-summary__row {
@@ -573,6 +658,51 @@ button {
   padding: 8px 12px;
   background: var(--ww-surface-deeper);
   color: var(--ww-text-dim);
+}
+
+.ww-role-summary__row strong {
+  color: var(--ww-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.ww-elimination-log {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ww-elimination-log__entry {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 58px;
+  border: 1px solid var(--ww-border-neutral);
+  border-radius: var(--ww-radius-md);
+  padding: 10px;
+  background: var(--ww-surface);
+}
+
+.ww-elimination-log__phase {
+  color: var(--ww-accent-bright);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+}
+
+.ww-elimination-log__body {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.ww-elimination-log__reason {
+  color: var(--ww-text-muted);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .ww-benchmark-panel {
@@ -608,6 +738,10 @@ button {
   }
 
   .ww-stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ww-elimination-log__entry {
     grid-template-columns: 1fr;
   }
 }

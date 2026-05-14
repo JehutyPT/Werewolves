@@ -1,0 +1,285 @@
+using FluentAssertions;
+using Microsoft.Extensions.Logging;
+using Plugin.Maui.Audio;
+using Werewolves.Client.Services;
+using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Models;
+using Xunit;
+
+namespace Werewolves.Client.Tests.Services;
+
+public class InstructionAudioPlaybackTests
+{
+	private const SoundEffectsEnum FirstEffect = (SoundEffectsEnum)1;
+	private const SoundEffectsEnum SecondEffect = (SoundEffectsEnum)2;
+
+	[Fact]
+	public async Task ReconcileAsync_WithMappedAvailableEffect_PlaysLoopedAudio()
+	{
+		var context = PlaybackContext.Create(
+			new Dictionary<SoundEffectsEnum, string> { [FirstEffect] = "noite-lobos.mp3" },
+			new Dictionary<string, byte[]> { ["noite-lobos.mp3"] = [1, 2, 3] });
+
+		await context.Playback.ReconcileAsync(new TestInstruction(FirstEffect));
+
+		context.AssetLoader.OpenedFileNames.Should().Equal("noite-lobos.mp3");
+		context.PlayerFactory.CreatedPlayers.Should().ContainSingle();
+		var player = context.PlayerFactory.CreatedPlayers.Single();
+		player.Loop.Should().BeTrue();
+		player.IsPlaying.Should().BeTrue();
+		player.PlayCount.Should().Be(1);
+	}
+
+	[Fact]
+	public async Task ReconcileAsync_WhenInstructionChanges_StopsPreviousTrackBeforePlayingNext()
+	{
+		var context = PlaybackContext.Create(
+			new Dictionary<SoundEffectsEnum, string>
+			{
+				[FirstEffect] = "noite-lobos.mp3",
+				[SecondEffect] = "amanhecer.mp3"
+			},
+			new Dictionary<string, byte[]>
+			{
+				["noite-lobos.mp3"] = [1],
+				["amanhecer.mp3"] = [2]
+			});
+
+		await context.Playback.ReconcileAsync(new TestInstruction(FirstEffect));
+		var firstPlayer = context.PlayerFactory.CreatedPlayers.Single();
+
+		await context.Playback.ReconcileAsync(new TestInstruction(SecondEffect));
+
+		firstPlayer.StopCount.Should().Be(1);
+		firstPlayer.IsDisposed.Should().BeTrue();
+		context.PlayerFactory.CreatedPlayers.Should().HaveCount(2);
+		context.PlayerFactory.CreatedPlayers[1].IsPlaying.Should().BeTrue();
+	}
+
+	[Fact]
+	public async Task ReconcileAsync_WhenSameTrackIsPausedAfterBackgrounding_ResumesExistingPlayer()
+	{
+		var context = PlaybackContext.Create(
+			new Dictionary<SoundEffectsEnum, string> { [FirstEffect] = "noite-lobos.mp3" },
+			new Dictionary<string, byte[]> { ["noite-lobos.mp3"] = [1] });
+
+		await context.Playback.ReconcileAsync(new TestInstruction(FirstEffect));
+		var player = context.PlayerFactory.CreatedPlayers.Single();
+		player.Pause();
+
+		await context.Playback.ReconcileAsync(new TestInstruction(FirstEffect));
+
+		context.PlayerFactory.CreatedPlayers.Should().ContainSingle();
+		player.IsPlaying.Should().BeTrue();
+		player.PlayCount.Should().Be(2);
+	}
+
+	[Fact]
+	public async Task SetMutedAsync_WhenMutedSilencesAudio_AndUnmutedResumesCurrentInstruction()
+	{
+		var context = PlaybackContext.Create(
+			new Dictionary<SoundEffectsEnum, string> { [FirstEffect] = "noite-lobos.mp3" },
+			new Dictionary<string, byte[]> { ["noite-lobos.mp3"] = [1] });
+		var instruction = new TestInstruction(FirstEffect);
+
+		await context.Playback.ReconcileAsync(instruction);
+		var firstPlayer = context.PlayerFactory.CreatedPlayers.Single();
+
+		await context.Playback.SetMutedAsync(isMuted: true, instruction);
+		await context.Playback.ReconcileAsync(instruction);
+
+		context.Playback.IsMuted.Should().BeTrue();
+		firstPlayer.StopCount.Should().Be(1);
+		firstPlayer.IsDisposed.Should().BeTrue();
+		context.PlayerFactory.CreatedPlayers.Should().ContainSingle();
+
+		await context.Playback.SetMutedAsync(isMuted: false, instruction);
+
+		context.Playback.IsMuted.Should().BeFalse();
+		context.PlayerFactory.CreatedPlayers.Should().HaveCount(2);
+		context.PlayerFactory.CreatedPlayers[1].IsPlaying.Should().BeTrue();
+	}
+
+	[Fact]
+	public async Task ReconcileAsync_WhenMappedFileIsMissing_LogsWarningAndTreatsInstructionAsSilent()
+	{
+		var context = PlaybackContext.Create(
+			new Dictionary<SoundEffectsEnum, string> { [FirstEffect] = "noite-lobos.mp3" },
+			new Dictionary<string, byte[]>());
+
+		await context.Playback.ReconcileAsync(new TestInstruction(FirstEffect));
+
+		context.PlayerFactory.CreatedPlayers.Should().BeEmpty();
+		context.Logger.Entries.Should().Contain(entry =>
+			entry.Level == LogLevel.Warning &&
+			entry.Message.Contains("noite-lobos.mp3", StringComparison.Ordinal));
+	}
+
+	private sealed record TestInstruction : ModeratorInstruction
+	{
+		public TestInstruction(params SoundEffectsEnum[] soundEffects)
+			: base(privateInstruction: "Teste", soundEffects: soundEffects.ToList())
+		{
+		}
+	}
+
+	private sealed class PlaybackContext
+	{
+		private PlaybackContext(
+			InstructionAudioPlayback playback,
+			FakeAudioAssetLoader assetLoader,
+			FakeAudioPlayerFactory playerFactory,
+			TestLogger<InstructionAudioPlayback> logger)
+		{
+			Playback = playback;
+			AssetLoader = assetLoader;
+			PlayerFactory = playerFactory;
+			Logger = logger;
+		}
+
+		public InstructionAudioPlayback Playback { get; }
+		public FakeAudioAssetLoader AssetLoader { get; }
+		public FakeAudioPlayerFactory PlayerFactory { get; }
+		public TestLogger<InstructionAudioPlayback> Logger { get; }
+
+		public static PlaybackContext Create(
+			IReadOnlyDictionary<SoundEffectsEnum, string> mappings,
+			IReadOnlyDictionary<string, byte[]> assets)
+		{
+			var assetLoader = new FakeAudioAssetLoader(assets);
+			var playerFactory = new FakeAudioPlayerFactory();
+			var logger = new TestLogger<InstructionAudioPlayback>();
+			var playback = new InstructionAudioPlayback(
+				new AudioMap(mappings),
+				assetLoader,
+				playerFactory,
+				logger);
+
+			return new PlaybackContext(playback, assetLoader, playerFactory, logger);
+		}
+	}
+
+	private sealed class FakeAudioAssetLoader : IAudioAssetLoader
+	{
+		private readonly IReadOnlyDictionary<string, byte[]> _assets;
+
+		public FakeAudioAssetLoader(IReadOnlyDictionary<string, byte[]> assets)
+		{
+			_assets = assets;
+		}
+
+		public List<string> OpenedFileNames { get; } = [];
+
+		public Task<Stream?> OpenAsync(string fileName, CancellationToken cancellationToken = default)
+		{
+			OpenedFileNames.Add(fileName);
+			return Task.FromResult(_assets.TryGetValue(fileName, out var bytes)
+				? new MemoryStream(bytes) as Stream
+				: null);
+		}
+	}
+
+	private sealed class FakeAudioPlayerFactory : IAudioPlayerFactory
+	{
+		public List<FakeAudioPlayer> CreatedPlayers { get; } = [];
+
+		public IAudioPlayer Create(Stream audioStream)
+		{
+			var player = new FakeAudioPlayer();
+			CreatedPlayers.Add(player);
+			return player;
+		}
+	}
+
+	private sealed class FakeAudioPlayer : IAudioPlayer
+	{
+		public event EventHandler? PlaybackEnded
+		{
+			add { }
+			remove { }
+		}
+
+		public event EventHandler? Error
+		{
+			add { }
+			remove { }
+		}
+
+		public double Duration { get; private set; }
+		public double CurrentPosition { get; private set; }
+		public double Volume { get; set; } = 1;
+		public double Balance { get; set; }
+		public double Speed { get; set; } = 1;
+		public double MinimumSpeed => 0.5;
+		public double MaximumSpeed => 2;
+		public bool CanSetSpeed => true;
+		public bool IsPlaying { get; private set; }
+		public bool Loop { get; set; }
+		public bool CanSeek => true;
+		public int PlayCount { get; private set; }
+		public int StopCount { get; private set; }
+		public bool IsDisposed { get; private set; }
+
+		public void Play()
+		{
+			PlayCount++;
+			IsPlaying = true;
+		}
+
+		public void Pause()
+		{
+			IsPlaying = false;
+		}
+
+		public void Stop()
+		{
+			StopCount++;
+			IsPlaying = false;
+			CurrentPosition = 0;
+		}
+
+		public void Seek(double position)
+		{
+			CurrentPosition = position;
+		}
+
+		public void SetSource(Stream audioStream)
+		{
+			CurrentPosition = 0;
+		}
+
+		public void Dispose()
+		{
+			IsDisposed = true;
+		}
+	}
+
+	private sealed class TestLogger<T> : ILogger<T>
+	{
+		public List<LogEntry> Entries { get; } = [];
+
+		public IDisposable BeginScope<TState>(TState state) where TState : notnull => NullScope.Instance;
+		public bool IsEnabled(LogLevel logLevel) => true;
+
+		public void Log<TState>(
+			LogLevel logLevel,
+			EventId eventId,
+			TState state,
+			Exception? exception,
+			Func<TState, Exception?, string> formatter)
+		{
+			Entries.Add(new LogEntry(logLevel, formatter(state, exception)));
+		}
+
+		private sealed class NullScope : IDisposable
+		{
+			public static NullScope Instance { get; } = new();
+
+			public void Dispose()
+			{
+			}
+		}
+	}
+
+	private sealed record LogEntry(LogLevel Level, string Message);
+}

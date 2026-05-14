@@ -5,13 +5,13 @@
              x:Class="Werewolves.Client.App">
     <Application.Resources>
         <ResourceDictionary>
+            <Color x:Key="WerewolvesBackground">#070C12</Color>
+            <Color x:Key="WerewolvesText">#EAF4FB</Color>
+            <Color x:Key="WerewolvesAccent">#3FE0C8</Color>
 
-            <!--
-                For information about styling .NET MAUI pages
-                please refer to the documentation:
-                https://go.microsoft.com/fwlink/?linkid=2282329
-            -->
-
+            <Style TargetType="ContentPage">
+                <Setter Property="BackgroundColor" Value="{StaticResource WerewolvesBackground}" />
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

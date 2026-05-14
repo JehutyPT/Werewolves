@@ -10,8 +10,15 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="..\Werewolves.Client\Services\AudioMap.cs" Link="Services\AudioMap.cs" />
     <Compile Include="..\Werewolves.Client\Services\BenchmarkClientManager.cs" Link="Services\BenchmarkClientManager.cs" />
+    <Compile Include="..\Werewolves.Client\Services\DashboardRoster.cs" Link="Services\DashboardRoster.cs" />
+    <Compile Include="..\Werewolves.Client\Services\DashboardStatsSnapshot.cs" Link="Services\DashboardStatsSnapshot.cs" />
+    <Compile Include="..\Werewolves.Client\Services\FileGameSessionSaveStore.cs" Link="Services\FileGameSessionSaveStore.cs" />
     <Compile Include="..\Werewolves.Client\Services\GameClientManager.cs" Link="Services\GameClientManager.cs" />
+    <Compile Include="..\Werewolves.Client\Services\GameplayWakeLockController.cs" Link="Services\GameplayWakeLockController.cs" />
+    <Compile Include="..\Werewolves.Client\Services\InstructionAudioPlayback.cs" Link="Services\InstructionAudioPlayback.cs" />
+    <Compile Include="..\Werewolves.Client\Services\InstructionDisplayFlow.cs" Link="Services\InstructionDisplayFlow.cs" />
     <Compile Include="..\Werewolves.Client\Services\LobbySetupState.cs" Link="Services\LobbySetupState.cs" />
   </ItemGroup>
 
@@ -37,7 +44,10 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="FluentAssertions" Version="6.12.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Maui.Controls" Version="10.0.20" PrivateAssets="all" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="Plugin.Maui.Audio" Version="4.0.0" />
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
       <PrivateAssets>all</PrivateAssets>

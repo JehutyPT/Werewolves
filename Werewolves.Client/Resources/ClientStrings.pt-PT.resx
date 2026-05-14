@@ -274,6 +274,45 @@
   <data name="StatusEffect_Fallback" xml:space="preserve">
     <value>Efeito</value>
   </data>
+  <data name="Dashboard_PlayerStatusLabel" xml:space="preserve">
+    <value>Estado dos jogadores</value>
+  </data>
+  <data name="Dashboard_RevealedStatLabel" xml:space="preserve">
+    <value>Revelados</value>
+  </data>
+  <data name="Dashboard_RolesByFactionTitle" xml:space="preserve">
+    <value>Papéis restantes por facção</value>
+  </data>
+  <data name="Dashboard_NoRevealedRoles" xml:space="preserve">
+    <value>Sem papéis revelados ativos.</value>
+  </data>
+  <data name="Dashboard_FactionRolesAriaFormat" xml:space="preserve">
+    <value>Papéis de {0}</value>
+  </data>
+  <data name="Dashboard_EliminationLogTitle" xml:space="preserve">
+    <value>Registo de eliminações</value>
+  </data>
+  <data name="Dashboard_NoEliminations" xml:space="preserve">
+    <value>Ainda não houve eliminações.</value>
+  </data>
+  <data name="Dashboard_RevealedRoleCountOne" xml:space="preserve">
+    <value>1 papel revelado ativo</value>
+  </data>
+  <data name="Dashboard_RevealedRoleCountManyFormat" xml:space="preserve">
+    <value>{0} papéis revelados ativos</value>
+  </data>
+  <data name="Dashboard_EliminationCountOne" xml:space="preserve">
+    <value>1 eliminação</value>
+  </data>
+  <data name="Dashboard_EliminationCountManyFormat" xml:space="preserve">
+    <value>{0} eliminações</value>
+  </data>
+  <data name="Dashboard_AudioUnmute" xml:space="preserve">
+    <value>Ativar som</value>
+  </data>
+  <data name="Dashboard_AudioMute" xml:space="preserve">
+    <value>Silenciar áudio</value>
+  </data>
   <data name="Benchmark_StepLabel" xml:space="preserve">
     <value>Spike #30</value>
   </data>

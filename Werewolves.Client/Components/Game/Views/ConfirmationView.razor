@@ -1,0 +1,14 @@
+@using Werewolves.Core.StateModels.Models
+@using Werewolves.Core.StateModels.Models.Instructions
+
+<button type="button" class="ww-btn-primary" @onclick="Confirm">Confirmar</button>
+
+@code {
+	[Parameter, EditorRequired]
+	public ConfirmationInstruction Instruction { get; set; } = default!;
+
+	[Parameter]
+	public EventCallback<ModeratorResponse> OnResponse { get; set; }
+
+	private Task Confirm() => OnResponse.InvokeAsync(Instruction.CreateResponse(true));
+}

@@ -274,6 +274,45 @@
   <data name="StatusEffect_Fallback" xml:space="preserve">
     <value>Effect</value>
   </data>
+  <data name="Dashboard_PlayerStatusLabel" xml:space="preserve">
+    <value>Player status</value>
+  </data>
+  <data name="Dashboard_RevealedStatLabel" xml:space="preserve">
+    <value>Revealed</value>
+  </data>
+  <data name="Dashboard_RolesByFactionTitle" xml:space="preserve">
+    <value>Remaining roles by faction</value>
+  </data>
+  <data name="Dashboard_NoRevealedRoles" xml:space="preserve">
+    <value>No revealed active roles.</value>
+  </data>
+  <data name="Dashboard_FactionRolesAriaFormat" xml:space="preserve">
+    <value>{0} roles</value>
+  </data>
+  <data name="Dashboard_EliminationLogTitle" xml:space="preserve">
+    <value>Elimination log</value>
+  </data>
+  <data name="Dashboard_NoEliminations" xml:space="preserve">
+    <value>No eliminations yet.</value>
+  </data>
+  <data name="Dashboard_RevealedRoleCountOne" xml:space="preserve">
+    <value>1 revealed active role</value>
+  </data>
+  <data name="Dashboard_RevealedRoleCountManyFormat" xml:space="preserve">
+    <value>{0} revealed active roles</value>
+  </data>
+  <data name="Dashboard_EliminationCountOne" xml:space="preserve">
+    <value>1 elimination</value>
+  </data>
+  <data name="Dashboard_EliminationCountManyFormat" xml:space="preserve">
+    <value>{0} eliminations</value>
+  </data>
+  <data name="Dashboard_AudioUnmute" xml:space="preserve">
+    <value>Unmute audio</value>
+  </data>
+  <data name="Dashboard_AudioMute" xml:space="preserve">
+    <value>Mute audio</value>
+  </data>
   <data name="Benchmark_StepLabel" xml:space="preserve">
     <value>Spike #30</value>
   </data>

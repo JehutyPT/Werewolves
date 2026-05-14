@@ -1,0 +1,82 @@
+@using Werewolves.Core.StateModels.Models
+@using Werewolves.Core.StateModels.Models.Instructions
+
+<div class="ww-instruction-stack">
+	@if (!_flow.HasInstruction)
+	{
+		<p class="ww-empty-state">Sem instrução pendente.</p>
+	}
+	else
+	{
+		<article class="@InstructionBlockClass" @key="Instruction">
+			<span class="@LabelClass">@DisplayLabel</span>
+			<p class="@InstructionTextClass">@_flow.CurrentText</p>
+		</article>
+	}
+</div>
+
+<footer class="ww-dashboard-action-zone">
+	@if (AudioControls is not null)
+	{
+		@AudioControls
+	}
+
+	@if (_flow.HasInstruction)
+	{
+		if (!_flow.IsShowingInput)
+		{
+			<button type="button" class="ww-btn-primary" @onclick="RevealPrivateInstruction">Mostrar instrução</button>
+		}
+		else if (Instruction is ConfirmationInstruction confirmationInstruction)
+		{
+			<ConfirmationView Instruction="confirmationInstruction" OnResponse="OnResponse" />
+		}
+		else
+		{
+			<button type="button" class="ww-btn-primary" disabled>Responder</button>
+		}
+	}
+</footer>
+
+@code {
+	private readonly InstructionDisplayFlow _flow = new();
+
+	[Parameter]
+	public ModeratorInstruction? Instruction { get; set; }
+
+	[Parameter]
+	public EventCallback<ModeratorResponse> OnResponse { get; set; }
+
+	[Parameter]
+	public RenderFragment? AudioControls { get; set; }
+
+	protected override void OnParametersSet()
+	{
+		_flow.SetInstruction(Instruction);
+	}
+
+	private string DisplayLabel =>
+		_flow.IsShowingInput && !string.IsNullOrWhiteSpace(Instruction?.PrivateInstruction)
+			? "Moderador"
+			: "Anunciar";
+
+	private string LabelClass =>
+		DisplayLabel == "Anunciar"
+			? "ww-label ww-label--accent"
+			: "ww-label";
+
+	private string InstructionBlockClass =>
+		DisplayLabel == "Anunciar"
+			? "ww-instruction-block ww-instruction-block--announcement"
+			: "ww-instruction-block ww-instruction-block--private";
+
+	private string InstructionTextClass =>
+		DisplayLabel == "Anunciar"
+			? "ww-announcement"
+			: "ww-private-instruction";
+
+	private void RevealPrivateInstruction()
+	{
+		_flow.Advance();
+	}
+}

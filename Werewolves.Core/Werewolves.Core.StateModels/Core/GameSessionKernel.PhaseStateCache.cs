@@ -238,35 +238,13 @@ internal partial class GameSessionKernel
 
 		/// <summary>
 		/// Restores a GamePhaseStateCache from a DTO.
+		/// Only the main phase is restored. Sub-phase position, listener state, and other
+		/// execution state are transient (ADR-0002) and intentionally not read back —
+		/// rehydration resets to the beginning of the current main phase.
 		/// </summary>
 		internal static GamePhaseStateCache FromDto(GamePhaseStateCacheDto dto)
 		{
-			ListenerIdentifier? listener = null;
-			if (dto.CurrentListenerId != null && dto.CurrentListenerType != null)
-			{
-				if (Enum.TryParse<GameHookListenerType>(dto.CurrentListenerType, out var listenerType))
-				{
-					// Recreate the listener identifier based on type
-					listener = listenerType switch
-					{
-						GameHookListenerType.MainRole when Enum.TryParse<MainRoleType>(dto.CurrentListenerId, out var role) 
-							=> ListenerIdentifier.Listener(role),
-						GameHookListenerType.StatusEffect when Enum.TryParse<StatusEffectTypes>(dto.CurrentListenerId, out var effect) 
-							=> ListenerIdentifier.Listener(effect),
-						_ => null
-					};
-				}
-			}
-
-			return new GamePhaseStateCache
-			{
-				_currentPhase = dto.CurrentPhase,
-				_currentSubPhase = dto.SubPhase,
-				_currentSubPhaseStage = dto.ActiveSubPhaseStage,
-				_previousSubPhaseStages = dto.CompletedSubPhaseStages.ToList(),
-				_currentListener = listener,
-				_currentListenerState = dto.CurrentListenerState
-			};
+			return new GamePhaseStateCache(dto.CurrentPhase);
 		}
 
 		#endregion

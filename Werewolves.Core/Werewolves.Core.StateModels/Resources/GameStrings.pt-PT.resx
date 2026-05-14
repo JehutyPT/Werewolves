@@ -125,6 +125,10 @@
     <value>A aldeia adormece.</value>
     <comment/>
   </data>
+  <data name="NightActionsCompletePrompt" xml:space="preserve">
+    <value>As ações da noite terminaram. A aldeia acorda.</value>
+    <comment/>
+  </data>
   <data name="SimpleVillagerRoleName" xml:space="preserve">
     <value>Aldeão</value>
     <comment/>

@@ -27,25 +27,25 @@
 
 	<section class="ww-dashboard-panel" style="@PanelStyle(DashboardTab.Roster)" aria-hidden="@(_activeTab != DashboardTab.Roster)">
 		<div class="ww-section-head">
-			<span>@ClientStrings.LobbyRoster_SeatOrderLabel</span>
+			<span>@ClientStrings.Dashboard_PlayerStatusLabel</span>
 			<span>@PlayerCountLabel</span>
 		</div>
 
-		@if (Players.Count == 0)
+		@if (RosterEntries.Count == 0)
 		{
 			<p class="ww-empty-state">@ClientStrings.Dashboard_EmptyRoster</p>
 		}
 		else
 		{
 			<ol class="ww-dashboard-roster">
-				@for (var index = 0; index < Players.Count; index++)
+				@for (var index = 0; index < RosterEntries.Count; index++)
 				{
-					var player = Players[index];
-					<li class="ww-dashboard-player @(player.State.Health == PlayerHealth.Dead ? "ww-dashboard-player--dead" : "")" @key="player.Id">
-						<span class="ww-seat-number">@(index + 1)</span>
+					var player = RosterEntries[index];
+					<li class="ww-dashboard-player @(player.IsDead ? "ww-dashboard-player--dead" : "")" @key="player.PlayerId">
+						<span class="ww-seat-number">@player.SeatNumber</span>
 						<div class="ww-dashboard-player__main">
 							<span class="ww-player-name">@player.Name</span>
-							<span class="ww-dashboard-player__meta">@RoleLabel(player) · @HealthLabel(player.State.Health)</span>
+							<span class="ww-dashboard-player__meta">@player.RoleLabel · @player.HealthLabel</span>
 						</div>
 						<span class="ww-status-list">@StatusEffectsLabel(player)</span>
 					</li>
@@ -55,44 +55,20 @@
 	</section>
 
 	<section class="ww-dashboard-panel ww-action-panel" style="@PanelStyle(DashboardTab.Action)" aria-hidden="@(_activeTab != DashboardTab.Action)">
-		<div class="ww-instruction-stack">
-			@if (Game.CurrentInstruction is null)
-			{
-				<p class="ww-empty-state">@ClientStrings.Dashboard_NoInstruction</p>
-			}
-			else
-			{
-				@if (!string.IsNullOrWhiteSpace(Game.CurrentInstruction.PublicAnnouncement))
-				{
-					<article class="ww-instruction-block">
-						<span class="ww-label ww-label--accent">@ClientStrings.Dashboard_AnnounceLabel</span>
-						<p class="ww-announcement">@Game.CurrentInstruction.PublicAnnouncement</p>
-					</article>
-				}
-
-				@if (!string.IsNullOrWhiteSpace(Game.CurrentInstruction.PrivateInstruction))
-				{
-					<article class="ww-instruction-block">
-						<span class="ww-label">@ClientStrings.Dashboard_ModeratorLabel</span>
-						<p>@Game.CurrentInstruction.PrivateInstruction</p>
-					</article>
-				}
-			}
-		</div>
-
-		<footer class="ww-dashboard-action-zone">
-			@if (Game.CurrentInstruction is ConfirmationInstruction confirmationInstruction)
-			{
-				<button type="button" class="ww-btn-primary" @onclick="() => Confirm(confirmationInstruction)">@ClientStrings.Dashboard_ContinueButton</button>
-			}
-			else
-			{
-				<button type="button" class="ww-btn-primary" disabled>@ClientStrings.Dashboard_RespondButton</button>
-			}
-		</footer>
+		<InstructionRenderer Instruction="Game.CurrentInstruction" OnResponse="ProcessResponse">
+			<AudioControls>
+				<button type="button"
+						class="@AudioToggleClass"
+						aria-pressed="@Game.IsAudioMuted"
+						@onclick="ToggleAudioMute">@AudioToggleLabel</button>
+			</AudioControls>
+		</InstructionRenderer>
 	</section>
 
 	<section class="ww-dashboard-panel" style="@PanelStyle(DashboardTab.Stats)" aria-hidden="@(_activeTab != DashboardTab.Stats)">
+		@{
+			var stats = StatsSnapshot;
+		}
 		<div class="ww-section-head">
 			<span>@ClientStrings.Dashboard_GameSummaryLabel</span>
 			<span>@PhaseTurnLabel</span>
@@ -108,18 +84,74 @@
 				<strong>@EliminatedCount</strong>
 			</div>
 			<div class="ww-stat-tile">
-				<span class="ww-label">@ClientStrings.Dashboard_RolesStatLabel</span>
-				<strong>@RoleCount</strong>
+				<span class="ww-label">@ClientStrings.Dashboard_RevealedStatLabel</span>
+				<strong>@KnownAliveRoleCount</strong>
 			</div>
 		</div>
 
-		<section class="ww-role-summary" aria-label="@ClientStrings.Dashboard_RolesInPlayAria">
-			@foreach (var role in RolesInPlay)
+		<section class="ww-stats-section" aria-labelledby="roles-remaining-title">
+			<div class="ww-section-head">
+				<span id="roles-remaining-title">@ClientStrings.Dashboard_RolesByFactionTitle</span>
+				<span>@KnownAliveRoleCountLabel(stats)</span>
+			</div>
+
+			<div class="ww-faction-summary">
+				@foreach (var group in stats.RoleGroups)
+				{
+					<article class="ww-faction-summary__group" @key="group.Group">
+						<header class="ww-faction-summary__header">
+							<span class="ww-faction-badge">
+								<span class="ww-faction-badge__dot" style="background: var(@GroupCssVar(group.Group))"></span>
+								@group.DisplayName
+							</span>
+							<strong>@group.RemainingCount</strong>
+						</header>
+
+						@if (group.Roles.Count == 0)
+						{
+							<p class="ww-faction-summary__empty">@ClientStrings.Dashboard_NoRevealedRoles</p>
+						}
+						else
+						{
+							<div class="ww-role-summary" aria-label="@Format(ClientStrings.Dashboard_FactionRolesAriaFormat, group.DisplayName)">
+								@foreach (var role in group.Roles)
+								{
+									<div class="ww-role-summary__row" @key="role.Role">
+										<span>@role.DisplayName</span>
+										<strong>@role.RemainingCount</strong>
+									</div>
+								}
+							</div>
+						}
+					</article>
+				}
+			</div>
+		</section>
+
+		<section class="ww-stats-section" aria-labelledby="elimination-log-title">
+			<div class="ww-section-head">
+				<span id="elimination-log-title">@ClientStrings.Dashboard_EliminationLogTitle</span>
+				<span>@EliminationLogCountLabel(stats)</span>
+			</div>
+
+			@if (stats.EliminationLog.Count == 0)
 			{
-				<div class="ww-role-summary__row" @key="role.Role">
-					<span>@role.Name</span>
-					<strong>@role.Count</strong>
-				</div>
+				<p class="ww-empty-state">@ClientStrings.Dashboard_NoEliminations</p>
+			}
+			else
+			{
+				<ol class="ww-elimination-log">
+					@foreach (var entry in stats.EliminationLog)
+					{
+						<li class="ww-elimination-log__entry" @key="@($"{entry.TurnNumber}:{entry.Phase}:{entry.PlayerName}")">
+							<span class="ww-elimination-log__phase">@entry.TurnPhaseLabel</span>
+							<div class="ww-elimination-log__body">
+								<span class="ww-player-name">@entry.PlayerName</span>
+								<span class="ww-elimination-log__reason">@entry.ReasonLabel</span>
+							</div>
+						</li>
+					}
+				</ol>
 			}
 		</section>
 	</section>
@@ -129,7 +161,7 @@
 @using Werewolves.Core.StateModels.Core
 @using Werewolves.Core.StateModels.Enums
 @using Werewolves.Core.StateModels.Extensions
-@using Werewolves.Core.StateModels.Models.Instructions
+@using Werewolves.Core.StateModels.Models
 
 @code {
 	private DashboardTab _activeTab = DashboardTab.Action;
@@ -140,10 +172,14 @@
 	}
 
 	private IReadOnlyList<IPlayer> Players => Game.CurrentSession?.GetPlayers().ToList() ?? [];
+	private IReadOnlyList<DashboardRosterEntry> RosterEntries => Game.CurrentRoster;
 
 	private int AliveCount => Players.Count(player => player.State.Health == PlayerHealth.Alive);
 	private int EliminatedCount => Players.Count(player => player.State.Health == PlayerHealth.Dead);
-	private int RoleCount => Players.Count(player => player.State.MainRole is not null);
+	private int KnownAliveRoleCount => Players.Count(player =>
+		player.State.Health == PlayerHealth.Alive &&
+		player.State.MainRole is not null);
+	private DashboardStatsSnapshot StatsSnapshot => DashboardStatsSnapshot.FromSession(Game.CurrentSession);
 
 	private string PlayerCountLabel => Players.Count == 1
 		? ClientStrings.Dashboard_PlayerCountOne
@@ -162,30 +198,31 @@
 		}
 	}
 
-	private IEnumerable<(MainRoleType Role, string Name, int Count)> RolesInPlay =>
-		Players
-			.Select(player => player.State.MainRole)
-			.OfType<MainRoleType>()
-			.GroupBy(role => role)
-			.OrderBy(group => group.Key.GetRoleGroup())
-			.ThenBy(group => group.Key.GetPublicName())
-			.Select(group => (group.Key, group.Key.GetPublicName(), group.Count()));
-
 	private void SelectTab(DashboardTab tab)
 	{
 		_activeTab = tab;
 	}
 
-	private void Confirm(ConfirmationInstruction instruction)
+	private void ProcessResponse(ModeratorResponse response)
 	{
-		Game.ProcessInput(instruction.CreateResponse(true));
+		Game.ProcessInput(response);
 	}
+
+	private Task ToggleAudioMute() => Game.ToggleAudioMuteAsync();
 
 	private string TabButtonClass(DashboardTab tab) =>
 		_activeTab == tab ? "ww-dashboard-tab ww-dashboard-tab--active" : "ww-dashboard-tab";
 
 	private string PanelStyle(DashboardTab tab) =>
 		_activeTab == tab ? "display:block;" : "display:none;";
+
+	private string AudioToggleLabel => Game.IsAudioMuted
+		? ClientStrings.Dashboard_AudioUnmute
+		: ClientStrings.Dashboard_AudioMute;
+
+	private string AudioToggleClass => Game.IsAudioMuted
+		? "ww-audio-toggle ww-audio-toggle--muted"
+		: "ww-audio-toggle";
 
 	private static string PhaseLabel(GamePhase phase) => phase switch
 	{
@@ -195,36 +232,31 @@
 		_ => ClientStrings.Dashboard_PhaseFallback
 	};
 
-	private static string RoleLabel(IPlayer player) =>
-		player.State.MainRole?.GetPublicName() ?? ClientStrings.Dashboard_UnassignedRole;
+	private static string StatusEffectsLabel(DashboardRosterEntry player) => player.StatusEffectsLabel;
 
-	private static string HealthLabel(PlayerHealth health) => health switch
+	private static string KnownAliveRoleCountLabel(DashboardStatsSnapshot stats)
 	{
-		PlayerHealth.Alive => ClientStrings.Dashboard_HealthAlive,
-		PlayerHealth.Dead => ClientStrings.Dashboard_HealthDead,
-		_ => ClientStrings.Dashboard_HealthUnknown
-	};
-
-	private static string StatusEffectsLabel(IPlayer player)
-	{
-		var effects = player.State.GetActiveStatusEffects();
-		return effects.Count == 0
-			? ClientStrings.Dashboard_NoStatusEffects
-			: string.Join(ClientStrings.Common_ListSeparator, effects.Select(StatusEffectLabel));
+		var count = stats.RoleGroups.Sum(group => group.RemainingCount);
+		return count == 1
+			? ClientStrings.Dashboard_RevealedRoleCountOne
+			: Format(ClientStrings.Dashboard_RevealedRoleCountManyFormat, count);
 	}
 
-	private static string StatusEffectLabel(StatusEffectTypes effect) => effect switch
+	private static string EliminationLogCountLabel(DashboardStatsSnapshot stats)
 	{
-		StatusEffectTypes.ElderProtectionLost => ClientStrings.StatusEffect_ElderProtectionLost,
-		StatusEffectTypes.LycanthropyInfection => ClientStrings.StatusEffect_LycanthropyInfection,
-		StatusEffectTypes.WildChildChanged => ClientStrings.StatusEffect_WildChildChanged,
-		StatusEffectTypes.LynchingImmunityUsed => ClientStrings.StatusEffect_LynchingImmunityUsed,
-		StatusEffectTypes.Sheriff => ClientStrings.StatusEffect_Sheriff,
-		StatusEffectTypes.Lovers => ClientStrings.StatusEffect_Lovers,
-		StatusEffectTypes.Charmed => ClientStrings.StatusEffect_Charmed,
-		StatusEffectTypes.TownCrier => ClientStrings.StatusEffect_TownCrier,
-		StatusEffectTypes.Executioner => ClientStrings.StatusEffect_Executioner,
-		_ => ClientStrings.StatusEffect_Fallback
+		var count = stats.EliminationLog.Count;
+		return count == 1
+			? ClientStrings.Dashboard_EliminationCountOne
+			: Format(ClientStrings.Dashboard_EliminationCountManyFormat, count);
+	}
+
+	private static string GroupCssVar(RoleGroup group) => group switch
+	{
+		RoleGroup.Villagers => "--ww-faction-villager",
+		RoleGroup.Werewolves => "--ww-faction-werewolf",
+		RoleGroup.Ambiguous => "--ww-faction-ambiguous",
+		RoleGroup.Loners => "--ww-faction-loner",
+		_ => "--ww-accent"
 	};
 
 	private void HandleStateChanged(object? sender, EventArgs args)

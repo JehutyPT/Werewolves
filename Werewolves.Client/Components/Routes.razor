@@ -1,6 +1,8 @@
 @using Werewolves.Client.Components.Pages
+@implements IDisposable
 @inject LobbySetupState Lobby
 @inject GameClientManager Game
+@inject GameplayWakeLockController WakeLock
 
 @if (_currentStep == LobbyStep.Roster)
 {
@@ -24,25 +26,46 @@ else
 @code {
 	private LobbyStep _currentStep = LobbyStep.Roster;
 
+	protected override void OnInitialized()
+	{
+		MoveTo(LobbyStep.Roster);
+	}
+
 	private void ShowRoleSelection()
 	{
-		_currentStep = LobbyStep.RoleSelection;
+		MoveTo(LobbyStep.RoleSelection);
 	}
 
 	private void ShowRoster()
 	{
-		_currentStep = LobbyStep.Roster;
+		MoveTo(LobbyStep.Roster);
 	}
 
 	private void ShowBenchmark()
 	{
-		_currentStep = LobbyStep.Benchmark;
+		MoveTo(LobbyStep.Benchmark);
 	}
 
 	private void HandleStartGame()
 	{
 		Game.StartGame(Lobby.PlayerNames, Lobby.GetSelectedRoles());
-		_currentStep = LobbyStep.Dashboard;
+		MoveTo(LobbyStep.Dashboard);
+	}
+
+	private void MoveTo(LobbyStep step)
+	{
+		_currentStep = step;
+		WakeLock.MoveTo(step switch
+		{
+			LobbyStep.Roster or LobbyStep.RoleSelection => GameplayWakeLockArea.Lobby,
+			LobbyStep.Dashboard => GameplayWakeLockArea.Dashboard,
+			_ => GameplayWakeLockArea.None
+		});
+	}
+
+	public void Dispose()
+	{
+		WakeLock.MoveTo(GameplayWakeLockArea.None);
 	}
 
 	private enum LobbyStep

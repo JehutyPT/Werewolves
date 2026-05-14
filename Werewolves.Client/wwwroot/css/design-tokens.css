@@ -5,6 +5,8 @@
   --ww-surface: #101926;
   --ww-surface-hi: #172335;
   --ww-surface-deeper: #0B121C;
+  --ww-bg-transparent: rgba(7, 12, 18, 0);
+  --ww-bottom-scrim: linear-gradient(180deg, var(--ww-bg-transparent) 0%, var(--ww-bg) 22%);
 
   /* ── Borders ── */
   --ww-border: rgba(63, 224, 200, 0.10);
@@ -14,7 +16,7 @@
   /* ── Text ── */
   --ww-text: #EAF4FB;
   --ww-text-dim: #A4BACE;
-  --ww-text-muted: #56697F;
+  --ww-text-muted: #8498AD;
 
   /* ── Accent ── */
   --ww-accent: #3FE0C8;
@@ -42,6 +44,7 @@
   /* ── Shadows ── */
   --ww-glow-accent: 0 0 40px rgba(63, 224, 200, 0.18);
   --ww-glow-accent-strong: 0 0 40px rgba(63, 224, 200, 0.32);
+  --ww-shadow-sticky: 0 6px 8px -8px rgba(0, 0, 0, 0.4);
 
   /* ── Spacing ── */
   --ww-page-px: 16px;

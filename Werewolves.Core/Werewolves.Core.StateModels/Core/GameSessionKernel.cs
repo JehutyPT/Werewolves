@@ -183,7 +183,7 @@ namespace Werewolves.Core.StateModels.Core
 			_turnNumber = dto.TurnNumber;
 			_playerSeatingOrder = dto.SeatingOrder;
 			_rolesInPlay = dto.RolesInPlay;
-			_pendingModeratorInstruction = dto.PendingInstruction;
+			// PendingInstruction is transient execution state (ADR-0002) — not restored on rehydration.
 			_phaseStateCache = GamePhaseStateCache.FromDto(dto.PhaseStateCache);
 
 			foreach (var playerDto in dto.Players)

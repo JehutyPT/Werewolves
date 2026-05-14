@@ -51,7 +51,7 @@ public class GameService
     /// </summary>
     /// <param name="serializedSession">The serialized data representing the game session to be restored. Cannot be null or empty.</param>
     /// <returns>The unique ID of the rehydrated game session.</returns>
-    internal Guid RehydrateSession(string serializedSession)
+    public Guid RehydrateSession(string serializedSession)
     {
         var session = new GameSession(serializedSession);
         _sessions.TryAdd(session.Id, session);

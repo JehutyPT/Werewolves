@@ -110,9 +110,10 @@ internal abstract class NightRoleHookListener<T> : RoleHookListener<T> where T :
 
 		return HookListenerActionResult.NeedInput(
 			new SelectPlayersInstruction(
-				playersWithoutRole,
-				NumberRangeConstraint.Exact(roleCount),
-				publicText
+				selectablePlayerIds: playersWithoutRole,
+				countConstraint: NumberRangeConstraint.Exact(roleCount),
+				publicAnnouncement: publicText,
+				privateInstruction: privateInstruction
 			),
 			WokenUpStateEnum);
 	}

@@ -738,6 +738,42 @@ public class NightActionTests : DiagnosticTestBase
 
     #endregion
 
+    #region NA-030: First Night Identification Instruction
+
+    /// <summary>
+    /// NA-030: First night wake-up instruction includes private identification prompt.
+    /// The instruction should have both a public announcement ("X acorda.") and
+    /// a private instruction ("Identifica o jogador que é X.") for the moderator.
+    /// </summary>
+    [Fact]
+    public void FirstNight_WakeupInstruction_IncludesPrivateIdentificationPrompt()
+    {
+        // Arrange - 5 players: 1 WW, 1 Seer, 3 Villagers
+        var builder = CreateBuilder()
+            .WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);
+        builder.StartGame();
+        builder.ConfirmGameStart();
+
+        ConfirmNightStart(builder);
+
+        // Act — get the first night wake-up instruction (werewolf)
+        var wwInstruction = InstructionAssert.ExpectType<SelectPlayersInstruction>(
+            builder.GetCurrentInstruction(),
+            "Werewolf wake/identify instruction");
+
+        // Assert — instruction must have both announcement and private identification prompt
+        wwInstruction.PublicAnnouncement.Should().Contain(GameStrings.SimpleWerewolfRoleName,
+            "Public announcement should mention the role name");
+        wwInstruction.PrivateInstruction.Should().NotBeNullOrWhiteSpace(
+            "First-night wake-up must include a private identification prompt for the moderator");
+        wwInstruction.PrivateInstruction.Should().Contain(GameStrings.SimpleWerewolfRoleName,
+            "Private instruction should tell the moderator which role to identify");
+
+        MarkTestCompleted();
+    }
+
+    #endregion
+
     #region Helper Methods
 
     /// <summary>

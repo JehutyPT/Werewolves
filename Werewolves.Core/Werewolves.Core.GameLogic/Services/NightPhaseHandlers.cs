@@ -14,5 +14,5 @@ internal static class NightPhaseHandlers
 
     internal static ModeratorInstruction FinishNightActions(GameSession session, ModeratorResponse input)
         => new ConfirmationInstruction(
-            publicAnnouncement: "Night actions complete. Village wakes up.");
+            publicAnnouncement: GameStrings.NightActionsCompletePrompt);
 }
