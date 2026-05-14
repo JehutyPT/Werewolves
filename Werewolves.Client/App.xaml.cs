@@ -1,4 +1,6 @@
-﻿namespace Werewolves.Client
+﻿using Werewolves.Client.Resources;
+
+namespace Werewolves.Client
 {
     public partial class App : Application
     {
@@ -9,7 +11,7 @@
 
         protected override Window CreateWindow(IActivationState? activationState)
         {
-            return new Window(new MainPage()) { Title = "Werewolves.Client" };
+            return new Window(new MainPage()) { Title = ClientStrings.App_Title };
         }
     }
 }

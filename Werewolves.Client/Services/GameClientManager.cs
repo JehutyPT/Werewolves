@@ -51,6 +51,7 @@ public sealed class GameClientManager
 	{
 		if (ActiveGameId is not { } gameId)
 		{
+			// Developer-facing guard, not rendered UI copy.
 			throw new InvalidOperationException("Cannot process moderator response without an active game session.");
 		}
 

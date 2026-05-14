@@ -3,22 +3,22 @@
 <main class="ww-app-shell" aria-labelledby="benchmark-title">
 	<section class="ww-lobby-header">
 		<div>
-			<p class="ww-step-label">Spike #30</p>
-			<h1 id="benchmark-title">Benchmark</h1>
-			<p class="ww-page-copy">1.000 jogos · 2 tarefas · 15 jogadores · 3 lobisomens · Vidente · Criança Selvagem · 10 aldeões</p>
+			<p class="ww-step-label">@ClientStrings.Benchmark_StepLabel</p>
+			<h1 id="benchmark-title">@ClientStrings.Benchmark_Title</h1>
+			<p class="ww-page-copy">@ClientStrings.Benchmark_Description</p>
 		</div>
-		<div class="ww-roster-count" aria-label="@RunCountLabel">1k</div>
+		<div class="ww-roster-count" aria-label="@RunCountLabel">@ClientStrings.Benchmark_RunCountPill</div>
 	</section>
 
-	<section class="ww-benchmark-panel" aria-label="Resultados">
+	<section class="ww-benchmark-panel" aria-label="@ClientStrings.Benchmark_ResultsAria">
 		@if (Benchmark.LastResult is null && !Benchmark.IsRunning && _errorMessage is null)
 		{
-			<p class="ww-empty-state">Sem resultados.</p>
+			<p class="ww-empty-state">@ClientStrings.Benchmark_NoResults</p>
 		}
 
 		@if (Benchmark.IsRunning)
 		{
-			<p class="ww-empty-state">A correr...</p>
+			<p class="ww-empty-state">@ClientStrings.Benchmark_RunningStatus</p>
 		}
 
 		@if (_errorMessage is not null)
@@ -30,56 +30,56 @@
 		{
 			<div class="ww-stats-grid ww-benchmark-grid">
 				<div class="ww-stat-tile">
-					<span class="ww-label">Total</span>
+					<span class="ww-label">@ClientStrings.Benchmark_TotalLabel</span>
 					<strong>@FormatDuration(result.TotalElapsed)</strong>
 				</div>
 				<div class="ww-stat-tile">
-					<span class="ww-label">Média</span>
+					<span class="ww-label">@ClientStrings.Benchmark_AverageLabel</span>
 					<strong>@FormatDuration(result.AverageElapsedPerGame)</strong>
 				</div>
 				<div class="ww-stat-tile">
-					<span class="ww-label">Jogos</span>
+					<span class="ww-label">@ClientStrings.Benchmark_GameCountLabel</span>
 					<strong>@result.GameCount</strong>
 				</div>
 				<div class="ww-stat-tile">
-					<span class="ww-label">Tarefas</span>
+					<span class="ww-label">@ClientStrings.Benchmark_DegreeOfParallelismLabel</span>
 					<strong>@result.DegreeOfParallelism</strong>
 				</div>
 				<div class="ww-stat-tile">
-					<span class="ww-label">Mín.</span>
+					<span class="ww-label">@ClientStrings.Benchmark_MinLabel</span>
 					<strong>@FormatDuration(result.MinElapsedPerGame)</strong>
 				</div>
 				<div class="ww-stat-tile">
-					<span class="ww-label">Máx.</span>
+					<span class="ww-label">@ClientStrings.Benchmark_MaxLabel</span>
 					<strong>@FormatDuration(result.MaxElapsedPerGame)</strong>
 				</div>
 				<div class="ww-stat-tile">
-					<span class="ww-label">Turnos</span>
+					<span class="ww-label">@ClientStrings.Benchmark_TurnsLabel</span>
 					<strong>@TurnSummary(result.TurnCounts)</strong>
 				</div>
 			</div>
 
-			<section class="ww-role-summary" aria-label="Distribuição de turnos">
+			<section class="ww-role-summary" aria-label="@ClientStrings.Benchmark_TurnDistributionAria">
 				@foreach (var bucket in TurnDistribution(result.TurnCounts))
 				{
 					<div class="ww-role-summary__row" @key="bucket.TurnCount">
-						<span>@bucket.TurnCount turnos</span>
+						<span>@Format(ClientStrings.Benchmark_TurnCountFormat, bucket.TurnCount)</span>
 						<strong>@bucket.GameCount</strong>
 					</div>
 				}
 			</section>
 
-			<section class="ww-role-summary" aria-label="Coleções GC">
+			<section class="ww-role-summary" aria-label="@ClientStrings.Benchmark_GcCollectionsAria">
 				<div class="ww-role-summary__row">
-					<span>Gen 0</span>
+					<span>@ClientStrings.Benchmark_Gen0Label</span>
 					<strong>@result.GcCollections.Gen0</strong>
 				</div>
 				<div class="ww-role-summary__row">
-					<span>Gen 1</span>
+					<span>@ClientStrings.Benchmark_Gen1Label</span>
 					<strong>@result.GcCollections.Gen1</strong>
 				</div>
 				<div class="ww-role-summary__row">
-					<span>Gen 2</span>
+					<span>@ClientStrings.Benchmark_Gen2Label</span>
 					<strong>@result.GcCollections.Gen2</strong>
 				</div>
 			</section>
@@ -88,9 +88,9 @@
 
 	<footer class="ww-action-bar">
 		<div class="ww-action-pair">
-			<button type="button" class="ww-secondary-button" @onclick="Back" disabled="@Benchmark.IsRunning">Voltar</button>
+			<button type="button" class="ww-secondary-button" @onclick="Back" disabled="@Benchmark.IsRunning">@ClientStrings.Benchmark_BackButton</button>
 			<button type="button" class="ww-btn-primary" @onclick="RunBenchmark" disabled="@Benchmark.IsRunning">
-				@(Benchmark.IsRunning ? "A correr" : "Executar 1.000 jogos")
+				@(Benchmark.IsRunning ? ClientStrings.Benchmark_RunningButton : ClientStrings.Benchmark_RunButton)
 			</button>
 		</div>
 	</footer>
@@ -103,7 +103,7 @@
 	public EventCallback OnBack { get; set; }
 
 	private string? _errorMessage;
-	private string RunCountLabel => "1000 jogos";
+	private string RunCountLabel => ClientStrings.Benchmark_RunCountLabel;
 
 	private async Task RunBenchmark()
 	{
@@ -126,18 +126,18 @@
 	private static string FormatDuration(TimeSpan elapsed)
 	{
 		return elapsed.TotalSeconds >= 1
-			? $"{elapsed.TotalSeconds:N2}s"
-			: $"{elapsed.TotalMilliseconds:N1}ms";
+			? Format(ClientStrings.Benchmark_DurationSecondsFormat, elapsed.TotalSeconds)
+			: Format(ClientStrings.Benchmark_DurationMillisecondsFormat, elapsed.TotalMilliseconds);
 	}
 
 	private static string TurnSummary(IReadOnlyList<int> turnCounts)
 	{
 		if (turnCounts.Count == 0)
 		{
-			return "-";
+			return ClientStrings.Common_NotAvailable;
 		}
 
-		return $"{turnCounts.Min()}-{turnCounts.Max()}";
+		return Format(ClientStrings.Benchmark_TurnSummaryRangeFormat, turnCounts.Min(), turnCounts.Max());
 	}
 
 	private static IEnumerable<(int TurnCount, int GameCount)> TurnDistribution(IReadOnlyList<int> turnCounts)
@@ -147,4 +147,7 @@
 			.OrderBy(group => group.Key)
 			.Select(group => (group.Key, group.Count()));
 	}
+
+	private static string Format(string format, params object[] args) =>
+		string.Format(CultureInfo.CurrentCulture, format, args);
 }

@@ -3,9 +3,9 @@
 <main class="ww-app-shell" aria-labelledby="roster-title">
 	<section class="ww-lobby-header">
 		<div>
-			<p class="ww-step-label">Passo 1 de 2</p>
-			<h1 id="roster-title">Jogadores</h1>
-			<p class="ww-page-copy">Adiciona os nomes pela ordem em que estão sentados à volta da mesa.</p>
+			<p class="ww-step-label">@ClientStrings.LobbyRoster_StepLabel</p>
+			<h1 id="roster-title">@ClientStrings.LobbyRoster_Title</h1>
+			<p class="ww-page-copy">@ClientStrings.LobbyRoster_Description</p>
 		</div>
 		<div class="ww-roster-count @(HasEnoughPlayers ? "" : "ww-roster-count--under")" aria-label="@PlayerCountLabel">
 			@Lobby.PlayerNames.Count@if (!HasEnoughPlayers)
@@ -14,15 +14,15 @@
 	</section>
 
 	<form class="ww-roster-form" @onsubmit="AddPlayer" @onsubmit:preventDefault="true">
-		<label for="player-name">Nome do jogador</label>
+		<label for="player-name">@ClientStrings.LobbyRoster_PlayerNameLabel</label>
 		<div class="ww-add-row">
 			<input id="player-name"
 				   type="text"
 				   autocomplete="off"
-				   placeholder="Ex.: Ana"
+				   placeholder="@ClientStrings.LobbyRoster_PlayerNamePlaceholder"
 				   @bind="_draftPlayerName"
 				   @bind:event="oninput" />
-			<button type="submit">Adicionar</button>
+			<button type="submit">@ClientStrings.LobbyRoster_AddButton</button>
 		</div>
 		@if (_validationMessage is not null)
 		{
@@ -30,15 +30,15 @@
 		}
 	</form>
 
-	<section class="ww-roster-panel" aria-label="Ordem de lugares">
+	<section class="ww-roster-panel" aria-label="@ClientStrings.LobbyRoster_SeatOrderLabel">
 		<div class="ww-section-head">
-			<span>Ordem de lugares</span>
+			<span>@ClientStrings.LobbyRoster_SeatOrderLabel</span>
 			<span>@PlayerCountLabel</span>
 		</div>
 
 		@if (Lobby.PlayerNames.Count == 0)
 		{
-			<p class="ww-empty-state">Ainda não adicionaste jogadores.</p>
+			<p class="ww-empty-state">@ClientStrings.LobbyRoster_EmptyState</p>
 		}
 		else
 		{
@@ -55,20 +55,20 @@
 						<div class="ww-row-actions">
 							<button type="button"
 									class="ww-icon-button"
-									title="Mover para cima"
-									aria-label="@($"Mover {playerName} para cima")"
+									title="@ClientStrings.LobbyRoster_MoveUpTitle"
+									aria-label="@Format(ClientStrings.LobbyRoster_MoveUpAriaFormat, playerName)"
 									disabled="@(!Lobby.CanMovePlayerUp(seatIndex))"
 									@onclick="() => MovePlayerUp(seatIndex)">↑</button>
 							<button type="button"
 									class="ww-icon-button"
-									title="Mover para baixo"
-									aria-label="@($"Mover {playerName} para baixo")"
+									title="@ClientStrings.LobbyRoster_MoveDownTitle"
+									aria-label="@Format(ClientStrings.LobbyRoster_MoveDownAriaFormat, playerName)"
 									disabled="@(!Lobby.CanMovePlayerDown(seatIndex))"
 									@onclick="() => MovePlayerDown(seatIndex)">↓</button>
 							<button type="button"
 									class="ww-icon-button ww-icon-button-danger"
-									title="Remover"
-									aria-label="@($"Remover {playerName}")"
+									title="@ClientStrings.LobbyRoster_RemoveTitle"
+									aria-label="@Format(ClientStrings.LobbyRoster_RemoveAriaFormat, playerName)"
 									@onclick="() => RemovePlayer(seatIndex)">×</button>
 						</div>
 					</li>
@@ -90,13 +90,13 @@
 		@if (IsDebugBuild && OnShowBenchmark.HasDelegate)
 		{
 			<div class="ww-action-pair">
-				<button type="button" class="ww-secondary-button" @onclick="ShowBenchmark">Benchmark</button>
-				<button type="button" class="ww-btn-primary" disabled="@(!HasEnoughPlayers)" @onclick="Continue">Avançar para papéis</button>
+				<button type="button" class="ww-secondary-button" @onclick="ShowBenchmark">@ClientStrings.Common_Benchmark</button>
+				<button type="button" class="ww-btn-primary" disabled="@(!HasEnoughPlayers)" @onclick="Continue">@ClientStrings.LobbyRoster_ContinueToRolesButton</button>
 			</div>
 		}
 		else
 		{
-			<button type="button" class="ww-btn-primary" disabled="@(!HasEnoughPlayers)" @onclick="Continue">Avançar para papéis</button>
+			<button type="button" class="ww-btn-primary" disabled="@(!HasEnoughPlayers)" @onclick="Continue">@ClientStrings.LobbyRoster_ContinueToRolesButton</button>
 		}
 	</footer>
 </main>
@@ -125,8 +125,8 @@
 	private bool HasEnoughPlayers => Lobby.PlayerNames.Count >= MinPlayers;
 
 	private string PlayerCountLabel => Lobby.PlayerNames.Count == 1
-		? "1 jogador"
-		: $"{Lobby.PlayerNames.Count} jogadores";
+		? ClientStrings.LobbyRoster_PlayerCountOne
+		: Format(ClientStrings.LobbyRoster_PlayerCountManyFormat, Lobby.PlayerNames.Count);
 
 	private void AddPlayer()
 	{
@@ -141,8 +141,8 @@
 
 		_validationMessage = result switch
 		{
-			AddPlayerResult.EmptyName => "Escreve um nome antes de adicionar.",
-			AddPlayerResult.DuplicateName => "Já existe um jogador com este nome.",
+			AddPlayerResult.EmptyName => ClientStrings.Validation_EmptyPlayerName,
+			AddPlayerResult.DuplicateName => ClientStrings.Validation_DuplicatePlayerName,
 			_ => null
 		};
 	}
@@ -176,5 +176,8 @@
 	}
 
 	private Task ShowBenchmark() => OnShowBenchmark.InvokeAsync();
+
+	private static string Format(string format, params object[] args) =>
+		string.Format(CultureInfo.CurrentCulture, format, args);
 
 }

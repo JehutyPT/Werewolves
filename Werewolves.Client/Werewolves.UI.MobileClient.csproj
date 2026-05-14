@@ -80,4 +80,14 @@
       <ProjectReference Include="..\Werewolves.Core\Werewolves.Core.StateModels\Werewolves.Core.StateModels.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+      <EmbeddedResource Update="Resources\ClientStrings.resx">
+        <StronglyTypedClassName>ClientStrings</StronglyTypedClassName>
+        <StronglyTypedNamespace>Werewolves.Client.Resources</StronglyTypedNamespace>
+        <StronglyTypedFileName>$(IntermediateOutputPath)ClientStrings.Designer.cs</StronglyTypedFileName>
+        <StronglyTypedLanguage>C#</StronglyTypedLanguage>
+        <PublicClass>true</PublicClass>
+      </EmbeddedResource>
+    </ItemGroup>
+
 </Project>

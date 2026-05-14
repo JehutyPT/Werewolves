@@ -1,4 +1,6 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using System.Globalization;
+using Microsoft.Extensions.Logging;
+using Werewolves.Client.Resources;
 using Werewolves.Core.GameLogic.Models;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Client.Services;
@@ -15,7 +17,11 @@ namespace Werewolves.Client
     {
         public static MauiApp CreateMauiApp()
         {
-            
+            var portugueseCulture = CultureInfo.GetCultureInfo("pt-PT");
+            CultureInfo.DefaultThreadCurrentCulture = portugueseCulture;
+            CultureInfo.DefaultThreadCurrentUICulture = portugueseCulture;
+            ClientStrings.Culture = portugueseCulture;
+
             var builder = MauiApp.CreateBuilder();
             builder
                 .UseMauiApp<App>()

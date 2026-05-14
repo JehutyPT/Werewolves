@@ -2,38 +2,38 @@
 @inject GameClientManager Game
 
 <main class="ww-dashboard-shell" aria-labelledby="dashboard-title">
-	<nav class="ww-dashboard-tabs" aria-label="Áreas do jogo">
+	<nav class="ww-dashboard-tabs" aria-label="@ClientStrings.Dashboard_TabsAria">
 		<button type="button"
 				class="@TabButtonClass(DashboardTab.Roster)"
 				aria-selected="@(_activeTab == DashboardTab.Roster)"
-				@onclick="() => SelectTab(DashboardTab.Roster)">Jogadores</button>
+				@onclick="() => SelectTab(DashboardTab.Roster)">@ClientStrings.Dashboard_TabRoster</button>
 		<button type="button"
 				class="@TabButtonClass(DashboardTab.Action)"
 				aria-selected="@(_activeTab == DashboardTab.Action)"
-				@onclick="() => SelectTab(DashboardTab.Action)">Ação</button>
+				@onclick="() => SelectTab(DashboardTab.Action)">@ClientStrings.Dashboard_TabAction</button>
 		<button type="button"
 				class="@TabButtonClass(DashboardTab.Stats)"
 				aria-selected="@(_activeTab == DashboardTab.Stats)"
-				@onclick="() => SelectTab(DashboardTab.Stats)">Estatísticas</button>
+				@onclick="() => SelectTab(DashboardTab.Stats)">@ClientStrings.Dashboard_TabStats</button>
 	</nav>
 
 	<header class="ww-phase-strip">
 		<div>
-			<p class="ww-step-label">Sessão em curso</p>
+			<p class="ww-step-label">@ClientStrings.Dashboard_StepLabel</p>
 			<h1 id="dashboard-title">@PhaseTurnLabel</h1>
 		</div>
-		<span class="ww-phase-pill">@AliveCount vivos</span>
+		<span class="ww-phase-pill">@Format(ClientStrings.Dashboard_AliveCountFormat, AliveCount)</span>
 	</header>
 
 	<section class="ww-dashboard-panel" style="@PanelStyle(DashboardTab.Roster)" aria-hidden="@(_activeTab != DashboardTab.Roster)">
 		<div class="ww-section-head">
-			<span>Ordem de lugares</span>
+			<span>@ClientStrings.LobbyRoster_SeatOrderLabel</span>
 			<span>@PlayerCountLabel</span>
 		</div>
 
 		@if (Players.Count == 0)
 		{
-			<p class="ww-empty-state">Sem jogadores nesta sessão.</p>
+			<p class="ww-empty-state">@ClientStrings.Dashboard_EmptyRoster</p>
 		}
 		else
 		{
@@ -58,14 +58,14 @@
 		<div class="ww-instruction-stack">
 			@if (Game.CurrentInstruction is null)
 			{
-				<p class="ww-empty-state">Sem instrução pendente.</p>
+				<p class="ww-empty-state">@ClientStrings.Dashboard_NoInstruction</p>
 			}
 			else
 			{
 				@if (!string.IsNullOrWhiteSpace(Game.CurrentInstruction.PublicAnnouncement))
 				{
 					<article class="ww-instruction-block">
-						<span class="ww-label ww-label--accent">Anunciar</span>
+						<span class="ww-label ww-label--accent">@ClientStrings.Dashboard_AnnounceLabel</span>
 						<p class="ww-announcement">@Game.CurrentInstruction.PublicAnnouncement</p>
 					</article>
 				}
@@ -73,7 +73,7 @@
 				@if (!string.IsNullOrWhiteSpace(Game.CurrentInstruction.PrivateInstruction))
 				{
 					<article class="ww-instruction-block">
-						<span class="ww-label">Moderador</span>
+						<span class="ww-label">@ClientStrings.Dashboard_ModeratorLabel</span>
 						<p>@Game.CurrentInstruction.PrivateInstruction</p>
 					</article>
 				}
@@ -83,37 +83,37 @@
 		<footer class="ww-dashboard-action-zone">
 			@if (Game.CurrentInstruction is ConfirmationInstruction confirmationInstruction)
 			{
-				<button type="button" class="ww-btn-primary" @onclick="() => Confirm(confirmationInstruction)">Continuar</button>
+				<button type="button" class="ww-btn-primary" @onclick="() => Confirm(confirmationInstruction)">@ClientStrings.Dashboard_ContinueButton</button>
 			}
 			else
 			{
-				<button type="button" class="ww-btn-primary" disabled>Responder</button>
+				<button type="button" class="ww-btn-primary" disabled>@ClientStrings.Dashboard_RespondButton</button>
 			}
 		</footer>
 	</section>
 
 	<section class="ww-dashboard-panel" style="@PanelStyle(DashboardTab.Stats)" aria-hidden="@(_activeTab != DashboardTab.Stats)">
 		<div class="ww-section-head">
-			<span>Resumo do jogo</span>
+			<span>@ClientStrings.Dashboard_GameSummaryLabel</span>
 			<span>@PhaseTurnLabel</span>
 		</div>
 
 		<div class="ww-stats-grid">
 			<div class="ww-stat-tile">
-				<span class="ww-label">Vivos</span>
+				<span class="ww-label">@ClientStrings.Dashboard_AliveStatLabel</span>
 				<strong>@AliveCount</strong>
 			</div>
 			<div class="ww-stat-tile">
-				<span class="ww-label">Eliminados</span>
+				<span class="ww-label">@ClientStrings.Dashboard_EliminatedStatLabel</span>
 				<strong>@EliminatedCount</strong>
 			</div>
 			<div class="ww-stat-tile">
-				<span class="ww-label">Papéis</span>
+				<span class="ww-label">@ClientStrings.Dashboard_RolesStatLabel</span>
 				<strong>@RoleCount</strong>
 			</div>
 		</div>
 
-		<section class="ww-role-summary" aria-label="Papéis em jogo">
+		<section class="ww-role-summary" aria-label="@ClientStrings.Dashboard_RolesInPlayAria">
 			@foreach (var role in RolesInPlay)
 			{
 				<div class="ww-role-summary__row" @key="role.Role">
@@ -146,8 +146,8 @@
 	private int RoleCount => Players.Count(player => player.State.MainRole is not null);
 
 	private string PlayerCountLabel => Players.Count == 1
-		? "1 jogador"
-		: $"{Players.Count} jogadores";
+		? ClientStrings.Dashboard_PlayerCountOne
+		: Format(ClientStrings.Dashboard_PlayerCountManyFormat, Players.Count);
 
 	private string PhaseTurnLabel
 	{
@@ -155,10 +155,10 @@
 		{
 			if (Game.CurrentPhase is not { } phase || Game.TurnNumber is not { } turn)
 			{
-				return "Sem sessão";
+				return ClientStrings.Dashboard_NoSession;
 			}
 
-			return $"{PhaseLabel(phase)} {turn}";
+			return Format(ClientStrings.Dashboard_PhaseTurnFormat, PhaseLabel(phase), turn);
 		}
 	}
 
@@ -189,42 +189,42 @@
 
 	private static string PhaseLabel(GamePhase phase) => phase switch
 	{
-		GamePhase.Night => "Noite",
-		GamePhase.Dawn => "Amanhecer",
-		GamePhase.Day => "Dia",
-		_ => "Fase"
+		GamePhase.Night => ClientStrings.Dashboard_PhaseNight,
+		GamePhase.Dawn => ClientStrings.Dashboard_PhaseDawn,
+		GamePhase.Day => ClientStrings.Dashboard_PhaseDay,
+		_ => ClientStrings.Dashboard_PhaseFallback
 	};
 
 	private static string RoleLabel(IPlayer player) =>
-		player.State.MainRole?.GetPublicName() ?? "Por atribuir";
+		player.State.MainRole?.GetPublicName() ?? ClientStrings.Dashboard_UnassignedRole;
 
 	private static string HealthLabel(PlayerHealth health) => health switch
 	{
-		PlayerHealth.Alive => "Vivo",
-		PlayerHealth.Dead => "Eliminado",
-		_ => "Estado desconhecido"
+		PlayerHealth.Alive => ClientStrings.Dashboard_HealthAlive,
+		PlayerHealth.Dead => ClientStrings.Dashboard_HealthDead,
+		_ => ClientStrings.Dashboard_HealthUnknown
 	};
 
 	private static string StatusEffectsLabel(IPlayer player)
 	{
 		var effects = player.State.GetActiveStatusEffects();
 		return effects.Count == 0
-			? "Sem efeitos"
-			: string.Join(", ", effects.Select(StatusEffectLabel));
+			? ClientStrings.Dashboard_NoStatusEffects
+			: string.Join(ClientStrings.Common_ListSeparator, effects.Select(StatusEffectLabel));
 	}
 
 	private static string StatusEffectLabel(StatusEffectTypes effect) => effect switch
 	{
-		StatusEffectTypes.ElderProtectionLost => "Proteção perdida",
-		StatusEffectTypes.LycanthropyInfection => "Infetado",
-		StatusEffectTypes.WildChildChanged => "Transformado",
-		StatusEffectTypes.LynchingImmunityUsed => "Imunidade usada",
-		StatusEffectTypes.Sheriff => "Capitão",
-		StatusEffectTypes.Lovers => "Apaixonado",
-		StatusEffectTypes.Charmed => "Encantado",
-		StatusEffectTypes.TownCrier => "Pregoeiro",
-		StatusEffectTypes.Executioner => "Carrasco",
-		_ => "Efeito"
+		StatusEffectTypes.ElderProtectionLost => ClientStrings.StatusEffect_ElderProtectionLost,
+		StatusEffectTypes.LycanthropyInfection => ClientStrings.StatusEffect_LycanthropyInfection,
+		StatusEffectTypes.WildChildChanged => ClientStrings.StatusEffect_WildChildChanged,
+		StatusEffectTypes.LynchingImmunityUsed => ClientStrings.StatusEffect_LynchingImmunityUsed,
+		StatusEffectTypes.Sheriff => ClientStrings.StatusEffect_Sheriff,
+		StatusEffectTypes.Lovers => ClientStrings.StatusEffect_Lovers,
+		StatusEffectTypes.Charmed => ClientStrings.StatusEffect_Charmed,
+		StatusEffectTypes.TownCrier => ClientStrings.StatusEffect_TownCrier,
+		StatusEffectTypes.Executioner => ClientStrings.StatusEffect_Executioner,
+		_ => ClientStrings.StatusEffect_Fallback
 	};
 
 	private void HandleStateChanged(object? sender, EventArgs args)
@@ -243,4 +243,7 @@
 		Action,
 		Stats
 	}
+
+	private static string Format(string format, params object[] args) =>
+		string.Format(CultureInfo.CurrentCulture, format, args);
 }

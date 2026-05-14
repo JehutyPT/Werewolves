@@ -2,6 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Werewolves.Client</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
@@ -12,6 +13,17 @@
     <Compile Include="..\Werewolves.Client\Services\BenchmarkClientManager.cs" Link="Services\BenchmarkClientManager.cs" />
     <Compile Include="..\Werewolves.Client\Services\GameClientManager.cs" Link="Services\GameClientManager.cs" />
     <Compile Include="..\Werewolves.Client\Services\LobbySetupState.cs" Link="Services\LobbySetupState.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\Werewolves.Client\Resources\ClientStrings.resx" Link="Resources\ClientStrings.resx">
+      <StronglyTypedClassName>ClientStrings</StronglyTypedClassName>
+      <StronglyTypedNamespace>Werewolves.Client.Resources</StronglyTypedNamespace>
+      <StronglyTypedFileName>$(IntermediateOutputPath)ClientStrings.Designer.cs</StronglyTypedFileName>
+      <StronglyTypedLanguage>C#</StronglyTypedLanguage>
+      <PublicClass>true</PublicClass>
+    </EmbeddedResource>
+    <EmbeddedResource Include="..\Werewolves.Client\Resources\ClientStrings.pt-PT.resx" Link="Resources\ClientStrings.pt-PT.resx" />
   </ItemGroup>
 
   <ItemGroup>

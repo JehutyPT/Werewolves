@@ -1,0 +1,361 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace"/>
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0"/>
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string"/>
+              <xsd:attribute name="type" type="xsd:string"/>
+              <xsd:attribute name="mimetype" type="xsd:string"/>
+              <xsd:attribute ref="xml:space"/>
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string"/>
+              <xsd:attribute name="name" type="xsd:string"/>
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1"/>
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2"/>
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1"/>
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3"/>
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4"/>
+              <xsd:attribute ref="xml:space"/>
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1"/>
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required"/>
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="LobbyRoster_Title" xml:space="preserve">
+    <value>Players</value>
+  </data>
+  <data name="RoleSelection_Title" xml:space="preserve">
+    <value>Roles</value>
+  </data>
+  <data name="Dashboard_NoSession" xml:space="preserve">
+    <value>No session</value>
+  </data>
+  <data name="App_Title" xml:space="preserve">
+    <value>Werewolves.Client</value>
+  </data>
+  <data name="Common_Back" xml:space="preserve">
+    <value>Back</value>
+  </data>
+  <data name="Common_Benchmark" xml:space="preserve">
+    <value>Benchmark</value>
+  </data>
+  <data name="LobbyRoster_StepLabel" xml:space="preserve">
+    <value>Step 1 of 2</value>
+  </data>
+  <data name="LobbyRoster_Description" xml:space="preserve">
+    <value>Add names in the order players are seated around the table.</value>
+  </data>
+  <data name="LobbyRoster_PlayerNameLabel" xml:space="preserve">
+    <value>Player name</value>
+  </data>
+  <data name="LobbyRoster_PlayerNamePlaceholder" xml:space="preserve">
+    <value>e.g. Ana</value>
+  </data>
+  <data name="LobbyRoster_AddButton" xml:space="preserve">
+    <value>Add</value>
+  </data>
+  <data name="LobbyRoster_SeatOrderLabel" xml:space="preserve">
+    <value>Seating order</value>
+  </data>
+  <data name="LobbyRoster_EmptyState" xml:space="preserve">
+    <value>You have not added players yet.</value>
+  </data>
+  <data name="LobbyRoster_MoveUpTitle" xml:space="preserve">
+    <value>Move up</value>
+  </data>
+  <data name="LobbyRoster_MoveUpAriaFormat" xml:space="preserve">
+    <value>Move {0} up</value>
+  </data>
+  <data name="LobbyRoster_MoveDownTitle" xml:space="preserve">
+    <value>Move down</value>
+  </data>
+  <data name="LobbyRoster_MoveDownAriaFormat" xml:space="preserve">
+    <value>Move {0} down</value>
+  </data>
+  <data name="LobbyRoster_RemoveTitle" xml:space="preserve">
+    <value>Remove</value>
+  </data>
+  <data name="LobbyRoster_RemoveAriaFormat" xml:space="preserve">
+    <value>Remove {0}</value>
+  </data>
+  <data name="LobbyRoster_ContinueToRolesButton" xml:space="preserve">
+    <value>Continue to roles</value>
+  </data>
+  <data name="LobbyRoster_PlayerCountOne" xml:space="preserve">
+    <value>1 player</value>
+  </data>
+  <data name="LobbyRoster_PlayerCountManyFormat" xml:space="preserve">
+    <value>{0} players</value>
+  </data>
+  <data name="Validation_EmptyPlayerName" xml:space="preserve">
+    <value>Enter a name before adding.</value>
+  </data>
+  <data name="Validation_DuplicatePlayerName" xml:space="preserve">
+    <value>A player with this name already exists.</value>
+  </data>
+  <data name="Common_NotAvailable" xml:space="preserve">
+    <value>-</value>
+  </data>
+  <data name="Common_ListSeparator" xml:space="preserve">
+    <value>, </value>
+  </data>
+  <data name="RoleSelection_StepLabel" xml:space="preserve">
+    <value>Step 2 of 2</value>
+  </data>
+  <data name="RoleSelection_Description" xml:space="preserve">
+    <value>Choose the roles for the game. The total must match the number of players.</value>
+  </data>
+  <data name="RoleSelection_RemoveRoleAriaFormat" xml:space="preserve">
+    <value>Remove {0}</value>
+  </data>
+  <data name="RoleSelection_AddRoleAriaFormat" xml:space="preserve">
+    <value>Add {0}</value>
+  </data>
+  <data name="RoleSelection_RoleCountAriaFormat" xml:space="preserve">
+    <value>{0} {1}</value>
+  </data>
+  <data name="RoleSelection_SelectedCountFormat" xml:space="preserve">
+    <value>{0} of {1} roles selected</value>
+  </data>
+  <data name="RoleSelection_StartGameButton" xml:space="preserve">
+    <value>Start game</value>
+  </data>
+  <data name="Dashboard_TabsAria" xml:space="preserve">
+    <value>Game areas</value>
+  </data>
+  <data name="Dashboard_TabRoster" xml:space="preserve">
+    <value>Players</value>
+  </data>
+  <data name="Dashboard_TabAction" xml:space="preserve">
+    <value>Action</value>
+  </data>
+  <data name="Dashboard_TabStats" xml:space="preserve">
+    <value>Stats</value>
+  </data>
+  <data name="Dashboard_StepLabel" xml:space="preserve">
+    <value>Current session</value>
+  </data>
+  <data name="Dashboard_AliveCountFormat" xml:space="preserve">
+    <value>{0} alive</value>
+  </data>
+  <data name="Dashboard_EmptyRoster" xml:space="preserve">
+    <value>No players in this session.</value>
+  </data>
+  <data name="Dashboard_NoInstruction" xml:space="preserve">
+    <value>No pending instruction.</value>
+  </data>
+  <data name="Dashboard_AnnounceLabel" xml:space="preserve">
+    <value>Announce</value>
+  </data>
+  <data name="Dashboard_ModeratorLabel" xml:space="preserve">
+    <value>Moderator</value>
+  </data>
+  <data name="Dashboard_ContinueButton" xml:space="preserve">
+    <value>Continue</value>
+  </data>
+  <data name="Dashboard_RespondButton" xml:space="preserve">
+    <value>Respond</value>
+  </data>
+  <data name="Dashboard_GameSummaryLabel" xml:space="preserve">
+    <value>Game summary</value>
+  </data>
+  <data name="Dashboard_AliveStatLabel" xml:space="preserve">
+    <value>Alive</value>
+  </data>
+  <data name="Dashboard_EliminatedStatLabel" xml:space="preserve">
+    <value>Eliminated</value>
+  </data>
+  <data name="Dashboard_RolesStatLabel" xml:space="preserve">
+    <value>Roles</value>
+  </data>
+  <data name="Dashboard_RolesInPlayAria" xml:space="preserve">
+    <value>Roles in play</value>
+  </data>
+  <data name="Dashboard_PlayerCountOne" xml:space="preserve">
+    <value>1 player</value>
+  </data>
+  <data name="Dashboard_PlayerCountManyFormat" xml:space="preserve">
+    <value>{0} players</value>
+  </data>
+  <data name="Dashboard_PhaseTurnFormat" xml:space="preserve">
+    <value>{0} {1}</value>
+  </data>
+  <data name="Dashboard_PhaseNight" xml:space="preserve">
+    <value>Night</value>
+  </data>
+  <data name="Dashboard_PhaseDawn" xml:space="preserve">
+    <value>Dawn</value>
+  </data>
+  <data name="Dashboard_PhaseDay" xml:space="preserve">
+    <value>Day</value>
+  </data>
+  <data name="Dashboard_PhaseFallback" xml:space="preserve">
+    <value>Phase</value>
+  </data>
+  <data name="Dashboard_UnassignedRole" xml:space="preserve">
+    <value>Unassigned</value>
+  </data>
+  <data name="Dashboard_HealthAlive" xml:space="preserve">
+    <value>Alive</value>
+  </data>
+  <data name="Dashboard_HealthDead" xml:space="preserve">
+    <value>Eliminated</value>
+  </data>
+  <data name="Dashboard_HealthUnknown" xml:space="preserve">
+    <value>Unknown state</value>
+  </data>
+  <data name="Dashboard_NoStatusEffects" xml:space="preserve">
+    <value>No effects</value>
+  </data>
+  <data name="StatusEffect_ElderProtectionLost" xml:space="preserve">
+    <value>Protection lost</value>
+  </data>
+  <data name="StatusEffect_LycanthropyInfection" xml:space="preserve">
+    <value>Infected</value>
+  </data>
+  <data name="StatusEffect_WildChildChanged" xml:space="preserve">
+    <value>Transformed</value>
+  </data>
+  <data name="StatusEffect_LynchingImmunityUsed" xml:space="preserve">
+    <value>Immunity used</value>
+  </data>
+  <data name="StatusEffect_Sheriff" xml:space="preserve">
+    <value>Captain</value>
+  </data>
+  <data name="StatusEffect_Lovers" xml:space="preserve">
+    <value>In love</value>
+  </data>
+  <data name="StatusEffect_Charmed" xml:space="preserve">
+    <value>Charmed</value>
+  </data>
+  <data name="StatusEffect_TownCrier" xml:space="preserve">
+    <value>Town crier</value>
+  </data>
+  <data name="StatusEffect_Executioner" xml:space="preserve">
+    <value>Executioner</value>
+  </data>
+  <data name="StatusEffect_Fallback" xml:space="preserve">
+    <value>Effect</value>
+  </data>
+  <data name="Benchmark_StepLabel" xml:space="preserve">
+    <value>Spike #30</value>
+  </data>
+  <data name="Benchmark_Title" xml:space="preserve">
+    <value>Benchmark</value>
+  </data>
+  <data name="Benchmark_Description" xml:space="preserve">
+    <value>1,000 games · 2 tasks · 15 players · 3 werewolves · Seer · Wild Child · 10 villagers</value>
+  </data>
+  <data name="Benchmark_RunCountPill" xml:space="preserve">
+    <value>1k</value>
+  </data>
+  <data name="Benchmark_RunCountLabel" xml:space="preserve">
+    <value>1000 games</value>
+  </data>
+  <data name="Benchmark_ResultsAria" xml:space="preserve">
+    <value>Results</value>
+  </data>
+  <data name="Benchmark_NoResults" xml:space="preserve">
+    <value>No results.</value>
+  </data>
+  <data name="Benchmark_RunningStatus" xml:space="preserve">
+    <value>Running...</value>
+  </data>
+  <data name="Benchmark_TotalLabel" xml:space="preserve">
+    <value>Total</value>
+  </data>
+  <data name="Benchmark_AverageLabel" xml:space="preserve">
+    <value>Average</value>
+  </data>
+  <data name="Benchmark_GameCountLabel" xml:space="preserve">
+    <value>Games</value>
+  </data>
+  <data name="Benchmark_DegreeOfParallelismLabel" xml:space="preserve">
+    <value>Tasks</value>
+  </data>
+  <data name="Benchmark_MinLabel" xml:space="preserve">
+    <value>Min.</value>
+  </data>
+  <data name="Benchmark_MaxLabel" xml:space="preserve">
+    <value>Max.</value>
+  </data>
+  <data name="Benchmark_TurnsLabel" xml:space="preserve">
+    <value>Turns</value>
+  </data>
+  <data name="Benchmark_TurnDistributionAria" xml:space="preserve">
+    <value>Turn distribution</value>
+  </data>
+  <data name="Benchmark_TurnCountFormat" xml:space="preserve">
+    <value>{0} turns</value>
+  </data>
+  <data name="Benchmark_TurnSummaryRangeFormat" xml:space="preserve">
+    <value>{0}-{1}</value>
+  </data>
+  <data name="Benchmark_GcCollectionsAria" xml:space="preserve">
+    <value>GC collections</value>
+  </data>
+  <data name="Benchmark_Gen0Label" xml:space="preserve">
+    <value>Gen 0</value>
+  </data>
+  <data name="Benchmark_Gen1Label" xml:space="preserve">
+    <value>Gen 1</value>
+  </data>
+  <data name="Benchmark_Gen2Label" xml:space="preserve">
+    <value>Gen 2</value>
+  </data>
+  <data name="Benchmark_BackButton" xml:space="preserve">
+    <value>Back</value>
+  </data>
+  <data name="Benchmark_RunningButton" xml:space="preserve">
+    <value>Running</value>
+  </data>
+  <data name="Benchmark_RunButton" xml:space="preserve">
+    <value>Run 1,000 games</value>
+  </data>
+  <data name="Benchmark_DurationSecondsFormat" xml:space="preserve">
+    <value>{0:N2}s</value>
+  </data>
+  <data name="Benchmark_DurationMillisecondsFormat" xml:space="preserve">
+    <value>{0:N1}ms</value>
+  </data>
+  <data name="Benchmark_AlreadyRunningError" xml:space="preserve">
+    <value>Benchmark is already running.</value>
+  </data>
+</root>

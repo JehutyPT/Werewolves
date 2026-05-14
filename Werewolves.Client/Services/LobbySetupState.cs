@@ -233,6 +233,7 @@ public class LobbySetupState
 			return metadata;
 		}
 
+		// Developer-facing guard, not rendered UI copy.
 		throw new InvalidOperationException($"Role {role} is not available in lobby setup metadata.");
 	}
 }

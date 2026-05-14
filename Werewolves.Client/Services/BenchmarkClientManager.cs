@@ -1,3 +1,4 @@
+using Werewolves.Client.Resources;
 using Werewolves.Core.GameLogic.Models;
 using Werewolves.Core.GameLogic.Services;
 
@@ -26,7 +27,7 @@ public sealed class BenchmarkClientManager
 	{
 		if (IsRunning)
 		{
-			throw new InvalidOperationException("Benchmark is already running.");
+			throw new InvalidOperationException(ClientStrings.Benchmark_AlreadyRunningError);
 		}
 
 		IsRunning = true;

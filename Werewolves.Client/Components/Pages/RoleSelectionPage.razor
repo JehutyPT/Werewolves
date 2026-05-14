@@ -3,9 +3,9 @@
 <main class="ww-app-shell" aria-labelledby="role-selection-title">
 	<section class="ww-lobby-header">
 		<div>
-			<p class="ww-step-label">Passo 2 de 2</p>
-			<h1 id="role-selection-title">Papéis</h1>
-			<p class="ww-page-copy">Escolhe os papéis para o jogo. O total tem de corresponder ao número de jogadores.</p>
+			<p class="ww-step-label">@ClientStrings.RoleSelection_StepLabel</p>
+			<h1 id="role-selection-title">@ClientStrings.RoleSelection_Title</h1>
+			<p class="ww-page-copy">@ClientStrings.RoleSelection_Description</p>
 		</div>
 		<div class="ww-roster-count @(IsCountMatching ? "" : "ww-roster-count--under")" aria-label="@CountLabel">
 			@Lobby.TotalSelectedRoleCount<span class="ww-roster-count__min">&thinsp;/&thinsp;@Lobby.ExpectedRoleCount</span>
@@ -33,13 +33,13 @@
 							<div class="ww-stepper">
 								<button type="button"
 										class="ww-stepper-btn"
-										aria-label="@($"Remover {info.DisplayName}")"
+										aria-label="@Format(ClientStrings.RoleSelection_RemoveRoleAriaFormat, info.DisplayName)"
 										disabled="@(!info.CanDecrement)"
 										@onclick="() => DecrementRole(role)">−</button>
-								<span class="ww-stepper-count" aria-label="@($"{info.Count} {info.DisplayName}")">@info.Count</span>
+								<span class="ww-stepper-count" aria-label="@Format(ClientStrings.RoleSelection_RoleCountAriaFormat, info.Count, info.DisplayName)">@info.Count</span>
 								<button type="button"
 										class="ww-stepper-btn"
-										aria-label="@($"Adicionar {info.DisplayName}")"
+										aria-label="@Format(ClientStrings.RoleSelection_AddRoleAriaFormat, info.DisplayName)"
 										@onclick="() => IncrementRole(role)">+</button>
 							</div>
 						}
@@ -77,8 +77,8 @@
 			</ul>
 		}
 		<div class="ww-action-pair">
-			<button type="button" class="ww-secondary-button" @onclick="Back">Voltar</button>
-			<button type="button" class="ww-btn-primary" disabled="@(!CanStartGame)" @onclick="StartGame">Iniciar jogo</button>
+			<button type="button" class="ww-secondary-button" @onclick="Back">@ClientStrings.Common_Back</button>
+			<button type="button" class="ww-btn-primary" disabled="@(!CanStartGame)" @onclick="StartGame">@ClientStrings.RoleSelection_StartGameButton</button>
 		</div>
 	</footer>
 </main>
@@ -100,7 +100,10 @@
 	private bool IsCountMatching => Lobby.TotalSelectedRoleCount == Lobby.ExpectedRoleCount;
 	private bool CanStartGame => !Lobby.HasRoleConfigIssues(out _);
 
-	private string CountLabel => $"{Lobby.TotalSelectedRoleCount} de {Lobby.ExpectedRoleCount} papéis selecionados";
+	private string CountLabel => Format(
+		ClientStrings.RoleSelection_SelectedCountFormat,
+		Lobby.TotalSelectedRoleCount,
+		Lobby.ExpectedRoleCount);
 
 	private void IncrementRole(MainRoleType role)
 	{
@@ -158,4 +161,7 @@
 		RoleGroup.NewMoon => "--ww-accent",
 		_ => "--ww-accent"
 	};
+
+	private static string Format(string format, params object[] args) =>
+		string.Format(CultureInfo.CurrentCulture, format, args);
 }
