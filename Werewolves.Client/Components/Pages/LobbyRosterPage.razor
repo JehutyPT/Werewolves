@@ -87,7 +87,17 @@
 				}
 			</ul>
 		}
-		<button type="button" class="ww-btn-primary" disabled="@(!HasEnoughPlayers)" @onclick="Continue">Avançar para papéis</button>
+		@if (IsDebugBuild && OnShowBenchmark.HasDelegate)
+		{
+			<div class="ww-action-pair">
+				<button type="button" class="ww-secondary-button" @onclick="ShowBenchmark">Benchmark</button>
+				<button type="button" class="ww-btn-primary" disabled="@(!HasEnoughPlayers)" @onclick="Continue">Avançar para papéis</button>
+			</div>
+		}
+		else
+		{
+			<button type="button" class="ww-btn-primary" disabled="@(!HasEnoughPlayers)" @onclick="Continue">Avançar para papéis</button>
+		}
 	</footer>
 </main>
 
@@ -98,9 +108,18 @@
 	[Parameter]
 	public EventCallback OnContinue { get; set; }
 
+	[Parameter]
+	public EventCallback OnShowBenchmark { get; set; }
+
 	private string _draftPlayerName = string.Empty;
 	private string? _validationMessage;
 	private List<string> _rosterErrors = new();
+
+#if DEBUG
+	private const bool IsDebugBuild = true;
+#else
+	private const bool IsDebugBuild = false;
+#endif
 
 	private int MinPlayers => Lobby.MinimumPlayerCount;
 	private bool HasEnoughPlayers => Lobby.PlayerNames.Count >= MinPlayers;
@@ -155,5 +174,7 @@
 		_rosterErrors.Clear();
 		return OnContinue.InvokeAsync();
 	}
+
+	private Task ShowBenchmark() => OnShowBenchmark.InvokeAsync();
 
 }

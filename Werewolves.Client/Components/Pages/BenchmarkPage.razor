@@ -1,0 +1,150 @@
+@inject BenchmarkClientManager Benchmark
+
+<main class="ww-app-shell" aria-labelledby="benchmark-title">
+	<section class="ww-lobby-header">
+		<div>
+			<p class="ww-step-label">Spike #30</p>
+			<h1 id="benchmark-title">Benchmark</h1>
+			<p class="ww-page-copy">1.000 jogos · 2 tarefas · 15 jogadores · 3 lobisomens · Vidente · Criança Selvagem · 10 aldeões</p>
+		</div>
+		<div class="ww-roster-count" aria-label="@RunCountLabel">1k</div>
+	</section>
+
+	<section class="ww-benchmark-panel" aria-label="Resultados">
+		@if (Benchmark.LastResult is null && !Benchmark.IsRunning && _errorMessage is null)
+		{
+			<p class="ww-empty-state">Sem resultados.</p>
+		}
+
+		@if (Benchmark.IsRunning)
+		{
+			<p class="ww-empty-state">A correr...</p>
+		}
+
+		@if (_errorMessage is not null)
+		{
+			<p class="ww-validation" role="alert">@_errorMessage</p>
+		}
+
+		@if (Benchmark.LastResult is { } result)
+		{
+			<div class="ww-stats-grid ww-benchmark-grid">
+				<div class="ww-stat-tile">
+					<span class="ww-label">Total</span>
+					<strong>@FormatDuration(result.TotalElapsed)</strong>
+				</div>
+				<div class="ww-stat-tile">
+					<span class="ww-label">Média</span>
+					<strong>@FormatDuration(result.AverageElapsedPerGame)</strong>
+				</div>
+				<div class="ww-stat-tile">
+					<span class="ww-label">Jogos</span>
+					<strong>@result.GameCount</strong>
+				</div>
+				<div class="ww-stat-tile">
+					<span class="ww-label">Tarefas</span>
+					<strong>@result.DegreeOfParallelism</strong>
+				</div>
+				<div class="ww-stat-tile">
+					<span class="ww-label">Mín.</span>
+					<strong>@FormatDuration(result.MinElapsedPerGame)</strong>
+				</div>
+				<div class="ww-stat-tile">
+					<span class="ww-label">Máx.</span>
+					<strong>@FormatDuration(result.MaxElapsedPerGame)</strong>
+				</div>
+				<div class="ww-stat-tile">
+					<span class="ww-label">Turnos</span>
+					<strong>@TurnSummary(result.TurnCounts)</strong>
+				</div>
+			</div>
+
+			<section class="ww-role-summary" aria-label="Distribuição de turnos">
+				@foreach (var bucket in TurnDistribution(result.TurnCounts))
+				{
+					<div class="ww-role-summary__row" @key="bucket.TurnCount">
+						<span>@bucket.TurnCount turnos</span>
+						<strong>@bucket.GameCount</strong>
+					</div>
+				}
+			</section>
+
+			<section class="ww-role-summary" aria-label="Coleções GC">
+				<div class="ww-role-summary__row">
+					<span>Gen 0</span>
+					<strong>@result.GcCollections.Gen0</strong>
+				</div>
+				<div class="ww-role-summary__row">
+					<span>Gen 1</span>
+					<strong>@result.GcCollections.Gen1</strong>
+				</div>
+				<div class="ww-role-summary__row">
+					<span>Gen 2</span>
+					<strong>@result.GcCollections.Gen2</strong>
+				</div>
+			</section>
+		}
+	</section>
+
+	<footer class="ww-action-bar">
+		<div class="ww-action-pair">
+			<button type="button" class="ww-secondary-button" @onclick="Back" disabled="@Benchmark.IsRunning">Voltar</button>
+			<button type="button" class="ww-btn-primary" @onclick="RunBenchmark" disabled="@Benchmark.IsRunning">
+				@(Benchmark.IsRunning ? "A correr" : "Executar 1.000 jogos")
+			</button>
+		</div>
+	</footer>
+</main>
+
+@using Werewolves.Core.GameLogic.Models
+
+@code {
+	[Parameter]
+	public EventCallback OnBack { get; set; }
+
+	private string? _errorMessage;
+	private string RunCountLabel => "1000 jogos";
+
+	private async Task RunBenchmark()
+	{
+		_errorMessage = null;
+
+		try
+		{
+			var benchmarkTask = Benchmark.RunAsync();
+			await InvokeAsync(StateHasChanged);
+			await benchmarkTask;
+		}
+		catch (Exception exception)
+		{
+			_errorMessage = exception.Message;
+		}
+	}
+
+	private Task Back() => OnBack.InvokeAsync();
+
+	private static string FormatDuration(TimeSpan elapsed)
+	{
+		return elapsed.TotalSeconds >= 1
+			? $"{elapsed.TotalSeconds:N2}s"
+			: $"{elapsed.TotalMilliseconds:N1}ms";
+	}
+
+	private static string TurnSummary(IReadOnlyList<int> turnCounts)
+	{
+		if (turnCounts.Count == 0)
+		{
+			return "-";
+		}
+
+		return $"{turnCounts.Min()}-{turnCounts.Max()}";
+	}
+
+	private static IEnumerable<(int TurnCount, int GameCount)> TurnDistribution(IReadOnlyList<int> turnCounts)
+	{
+		return turnCounts
+			.GroupBy(turnCount => turnCount)
+			.OrderBy(group => group.Key)
+			.Select(group => (group.Key, group.Count()));
+	}
+}

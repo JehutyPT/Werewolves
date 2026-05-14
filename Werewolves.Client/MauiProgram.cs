@@ -33,8 +33,9 @@ namespace Werewolves.Client
             builder.Services.AddSingleton<GameClientManager>();
 
 #if DEBUG
-    		builder.Services.AddBlazorWebViewDeveloperTools();
-    		builder.Logging.AddDebug();
+            builder.Services.AddSingleton<BenchmarkClientManager>();
+            builder.Services.AddBlazorWebViewDeveloperTools();
+            builder.Logging.AddDebug();
 #endif
 
             // Add this block

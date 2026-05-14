@@ -4,11 +4,15 @@
 
 @if (_currentStep == LobbyStep.Roster)
 {
-	<LobbyRosterPage OnContinue="ShowRoleSelection" />
+	<LobbyRosterPage OnContinue="ShowRoleSelection" OnShowBenchmark="ShowBenchmark" />
 }
 else if (_currentStep == LobbyStep.RoleSelection)
 {
 	<RoleSelectionPage OnBack="ShowRoster" OnStartGame="HandleStartGame" />
+}
+else if (_currentStep == LobbyStep.Benchmark)
+{
+	<BenchmarkPage OnBack="ShowRoster" />
 }
 else
 {
@@ -30,6 +34,11 @@ else
 		_currentStep = LobbyStep.Roster;
 	}
 
+	private void ShowBenchmark()
+	{
+		_currentStep = LobbyStep.Benchmark;
+	}
+
 	private void HandleStartGame()
 	{
 		Game.StartGame(Lobby.PlayerNames, Lobby.GetSelectedRoles());
@@ -40,6 +49,7 @@ else
 	{
 		Roster,
 		RoleSelection,
+		Benchmark,
 		Dashboard
 	}
 }
