@@ -20,8 +20,16 @@ public record RoleInfo(
 	bool CanIncrement,
 	bool CanDecrement);
 
+public record RoleSelectionGroupInfo(
+	RoleGroup Group,
+	string DisplayName,
+	IReadOnlyList<RoleInfo> Roles);
+
 public class LobbySetupState
 {
+	private static readonly RoleGroup[] RoleSelectionGroupOrder =
+		[RoleGroup.Villagers, RoleGroup.Werewolves, RoleGroup.Ambiguous, RoleGroup.Loners, RoleGroup.NewMoon];
+
 	private readonly List<string> _playerNames = new();
 	private readonly Dictionary<MainRoleType, int> _roleCounts = new();
 	private readonly LobbySetupMetadata _setupMetadata;
@@ -38,6 +46,7 @@ public class LobbySetupState
 	public int MinimumPlayerCount => _setupMetadata.MinimumPlayerCount;
 	public IReadOnlyList<MainRoleType> AvailableRoles => _availableRoles;
 	public IReadOnlyList<RoleInfo> AvailableRoleInfos => _availableRoles.Select(GetRoleInfo).ToArray();
+	public IReadOnlyList<RoleSelectionGroupInfo> AvailableRoleGroups => GetAvailableRoleGroups();
 
 	public IReadOnlyList<string> PlayerNames => _playerNames;
 
@@ -193,6 +202,21 @@ public class LobbySetupState
 	public bool HasConfigIssues(out List<GameConfigValidationError> issues)
 	{
 		return GameSessionConfig.TryGetConfigIssues(_playerNames, GetSelectedRoles(), out issues);
+	}
+
+	private IReadOnlyList<RoleSelectionGroupInfo> GetAvailableRoleGroups()
+	{
+		var roleInfosByGroup = AvailableRoleInfos
+			.GroupBy(info => info.Group)
+			.ToDictionary(group => group.Key, group => (IReadOnlyList<RoleInfo>)group.ToArray());
+
+		return RoleSelectionGroupOrder
+			.Where(roleInfosByGroup.ContainsKey)
+			.Select(group => new RoleSelectionGroupInfo(
+				group,
+				group.GetDisplayName(),
+				roleInfosByGroup[group]))
+			.ToArray();
 	}
 
 	private static (RoleAffordance Affordance, int BatchSize) ClassifyConstraint(NumberRangeConstraint constraint)

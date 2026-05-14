@@ -12,19 +12,17 @@
 		</div>
 	</section>
 
-	@foreach (var group in GroupedRoles)
+	@foreach (var group in Lobby.AvailableRoleGroups)
 	{
-		var firstRole = group.First();
-
-		<section class="ww-role-group" aria-label="@firstRole.GroupDisplayName">
+		<section class="ww-role-group" aria-label="@group.DisplayName">
 			<div class="ww-section-head">
 				<span class="ww-faction-badge">
-					<span class="ww-faction-badge__dot" style="background: var(@GroupCssVar(group.Key))"></span>
-					@firstRole.GroupDisplayName
+					<span class="ww-faction-badge__dot" style="background: var(@GroupCssVar(group.Group))"></span>
+					@group.DisplayName
 				</span>
 			</div>
 			<div class="ww-role-list">
-				@foreach (var info in group)
+				@foreach (var info in group.Roles)
 				{
 					var role = info.Role;
 
@@ -103,15 +101,6 @@
 	private bool CanStartGame => !Lobby.HasRoleConfigIssues(out _);
 
 	private string CountLabel => $"{Lobby.TotalSelectedRoleCount} de {Lobby.ExpectedRoleCount} papéis selecionados";
-
-	private static readonly RoleGroup[] GroupOrder =
-		[RoleGroup.Villagers, RoleGroup.Werewolves, RoleGroup.Ambiguous, RoleGroup.Loners, RoleGroup.NewMoon];
-
-	private IReadOnlyList<IGrouping<RoleGroup, RoleInfo>> GroupedRoles =>
-		Lobby.AvailableRoleInfos
-			.GroupBy(info => info.Group)
-			.OrderBy(g => Array.IndexOf(GroupOrder, g.Key))
-			.ToList();
 
 	private void IncrementRole(MainRoleType role)
 	{

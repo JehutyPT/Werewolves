@@ -381,6 +381,58 @@ public class LobbySetupStateTests
 		info.DisplayName.Should().Be(MainRoleType.Seer.GetPublicName());
 	}
 
+	[Fact]
+	public void AvailableRoleGroups_UsesLobbyGroupOrderAndGroupLabels()
+	{
+		var state = new LobbySetupState(CreateSetupMetadata(
+			MainRoleType.Gypsy,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.Seer,
+			MainRoleType.Angel,
+			MainRoleType.WildChild));
+
+		var groups = state.AvailableRoleGroups;
+
+		groups.Select(group => group.Group).Should().Equal(
+			RoleGroup.Villagers,
+			RoleGroup.Werewolves,
+			RoleGroup.Ambiguous,
+			RoleGroup.Loners,
+			RoleGroup.NewMoon);
+		groups.Select(group => group.DisplayName).Should().Equal(
+			RoleGroup.Villagers.GetDisplayName(),
+			RoleGroup.Werewolves.GetDisplayName(),
+			RoleGroup.Ambiguous.GetDisplayName(),
+			RoleGroup.Loners.GetDisplayName(),
+			RoleGroup.NewMoon.GetDisplayName());
+		groups.SelectMany(group => group.Roles).Select(info => info.Role).Should().Equal(
+			MainRoleType.Seer,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.WildChild,
+			MainRoleType.Angel,
+			MainRoleType.Gypsy);
+	}
+
+	[Fact]
+	public void AvailableRoleGroups_DoesNotDeriveGroupLabelFromFirstRoleInGroup()
+	{
+		var mislabeledFirstRole = CreateRoleMetadata(MainRoleType.Seer) with
+		{
+			GroupDisplayName = "Unexpected first role group label"
+		};
+		var state = new LobbySetupState(new LobbySetupMetadata(
+			GameSessionConfig.MinimumPlayerCount,
+			[
+				mislabeledFirstRole,
+				CreateRoleMetadata(MainRoleType.SimpleVillager)
+			]));
+
+		var group = state.AvailableRoleGroups.Should().ContainSingle().Subject;
+
+		group.Group.Should().Be(RoleGroup.Villagers);
+		group.DisplayName.Should().Be(RoleGroup.Villagers.GetDisplayName());
+	}
+
 	private static LobbySetupMetadata CreateSetupMetadata(params MainRoleType[] roles)
 	{
 		return new LobbySetupMetadata(
