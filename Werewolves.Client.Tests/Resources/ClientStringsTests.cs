@@ -22,6 +22,9 @@ public class ClientStringsTests
 			ClientStrings.Dashboard_NoSession.Should().Be("Sem sessão");
 			ClientStrings.Dashboard_HealthDead.Should().Be("Eliminado");
 			ClientStrings.Benchmark_RunButton.Should().Be("Executar 1.000 jogos");
+			ClientStrings.Victory_Title.Should().Be("Fim de Jogo");
+			ClientStrings.Victory_StepLabel.Should().Be("Resultado");
+			ClientStrings.Victory_ReturnToLobbyButton.Should().Be("Novo jogo");
 		}
 		finally
 		{
