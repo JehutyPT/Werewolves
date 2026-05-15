@@ -31,6 +31,7 @@ public class ClientStringsTests
 			ClientStrings.AssignRoles_Title.Should().Be("Atribuir papel");
 			ClientStrings.AssignRoles_SelectRolePrompt.Should().Be("Escolher papel");
 			ClientStrings.Common_HoldToConfirm.Should().Be("Manter premido para confirmar");
+			ClientStrings.Dashboard_DebateTimerLabel.Should().Be("Debate");
 		}
 		finally
 		{
