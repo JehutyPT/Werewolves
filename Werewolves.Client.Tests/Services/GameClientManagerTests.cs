@@ -475,23 +475,11 @@ public class GameClientManagerTests
 			new FileGameSessionSaveStore(saveDirectory.Path),
 			resumeFakeTime);
 
-		// If the save/resume successfully restores the debate instruction,
-		// the timer should be active. Resume may not restore the instruction
-		// (pre-existing limitation), so guard accordingly.
-		if (resumed.CurrentInstruction is not null &&
-			resumed.CurrentInstruction.PublicAnnouncement == GameStrings.DebateStartsPrompt)
-		{
-			resumed.DebateElapsed.Should().NotBeNull();
-			resumeFakeTime.Advance(TimeSpan.FromSeconds(15));
-			resumed.DebateElapsed!.Value.Should().BeCloseTo(TimeSpan.FromSeconds(15), TimeSpan.FromMilliseconds(50));
-		}
-		else
-		{
-			// Pre-existing resume limitation: instruction may be null after restore.
-			// The UpdateDebateTimer call was still added to TryResumeSavedGame for
-			// correctness when the underlying resume issue is fixed.
-			resumed.DebateElapsed.Should().BeNull();
-		}
+		resumed.CurrentInstruction.Should().NotBeNull();
+		resumed.CurrentInstruction!.PublicAnnouncement.Should().Be(GameStrings.DebateStartsPrompt);
+		resumed.DebateElapsed.Should().NotBeNull();
+		resumeFakeTime.Advance(TimeSpan.FromSeconds(15));
+		resumed.DebateElapsed!.Value.Should().BeCloseTo(TimeSpan.FromSeconds(15), TimeSpan.FromMilliseconds(50));
 	}
 
 	[Fact]
