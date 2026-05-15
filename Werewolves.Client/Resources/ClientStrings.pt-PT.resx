@@ -403,4 +403,19 @@
   <data name="SelectPlayers_ListAria" xml:space="preserve">
     <value>Jogadores selecionáveis</value>
   </data>
+  <data name="SelectOptions_Title" xml:space="preserve">
+    <value>Escolher opção</value>
+  </data>
+  <data name="SelectOptions_SelectionCountFormat" xml:space="preserve">
+    <value>{0} de {1} selecionadas</value>
+  </data>
+  <data name="AssignRoles_Title" xml:space="preserve">
+    <value>Atribuir papel</value>
+  </data>
+  <data name="AssignRoles_SelectRolePrompt" xml:space="preserve">
+    <value>Escolher papel</value>
+  </data>
+  <data name="Common_HoldToConfirm" xml:space="preserve">
+    <value>Manter premido para confirmar</value>
+  </data>
 </root>

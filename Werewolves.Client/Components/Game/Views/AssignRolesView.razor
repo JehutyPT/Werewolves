@@ -1,0 +1,122 @@
+@using Werewolves.Core.StateModels.Enums
+@using Werewolves.Core.StateModels.Extensions
+@using Werewolves.Core.StateModels.Models
+@using Werewolves.Core.StateModels.Models.Instructions
+
+<div class="ww-assign-roles" aria-label="@ClientStrings.AssignRoles_Title">
+	@foreach (var playerId in Instruction.PlayersForAssignment)
+	{
+		var playerName = ResolvePlayerName(playerId);
+		<div class="ww-assign-roles__player" @key="playerId">
+			<span class="ww-player-name">@playerName</span>
+			<span class="ww-assign-prompt">@AssignmentLabel(playerId)</span>
+			<div class="ww-role-choices">
+				@foreach (var role in AvailableRolesForPlayer(playerId))
+				{
+					<button type="button"
+							class="@RoleClass(playerId, role)"
+							@onclick="() => AssignRole(playerId, role)">@role.GetPublicName()</button>
+				}
+			</div>
+		</div>
+	}
+</div>
+
+<button type="button"
+		class="ww-btn-primary"
+		disabled="@(!AllPlayersAssigned)"
+		aria-label="@ClientStrings.Common_HoldToConfirm"
+		@onpointerdown="StartHold"
+		@onpointerup="CancelHold"
+		@onpointerleave="CancelHold"
+		@onpointercancel="CancelHold">@ClientStrings.Dashboard_ContinueButton</button>
+
+@code {
+	private const int HoldDurationMs = 600;
+	private readonly Dictionary<Guid, MainRoleType> _assignments = new();
+	private CancellationTokenSource? _holdCts;
+
+	[Parameter, EditorRequired]
+	public AssignRolesInstruction Instruction { get; set; } = default!;
+
+	[Parameter]
+	public EventCallback<ModeratorResponse> OnResponse { get; set; }
+
+	[Parameter]
+	public IReadOnlyList<DashboardRosterEntry> Roster { get; set; } = [];
+
+	private bool AllPlayersAssigned =>
+		Instruction.PlayersForAssignment.All(p => _assignments.ContainsKey(p));
+
+	private string ResolvePlayerName(Guid playerId)
+	{
+		var entry = Roster.FirstOrDefault(r => r.PlayerId == playerId);
+		return entry?.Name ?? playerId.ToString()[..8];
+	}
+
+	private string AssignmentLabel(Guid playerId) =>
+		_assignments.TryGetValue(playerId, out var role)
+			? role.GetPublicName()
+			: ClientStrings.AssignRoles_SelectRolePrompt;
+
+	private IEnumerable<MainRoleType> AvailableRolesForPlayer(Guid playerId)
+	{
+		var usedRoles = _assignments
+			.Where(a => a.Key != playerId)
+			.Select(a => a.Value)
+			.ToList();
+
+		var remaining = new List<MainRoleType>(Instruction.RolesForAssignment);
+		foreach (var used in usedRoles)
+		{
+			remaining.Remove(used);
+		}
+
+		return remaining.Distinct();
+	}
+
+	private void AssignRole(Guid playerId, MainRoleType role)
+	{
+		_assignments[playerId] = role;
+	}
+
+	private async Task StartHold()
+	{
+		if (!AllPlayersAssigned)
+		{
+			return;
+		}
+
+		CancelHoldInternal();
+		_holdCts = new CancellationTokenSource();
+		var token = _holdCts.Token;
+
+		try
+		{
+			await Task.Delay(HoldDurationMs, token);
+			var response = Instruction.CreateResponse(new Dictionary<Guid, MainRoleType>(_assignments));
+			await OnResponse.InvokeAsync(response);
+		}
+		catch (TaskCanceledException)
+		{
+			// Hold was released before completion -- no action
+		}
+	}
+
+	private void CancelHold()
+	{
+		CancelHoldInternal();
+	}
+
+	private void CancelHoldInternal()
+	{
+		_holdCts?.Cancel();
+		_holdCts?.Dispose();
+		_holdCts = null;
+	}
+
+	private string RoleClass(Guid playerId, MainRoleType role) =>
+		_assignments.TryGetValue(playerId, out var assigned) && assigned == role
+			? "ww-role-btn ww-role-btn--selected"
+			: "ww-role-btn";
+}

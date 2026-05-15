@@ -403,4 +403,19 @@
   <data name="SelectPlayers_ListAria" xml:space="preserve">
     <value>Selectable players</value>
   </data>
+  <data name="SelectOptions_Title" xml:space="preserve">
+    <value>Choose option</value>
+  </data>
+  <data name="SelectOptions_SelectionCountFormat" xml:space="preserve">
+    <value>{0} of {1} selected</value>
+  </data>
+  <data name="AssignRoles_Title" xml:space="preserve">
+    <value>Assign role</value>
+  </data>
+  <data name="AssignRoles_SelectRolePrompt" xml:space="preserve">
+    <value>Choose role</value>
+  </data>
+  <data name="Common_HoldToConfirm" xml:space="preserve">
+    <value>Hold to confirm</value>
+  </data>
 </root>

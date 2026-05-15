@@ -165,6 +165,56 @@ public class GameClientManagerTests
 	}
 
 	[Fact]
+	public void PlayToVictory_EncountersAssignRolesInstruction_RosterResolvesPlayerNames()
+	{
+		var manager = new GameClientManager();
+		var startInstruction = manager.StartGame(
+			["Ana", "Bruno", "Catarina", "Diana", "Eduardo"],
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+
+		manager.ProcessInput(startInstruction.CreateResponse(true));
+		var players = manager.CurrentSession!.GetPlayers().ToList();
+		var werewolfIds = players.Take(2).Select(p => p.Id).ToHashSet();
+		var victimId = players[2].Id;
+
+		ConfirmCurrentInstruction(manager);
+		SelectCurrentPlayers(manager, werewolfIds);
+		SelectCurrentPlayers(manager, [victimId]);
+		ConfirmCurrentInstruction(manager);
+		ConfirmCurrentInstruction(manager);
+
+		// At this point in the flow, an AssignRolesInstruction should be encountered
+		var assignRoles = manager.CurrentInstruction.Should().BeOfType<AssignRolesInstruction>().Subject;
+
+		assignRoles.PlayersForAssignment.Should().NotBeEmpty();
+		assignRoles.RolesForAssignment.Should().NotBeEmpty();
+		assignRoles.PlayersForAssignment.Count.Should().BeLessOrEqualTo(assignRoles.RolesForAssignment.Count);
+
+		// Verify roster can resolve the player names for the affected players
+		var roster = manager.CurrentRoster;
+		foreach (var playerId in assignRoles.PlayersForAssignment)
+		{
+			roster.Should().Contain(r => r.PlayerId == playerId,
+				"roster should contain an entry for each player needing role assignment");
+		}
+
+		// Process the assignment and verify game advances
+		var assignments = assignRoles.PlayersForAssignment.ToDictionary(
+			playerId => playerId,
+			_ => MainRoleType.SimpleVillager);
+		var result = manager.ProcessInput(assignRoles.CreateResponse(assignments));
+
+		result.IsSuccess.Should().BeTrue();
+		manager.CurrentInstruction.Should().NotBe(assignRoles);
+	}
+
+	[Fact]
 	public void ProcessInput_WhenSaveFails_DoesNotThrowAndKeepsGameProgress()
 	{
 		var manager = new GameClientManager(new GameService(), new ThrowingSaveStore());
