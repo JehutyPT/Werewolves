@@ -313,6 +313,9 @@
   <data name="Dashboard_AudioMute" xml:space="preserve">
     <value>Mute audio</value>
   </data>
+  <data name="Dashboard_DebateTimerLabel" xml:space="preserve">
+    <value>Debate</value>
+  </data>
   <data name="Benchmark_StepLabel" xml:space="preserve">
     <value>Spike #30</value>
   </data>

@@ -55,6 +55,13 @@
 	</section>
 
 	<section class="ww-dashboard-panel ww-action-panel" style="@PanelStyle(DashboardTab.Action)" aria-hidden="@(_activeTab != DashboardTab.Action)">
+		@if (Game.DebateElapsed is { } debateElapsed)
+		{
+			<div class="ww-debate-timer" aria-label="@ClientStrings.Dashboard_DebateTimerLabel">
+				<span class="ww-label">@ClientStrings.Dashboard_DebateTimerLabel</span>
+				<span class="ww-debate-timer__clock">@FormatElapsed(debateElapsed)</span>
+			</div>
+		}
 		<InstructionRenderer Instruction="Game.CurrentInstruction" OnResponse="ProcessResponse">
 			<AudioControls>
 				<button type="button"
@@ -165,10 +172,12 @@
 
 @code {
 	private DashboardTab _activeTab = DashboardTab.Action;
+	private Timer? _debateTickTimer;
 
 	protected override void OnInitialized()
 	{
 		Game.StateChanged += HandleStateChanged;
+		SyncDebateTickTimer();
 	}
 
 	private IReadOnlyList<IPlayer> Players => Game.CurrentSession?.GetPlayers().ToList() ?? [];
@@ -259,14 +268,41 @@
 		_ => "--ww-accent"
 	};
 
+	private static string FormatElapsed(TimeSpan elapsed)
+	{
+		var totalMinutes = (int)elapsed.TotalMinutes;
+		var seconds = elapsed.Seconds;
+		return $"{totalMinutes:D2}:{seconds:D2}";
+	}
+
 	private void HandleStateChanged(object? sender, EventArgs args)
 	{
-		_ = InvokeAsync(StateHasChanged);
+		_ = InvokeAsync(() =>
+		{
+			SyncDebateTickTimer();
+			StateHasChanged();
+		});
+	}
+
+	private void SyncDebateTickTimer()
+	{
+		var isDebating = Game.DebateElapsed.HasValue;
+
+		if (isDebating && _debateTickTimer is null)
+		{
+			_debateTickTimer = new Timer(_ => _ = InvokeAsync(StateHasChanged), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+		}
+		else if (!isDebating && _debateTickTimer is not null)
+		{
+			_debateTickTimer.Dispose();
+			_debateTickTimer = null;
+		}
 	}
 
 	public void Dispose()
 	{
 		Game.StateChanged -= HandleStateChanged;
+		_debateTickTimer?.Dispose();
 	}
 
 	private enum DashboardTab
