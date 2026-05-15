@@ -764,6 +764,50 @@ public class GameClientManagerTests
 		}
 	}
 
+	[Fact]
+	public void ClearSession_NullsActiveGameIdAndSessionAndInstruction()
+	{
+		var manager = new GameClientManager();
+		StartSimpleGame(manager);
+		manager.HasActiveSession.Should().BeTrue();
+
+		manager.ClearSession();
+
+		manager.ActiveGameId.Should().BeNull();
+		manager.CurrentSession.Should().BeNull();
+		manager.CurrentInstruction.Should().BeNull();
+		manager.HasActiveSession.Should().BeFalse();
+	}
+
+	[Fact]
+	public void ClearSession_RaisesStateChanged()
+	{
+		var manager = new GameClientManager();
+		StartSimpleGame(manager);
+		var eventCount = 0;
+		manager.StateChanged += (_, _) => eventCount++;
+
+		manager.ClearSession();
+
+		eventCount.Should().Be(1);
+	}
+
+	[Fact]
+	public void ClearSession_DeletesSaveFile()
+	{
+		using var saveDirectory = TemporaryDirectory.Create();
+		var saveStore = new FileGameSessionSaveStore(saveDirectory.Path);
+		var manager = new GameClientManager(new GameService(), saveStore);
+		var startInstruction = StartSimpleGame(manager);
+		manager.ProcessInput(startInstruction.CreateResponse(true));
+		var saveFilePath = Path.Combine(saveDirectory.Path, FileGameSessionSaveStore.SaveFileName);
+		File.Exists(saveFilePath).Should().BeTrue();
+
+		manager.ClearSession();
+
+		File.Exists(saveFilePath).Should().BeFalse();
+	}
+
 	private static StartGameConfirmationInstruction StartVillagerOnlyGame(GameClientManager manager)
 	{
 		var players = new[] { "Ana", "Bruno", "Catarina", "Diana", "Eduardo" };

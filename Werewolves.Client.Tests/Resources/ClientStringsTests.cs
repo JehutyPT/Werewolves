@@ -32,6 +32,9 @@ public class ClientStringsTests
 			ClientStrings.AssignRoles_SelectRolePrompt.Should().Be("Escolher papel");
 			ClientStrings.Common_HoldToConfirm.Should().Be("Manter premido para confirmar");
 			ClientStrings.Dashboard_DebateTimerLabel.Should().Be("Debate");
+			ClientStrings.Victory_Title.Should().Be("Fim de Jogo");
+			ClientStrings.Victory_StepLabel.Should().Be("Resultado");
+			ClientStrings.Victory_ReturnToLobbyButton.Should().Be("Novo jogo");
 		}
 		finally
 		{

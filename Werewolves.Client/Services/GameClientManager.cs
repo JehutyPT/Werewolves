@@ -84,6 +84,15 @@ public sealed class GameClientManager
 		return instruction;
 	}
 
+	public void ClearSession()
+	{
+		ActiveGameId = null;
+		CurrentSession = null;
+		CurrentInstruction = null;
+		ClearSavedGame();
+		OnStateChanged();
+	}
+
 	public ProcessResult ProcessInput(ModeratorResponse response)
 	{
 		if (ActiveGameId is not { } gameId)

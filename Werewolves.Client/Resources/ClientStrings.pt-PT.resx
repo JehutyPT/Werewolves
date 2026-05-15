@@ -421,4 +421,13 @@
   <data name="Common_HoldToConfirm" xml:space="preserve">
     <value>Manter premido para confirmar</value>
   </data>
+  <data name="Victory_Title" xml:space="preserve">
+    <value>Fim de Jogo</value>
+  </data>
+  <data name="Victory_StepLabel" xml:space="preserve">
+    <value>Resultado</value>
+  </data>
+  <data name="Victory_ReturnToLobbyButton" xml:space="preserve">
+    <value>Novo jogo</value>
+  </data>
 </root>
