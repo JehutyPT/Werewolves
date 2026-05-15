@@ -21,6 +21,8 @@ public class ClientStringsTests
 			ClientStrings.RoleSelection_StartGameButton.Should().Be("Iniciar jogo");
 			ClientStrings.Dashboard_NoSession.Should().Be("Sem sessão");
 			ClientStrings.Dashboard_HealthDead.Should().Be("Eliminado");
+			ClientStrings.Dashboard_AudioMute.Should().Be("Silenciar áudio");
+			ClientStrings.Dashboard_AudioUnmute.Should().Be("Ativar som");
 			ClientStrings.Benchmark_RunButton.Should().Be("Executar 1.000 jogos");
 			ClientStrings.SelectPlayers_SubmitButton.Should().Be("Confirmar");
 			ClientStrings.SelectPlayers_ListAria.Should().Be("Jogadores selecionáveis");
