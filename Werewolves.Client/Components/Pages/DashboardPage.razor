@@ -55,7 +55,7 @@
 	</section>
 
 	<section class="ww-dashboard-panel ww-action-panel" style="@PanelStyle(DashboardTab.Action)" aria-hidden="@(_activeTab != DashboardTab.Action)">
-		<InstructionRenderer Instruction="Game.CurrentInstruction" OnResponse="ProcessResponse">
+		<InstructionRenderer Instruction="Game.CurrentInstruction" Roster="RosterEntries" OnResponse="ProcessResponse">
 			<AudioControls>
 				<button type="button"
 						class="@AudioToggleClass"

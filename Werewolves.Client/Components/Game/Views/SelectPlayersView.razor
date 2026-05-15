@@ -1,0 +1,96 @@
+@using Werewolves.Client.Services
+@using Werewolves.Client.Resources
+@using Werewolves.Core.StateModels.Models
+@using Werewolves.Core.StateModels.Models.Instructions
+
+<ul class="ww-select-players-list" aria-label="@ClientStrings.SelectPlayers_ListAria">
+	@foreach (var player in _state.SelectablePlayers)
+	{
+		var playerId = player.PlayerId;
+		var isSelected = _state.IsSelected(playerId);
+		<li class="ww-select-players-item @(isSelected ? "ww-select-players-item--selected" : "")"
+			@key="playerId"
+			@onclick="() => HandleToggle(playerId)"
+			role="option"
+			aria-selected="@isSelected">
+			<span class="ww-seat-number">@player.SeatNumber</span>
+			<span class="ww-player-name">@player.Name</span>
+		</li>
+	}
+</ul>
+
+<button type="button"
+		class="ww-btn-primary"
+		disabled="@(!_state.CanSubmit)"
+		@onpointerdown="HandlePointerDown"
+		@onpointerup="HandlePointerUp"
+		@onpointerleave="HandlePointerCancel"
+		@onpointercancel="HandlePointerCancel">@ClientStrings.SelectPlayers_SubmitButton</button>
+
+@code {
+	private SelectPlayersInputState _state = null!;
+	private CancellationTokenSource? _holdCts;
+
+	[Parameter, EditorRequired]
+	public SelectPlayersInstruction Instruction { get; set; } = default!;
+
+	[Parameter, EditorRequired]
+	public IReadOnlyList<DashboardRosterEntry> Roster { get; set; } = default!;
+
+	[Parameter]
+	public EventCallback<ModeratorResponse> OnResponse { get; set; }
+
+	protected override void OnParametersSet()
+	{
+		_state = new SelectPlayersInputState(
+			Roster,
+			Instruction.SelectablePlayerIds,
+			Instruction.CountConstraint);
+	}
+
+	private void HandleToggle(Guid playerId)
+	{
+		if (_state.ToggleSelection(playerId))
+		{
+			StateHasChanged();
+		}
+	}
+
+	private async Task HandlePointerDown()
+	{
+		if (!_state.CanSubmit)
+		{
+			return;
+		}
+
+		_holdCts?.Cancel();
+		_holdCts = new CancellationTokenSource();
+		var token = _holdCts.Token;
+
+		try
+		{
+			await Task.Delay(600, token);
+			if (!token.IsCancellationRequested && _state.CanSubmit)
+			{
+				var response = Instruction.CreateResponse(_state.GetSelection());
+				await OnResponse.InvokeAsync(response);
+			}
+		}
+		catch (TaskCanceledException)
+		{
+			// Brief tap or pointer left: do nothing
+		}
+	}
+
+	private void HandlePointerUp()
+	{
+		_holdCts?.Cancel();
+		_holdCts = null;
+	}
+
+	private void HandlePointerCancel()
+	{
+		_holdCts?.Cancel();
+		_holdCts = null;
+	}
+}

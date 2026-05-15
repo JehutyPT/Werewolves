@@ -397,4 +397,10 @@
   <data name="Benchmark_AlreadyRunningError" xml:space="preserve">
     <value>Benchmark is already running.</value>
   </data>
+  <data name="SelectPlayers_SubmitButton" xml:space="preserve">
+    <value>Confirmar</value>
+  </data>
+  <data name="SelectPlayers_ListAria" xml:space="preserve">
+    <value>Jogadores selecionáveis</value>
+  </data>
 </root>

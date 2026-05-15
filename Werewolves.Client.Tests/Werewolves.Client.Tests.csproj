@@ -20,6 +20,7 @@
     <Compile Include="..\Werewolves.Client\Services\InstructionAudioPlayback.cs" Link="Services\InstructionAudioPlayback.cs" />
     <Compile Include="..\Werewolves.Client\Services\InstructionDisplayFlow.cs" Link="Services\InstructionDisplayFlow.cs" />
     <Compile Include="..\Werewolves.Client\Services\LobbySetupState.cs" Link="Services\LobbySetupState.cs" />
+    <Compile Include="..\Werewolves.Client\Services\SelectPlayersInputState.cs" Link="Services\SelectPlayersInputState.cs" />
   </ItemGroup>
 
   <ItemGroup>

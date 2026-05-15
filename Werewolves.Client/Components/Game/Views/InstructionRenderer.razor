@@ -1,3 +1,4 @@
+@using Werewolves.Client.Services
 @using Werewolves.Core.StateModels.Models
 @using Werewolves.Core.StateModels.Models.Instructions
 
@@ -31,6 +32,10 @@
 		{
 			<ConfirmationView Instruction="confirmationInstruction" OnResponse="OnResponse" />
 		}
+		else if (Instruction is SelectPlayersInstruction selectPlayersInstruction)
+		{
+			<SelectPlayersView Instruction="selectPlayersInstruction" Roster="Roster" OnResponse="OnResponse" />
+		}
 		else
 		{
 			<button type="button" class="ww-btn-primary" disabled>Responder</button>
@@ -46,6 +51,9 @@
 
 	[Parameter]
 	public EventCallback<ModeratorResponse> OnResponse { get; set; }
+
+	[Parameter]
+	public IReadOnlyList<DashboardRosterEntry> Roster { get; set; } = [];
 
 	[Parameter]
 	public RenderFragment? AudioControls { get; set; }
