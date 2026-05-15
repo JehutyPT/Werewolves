@@ -179,6 +179,7 @@ public sealed class GameClientManager
 
 			ActiveGameId = _gameService.RehydrateSession(serializedSession);
 			RefreshCurrentState();
+			UpdateDebateTimer();
 		}
 		catch (Exception)
 		{
