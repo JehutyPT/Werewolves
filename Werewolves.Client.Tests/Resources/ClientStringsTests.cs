@@ -22,6 +22,13 @@ public class ClientStringsTests
 			ClientStrings.Dashboard_NoSession.Should().Be("Sem sessão");
 			ClientStrings.Dashboard_HealthDead.Should().Be("Eliminado");
 			ClientStrings.Benchmark_RunButton.Should().Be("Executar 1.000 jogos");
+
+			// SelectOptionsView and AssignRolesView strings
+			ClientStrings.SelectOptions_Title.Should().Be("Escolher opção");
+			ClientStrings.SelectOptions_SelectionCountFormat.Should().Be("{0} de {1} selecionadas");
+			ClientStrings.AssignRoles_Title.Should().Be("Atribuir papel");
+			ClientStrings.AssignRoles_SelectRolePrompt.Should().Be("Escolher papel");
+			ClientStrings.Common_HoldToConfirm.Should().Be("Manter premido para confirmar");
 		}
 		finally
 		{

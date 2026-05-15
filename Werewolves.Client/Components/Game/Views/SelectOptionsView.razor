@@ -1,0 +1,94 @@
+@using Werewolves.Core.StateModels.Models
+@using Werewolves.Core.StateModels.Models.Instructions
+
+<div class="ww-option-list" aria-label="@ClientStrings.SelectOptions_Title">
+	@foreach (var option in Instruction.SelectableOptions)
+	{
+		<button type="button"
+				class="@OptionClass(option)"
+				@onclick="() => ToggleOption(option)">@option</button>
+	}
+</div>
+
+<span class="ww-selection-count">@SelectionCountLabel</span>
+
+<button type="button"
+		class="ww-btn-primary"
+		disabled="@(!IsSelectionValid)"
+		aria-label="@ClientStrings.Common_HoldToConfirm"
+		@onpointerdown="StartHold"
+		@onpointerup="CancelHold"
+		@onpointerleave="CancelHold"
+		@onpointercancel="CancelHold">@ClientStrings.Dashboard_ContinueButton</button>
+
+@code {
+	private const int HoldDurationMs = 600;
+	private readonly HashSet<string> _selectedOptions = new();
+	private CancellationTokenSource? _holdCts;
+
+	[Parameter, EditorRequired]
+	public SelectOptionsInstruction Instruction { get; set; } = default!;
+
+	[Parameter]
+	public EventCallback<ModeratorResponse> OnResponse { get; set; }
+
+	private bool IsSelectionValid => Instruction.SelectionRange.IsValid(_selectedOptions);
+
+	private string SelectionCountLabel =>
+		string.Format(
+			System.Globalization.CultureInfo.CurrentCulture,
+			ClientStrings.SelectOptions_SelectionCountFormat,
+			_selectedOptions.Count,
+			Instruction.SelectionRange.Maximum);
+
+	private void ToggleOption(string option)
+	{
+		if (!_selectedOptions.Remove(option))
+		{
+			if (_selectedOptions.Count < Instruction.SelectionRange.Maximum)
+			{
+				_selectedOptions.Add(option);
+			}
+		}
+	}
+
+	private async Task StartHold()
+	{
+		if (!IsSelectionValid)
+		{
+			return;
+		}
+
+		CancelHoldInternal();
+		_holdCts = new CancellationTokenSource();
+		var token = _holdCts.Token;
+
+		try
+		{
+			await Task.Delay(HoldDurationMs, token);
+			var response = Instruction.CreateResponse(new HashSet<string>(_selectedOptions));
+			await OnResponse.InvokeAsync(response);
+		}
+		catch (TaskCanceledException)
+		{
+			// Hold was released before completion -- no action
+		}
+	}
+
+	private void CancelHold()
+	{
+		CancelHoldInternal();
+	}
+
+	private void CancelHoldInternal()
+	{
+		_holdCts?.Cancel();
+		_holdCts?.Dispose();
+		_holdCts = null;
+	}
+
+	private string OptionClass(string option) =>
+		_selectedOptions.Contains(option)
+			? "ww-option-btn ww-option-btn--selected"
+			: "ww-option-btn";
+}

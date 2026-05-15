@@ -31,6 +31,14 @@
 		{
 			<ConfirmationView Instruction="confirmationInstruction" OnResponse="OnResponse" />
 		}
+		else if (Instruction is SelectOptionsInstruction selectOptionsInstruction)
+		{
+			<SelectOptionsView Instruction="selectOptionsInstruction" OnResponse="OnResponse" />
+		}
+		else if (Instruction is AssignRolesInstruction assignRolesInstruction)
+		{
+			<AssignRolesView Instruction="assignRolesInstruction" OnResponse="OnResponse" Roster="Roster" />
+		}
 		else
 		{
 			<button type="button" class="ww-btn-primary" disabled>Responder</button>
@@ -49,6 +57,9 @@
 
 	[Parameter]
 	public RenderFragment? AudioControls { get; set; }
+
+	[Parameter]
+	public IReadOnlyList<DashboardRosterEntry> Roster { get; set; } = [];
 
 	protected override void OnParametersSet()
 	{
