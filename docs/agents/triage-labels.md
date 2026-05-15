@@ -8,9 +8,8 @@ This file maps skill-canonical roles to the actual label strings used in this re
 | -------------------------- | -------------------- | ---------------------------------------- |
 | `needs-triage`             | `needs-triage`       | Maintainer needs to evaluate this issue  |
 | `needs-info`               | `needs-info`         | Waiting on reporter for more information |
-| `ready-for-agent`          | `ready-for-agent`    | Fully specified, ready for an AFK agent  |
+| `ready-for-agent`          | `ready-for-agent`    | Fully specified, ready for an AFK agent (assigned only by `/triage` and `/fanout-triage`) |
 | `ready-for-human`          | `ready-for-human`    | Requires human implementation            |
-| `blocked`                  | `blocked`            | Specified but waiting on prerequisite    |
 | `wontfix`                  | `wontfix`            | Will not be actioned                     |
 
 ## Category roles
@@ -38,7 +37,7 @@ Not state or category roles — these replace category labels for non-work-item 
 | -------------------------- | -------------------- | ---------------------------------------- |
 | `prd`                      | `prd`                | Product requirements document            |
 
-PRDs only use `needs-triage` or no state label. Never apply `ready-for-agent`, `ready-for-human`, or `blocked` to a PRD.
+PRDs only use `needs-triage` or no state label. Never apply `ready-for-agent` or `ready-for-human` to a PRD.
 
 When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the corresponding label string from this table.
 
