@@ -67,9 +67,6 @@
 	[Parameter]
 	public RenderFragment? AudioControls { get; set; }
 
-	[Parameter]
-	public IReadOnlyList<DashboardRosterEntry> Roster { get; set; } = [];
-
 	protected override void OnParametersSet()
 	{
 		_flow.SetInstruction(Instruction);

@@ -1,0 +1,94 @@
+@inject IHapticFeedbackService Haptic
+
+<div class="ww-hold-zone @HoldClass">
+	<span class="ww-hold-hint">@ClientStrings.Common_HoldToConfirm</span>
+	<button type="button"
+			class="ww-btn-hold"
+			disabled="@Disabled"
+			aria-label="@ClientStrings.Common_HoldToConfirm"
+			@onpointerdown="HandlePointerDown"
+			@onpointerup="HandlePointerUp"
+			@onpointerleave="HandlePointerCancel"
+			@onpointercancel="HandlePointerCancel">
+		<span class="ww-btn-hold__fill"></span>
+		<span class="ww-btn-hold__edge"></span>
+		<span class="ww-btn-hold__label">@DisplayLabel</span>
+	</button>
+</div>
+
+@code {
+	private const int HoldDurationMs = 600;
+	private const int SuccessFlashMs = 250;
+
+	private bool _isHolding;
+	private bool _isComplete;
+	private CancellationTokenSource? _holdCts;
+
+	[Parameter, EditorRequired]
+	public string Label { get; set; } = default!;
+
+	[Parameter]
+	public bool Disabled { get; set; }
+
+	[Parameter]
+	public EventCallback OnHoldComplete { get; set; }
+
+	private string HoldClass =>
+		Disabled ? "" :
+		_isComplete ? "is-complete" :
+		_isHolding ? "is-holding" : "";
+
+	private string DisplayLabel =>
+		_isComplete ? "✓" : Label;
+
+	private async Task HandlePointerDown()
+	{
+		if (Disabled) return;
+
+		_holdCts?.Cancel();
+		_holdCts = new CancellationTokenSource();
+		var token = _holdCts.Token;
+
+		_isHolding = true;
+		_isComplete = false;
+		StateHasChanged();
+
+		try
+		{
+			await Task.Delay(HoldDurationMs, token);
+
+			Haptic.Click();
+			_isHolding = false;
+			_isComplete = true;
+			StateHasChanged();
+
+			await Task.Delay(SuccessFlashMs, token);
+			await OnHoldComplete.InvokeAsync();
+		}
+		catch (TaskCanceledException)
+		{
+		}
+	}
+
+	private void HandlePointerUp()
+	{
+		if (_isHolding && !_isComplete)
+		{
+			_holdCts?.Cancel();
+			_holdCts = null;
+			_isHolding = false;
+			StateHasChanged();
+		}
+	}
+
+	private void HandlePointerCancel()
+	{
+		if (_isHolding && !_isComplete)
+		{
+			_holdCts?.Cancel();
+			_holdCts = null;
+			_isHolding = false;
+			StateHasChanged();
+		}
+	}
+}

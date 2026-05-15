@@ -158,6 +158,110 @@
 }
 
 
+/* ── Hold-to-confirm button states (visual feedback) ── */
+
+.ww-hold-zone {
+  -webkit-user-select: none;
+  user-select: none;
+  display: grid;
+  gap: 6px;
+}
+
+.ww-hold-hint {
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--ww-text-muted);
+  min-height: 20px;
+  transition: opacity 150ms ease-out;
+}
+
+.ww-hold-zone.is-holding .ww-hold-hint {
+  opacity: 0.5;
+}
+
+.ww-hold-zone.is-complete .ww-hold-hint {
+  opacity: 0;
+}
+
+.ww-hold-zone .ww-btn-hold {
+  animation: ww-hold-idle 2.5s ease-in-out infinite;
+}
+
+.ww-hold-zone .ww-btn-hold:disabled {
+  opacity: 0.34;
+  cursor: default;
+  animation: none;
+  box-shadow: none;
+}
+
+.ww-hold-zone.is-holding .ww-btn-hold,
+.ww-hold-zone.is-complete .ww-btn-hold {
+  animation: none;
+}
+
+@keyframes ww-hold-idle {
+  0%, 100% { box-shadow: 0 0 20px rgba(63, 224, 200, 0.10); }
+  50%      { box-shadow: 0 0 48px rgba(63, 224, 200, 0.38); }
+}
+
+.ww-hold-zone .ww-btn-hold__fill {
+  width: 0%;
+  transition: width 220ms ease-out;
+  pointer-events: none;
+}
+
+.ww-hold-zone.is-holding .ww-btn-hold__fill {
+  width: 100%;
+  transition: width 600ms linear;
+}
+
+.ww-hold-zone.is-complete .ww-btn-hold__fill {
+  width: 100%;
+  transition: none;
+  background: var(--ww-accent);
+}
+
+.ww-hold-zone .ww-btn-hold__edge {
+  left: 0%;
+  opacity: 0;
+  transition: left 220ms ease-out, opacity 120ms ease-out;
+  pointer-events: none;
+}
+
+.ww-hold-zone.is-holding .ww-btn-hold__edge {
+  left: calc(100% - 2px);
+  opacity: 1;
+  transition: left 600ms linear, opacity 80ms ease-in;
+}
+
+.ww-hold-zone.is-complete .ww-btn-hold__edge {
+  opacity: 0;
+  transition: opacity 150ms ease-out;
+}
+
+.ww-hold-zone .ww-btn-hold__label {
+  transition: color 300ms ease-out;
+}
+
+.ww-hold-zone.is-holding .ww-btn-hold__label {
+  color: var(--ww-bg);
+  transition: color 400ms linear;
+}
+
+.ww-hold-zone.is-complete .ww-btn-hold__label {
+  color: var(--ww-bg);
+  font-weight: 800;
+}
+
+.ww-hold-zone.is-complete .ww-btn-hold {
+  box-shadow: 0 0 60px rgba(63, 224, 200, 0.50);
+  border-color: var(--ww-accent-bright);
+}
+
+
 /* ── Player list row ── */
 
 .ww-player-row {

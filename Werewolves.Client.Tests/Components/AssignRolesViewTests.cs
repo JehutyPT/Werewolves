@@ -53,11 +53,9 @@ public class AssignRolesViewTests
 	{
 		var markup = File.ReadAllText(GetViewPath());
 
-		markup.Should().Contain("@onpointerdown");
-		markup.Should().Contain("@onpointerup");
-		markup.Should().Contain("@onpointerleave");
-		markup.Should().Contain("Task.Delay");
-		markup.Should().Contain("CancellationTokenSource");
+		markup.Should().Contain("<HoldButton");
+		markup.Should().Contain("Label=\"@ClientStrings.Dashboard_ContinueButton\"");
+		markup.Should().Contain("OnHoldComplete=\"HandleSubmit\"");
 	}
 
 	[Fact]
@@ -65,8 +63,7 @@ public class AssignRolesViewTests
 	{
 		var markup = File.ReadAllText(GetViewPath());
 
-		markup.Should().Contain("disabled");
-		markup.Should().Contain("AllPlayersAssigned");
+		markup.Should().Contain("Disabled=\"@(!AllPlayersAssigned)\"");
 	}
 
 	[Fact]
@@ -85,7 +82,6 @@ public class AssignRolesViewTests
 
 		markup.Should().Contain("ClientStrings.AssignRoles_Title");
 		markup.Should().Contain("ClientStrings.AssignRoles_SelectRolePrompt");
-		markup.Should().Contain("ClientStrings.Common_HoldToConfirm");
 		markup.Should().Contain("ClientStrings.Dashboard_ContinueButton");
 	}
 

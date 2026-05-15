@@ -59,7 +59,7 @@ public class GameClientManagerTests
 	{
 		using var saveDirectory = TemporaryDirectory.Create();
 		var saveStore = new FileGameSessionSaveStore(saveDirectory.Path);
-		var manager = new GameClientManager(new GameService(), saveStore);
+		var manager = new GameClientManager(new GameService(), saveStore: saveStore);
 		var startInstruction = StartSimpleGame(manager);
 
 		manager.ProcessInput(startInstruction.CreateResponse(true));
@@ -74,7 +74,7 @@ public class GameClientManagerTests
 	{
 		using var saveDirectory = TemporaryDirectory.Create();
 		var saveStore = new FileGameSessionSaveStore(saveDirectory.Path);
-		var manager = new GameClientManager(new GameService(), saveStore);
+		var manager = new GameClientManager(new GameService(), saveStore: saveStore);
 		var startInstruction = StartSimpleGame(manager);
 		var saveFilePath = Path.Combine(saveDirectory.Path, FileGameSessionSaveStore.SaveFileName);
 		File.WriteAllText(saveFilePath, "stale save data");
@@ -90,13 +90,13 @@ public class GameClientManagerTests
 	{
 		using var saveDirectory = TemporaryDirectory.Create();
 		var saveStore = new FileGameSessionSaveStore(saveDirectory.Path);
-		var manager = new GameClientManager(new GameService(), saveStore);
+		var manager = new GameClientManager(new GameService(), saveStore: saveStore);
 		var startInstruction = StartSimpleGame(manager);
 		manager.ProcessInput(startInstruction.CreateResponse(true));
 		var savedGameId = manager.ActiveGameId;
 		var savedPhase = manager.CurrentPhase;
 
-		var resumed = new GameClientManager(new GameService(), new FileGameSessionSaveStore(saveDirectory.Path));
+		var resumed = new GameClientManager(new GameService(), saveStore: new FileGameSessionSaveStore(saveDirectory.Path));
 
 		resumed.HasActiveSession.Should().BeTrue();
 		resumed.ActiveGameId.Should().Be(savedGameId);
@@ -109,10 +109,10 @@ public class GameClientManagerTests
 	public void ProcessInput_AfterResume_ContinuesFromRestoredInstruction()
 	{
 		using var saveDirectory = TemporaryDirectory.Create();
-		var manager = new GameClientManager(new GameService(), new FileGameSessionSaveStore(saveDirectory.Path));
+		var manager = new GameClientManager(new GameService(), saveStore: new FileGameSessionSaveStore(saveDirectory.Path));
 		var startInstruction = StartSimpleGame(manager);
 		manager.ProcessInput(startInstruction.CreateResponse(true));
-		var resumed = new GameClientManager(new GameService(), new FileGameSessionSaveStore(saveDirectory.Path));
+		var resumed = new GameClientManager(new GameService(), saveStore: new FileGameSessionSaveStore(saveDirectory.Path));
 		var restoredInstruction = resumed.CurrentInstruction.Should().BeOfType<ConfirmationInstruction>().Subject;
 
 		var result = resumed.ProcessInput(restoredInstruction.CreateResponse(true));
@@ -130,7 +130,7 @@ public class GameClientManagerTests
 		var saveFilePath = Path.Combine(saveDirectory.Path, FileGameSessionSaveStore.SaveFileName);
 		File.WriteAllText(saveFilePath, "not valid session json");
 
-		var act = () => new GameClientManager(new GameService(), new FileGameSessionSaveStore(saveDirectory.Path));
+		var act = () => new GameClientManager(new GameService(), saveStore: new FileGameSessionSaveStore(saveDirectory.Path));
 
 		var manager = act.Should().NotThrow().Subject;
 		manager.HasActiveSession.Should().BeFalse();
@@ -142,7 +142,7 @@ public class GameClientManagerTests
 	{
 		using var saveDirectory = TemporaryDirectory.Create();
 		var saveFilePath = Path.Combine(saveDirectory.Path, FileGameSessionSaveStore.SaveFileName);
-		var manager = new GameClientManager(new GameService(), new FileGameSessionSaveStore(saveDirectory.Path));
+		var manager = new GameClientManager(new GameService(), saveStore: new FileGameSessionSaveStore(saveDirectory.Path));
 		var startInstruction = StartSimpleGame(manager);
 		manager.ProcessInput(startInstruction.CreateResponse(true));
 		File.Exists(saveFilePath).Should().BeTrue();
@@ -157,7 +157,7 @@ public class GameClientManagerTests
 	{
 		using var saveDirectory = TemporaryDirectory.Create();
 		var saveFilePath = Path.Combine(saveDirectory.Path, FileGameSessionSaveStore.SaveFileName);
-		var manager = new GameClientManager(new GameService(), new FileGameSessionSaveStore(saveDirectory.Path));
+		var manager = new GameClientManager(new GameService(), saveStore: new FileGameSessionSaveStore(saveDirectory.Path));
 
 		PlayToWerewolfVictoryAtDawn(manager);
 
@@ -218,7 +218,7 @@ public class GameClientManagerTests
 	[Fact]
 	public void ProcessInput_WhenSaveFails_DoesNotThrowAndKeepsGameProgress()
 	{
-		var manager = new GameClientManager(new GameService(), new ThrowingSaveStore());
+		var manager = new GameClientManager(new GameService(), saveStore: new ThrowingSaveStore());
 		var startInstruction = StartSimpleGame(manager);
 
 		var act = () => manager.ProcessInput(startInstruction.CreateResponse(true));
@@ -797,7 +797,7 @@ public class GameClientManagerTests
 	{
 		using var saveDirectory = TemporaryDirectory.Create();
 		var saveStore = new FileGameSessionSaveStore(saveDirectory.Path);
-		var manager = new GameClientManager(new GameService(), saveStore);
+		var manager = new GameClientManager(new GameService(), saveStore: saveStore);
 		var startInstruction = StartSimpleGame(manager);
 		manager.ProcessInput(startInstruction.CreateResponse(true));
 		var saveFilePath = Path.Combine(saveDirectory.Path, FileGameSessionSaveStore.SaveFileName);

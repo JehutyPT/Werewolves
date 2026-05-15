@@ -23,6 +23,7 @@ public class SelectPlayersViewMarkupTests
 
 		markup.Should().Contain("ww-select-players-item--selected");
 		markup.Should().Contain("aria-selected");
+		markup.Should().Contain("ww-select-players-check");
 	}
 
 	[Fact]
@@ -30,10 +31,9 @@ public class SelectPlayersViewMarkupTests
 	{
 		var markup = File.ReadAllText(GetViewPath());
 
-		markup.Should().Contain("@onpointerdown");
-		markup.Should().Contain("@onpointerup");
-		markup.Should().Contain("@onpointerleave");
-		markup.Should().Contain("ww-btn-primary");
+		markup.Should().Contain("<HoldButton");
+		markup.Should().Contain("Label=\"@ClientStrings.SelectPlayers_SubmitButton\"");
+		markup.Should().Contain("OnHoldComplete=\"HandleSubmit\"");
 	}
 
 	[Fact]
@@ -61,7 +61,7 @@ public class SelectPlayersViewMarkupTests
 	{
 		var markup = File.ReadAllText(GetViewPath());
 
-		markup.Should().Contain("disabled=\"@(!_state.CanSubmit)\"");
+		markup.Should().Contain("Disabled=\"@(!_state.CanSubmit)\"");
 	}
 
 	private static string GetViewPath()

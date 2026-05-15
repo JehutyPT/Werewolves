@@ -386,6 +386,63 @@ button {
 }
 
 
+/* ── Select players (in-game player picker) ───────────────── */
+
+.ww-select-players-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ww-select-players-item {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 38px;
+  align-items: center;
+  gap: 10px;
+  min-height: 64px;
+  padding: 10px;
+  border: 1px solid var(--ww-border-neutral);
+  border-radius: var(--ww-radius-md);
+  background: var(--ww-surface);
+  cursor: pointer;
+}
+
+.ww-select-players-item--selected {
+  border-color: var(--ww-border-strong);
+  background: var(--ww-accent-soft);
+}
+
+.ww-select-players-item--selected .ww-seat-number {
+  color: var(--ww-accent);
+}
+
+.ww-select-players-item--selected .ww-player-name {
+  font-weight: 800;
+}
+
+.ww-select-players-check {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 2px solid var(--ww-border-strong);
+  background: var(--ww-surface);
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  font-weight: 700;
+  color: transparent;
+}
+
+.ww-select-players-item--selected .ww-select-players-check {
+  background: var(--ww-accent);
+  border-color: var(--ww-accent);
+  color: var(--ww-bg);
+  box-shadow: 0 0 16px var(--ww-accent-dim);
+}
+
+
 /* ── Dashboard ─────────────────────────────────────────────── */
 
 .ww-dashboard-shell {

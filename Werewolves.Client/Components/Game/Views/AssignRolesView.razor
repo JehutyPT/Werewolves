@@ -22,19 +22,12 @@
 	}
 </div>
 
-<button type="button"
-		class="ww-btn-primary"
-		disabled="@(!AllPlayersAssigned)"
-		aria-label="@ClientStrings.Common_HoldToConfirm"
-		@onpointerdown="StartHold"
-		@onpointerup="CancelHold"
-		@onpointerleave="CancelHold"
-		@onpointercancel="CancelHold">@ClientStrings.Dashboard_ContinueButton</button>
+<HoldButton Label="@ClientStrings.Dashboard_ContinueButton"
+			Disabled="@(!AllPlayersAssigned)"
+			OnHoldComplete="HandleSubmit" />
 
 @code {
-	private const int HoldDurationMs = 600;
 	private readonly Dictionary<Guid, MainRoleType> _assignments = new();
-	private CancellationTokenSource? _holdCts;
 
 	[Parameter, EditorRequired]
 	public AssignRolesInstruction Instruction { get; set; } = default!;
@@ -80,39 +73,10 @@
 		_assignments[playerId] = role;
 	}
 
-	private async Task StartHold()
+	private Task HandleSubmit()
 	{
-		if (!AllPlayersAssigned)
-		{
-			return;
-		}
-
-		CancelHoldInternal();
-		_holdCts = new CancellationTokenSource();
-		var token = _holdCts.Token;
-
-		try
-		{
-			await Task.Delay(HoldDurationMs, token);
-			var response = Instruction.CreateResponse(new Dictionary<Guid, MainRoleType>(_assignments));
-			await OnResponse.InvokeAsync(response);
-		}
-		catch (TaskCanceledException)
-		{
-			// Hold was released before completion -- no action
-		}
-	}
-
-	private void CancelHold()
-	{
-		CancelHoldInternal();
-	}
-
-	private void CancelHoldInternal()
-	{
-		_holdCts?.Cancel();
-		_holdCts?.Dispose();
-		_holdCts = null;
+		var response = Instruction.CreateResponse(new Dictionary<Guid, MainRoleType>(_assignments));
+		return OnResponse.InvokeAsync(response);
 	}
 
 	private string RoleClass(Guid playerId, MainRoleType role) =>

@@ -56,13 +56,9 @@ public class SelectOptionsViewTests
 	{
 		var markup = File.ReadAllText(GetViewPath());
 
-		// Press-and-hold requires pointer events, not a simple @onclick
-		markup.Should().Contain("@onpointerdown");
-		markup.Should().Contain("@onpointerup");
-		markup.Should().Contain("@onpointerleave");
-		// Brief taps should not trigger -- uses Task.Delay with cancellation
-		markup.Should().Contain("Task.Delay");
-		markup.Should().Contain("CancellationTokenSource");
+		markup.Should().Contain("<HoldButton");
+		markup.Should().Contain("Label=\"@ClientStrings.Dashboard_ContinueButton\"");
+		markup.Should().Contain("OnHoldComplete=\"HandleSubmit\"");
 	}
 
 	[Fact]
@@ -70,9 +66,7 @@ public class SelectOptionsViewTests
 	{
 		var markup = File.ReadAllText(GetViewPath());
 
-		// Submit button is disabled when selection violates constraints
-		markup.Should().Contain("disabled");
-		markup.Should().Contain("IsSelectionValid");
+		markup.Should().Contain("Disabled=\"@(!IsSelectionValid)\"");
 	}
 
 	[Fact]
@@ -91,7 +85,6 @@ public class SelectOptionsViewTests
 
 		markup.Should().Contain("ClientStrings.SelectOptions_Title");
 		markup.Should().Contain("ClientStrings.SelectOptions_SelectionCountFormat");
-		markup.Should().Contain("ClientStrings.Common_HoldToConfirm");
 		markup.Should().Contain("ClientStrings.Dashboard_ContinueButton");
 	}
 

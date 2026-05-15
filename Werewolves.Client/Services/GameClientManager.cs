@@ -17,34 +17,19 @@ public sealed class GameClientManager
 	private DateTimeOffset? _debateStartedAt;
 
 	public GameClientManager()
-		: this(new GameService(), DisabledInstructionAudioPlayback.Instance, FileGameSessionSaveStore.CreateDefault(), null)
-	{
-	}
-
-	public GameClientManager(GameService gameService, TimeProvider? timeProvider = null)
-		: this(gameService, DisabledInstructionAudioPlayback.Instance, FileGameSessionSaveStore.CreateDefault(), timeProvider)
-	{
-	}
-
-	public GameClientManager(GameService gameService, IInstructionAudioPlayback audioPlayback)
-		: this(gameService, audioPlayback, FileGameSessionSaveStore.CreateDefault(), null)
-	{
-	}
-
-	public GameClientManager(GameService gameService, IGameSessionSaveStore saveStore)
-		: this(gameService, DisabledInstructionAudioPlayback.Instance, saveStore, null)
+		: this(new GameService())
 	{
 	}
 
 	public GameClientManager(
 		GameService gameService,
-		IInstructionAudioPlayback audioPlayback,
-		IGameSessionSaveStore saveStore,
+		IInstructionAudioPlayback? audioPlayback = null,
+		IGameSessionSaveStore? saveStore = null,
 		TimeProvider? timeProvider = null)
 	{
 		_gameService = gameService;
-		_audioPlayback = audioPlayback;
-		_saveStore = saveStore;
+		_audioPlayback = audioPlayback ?? DisabledInstructionAudioPlayback.Instance;
+		_saveStore = saveStore ?? FileGameSessionSaveStore.CreateDefault();
 		_timeProvider = timeProvider ?? TimeProvider.System;
 		TryResumeSavedGame();
 	}

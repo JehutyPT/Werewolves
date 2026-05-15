@@ -12,19 +12,12 @@
 
 <span class="ww-selection-count">@SelectionCountLabel</span>
 
-<button type="button"
-		class="ww-btn-primary"
-		disabled="@(!IsSelectionValid)"
-		aria-label="@ClientStrings.Common_HoldToConfirm"
-		@onpointerdown="StartHold"
-		@onpointerup="CancelHold"
-		@onpointerleave="CancelHold"
-		@onpointercancel="CancelHold">@ClientStrings.Dashboard_ContinueButton</button>
+<HoldButton Label="@ClientStrings.Dashboard_ContinueButton"
+			Disabled="@(!IsSelectionValid)"
+			OnHoldComplete="HandleSubmit" />
 
 @code {
-	private const int HoldDurationMs = 600;
 	private readonly HashSet<string> _selectedOptions = new();
-	private CancellationTokenSource? _holdCts;
 
 	[Parameter, EditorRequired]
 	public SelectOptionsInstruction Instruction { get; set; } = default!;
@@ -52,39 +45,10 @@
 		}
 	}
 
-	private async Task StartHold()
+	private Task HandleSubmit()
 	{
-		if (!IsSelectionValid)
-		{
-			return;
-		}
-
-		CancelHoldInternal();
-		_holdCts = new CancellationTokenSource();
-		var token = _holdCts.Token;
-
-		try
-		{
-			await Task.Delay(HoldDurationMs, token);
-			var response = Instruction.CreateResponse(new HashSet<string>(_selectedOptions));
-			await OnResponse.InvokeAsync(response);
-		}
-		catch (TaskCanceledException)
-		{
-			// Hold was released before completion -- no action
-		}
-	}
-
-	private void CancelHold()
-	{
-		CancelHoldInternal();
-	}
-
-	private void CancelHoldInternal()
-	{
-		_holdCts?.Cancel();
-		_holdCts?.Dispose();
-		_holdCts = null;
+		var response = Instruction.CreateResponse(new HashSet<string>(_selectedOptions));
+		return OnResponse.InvokeAsync(response);
 	}
 
 	private string OptionClass(string option) =>
