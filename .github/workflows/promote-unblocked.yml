@@ -3,6 +3,8 @@ name: Promote unblocked issues
 on:
   issues:
     types: [closed]
+  schedule:
+    - cron: '0 * * * *'
   workflow_dispatch:
 
 jobs:
@@ -11,43 +13,140 @@ jobs:
     permissions:
       issues: write
     steps:
-      - name: Promote blocked issues whose blockers have all closed
+      - name: Clear relationships on closed issue and promote unblocked
+        if: github.event_name == 'issues'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
+          OWNER: ${{ github.repository_owner }}
         run: |
           set -euo pipefail
+          NAME="${REPO#*/}"
+          CLOSED_ID="${{ github.event.issue.node_id }}"
+          CLOSED_NUM="${{ github.event.issue.number }}"
 
-          gh issue list --repo "$REPO" --label blocked --state open --limit 200 \
-            --json number,body --jq '.[]' \
-          | while read -r issue; do
-              NUM=$(echo "$issue" | jq -r '.number')
-              BODY=$(echo "$issue" | jq -r '.body')
+          RELS=$(gh api graphql \
+            -f owner="$OWNER" -f name="$NAME" -F number="$CLOSED_NUM" \
+            -f query='
+              query($owner: String!, $name: String!, $number: Int!) {
+                repository(owner: $owner, name: $name) {
+                  issue(number: $number) {
+                    blocking(first: 50)  { nodes { id number } }
+                    blockedBy(first: 50) { nodes { id number } }
+                  }
+                }
+              }')
 
-              BLOCKERS=$(echo "$BODY" | awk '
-                /^## Blocked by/ { flag=1; next }
-                /^## / { flag=0 }
-                flag { print }
-              ' | grep -oE '#[0-9]+' | tr -d '#' | sort -u)
-
-              if [ -z "$BLOCKERS" ]; then
-                echo "#$NUM: labeled blocked but no '## Blocked by' references — skipping"
+          # Remove this issue as a blocker and promote newly-unblocked issues
+          echo "$RELS" | jq -r '.data.repository.issue.blocking.nodes[] | "\(.id) \(.number)"' \
+            | while read -r BLOCKEE_ID BLOCKEE_NUM; do
+              echo "Removing #$CLOSED_NUM as blocker of #$BLOCKEE_NUM"
+              if ! OUT=$(gh api graphql -f query='
+                mutation($blockedId: ID!, $blockerId: ID!) {
+                  removeBlockedBy(input: { issueId: $blockedId, blockingIssueId: $blockerId }) {
+                    clientMutationId
+                  }
+                }' -f blockedId="$BLOCKEE_ID" -f blockerId="$CLOSED_ID" 2>&1); then
+                echo "  failed: $OUT"
                 continue
               fi
 
-              ALL_CLOSED=true
-              for B in $BLOCKERS; do
-                STATE=$(gh issue view "$B" --repo "$REPO" --json state --jq '.state' 2>/dev/null || echo "MISSING")
-                if [ "$STATE" != "CLOSED" ]; then
-                  ALL_CLOSED=false
-                  echo "#$NUM: blocker #$B is $STATE — not promoting"
-                  break
+              # Check if blockee is now fully unblocked
+              STATE=$(gh api graphql \
+                -f owner="$OWNER" -f name="$NAME" -F number="$BLOCKEE_NUM" \
+                -f query='
+                  query($owner: String!, $name: String!, $number: Int!) {
+                    repository(owner: $owner, name: $name) {
+                      issue(number: $number) {
+                        blockedBy(first: 1) { totalCount }
+                        labels(first: 10) { nodes { name } }
+                      }
+                    }
+                  }')
+
+              REMAINING=$(echo "$STATE" | jq '.data.repository.issue.blockedBy.totalCount')
+              if [ "$REMAINING" -gt 0 ]; then
+                echo "  #$BLOCKEE_NUM still has $REMAINING blocker(s)"
+                continue
+              fi
+
+              HAS_LABEL=$(echo "$STATE" | jq '[.data.repository.issue.labels.nodes[].name] | any(. == "needs-triage" or . == "needs-info" or . == "ready-for-agent" or . == "ready-for-human" or . == "wontfix")')
+              if [ "$HAS_LABEL" = "true" ]; then
+                echo "  #$BLOCKEE_NUM is unblocked but already has a triage label"
+                continue
+              fi
+
+              echo "  #$BLOCKEE_NUM is fully unblocked — promoting to needs-triage"
+              gh issue edit "$BLOCKEE_NUM" --repo "$REPO" --add-label needs-triage
+            done
+
+          # Clean up this issue's own blockedBy relationships
+          echo "$RELS" | jq -r '.data.repository.issue.blockedBy.nodes[] | "\(.id) \(.number)"' \
+            | while read -r BLOCKER_ID BLOCKER_NUM; do
+              echo "Removing #$BLOCKER_NUM as blocker of #$CLOSED_NUM"
+              if ! OUT=$(gh api graphql -f query='
+                mutation($blockedId: ID!, $blockerId: ID!) {
+                  removeBlockedBy(input: { issueId: $blockedId, blockingIssueId: $blockerId }) {
+                    clientMutationId
+                  }
+                }' -f blockedId="$CLOSED_ID" -f blockerId="$BLOCKER_ID" 2>&1); then
+                echo "  failed: $OUT"
+              fi
+            done
+
+      - name: Sweep stale blocking relationships
+        if: github.event_name != 'issues'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          NAME="${REPO#*/}"
+
+          for NUM in $(gh issue list --repo "$REPO" --state open --limit 200 \
+            --json number --jq '.[].number'); do
+
+            DATA=$(gh api graphql \
+              -f owner="$OWNER" -f name="$NAME" -F number="$NUM" \
+              -f query='
+                query($owner: String!, $name: String!, $number: Int!) {
+                  repository(owner: $owner, name: $name) {
+                    issue(number: $number) {
+                      id
+                      blockedBy(first: 50) { nodes { id number state } }
+                      labels(first: 10) { nodes { name } }
+                    }
+                  }
+                }')
+
+            TOTAL=$(echo "$DATA" | jq '.data.repository.issue.blockedBy.nodes | length')
+            [ "$TOTAL" -eq 0 ] && continue
+
+            OPEN=$(echo "$DATA" | jq '[.data.repository.issue.blockedBy.nodes[] | select(.state != "CLOSED")] | length')
+            [ "$OPEN" -gt 0 ] && continue
+
+            ISSUE_ID=$(echo "$DATA" | jq -r '.data.repository.issue.id')
+
+            # All blockers are closed — clear stale relationships
+            echo "$DATA" | jq -r '.data.repository.issue.blockedBy.nodes[] | "\(.id) \(.number)"' \
+              | while read -r BLOCKER_ID BLOCKER_NUM; do
+                echo "#$NUM: clearing stale blocker #$BLOCKER_NUM"
+                if ! OUT=$(gh api graphql -f query='
+                  mutation($blockedId: ID!, $blockerId: ID!) {
+                    removeBlockedBy(input: { issueId: $blockedId, blockingIssueId: $blockerId }) {
+                      clientMutationId
+                    }
+                  }' -f blockedId="$ISSUE_ID" -f blockerId="$BLOCKER_ID" 2>&1); then
+                  echo "  failed: $OUT"
                 fi
               done
 
-              if [ "$ALL_CLOSED" = true ]; then
-                echo "#$NUM: all blockers closed — promoting to ready-for-agent"
-                gh issue edit "$NUM" --repo "$REPO" \
-                  --remove-label blocked --add-label ready-for-agent
-              fi
-            done
+            HAS_LABEL=$(echo "$DATA" | jq '[.data.repository.issue.labels.nodes[].name] | any(. == "needs-triage" or . == "needs-info" or . == "ready-for-agent" or . == "ready-for-human" or . == "wontfix")')
+            if [ "$HAS_LABEL" = "false" ]; then
+              echo "#$NUM: all blockers closed — promoting to needs-triage"
+              gh issue edit "$NUM" --repo "$REPO" --add-label needs-triage
+            else
+              echo "#$NUM: all blockers closed but already has a triage label"
+            fi
+          done
