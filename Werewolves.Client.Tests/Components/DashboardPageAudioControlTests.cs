@@ -6,12 +6,12 @@ namespace Werewolves.Client.Tests.Components;
 public class DashboardPageAudioControlTests
 {
 	[Fact]
-	public void ActionTabMarkup_ExposesPortugueseMuteToggle()
+	public void ActionTabMarkup_BindsAudioToggleResourceKeys()
 	{
 		var markup = File.ReadAllText(GetDashboardPagePath());
 
-		markup.Should().Contain("Silenciar áudio");
-		markup.Should().Contain("Ativar som");
+		markup.Should().Contain("ClientStrings.Dashboard_AudioMute");
+		markup.Should().Contain("ClientStrings.Dashboard_AudioUnmute");
 		markup.Should().Contain("@onclick=\"ToggleAudioMute\"");
 	}
 
