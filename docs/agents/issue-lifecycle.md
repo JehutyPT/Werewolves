@@ -24,12 +24,12 @@ Milestone operations use wrapper scripts in `docs/agents/scripts/`.
 
 ### `on:batch-discover`
 
-**Triggered by:** `/fanout` when gathering issues to process.
+**Triggered by:** `/fanout-implement` when gathering issues to process.
 
 **Actions:**
 1. Apply the user-supplied scope filter to narrow the issue set.
 
-The global fanout skill accepts an optional freeform `<scope>` argument. In this repo, scope is interpreted as a milestone name and passed as `--milestone` to the list command.
+The global fanout-implement skill accepts an optional freeform `<scope>` argument. In this repo, scope is interpreted as a milestone name and passed as `--milestone` to the list command.
 
 - Without scope: `docs/agents/scripts/list-issues.sh --label "ready-for-agent" --state open`
 - With scope: `docs/agents/scripts/list-issues.sh --label "ready-for-agent" --state open --milestone "<scope>"`
@@ -47,6 +47,6 @@ If no milestone preference is available, skip silently. Do not block triage on m
 
 ### `on:issue-landed`
 
-**Triggered by:** `/fanout` after merging a branch and closing an issue.
+**Triggered by:** The user (or a downstream skill) after merging a fanout branch and closing an issue.
 
 **Actions:** None. The milestone stays on the issue for historical tracking. No extra action required.
