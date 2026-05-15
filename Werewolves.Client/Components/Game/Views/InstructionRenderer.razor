@@ -1,6 +1,7 @@
 @using Werewolves.Client.Services
 @using Werewolves.Core.StateModels.Models
 @using Werewolves.Core.StateModels.Models.Instructions
+@inject IHapticFeedbackService Haptic
 
 <div class="ww-instruction-stack">
 	@if (!_flow.HasInstruction)
@@ -9,7 +10,7 @@
 	}
 	else
 	{
-		<article class="@InstructionBlockClass" @key="Instruction">
+		<article class="@InstructionBlockClass" @key="_flow.TransitionKey">
 			<span class="@LabelClass">@DisplayLabel</span>
 			<p class="@InstructionTextClass">@_flow.CurrentText</p>
 		</article>
@@ -96,6 +97,7 @@
 
 	private void RevealPrivateInstruction()
 	{
+		Haptic.Click();
 		_flow.Advance();
 	}
 }
