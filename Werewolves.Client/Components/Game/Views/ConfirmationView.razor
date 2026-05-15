@@ -1,5 +1,6 @@
 @using Werewolves.Core.StateModels.Models
 @using Werewolves.Core.StateModels.Models.Instructions
+@inject IHapticFeedbackService Haptic
 
 <button type="button" class="ww-btn-primary" @onclick="Confirm">Confirmar</button>
 
@@ -10,5 +11,9 @@
 	[Parameter]
 	public EventCallback<ModeratorResponse> OnResponse { get; set; }
 
-	private Task Confirm() => OnResponse.InvokeAsync(Instruction.CreateResponse(true));
+	private Task Confirm()
+	{
+		Haptic.Click();
+		return OnResponse.InvokeAsync(Instruction.CreateResponse(true));
+	}
 }

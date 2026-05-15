@@ -49,6 +49,9 @@
   /* ── Spacing ── */
   --ww-page-px: 16px;
   --ww-card-px: 20px;
+
+  /* ── Animation ── */
+  --ww-anim-instruction: 240ms;
 }
 
 

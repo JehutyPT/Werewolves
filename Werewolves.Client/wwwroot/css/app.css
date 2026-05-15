@@ -509,6 +509,17 @@ button {
   padding-bottom: 88px;
 }
 
+@keyframes ww-instruction-enter {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 .ww-instruction-block {
   display: grid;
   gap: 10px;
@@ -516,6 +527,7 @@ button {
   border-radius: var(--ww-radius-md);
   padding: 16px;
   background: var(--ww-surface);
+  animation: ww-instruction-enter var(--ww-anim-instruction) ease-out;
 }
 
 .ww-instruction-block--announcement {

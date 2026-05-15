@@ -6,6 +6,7 @@ public sealed class InstructionDisplayFlow
 {
 	private ModeratorInstruction? _instruction;
 	private bool _isShowingPrivateInstruction;
+	private int _transitionVersion;
 
 	public InstructionDisplayFlow(ModeratorInstruction? instruction = null)
 	{
@@ -16,6 +17,13 @@ public sealed class InstructionDisplayFlow
 	public bool HasInstruction => _instruction is not null;
 	public bool HasTwoPartInstruction => HasPublicAnnouncement(_instruction) && HasPrivateInstruction(_instruction);
 	public bool IsShowingInput => HasInstruction && (!HasTwoPartInstruction || _isShowingPrivateInstruction);
+
+	/// <summary>
+	/// A key that changes whenever the displayed content transitions, triggering
+	/// CSS re-mount animations. Changes on both instruction switches and
+	/// public-to-private reveals.
+	/// </summary>
+	public object? TransitionKey => _instruction is null ? null : (object)_transitionVersion;
 
 	public string? CurrentText
 	{
@@ -46,6 +54,7 @@ public sealed class InstructionDisplayFlow
 
 		_instruction = instruction;
 		_isShowingPrivateInstruction = false;
+		_transitionVersion++;
 	}
 
 	public void Advance()
@@ -53,6 +62,7 @@ public sealed class InstructionDisplayFlow
 		if (HasTwoPartInstruction)
 		{
 			_isShowingPrivateInstruction = true;
+			_transitionVersion++;
 		}
 	}
 

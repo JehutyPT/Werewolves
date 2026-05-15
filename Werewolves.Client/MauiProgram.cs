@@ -47,6 +47,7 @@ namespace Werewolves.Client
             builder.Services.AddSingleton<IDeviceDisplay>(DeviceDisplay.Current);
             builder.Services.AddSingleton<IScreenWakeLock, DeviceDisplayScreenWakeLock>();
             builder.Services.AddSingleton<GameplayWakeLockController>();
+            builder.Services.AddSingleton<IHapticFeedbackService, MauiHapticFeedbackService>();
 
 #if DEBUG
             builder.Services.AddSingleton<BenchmarkClientManager>();
