@@ -136,6 +136,9 @@
   <data name="Common_ListSeparator" xml:space="preserve">
     <value>, </value>
   </data>
+  <data name="Common_TapToExpand" xml:space="preserve">
+    <value>Tocar para expandir</value>
+  </data>
   <data name="RoleSelection_StepLabel" xml:space="preserve">
     <value>Passo 2 de 2</value>
   </data>
@@ -417,6 +420,12 @@
   </data>
   <data name="AssignRoles_SelectRolePrompt" xml:space="preserve">
     <value>Escolher papel</value>
+  </data>
+  <data name="AssignRoles_PreviousPlayerAria" xml:space="preserve">
+    <value>Jogador anterior</value>
+  </data>
+  <data name="AssignRoles_NextPlayerAria" xml:space="preserve">
+    <value>Jogador seguinte</value>
   </data>
   <data name="Common_HoldToConfirm" xml:space="preserve">
     <value>Manter premido para confirmar</value>

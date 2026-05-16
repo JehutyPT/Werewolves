@@ -13,6 +13,12 @@ using Microsoft.UI.Windowing;
 using Windows.Graphics;
 #endif
 
+#if MACCATALYST
+using Microsoft.Maui.LifecycleEvents;
+using UIKit;
+using CoreGraphics;
+#endif
+
 namespace Werewolves.Client
 {
     public static class MauiProgram
@@ -91,6 +97,24 @@ namespace Werewolves.Client
                 });
             });
         });
+#endif
+
+#if MACCATALYST
+            builder.ConfigureLifecycleEvents(events =>
+            {
+                events.AddiOS(lifecycle =>
+                {
+                    lifecycle.SceneWillConnect((scene, session, options) =>
+                    {
+                        if (scene is UIWindowScene windowScene)
+                        {
+                            var size = MacCatalystPhoneWindow.Size;
+                            windowScene.SizeRestrictions!.MinimumSize = size;
+                            windowScene.SizeRestrictions!.MaximumSize = size;
+                        }
+                    });
+                });
+            });
 #endif
 
 			return builder.Build();

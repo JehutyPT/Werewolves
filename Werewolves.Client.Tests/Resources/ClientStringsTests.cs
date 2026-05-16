@@ -32,7 +32,10 @@ public class ClientStringsTests
 			ClientStrings.SelectOptions_SelectionCountFormat.Should().Be("{0} de {1} selecionadas");
 			ClientStrings.AssignRoles_Title.Should().Be("Atribuir papel");
 			ClientStrings.AssignRoles_SelectRolePrompt.Should().Be("Escolher papel");
+			ClientStrings.AssignRoles_PreviousPlayerAria.Should().Be("Jogador anterior");
+			ClientStrings.AssignRoles_NextPlayerAria.Should().Be("Jogador seguinte");
 			ClientStrings.Common_HoldToConfirm.Should().Be("Manter premido para confirmar");
+			ClientStrings.Common_TapToExpand.Should().Be("Tocar para expandir");
 			ClientStrings.Dashboard_DebateTimerLabel.Should().Be("Debate");
 			ClientStrings.Victory_Title.Should().Be("Fim de Jogo");
 			ClientStrings.Victory_StepLabel.Should().Be("Resultado");

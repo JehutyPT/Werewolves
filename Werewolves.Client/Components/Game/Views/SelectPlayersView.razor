@@ -20,9 +20,11 @@
 	}
 </ul>
 
-<HoldButton Label="@ClientStrings.SelectPlayers_SubmitButton"
-			Disabled="@(!_state.CanSubmit)"
-			OnHoldComplete="HandleSubmit" />
+<footer class="ww-dashboard-action-zone">
+	<HoldButton Label="@ClientStrings.SelectPlayers_SubmitButton"
+				Disabled="@(!_state.CanSubmit)"
+				OnHoldComplete="HandleSubmit" />
+</footer>
 
 @code {
 	private SelectPlayersInputState _state = null!;

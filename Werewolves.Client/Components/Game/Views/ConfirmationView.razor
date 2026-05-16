@@ -1,8 +1,8 @@
 @using Werewolves.Core.StateModels.Models
 @using Werewolves.Core.StateModels.Models.Instructions
-@inject IHapticFeedbackService Haptic
 
-<button type="button" class="ww-btn-primary" @onclick="Confirm">Confirmar</button>
+<HoldButton Label="@ClientStrings.SelectPlayers_SubmitButton"
+			OnHoldComplete="Confirm" />
 
 @code {
 	[Parameter, EditorRequired]
@@ -13,7 +13,6 @@
 
 	private Task Confirm()
 	{
-		Haptic.TryClick();
 		return OnResponse.InvokeAsync(Instruction.CreateResponse(true));
 	}
 }

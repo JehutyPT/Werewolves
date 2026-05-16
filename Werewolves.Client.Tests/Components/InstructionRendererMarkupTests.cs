@@ -23,6 +23,15 @@ public class InstructionRendererMarkupTests
 	}
 
 	[Fact]
+	public void Markup_DoesNotRenderEmptyFixedActionZoneForInputViews()
+	{
+		var markup = File.ReadAllText(GetRendererPath());
+
+		markup.Should().Contain("ShouldRenderDashboardActionZone");
+		markup.Should().Contain("Instruction is not (SelectPlayersInstruction or SelectOptionsInstruction or AssignRolesInstruction)");
+	}
+
+	[Fact]
 	public void Markup_DeclaresRosterParameter()
 	{
 		var markup = File.ReadAllText(GetRendererPath());

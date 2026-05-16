@@ -12,9 +12,11 @@
 
 <span class="ww-selection-count">@SelectionCountLabel</span>
 
-<HoldButton Label="@ClientStrings.Dashboard_ContinueButton"
-			Disabled="@(!IsSelectionValid)"
-			OnHoldComplete="HandleSubmit" />
+<footer class="ww-dashboard-action-zone">
+	<HoldButton Label="@ClientStrings.Dashboard_ContinueButton"
+				Disabled="@(!IsSelectionValid)"
+				OnHoldComplete="HandleSubmit" />
+</footer>
 
 @code {
 	private readonly HashSet<string> _selectedOptions = new();

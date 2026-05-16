@@ -18,7 +18,7 @@ namespace Werewolves.Client.Tests.Components;
 public class DashboardPageAudioControlTests
 {
 	[Fact]
-	public async Task ActionTab_RendersAudioToggleAsOperableMuteControl()
+	public async Task StatusBar_RendersAudioToggleAsOperableMuteControl()
 	{
 		using var dashboard = new DashboardRenderFixture();
 		await dashboard.RenderAsync();
@@ -26,14 +26,16 @@ public class DashboardPageAudioControlTests
 		var toggle = dashboard.FindAudioToggleButton();
 
 		toggle.Attributes.Should().Contain("type", "button");
-		toggle.Attributes.Should().Contain("class", "ww-audio-toggle");
+		toggle.Attributes.Should().Contain("class", "ww-icon-button ww-audio-toggle");
+		toggle.Attributes.Should().Contain("aria-label", ClientStrings.Dashboard_AudioMute);
+		toggle.Attributes.Should().Contain("title", ClientStrings.Dashboard_AudioMute);
 		toggle.Attributes.Should().Contain("aria-pressed", "false");
-		toggle.TextContent.Should().Be(ClientStrings.Dashboard_AudioMute);
+		toggle.TextContent.Should().BeEmpty();
 		toggle.ClickEventHandlerId.Should().NotBe(0);
 	}
 
 	[Fact]
-	public async Task ActionTab_AudioToggleClick_TogglesMuteStateAndUpdatesRenderedControl()
+	public async Task StatusBar_AudioToggleClick_TogglesMuteStateAndUpdatesRenderedControl()
 	{
 		using var dashboard = new DashboardRenderFixture();
 		await dashboard.RenderAsync();
@@ -46,8 +48,10 @@ public class DashboardPageAudioControlTests
 
 		var updatedToggle = dashboard.FindAudioToggleButton();
 		updatedToggle.Attributes.Should().Contain("aria-pressed", "true");
-		updatedToggle.Attributes.Should().Contain("class", "ww-audio-toggle ww-audio-toggle--muted");
-		updatedToggle.TextContent.Should().Be(ClientStrings.Dashboard_AudioUnmute);
+		updatedToggle.Attributes.Should().Contain("aria-label", ClientStrings.Dashboard_AudioUnmute);
+		updatedToggle.Attributes.Should().Contain("title", ClientStrings.Dashboard_AudioUnmute);
+		updatedToggle.Attributes.Should().Contain("class", "ww-icon-button ww-audio-toggle ww-audio-toggle--muted");
+		updatedToggle.TextContent.Should().BeEmpty();
 	}
 
 	private sealed class DashboardRenderFixture : IDisposable
@@ -100,7 +104,7 @@ public class DashboardPageAudioControlTests
 					value is string className &&
 					className.Split(' ', StringSplitOptions.RemoveEmptyEntries).Contains("ww-audio-toggle"));
 
-			element.Should().NotBeNull("the dashboard action area should expose the audio mute/unmute toggle");
+			element.Should().NotBeNull("the dashboard status bar should expose the audio mute/unmute toggle");
 			return element!;
 		}
 

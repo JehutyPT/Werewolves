@@ -37,6 +37,14 @@ public class SelectPlayersViewMarkupTests
 	}
 
 	[Fact]
+	public void Markup_PinsSubmitButtonInDashboardActionZone()
+	{
+		var markup = File.ReadAllText(GetViewPath());
+
+		markup.Should().MatchRegex(@"(?s)<footer class=""ww-dashboard-action-zone"">\s*<HoldButton");
+	}
+
+	[Fact]
 	public void Markup_UsesClientStringsResourceKeys()
 	{
 		var markup = File.ReadAllText(GetViewPath());

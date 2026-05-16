@@ -1,8 +1,8 @@
 @implements IDisposable
 @inject GameClientManager Game
 
-<main class="ww-dashboard-shell" aria-labelledby="dashboard-title">
-	<nav class="ww-dashboard-tabs" aria-label="@ClientStrings.Dashboard_TabsAria">
+<main class="ww-dashboard-shell" data-production-dashboard aria-label="@DashboardStatusLabel">
+	<nav class="ww-dashboard-tabs ww-dashboard-tabs--compact" aria-label="@ClientStrings.Dashboard_TabsAria">
 		<button type="button"
 				class="@TabButtonClass(DashboardTab.Roster)"
 				aria-selected="@(_activeTab == DashboardTab.Roster)"
@@ -17,12 +17,33 @@
 				@onclick="() => SelectTab(DashboardTab.Stats)">@ClientStrings.Dashboard_TabStats</button>
 	</nav>
 
-	<header class="ww-phase-strip">
-		<div>
-			<p class="ww-step-label">@ClientStrings.Dashboard_StepLabel</p>
-			<h1 id="dashboard-title">@PhaseTurnLabel</h1>
-		</div>
-		<span class="ww-phase-pill">@Format(ClientStrings.Dashboard_AliveCountFormat, AliveCount)</span>
+	<header class="ww-labs-status-bar ww-dashboard-status-bar" aria-label="@DashboardStatusLabel">
+		<span class="ww-labs-status-bar__dot" aria-hidden="true"></span>
+		<span class="ww-labs-status-bar__turn">@PhaseTurnLabel</span>
+		<span class="ww-labs-status-bar__phase">@Format(ClientStrings.Dashboard_AliveCountFormat, AliveCount)</span>
+		<button type="button"
+				class="@AudioToggleClass"
+				aria-label="@AudioToggleLabel"
+				title="@AudioToggleLabel"
+				aria-pressed="@AudioTogglePressed"
+				@onclick="ToggleAudioMute">
+			@if (Game.IsAudioMuted)
+			{
+				<svg class="ww-audio-toggle__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+					<path d="M11 5 6 9H3v6h3l5 4z" />
+					<path d="m16 9 5 5" />
+					<path d="m21 9-5 5" />
+				</svg>
+			}
+			else
+			{
+				<svg class="ww-audio-toggle__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+					<path d="M11 5 6 9H3v6h3l5 4z" />
+					<path d="M16 8a5 5 0 0 1 0 8" />
+					<path d="M19 5a9 9 0 0 1 0 14" />
+				</svg>
+			}
+		</button>
 	</header>
 
 	<section class="ww-dashboard-panel" style="@PanelStyle(DashboardTab.Roster)" aria-hidden="@(_activeTab != DashboardTab.Roster)">
@@ -62,14 +83,7 @@
 				<span class="ww-debate-timer__clock">@FormatElapsed(debateElapsed)</span>
 			</div>
 		}
-		<InstructionRenderer Instruction="Game.CurrentInstruction" Roster="RosterEntries" OnResponse="ProcessResponse">
-			<AudioControls>
-				<button type="button"
-						class="@AudioToggleClass"
-						aria-pressed="@AudioTogglePressed"
-						@onclick="ToggleAudioMute">@AudioToggleLabel</button>
-			</AudioControls>
-		</InstructionRenderer>
+		<InstructionRenderer Instruction="Game.CurrentInstruction" Roster="RosterEntries" OnResponse="ProcessResponse" />
 	</section>
 
 	<section class="ww-dashboard-panel" style="@PanelStyle(DashboardTab.Stats)" aria-hidden="@(_activeTab != DashboardTab.Stats)">
@@ -207,6 +221,9 @@
 		}
 	}
 
+	private string DashboardStatusLabel =>
+		$"{PhaseTurnLabel}; {Format(ClientStrings.Dashboard_AliveCountFormat, AliveCount)}";
+
 	private void SelectTab(DashboardTab tab)
 	{
 		_activeTab = tab;
@@ -230,8 +247,8 @@
 		: ClientStrings.Dashboard_AudioMute;
 
 	private string AudioToggleClass => Game.IsAudioMuted
-		? "ww-audio-toggle ww-audio-toggle--muted"
-		: "ww-audio-toggle";
+		? "ww-icon-button ww-audio-toggle ww-audio-toggle--muted"
+		: "ww-icon-button ww-audio-toggle";
 
 	private string AudioTogglePressed => Game.IsAudioMuted ? "true" : "false";
 

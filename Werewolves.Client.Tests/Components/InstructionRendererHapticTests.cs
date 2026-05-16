@@ -12,7 +12,7 @@ public class InstructionRendererHapticTests
         var markup = File.ReadAllText(InstructionRendererPath());
 
         markup.Should().Contain("IHapticFeedbackService",
-            "InstructionRenderer should inject IHapticFeedbackService to fire haptic on game-advancing taps");
+            "InstructionRenderer should inject IHapticFeedbackService to fire haptic on instruction expansion taps");
     }
 
     [Fact]
@@ -21,16 +21,19 @@ public class InstructionRendererHapticTests
         var markup = File.ReadAllText(InstructionRendererPath());
 
         markup.Should().Contain("_flow.TransitionKey",
-            "InstructionRenderer should use _flow.TransitionKey as @key so both instruction changes and public-to-private reveals trigger animation");
+            "InstructionRenderer should use _flow.TransitionKey as @key so instruction changes trigger animation");
     }
 
     [Fact]
-    public void ConfirmationView_InjectsHapticFeedbackService()
+    public void ConfirmationView_UsesHoldButtonForSubmission()
     {
         var markup = File.ReadAllText(ConfirmationViewPath());
 
-        markup.Should().Contain("IHapticFeedbackService",
-            "ConfirmationView should inject IHapticFeedbackService to fire haptic on confirm");
+        markup.Should().Contain("<HoldButton",
+            "confirmation game actions should use the same press-and-hold confirmation gate as other submissions");
+        markup.Should().Contain("OnHoldComplete=\"Confirm\"");
+        markup.Should().NotContain("@onclick=\"Confirm\"",
+            "confirmation must not keep an instant-click submit path");
     }
 
     private static string InstructionRendererPath()

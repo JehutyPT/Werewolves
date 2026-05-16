@@ -62,6 +62,14 @@ public class SelectOptionsViewTests
 	}
 
 	[Fact]
+	public void Markup_PinsSubmitButtonInDashboardActionZone()
+	{
+		var markup = File.ReadAllText(GetViewPath());
+
+		markup.Should().MatchRegex(@"(?s)<footer class=""ww-dashboard-action-zone"">\s*<HoldButton");
+	}
+
+	[Fact]
 	public void Markup_SubmitButtonIsDisabledWhenSelectionInvalid()
 	{
 		var markup = File.ReadAllText(GetViewPath());

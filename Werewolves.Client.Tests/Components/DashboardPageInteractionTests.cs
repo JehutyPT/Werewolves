@@ -19,18 +19,19 @@ namespace Werewolves.Client.Tests.Components;
 public class DashboardPageInteractionTests
 {
 	[Fact]
-	public async Task InitialRender_ShowsConfirmButtonForStartGameInstruction()
+	public async Task InitialRender_ShowsHoldConfirmButtonForStartGameInstruction()
 	{
 		using var fixture = new InteractionFixture();
 		await fixture.RenderAsync();
 
-		var confirmButton = fixture.FindButtonByText("Confirmar");
+		var confirmButton = fixture.FindButtonByText(ClientStrings.SelectPlayers_SubmitButton);
 		confirmButton.Should().NotBeNull("the start game confirmation should be shown directly");
-		confirmButton!.ClickEventHandlerId.Should().NotBe(0, "the confirm button should have a click handler");
+		confirmButton!.ClickEventHandlerId.Should().Be(0, "confirmation must not submit from an instant click");
+		confirmButton.HasPointerHandlers.Should().BeTrue("confirmation should use the press-and-hold gate");
 	}
 
 	[Fact]
-	public async Task ClickConfirmButton_AdvancesGameToNextInstruction()
+	public async Task HoldConfirmButton_AdvancesGameToNextInstruction()
 	{
 		using var fixture = new InteractionFixture();
 		await fixture.RenderAsync();
@@ -38,28 +39,28 @@ public class DashboardPageInteractionTests
 		var instructionBefore = fixture.Game.CurrentInstruction;
 		instructionBefore.Should().BeOfType<StartGameConfirmationInstruction>();
 
-		var confirmButton = fixture.FindButtonByText("Confirmar");
-		await fixture.ClickAsync(confirmButton!);
+		var confirmButton = fixture.FindButtonByText(ClientStrings.SelectPlayers_SubmitButton);
+		await fixture.CompleteHoldAsync(confirmButton!);
 
 		fixture.Game.CurrentInstruction.Should().NotBeSameAs(instructionBefore,
-			"clicking confirm should advance to the next instruction");
+			"holding confirm should advance to the next instruction");
 	}
 
 	[Fact]
-	public async Task ClickConfirmButton_WhenHapticFeedbackFails_KeepsDashboardInteractive()
+	public async Task HoldConfirmButton_WhenHapticFeedbackFails_KeepsDashboardInteractive()
 	{
 		using var fixture = new InteractionFixture(new ThrowingHaptic());
 		await fixture.RenderAsync();
 
 		var instructionBefore = fixture.Game.CurrentInstruction;
-		var confirmButton = fixture.FindButtonByText("Confirmar");
+		var confirmButton = fixture.FindButtonByText(ClientStrings.SelectPlayers_SubmitButton);
 
-		await fixture.ClickAsync(confirmButton!);
+		await fixture.CompleteHoldAsync(confirmButton!);
 
 		fixture.Game.CurrentInstruction.Should().NotBeSameAs(instructionBefore,
 			"haptic feedback is optional and must not block game progression");
 
-		var audioToggle = fixture.FindButtonByText(ClientStrings.Dashboard_AudioMute);
+		var audioToggle = fixture.FindButtonByClass("ww-audio-toggle");
 		await fixture.ClickAsync(audioToggle!);
 
 		fixture.Game.IsAudioMuted.Should().BeTrue(
@@ -96,23 +97,12 @@ public class DashboardPageInteractionTests
 
 			if (instruction is ConfirmationInstruction)
 			{
-				var confirm = fixture.FindButtonByText("Confirmar");
-				if (confirm is null)
-				{
-					var reveal = buttons.FirstOrDefault(b =>
-						b.ClassName.Contains("ww-btn-primary") && b.ClickEventHandlerId != 0);
-					reveal.Should().NotBeNull(
-						$"step {step}: ConfirmationInstruction should show a primary action button. " +
-						$"Instruction: public='{instruction.PublicAnnouncement}', private='{instruction.PrivateInstruction}'. " +
-						$"Buttons: [{buttonLabels}]");
-					await fixture.ClickAsync(reveal!);
-
-					confirm = fixture.FindButtonByText("Confirmar");
-				}
+				var confirm = fixture.FindButtonByText(ClientStrings.SelectPlayers_SubmitButton)
+					?? fixture.FindButtonByClass("ww-btn-hold");
 
 				if (confirm is not null)
 				{
-					await fixture.ClickAsync(confirm);
+					await fixture.CompleteHoldAsync(confirm);
 				}
 				else
 				{
@@ -204,9 +194,16 @@ public class DashboardPageInteractionTests
 		public Task ClickAsync(ButtonSnapshot button) =>
 			_renderer.Dispatcher.InvokeAsync(() => _renderer.DispatchClickAsync(button.ClickEventHandlerId));
 
+		public Task CompleteHoldAsync(ButtonSnapshot button) =>
+			_renderer.Dispatcher.InvokeAsync(() => _renderer.DispatchPointerDownAsync(button.PointerDownEventHandlerId));
+
 		public ButtonSnapshot? FindButtonByText(string text) =>
 			FindAllButtons().FirstOrDefault(b =>
 				b.TextContent.Equals(text, StringComparison.OrdinalIgnoreCase));
+
+		public ButtonSnapshot? FindButtonByClass(string className) =>
+			FindAllButtons().FirstOrDefault(b =>
+				b.ClassName.Split(' ', StringSplitOptions.RemoveEmptyEntries).Contains(className));
 
 		public List<ButtonSnapshot> FindAllButtons()
 		{
@@ -252,9 +249,11 @@ public class DashboardPageInteractionTests
 			var attributes = new Dictionary<string, object?>();
 			var text = new List<string>();
 			var clickHandlerId = 0UL;
+			var pointerDownHandlerId = 0UL;
 			var hasPointerHandlers = false;
 			var isDisabled = false;
 			var endIndex = elementIndex + element.ElementSubtreeLength;
+			var collectingButtonAttributes = true;
 
 			for (var index = elementIndex + 1; index < endIndex; index++)
 			{
@@ -262,16 +261,25 @@ public class DashboardPageInteractionTests
 				switch (frame.FrameType)
 				{
 					case RenderTreeFrameType.Attribute:
-						attributes[frame.AttributeName] = frame.AttributeValue;
-						if (frame.AttributeName == "onclick")
-							clickHandlerId = frame.AttributeEventHandlerId;
-						if (frame.AttributeName is "onpointerdown" or "onpointerup")
-							hasPointerHandlers = true;
-						if (frame.AttributeName == "disabled" && frame.AttributeValue is true)
-							isDisabled = true;
+						if (collectingButtonAttributes)
+						{
+							attributes[frame.AttributeName] = frame.AttributeValue;
+							if (frame.AttributeName == "onclick")
+								clickHandlerId = frame.AttributeEventHandlerId;
+							if (frame.AttributeName == "onpointerdown")
+								pointerDownHandlerId = frame.AttributeEventHandlerId;
+							if (frame.AttributeName is "onpointerdown" or "onpointerup")
+								hasPointerHandlers = true;
+							if (frame.AttributeName == "disabled" && frame.AttributeValue is true)
+								isDisabled = true;
+						}
 						break;
 					case RenderTreeFrameType.Text:
+						collectingButtonAttributes = false;
 						text.Add(frame.TextContent);
+						break;
+					default:
+						collectingButtonAttributes = false;
 						break;
 				}
 			}
@@ -281,6 +289,7 @@ public class DashboardPageInteractionTests
 				className,
 				string.Concat(text),
 				clickHandlerId,
+				pointerDownHandlerId,
 				hasPointerHandlers,
 				isDisabled,
 				attributes);
@@ -291,6 +300,7 @@ public class DashboardPageInteractionTests
 		string ClassName,
 		string TextContent,
 		ulong ClickEventHandlerId,
+		ulong PointerDownEventHandlerId,
 		bool HasPointerHandlers,
 		bool IsDisabled,
 		IReadOnlyDictionary<string, object?> Attributes);
@@ -314,6 +324,9 @@ public class DashboardPageInteractionTests
 
 		public Task DispatchClickAsync(ulong eventHandlerId) =>
 			DispatchEventAsync(eventHandlerId, default, new MouseEventArgs());
+
+		public Task DispatchPointerDownAsync(ulong eventHandlerId) =>
+			DispatchEventAsync(eventHandlerId, default, new Microsoft.AspNetCore.Components.Web.PointerEventArgs());
 
 		protected override Task UpdateDisplayAsync(in RenderBatch renderBatch) => Task.CompletedTask;
 
