@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  DOTNET_VERSION: '10.0.x'
+
+jobs:
+  build-and-test:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Install MAUI workload
+        run: dotnet workload install maui
+
+      - name: Restore
+        run: dotnet restore Werewolves.sln
+
+      - name: Build app (maccatalyst)
+        run: dotnet build Werewolves.Client/Werewolves.UI.MobileClient.csproj -f net10.0-maccatalyst --no-restore
+
+      - name: Test
+        run: |
+          dotnet test Werewolves.Core/Werewolves.Core.Tests/ --no-restore
+          dotnet test Werewolves.Client.Tests/ --no-restore
