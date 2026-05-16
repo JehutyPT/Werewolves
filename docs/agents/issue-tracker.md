@@ -51,6 +51,7 @@ These use wrapper scripts in `docs/agents/scripts/`. Each script accepts issue n
 | Operation | Command |
 |---|---|
 | Mark criterion complete | `docs/agents/scripts/mark-criterion-complete.sh <issue> "<criterion_text>"` |
+| Unmark criterion complete | `docs/agents/scripts/unmark-criterion-complete.sh <issue> "<criterion_text>"` |
 
 ## When a Skill Says...
 
@@ -74,3 +75,4 @@ These use wrapper scripts in `docs/agents/scripts/`. Each script accepts issue n
 | "get blockers" / "check blockers" | `docs/agents/scripts/query-blockers.sh` |
 | "get blocking" | `docs/agents/scripts/query-blocking.sh` |
 | "check criterion" / "mark criterion complete" | `docs/agents/scripts/mark-criterion-complete.sh` |
+| "uncheck criterion" / "unmark criterion" | `docs/agents/scripts/unmark-criterion-complete.sh` |
