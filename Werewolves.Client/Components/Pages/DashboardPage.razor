@@ -66,7 +66,7 @@
 			<AudioControls>
 				<button type="button"
 						class="@AudioToggleClass"
-						aria-pressed="@Game.IsAudioMuted"
+						aria-pressed="@AudioTogglePressed"
 						@onclick="ToggleAudioMute">@AudioToggleLabel</button>
 			</AudioControls>
 		</InstructionRenderer>
@@ -232,6 +232,8 @@
 	private string AudioToggleClass => Game.IsAudioMuted
 		? "ww-audio-toggle ww-audio-toggle--muted"
 		: "ww-audio-toggle";
+
+	private string AudioTogglePressed => Game.IsAudioMuted ? "true" : "false";
 
 	private static string PhaseLabel(GamePhase phase) => phase switch
 	{
