@@ -12,20 +12,5 @@ fi
 ISSUE_NUMBER=$1
 TEXT=$2
 
-BODY=$(gh issue view "$ISSUE_NUMBER" --json body -q '.body')
-
-D=$'\x01'
-# Escape regex metacharacters in the criterion text for safe sed matching.
-ESCAPED_TEXT=$(printf '%s' "$TEXT" | sed 's/[.[*^$\\]/\\&/g')
-REPL_TEXT=$(printf '%s' "$TEXT" | sed 's/[&\\/]/\\&/g')
-
-UPDATED=$(echo "$BODY" | sed "s${D}- \[ \] ${ESCAPED_TEXT}\$${D}- [x] ${REPL_TEXT}${D}")
-
-if [ "$BODY" = "$UPDATED" ]; then
-  echo "Error: no unchecked criterion matching \"$TEXT\" found in issue #$ISSUE_NUMBER" >&2
-  exit 1
-fi
-
-gh issue edit "$ISSUE_NUMBER" --body "$UPDATED"
-
-echo "Criterion marked complete in issue #$ISSUE_NUMBER"
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+"$SCRIPT_DIR/update-criterion-state.sh" mark "$ISSUE_NUMBER" "$TEXT"
