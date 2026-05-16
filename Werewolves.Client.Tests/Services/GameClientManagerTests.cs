@@ -2,6 +2,7 @@ using FluentAssertions;
 using Werewolves.Client.Services;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Resources;
@@ -226,6 +227,137 @@ public class GameClientManagerTests
 		act.Should().NotThrow();
 		manager.HasActiveSession.Should().BeTrue();
 		manager.CurrentInstruction.Should().NotBe(startInstruction);
+	}
+
+	[Fact]
+	public void ProcessInput_DuringNightAction_PersistsStableNightBoundaryWithoutTailEntries()
+	{
+		using var saveDirectory = TemporaryDirectory.Create();
+		var manager = new GameClientManager(new GameService(), saveStore: new FileGameSessionSaveStore(saveDirectory.Path));
+		var startInstruction = StartSimpleGame(manager);
+		manager.ProcessInput(startInstruction.CreateResponse(true));
+		ConfirmCurrentInstruction(manager);
+		var players = manager.CurrentSession!.GetPlayers().ToList();
+
+		SelectCurrentPlayers(manager, [players[0].Id]);
+		SelectCurrentPlayers(manager, [players[4].Id]);
+
+		manager.CurrentSession.GameHistoryLog.OfType<AssignRoleLogEntry>().Should().NotBeEmpty();
+		manager.CurrentSession.GameHistoryLog.OfType<NightActionLogEntry>().Should().NotBeEmpty();
+		var resumed = new GameClientManager(new GameService(), saveStore: new FileGameSessionSaveStore(saveDirectory.Path));
+		var savedSession = resumed.CurrentSession!;
+		savedSession.GetCurrentPhase().Should().Be(GamePhase.Night);
+		savedSession.TurnNumber.Should().Be(1);
+		savedSession.GameHistoryLog.OfType<AssignRoleLogEntry>().Should().BeEmpty();
+		savedSession.GameHistoryLog.OfType<NightActionLogEntry>().Should().BeEmpty();
+		resumed.CurrentInstruction.Should().BeOfType<ConfirmationInstruction>()
+			.Subject.PublicAnnouncement.Should().Be(GameStrings.NightStartsPrompt);
+
+		ConfirmCurrentInstruction(resumed);
+
+		resumed.CurrentInstruction.Should().BeOfType<SelectPlayersInstruction>();
+		resumed.CurrentSession!.GameHistoryLog.OfType<AssignRoleLogEntry>().Should().BeEmpty();
+	}
+
+	[Fact]
+	public void ProcessInput_DuringDawnResolution_PersistsStableDawnBoundaryWithoutTailEntries()
+	{
+		using var saveDirectory = TemporaryDirectory.Create();
+		var manager = new GameClientManager(new GameService(), saveStore: new FileGameSessionSaveStore(saveDirectory.Path));
+		var startInstruction = StartTwoWerewolfGame(manager);
+		manager.ProcessInput(startInstruction.CreateResponse(true));
+		var players = manager.CurrentSession!.GetPlayers().ToList();
+
+		ConfirmCurrentInstruction(manager);
+		SelectCurrentPlayers(manager, [players[0].Id, players[1].Id]);
+		SelectCurrentPlayers(manager, [players[2].Id]);
+		ConfirmCurrentInstruction(manager);
+
+		manager.CurrentPhase.Should().Be(GamePhase.Dawn);
+		manager.CurrentSession.GameHistoryLog.OfType<PhaseTransitionLogEntry>()
+			.Should().Contain(entry => entry.CurrentPhase == GamePhase.Dawn);
+
+		ConfirmCurrentInstruction(manager);
+
+		manager.CurrentPhase.Should().Be(GamePhase.Dawn);
+		manager.CurrentSession.GameHistoryLog.OfType<PlayerEliminatedLogEntry>().Should().NotBeEmpty();
+		var resumed = ResumeFromSave(saveDirectory.Path);
+		var savedSession = resumed.CurrentSession!;
+		savedSession.GetCurrentPhase().Should().Be(GamePhase.Dawn);
+		savedSession.GameHistoryLog.OfType<PlayerEliminatedLogEntry>().Should().BeEmpty();
+		savedSession.GameHistoryLog.OfType<AssignRoleLogEntry>()
+			.Where(entry => entry.CurrentPhase == GamePhase.Dawn)
+			.Should().BeEmpty();
+		savedSession.GameHistoryLog.OfType<PhaseTransitionLogEntry>()
+			.Should().Contain(entry => entry.CurrentPhase == GamePhase.Dawn);
+		resumed.CurrentInstruction.Should().BeOfType<ConfirmationInstruction>()
+			.Subject.PublicAnnouncement.Should().Be(GameStrings.NightActionsCompletePrompt);
+
+		ConfirmCurrentInstruction(resumed);
+
+		resumed.CurrentSession!.GameHistoryLog.OfType<PlayerEliminatedLogEntry>()
+			.Should().ContainSingle(entry => entry.PlayerId == players[2].Id);
+	}
+
+	[Fact]
+	public void ProcessInput_DuringDayVote_PersistsStableDayBoundaryWithoutVoteTailEntries()
+	{
+		using var saveDirectory = TemporaryDirectory.Create();
+		var manager = new GameClientManager(new GameService(), saveStore: new FileGameSessionSaveStore(saveDirectory.Path));
+		AdvanceToDebate(manager);
+		var stableDayTurn = manager.TurnNumber;
+
+		ConfirmCurrentInstruction(manager);
+		var voteInstruction = manager.CurrentInstruction.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		manager.ProcessInput(voteInstruction.CreateResponse([voteInstruction.SelectablePlayerIds.First()]));
+
+		manager.CurrentSession!.GameHistoryLog.OfType<VoteOutcomeReportedLogEntry>().Should().NotBeEmpty();
+		var resumed = ResumeFromSave(saveDirectory.Path);
+		var savedSession = resumed.CurrentSession!;
+		savedSession.GetCurrentPhase().Should().Be(GamePhase.Day);
+		savedSession.TurnNumber.Should().Be(stableDayTurn);
+		savedSession.GameHistoryLog.OfType<VoteOutcomeReportedLogEntry>().Should().BeEmpty();
+		savedSession.GameHistoryLog.OfType<PlayerEliminatedLogEntry>()
+			.Where(entry => entry.CurrentPhase == GamePhase.Day)
+			.Should().BeEmpty();
+		savedSession.GameHistoryLog.OfType<AssignRoleLogEntry>()
+			.Where(entry => entry.CurrentPhase == GamePhase.Day)
+			.Should().BeEmpty();
+		savedSession.GameHistoryLog.OfType<PhaseTransitionLogEntry>()
+			.Should().Contain(entry => entry.CurrentPhase == GamePhase.Day);
+		resumed.CurrentInstruction.Should().BeOfType<ConfirmationInstruction>()
+			.Subject.PublicAnnouncement.Should().Be(GameStrings.DebateStartsPrompt);
+
+		ConfirmCurrentInstruction(resumed);
+
+		resumed.CurrentInstruction.Should().BeOfType<SelectPlayersInstruction>();
+	}
+
+	[Fact]
+	public void ProcessInput_DayToNightRecoveryPayload_HasPostTransitionTurnWithoutDoubleIncrement()
+	{
+		using var saveDirectory = TemporaryDirectory.Create();
+		var manager = new GameClientManager(new GameService(), saveStore: new FileGameSessionSaveStore(saveDirectory.Path));
+		AdvanceToDebate(manager);
+
+		ConfirmCurrentInstruction(manager);
+		var voteInstruction = manager.CurrentInstruction.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		manager.ProcessInput(voteInstruction.CreateResponse([]));
+
+		manager.CurrentPhase.Should().Be(GamePhase.Night);
+		manager.TurnNumber.Should().Be(2);
+		var resumed = ResumeFromSave(saveDirectory.Path);
+		var savedSession = resumed.CurrentSession!;
+		savedSession.GetCurrentPhase().Should().Be(GamePhase.Night);
+		savedSession.TurnNumber.Should().Be(2);
+		savedSession.GameHistoryLog.OfType<PhaseTransitionLogEntry>()
+			.Where(entry => entry.CurrentPhase == GamePhase.Night)
+			.Should().ContainSingle()
+			.Which.TurnNumber.Should().Be(2);
+
+		ConfirmCurrentInstruction(resumed);
+
+		resumed.TurnNumber.Should().Be(2);
 	}
 
 	[Fact]
@@ -514,6 +646,24 @@ public class GameClientManagerTests
 
 		return manager.StartGame(players, roles);
 	}
+
+	private static StartGameConfirmationInstruction StartTwoWerewolfGame(GameClientManager manager)
+	{
+		var players = new[] { "Ana", "Bruno", "Catarina", "Diana", "Eduardo" };
+		var roles = new[]
+		{
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager
+		};
+
+		return manager.StartGame(players, roles);
+	}
+
+	private static GameClientManager ResumeFromSave(string saveDirectoryPath) =>
+		new(new GameService(), saveStore: new FileGameSessionSaveStore(saveDirectoryPath));
 
 	private sealed class FakeInstructionAudioPlayback : IInstructionAudioPlayback
 	{
