@@ -814,3 +814,197 @@ button {
     grid-template-columns: 1fr;
   }
 }
+
+/* === Labs styles === */
+
+[data-lab-unified] {
+    padding-top: max(30px, calc(env(safe-area-inset-top) + 18px));
+}
+
+.ww-labs-unified-nav {
+    top: max(8px, env(safe-area-inset-top));
+    padding: 6px 0 16px;
+}
+
+.ww-labs-status-bar {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 100%;
+    min-height: 34px;
+    margin: 0 0 14px;
+    padding: 7px 10px;
+    border: 1px solid var(--ww-border-neutral);
+    border-radius: var(--ww-radius-sm);
+    background: var(--ww-surface-deeper);
+    color: var(--ww-text-dim);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    font-variant-numeric: tabular-nums;
+}
+
+.ww-labs-status-bar__dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--ww-accent);
+    box-shadow: 0 0 16px var(--ww-accent-dim);
+}
+
+.ww-labs-status-bar__turn {
+    color: var(--ww-text);
+}
+
+.ww-labs-status-bar__phase {
+    color: var(--ww-accent-bright);
+}
+
+.ww-labs-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 1rem;
+}
+
+.ww-labs-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 1rem 1.25rem;
+    border: 1px solid var(--ww-border);
+    border-radius: 12px;
+    background: var(--ww-surface-hi);
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.ww-labs-card:active {
+    background: var(--ww-surface-deeper);
+    border-color: var(--ww-accent-bright);
+}
+
+.ww-labs-card strong {
+    font-size: 1rem;
+    color: var(--ww-text);
+}
+
+.ww-labs-card span {
+    font-size: 0.8125rem;
+    color: var(--ww-text-dim);
+}
+
+.ww-labs-collapsible {
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.ww-labs-collapsible:active {
+    background: var(--ww-surface-deeper);
+}
+
+.ww-labs-preview {
+    opacity: 0.7;
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.ww-labs-expand-hint {
+    display: block;
+    font-size: 0.6875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ww-text-dim);
+    margin-top: 0.5rem;
+    opacity: 0.6;
+}
+
+.ww-labs-collapsible.is-expanded .ww-labs-expand-hint {
+    display: none;
+}
+
+.ww-option-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    width: 100%;
+}
+
+.ww-option-btn {
+    flex: 1 1 calc(50% - 0.25rem);
+    min-height: 48px;
+    padding: 0.625rem 1rem;
+    border: 1px solid var(--ww-border-neutral);
+    border-radius: var(--ww-radius-md);
+    background: var(--ww-surface);
+    color: var(--ww-text);
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.ww-option-btn--selected {
+    border-color: var(--ww-border-strong);
+    background: var(--ww-accent-soft);
+    color: var(--ww-accent-bright);
+}
+
+.ww-selection-count {
+    display: block;
+    text-align: center;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ww-text-dim);
+}
+
+.ww-assign-roles {
+    display: grid;
+    gap: 1rem;
+    width: 100%;
+}
+
+.ww-assign-roles__player {
+    display: grid;
+    gap: 0.375rem;
+}
+
+.ww-assign-roles__player .ww-player-name {
+    font-weight: 700;
+    color: var(--ww-text);
+}
+
+.ww-assign-prompt {
+    font-size: 0.75rem;
+    color: var(--ww-text-dim);
+}
+
+.ww-role-choices {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+}
+
+.ww-role-btn {
+    padding: 0.5rem 0.875rem;
+    border: 1px solid var(--ww-border-neutral);
+    border-radius: var(--ww-radius-sm);
+    background: var(--ww-surface);
+    color: var(--ww-text);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.ww-role-btn--selected {
+    border-color: var(--ww-border-strong);
+    background: var(--ww-accent-soft);
+    color: var(--ww-accent-bright);
+}

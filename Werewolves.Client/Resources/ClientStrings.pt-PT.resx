@@ -73,8 +73,8 @@
   <data name="Common_Back" xml:space="preserve">
     <value>Voltar</value>
   </data>
-  <data name="Common_Benchmark" xml:space="preserve">
-    <value>Benchmark</value>
+  <data name="Common_Labs" xml:space="preserve">
+    <value>Labs</value>
   </data>
   <data name="LobbyRoster_StepLabel" xml:space="preserve">
     <value>Passo 1 de 2</value>

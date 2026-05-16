@@ -15,6 +15,22 @@
 			<p class="@InstructionTextClass">@_flow.CurrentText</p>
 		</article>
 	}
+
+	@if (_flow.IsShowingInput)
+	{
+		if (Instruction is SelectPlayersInstruction selectPlayersInstruction)
+		{
+			<SelectPlayersView Instruction="selectPlayersInstruction" Roster="Roster" OnResponse="OnResponse" />
+		}
+		else if (Instruction is SelectOptionsInstruction selectOptionsInstruction)
+		{
+			<SelectOptionsView Instruction="selectOptionsInstruction" OnResponse="OnResponse" />
+		}
+		else if (Instruction is AssignRolesInstruction assignRolesInstruction)
+		{
+			<AssignRolesView Instruction="assignRolesInstruction" OnResponse="OnResponse" Roster="Roster" />
+		}
+	}
 </div>
 
 <footer class="ww-dashboard-action-zone">
@@ -33,19 +49,7 @@
 		{
 			<ConfirmationView Instruction="confirmationInstruction" OnResponse="OnResponse" />
 		}
-		else if (Instruction is SelectPlayersInstruction selectPlayersInstruction)
-		{
-			<SelectPlayersView Instruction="selectPlayersInstruction" Roster="Roster" OnResponse="OnResponse" />
-		}
-		else if (Instruction is SelectOptionsInstruction selectOptionsInstruction)
-		{
-			<SelectOptionsView Instruction="selectOptionsInstruction" OnResponse="OnResponse" />
-		}
-		else if (Instruction is AssignRolesInstruction assignRolesInstruction)
-		{
-			<AssignRolesView Instruction="assignRolesInstruction" OnResponse="OnResponse" Roster="Roster" />
-		}
-		else
+		else if (Instruction is not (SelectPlayersInstruction or SelectOptionsInstruction or AssignRolesInstruction))
 		{
 			<button type="button" class="ww-btn-primary" disabled>Responder</button>
 		}

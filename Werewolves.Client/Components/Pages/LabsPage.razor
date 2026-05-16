@@ -1,0 +1,50 @@
+@if (_currentExperiment == "benchmark")
+{
+    <BenchmarkPage OnBack="BackToHub" />
+}
+else if (_currentExperiment == "unified-instruction")
+{
+    <LabsUnifiedInstructionPrototype OnBack="BackToHub" />
+}
+else
+{
+    <main class="ww-app-shell" aria-labelledby="labs-title">
+        <section class="ww-lobby-header">
+            <div>
+                <p class="ww-step-label">Debug</p>
+                <h1 id="labs-title">Labs</h1>
+                <p class="ww-page-copy">Prototypes and experiments for on-device testing.</p>
+            </div>
+        </section>
+
+        <section class="ww-roster-panel" aria-label="Experiments">
+            <div class="ww-section-head">
+                <span>Experiments</span>
+            </div>
+            <div class="ww-labs-list">
+                <button type="button" class="ww-labs-card" @onclick='() => _currentExperiment = "benchmark"'>
+                    <strong>Benchmark</strong>
+                    <span>Run game engine performance benchmarks</span>
+                </button>
+                <button type="button" class="ww-labs-card" @onclick='() => _currentExperiment = "unified-instruction"'>
+                    <strong>Unified Instruction</strong>
+                    <span>Issue #56 — Single-screen with collapsible private text</span>
+                </button>
+            </div>
+        </section>
+
+        <footer class="ww-action-bar">
+            <button type="button" class="ww-secondary-button" @onclick="Back">@ClientStrings.Common_Back</button>
+        </footer>
+    </main>
+}
+
+@code {
+    [Parameter]
+    public EventCallback OnBack { get; set; }
+
+    private string? _currentExperiment;
+
+    private void BackToHub() => _currentExperiment = null;
+    private Task Back() => OnBack.InvokeAsync();
+}

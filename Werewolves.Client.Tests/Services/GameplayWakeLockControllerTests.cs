@@ -56,8 +56,39 @@ public class GameplayWakeLockControllerTests
 		wakeLock.KeepScreenOn.Should().BeFalse();
 	}
 
+	[Fact]
+	public void MoveToGameplayArea_WhenWakeLockPlatformThrows_DoesNotPropagate()
+	{
+		var wakeLock = new ThrowingScreenWakeLock();
+		var controller = new GameplayWakeLockController(wakeLock);
+
+		var act = () => controller.MoveTo(GameplayWakeLockArea.Lobby);
+
+		act.Should().NotThrow();
+	}
+
+	[Fact]
+	public void AppEnteredBackground_WhenWakeLockPlatformThrows_DoesNotPropagate()
+	{
+		var wakeLock = new ThrowingScreenWakeLock();
+		var controller = new GameplayWakeLockController(wakeLock);
+
+		var act = () => controller.AppEnteredBackground();
+
+		act.Should().NotThrow();
+	}
+
 	private sealed class FakeScreenWakeLock : IScreenWakeLock
 	{
 		public bool KeepScreenOn { get; set; }
+	}
+
+	private sealed class ThrowingScreenWakeLock : IScreenWakeLock
+	{
+		public bool KeepScreenOn
+		{
+			get => throw new InvalidOperationException("Platform wake lock unavailable.");
+			set => throw new InvalidOperationException("Platform wake lock unavailable.");
+		}
 	}
 }

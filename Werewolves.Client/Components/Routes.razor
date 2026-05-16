@@ -7,15 +7,15 @@
 
 @if (_currentStep == LobbyStep.Roster)
 {
-	<LobbyRosterPage OnContinue="ShowRoleSelection" OnShowBenchmark="ShowBenchmark" />
+	<LobbyRosterPage OnContinue="ShowRoleSelection" OnShowLabs="ShowLabs" />
 }
 else if (_currentStep == LobbyStep.RoleSelection)
 {
 	<RoleSelectionPage OnBack="ShowRoster" OnStartGame="HandleStartGame" />
 }
-else if (_currentStep == LobbyStep.Benchmark)
+else if (_currentStep == LobbyStep.Labs)
 {
-	<BenchmarkPage OnBack="ShowRoster" />
+	<LabsPage OnBack="ShowRoster" />
 }
 else if (_currentStep == LobbyStep.Victory)
 {
@@ -48,9 +48,9 @@ else
 		MoveTo(LobbyStep.Roster);
 	}
 
-	private void ShowBenchmark()
+	private void ShowLabs()
 	{
-		MoveTo(LobbyStep.Benchmark);
+		MoveTo(LobbyStep.Labs);
 	}
 
 	private void HandleStartGame()
@@ -98,7 +98,7 @@ else
 	{
 		Roster,
 		RoleSelection,
-		Benchmark,
+		Labs,
 		Dashboard,
 		Victory
 	}
