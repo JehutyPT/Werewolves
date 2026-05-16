@@ -38,7 +38,14 @@ namespace Werewolves.Client
             builder.Services.AddSingleton<LobbySetupMetadata>(sp =>
                 sp.GetRequiredService<GameService>().GetLobbySetupMetadata());
             builder.Services.AddSingleton<LobbySetupState>(sp =>
-                new LobbySetupState(sp.GetRequiredService<LobbySetupMetadata>()));
+            {
+                var state = new LobbySetupState(sp.GetRequiredService<LobbySetupMetadata>());
+#if DEBUG
+                foreach (var name in new[] { "Ana", "Beatriz", "Rui", "Bernardo", "Roberto" })
+                    state.AddPlayer(name);
+#endif
+                return state;
+            });
             builder.Services.AddSingleton<IAudioMap, AudioMap>();
             builder.Services.AddSingleton<IAudioAssetLoader, MauiAudioAssetLoader>();
             builder.Services.AddSingleton<IAudioPlayerFactory, PluginAudioPlayerFactory>();
