@@ -91,7 +91,7 @@
 			_isHolding = false;
 			_isComplete = true;
 
-			Haptic.Click();
+			Haptic.TryClick();
 			StateHasChanged();
 
 			await Task.Delay(SuccessFlashMs);

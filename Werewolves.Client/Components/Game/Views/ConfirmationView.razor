@@ -13,7 +13,7 @@
 
 	private Task Confirm()
 	{
-		Haptic.Click();
+		Haptic.TryClick();
 		return OnResponse.InvokeAsync(Instruction.CreateResponse(true));
 	}
 }

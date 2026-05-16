@@ -31,7 +31,7 @@ public class HoldButtonMarkupTests
 		var markup = File.ReadAllText(GetViewPath());
 
 		markup.Should().Contain("@inject IHapticFeedbackService Haptic");
-		markup.Should().Contain("Haptic.Click()");
+		markup.Should().Contain("Haptic.TryClick()");
 	}
 
 	[Fact]
