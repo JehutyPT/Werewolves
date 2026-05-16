@@ -11,10 +11,15 @@ env:
 
 jobs:
   build-and-test:
-    runs-on: macos-latest
+    runs-on: macos-26
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Select Xcode 26.4
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.4.app/Contents/Developer
+          xcodebuild -version
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
