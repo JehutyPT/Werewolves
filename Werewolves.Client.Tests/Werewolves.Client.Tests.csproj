@@ -10,6 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="..\Werewolves.Client\Components\Game\Views\HoldConfirmationGate.cs" Link="Components\HoldConfirmationGate.cs" />
     <Compile Include="..\Werewolves.Client\Services\AudioMap.cs" Link="Services\AudioMap.cs" />
     <Compile Include="..\Werewolves.Client\Services\BenchmarkClientManager.cs" Link="Services\BenchmarkClientManager.cs" />
     <Compile Include="..\Werewolves.Client\Services\DashboardRoster.cs" Link="Services\DashboardRoster.cs" />
