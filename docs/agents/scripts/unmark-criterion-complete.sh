@@ -18,7 +18,7 @@ D=$'\x01'
 ESCAPED_TEXT=$(printf '%s' "$TEXT" | sed 's/[.[*^$\\]/\\&/g')
 REPL_TEXT=$(printf '%s' "$TEXT" | sed 's/[&\\/]/\\&/g')
 
-UPDATED=$(echo "$BODY" | sed "s${D}- \[x\] ${ESCAPED_TEXT}${D}- [ ] ${REPL_TEXT}${D}")
+UPDATED=$(echo "$BODY" | sed "s${D}- \[x\] ${ESCAPED_TEXT}\$${D}- [ ] ${REPL_TEXT}${D}")
 
 if [ "$BODY" = "$UPDATED" ]; then
   echo "Error: no checked criterion matching \"$TEXT\" found in issue #$ISSUE_NUMBER" >&2

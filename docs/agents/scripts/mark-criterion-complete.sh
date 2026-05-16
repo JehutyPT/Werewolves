@@ -19,7 +19,7 @@ D=$'\x01'
 ESCAPED_TEXT=$(printf '%s' "$TEXT" | sed 's/[.[*^$\\]/\\&/g')
 REPL_TEXT=$(printf '%s' "$TEXT" | sed 's/[&\\/]/\\&/g')
 
-UPDATED=$(echo "$BODY" | sed "s${D}- \[ \] ${ESCAPED_TEXT}${D}- [x] ${REPL_TEXT}${D}")
+UPDATED=$(echo "$BODY" | sed "s${D}- \[ \] ${ESCAPED_TEXT}\$${D}- [x] ${REPL_TEXT}${D}")
 
 if [ "$BODY" = "$UPDATED" ]; then
   echo "Error: no unchecked criterion matching \"$TEXT\" found in issue #$ISSUE_NUMBER" >&2
