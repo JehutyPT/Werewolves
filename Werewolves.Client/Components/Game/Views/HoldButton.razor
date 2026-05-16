@@ -19,10 +19,13 @@
 @code {
 	private const int HoldDurationMs = 600;
 	private const int SuccessFlashMs = 250;
+	private static readonly TimeSpan HoldDuration = TimeSpan.FromMilliseconds(HoldDurationMs);
 
+	private readonly HoldConfirmationGate _holdGate = new(HoldDuration);
 	private bool _isHolding;
 	private bool _isComplete;
 	private CancellationTokenSource? _holdCts;
+	private long _holdStartedAtTimestamp;
 
 	[Parameter, EditorRequired]
 	public string Label { get; set; } = default!;
@@ -49,6 +52,8 @@
 		_holdCts = new CancellationTokenSource();
 		var token = _holdCts.Token;
 
+		_holdStartedAtTimestamp = System.Diagnostics.Stopwatch.GetTimestamp();
+		_holdGate.Begin();
 		_isHolding = true;
 		_isComplete = false;
 		StateHasChanged();
@@ -56,39 +61,54 @@
 		try
 		{
 			await Task.Delay(HoldDurationMs, token);
-
-			Haptic.Click();
-			_isHolding = false;
-			_isComplete = true;
-			StateHasChanged();
-
-			await Task.Delay(SuccessFlashMs, token);
-			await OnHoldComplete.InvokeAsync();
+			await ApplyHoldResultAsync(_holdGate.ThresholdReached());
 		}
 		catch (TaskCanceledException)
 		{
 		}
 	}
 
-	private void HandlePointerUp()
+	private async Task HandlePointerUp()
 	{
-		if (_isHolding && !_isComplete)
-		{
-			_holdCts?.Cancel();
-			_holdCts = null;
-			_isHolding = false;
-			StateHasChanged();
-		}
+		var elapsed = System.Diagnostics.Stopwatch.GetElapsedTime(_holdStartedAtTimestamp);
+		await ApplyHoldResultAsync(_holdGate.ReleaseAfter(elapsed));
 	}
 
 	private void HandlePointerCancel()
 	{
-		if (_isHolding && !_isComplete)
+		ApplyHoldResult(_holdGate.Cancel());
+	}
+
+	private async Task ApplyHoldResultAsync(HoldConfirmationResult result)
+	{
+		if (result == HoldConfirmationResult.Completed)
 		{
 			_holdCts?.Cancel();
 			_holdCts = null;
 			_isHolding = false;
+			_isComplete = true;
+
+			Haptic.Click();
 			StateHasChanged();
+
+			await Task.Delay(SuccessFlashMs);
+			await OnHoldComplete.InvokeAsync();
+			return;
 		}
+
+		ApplyHoldResult(result);
+	}
+
+	private void ApplyHoldResult(HoldConfirmationResult result)
+	{
+		if (result != HoldConfirmationResult.Canceled)
+		{
+			return;
+		}
+
+		_holdCts?.Cancel();
+		_holdCts = null;
+		_isHolding = false;
+		StateHasChanged();
 	}
 }
