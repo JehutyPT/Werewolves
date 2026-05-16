@@ -249,10 +249,16 @@ public class InstructionRendererCollapsibleTests
 	public sealed class RecordingHapticFeedbackService : IHapticFeedbackService
 	{
 		public int ClickCount { get; private set; }
+		public int LongPressCount { get; private set; }
 
 		public void Click()
 		{
 			ClickCount++;
+		}
+
+		public void LongPress()
+		{
+			LongPressCount++;
 		}
 	}
 }

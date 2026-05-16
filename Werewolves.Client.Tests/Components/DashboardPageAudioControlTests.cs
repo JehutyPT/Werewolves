@@ -264,5 +264,9 @@ public class DashboardPageAudioControlTests
 		public void Click()
 		{
 		}
+
+		public void LongPress()
+		{
+		}
 	}
 }

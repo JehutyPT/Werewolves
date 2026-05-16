@@ -340,11 +340,13 @@ public class DashboardPageInteractionTests
 	private sealed class NoOpHaptic : IHapticFeedbackService
 	{
 		public void Click() { }
+		public void LongPress() { }
 	}
 
 	private sealed class ThrowingHaptic : IHapticFeedbackService
 	{
 		public void Click() => throw new InvalidOperationException("Synthetic haptic failure.");
+		public void LongPress() => throw new InvalidOperationException("Synthetic haptic failure.");
 	}
 
 	private sealed class NoOpAudioPlayback : IInstructionAudioPlayback

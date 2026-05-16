@@ -429,5 +429,6 @@ public class AssignRolesViewTests
 	private sealed class NoOpHapticFeedbackService : IHapticFeedbackService
 	{
 		public void Click() { }
+		public void LongPress() { }
 	}
 }

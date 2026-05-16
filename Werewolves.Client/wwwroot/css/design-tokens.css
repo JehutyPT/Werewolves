@@ -215,7 +215,7 @@
 
 .ww-hold-zone.is-holding .ww-btn-hold__fill {
   width: 100%;
-  transition: width 600ms linear;
+  transition: width 400ms linear;
 }
 
 .ww-hold-zone.is-complete .ww-btn-hold__fill {
@@ -234,7 +234,7 @@
 .ww-hold-zone.is-holding .ww-btn-hold__edge {
   left: calc(100% - 2px);
   opacity: 1;
-  transition: left 600ms linear, opacity 80ms ease-in;
+  transition: left 400ms linear, opacity 80ms ease-in;
 }
 
 .ww-hold-zone.is-complete .ww-btn-hold__edge {

@@ -4,14 +4,19 @@ public sealed class MauiHapticFeedbackService : IHapticFeedbackService
 {
     public void Click()
     {
-        MainThread.BeginInvokeOnMainThread(PerformClick);
+        MainThread.BeginInvokeOnMainThread(() => Perform(HapticFeedbackType.Click));
     }
 
-    private static void PerformClick()
+    public void LongPress()
+    {
+        MainThread.BeginInvokeOnMainThread(() => Perform(HapticFeedbackType.LongPress));
+    }
+
+    private static void Perform(HapticFeedbackType hapticFeedbackType)
     {
         try
         {
-            HapticFeedback.Default.Perform(HapticFeedbackType.Click);
+            HapticFeedback.Default.Perform(hapticFeedbackType);
         }
         catch (Exception)
         {

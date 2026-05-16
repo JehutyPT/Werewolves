@@ -31,7 +31,29 @@ public class HoldButtonMarkupTests
 		var markup = File.ReadAllText(GetViewPath());
 
 		markup.Should().Contain("@inject IHapticFeedbackService Haptic");
-		markup.Should().Contain("Haptic.TryClick()");
+		markup.Should().Contain("Haptic.TryLongPress()");
+		markup.Should().NotContain("Haptic.TryClick()");
+	}
+
+	[Fact]
+	public void Markup_LocksProductionHapticPresetTiming()
+	{
+		var markup = File.ReadAllText(GetViewPath());
+
+		markup.Should().Contain("HoldDurationMs = 400");
+		markup.Should().Contain("new[] { 0, 200, 280, 330, 360, 380 }");
+		markup.Should().Contain("PendingLongPressHapticOffsetsMs");
+	}
+
+	[Fact]
+	public void DesignTokens_AnimateHoldProgressOverProductionDuration()
+	{
+		var designTokens = File.ReadAllText(GetClientPath("wwwroot", "css", "design-tokens.css"));
+
+		designTokens.Should().Contain("transition: width 400ms linear;");
+		designTokens.Should().Contain("transition: left 400ms linear, opacity 80ms ease-in;");
+		designTokens.Should().NotContain("transition: width 600ms linear;");
+		designTokens.Should().NotContain("transition: left 600ms linear, opacity 80ms ease-in;");
 	}
 
 	[Fact]
@@ -85,16 +107,15 @@ public class HoldButtonMarkupTests
 
 	private static string GetViewPath()
 	{
+		return GetClientPath("Components", "Game", "Views", "HoldButton.razor");
+	}
+
+	private static string GetClientPath(params string[] relativeSegments)
+	{
 		var directory = new DirectoryInfo(AppContext.BaseDirectory);
 		while (directory is not null)
 		{
-			var candidate = Path.Combine(
-				directory.FullName,
-				"Werewolves.Client",
-				"Components",
-				"Game",
-				"Views",
-				"HoldButton.razor");
+			var candidate = Path.Combine([directory.FullName, "Werewolves.Client", .. relativeSegments]);
 
 			if (File.Exists(candidate))
 			{
@@ -104,6 +125,7 @@ public class HoldButtonMarkupTests
 			directory = directory.Parent;
 		}
 
-		throw new FileNotFoundException("HoldButton.razor could not be found from the test output directory.");
+		throw new FileNotFoundException(
+			$"{Path.Combine(relativeSegments)} could not be found from the test output directory.");
 	}
 }

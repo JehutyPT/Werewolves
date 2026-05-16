@@ -18,15 +18,18 @@
 </div>
 
 @code {
-	private const int HoldDurationMs = 600;
+	private const int HoldDurationMs = 400;
 	private const int SuccessFlashMs = 250;
+	private static readonly int[] PendingLongPressHapticOffsetsMs = new[] { 0, 200, 280, 330, 360, 380 };
 	private static readonly TimeSpan HoldDuration = TimeSpan.FromMilliseconds(HoldDurationMs);
 
 	private readonly HoldConfirmationGate _holdGate = new(HoldDuration);
 	private bool _isHolding;
 	private bool _isComplete;
 	private CancellationTokenSource? _holdCts;
+	private long _holdSequence;
 	private long _holdStartedAtTimestamp;
+	private bool _isDisposed;
 
 	[Parameter, EditorRequired]
 	public string Label { get; set; } = default!;
@@ -49,8 +52,8 @@
 	{
 		if (Disabled) return;
 
-		_holdCts?.Cancel();
-		_holdCts?.Dispose();
+		CancelPendingHold();
+		var holdSequence = ++_holdSequence;
 		_holdCts = new CancellationTokenSource();
 		var token = _holdCts.Token;
 
@@ -59,10 +62,16 @@
 		_isHolding = true;
 		_isComplete = false;
 		StateHasChanged();
+		_ = PlayPendingLongPressHapticsAsync(holdSequence, token);
 
 		try
 		{
 			await Task.Delay(HoldDurationMs, token);
+			if (!IsCurrentHold(holdSequence, token))
+			{
+				return;
+			}
+
 			await ApplyHoldResultAsync(_holdGate.ThresholdReached());
 		}
 		catch (TaskCanceledException)
@@ -85,13 +94,11 @@
 	{
 		if (result == HoldConfirmationResult.Completed)
 		{
-			_holdCts?.Cancel();
-			_holdCts?.Dispose();
-			_holdCts = null;
+			CancelPendingHold();
 			_isHolding = false;
 			_isComplete = true;
 
-			Haptic.TryClick();
+			Haptic.TryLongPress();
 			StateHasChanged();
 
 			await Task.Delay(SuccessFlashMs);
@@ -109,17 +116,55 @@
 			return;
 		}
 
-		_holdCts?.Cancel();
-		_holdCts?.Dispose();
-		_holdCts = null;
+		CancelPendingHold();
 		_isHolding = false;
 		StateHasChanged();
 	}
 
-	public void Dispose()
+	private async Task PlayPendingLongPressHapticsAsync(long holdSequence, CancellationToken token)
+	{
+		var previousOffsetMs = 0;
+
+		try
+		{
+			foreach (var offsetMs in PendingLongPressHapticOffsetsMs)
+			{
+				var delayMs = offsetMs - previousOffsetMs;
+				if (delayMs > 0)
+				{
+					await Task.Delay(delayMs, token);
+				}
+
+				if (!IsCurrentHold(holdSequence, token))
+				{
+					return;
+				}
+
+				Haptic.TryLongPress();
+				previousOffsetMs = offsetMs;
+			}
+		}
+		catch (TaskCanceledException)
+		{
+		}
+	}
+
+	private bool IsCurrentHold(long holdSequence, CancellationToken token) =>
+		!_isDisposed &&
+		_holdCts is not null &&
+		holdSequence == _holdSequence &&
+		!token.IsCancellationRequested;
+
+	private void CancelPendingHold()
 	{
 		_holdCts?.Cancel();
 		_holdCts?.Dispose();
 		_holdCts = null;
+	}
+
+	public void Dispose()
+	{
+		_isDisposed = true;
+		CancelPendingHold();
 	}
 }

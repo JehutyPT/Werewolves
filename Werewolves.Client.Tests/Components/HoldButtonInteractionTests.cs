@@ -35,6 +35,73 @@ public class HoldButtonInteractionTests
 		updatedButton.TextContent.Should().Be(ClientStrings.SelectPlayers_SubmitButton);
 	}
 
+	[Fact]
+	public async Task CompletedConfirmationHold_EmitsProductionLongPressPreset()
+	{
+		using var fixture = new HoldButtonFixture();
+		await fixture.RenderAsync();
+
+		await fixture.CompleteHoldAsync(fixture.FindHoldButton());
+
+		fixture.Haptic.LongPresses.Should().Be(7);
+		fixture.Haptic.Clicks.Should().Be(0);
+	}
+
+	[Fact]
+	public async Task ReleaseBeforeRequiredDuration_CancelsPendingLongPressHaptics()
+	{
+		using var fixture = new HoldButtonFixture();
+		await fixture.RenderAsync();
+
+		var button = fixture.FindHoldButton();
+		var holdTask = fixture.StartHoldAsync(button);
+
+		await WaitForAsync(
+			() => fixture.Haptic.LongPresses >= 1,
+			"the zero millisecond long-press pulse should fire immediately");
+		await fixture.ReleaseHoldAsync(button);
+		await holdTask;
+		await Task.Delay(450);
+
+		fixture.Haptic.LongPresses.Should().Be(1);
+		fixture.Haptic.Clicks.Should().Be(0);
+	}
+
+	[Fact]
+	public async Task PointerCancelBeforeRequiredDuration_CancelsPendingLongPressHaptics()
+	{
+		using var fixture = new HoldButtonFixture();
+		await fixture.RenderAsync();
+
+		var button = fixture.FindHoldButton();
+		var holdTask = fixture.StartHoldAsync(button);
+
+		await WaitForAsync(
+			() => fixture.Haptic.LongPresses >= 1,
+			"the zero millisecond long-press pulse should fire immediately");
+		await fixture.CancelHoldAsync(button);
+		await holdTask;
+		await Task.Delay(450);
+
+		fixture.Haptic.LongPresses.Should().Be(1);
+		fixture.Haptic.Clicks.Should().Be(0);
+	}
+
+	private static async Task WaitForAsync(Func<bool> condition, string because)
+	{
+		var deadline = DateTime.UtcNow.AddSeconds(1);
+		while (!condition())
+		{
+			if (DateTime.UtcNow >= deadline)
+			{
+				condition().Should().BeTrue(because);
+				return;
+			}
+
+			await Task.Delay(10);
+		}
+	}
+
 	private sealed class HoldButtonFixture : IDisposable
 	{
 		private readonly ComponentTestRenderer _renderer;
@@ -44,18 +111,29 @@ public class HoldButtonInteractionTests
 		public HoldButtonFixture()
 		{
 			var services = new ServiceCollection();
-			services.AddSingleton<IHapticFeedbackService, NoOpHapticFeedbackService>();
+			services.AddSingleton<IHapticFeedbackService>(Haptic);
 			_serviceProvider = services.BuildServiceProvider();
 
 			_renderer = new ComponentTestRenderer(_serviceProvider);
 			_rootComponentId = _renderer.AttachRootComponent(new HoldButtonHost());
 		}
 
+		public RecordingHapticFeedbackService Haptic { get; } = new();
+
 		public Task RenderAsync() =>
 			_renderer.Dispatcher.InvokeAsync(() => _renderer.RenderRootAsync(_rootComponentId));
 
-		public Task CompleteHoldAsync(ButtonSnapshot button) =>
+		public Task StartHoldAsync(ButtonSnapshot button) =>
 			_renderer.Dispatcher.InvokeAsync(() => _renderer.DispatchPointerDownAsync(button.PointerDownEventHandlerId));
+
+		public Task CompleteHoldAsync(ButtonSnapshot button) =>
+			StartHoldAsync(button);
+
+		public Task ReleaseHoldAsync(ButtonSnapshot button) =>
+			_renderer.Dispatcher.InvokeAsync(() => _renderer.DispatchPointerUpAsync(button.PointerUpEventHandlerId));
+
+		public Task CancelHoldAsync(ButtonSnapshot button) =>
+			_renderer.Dispatcher.InvokeAsync(() => _renderer.DispatchPointerCancelAsync(button.PointerCancelEventHandlerId));
 
 		public ButtonSnapshot FindHoldButton() =>
 			FindAllButtons().Single(button => button.ClassName.Contains("ww-btn-hold", StringComparison.Ordinal));
@@ -70,7 +148,9 @@ public class HoldButtonInteractionTests
 				.Select(element => new ButtonSnapshot(
 					element.ClassName,
 					element.TextContent,
-					element.PointerDownEventHandlerId))
+					element.PointerDownEventHandlerId,
+					element.PointerUpEventHandlerId,
+					element.PointerCancelEventHandlerId))
 				.ToList();
 
 		private List<ElementSnapshot> FindAllElements()
@@ -119,6 +199,8 @@ public class HoldButtonInteractionTests
 			var attributes = new Dictionary<string, object?>();
 			var text = new List<string>();
 			var pointerDownHandlerId = 0UL;
+			var pointerUpHandlerId = 0UL;
+			var pointerCancelHandlerId = 0UL;
 			var endIndex = elementIndex + element.ElementSubtreeLength;
 			var collectingElementAttributes = true;
 
@@ -134,6 +216,14 @@ public class HoldButtonInteractionTests
 							if (frame.AttributeName == "onpointerdown")
 							{
 								pointerDownHandlerId = frame.AttributeEventHandlerId;
+							}
+							if (frame.AttributeName == "onpointerup")
+							{
+								pointerUpHandlerId = frame.AttributeEventHandlerId;
+							}
+							if (frame.AttributeName == "onpointercancel")
+							{
+								pointerCancelHandlerId = frame.AttributeEventHandlerId;
 							}
 						}
 						break;
@@ -153,6 +243,8 @@ public class HoldButtonInteractionTests
 				className,
 				string.Concat(text),
 				pointerDownHandlerId,
+				pointerUpHandlerId,
+				pointerCancelHandlerId,
 				attributes);
 		}
 
@@ -188,12 +280,16 @@ public class HoldButtonInteractionTests
 		string ClassName,
 		string TextContent,
 		ulong PointerDownEventHandlerId,
+		ulong PointerUpEventHandlerId,
+		ulong PointerCancelEventHandlerId,
 		IReadOnlyDictionary<string, object?> Attributes);
 
 	private sealed record ButtonSnapshot(
 		string ClassName,
 		string TextContent,
-		ulong PointerDownEventHandlerId);
+		ulong PointerDownEventHandlerId,
+		ulong PointerUpEventHandlerId,
+		ulong PointerCancelEventHandlerId);
 
 	private sealed class ComponentTestRenderer(IServiceProvider serviceProvider)
 		: Renderer(serviceProvider, NullLoggerFactory.Instance)
@@ -211,6 +307,12 @@ public class HoldButtonInteractionTests
 		public Task DispatchPointerDownAsync(ulong eventHandlerId) =>
 			DispatchEventAsync(eventHandlerId, default, new Microsoft.AspNetCore.Components.Web.PointerEventArgs());
 
+		public Task DispatchPointerUpAsync(ulong eventHandlerId) =>
+			DispatchEventAsync(eventHandlerId, default, new Microsoft.AspNetCore.Components.Web.PointerEventArgs());
+
+		public Task DispatchPointerCancelAsync(ulong eventHandlerId) =>
+			DispatchEventAsync(eventHandlerId, default, new Microsoft.AspNetCore.Components.Web.PointerEventArgs());
+
 		protected override Task UpdateDisplayAsync(in RenderBatch renderBatch) => Task.CompletedTask;
 
 		protected override void HandleException(Exception exception)
@@ -220,8 +322,15 @@ public class HoldButtonInteractionTests
 		}
 	}
 
-	private sealed class NoOpHapticFeedbackService : IHapticFeedbackService
+	public sealed class RecordingHapticFeedbackService : IHapticFeedbackService
 	{
-		public void Click() { }
+		private int _clicks;
+		private int _longPresses;
+
+		public int Clicks => Volatile.Read(ref _clicks);
+		public int LongPresses => Volatile.Read(ref _longPresses);
+
+		public void Click() => Interlocked.Increment(ref _clicks);
+		public void LongPress() => Interlocked.Increment(ref _longPresses);
 	}
 }

@@ -6,6 +6,10 @@ else if (_currentExperiment == "unified-instruction")
 {
     <LabsUnifiedInstructionPrototype OnBack="BackToHub" />
 }
+else if (_currentExperiment == "long-press-haptics")
+{
+    <LabsLongPressHapticTimingPrototype OnBack="BackToHub" />
+}
 else
 {
     <main class="ww-app-shell" aria-labelledby="labs-title">
@@ -29,6 +33,10 @@ else
                 <button type="button" class="ww-labs-card" @onclick='() => _currentExperiment = "unified-instruction"'>
                     <strong>Unified Instruction</strong>
                     <span>Issue #56 — Single-screen with collapsible private text</span>
+                </button>
+                <button type="button" class="ww-labs-card" @onclick='() => _currentExperiment = "long-press-haptics"'>
+                    <strong>Long-press Haptics</strong>
+                    <span>PROTOTYPE — schedule MAUI Click and LongPress feedback during a hold</span>
                 </button>
             </div>
         </section>
