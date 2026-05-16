@@ -14,6 +14,7 @@ internal class GameSessionDto
     public List<Guid> SeatingOrder { get; set; } = new();
     public List<MainRoleType> RolesInPlay { get; set; } = new();
     public int TurnNumber { get; set; }
+    public bool IsStableRecoveryBoundary { get; set; }
     
     // Transient state
     public GamePhaseStateCacheDto PhaseStateCache { get; set; } = new();

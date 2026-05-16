@@ -1,7 +1,13 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using FluentAssertions;
+using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
+using Werewolves.Core.StateModels.Models;
+using Werewolves.Core.StateModels.Models.Instructions;
+using Werewolves.Core.StateModels.Resources;
+using Werewolves.Core.StateModels.Serialization;
 using Werewolves.Core.Tests.Helpers;
 using Xunit;
 using Xunit.Abstractions;
@@ -15,6 +21,16 @@ namespace Werewolves.Core.Tests.Integration;
 public class SerializationTests : DiagnosticTestBase
 {
     public SerializationTests(ITestOutputHelper output) : base(output) { }
+
+    private static readonly JsonSerializerOptions RecoverySerializationOptions = new()
+    {
+        Converters =
+        {
+            new GameLogEntryConverter(),
+            new ModeratorInstructionConverter(),
+            new JsonStringEnumConverter()
+        }
+    };
 
     #region SZ-001 to SZ-005: Round-Trip Serialization
 
@@ -541,5 +557,160 @@ public class SerializationTests : DiagnosticTestBase
         MarkTestCompleted();
     }
 
+    [Fact]
+    public void RehydrateInterruptedDawn_ReplaysElderProtectionWithoutEliminatingElder()
+    {
+        var wolfId = Guid.NewGuid();
+        var elderId = Guid.NewGuid();
+        var victimId = Guid.NewGuid();
+        var villagerId = Guid.NewGuid();
+        var extraVillagerId = Guid.NewGuid();
+        var stableDawnJson = CreateStableDawnBoundaryJson(
+            wolfId,
+            elderId,
+            victimId,
+            villagerId,
+            extraVillagerId);
+        var firstService = new GameService();
+        var firstGameId = firstService.RehydrateSession(stableDawnJson);
+        var dawnInstruction = (ConfirmationInstruction)firstService.GetCurrentInstruction(firstGameId)!;
+
+        firstService.ProcessInstruction(firstGameId, dawnInstruction.CreateResponse(true));
+        var interruptedPayload = firstService.GetGameStateView(firstGameId)!.Serialize();
+        var interruptedDto = JsonSerializer.Deserialize<GameSessionDto>(
+            interruptedPayload,
+            RecoverySerializationOptions)!;
+        interruptedDto.GameHistoryLog.OfType<StatusEffectLogEntry>().Should().BeEmpty();
+        interruptedDto.GameHistoryLog.OfType<PlayerEliminatedLogEntry>()
+            .Where(entry => entry.CurrentPhase == GamePhase.Dawn)
+            .Should().BeEmpty();
+
+        var replayService = new GameService();
+        var replayGameId = replayService.RehydrateSession(interruptedPayload);
+        var replayInstruction = (ConfirmationInstruction)replayService.GetCurrentInstruction(replayGameId)!;
+        replayService.ProcessInstruction(replayGameId, replayInstruction.CreateResponse(true));
+        var replayedSession = replayService.GetGameStateView(replayGameId)!;
+
+        replayedSession.GetPlayerState(elderId).Health.Should().Be(PlayerHealth.Alive);
+        replayedSession.GetPlayerState(elderId).HasStatusEffect(StatusEffectTypes.ElderProtectionLost)
+            .Should().BeTrue();
+        replayedSession.GameHistoryLog.OfType<PlayerEliminatedLogEntry>()
+            .Should().NotContain(entry => entry.PlayerId == elderId);
+        replayedSession.GameHistoryLog.OfType<StatusEffectLogEntry>()
+            .Where(entry => entry.PlayerId == elderId && entry.EffectType == StatusEffectTypes.ElderProtectionLost)
+            .Should().ContainSingle();
+
+        MarkTestCompleted();
+    }
+
     #endregion
+
+    private static string CreateStableDawnBoundaryJson(
+        Guid wolfId,
+        Guid elderId,
+        Guid victimId,
+        Guid villagerId,
+        Guid extraVillagerId)
+    {
+        var dto = new GameSessionDto
+        {
+            Id = Guid.NewGuid(),
+            TurnNumber = 1,
+            IsStableRecoveryBoundary = true,
+            SeatingOrder = [wolfId, elderId, victimId, villagerId, extraVillagerId],
+            RolesInPlay =
+            [
+                MainRoleType.SimpleWerewolf,
+                MainRoleType.Elder,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager
+            ],
+            PendingInstruction = new ConfirmationInstruction(
+                publicAnnouncement: GameStrings.NightActionsCompletePrompt),
+            PhaseStateCache = new GamePhaseStateCacheDto
+            {
+                CurrentPhase = GamePhase.Dawn
+            },
+            Players =
+            [
+                new PlayerDto
+                {
+                    Id = wolfId,
+                    Name = "Wolf",
+                    MainRole = MainRoleType.SimpleWerewolf,
+                    Health = PlayerHealth.Alive
+                },
+                new PlayerDto
+                {
+                    Id = elderId,
+                    Name = "Elder",
+                    MainRole = MainRoleType.Elder,
+                    Health = PlayerHealth.Alive
+                },
+                new PlayerDto
+                {
+                    Id = victimId,
+                    Name = "Victim",
+                    Health = PlayerHealth.Alive
+                },
+                new PlayerDto
+                {
+                    Id = villagerId,
+                    Name = "Villager",
+                    Health = PlayerHealth.Alive
+                },
+                new PlayerDto
+                {
+                    Id = extraVillagerId,
+                    Name = "Extra Villager",
+                    Health = PlayerHealth.Alive
+                }
+            ],
+            GameHistoryLog =
+            [
+                new AssignRoleLogEntry
+                {
+                    Timestamp = DateTimeOffset.UtcNow,
+                    TurnNumber = 1,
+                    CurrentPhase = GamePhase.Night,
+                    PlayerIds = [wolfId],
+                    AssignedMainRole = MainRoleType.SimpleWerewolf
+                },
+                new AssignRoleLogEntry
+                {
+                    Timestamp = DateTimeOffset.UtcNow,
+                    TurnNumber = 1,
+                    CurrentPhase = GamePhase.Night,
+                    PlayerIds = [elderId],
+                    AssignedMainRole = MainRoleType.Elder
+                },
+                new NightActionLogEntry
+                {
+                    Timestamp = DateTimeOffset.UtcNow,
+                    TurnNumber = 1,
+                    CurrentPhase = GamePhase.Night,
+                    ActionType = NightActionType.WerewolfVictimSelection,
+                    TargetIds = [elderId]
+                },
+                new NightActionLogEntry
+                {
+                    Timestamp = DateTimeOffset.UtcNow,
+                    TurnNumber = 1,
+                    CurrentPhase = GamePhase.Night,
+                    ActionType = NightActionType.WitchKill,
+                    TargetIds = [victimId]
+                },
+                new PhaseTransitionLogEntry
+                {
+                    Timestamp = DateTimeOffset.UtcNow,
+                    TurnNumber = 1,
+                    PreviousPhase = GamePhase.Night,
+                    CurrentPhase = GamePhase.Dawn
+                }
+            ]
+        };
+
+        return JsonSerializer.Serialize(dto, RecoverySerializationOptions);
+    }
 }

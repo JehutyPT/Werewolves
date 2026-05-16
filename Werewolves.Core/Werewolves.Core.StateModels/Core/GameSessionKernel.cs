@@ -26,6 +26,7 @@ namespace Werewolves.Core.StateModels.Core
 		private readonly GameLogManager _gameHistoryLog = new();
 		// Transient execution state
 		private GamePhaseStateCache _phaseStateCache = new();
+		private GameSessionDto? _recoveryBoundary;
 
 		internal Guid Id { get; }
 
@@ -70,6 +71,7 @@ namespace Werewolves.Core.StateModels.Core
 			_stateChangeObserver?.OnPendingInstructionChanged(initialInstruction);
 			_stateChangeObserver?.OnMainPhaseChanged(GamePhase.Night);
 			_stateChangeObserver?.OnTurnNumberChanged(1);
+			CaptureRecoveryBoundary();
 		}
 
 		internal void AddEntryAndUpdateState(GameLogEntryBase entry)
@@ -144,10 +146,21 @@ namespace Werewolves.Core.StateModels.Core
 
 		internal string Serialize()
 		{
-			var dto = new GameSessionDto
+			return JsonSerializer.Serialize(_recoveryBoundary ?? CreateDto(), SerializationOptions);
+		}
+
+		internal void CaptureRecoveryBoundary()
+		{
+			_recoveryBoundary = CreateDto();
+		}
+
+		private GameSessionDto CreateDto()
+		{
+			return new GameSessionDto
 			{
 				Id = Id,
 				TurnNumber = _turnNumber,
+				IsStableRecoveryBoundary = true,
 				SeatingOrder = _playerSeatingOrder.ToList(),
 				RolesInPlay = _rolesInPlay.ToList(),
 				PendingInstruction = _pendingModeratorInstruction,
@@ -162,8 +175,6 @@ namespace Werewolves.Core.StateModels.Core
 					Health = p.State.Health
 				}).ToList()
 			};
-
-			return JsonSerializer.Serialize(dto, SerializationOptions);
 		}
 
 		public static GameSessionKernel Deserialize(string json)
@@ -184,7 +195,9 @@ namespace Werewolves.Core.StateModels.Core
 			_playerSeatingOrder = dto.SeatingOrder;
 			_rolesInPlay = dto.RolesInPlay;
 			_pendingModeratorInstruction = dto.PendingInstruction;
-			_phaseStateCache = GamePhaseStateCache.FromDto(dto.PhaseStateCache);
+			_phaseStateCache = dto.IsStableRecoveryBoundary
+				? GamePhaseStateCache.FromStableRecoveryBoundaryDto(dto.PhaseStateCache)
+				: GamePhaseStateCache.FromDto(dto.PhaseStateCache);
 
 			foreach (var playerDto in dto.Players)
 			{
@@ -201,6 +214,8 @@ namespace Werewolves.Core.StateModels.Core
 			{
 				_gameHistoryLog.RestoreLogEntry(entry);
 			}
+
+			CaptureRecoveryBoundary();
 		}
 
 		/// <summary>

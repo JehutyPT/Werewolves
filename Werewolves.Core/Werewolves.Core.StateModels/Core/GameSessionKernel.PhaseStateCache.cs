@@ -247,6 +247,21 @@ internal partial class GameSessionKernel
 			return new GamePhaseStateCache(dto.CurrentPhase);
 		}
 
+		/// <summary>
+		/// Restores the minimal cursor needed to consume a committed boundary instruction.
+		/// Arbitrary mid-phase active stages and listeners remain transient.
+		/// </summary>
+		internal static GamePhaseStateCache FromStableRecoveryBoundaryDto(GamePhaseStateCacheDto dto)
+		{
+			var cache = new GamePhaseStateCache(dto.CurrentPhase)
+			{
+				_currentSubPhase = dto.SubPhase,
+				_previousSubPhaseStages = dto.CompletedSubPhaseStages.ToList()
+			};
+
+			return cache;
+		}
+
 		#endregion
 	}
 }
