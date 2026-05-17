@@ -4,6 +4,7 @@ using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
+using Werewolves.Core.StateModels.Resources;
 
 namespace Werewolves.Client.Services;
 
@@ -12,35 +13,24 @@ public sealed class GameClientManager
 	private readonly GameService _gameService;
 	private readonly IInstructionAudioPlayback _audioPlayback;
 	private readonly IGameSessionSaveStore _saveStore;
+	private readonly TimeProvider _timeProvider;
+	private DateTimeOffset? _debateStartedAt;
 
 	public GameClientManager()
-		: this(new GameService(), DisabledInstructionAudioPlayback.Instance, FileGameSessionSaveStore.CreateDefault())
-	{
-	}
-
-	public GameClientManager(GameService gameService)
-		: this(gameService, DisabledInstructionAudioPlayback.Instance, FileGameSessionSaveStore.CreateDefault())
-	{
-	}
-
-	public GameClientManager(GameService gameService, IInstructionAudioPlayback audioPlayback)
-		: this(gameService, audioPlayback, FileGameSessionSaveStore.CreateDefault())
-	{
-	}
-
-	public GameClientManager(GameService gameService, IGameSessionSaveStore saveStore)
-		: this(gameService, DisabledInstructionAudioPlayback.Instance, saveStore)
+		: this(new GameService())
 	{
 	}
 
 	public GameClientManager(
 		GameService gameService,
-		IInstructionAudioPlayback audioPlayback,
-		IGameSessionSaveStore saveStore)
+		IInstructionAudioPlayback? audioPlayback = null,
+		IGameSessionSaveStore? saveStore = null,
+		TimeProvider? timeProvider = null)
 	{
 		_gameService = gameService;
-		_audioPlayback = audioPlayback;
-		_saveStore = saveStore;
+		_audioPlayback = audioPlayback ?? DisabledInstructionAudioPlayback.Instance;
+		_saveStore = saveStore ?? FileGameSessionSaveStore.CreateDefault();
+		_timeProvider = timeProvider ?? TimeProvider.System;
 		TryResumeSavedGame();
 	}
 
@@ -56,6 +46,9 @@ public sealed class GameClientManager
 	public bool IsAudioMuted => _audioPlayback.IsMuted;
 	public Task PendingAudioReconciliation { get; private set; } = Task.CompletedTask;
 
+	public TimeSpan? DebateElapsed =>
+		_debateStartedAt is { } start ? _timeProvider.GetUtcNow() - start : null;
+
 	public StartGameConfirmationInstruction StartGame(
 		IReadOnlyList<string> playerNamesInOrder,
 		IReadOnlyList<MainRoleType> rolesInPlay)
@@ -70,9 +63,19 @@ public sealed class GameClientManager
 		ClearSavedGame();
 		ActiveGameId = instruction.GameGuid;
 		RefreshCurrentState(instruction);
+		UpdateDebateTimer();
 		QueueAudioReconciliation();
 		OnStateChanged();
 		return instruction;
+	}
+
+	public void ClearSession()
+	{
+		ActiveGameId = null;
+		CurrentSession = null;
+		CurrentInstruction = null;
+		ClearSavedGame();
+		OnStateChanged();
 	}
 
 	public ProcessResult ProcessInput(ModeratorResponse response)
@@ -87,6 +90,7 @@ public sealed class GameClientManager
 		if (result.IsSuccess)
 		{
 			RefreshCurrentState(result.ModeratorInstruction);
+			UpdateDebateTimer();
 			if (ShouldClearSaveAfterSuccessfulInput(result))
 			{
 				ClearSavedGame();
@@ -125,6 +129,22 @@ public sealed class GameClientManager
 		CurrentInstruction is FinishedGameConfirmationInstruction ||
 		CurrentSession is null;
 
+	private void UpdateDebateTimer()
+	{
+		if (IsDebateInstruction(CurrentInstruction))
+		{
+			_debateStartedAt ??= _timeProvider.GetUtcNow();
+		}
+		else
+		{
+			_debateStartedAt = null;
+		}
+	}
+
+	private static bool IsDebateInstruction(ModeratorInstruction? instruction) =>
+		instruction is ConfirmationInstruction &&
+		instruction.PublicAnnouncement == GameStrings.DebateStartsPrompt;
+
 	private void SaveCurrentSession()
 	{
 		if (CurrentSession is null)
@@ -153,6 +173,7 @@ public sealed class GameClientManager
 
 			ActiveGameId = _gameService.RehydrateSession(serializedSession);
 			RefreshCurrentState();
+			UpdateDebateTimer();
 		}
 		catch (Exception)
 		{

@@ -43,7 +43,14 @@ public sealed class GameplayWakeLockController
 
 	private void Apply()
 	{
-		_wakeLock.KeepScreenOn = _isForegrounded
-			&& _currentArea is GameplayWakeLockArea.Lobby or GameplayWakeLockArea.Dashboard;
+		try
+		{
+			_wakeLock.KeepScreenOn = _isForegrounded
+				&& _currentArea is GameplayWakeLockArea.Lobby or GameplayWakeLockArea.Dashboard;
+		}
+		catch (Exception)
+		{
+			// Wake locks are optional; platform failures must not abort launch or navigation.
+		}
 	}
 }

@@ -3,7 +3,7 @@
     "Mac Catalyst": {
       "commandName": "Executable",
       "executablePath": "open",
-      "commandLineArgs": "-n bin/Debug/net10.0-maccatalyst/maccatalyst-arm64/Werewolves.Client.app"
+      "commandLineArgs": "bin/Debug/net10.0-maccatalyst/maccatalyst-arm64/Werewolves.Client.app"
     },
     "Windows Machine": {
       "commandName": "Project",

@@ -1,0 +1,25 @@
+<main class="ww-app-shell" aria-labelledby="victory-title">
+	<section class="ww-lobby-header">
+		<div>
+			<p class="ww-step-label">@ClientStrings.Victory_StepLabel</p>
+			<h1 id="victory-title">@ClientStrings.Victory_Title</h1>
+			<p class="ww-page-copy">@VictoryDescription</p>
+		</div>
+	</section>
+
+	<footer class="ww-action-bar">
+		<button type="button" class="ww-btn-primary" @onclick="ReturnToLobby">@ClientStrings.Victory_ReturnToLobbyButton</button>
+	</footer>
+</main>
+
+@using Werewolves.Client.Resources
+
+@code {
+	[Parameter, EditorRequired]
+	public string VictoryDescription { get; set; } = string.Empty;
+
+	[Parameter]
+	public EventCallback OnReturnToLobby { get; set; }
+
+	private Task ReturnToLobby() => OnReturnToLobby.InvokeAsync();
+}

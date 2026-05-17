@@ -169,6 +169,12 @@ public class LobbySetupState
 		return roles;
 	}
 
+	public void Reset()
+	{
+		_playerNames.Clear();
+		_roleCounts.Clear();
+	}
+
 	public int TotalSelectedRoleCount => _roleCounts.Values.Sum();
 
 	public int ExpectedRoleCount =>

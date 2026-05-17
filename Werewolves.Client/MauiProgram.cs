@@ -13,6 +13,12 @@ using Microsoft.UI.Windowing;
 using Windows.Graphics;
 #endif
 
+#if MACCATALYST
+using Microsoft.Maui.LifecycleEvents;
+using UIKit;
+using CoreGraphics;
+#endif
+
 namespace Werewolves.Client
 {
     public static class MauiProgram
@@ -38,15 +44,24 @@ namespace Werewolves.Client
             builder.Services.AddSingleton<LobbySetupMetadata>(sp =>
                 sp.GetRequiredService<GameService>().GetLobbySetupMetadata());
             builder.Services.AddSingleton<LobbySetupState>(sp =>
-                new LobbySetupState(sp.GetRequiredService<LobbySetupMetadata>()));
+            {
+                var state = new LobbySetupState(sp.GetRequiredService<LobbySetupMetadata>());
+#if DEBUG
+                foreach (var name in new[] { "Ana", "Beatriz", "Rui", "Bernardo", "Roberto" })
+                    state.AddPlayer(name);
+#endif
+                return state;
+            });
             builder.Services.AddSingleton<IAudioMap, AudioMap>();
             builder.Services.AddSingleton<IAudioAssetLoader, MauiAudioAssetLoader>();
             builder.Services.AddSingleton<IAudioPlayerFactory, PluginAudioPlayerFactory>();
             builder.Services.AddSingleton<IInstructionAudioPlayback, InstructionAudioPlayback>();
+            builder.Services.AddSingleton<IGameSessionSaveStore>(FileGameSessionSaveStore.CreateDefault());
             builder.Services.AddSingleton<GameClientManager>();
             builder.Services.AddSingleton<IDeviceDisplay>(DeviceDisplay.Current);
             builder.Services.AddSingleton<IScreenWakeLock, DeviceDisplayScreenWakeLock>();
             builder.Services.AddSingleton<GameplayWakeLockController>();
+            builder.Services.AddSingleton<IHapticFeedbackService, MauiHapticFeedbackService>();
 
 #if DEBUG
             builder.Services.AddSingleton<BenchmarkClientManager>();
@@ -82,6 +97,24 @@ namespace Werewolves.Client
                 });
             });
         });
+#endif
+
+#if MACCATALYST
+            builder.ConfigureLifecycleEvents(events =>
+            {
+                events.AddiOS(lifecycle =>
+                {
+                    lifecycle.SceneWillConnect((scene, session, options) =>
+                    {
+                        if (scene is UIWindowScene windowScene)
+                        {
+                            var size = MacCatalystPhoneWindow.Size;
+                            windowScene.SizeRestrictions!.MinimumSize = size;
+                            windowScene.SizeRestrictions!.MaximumSize = size;
+                        }
+                    });
+                });
+            });
 #endif
 
 			return builder.Build();

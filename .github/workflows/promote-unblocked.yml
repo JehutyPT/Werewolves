@@ -33,9 +33,16 @@ jobs:
                   issue(number: $number) {
                     blocking(first: 50)  { nodes { id number } }
                     blockedBy(first: 50) { nodes { id number } }
+                    labels(first: 100) { nodes { name } }
                   }
                 }
               }')
+
+          CLOSED_HAS_READY_FOR_AGENT=$(echo "$RELS" | jq '[.data.repository.issue.labels.nodes[].name] | any(. == "ready-for-agent")')
+          if [ "$CLOSED_HAS_READY_FOR_AGENT" = "true" ]; then
+            echo "Removing ready-for-agent from closed issue #$CLOSED_NUM"
+            gh issue edit "$CLOSED_NUM" --repo "$REPO" --remove-label ready-for-agent
+          fi
 
           # Remove this issue as a blocker and promote newly-unblocked issues
           echo "$RELS" | jq -r '.data.repository.issue.blocking.nodes[] | "\(.id) \(.number)"' \

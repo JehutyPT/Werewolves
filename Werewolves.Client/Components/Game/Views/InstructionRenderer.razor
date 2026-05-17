@@ -1,45 +1,100 @@
+@using Werewolves.Client.Services
 @using Werewolves.Core.StateModels.Models
 @using Werewolves.Core.StateModels.Models.Instructions
+@inject IHapticFeedbackService Haptic
 
-<div class="ww-instruction-stack">
+<div class="ww-instruction-stack" @key="_flow.TransitionKey">
 	@if (!_flow.HasInstruction)
 	{
-		<p class="ww-empty-state">Sem instrução pendente.</p>
+		<p class="ww-empty-state">@ClientStrings.Dashboard_NoInstruction</p>
 	}
 	else
 	{
-		<article class="@InstructionBlockClass" @key="Instruction">
-			<span class="@LabelClass">@DisplayLabel</span>
-			<p class="@InstructionTextClass">@_flow.CurrentText</p>
-		</article>
-	}
-</div>
+		if (HasPublicAnnouncement)
+		{
+			var publicExpanded = IsExpanded(InstructionSection.Public);
 
-<footer class="ww-dashboard-action-zone">
-	@if (AudioControls is not null)
-	{
-		@AudioControls
+			<button type="button"
+					class="@InstructionBlockClass(InstructionSection.Public, publicExpanded)"
+					aria-expanded="@AriaExpanded(publicExpanded)"
+					aria-label="@InstructionToggleLabel(ClientStrings.Dashboard_AnnounceLabel)"
+					@onclick="() => Expand(InstructionSection.Public)">
+				<span class="ww-label ww-label--accent">@ClientStrings.Dashboard_AnnounceLabel</span>
+				<span class="@InstructionTextClass(InstructionSection.Public, publicExpanded)">
+					@InstructionText(Instruction!.PublicAnnouncement, publicExpanded)
+				</span>
+				@if (!publicExpanded)
+				{
+					<span class="ww-labs-expand-hint">@ClientStrings.Common_TapToExpand</span>
+				}
+			</button>
+		}
+
+		if (HasPrivateInstruction)
+		{
+			var privateExpanded = IsExpanded(InstructionSection.Private);
+
+			<button type="button"
+					class="@InstructionBlockClass(InstructionSection.Private, privateExpanded)"
+					aria-expanded="@AriaExpanded(privateExpanded)"
+					aria-label="@InstructionToggleLabel(ClientStrings.Dashboard_ModeratorLabel)"
+					@onclick="() => Expand(InstructionSection.Private)">
+				<span class="ww-label">@ClientStrings.Dashboard_ModeratorLabel</span>
+				<span class="@InstructionTextClass(InstructionSection.Private, privateExpanded)">
+					@InstructionText(Instruction!.PrivateInstruction, privateExpanded)
+				</span>
+				@if (!privateExpanded)
+				{
+					<span class="ww-labs-expand-hint">@ClientStrings.Common_TapToExpand</span>
+				}
+			</button>
+		}
 	}
 
 	@if (_flow.HasInstruction)
 	{
-		if (!_flow.IsShowingInput)
+		if (Instruction is SelectPlayersInstruction selectPlayersInstruction)
 		{
-			<button type="button" class="ww-btn-primary" @onclick="RevealPrivateInstruction">Mostrar instrução</button>
+			<SelectPlayersView Instruction="selectPlayersInstruction" Roster="Roster" OnResponse="OnResponse" />
 		}
-		else if (Instruction is ConfirmationInstruction confirmationInstruction)
+		else if (Instruction is SelectOptionsInstruction selectOptionsInstruction)
 		{
-			<ConfirmationView Instruction="confirmationInstruction" OnResponse="OnResponse" />
+			<SelectOptionsView Instruction="selectOptionsInstruction" OnResponse="OnResponse" />
 		}
-		else
+		else if (Instruction is AssignRolesInstruction assignRolesInstruction)
 		{
-			<button type="button" class="ww-btn-primary" disabled>Responder</button>
+			<AssignRolesView Instruction="assignRolesInstruction" OnResponse="OnResponse" Roster="Roster" />
 		}
 	}
-</footer>
+</div>
+
+@if (ShouldRenderDashboardActionZone)
+{
+	<footer class="ww-dashboard-action-zone">
+		@if (AudioControls is not null)
+		{
+			@AudioControls
+		}
+
+		@if (_flow.HasInstruction)
+		{
+			if (Instruction is ConfirmationInstruction confirmationInstruction)
+			{
+				<ConfirmationView @key="confirmationInstruction"
+								  Instruction="confirmationInstruction"
+								  OnResponse="OnResponse" />
+			}
+			else if (Instruction is not (SelectPlayersInstruction or SelectOptionsInstruction or AssignRolesInstruction))
+			{
+				<button type="button" class="ww-btn-primary" disabled>Responder</button>
+			}
+		}
+	</footer>
+}
 
 @code {
 	private readonly InstructionDisplayFlow _flow = new();
+	private InstructionSection _expandedSection;
 
 	[Parameter]
 	public ModeratorInstruction? Instruction { get; set; }
@@ -48,35 +103,98 @@
 	public EventCallback<ModeratorResponse> OnResponse { get; set; }
 
 	[Parameter]
+	public IReadOnlyList<DashboardRosterEntry> Roster { get; set; } = [];
+
+	[Parameter]
 	public RenderFragment? AudioControls { get; set; }
 
 	protected override void OnParametersSet()
 	{
+		var previousInstruction = _flow.Instruction;
 		_flow.SetInstruction(Instruction);
+
+		if (!ReferenceEquals(previousInstruction, Instruction))
+		{
+			_expandedSection = InitialExpandedSection(Instruction);
+		}
 	}
 
-	private string DisplayLabel =>
-		_flow.IsShowingInput && !string.IsNullOrWhiteSpace(Instruction?.PrivateInstruction)
-			? "Moderador"
-			: "Anunciar";
+	private bool HasPublicAnnouncement =>
+		!string.IsNullOrWhiteSpace(Instruction?.PublicAnnouncement);
 
-	private string LabelClass =>
-		DisplayLabel == "Anunciar"
-			? "ww-label ww-label--accent"
-			: "ww-label";
+	private bool HasPrivateInstruction =>
+		!string.IsNullOrWhiteSpace(Instruction?.PrivateInstruction);
 
-	private string InstructionBlockClass =>
-		DisplayLabel == "Anunciar"
-			? "ww-instruction-block ww-instruction-block--announcement"
-			: "ww-instruction-block ww-instruction-block--private";
+	private bool ShouldRenderDashboardActionZone =>
+		AudioControls is not null ||
+		(_flow.HasInstruction &&
+			Instruction is not (SelectPlayersInstruction or SelectOptionsInstruction or AssignRolesInstruction));
 
-	private string InstructionTextClass =>
-		DisplayLabel == "Anunciar"
+	private bool IsExpanded(InstructionSection section) =>
+		_expandedSection == section;
+
+	private static string InstructionBlockClass(InstructionSection section, bool isExpanded)
+	{
+		var blockKind = section == InstructionSection.Public
+			? "ww-instruction-block--announcement"
+			: "ww-instruction-block--private";
+		var expandedClass = isExpanded ? " is-expanded" : string.Empty;
+
+		return $"ww-instruction-block {blockKind} ww-labs-collapsible{expandedClass}";
+	}
+
+	private static string InstructionTextClass(InstructionSection section, bool isExpanded)
+	{
+		var textKind = section == InstructionSection.Public
 			? "ww-announcement"
 			: "ww-private-instruction";
+		var previewClass = isExpanded ? string.Empty : " ww-labs-preview";
 
-	private void RevealPrivateInstruction()
-	{
-		_flow.Advance();
+		return $"ww-instruction-text {textKind}{previewClass}";
 	}
+
+	private static string InstructionText(string? text, bool isExpanded) =>
+		isExpanded || string.IsNullOrWhiteSpace(text)
+			? text ?? string.Empty
+			: FirstLine(text);
+
+	private static string FirstLine(string text)
+	{
+		var newlineIndex = text.IndexOf('\n');
+		return newlineIndex >= 0 ? text[..newlineIndex] + " ..." : text;
+	}
+
+	private void Expand(InstructionSection section)
+	{
+		if (_expandedSection == section)
+		{
+			return;
+		}
+
+		_expandedSection = section;
+		Haptic.TryClick();
+	}
+
+	private static InstructionSection InitialExpandedSection(ModeratorInstruction? instruction)
+	{
+		if (!string.IsNullOrWhiteSpace(instruction?.PublicAnnouncement))
+		{
+			return InstructionSection.Public;
+		}
+
+		if (!string.IsNullOrWhiteSpace(instruction?.PrivateInstruction))
+		{
+			return InstructionSection.Private;
+		}
+
+		return InstructionSection.None;
+	}
+
+	private static string InstructionToggleLabel(string label) =>
+		label;
+
+	private static string AriaExpanded(bool isExpanded) =>
+		isExpanded ? "true" : "false";
+
+	private enum InstructionSection { None, Public, Private }
 }

@@ -386,12 +386,77 @@ button {
 }
 
 
+/* ── Select players (in-game player picker) ───────────────── */
+
+.ww-select-players-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ww-select-players-item {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 38px;
+  align-items: center;
+  gap: 10px;
+  min-height: 64px;
+  padding: 10px;
+  border: 1px solid var(--ww-border-neutral);
+  border-radius: var(--ww-radius-md);
+  background: var(--ww-surface);
+  cursor: pointer;
+}
+
+.ww-select-players-item--selected {
+  border-color: var(--ww-border-strong);
+  background: var(--ww-accent-soft);
+}
+
+.ww-select-players-item--selected .ww-seat-number {
+  color: var(--ww-accent);
+}
+
+.ww-select-players-item--selected .ww-player-name {
+  font-weight: 800;
+}
+
+.ww-select-players-check {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 2px solid var(--ww-border-strong);
+  background: var(--ww-surface);
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  font-weight: 700;
+  color: transparent;
+}
+
+.ww-select-players-item--selected .ww-select-players-check {
+  background: var(--ww-accent);
+  border-color: var(--ww-accent);
+  color: var(--ww-bg);
+  box-shadow: 0 0 16px var(--ww-accent-dim);
+}
+
+
 /* ── Dashboard ─────────────────────────────────────────────── */
 
 .ww-dashboard-shell {
   min-height: 100vh;
   padding: max(12px, env(safe-area-inset-top)) var(--ww-page-px) max(96px, env(safe-area-inset-bottom));
   background: var(--ww-bg);
+}
+
+[data-production-dashboard] {
+  --ww-dashboard-tabs-height: calc(max(30px, calc(env(safe-area-inset-top) + 18px)) + 44px + 16px);
+  --ww-dashboard-status-height: 48px;
+  --ww-dashboard-action-height: calc(100px + max(14px, env(safe-area-inset-bottom)));
+  padding-top: calc(var(--ww-dashboard-tabs-height) + var(--ww-dashboard-status-height) + 10px);
+  padding-bottom: calc(var(--ww-dashboard-action-height) + 24px);
 }
 
 .ww-dashboard-tabs {
@@ -403,6 +468,18 @@ button {
   gap: 6px;
   padding: 4px 0 12px;
   background: var(--ww-bg);
+}
+
+.ww-dashboard-tabs--compact {
+  top: 0;
+  padding: max(30px, calc(env(safe-area-inset-top) + 18px)) 0 16px;
+}
+
+[data-production-dashboard] .ww-dashboard-tabs--compact {
+  position: fixed;
+  left: var(--ww-page-px);
+  right: var(--ww-page-px);
+  z-index: 40;
 }
 
 .ww-dashboard-tab {
@@ -454,9 +531,23 @@ button {
   text-transform: uppercase;
 }
 
+.ww-dashboard-status-bar {
+  margin-bottom: 14px;
+}
+
+[data-production-dashboard] .ww-dashboard-status-bar {
+  position: fixed;
+  top: var(--ww-dashboard-tabs-height);
+  left: var(--ww-page-px);
+  right: var(--ww-page-px);
+  z-index: 35;
+  margin: 0;
+  box-shadow: var(--ww-shadow-sticky);
+}
+
 .ww-dashboard-panel {
   min-height: 52vh;
-  padding: 4px 0 24px;
+  padding: 4px 0 calc(var(--ww-dashboard-action-height, 96px) + 24px);
 }
 
 .ww-dashboard-roster {
@@ -506,7 +597,18 @@ button {
   gap: 12px;
   align-content: start;
   min-height: 42vh;
-  padding-bottom: 88px;
+  padding-bottom: var(--ww-dashboard-action-height, 88px);
+}
+
+@keyframes ww-instruction-enter {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 .ww-instruction-block {
@@ -516,6 +618,14 @@ button {
   border-radius: var(--ww-radius-md);
   padding: 16px;
   background: var(--ww-surface);
+  animation: ww-instruction-enter var(--ww-anim-instruction) ease-out;
+}
+
+button.ww-instruction-block {
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: left;
 }
 
 .ww-instruction-block--announcement {
@@ -528,6 +638,14 @@ button {
 }
 
 .ww-instruction-block p {
+  margin: 0;
+  color: var(--ww-text);
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.ww-instruction-text {
+  display: block;
   margin: 0;
   color: var(--ww-text);
   font-size: 16px;
@@ -558,22 +676,33 @@ button {
 }
 
 .ww-audio-toggle {
-  min-height: 44px;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  margin-left: auto;
+  padding: 0;
   border: 1px solid var(--ww-border-neutral);
   border-radius: var(--ww-radius-sm);
-  background: var(--ww-surface);
+  background: var(--ww-surface-hi);
   color: var(--ww-text-dim);
   cursor: pointer;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.7px;
-  text-transform: uppercase;
+  line-height: 1;
 }
 
 .ww-audio-toggle--muted {
   border-color: var(--ww-border-strong);
   background: var(--ww-surface-hi);
   color: var(--ww-accent-bright);
+}
+
+.ww-audio-toggle__icon {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .ww-stats-grid {
@@ -744,4 +873,485 @@ button {
   .ww-elimination-log__entry {
     grid-template-columns: 1fr;
   }
+}
+
+/* === Labs styles === */
+
+[data-lab-unified] {
+    padding-top: 0;
+}
+
+.ww-labs-unified-nav {
+    top: 0;
+    padding: max(30px, calc(env(safe-area-inset-top) + 18px)) 0 16px;
+}
+
+.ww-labs-status-bar {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    max-width: 100%;
+    min-height: 34px;
+    margin: 0 0 14px;
+    padding: 7px 10px;
+    border: 1px solid var(--ww-border-neutral);
+    border-radius: var(--ww-radius-sm);
+    background: var(--ww-surface-deeper);
+    color: var(--ww-text-dim);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    font-variant-numeric: tabular-nums;
+}
+
+.ww-labs-status-bar__dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--ww-accent);
+    box-shadow: 0 0 16px var(--ww-accent-dim);
+}
+
+.ww-labs-status-bar__turn {
+    color: var(--ww-text);
+}
+
+.ww-labs-status-bar__phase {
+    color: var(--ww-accent-bright);
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.ww-labs-status-bar.ww-dashboard-status-bar {
+    display: flex;
+    width: auto;
+    box-sizing: border-box;
+}
+
+.ww-labs-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 1rem;
+}
+
+.ww-labs-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 1rem 1.25rem;
+    border: 1px solid var(--ww-border);
+    border-radius: 12px;
+    background: var(--ww-surface-hi);
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.ww-labs-card:active {
+    background: var(--ww-surface-deeper);
+    border-color: var(--ww-accent-bright);
+}
+
+.ww-labs-card strong {
+    font-size: 1rem;
+    color: var(--ww-text);
+}
+
+.ww-labs-card span {
+    font-size: 0.8125rem;
+    color: var(--ww-text-dim);
+}
+
+.ww-labs-collapsible {
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.ww-labs-collapsible:active {
+    background: var(--ww-surface-deeper);
+}
+
+.ww-labs-collapsible:focus-visible {
+    outline: 2px solid var(--ww-accent);
+    outline-offset: 2px;
+}
+
+.ww-labs-preview {
+    opacity: 0.7;
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.ww-labs-expand-hint {
+    display: block;
+    font-size: 0.6875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ww-text-dim);
+    margin-top: 0.5rem;
+    opacity: 0.6;
+}
+
+.ww-labs-collapsible.is-expanded .ww-labs-expand-hint {
+    display: none;
+}
+
+[data-lab-haptic-timing] {
+    padding-top: 0;
+}
+
+[data-lab-haptic-timing] .ww-dashboard-panel {
+    min-height: auto;
+    padding-bottom: 0;
+}
+
+.ww-labs-haptic-panel {
+    gap: 14px;
+}
+
+.ww-labs-haptic-button-zone {
+    --ww-lab-haptic-progress: 0%;
+    display: grid;
+    gap: 10px;
+}
+
+.ww-labs-haptic-hold-button {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 100%;
+    min-height: 92px;
+    overflow: hidden;
+    border: 1px solid var(--ww-border-strong);
+    border-radius: var(--ww-radius-md);
+    background: var(--ww-surface);
+    color: var(--ww-text);
+    cursor: pointer;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+.ww-labs-haptic-hold-button__fill {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: var(--ww-lab-haptic-progress);
+    background: linear-gradient(90deg, var(--ww-accent-soft), var(--ww-accent));
+    transition: width 40ms linear;
+}
+
+.ww-labs-haptic-hold-button__copy {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    gap: 6px;
+    justify-items: center;
+    padding: 16px;
+    text-align: center;
+}
+
+.ww-labs-haptic-hold-button__copy strong {
+    font-size: 0.95rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.ww-labs-haptic-hold-button__copy small {
+    color: var(--ww-text-dim);
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.ww-labs-haptic-hold-button.is-holding {
+    border-color: var(--ww-accent-bright);
+    box-shadow: var(--ww-glow-accent);
+}
+
+.ww-labs-haptic-hold-button.is-holding .ww-labs-haptic-hold-button__copy strong,
+.ww-labs-haptic-hold-button.is-holding .ww-labs-haptic-hold-button__copy small {
+    color: var(--ww-bg);
+}
+
+.ww-labs-haptic-state {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin: 0;
+}
+
+.ww-labs-haptic-state div {
+    min-width: 0;
+    padding: 10px;
+    border: 1px solid var(--ww-border-neutral);
+    border-radius: var(--ww-radius-sm);
+    background: var(--ww-surface-deeper);
+}
+
+.ww-labs-haptic-state dt {
+    margin: 0 0 4px;
+    color: var(--ww-text-dim);
+    font-size: 0.7rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.ww-labs-haptic-state dd {
+    margin: 0;
+    color: var(--ww-text);
+    font-size: 0.9rem;
+    font-weight: 700;
+    overflow-wrap: anywhere;
+}
+
+.ww-labs-haptic-control {
+    display: grid;
+    gap: 6px;
+}
+
+.ww-labs-haptic-control span {
+    color: var(--ww-text-dim);
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.ww-labs-haptic-control input,
+.ww-labs-haptic-control select {
+    width: 100%;
+    min-height: 42px;
+    box-sizing: border-box;
+    border: 1px solid var(--ww-border-neutral);
+    border-radius: var(--ww-radius-sm);
+    padding: 8px 10px;
+    background: var(--ww-surface);
+    color: var(--ww-text);
+    font: inherit;
+}
+
+.ww-labs-haptic-range {
+    width: 100%;
+    accent-color: var(--ww-accent);
+}
+
+.ww-labs-haptic-note {
+    margin: 0;
+    color: var(--ww-text-dim);
+    font-size: 0.75rem;
+}
+
+.ww-labs-haptic-events {
+    display: grid;
+    gap: 10px;
+}
+
+.ww-labs-haptic-event {
+    display: grid;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid var(--ww-border-neutral);
+    border-radius: var(--ww-radius-sm);
+    background: var(--ww-surface-deeper);
+}
+
+.ww-labs-haptic-event__head,
+.ww-labs-haptic-event__foot,
+.ww-labs-haptic-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.ww-labs-haptic-event__head strong {
+    color: var(--ww-text);
+    font-size: 0.9rem;
+}
+
+.ww-labs-haptic-event__head span {
+    color: var(--ww-text-dim);
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.ww-labs-haptic-event__status {
+    color: var(--ww-text-dim);
+    font-size: 0.75rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.ww-labs-haptic-event__status.is-queued {
+    color: var(--ww-accent-bright);
+}
+
+.ww-labs-haptic-event__status.is-fired {
+    color: var(--ww-accent);
+}
+
+.ww-labs-haptic-event__status.is-canceled {
+    color: var(--ww-text-muted);
+}
+
+.ww-labs-haptic-actions {
+    flex-wrap: wrap;
+}
+
+.ww-labs-haptic-actions .ww-secondary-button,
+.ww-labs-haptic-event__foot .ww-secondary-button {
+    width: auto;
+    min-height: 38px;
+    padding: 0 12px;
+}
+
+.ww-option-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    width: 100%;
+}
+
+.ww-option-btn {
+    flex: 1 1 calc(50% - 0.25rem);
+    min-height: 48px;
+    padding: 0.625rem 1rem;
+    border: 1px solid var(--ww-border-neutral);
+    border-radius: var(--ww-radius-md);
+    background: var(--ww-surface);
+    color: var(--ww-text);
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.ww-option-btn--selected {
+    border-color: var(--ww-border-strong);
+    background: var(--ww-accent-soft);
+    color: var(--ww-accent-bright);
+}
+
+.ww-selection-count {
+    display: block;
+    text-align: center;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ww-text-dim);
+}
+
+.ww-role-assignment,
+.ww-labs-role-assignment {
+    display: grid;
+    gap: 14px;
+    width: 100%;
+}
+
+.ww-player-picker,
+.ww-labs-player-picker {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
+    align-items: stretch;
+    gap: 8px;
+}
+
+.ww-player-arrow,
+.ww-labs-player-arrow {
+    width: 44px;
+    height: auto;
+    min-height: 64px;
+    font-size: 24px;
+}
+
+.ww-player-picker__identity,
+.ww-labs-player-picker__identity {
+    display: grid;
+    align-content: center;
+    gap: 4px;
+    min-width: 0;
+    min-height: 64px;
+    border: 1px solid var(--ww-border-neutral);
+    border-radius: var(--ww-radius-md);
+    padding: 10px 12px;
+    background: var(--ww-surface);
+}
+
+.ww-role-groups,
+.ww-labs-role-groups {
+    display: grid;
+    gap: 14px;
+}
+
+.ww-role-group,
+.ww-labs-role-group {
+    display: grid;
+    gap: 8px;
+}
+
+.ww-role-group-choices,
+.ww-labs-role-choices {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.ww-role-group-choices .ww-role-btn,
+.ww-labs-role-choices .ww-role-btn {
+    width: 100%;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    text-align: left;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+}
+
+.ww-assign-roles {
+    display: grid;
+    gap: 1rem;
+    width: 100%;
+}
+
+.ww-assign-roles__player {
+    display: grid;
+    gap: 0.375rem;
+}
+
+.ww-assign-roles__player .ww-player-name {
+    font-weight: 700;
+    color: var(--ww-text);
+}
+
+.ww-assign-prompt {
+    font-size: 0.75rem;
+    color: var(--ww-text-dim);
+}
+
+.ww-role-choices {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+}
+
+.ww-role-btn {
+    padding: 0.5rem 0.875rem;
+    border: 1px solid var(--ww-border-neutral);
+    border-radius: var(--ww-radius-sm);
+    background: var(--ww-surface);
+    color: var(--ww-text);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.ww-role-btn--selected {
+    border-color: var(--ww-border-strong);
+    background: var(--ww-accent-soft);
+    color: var(--ww-accent-bright);
 }

@@ -435,4 +435,21 @@ public class LobbySetupStateTests
 		group.Group.Should().Be(RoleGroup.Villagers);
 		group.DisplayName.Should().Be(RoleGroup.Villagers.GetDisplayName());
 	}
+
+	[Fact]
+	public void Reset_ClearsPlayersAndRoleCounts()
+	{
+		var state = LobbySetupMetadataFixture.DefaultState();
+		state.AddPlayer("Ana");
+		state.AddPlayer("Bruno");
+		state.AddPlayer("Catarina");
+		state.IncrementRole(MainRoleType.SimpleWerewolf);
+		state.IncrementRole(MainRoleType.Seer);
+
+		state.Reset();
+
+		state.PlayerNames.Should().BeEmpty();
+		state.GetSelectedRoles().Should().BeEmpty();
+		state.TotalSelectedRoleCount.Should().Be(0);
+	}
 }

@@ -51,6 +51,11 @@ These use wrapper scripts in `docs/agents/scripts/`. Each script accepts issue n
 | Operation | Command |
 |---|---|
 | Mark criterion complete | `docs/agents/scripts/mark-criterion-complete.sh <issue> "<criterion_text>"` |
+| Unmark criterion complete | `docs/agents/scripts/unmark-criterion-complete.sh <issue> "<criterion_text>"` |
+
+Pass the criterion text without the `- [ ]` / `- [x]` checkbox marker. The
+scripts match exactly one Markdown task-list item, support wrapped criteria by
+normalizing whitespace, and fail instead of editing when the text is ambiguous.
 
 ## When a Skill Says...
 
@@ -74,3 +79,4 @@ These use wrapper scripts in `docs/agents/scripts/`. Each script accepts issue n
 | "get blockers" / "check blockers" | `docs/agents/scripts/query-blockers.sh` |
 | "get blocking" | `docs/agents/scripts/query-blocking.sh` |
 | "check criterion" / "mark criterion complete" | `docs/agents/scripts/mark-criterion-complete.sh` |
+| "uncheck criterion" / "unmark criterion" | `docs/agents/scripts/unmark-criterion-complete.sh` |

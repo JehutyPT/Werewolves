@@ -1,0 +1,186 @@
+@using Werewolves.Core.StateModels.Enums
+@using Werewolves.Core.StateModels.Extensions
+@using Werewolves.Core.StateModels.Models
+@using Werewolves.Core.StateModels.Models.Instructions
+
+@{
+	var activePlayerId = ActiveAssignmentPlayer;
+}
+
+<div class="ww-role-assignment" aria-label="@ClientStrings.AssignRoles_Title">
+	<div class="ww-player-picker">
+		<button type="button"
+				class="ww-icon-button ww-player-arrow"
+				aria-label="@ClientStrings.AssignRoles_PreviousPlayerAria"
+				disabled="@IsFirstAssignmentPlayer"
+				@onclick="PreviousAssignmentPlayer">&#x2039;</button>
+		<div class="ww-player-picker__identity">
+			<span class="ww-player-name">@ResolvePlayerName(activePlayerId)</span>
+			<span class="ww-assign-prompt">@AssignmentLabel(activePlayerId)</span>
+		</div>
+		<button type="button"
+				class="ww-icon-button ww-player-arrow"
+				aria-label="@ClientStrings.AssignRoles_NextPlayerAria"
+				disabled="@IsLastAssignmentPlayer"
+				@onclick="NextAssignmentPlayer">&#x203A;</button>
+	</div>
+
+	<div class="ww-role-groups">
+		@foreach (var group in RoleGroupsForPlayer(activePlayerId))
+		{
+			<section class="ww-role-group" @key="group.Group">
+				<div class="ww-section-head">
+					<span>@group.DisplayName</span>
+				</div>
+				<div class="ww-role-group-choices" aria-label="@group.DisplayName">
+					@foreach (var role in group.Roles)
+					{
+						<button type="button"
+								class="@RoleClass(activePlayerId, role)"
+								@onclick="() => AssignRole(activePlayerId, role)">@role.GetPublicName()</button>
+					}
+				</div>
+			</section>
+		}
+	</div>
+</div>
+
+<footer class="ww-dashboard-action-zone">
+	<HoldButton Label="@ClientStrings.Dashboard_ContinueButton"
+				Disabled="@(!AllPlayersAssigned)"
+				OnHoldComplete="HandleSubmit" />
+</footer>
+
+@code {
+	private readonly Dictionary<Guid, MainRoleType> _assignments = new();
+	private int _activeAssignmentPlayerIndex;
+
+	[Parameter, EditorRequired]
+	public AssignRolesInstruction Instruction { get; set; } = default!;
+
+	[Parameter]
+	public EventCallback<ModeratorResponse> OnResponse { get; set; }
+
+	[Parameter]
+	public IReadOnlyList<DashboardRosterEntry> Roster { get; set; } = [];
+
+	private bool AllPlayersAssigned =>
+		Instruction.PlayersForAssignment.All(p => _assignments.ContainsKey(p));
+
+	private IReadOnlyList<Guid> AssignmentPlayers =>
+		Instruction.PlayersForAssignment
+			.OrderBy(PlayerSeatOrder)
+			.ThenBy(ResolvePlayerName, StringComparer.CurrentCulture)
+			.ToArray();
+
+	private Guid ActiveAssignmentPlayer => AssignmentPlayers[_activeAssignmentPlayerIndex];
+
+	private bool IsFirstAssignmentPlayer => _activeAssignmentPlayerIndex == 0;
+
+	private bool IsLastAssignmentPlayer => _activeAssignmentPlayerIndex == AssignmentPlayers.Count - 1;
+
+	protected override void OnParametersSet()
+	{
+		var players = AssignmentPlayers;
+		if (_activeAssignmentPlayerIndex >= players.Count)
+		{
+			_activeAssignmentPlayerIndex = players.Count - 1;
+		}
+	}
+
+	private string ResolvePlayerName(Guid playerId)
+	{
+		var entry = Roster.FirstOrDefault(r => r.PlayerId == playerId);
+		return entry?.Name ?? playerId.ToString()[..8];
+	}
+
+	private string AssignmentLabel(Guid playerId) =>
+		_assignments.TryGetValue(playerId, out var role)
+			? role.GetPublicName()
+			: ClientStrings.AssignRoles_SelectRolePrompt;
+
+	private void PreviousAssignmentPlayer()
+	{
+		if (IsFirstAssignmentPlayer)
+		{
+			return;
+		}
+
+		_activeAssignmentPlayerIndex--;
+	}
+
+	private void NextAssignmentPlayer()
+	{
+		if (IsLastAssignmentPlayer)
+		{
+			return;
+		}
+
+		_activeAssignmentPlayerIndex++;
+	}
+
+	private IEnumerable<MainRoleType> AvailableRolesForPlayer(Guid playerId)
+	{
+		var usedRoles = _assignments
+			.Where(a => a.Key != playerId)
+			.Select(a => a.Value)
+			.ToList();
+
+		var remaining = new List<MainRoleType>(Instruction.RolesForAssignment);
+		foreach (var used in usedRoles)
+		{
+			remaining.Remove(used);
+		}
+
+		return remaining.Distinct();
+	}
+
+	private IEnumerable<RoleGroupDisplay> RoleGroupsForPlayer(Guid playerId) =>
+		AvailableRolesForPlayer(playerId)
+			.GroupBy(role => role.GetRoleGroup())
+			.OrderBy(group => RoleGroupOrder(group.Key))
+			.Select(group => new RoleGroupDisplay(
+				group.Key,
+				group.Key.GetDisplayName(),
+				group.OrderBy(role => role.GetPublicName(), StringComparer.CurrentCulture).ToArray()));
+
+	private int PlayerSeatOrder(Guid playerId)
+	{
+		var rosterIndex = Roster.ToList().FindIndex(entry => entry.PlayerId == playerId);
+		return rosterIndex >= 0 ? rosterIndex : int.MaxValue;
+	}
+
+	private static int RoleGroupOrder(RoleGroup group) => group switch
+	{
+		RoleGroup.Villagers => 0,
+		RoleGroup.Werewolves => 1,
+		RoleGroup.Ambiguous => 2,
+		RoleGroup.Loners => 3,
+		RoleGroup.NewMoon => 4,
+		_ => 5
+	};
+
+	private void AssignRole(Guid playerId, MainRoleType role)
+	{
+		if (_assignments.TryGetValue(playerId, out var assigned) && assigned == role)
+		{
+			_assignments.Remove(playerId);
+			return;
+		}
+
+		_assignments[playerId] = role;
+	}
+
+	private Task HandleSubmit()
+	{
+		var response = Instruction.CreateResponse(new Dictionary<Guid, MainRoleType>(_assignments));
+		return OnResponse.InvokeAsync(response);
+	}
+
+	private string RoleClass(Guid playerId, MainRoleType role) =>
+		_assignments.TryGetValue(playerId, out var assigned) && assigned == role
+			? "ww-role-btn ww-role-btn--selected"
+			: "ww-role-btn";
+
+	private sealed record RoleGroupDisplay(RoleGroup Group, string DisplayName, IReadOnlyList<MainRoleType> Roles);
+}

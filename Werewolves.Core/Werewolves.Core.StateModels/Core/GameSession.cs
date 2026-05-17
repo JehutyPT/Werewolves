@@ -99,6 +99,9 @@ internal class GameSession : IGameSession
 	internal void SetPendingModeratorInstruction(IGameFlowManagerKey key, ModeratorInstruction instruction) =>
 		_gameSessionKernel.SetPendingModeratorInstruction(instruction);
 
+	internal void CaptureRecoveryBoundary(IGameFlowManagerKey key) =>
+		_gameSessionKernel.CaptureRecoveryBoundary();
+
 	internal void TransitionSubPhaseCache(IPhaseManagerKey key, Enum subPhase) =>
         _gameSessionKernel.TransitionSubPhase(subPhase);
 

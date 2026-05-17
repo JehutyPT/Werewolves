@@ -368,8 +368,32 @@ internal static class GameFlowManager
 
         // --- Update Pending Instruction ---
 		session.SetPendingModeratorInstruction(Key, nextInstructionToSend);
+		if (ShouldAdvanceRecoveryBoundary(session, oldPhase, newPhase, nextInstructionToSend))
+		{
+			session.CaptureRecoveryBoundary(Key);
+		}
 
 		return ProcessResult.Success(nextInstructionToSend);
+    }
+
+    private static bool ShouldAdvanceRecoveryBoundary(
+        GameSession session,
+        GamePhase oldPhase,
+        GamePhase newPhase,
+        ModeratorInstruction nextInstructionToSend)
+    {
+        if (oldPhase != newPhase)
+        {
+            return true;
+        }
+
+        return newPhase == GamePhase.Night &&
+               !session.GameHistoryLog.Any() &&
+               nextInstructionToSend is ConfirmationInstruction
+               {
+                   PublicAnnouncement: var announcement
+               } &&
+               announcement == GameStrings.NightStartsPrompt;
     }
 
     private static bool TryGetVictoryInstructions(GameSession session, GamePhase oldPhase, GamePhase newPhase,

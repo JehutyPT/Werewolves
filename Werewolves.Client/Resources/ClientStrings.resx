@@ -73,8 +73,8 @@
   <data name="Common_Back" xml:space="preserve">
     <value>Back</value>
   </data>
-  <data name="Common_Benchmark" xml:space="preserve">
-    <value>Benchmark</value>
+  <data name="Common_Labs" xml:space="preserve">
+    <value>Labs</value>
   </data>
   <data name="LobbyRoster_StepLabel" xml:space="preserve">
     <value>Step 1 of 2</value>
@@ -135,6 +135,9 @@
   </data>
   <data name="Common_ListSeparator" xml:space="preserve">
     <value>, </value>
+  </data>
+  <data name="Common_TapToExpand" xml:space="preserve">
+    <value>Tap to expand</value>
   </data>
   <data name="RoleSelection_StepLabel" xml:space="preserve">
     <value>Step 2 of 2</value>
@@ -313,6 +316,9 @@
   <data name="Dashboard_AudioMute" xml:space="preserve">
     <value>Mute audio</value>
   </data>
+  <data name="Dashboard_DebateTimerLabel" xml:space="preserve">
+    <value>Debate</value>
+  </data>
   <data name="Benchmark_StepLabel" xml:space="preserve">
     <value>Spike #30</value>
   </data>
@@ -396,5 +402,41 @@
   </data>
   <data name="Benchmark_AlreadyRunningError" xml:space="preserve">
     <value>Benchmark is already running.</value>
+  </data>
+  <data name="SelectPlayers_SubmitButton" xml:space="preserve">
+    <value>Confirm</value>
+  </data>
+  <data name="SelectPlayers_ListAria" xml:space="preserve">
+    <value>Selectable players</value>
+  </data>
+  <data name="SelectOptions_Title" xml:space="preserve">
+    <value>Choose option</value>
+  </data>
+  <data name="SelectOptions_SelectionCountFormat" xml:space="preserve">
+    <value>{0} of {1} selected</value>
+  </data>
+  <data name="AssignRoles_Title" xml:space="preserve">
+    <value>Assign role</value>
+  </data>
+  <data name="AssignRoles_SelectRolePrompt" xml:space="preserve">
+    <value>Choose role</value>
+  </data>
+  <data name="AssignRoles_PreviousPlayerAria" xml:space="preserve">
+    <value>Previous player</value>
+  </data>
+  <data name="AssignRoles_NextPlayerAria" xml:space="preserve">
+    <value>Next player</value>
+  </data>
+  <data name="Common_HoldToConfirm" xml:space="preserve">
+    <value>Hold to confirm</value>
+  </data>
+  <data name="Victory_Title" xml:space="preserve">
+    <value>Game Over</value>
+  </data>
+  <data name="Victory_StepLabel" xml:space="preserve">
+    <value>Result</value>
+  </data>
+  <data name="Victory_ReturnToLobbyButton" xml:space="preserve">
+    <value>New game</value>
   </data>
 </root>

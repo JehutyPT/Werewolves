@@ -26,6 +26,9 @@ namespace Werewolves.Client
         protected override Window CreateWindow(IActivationState? activationState)
         {
             var window = new Window(new MainPage()) { Title = ClientStrings.App_Title };
+#if MACCATALYST
+            MacCatalystPhoneWindow.Apply(window);
+#endif
             window.Stopped += HandleWindowStopped;
             window.Resumed += HandleWindowResumed;
             window.Destroying += HandleWindowDestroying;

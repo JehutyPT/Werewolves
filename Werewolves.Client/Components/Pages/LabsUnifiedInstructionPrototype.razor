@@ -1,0 +1,391 @@
+@using Werewolves.Client.Components.Game.Views
+@inject IHapticFeedbackService Haptic
+
+<main class="ww-dashboard-shell" data-lab-unified aria-label="Laboratório de instrução unificada">
+    <nav class="ww-dashboard-tabs ww-labs-unified-nav" aria-label="Navegação do laboratório">
+        <button type="button" class="ww-dashboard-tab" @onclick="Back">Voltar</button>
+        <button type="button" class="ww-dashboard-tab" disabled="@(_currentIndex == 0)" @onclick="PrevSample">Anterior</button>
+        <button type="button" class="ww-dashboard-tab" disabled="@(_currentIndex >= _samples.Count - 1)" @onclick="NextSample">Seguinte</button>
+    </nav>
+
+    @{
+        var sample = _samples[_currentIndex];
+        var publicExpanded = _expandedSection == ExpandedSection.Public;
+        var privateExpanded = _expandedSection == ExpandedSection.Private;
+    }
+
+    <header class="ww-labs-status-bar" aria-label="@StatusLabel(sample)">
+        <span class="ww-labs-status-bar__dot" aria-hidden="true"></span>
+        <span class="ww-labs-status-bar__turn">Turno @sample.TurnNumber</span>
+        <span class="ww-labs-status-bar__phase">@sample.PhaseLabel</span>
+    </header>
+
+    <section class="ww-dashboard-panel ww-action-panel">
+        <div class="ww-instruction-stack">
+            @if (!string.IsNullOrWhiteSpace(sample.PublicText))
+            {
+                <article class="ww-instruction-block ww-instruction-block--announcement ww-labs-collapsible @(publicExpanded ? "is-expanded" : "")"
+                         @onclick="() => Expand(ExpandedSection.Public)">
+                    <span class="ww-label ww-label--accent">Anunciar</span>
+                    @if (publicExpanded)
+                    {
+                        <p class="ww-announcement">@sample.PublicText</p>
+                    }
+                    else
+                    {
+                        <p class="ww-announcement ww-labs-preview">@FirstLine(sample.PublicText)</p>
+                        <span class="ww-labs-expand-hint">Tocar para expandir</span>
+                    }
+                </article>
+            }
+
+            @if (!string.IsNullOrWhiteSpace(sample.PrivateText))
+            {
+                <article class="ww-instruction-block ww-instruction-block--private ww-labs-collapsible @(privateExpanded ? "is-expanded" : "")"
+                         @onclick="() => Expand(ExpandedSection.Private)">
+                    <span class="ww-label">Moderador</span>
+                    @if (privateExpanded)
+                    {
+                        <p class="ww-private-instruction">@sample.PrivateText</p>
+                    }
+                    else
+                    {
+                        <p class="ww-private-instruction ww-labs-preview">@FirstLine(sample.PrivateText)</p>
+                        <span class="ww-labs-expand-hint">Tocar para expandir</span>
+                    }
+                </article>
+            }
+
+            @switch (sample.InputType)
+            {
+                case SampleInputType.SelectPlayers:
+                    <ul class="ww-select-players-list" aria-label="Selecionar jogadores">
+                        @for (var i = 0; i < _fakePlayers.Count; i++)
+                        {
+                            var player = _fakePlayers[i];
+                            var seat = i + 1;
+                            var isSelected = _selectedPlayers.Contains(player);
+                            <li class="ww-select-players-item @(isSelected ? "ww-select-players-item--selected" : "")"
+                                @key="player"
+                                @onclick="() => TogglePlayer(player)"
+                                role="option"
+                                aria-selected="@isSelected">
+                                <span class="ww-seat-number">@seat</span>
+                                <span class="ww-player-name">@player</span>
+                                <span class="ww-select-players-check" aria-hidden="true">
+                                    @if (isSelected) { <text>&#x2713;</text> }
+                                </span>
+                            </li>
+                        }
+                    </ul>
+                    break;
+
+                case SampleInputType.SelectOptions:
+                    <div class="ww-option-list" aria-label="Selecionar opções">
+                        @foreach (var option in _fakeOptions)
+                        {
+                            <button type="button"
+                                    class="@OptionClass(option)"
+                                    @onclick="() => ToggleOption(option)">@option</button>
+                        }
+                    </div>
+                    <span class="ww-selection-count">@_selectedOptions.Count / @_fakeOptions.Count</span>
+                    break;
+
+                case SampleInputType.AssignRoles:
+                    var activePlayer = ActiveAssignmentPlayer;
+                    <div class="ww-labs-role-assignment" aria-label="Atribuir papéis">
+                        <div class="ww-labs-player-picker">
+                            <button type="button"
+                                    class="ww-icon-button ww-labs-player-arrow"
+                                    aria-label="Jogador anterior"
+                                    disabled="@IsFirstAssignmentPlayer"
+                                    @onclick="PreviousAssignmentPlayer">&#x2039;</button>
+                            <div class="ww-labs-player-picker__identity">
+                                <span class="ww-player-name">@activePlayer</span>
+                                <span class="ww-assign-prompt">@AssignmentLabel(activePlayer)</span>
+                            </div>
+                            <button type="button"
+                                    class="ww-icon-button ww-labs-player-arrow"
+                                    aria-label="Jogador seguinte"
+                                    disabled="@IsLastAssignmentPlayer"
+                                    @onclick="NextAssignmentPlayer">&#x203A;</button>
+                        </div>
+
+                        <div class="ww-labs-role-groups">
+                            @foreach (var group in RoleGroupsFor(activePlayer))
+                            {
+                                <section class="ww-labs-role-group" @key="group.Group">
+                                    <div class="ww-section-head">
+                                        <span>@RoleGroupLabel(group.Group)</span>
+                                    </div>
+                                    <div class="ww-labs-role-choices" aria-label="@RoleGroupLabel(group.Group)">
+                                        @foreach (var role in group.Roles)
+                                        {
+                                            <button type="button"
+                                                    class="@RoleClass(activePlayer, role.Name)"
+                                                    @onclick="() => AssignRole(activePlayer, role.Name)">@role.Name</button>
+                                        }
+                                    </div>
+                                </section>
+                            }
+                        </div>
+                    </div>
+                    break;
+            }
+        </div>
+    </section>
+
+    <footer class="ww-dashboard-action-zone">
+        @switch (sample.InputType)
+        {
+            case SampleInputType.Confirmation:
+                <HoldButton Label="Confirmar" OnHoldComplete="HandleConfirm" />
+                break;
+
+            case SampleInputType.SelectPlayers:
+                <HoldButton Label="Submeter" Disabled="@(_selectedPlayers.Count == 0)" OnHoldComplete="HandleConfirm" />
+                break;
+
+            case SampleInputType.SelectOptions:
+                <HoldButton Label="Continuar" Disabled="@(_selectedOptions.Count == 0)" OnHoldComplete="HandleConfirm" />
+                break;
+
+            case SampleInputType.AssignRoles:
+                <HoldButton Label="Continuar" Disabled="@(!AllPlayersAssigned)" OnHoldComplete="HandleConfirm" />
+                break;
+        }
+    </footer>
+</main>
+
+@code {
+    [Parameter]
+    public EventCallback OnBack { get; set; }
+
+    private int _currentIndex;
+    private int _activeAssignmentPlayerIndex;
+    private ExpandedSection _expandedSection;
+
+    private HashSet<string> _selectedPlayers = new();
+    private HashSet<string> _selectedOptions = new();
+    private Dictionary<string, string> _roleAssignments = new();
+
+    private readonly List<string> _fakePlayers = ["Alice", "Bob", "Carlos", "Diana", "Eduardo"];
+    private readonly List<string> _fakeOptions = ["Proteger", "Investigar", "Silenciar", "Passar"];
+    private readonly List<LabRoleOption> _fakeRoles =
+    [
+        new("Aldeão", LabRoleGroup.Villagers),
+        new("Ancião", LabRoleGroup.Villagers),
+        new("Bruxa", LabRoleGroup.Villagers),
+        new("Caçador", LabRoleGroup.Villagers),
+        new("Cupido", LabRoleGroup.Villagers),
+        new("Defensor", LabRoleGroup.Villagers),
+        new("Raposa", LabRoleGroup.Villagers),
+        new("Vidente", LabRoleGroup.Villagers),
+        new("Lobisomem", LabRoleGroup.Werewolves),
+        new("Lobo Branco", LabRoleGroup.Werewolves),
+        new("Bode Expiatório", LabRoleGroup.Ambiguous),
+        new("Criança Selvagem", LabRoleGroup.Ambiguous),
+        new("Anjo", LabRoleGroup.Loners),
+        new("Flautista", LabRoleGroup.Loners),
+    ];
+
+    private readonly List<SampleInstruction> _samples =
+    [
+        new(1,
+            "Noite",
+            "A Noite caiu sobre a aldeia. Todos fecham os olhos.",
+            "Toque no Lobisomem para acordar. Verifique se ninguém está a espreitar.\nLembre-se: o Lobisomem deve apontar silenciosamente para a sua vítima.",
+            SampleInputType.Confirmation),
+
+        new(1,
+            "Noite",
+            "O Vidente acorda e escolhe alguém para investigar.",
+            "Mostre a carta do jogador escolhido ao Vidente.\nNão revele a informação em voz alta — apenas mostre.",
+            SampleInputType.SelectPlayers),
+
+        new(1,
+            "Noite",
+            "A Bruxa acorda. Escolha o que fazer.",
+            "A Bruxa pode proteger a vítima ou envenenar outro jogador.\nMostre quem foi atacado antes de pedir a decisão.",
+            SampleInputType.SelectOptions),
+
+        new(0,
+            "Preparação",
+            null,
+            "Distribua os papéis aos jogadores indicados.\nVerifique que cada jogador recebe exactamente uma carta.",
+            SampleInputType.AssignRoles),
+    ];
+
+    private void Expand(ExpandedSection section)
+    {
+        if (_expandedSection != section)
+        {
+            _expandedSection = section;
+            Haptic.TryClick();
+        }
+    }
+
+    private void TogglePlayer(string player)
+    {
+        if (!_selectedPlayers.Add(player))
+            _selectedPlayers.Remove(player);
+    }
+
+    private void ToggleOption(string option)
+    {
+        if (!_selectedOptions.Remove(option))
+            _selectedOptions.Add(option);
+    }
+
+    private void AssignRole(string player, string role)
+    {
+        if (_roleAssignments.TryGetValue(player, out var assigned) && assigned == role)
+        {
+            _roleAssignments.Remove(player);
+            return;
+        }
+
+        _roleAssignments[player] = role;
+    }
+
+    private IReadOnlyList<string> AssignmentPlayers => _fakePlayers.Take(3).ToArray();
+
+    private string ActiveAssignmentPlayer => AssignmentPlayers[_activeAssignmentPlayerIndex];
+
+    private bool IsFirstAssignmentPlayer => _activeAssignmentPlayerIndex == 0;
+
+    private bool IsLastAssignmentPlayer => _activeAssignmentPlayerIndex == AssignmentPlayers.Count - 1;
+
+    private void PreviousAssignmentPlayer()
+    {
+        if (IsFirstAssignmentPlayer)
+        {
+            return;
+        }
+
+        _activeAssignmentPlayerIndex--;
+        Haptic.TryClick();
+    }
+
+    private void NextAssignmentPlayer()
+    {
+        if (IsLastAssignmentPlayer)
+        {
+            return;
+        }
+
+        _activeAssignmentPlayerIndex++;
+        Haptic.TryClick();
+    }
+
+    private string AssignmentLabel(string player) =>
+        _roleAssignments.TryGetValue(player, out var role) ? role : "Selecionar…";
+
+    private IEnumerable<LabRoleOption> AvailableRolesFor(string player)
+    {
+        var usedRoles = _roleAssignments
+            .Where(a => a.Key != player)
+            .Select(a => a.Value)
+            .ToHashSet();
+
+        return _fakeRoles.Where(r => !usedRoles.Contains(r.Name));
+    }
+
+    private IEnumerable<LabRoleGroupDisplay> RoleGroupsFor(string player) =>
+        AvailableRolesFor(player)
+            .GroupBy(role => role.Group)
+            .OrderBy(group => RoleGroupOrder(group.Key))
+            .Select(group => new LabRoleGroupDisplay(
+                group.Key,
+                group.OrderBy(role => role.Name, StringComparer.CurrentCulture).ToArray()));
+
+    private static int RoleGroupOrder(LabRoleGroup group) => group switch
+    {
+        LabRoleGroup.Villagers => 0,
+        LabRoleGroup.Werewolves => 1,
+        LabRoleGroup.Ambiguous => 2,
+        LabRoleGroup.Loners => 3,
+        _ => 4
+    };
+
+    private static string RoleGroupLabel(LabRoleGroup group) => group switch
+    {
+        LabRoleGroup.Villagers => "Aldeões",
+        LabRoleGroup.Werewolves => "Lobisomens",
+        LabRoleGroup.Ambiguous => "Ambíguos",
+        LabRoleGroup.Loners => "Solitários",
+        _ => "Papéis"
+    };
+
+    private bool AllPlayersAssigned =>
+        AssignmentPlayers.All(p => _roleAssignments.ContainsKey(p));
+
+    private string OptionClass(string option) =>
+        _selectedOptions.Contains(option)
+            ? "ww-option-btn ww-option-btn--selected"
+            : "ww-option-btn";
+
+    private string RoleClass(string player, string role) =>
+        _roleAssignments.TryGetValue(player, out var assigned) && assigned == role
+            ? "ww-role-btn ww-role-btn--selected"
+            : "ww-role-btn";
+
+    private void HandleConfirm()
+    {
+        _selectedPlayers.Clear();
+        _selectedOptions.Clear();
+        _roleAssignments.Clear();
+        NextSample();
+    }
+
+    private void NextSample()
+    {
+        if (_currentIndex < _samples.Count - 1)
+        {
+            _currentIndex++;
+            ResetForCurrentSample();
+        }
+    }
+
+    private void PrevSample()
+    {
+        if (_currentIndex > 0)
+        {
+            _currentIndex--;
+            ResetForCurrentSample();
+        }
+    }
+
+    private void ResetForCurrentSample()
+    {
+        _selectedPlayers.Clear();
+        _selectedOptions.Clear();
+        _roleAssignments.Clear();
+        _activeAssignmentPlayerIndex = 0;
+        var sample = _samples[_currentIndex];
+        _expandedSection = string.IsNullOrWhiteSpace(sample.PublicText)
+            ? ExpandedSection.Private
+            : ExpandedSection.Public;
+    }
+
+    private Task Back() => OnBack.InvokeAsync();
+
+    private static string FirstLine(string text)
+    {
+        var newlineIndex = text.IndexOf('\n');
+        return newlineIndex >= 0 ? text[..newlineIndex] + " …" : text;
+    }
+
+    protected override void OnInitialized() => ResetForCurrentSample();
+
+    private static string StatusLabel(SampleInstruction sample) =>
+        $"Estado do jogo: turno {sample.TurnNumber}, fase {sample.PhaseLabel}";
+
+    private record SampleInstruction(int TurnNumber, string PhaseLabel, string? PublicText, string? PrivateText, SampleInputType InputType);
+    private record LabRoleOption(string Name, LabRoleGroup Group);
+    private record LabRoleGroupDisplay(LabRoleGroup Group, IReadOnlyList<LabRoleOption> Roles);
+    private enum SampleInputType { Confirmation, SelectPlayers, SelectOptions, AssignRoles }
+    private enum ExpandedSection { Public, Private }
+    private enum LabRoleGroup { Villagers, Werewolves, Ambiguous, Loners }
+}

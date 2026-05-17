@@ -1,7 +1,8 @@
 @using Werewolves.Core.StateModels.Models
 @using Werewolves.Core.StateModels.Models.Instructions
 
-<button type="button" class="ww-btn-primary" @onclick="Confirm">Confirmar</button>
+<HoldButton Label="@ClientStrings.SelectPlayers_SubmitButton"
+			OnHoldComplete="Confirm" />
 
 @code {
 	[Parameter, EditorRequired]
@@ -10,5 +11,8 @@
 	[Parameter]
 	public EventCallback<ModeratorResponse> OnResponse { get; set; }
 
-	private Task Confirm() => OnResponse.InvokeAsync(Instruction.CreateResponse(true));
+	private Task Confirm()
+	{
+		return OnResponse.InvokeAsync(Instruction.CreateResponse(true));
+	}
 }
