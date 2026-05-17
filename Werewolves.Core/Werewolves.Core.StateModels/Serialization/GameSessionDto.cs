@@ -5,22 +5,28 @@ using Werewolves.Core.StateModels.Models;
 namespace Werewolves.Core.StateModels.Serialization;
 
 /// <summary>
-/// Data Transfer Object for serializing a complete GameSession.
+/// Durable recovery snapshot captured at a stable main-phase boundary.
 /// </summary>
 internal class GameSessionDto
 {
+    // Session identity and setup data.
     public Guid Id { get; set; }
-    public List<PlayerDto> Players { get; set; } = new();
     public List<Guid> SeatingOrder { get; set; } = new();
     public List<MainRoleType> RolesInPlay { get; set; } = new();
+
+    // Derived state restored directly during Rehydration.
+    public List<PlayerDto> Players { get; set; } = new();
     public int TurnNumber { get; set; }
+
+    // True for the ADR-0002 payload shape that preserves a committed boundary cursor.
     public bool IsStableRecoveryBoundary { get; set; }
-    
-    // Transient state
+
+    // Committed boundary instruction and minimal phase cursor. Active stage/listener fields in
+    // GamePhaseStateCacheDto are serialized for DTO compatibility but ignored during Rehydration.
     public GamePhaseStateCacheDto PhaseStateCache { get; set; } = new();
     public ModeratorInstruction? PendingInstruction { get; set; }
-    
-    // Event source
+
+    // Event source as of the same stable boundary as the derived state above.
     public List<GameLogEntryBase> GameHistoryLog { get; set; } = new();
 }
 
@@ -37,7 +43,8 @@ internal class PlayerDto
 }
 
 /// <summary>
-/// Data Transfer Object for serializing the GamePhaseStateCache.
+/// Serialized phase cache shape. Stable-boundary Rehydration restores only CurrentPhase,
+/// SubPhase, and CompletedSubPhaseStages.
 /// </summary>
 internal class GamePhaseStateCacheDto
 {

@@ -95,14 +95,14 @@ The hermetically sealed kernel that owns the game's mutable memory. It is not vi
     *   **`Player` & `PlayerState`:** Concrete implementations of `IPlayer` and `IPlayerState` are defined as **private nested classes** within the Kernel. This ensures their setters are physically inaccessible to any code outside the Kernel file.
     *   **`SessionMutator`:** A **private nested class** implementing `ISessionMutator`. This is the "Proxy Mutator" that bridges the gap between the log entry and the private state.
 *   **Transactional Apply Flow:** The Kernel exposes a single entry point for persistent mutation: `AddEntryAndUpdateState(GameLogEntryBase entry)`.
-*   **Deserialization:** `Deserialize(string json)` (static): Reconstructs a `GameSessionKernel` from its serialized JSON representation. *(Planned - not yet implemented)*
+*   **Deserialization:** `Deserialize(string json)` (static): Restores a `GameSessionKernel` from a stable recovery snapshot JSON payload. Rehydration restores derived player state, the boundary `GameHistoryLog`, the committed boundary `PendingInstruction`, and the minimal phase cursor directly; it does not replay log entries or restore the live in-memory execution tail.
 
 ### `GameSession` (Facade):
 A lightweight, stateless wrapper that implements `IGameSession` and delegates all operations to an internal `_gameSessionKernel` instance.
 
 *   **Constructors:**
     *   `GameSession(Guid id, ModeratorInstruction initialInstruction, GameSessionConfig config, ...)`: Standard constructor for new games.
-    *   `GameSession(string json)`: Rehydration constructor that deserializes a previously saved session. *(Planned - not yet implemented)*
+    *   `GameSession(string json)`: Internal Rehydration constructor that deserializes a previously saved stable recovery snapshot into a new session facade.
 
 *   **Public API (IGameSession):** Read-only projection for UI consumers.
     *   `Id` (Guid): Unique identifier (pass-through to `GameSessionKernel.Id`).
@@ -113,7 +113,7 @@ A lightweight, stateless wrapper that implements `IGameSession` and delegates al
     *   `GetPlayerState(Guid id)` (IPlayerState): Retrieves a player's state by ID.
     *   `GameHistoryLog` (IEnumerable<GameLogEntryBase>): The event log.
     *   `RoleInPlayCount(MainRoleType type)` (int): Returns count of a specific role in play.
-    *   `Serialize()` (string): Serializes the session to JSON for persistence. *(Planned - not yet implemented)*
+    *   `Serialize()` (string): Serializes the latest stable Main Phase recovery snapshot to JSON for persistence. The payload advances only when the Kernel captures a new recovery boundary.
 *   **Internal API (GameLogic):** Mutation gatekeeper for the rules engine.
     *   **State Mutation Methods** (create and dispatch log entries):
         *   `EliminatePlayer(Guid playerId, EliminationReason reason)`: Eliminates a player by creating a `PlayerEliminatedLogEntry`.
@@ -333,8 +333,7 @@ Orchestrates the game flow based on moderator input and tracked state. **Delegat
         *   **Session Cleanup:** If the result contains a `FinishedGameConfirmationInstruction`, the session is removed from the active sessions list.
     *   `GetCurrentInstruction(Guid gameId)` (ModeratorInstruction?): Retrieves the `PendingModeratorInstruction`. 
     *   `GetGameStateView(Guid gameId)` (IGameSession?): Returns the game state via the read-only `IGameSession` interface. This hides the internal mutation methods present on the concrete object, ensuring the UI cannot modify state.
-*   **Internal Methods:**
-    *   `RehydrateSession(string serializedSession)` (void): Restores a game session from its serialized JSON representation and adds it to the active session collection. Returns the session's GUID. *(Planned - not yet implemented)* 
+    *   `RehydrateSession(string serializedSession)` (Guid): Restores a game session from its stable recovery snapshot and adds it to the active session collection. Returns the session's GUID.
 *   **Internal Logic:** 
     *   `EnsureInputTypeIsExpected(Guid gameId, ModeratorResponse input)`: Retrieves the pending instruction internally and validates input type matches expectation. Throws exception on mismatch.
     *   Relies on `GameFlowManager` for all state machine operations. 
@@ -759,15 +758,29 @@ public class MyTests : DiagnosticTestBase
 
 # Session Persistence
 
-*Status: **Implemented** — Full serialization/deserialization support via `System.Text.Json`.*
+*Status: **Implemented** — Stable recovery snapshot serialization via `System.Text.Json`.*
 
-The architecture supports session persistence, enabling games to be saved and restored across application restarts or device changes.
+The Core persistence boundary is `IGameSession.Serialize()` plus `GameService.RehydrateSession(string)`. Serialization returns the latest stable Main Phase recovery snapshot captured by `GameSessionKernel.CaptureRecoveryBoundary()`. It does not serialize the live in-memory tail of the current phase, and Rehydration does not replay the event log.
 
 ## Design
 
-*   **Serialization:** `GameSession.Serialize()` returns a JSON representation of the game session by delegating to `GameSessionKernel.Serialize()`.
-*   **Deserialization:** `GameSessionKernel.Deserialize(string json)` restores session state from JSON.
-*   **Rehydration:** `GameService.RehydrateSession(string serializedSession)` restores a session and adds it to the active session collection. Returns the session's GUID.
+*   **Serialization:** `GameSession.Serialize()` delegates to `GameSessionKernel.Serialize()`, which returns the last captured stable boundary snapshot.
+*   **Boundary advancement:** `GameFlowManager.HandleInput(...)` captures a new boundary only after phase routing, victory override handling, and `PendingInstruction` settlement are complete.
+*   **Rehydration:** `GameService.RehydrateSession(string serializedSession)` restores the stable snapshot into a new active session and returns the session's GUID.
+
+## Durable Payload
+
+`GameSessionDto` is the durable recovery payload:
+
+*   `Id`, `SeatingOrder`, `RolesInPlay`: Session identity and setup.
+*   `Players`: Derived player cache (`Id`, `Name`, `MainRole`, `ActiveEffects`, `Health`) restored directly so Rehydration does not need to replay log entries.
+*   `TurnNumber`: Derived turn cursor as of the stable boundary. It is durable to avoid double-incrementing after Day-to-Night recovery.
+*   `GameHistoryLog`: Event source entries as of the same stable boundary as the derived caches.
+*   `PendingInstruction`: The committed boundary instruction the moderator must consume next after Rehydration. This is stable boundary state, not arbitrary listener progress.
+*   `IsStableRecoveryBoundary`: Marks payloads that follow the ADR-0002 stable boundary contract.
+*   `PhaseStateCache`: Serialized for DTO compatibility, but stable Rehydration restores only `CurrentPhase`, `SubPhase`, and `CompletedSubPhaseStages`. `ActiveSubPhaseStage`, `CurrentListenerId`, `CurrentListenerType`, and `CurrentListenerState` are ignored because they are transient execution state.
+
+For legacy or non-stable payloads, `GamePhaseStateCache.FromDto(...)` restores only the current Main Phase and discards all sub-phase, stage, listener, and listener-state details. For stable payloads, `GamePhaseStateCache.FromStableRecoveryBoundaryDto(...)` restores the minimal cursor needed to consume the committed boundary `PendingInstruction`.
 
 ## Implementation Details
 
@@ -775,10 +788,6 @@ The architecture supports session persistence, enabling games to be saved and re
     *   `GameLogEntryConverter`: Serializes/deserializes all `GameLogEntryBase` derived types using a `$type` discriminator.
     *   `ModeratorInstructionConverter`: Serializes/deserializes all `ModeratorInstruction` derived types using a `$type` discriminator.
 *   **DTOs:** Internal DTO classes (`GameSessionDto`, `PlayerDto`, `GamePhaseStateCacheDto`) provide a clean serialization boundary.
-*   **Serialized State:**
-    *   `GameHistoryLog` (event source): The primary data, as persistent state can be reconstructed by replaying log entries.
-    *   `GamePhaseStateCache` (transient execution state): Serialized alongside the currently pending moderator instruction.
-    *   Player identity data (`Id`, `Name`), seating order, `RolesInPlay`, and all `PlayerState` fields including `ActiveEffects`.
 *   **Deserialization Key:** A private `DeserializationKey` class implements `IStateMutatorKey` to allow direct state restoration during deserialization without going through log entry application.
 
 # Sound Effects

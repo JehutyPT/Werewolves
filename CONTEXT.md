@@ -103,11 +103,11 @@ _Avoid_: Event card (when referring to the game mechanic), Spirit card
 ### Persistence
 
 **Serialization**:
-Saving a Game Session to JSON so it can survive app restarts or device changes.
+Saving the latest stable Game Session recovery snapshot to JSON so it can survive app restarts or device changes.
 _Avoid_: Save game, checkpoint
 
 **Rehydration**:
-Restoring a Game Session from its serialized form, replaying the event log to reconstruct state.
+Restoring a Game Session from its serialized stable recovery snapshot. Rehydration restores cached boundary state directly; it does not replay the event log.
 _Avoid_: Load game, restore
 
 ## Relationships

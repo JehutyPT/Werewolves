@@ -65,26 +65,27 @@ killed or the device restarts, the in-progress game is lost. On launch, the
 app always returns the Moderator to the Lobby.
 
 **Desired behavior:**
-After every successful `ProcessInput`, the event log is serialised and written
-to `FileSystem.AppDataDirectory` as a single overwriting save file. On app
-launch, if a save file exists, `GameClientManager` rehydrates the session via
-`GameService` and returns the Moderator to the Dashboard at the start of the
-current main Phase (per ADR-0002). The save file is cleared when a game ends
-(victory) or a new game starts. A corrupted save file must not crash the app.
+After every successful `ProcessInput`, the Core's stable recovery snapshot is
+serialised and written to `FileSystem.AppDataDirectory` as a single overwriting
+save file. On app launch, if a save file exists, `GameClientManager` rehydrates
+the session via `GameService` and returns the Moderator to the Dashboard at the
+latest stable Main Phase recovery boundary (per ADR-0002). The save file is
+cleared when a game ends (victory) or a new game starts. A corrupted save file
+must not crash the app.
 
 **Key interfaces:**
 - `GameClientManager` — gains save/load lifecycle; existing `ProcessInput` and
   `StateChanged` semantics unchanged.
-- `GameService` — used for rehydration; expected to accept a serialised event
-  log and return a fully-restored `IGameSession`.
+- `GameService` — used for rehydration; expected to accept a serialised stable
+  recovery snapshot and return a fully-restored `IGameSession`.
 - `FileSystem.AppDataDirectory` — single canonical save location.
 
 **Acceptance criteria:**
-- [ ] Successful `ProcessInput` writes the event log to disk.
-- [ ] Only the event log is serialised (per ADR-0002).
+- [ ] Successful `ProcessInput` writes the Core stable recovery snapshot to disk.
+- [ ] Current-phase tail work remains transient until Core captures a stable boundary (per ADR-0002).
 - [ ] On app launch, an existing save file triggers session rehydration.
-- [ ] After rehydration, the Moderator continues from the start of the
-      current main Phase.
+- [ ] After rehydration, the Moderator continues from the latest stable Main
+      Phase recovery boundary.
 - [ ] Save file is deleted on victory and on new-game start.
 - [ ] Corrupt save file is detected and surfaced as a recoverable error
       (app does not crash; Moderator returns to Lobby).

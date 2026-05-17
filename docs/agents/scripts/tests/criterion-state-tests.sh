@@ -143,9 +143,9 @@ run_failure \
 run_success \
   "wrapped criterion matches normalized logical text" \
   mark-criterion-complete.sh \
-  $'- [ ] After rehydration, the Moderator continues from the start of the\n      current main Phase.' \
-  "After rehydration, the Moderator continues from the start of the current main Phase." \
-  $'- [x] After rehydration, the Moderator continues from the start of the\n      current main Phase.'
+  $'- [ ] After rehydration, the Moderator continues from the latest stable\n      Main Phase recovery boundary.' \
+  "After rehydration, the Moderator continues from the latest stable Main Phase recovery boundary." \
+  $'- [x] After rehydration, the Moderator continues from the latest stable\n      Main Phase recovery boundary.'
 
 run_success \
   "CRLF task line matches and preserves CRLF" \

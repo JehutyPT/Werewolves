@@ -1,7 +1,9 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using FluentAssertions;
+using Werewolves.Core.GameLogic.Models.StateMachine;
 using Werewolves.Core.GameLogic.Services;
+using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
@@ -558,6 +560,73 @@ public class SerializationTests : DiagnosticTestBase
     }
 
     [Fact]
+    public void Serialize_StableRecoveryBoundaryPayload_ContainsDocumentedDurableFields()
+    {
+        var playerNames = new[] { "Alice", "Bob", "Charlie", "Diana", "Eve" };
+        var roles = new[]
+        {
+            MainRoleType.SimpleWerewolf,
+            MainRoleType.Seer,
+            MainRoleType.SimpleVillager,
+            MainRoleType.SimpleVillager,
+            MainRoleType.SimpleVillager
+        };
+        var builder = CreateBuilder()
+            .WithPlayers(playerNames)
+            .WithRoles(roles);
+        builder.StartGame();
+        builder.ConfirmGameStart();
+
+        var session = builder.GetGameState()!;
+        var dto = JsonSerializer.Deserialize<GameSessionDto>(
+            session.Serialize(),
+            RecoverySerializationOptions)!;
+
+        dto.IsStableRecoveryBoundary.Should().BeTrue();
+        dto.Id.Should().Be(session.Id);
+        dto.TurnNumber.Should().Be(1);
+        dto.RolesInPlay.Should().Equal(roles);
+        dto.Players.Select(player => player.Name).Should().Equal(playerNames);
+        dto.SeatingOrder.Should().Equal(dto.Players.Select(player => player.Id));
+        dto.PendingInstruction.Should().BeOfType<ConfirmationInstruction>()
+            .Subject.PublicAnnouncement.Should().Be(GameStrings.NightStartsPrompt);
+        dto.PhaseStateCache.CurrentPhase.Should().Be(GamePhase.Night);
+        dto.GameHistoryLog.Should().BeEmpty();
+
+        MarkTestCompleted();
+    }
+
+    [Fact]
+    public void RehydrateStableBoundary_RestoresCommittedInstructionCursorAndIgnoresActiveExecutionState()
+    {
+        var alivePlayerId = Guid.NewGuid();
+        var votedPlayerId = Guid.NewGuid();
+        var bystanderId = Guid.NewGuid();
+        var service = new GameService();
+        var gameId = service.RehydrateSession(CreateStableDayVoteBoundaryJson(
+            alivePlayerId,
+            votedPlayerId,
+            bystanderId));
+        var session = (GameSession)service.GetGameStateView(gameId)!;
+
+        session.GetSubPhase<DaySubPhases>().Should().Be(DaySubPhases.NormalVoting);
+        session.GetActiveSubPhaseStage().Should().BeNull();
+        session.GetCurrentListener().Should().BeNull();
+        session.GetCurrentListenerState<StandardNightRoleState>(
+            ListenerIdentifier.Listener(MainRoleType.SimpleWerewolf)).Should().BeNull();
+        service.GetCurrentInstruction(gameId).Should().BeOfType<SelectPlayersInstruction>();
+
+        var voteInstruction = (SelectPlayersInstruction)service.GetCurrentInstruction(gameId)!;
+        service.ProcessInstruction(gameId, voteInstruction.CreateResponse([votedPlayerId]));
+
+        var updatedSession = service.GetGameStateView(gameId)!;
+        updatedSession.GameHistoryLog.OfType<VoteOutcomeReportedLogEntry>()
+            .Should().ContainSingle(entry => entry.ReportedOutcomePlayerId == votedPlayerId);
+
+        MarkTestCompleted();
+    }
+
+    [Fact]
     public void RehydrateInterruptedDawn_ReplaysElderProtectionWithoutEliminatingElder()
     {
         var wolfId = Guid.NewGuid();
@@ -707,6 +776,101 @@ public class SerializationTests : DiagnosticTestBase
                     TurnNumber = 1,
                     PreviousPhase = GamePhase.Night,
                     CurrentPhase = GamePhase.Dawn
+                }
+            ]
+        };
+
+        return JsonSerializer.Serialize(dto, RecoverySerializationOptions);
+    }
+
+    private static string CreateStableDayVoteBoundaryJson(
+        Guid alivePlayerId,
+        Guid votedPlayerId,
+        Guid bystanderId)
+    {
+        var dto = new GameSessionDto
+        {
+            Id = Guid.NewGuid(),
+            TurnNumber = 1,
+            IsStableRecoveryBoundary = true,
+            SeatingOrder = [alivePlayerId, votedPlayerId, bystanderId],
+            RolesInPlay =
+            [
+                MainRoleType.SimpleWerewolf,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager
+            ],
+            PendingInstruction = new SelectPlayersInstruction(
+                [alivePlayerId, votedPlayerId, bystanderId],
+                NumberRangeConstraint.SingleOptional,
+                publicAnnouncement: GameStrings.VoteStartsPublicInstruction,
+                privateInstruction: GameStrings.VoteStartsModeratorInstruction),
+            PhaseStateCache = new GamePhaseStateCacheDto
+            {
+                CurrentPhase = GamePhase.Day,
+                SubPhase = DaySubPhases.NormalVoting.ToString(),
+                ActiveSubPhaseStage = DaySubPhaseStage.RequestVote.ToString(),
+                CompletedSubPhaseStages = [DaySubPhaseStage.RequestVote.ToString()],
+                CurrentListenerId = MainRoleType.SimpleWerewolf.ToString(),
+                CurrentListenerType = GameHookListenerType.MainRole.ToString(),
+                CurrentListenerState = "Ignored"
+            },
+            Players =
+            [
+                new PlayerDto
+                {
+                    Id = alivePlayerId,
+                    Name = "Wolf",
+                    MainRole = MainRoleType.SimpleWerewolf,
+                    Health = PlayerHealth.Alive
+                },
+                new PlayerDto
+                {
+                    Id = votedPlayerId,
+                    Name = "Voted",
+                    MainRole = MainRoleType.SimpleVillager,
+                    Health = PlayerHealth.Alive
+                },
+                new PlayerDto
+                {
+                    Id = bystanderId,
+                    Name = "Bystander",
+                    MainRole = MainRoleType.SimpleVillager,
+                    Health = PlayerHealth.Alive
+                }
+            ],
+            GameHistoryLog =
+            [
+                new AssignRoleLogEntry
+                {
+                    Timestamp = DateTimeOffset.UtcNow,
+                    TurnNumber = 1,
+                    CurrentPhase = GamePhase.Night,
+                    PlayerIds = [alivePlayerId],
+                    AssignedMainRole = MainRoleType.SimpleWerewolf
+                },
+                new AssignRoleLogEntry
+                {
+                    Timestamp = DateTimeOffset.UtcNow,
+                    TurnNumber = 1,
+                    CurrentPhase = GamePhase.Night,
+                    PlayerIds = [votedPlayerId],
+                    AssignedMainRole = MainRoleType.SimpleVillager
+                },
+                new AssignRoleLogEntry
+                {
+                    Timestamp = DateTimeOffset.UtcNow,
+                    TurnNumber = 1,
+                    CurrentPhase = GamePhase.Night,
+                    PlayerIds = [bystanderId],
+                    AssignedMainRole = MainRoleType.SimpleVillager
+                },
+                new PhaseTransitionLogEntry
+                {
+                    Timestamp = DateTimeOffset.UtcNow,
+                    TurnNumber = 1,
+                    PreviousPhase = GamePhase.Dawn,
+                    CurrentPhase = GamePhase.Day
                 }
             ]
         };

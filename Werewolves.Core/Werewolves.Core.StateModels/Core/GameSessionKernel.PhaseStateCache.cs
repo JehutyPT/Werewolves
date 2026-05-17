@@ -248,8 +248,8 @@ internal partial class GameSessionKernel
 		}
 
 		/// <summary>
-		/// Restores the minimal cursor needed to consume a committed boundary instruction.
-		/// Arbitrary mid-phase active stages and listeners remain transient.
+		/// Restores the stable-boundary cursor needed to consume the committed PendingInstruction.
+		/// Active stages and listeners are live execution state and remain transient.
 		/// </summary>
 		internal static GamePhaseStateCache FromStableRecoveryBoundaryDto(GamePhaseStateCacheDto dto)
 		{

@@ -42,7 +42,7 @@
 *   Singleton. Proxies moderator input to Core, holds the active session, manages audio playback, and handles persistence.
 *   Monolithic for v1 — audio, persistence, and session management live in one class. The seams for future decomposition are obvious (audio, persistence, session) but splitting is deferred until complexity warrants it.
 *   **Audio:** Holds the active `IAudioPlayer`. Responsible for starting/stopping/looping tracks. Reconciles on `App.OnResume` or `StateChanged`. The View only sends signals (e.g., "Mute Toggled").
-*   **Persistence:** Immediate write to `FileSystem.AppDataDirectory` on successful `ProcessInput()`. Single active session — one save file, overwritten on each input.
+*   **Persistence:** Attempts a write to `FileSystem.AppDataDirectory` after successful `ProcessInput()`, but the Core payload represents only the latest stable Main Phase recovery boundary. Single active session — one save file, replaced on each save attempt.
 
 ## 4. Navigation & Layout
 
@@ -128,8 +128,10 @@
 ## 9. Lifecycle
 
 *   **Wake Lock:** Active during Lobby and Dashboard.
-*   **Persistence:** Save immediately after `ProcessInput()`. Load on app start / `App.OnResume`. If a save file exists on launch, resume; otherwise show Lobby.
-*   **Transient state is not serialized** (see ADR-0002). On process kill and rehydration, the game resets to the beginning of the current main phase.
+*   **Persistence:** Attempt to save after each successful `ProcessInput()`. Load on app start / `App.OnResume`. If a save file exists on launch, resume; otherwise show Lobby.
+*   **Stable recovery boundary:** A save attempt does not imply durable game progress advanced. `IGameSession.Serialize()` returns the Core's latest stable Main Phase recovery snapshot, so current-phase tail work remains volatile until Core captures a new boundary.
+*   **Transient state is not serialized** (see ADR-0002). On process kill and Rehydration, active sub-phase stage, active listener, and listener state are discarded; the game resumes from the committed boundary instruction and minimal phase cursor.
+*   **Crash-safe write behavior:** `FileGameSessionSaveStore` writes the new payload to a temporary file in the save directory, then replaces or renames it into place. If platform atomic replacement is unavailable, same-directory rename overwrite is the accepted fallback. Stale temporary write artifacts are cleaned up on save and clear where practical.
 
 ## 10. Error Handling
 

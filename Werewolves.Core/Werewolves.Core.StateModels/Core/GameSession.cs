@@ -16,7 +16,7 @@ public interface IGameSession
     public int RoleInPlayCount(MainRoleType type);
 
     /// <summary>
-    /// To support GameSession rehydration
+    /// Serializes the latest stable main-phase recovery snapshot for Rehydration.
     /// </summary>
 	public string Serialize();
 }
@@ -56,7 +56,7 @@ internal class GameSession : IGameSession
 	}
 
 	/// <summary>
-	/// To support GameSession rehydration
+	/// Restores a session from its stable recovery snapshot.
 	/// </summary>
 	/// <returns></returns>
 	internal GameSession(string json)

@@ -87,6 +87,43 @@ public class GameClientManagerTests
 	}
 
 	[Fact]
+	public void Save_OverwritesExistingSaveFileAndRemovesTemporaryWriteArtifacts()
+	{
+		using var saveDirectory = TemporaryDirectory.Create();
+		var saveStore = new FileGameSessionSaveStore(saveDirectory.Path);
+		var saveFilePath = Path.Combine(saveDirectory.Path, FileGameSessionSaveStore.SaveFileName);
+		var staleTempPath = Path.Combine(
+			saveDirectory.Path,
+			$"{FileGameSessionSaveStore.SaveFileName}.stale.tmp");
+		File.WriteAllText(saveFilePath, "stale save data");
+		File.WriteAllText(staleTempPath, "left over from interrupted write");
+
+		saveStore.Save("fresh save data");
+
+		File.ReadAllText(saveFilePath).Should().Be("fresh save data");
+		Directory.GetFiles(saveDirectory.Path).Should().ContainSingle(path => path == saveFilePath);
+		Directory.GetFiles(saveDirectory.Path, $"{FileGameSessionSaveStore.SaveFileName}.*.tmp")
+			.Should().BeEmpty();
+	}
+
+	[Fact]
+	public void Clear_RemovesSaveFileAndTemporaryWriteArtifacts()
+	{
+		using var saveDirectory = TemporaryDirectory.Create();
+		var saveStore = new FileGameSessionSaveStore(saveDirectory.Path);
+		var saveFilePath = Path.Combine(saveDirectory.Path, FileGameSessionSaveStore.SaveFileName);
+		var staleTempPath = Path.Combine(
+			saveDirectory.Path,
+			$"{FileGameSessionSaveStore.SaveFileName}.stale.tmp");
+		File.WriteAllText(saveFilePath, "stale save data");
+		File.WriteAllText(staleTempPath, "left over from interrupted write");
+
+		saveStore.Clear();
+
+		Directory.GetFiles(saveDirectory.Path).Should().BeEmpty();
+	}
+
+	[Fact]
 	public void Constructor_WhenSaveFileExists_RehydratesSessionAndCurrentInstruction()
 	{
 		using var saveDirectory = TemporaryDirectory.Create();
