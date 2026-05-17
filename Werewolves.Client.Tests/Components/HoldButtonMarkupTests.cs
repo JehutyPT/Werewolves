@@ -38,11 +38,11 @@ public class HoldButtonMarkupTests
 	[Fact]
 	public void Markup_LocksProductionHapticPresetTiming()
 	{
-		var markup = File.ReadAllText(GetViewPath());
+		var sequence = File.ReadAllText(GetClientPath("Components", "Game", "Views", "HoldButtonHapticSequence.cs"));
 
-		markup.Should().Contain("HoldDurationMs = 400");
-		markup.Should().Contain("new[] { 0, 200, 280, 330, 360, 380 }");
-		markup.Should().Contain("PendingLongPressHapticOffsetsMs");
+		sequence.Should().Contain("HoldDurationMs = 400");
+		sequence.Should().Contain("[0, 200, 280, 330, 360, 380]");
+		sequence.Should().Contain("PendingLongPressHapticOffsetsMs");
 	}
 
 	[Fact]

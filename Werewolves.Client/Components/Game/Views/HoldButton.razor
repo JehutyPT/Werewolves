@@ -18,12 +18,10 @@
 </div>
 
 @code {
-	private const int HoldDurationMs = 400;
-	private const int SuccessFlashMs = 250;
-	private static readonly int[] PendingLongPressHapticOffsetsMs = new[] { 0, 200, 280, 330, 360, 380 };
-	private static readonly TimeSpan HoldDuration = TimeSpan.FromMilliseconds(HoldDurationMs);
+	private static readonly TimeSpan HoldDuration = TimeSpan.FromMilliseconds(HoldButtonHapticSequence.HoldDurationMs);
 
 	private readonly HoldConfirmationGate _holdGate = new(HoldDuration);
+	private readonly HoldButtonHapticSequence _hapticSequence = new();
 	private bool _isHolding;
 	private bool _isComplete;
 	private CancellationTokenSource? _holdCts;
@@ -59,6 +57,7 @@
 
 		_holdStartedAtTimestamp = System.Diagnostics.Stopwatch.GetTimestamp();
 		_holdGate.Begin();
+		_hapticSequence.Reset();
 		_isHolding = true;
 		_isComplete = false;
 		StateHasChanged();
@@ -66,7 +65,7 @@
 
 		try
 		{
-			await Task.Delay(HoldDurationMs, token);
+			await Task.Delay(HoldButtonHapticSequence.HoldDurationMs, token);
 			if (!IsCurrentHold(holdSequence, token))
 			{
 				return;
@@ -94,6 +93,7 @@
 	{
 		if (result == HoldConfirmationResult.Completed)
 		{
+			PlayRemainingPendingLongPressHaptics();
 			CancelPendingHold();
 			_isHolding = false;
 			_isComplete = true;
@@ -101,7 +101,7 @@
 			Haptic.TryLongPress();
 			StateHasChanged();
 
-			await Task.Delay(SuccessFlashMs);
+			await Task.Delay(HoldButtonHapticSequence.SuccessFlashMs);
 			await OnHoldComplete.InvokeAsync();
 			return;
 		}
@@ -124,11 +124,13 @@
 	private async Task PlayPendingLongPressHapticsAsync(long holdSequence, CancellationToken token)
 	{
 		var previousOffsetMs = 0;
+		var offsets = HoldButtonHapticSequence.PendingLongPressHapticOffsetsMs;
 
 		try
 		{
-			foreach (var offsetMs in PendingLongPressHapticOffsetsMs)
+			for (var offsetIndex = 0; offsetIndex < offsets.Length; offsetIndex++)
 			{
+				var offsetMs = offsets[offsetIndex];
 				var delayMs = offsetMs - previousOffsetMs;
 				if (delayMs > 0)
 				{
@@ -140,12 +142,25 @@
 					return;
 				}
 
-				Haptic.TryLongPress();
+				if (_hapticSequence.TryReservePendingLongPress(offsetIndex))
+				{
+					Haptic.TryLongPress();
+				}
+
 				previousOffsetMs = offsetMs;
 			}
 		}
 		catch (TaskCanceledException)
 		{
+		}
+	}
+
+	private void PlayRemainingPendingLongPressHaptics()
+	{
+		var remainingCount = _hapticSequence.ReserveRemainingPendingLongPresses();
+		for (var index = 0; index < remainingCount; index++)
+		{
+			Haptic.TryLongPress();
 		}
 	}
 
