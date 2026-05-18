@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using FluentAssertions;
@@ -11,8 +12,12 @@ public class LocalizationPolicyTests
 		"(@?)\"((?:\"\"|\\\\.|[^\"\\\\])*)\"",
 		RegexOptions.Compiled);
 
+	private static readonly Regex FormatPlaceholderPattern = new(
+		@"\{\d+(?:,[^}:]+)?(?::[^}]+)?\}",
+		RegexOptions.Compiled);
+
 	[Fact]
-	public void ClientTests_DoNotHardcodeLocalizedProductionCopyOutsideResourceContracts()
+	public void TestProjects_DoNotHardcodeLocalizedProductionCopyOutsideResourceContracts()
 	{
 		var resources = LoadLocalizedResourceValues();
 		var resourcesByValue = resources
@@ -22,21 +27,30 @@ public class LocalizationPolicyTests
 			.GroupBy(resource => resource.Key)
 			.ToDictionary(group => group.Key, group => group.First().Value, StringComparer.Ordinal);
 
-		var violations = EnumerateClientTestFiles()
+		var violations = EnumeratePolicyTestFiles()
 			.Where(file => !IsResourceContractTest(file))
 			.SelectMany(file => FindStringLiterals(file)
 				.SelectMany(literal => FindResourceLiteralViolations(file, literal, resources, resourcesByValue, resourcesByKey)))
+			.Distinct()
 			.ToArray();
 
 		violations.Should().BeEmpty(
-			"client tests should use ClientStrings, GameStrings, GetPublicName(), or production localization helpers; raw localized copy belongs only in resource contract tests");
+			"test projects should use ClientStrings, GameStrings, GetPublicName(), or production localization helpers; raw localized copy belongs only in resource contract tests");
 	}
 
-	private static IEnumerable<string> EnumerateClientTestFiles() =>
-		Directory.EnumerateFiles(Path.Combine(RepositoryRoot, "Werewolves.Client.Tests"), "*.cs", SearchOption.AllDirectories)
-			.Where(file =>
-				!file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
-				&& !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal));
+	private static IEnumerable<string> EnumeratePolicyTestFiles()
+	{
+		var testRoots = new[]
+		{
+			Path.Combine(RepositoryRoot, "Werewolves.Client.Tests"),
+			Path.Combine(RepositoryRoot, "Werewolves.Core", "Werewolves.Core.Tests")
+		};
+
+		return testRoots
+			.Where(Directory.Exists)
+			.SelectMany(testRoot => Directory.EnumerateFiles(testRoot, "*.cs", SearchOption.AllDirectories))
+			.Where(file => !IsBuildOutputPath(file));
+	}
 
 	private static IEnumerable<LocalizationViolation> FindResourceLiteralViolations(
 		string file,
@@ -62,6 +76,15 @@ public class LocalizationPolicyTests
 			}
 		}
 
+		foreach (var resource in resources.Where(ShouldFlagFormattedValue))
+		{
+			if (!literal.Value.Equals(resource.Value, StringComparison.Ordinal)
+				&& IsFormattedResourceExample(literal.Value, resource.Value))
+			{
+				yield return new LocalizationViolation(RelativePath(file), literal.LineNumber, literal.Value, resource.Key);
+			}
+		}
+
 		if (IsPhaseTurnLiteral(literal.Value, resourcesByKey))
 		{
 			yield return new LocalizationViolation(RelativePath(file), literal.LineNumber, literal.Value, "Dashboard_PhaseTurnFormat");
@@ -75,6 +98,40 @@ public class LocalizationPolicyTests
 			|| resource.Key.StartsWith("StatusEffect_", StringComparison.Ordinal)
 			|| resource.Key.StartsWith("Dashboard_EliminationReason", StringComparison.Ordinal)
 			|| resource.Key == "Dashboard_PhaseDawn");
+
+	private static bool ShouldFlagFormattedValue(LocalizedResourceValue resource)
+	{
+		if (!FormatPlaceholderPattern.IsMatch(resource.Value))
+		{
+			return false;
+		}
+
+		var fixedText = FormatPlaceholderPattern.Replace(resource.Value, string.Empty);
+		return fixedText.Length >= 5
+			&& (fixedText.Any(character => character > 127)
+				|| fixedText.Contains(' ', StringComparison.Ordinal)
+				|| resource.Key.StartsWith("StatusEffect_", StringComparison.Ordinal)
+				|| resource.Key.StartsWith("Dashboard_EliminationReason", StringComparison.Ordinal)
+				|| resource.Key == "Dashboard_PhaseTurnFormat");
+	}
+
+	private static bool IsFormattedResourceExample(string value, string resourceValue)
+	{
+		var patternBuilder = new StringBuilder("^");
+		var currentIndex = 0;
+
+		foreach (Match match in FormatPlaceholderPattern.Matches(resourceValue))
+		{
+			patternBuilder.Append(Regex.Escape(resourceValue[currentIndex..match.Index]));
+			patternBuilder.Append(".+");
+			currentIndex = match.Index + match.Length;
+		}
+
+		patternBuilder.Append(Regex.Escape(resourceValue[currentIndex..]));
+		patternBuilder.Append('$');
+
+		return Regex.IsMatch(value, patternBuilder.ToString(), RegexOptions.CultureInvariant);
+	}
 
 	private static bool IsPhaseTurnLiteral(string value, IReadOnlyDictionary<string, string> resourcesByKey)
 	{
@@ -150,10 +207,14 @@ public class LocalizationPolicyTests
 
 	private static bool IsResourceContractTest(string file)
 	{
-		var relativePath = RelativePath(file).Replace(Path.DirectorySeparatorChar, '/');
-		return relativePath.StartsWith("Werewolves.Client.Tests/Resources/", StringComparison.Ordinal)
+		var relativePath = RelativePath(file).Replace('\\', '/');
+		return relativePath.Contains("/Resources/", StringComparison.Ordinal)
 			&& relativePath.EndsWith("StringsTests.cs", StringComparison.Ordinal);
 	}
+
+	private static bool IsBuildOutputPath(string file) =>
+		file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+		|| file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal);
 
 	private static string RelativePath(string file) =>
 		Path.GetRelativePath(RepositoryRoot, file);

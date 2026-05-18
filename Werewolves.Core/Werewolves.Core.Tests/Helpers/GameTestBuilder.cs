@@ -385,7 +385,7 @@ public class GameTestBuilder
                 return result;
         }
 
-        // Confirm the night-end instruction ("Night actions complete. Village wakes up.")
+        // Confirm the night-end instruction that transitions out of night actions.
         // This transitions the game to Dawn phase proper
         var nightEndInstruction = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
             result,

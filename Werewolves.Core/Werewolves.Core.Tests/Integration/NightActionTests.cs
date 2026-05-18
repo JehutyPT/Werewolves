@@ -742,8 +742,8 @@ public class NightActionTests : DiagnosticTestBase
 
     /// <summary>
     /// NA-030: First night wake-up instruction includes private identification prompt.
-    /// The instruction should have both a public announcement ("X acorda.") and
-    /// a private instruction ("Identifica o jogador que é X.") for the moderator.
+    /// The instruction should have both a public announcement and a resource-backed
+    /// private role-identification prompt for the moderator.
     /// </summary>
     [Fact]
     public void FirstNight_WakeupInstruction_IncludesPrivateIdentificationPrompt()
