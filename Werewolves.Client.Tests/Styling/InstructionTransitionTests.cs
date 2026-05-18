@@ -9,7 +9,7 @@ public class InstructionTransitionTests
     [Fact]
     public void DesignTokens_DefineInstructionAnimationDurationBetween200And300Ms()
     {
-        var css = File.ReadAllText(ClientPath("wwwroot/css/design-tokens.css"));
+        var css = File.ReadAllText(SharedPath("wwwroot/css/design-tokens.css"));
         var match = Regex.Match(css, @"--ww-anim-instruction:\s*(\d+)ms");
 
         match.Success.Should().BeTrue("design-tokens.css should define --ww-anim-instruction");
@@ -21,7 +21,7 @@ public class InstructionTransitionTests
     public void AppCss_DefinesInstructionEnterKeyframes()
     {
         // Deprecated temporary scaffold: replace with browser-host computed-style or motion checks.
-        var css = File.ReadAllText(ClientPath("wwwroot/css/app.css"));
+        var css = File.ReadAllText(SharedPath("wwwroot/css/app.css"));
 
         css.Should().Contain("@keyframes ww-instruction-enter",
             "app.css should define a keyframes animation for instruction transitions");
@@ -31,7 +31,7 @@ public class InstructionTransitionTests
     public void AppCss_InstructionBlockUsesAnimationToken()
     {
         // Deprecated temporary scaffold: replace with browser-host computed-style checks for rendered instruction blocks.
-        var css = File.ReadAllText(ClientPath("wwwroot/css/app.css"));
+        var css = File.ReadAllText(SharedPath("wwwroot/css/app.css"));
 
         css.Should().Contain("ww-instruction-enter",
             "instruction block should reference the enter animation");
@@ -39,9 +39,9 @@ public class InstructionTransitionTests
             "instruction block should use the design token for animation duration");
     }
 
-    private static string ClientPath(params string[] relativeSegments)
+    private static string SharedPath(params string[] relativeSegments)
     {
-        return Path.Combine([RepositoryRoot, "Werewolves.Client", .. relativeSegments]);
+        return Path.Combine([RepositoryRoot, "Werewolves.Client.Shared", .. relativeSegments]);
     }
 
     private static string RepositoryRoot

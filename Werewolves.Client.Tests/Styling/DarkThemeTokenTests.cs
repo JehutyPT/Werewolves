@@ -13,7 +13,7 @@ public class DarkThemeTokenTests
 	[Fact]
 	public void AppCss_ConsumesColorValuesThroughDesignTokens()
 	{
-		var literals = FindColorLiterals(ClientPath("wwwroot/css/app.css"));
+		var literals = FindColorLiterals(SharedPath("wwwroot/css/app.css"));
 
 		literals.Should().BeEmpty();
 	}
@@ -21,7 +21,7 @@ public class DarkThemeTokenTests
 	[Fact]
 	public void RootDocument_UsesDarkThemeTokensBeforePagesRender()
 	{
-		var appCss = File.ReadAllText(ClientPath("wwwroot/css/app.css"));
+		var appCss = File.ReadAllText(SharedPath("wwwroot/css/app.css"));
 
 		appCss.Should().MatchRegex(@"(?s)html,\s*body,\s*#app\s*\{.*background:\s*var\(--ww-bg\).*color:\s*var\(--ww-text\).*color-scheme:\s*dark");
 	}
@@ -101,7 +101,7 @@ public class DarkThemeTokenTests
 	[Fact]
 	public void Pages_DoNotUseInlineColorLiterals()
 	{
-		var pages = Directory.GetFiles(ClientPath("Components/Pages"), "*.razor");
+		var pages = Directory.GetFiles(SharedPath("Components/Pages"), "*.razor");
 		pages.Should().NotBeEmpty();
 
 		var inlineColorLiterals = pages
@@ -114,7 +114,7 @@ public class DarkThemeTokenTests
 	[Fact]
 	public void Pages_RenderInsideDarkShells()
 	{
-		var pages = Directory.GetFiles(ClientPath("Components/Pages"), "*.razor");
+		var pages = Directory.GetFiles(SharedPath("Components/Pages"), "*.razor");
 		pages.Should().NotBeEmpty();
 
 		// Deprecated temporary scaffold: replace with ADR-0006/bUnit or browser-host rendered shell checks.
@@ -136,7 +136,7 @@ public class DarkThemeTokenTests
 
 	private static IReadOnlyDictionary<string, string> ReadHexTokens()
 	{
-		var designTokens = File.ReadAllText(ClientPath("wwwroot/css/design-tokens.css"));
+		var designTokens = File.ReadAllText(SharedPath("wwwroot/css/design-tokens.css"));
 		var tokenPattern = new Regex(@"^\s*(--ww-[\w-]+):\s*(#[0-9a-f]{6})\s*;", RegexOptions.IgnoreCase | RegexOptions.Multiline);
 
 		return tokenPattern.Matches(designTokens)
@@ -172,6 +172,11 @@ public class DarkThemeTokenTests
 	private static string ClientPath(params string[] relativeSegments)
 	{
 		return Path.Combine([RepositoryRoot, "Werewolves.Client", .. relativeSegments]);
+	}
+
+	private static string SharedPath(params string[] relativeSegments)
+	{
+		return Path.Combine([RepositoryRoot, "Werewolves.Client.Shared", .. relativeSegments]);
 	}
 
 	private static string RepositoryRoot

@@ -198,7 +198,7 @@ public class AssignRolesViewTests
 		{
 			var candidate = Path.Combine(
 				directory.FullName,
-				"Werewolves.Client",
+				"Werewolves.Client.Shared",
 				"Components",
 				"Game",
 				"Views",

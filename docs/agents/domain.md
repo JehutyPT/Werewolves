@@ -25,6 +25,8 @@ Single-context repo:
 │   ├── triage-labels.md
 │   └── domain.md
 ├── Werewolves.Client/
+├── Werewolves.Client.Shared/
+├── Werewolves.Client.Tests/
 └── Werewolves.Core/
 ```
 

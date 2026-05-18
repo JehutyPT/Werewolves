@@ -17,7 +17,7 @@ public class InstructionRendererHapticTests
 
     private static string InstructionRendererPath()
     {
-        return Path.Combine(RepositoryRoot, "Werewolves.Client", "Components", "Game", "Views", "InstructionRenderer.razor");
+        return Path.Combine(RepositoryRoot, "Werewolves.Client.Shared", "Components", "Game", "Views", "InstructionRenderer.razor");
     }
 
     private static string RepositoryRoot

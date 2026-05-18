@@ -10,7 +10,7 @@ public class DashboardOverlayLayoutTests
 	public void ProductionDashboard_FixesTopAndBottomOverlays()
 	{
 		// Deprecated temporary scaffold: replace with local browser QA host viewport/computed-layout checks.
-		var css = File.ReadAllText(ClientPath("wwwroot/css/app.css"));
+		var css = File.ReadAllText(SharedPath("wwwroot/css/app.css"));
 
 		css.Should().MatchRegex(SelectorBlockPattern(@"\[data-production-dashboard\]\s+\.ww-dashboard-tabs--compact", "position: fixed"));
 		css.Should().MatchRegex(SelectorBlockPattern(@"\[data-production-dashboard\]\s+\.ww-dashboard-status-bar", "position: fixed"));
@@ -21,7 +21,7 @@ public class DashboardOverlayLayoutTests
 	public void ProductionDashboard_AddsScrollPaddingForFixedOverlays()
 	{
 		// Deprecated temporary scaffold: replace with local browser QA host viewport/computed-layout checks.
-		var css = File.ReadAllText(ClientPath("wwwroot/css/app.css"));
+		var css = File.ReadAllText(SharedPath("wwwroot/css/app.css"));
 
 		css.Should().Contain("--ww-dashboard-tabs-height");
 		css.Should().Contain("--ww-dashboard-status-height");
@@ -35,7 +35,7 @@ public class DashboardOverlayLayoutTests
 	public void ProductionDashboard_StatusBarUsesInsetWidthInsteadOfViewportWidth()
 	{
 		// Deprecated temporary scaffold: replace with local browser QA host safe-area and viewport checks.
-		var css = File.ReadAllText(ClientPath("wwwroot/css/app.css"));
+		var css = File.ReadAllText(SharedPath("wwwroot/css/app.css"));
 
 		css.Should().MatchRegex(SelectorBlockPattern(@"\.ww-labs-status-bar\.ww-dashboard-status-bar", "width: auto"));
 		css.Should().NotMatchRegex(SelectorBlockPattern(@"\.ww-labs-status-bar\.ww-dashboard-status-bar", "width: 100%"));
@@ -46,9 +46,9 @@ public class DashboardOverlayLayoutTests
 		return $@"(?s){selector}\s*\{{(?:(?!\}}).)*{Regex.Escape(declaration)}";
 	}
 
-	private static string ClientPath(params string[] relativeSegments)
+	private static string SharedPath(params string[] relativeSegments)
 	{
-		return Path.Combine([RepositoryRoot, "Werewolves.Client", .. relativeSegments]);
+		return Path.Combine([RepositoryRoot, "Werewolves.Client.Shared", .. relativeSegments]);
 	}
 
 	private static string RepositoryRoot

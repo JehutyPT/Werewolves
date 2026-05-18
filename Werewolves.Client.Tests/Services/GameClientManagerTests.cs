@@ -440,7 +440,7 @@ public class GameClientManagerTests
 		manager.ProcessInput(startInstruction.CreateResponse(true));
 		var nightStartInstruction = manager.CurrentInstruction.Should().BeOfType<ConfirmationInstruction>().Subject;
 		nightStartInstruction.PublicAnnouncement.Should().Be("A aldeia adormece.");
-		nightStartInstruction.PrivateInstruction.Should().Be("Confirma que todos estão a dormir e em silêncio.");
+		nightStartInstruction.PrivateInstruction.Should().Be("Confirma que todos estão de olhos fechados e em silêncio.");
 		manager.CurrentPhase.Should().Be(GamePhase.Night);
 		manager.TurnNumber.Should().Be(1);
 

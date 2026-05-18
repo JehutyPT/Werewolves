@@ -29,7 +29,7 @@ public sealed class GameClientManager
 	{
 		_gameService = gameService;
 		_audioPlayback = audioPlayback ?? DisabledInstructionAudioPlayback.Instance;
-		_saveStore = saveStore ?? FileGameSessionSaveStore.CreateDefault();
+		_saveStore = saveStore ?? DisabledGameSessionSaveStore.Instance;
 		_timeProvider = timeProvider ?? TimeProvider.System;
 		TryResumeSavedGame();
 	}
