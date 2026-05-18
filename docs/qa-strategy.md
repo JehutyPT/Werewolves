@@ -58,18 +58,16 @@ Keep local/manual evidence out of CI until it has stable fixtures, runtime, and 
 
 ## Manual Device Checks
 
-Treat these as the manual device boundary:
+Treat these as the manual device boundary. The repeatable client checklist lives in `Werewolves.Client/docs/native-device-qa-checklist.md`.
 
-- Native audio routing, looping, interruption, and mute behavior on real Android, iOS, and Mac Catalyst devices.
-- Haptic strength, timing feel, and platform availability.
-- Wake lock engagement and release across foreground/background transitions.
-- Resume/background behavior after operating-system process pressure.
-- Platform storage behavior, including file permissions and app data cleanup.
-- Packaging, signing, app icon, splash, and store metadata behavior.
-- WebView quirks in platform hosts, including safe areas, viewport units, keyboard overlays, and platform CSS bugs.
-- Touch feel, including hit target comfort, accidental tap prevention, press-and-hold feel, scroll momentum, and dark-room readability.
+The checklist stays native-only:
 
-Manual check notes must include: claim, device/OS, steps, result, and screenshots or observations when useful.
+- It proves native audio, haptics, wake lock, resume/background, platform storage, packaging/install, WebView host quirks, and touch feel with captured observations from real devices.
+- It does not replay Core game rules, phase flow, serialization semantics, or which semantic sound effects Core should trigger.
+- It does not repeat Browser QA Host layout, CSS, viewport, focus, or deterministic rendered-state checks.
+- It remains manual unless future repeated platform regressions justify one or two tiny device smoke tests with stable pass/fail evidence.
+
+Manual check notes must include: claim, device/OS, app build, steps, result, and screenshots, video, logs, install results, or observations when useful.
 
 ## Browser QA Host
 
@@ -89,6 +87,7 @@ Rows are active policy. If a retained source-level test no longer matches its co
 | Test or group | Category | Protected claim | Condition |
 | --- | --- | --- | --- |
 | `Werewolves.Client.Tests.Documentation.QaStrategyTests.QaStrategy_DefinesClaimFirstEvidenceGuideAndSourceTestAllowlist` | Permanent policy | This guide keeps claim-first QA, evidence selection, source-test rules, CI/local split, manual device boundary, browser-host guidance, and a populated allowlist. | Markdown is the policy surface; keep a narrow documentation contract test. |
+| `Werewolves.Client.Tests.Documentation.QaStrategyTests.NativeDeviceChecklist_DefinesManualOnlyClaimAndEvidenceChecks` | Permanent policy | The client docs keep a manual-only native device checklist with named claims, manual scenarios, expected evidence, native behavior coverage, and explicit Core/browser-host boundaries. | Markdown is the policy surface; keep a narrow documentation contract test. |
 | `Werewolves.Client.Tests.Platform.AndroidManifestTests.AndroidManifest_DeclaresVibratePermissionForHapticFeedback` | Permanent policy | Android declares the haptics permission needed by MAUI haptic feedback. | Manifest XML is the contract. |
 | `Werewolves.Client.Tests.Resources.ClientStringsTests.ClientStrings_ExposesPortugueseUiCopyThroughGeneratedAccessor` | Permanent policy | Portuguese client UI copy remains resource-backed through the generated accessor. | The generated accessor is the runtime localization surface. |
 | `Werewolves.Client.Tests.Styling.DarkThemeTokenTests`: `AppCss_ConsumesColorValuesThroughDesignTokens`, `RootDocument_UsesDarkThemeTokensBeforePagesRender`, `MauiHost_UsesDarkChromeAcrossSupportedSurfaces`, `TextTokens_HaveReadableContrastAgainstDarkSurfaces`, `Pages_DoNotUseInlineColorLiterals` | Permanent policy | Dark theme tokens, first-paint defaults, platform chrome metadata, contrast, and no-inline-color policy stay intact. | CSS, project, and platform metadata are the contracts. |
