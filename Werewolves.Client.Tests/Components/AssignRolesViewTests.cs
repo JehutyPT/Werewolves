@@ -96,6 +96,7 @@ public class AssignRolesViewTests
 	[Fact]
 	public void Markup_RendersRolesFromInstruction()
 	{
+		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered role-list checks.
 		var markup = File.ReadAllText(GetViewPath());
 
 		markup.Should().Contain("Instruction.RolesForAssignment");
@@ -104,6 +105,7 @@ public class AssignRolesViewTests
 	[Fact]
 	public void Markup_RendersPlayersForAssignment()
 	{
+		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered Player navigation checks.
 		var markup = File.ReadAllText(GetViewPath());
 
 		markup.Should().Contain("Instruction.PlayersForAssignment");
@@ -112,6 +114,7 @@ public class AssignRolesViewTests
 	[Fact]
 	public void Markup_AcceptsInstructionAndOnResponseParameters()
 	{
+		// Deprecated temporary scaffold: remove after ADR-0006/bUnit instantiates the component through public parameters.
 		var markup = File.ReadAllText(GetViewPath());
 
 		markup.Should().Contain("[Parameter");
@@ -122,6 +125,7 @@ public class AssignRolesViewTests
 	[Fact]
 	public void Markup_AcceptsRosterParameterForPlayerNameResolution()
 	{
+		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered Player-name checks.
 		var markup = File.ReadAllText(GetViewPath());
 
 		markup.Should().Contain("IReadOnlyList<DashboardRosterEntry> Roster");
@@ -130,6 +134,7 @@ public class AssignRolesViewTests
 	[Fact]
 	public void Markup_CallsCreateResponseOnSubmit()
 	{
+		// Deprecated temporary scaffold: replace with ADR-0006/bUnit submit-callback checks.
 		var markup = File.ReadAllText(GetViewPath());
 
 		markup.Should().Contain("Instruction.CreateResponse");
@@ -139,6 +144,7 @@ public class AssignRolesViewTests
 	[Fact]
 	public void Markup_SubmitUsesPressAndHoldPattern()
 	{
+		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered submit-event checks.
 		var markup = File.ReadAllText(GetViewPath());
 
 		markup.Should().Contain("<HoldButton");
@@ -149,6 +155,7 @@ public class AssignRolesViewTests
 	[Fact]
 	public void Markup_PinsSubmitButtonInDashboardActionZone()
 	{
+		// Deprecated temporary scaffold: replace with browser-host layout checks or bUnit rendered structure checks.
 		var markup = File.ReadAllText(GetViewPath());
 
 		markup.Should().MatchRegex(@"(?s)<footer class=""ww-dashboard-action-zone"">\s*<HoldButton");
@@ -157,6 +164,7 @@ public class AssignRolesViewTests
 	[Fact]
 	public void Markup_SubmitButtonIsDisabledWhenAssignmentsIncomplete()
 	{
+		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered interaction checks.
 		var markup = File.ReadAllText(GetViewPath());
 
 		markup.Should().Contain("Disabled=\"@(!AllPlayersAssigned)\"");
@@ -165,6 +173,7 @@ public class AssignRolesViewTests
 	[Fact]
 	public void Markup_UsesGetPublicNameForRoleDisplay()
 	{
+		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered role-label checks.
 		var markup = File.ReadAllText(GetViewPath());
 
 		// Roles should use the existing GetPublicName() extension for localization
@@ -174,6 +183,7 @@ public class AssignRolesViewTests
 	[Fact]
 	public void Markup_UsesClientStringsResourceKeys()
 	{
+		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered Portuguese text checks.
 		var markup = File.ReadAllText(GetViewPath());
 
 		markup.Should().Contain("ClientStrings.AssignRoles_Title");

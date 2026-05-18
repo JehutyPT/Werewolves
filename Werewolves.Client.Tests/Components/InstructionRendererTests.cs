@@ -8,6 +8,7 @@ public class InstructionRendererTests
 	[Fact]
 	public void Markup_HasSelectOptionsInstructionBranch()
 	{
+		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered branch checks.
 		var markup = File.ReadAllText(GetViewPath());
 
 		markup.Should().Contain("SelectOptionsInstruction");
@@ -17,6 +18,7 @@ public class InstructionRendererTests
 	[Fact]
 	public void Markup_HasAssignRolesInstructionBranch()
 	{
+		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered branch checks.
 		var markup = File.ReadAllText(GetViewPath());
 
 		markup.Should().Contain("AssignRolesInstruction");
@@ -26,6 +28,7 @@ public class InstructionRendererTests
 	[Fact]
 	public void Markup_PassesRosterToAssignRolesView()
 	{
+		// Deprecated temporary scaffold: replace with ADR-0006/bUnit visible Player-name checks.
 		var markup = File.ReadAllText(GetViewPath());
 
 		// AssignRolesView needs roster for player name resolution

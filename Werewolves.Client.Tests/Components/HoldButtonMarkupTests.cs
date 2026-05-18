@@ -8,6 +8,7 @@ public class HoldButtonMarkupTests
 	[Fact]
 	public void Markup_UsesPointerEventsForHoldDetection()
 	{
+		// Deprecated temporary scaffold: replace with ADR-0006/bUnit pointer-event rendering coverage.
 		var markup = File.ReadAllText(GetViewPath());
 
 		markup.Should().Contain("@onpointerdown");
@@ -17,37 +18,9 @@ public class HoldButtonMarkupTests
 	}
 
 	[Fact]
-	public void Markup_UsesDelayWithCancellationForHoldTiming()
-	{
-		var markup = File.ReadAllText(GetViewPath());
-
-		markup.Should().Contain("Task.Delay");
-		markup.Should().Contain("CancellationTokenSource");
-	}
-
-	[Fact]
-	public void Markup_InjectsHapticFeedbackService()
-	{
-		var markup = File.ReadAllText(GetViewPath());
-
-		markup.Should().Contain("@inject IHapticFeedbackService Haptic");
-		markup.Should().Contain("Haptic.TryLongPress()");
-		markup.Should().NotContain("Haptic.TryClick()");
-	}
-
-	[Fact]
-	public void Markup_LocksProductionHapticPresetTiming()
-	{
-		var sequence = File.ReadAllText(GetClientPath("Components", "Game", "Views", "HoldButtonHapticSequence.cs"));
-
-		sequence.Should().Contain("HoldDurationMs = 400");
-		sequence.Should().Contain("[0, 200, 280, 330, 360, 380]");
-		sequence.Should().Contain("PendingLongPressHapticOffsetsMs");
-	}
-
-	[Fact]
 	public void DesignTokens_AnimateHoldProgressOverProductionDuration()
 	{
+		// Deprecated temporary scaffold: replace with browser-host computed-style checks for rendered hold progress.
 		var designTokens = File.ReadAllText(GetClientPath("wwwroot", "css", "design-tokens.css"));
 
 		designTokens.Should().Contain("transition: width 400ms linear;");
@@ -59,6 +32,7 @@ public class HoldButtonMarkupTests
 	[Fact]
 	public void Markup_UsesHoldToConfirmResourceString()
 	{
+		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered text checks.
 		var markup = File.ReadAllText(GetViewPath());
 
 		markup.Should().Contain("ClientStrings.Common_HoldToConfirm");
@@ -67,6 +41,7 @@ public class HoldButtonMarkupTests
 	[Fact]
 	public void Markup_DeclaresRequiredParameters()
 	{
+		// Deprecated temporary scaffold: remove after ADR-0006/bUnit instantiates HoldButton through public parameters.
 		var markup = File.ReadAllText(GetViewPath());
 
 		markup.Should().Contain("[Parameter, EditorRequired]");
@@ -78,6 +53,7 @@ public class HoldButtonMarkupTests
 	[Fact]
 	public void Markup_RendersHoldButtonStructure()
 	{
+		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered markup or browser-host visual checks.
 		var markup = File.ReadAllText(GetViewPath());
 
 		markup.Should().Contain("ww-hold-zone");
@@ -91,6 +67,7 @@ public class HoldButtonMarkupTests
 	[Fact]
 	public void Markup_UsesCssStateClassesForVisualFeedback()
 	{
+		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered state-transition checks.
 		var markup = File.ReadAllText(GetViewPath());
 
 		markup.Should().Contain("is-holding");
@@ -100,6 +77,7 @@ public class HoldButtonMarkupTests
 	[Fact]
 	public void Markup_DisablesButtonWhenDisabledParameterIsTrue()
 	{
+		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered disabled-attribute checks.
 		var markup = File.ReadAllText(GetViewPath());
 
 		markup.Should().Contain("disabled=\"@Disabled\"");

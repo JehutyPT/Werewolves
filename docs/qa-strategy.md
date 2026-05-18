@@ -1,0 +1,105 @@
+# QA Strategy
+
+Use this guide when writing or evaluating automated tests for Core and Client.
+
+Run QA claim-first:
+
+- Name the claim the change must prove.
+- Choose the cheapest reliable evidence that proves that claim directly.
+- Do not use source assertions to prove rendered UI, native behavior, or service behavior when better evidence is available.
+- When evidence is local or manual, record the claim, environment, steps, result, and artifacts.
+
+## Choose Evidence
+
+Use this QA Evidence Matrix before adding or accepting tests.
+
+| Claim area | Preferred evidence | Run | Use for |
+| --- | --- | --- | --- |
+| Core behavior | Integration tests through public Core APIs, game-session builders, and observable `ModeratorInstruction` / `ModeratorResponse` results. | CI | Rules, phase flow, serialization, status effects, and game invariants. |
+| Moderator UI behavior | Rendered component tests through the component public surface, then DOM, text, attribute, and event assertions. | CI after the host-agnostic RCL boundary is stable. | What the Moderator sees, can press, can expand, or can submit. |
+| Client orchestration | Service and adapter tests with fakes for audio, haptics, persistence, wake lock, and app lifecycle seams. | CI | `GameClientManager`, display flow, save/recovery, audio reconciliation, mute state, roster projection, stats, and wake-lock policy. |
+| Browser-rendered UI | Browser QA host fixtures, viewport presets, screenshots, DOM/CSS inspection, and agent-assisted visual review. | Local | Layout, safe-area-like spacing, scroll behavior, animation feel, focus order, and visual hierarchy. |
+| Native platform behavior | Manual device checklist with captured observations. | Local/manual | Native audio, haptics, wake lock, resume/background behavior, platform storage, packaging, WebView quirks, and touch feel. |
+| Static policy/source contracts | Structured parsing or narrow source scans over manifest, plist, XAML, project, resource, CSS token, or documentation files. | CI when stable. | The source shape itself: permissions, metadata, no inline colors, token contrast, resource-backed copy, architecture boundaries, or QA policy sections. |
+
+## Source-Test Rules
+
+- Prefer behavior, rendered, service, adapter, or integration tests.
+- Write a source-level test only when the protected claim is the source shape itself, or when the test is an allowlisted temporary scaffold.
+- Reject raw Razor assertions over component names, event handler names, parameter declarations, CSS classes, resource key names, and implementation methods unless the test is allowlisted.
+- List every retained source-level test in the Source-Test Allowlist with its exact test or test group, category, protected claim, and replacement or removal condition.
+- Put the same replacement or removal direction in a short code comment for every `Deprecated temporary scaffold`.
+- Remove a temporary scaffold as soon as its replacement evidence exists.
+
+## Allowed Source Tests
+
+| Category | Rule |
+| --- | --- |
+| Permanent policy | Keep only when the source file is the real contract, such as platform metadata, resource-backed copy, design tokens, contrast thresholds, architecture boundaries, or this QA strategy. |
+| Deprecated temporary scaffold | Keep only while rendered, browser-host, service, or adapter evidence is unavailable. The allowlist row must say what replaces it or when to remove it. |
+| Disallowed | Do not keep source tests that freeze incidental implementation text, duplicate stronger evidence, or lack an allowlist row. |
+
+## CI vs Local Evidence
+
+Use CI for deterministic evidence:
+
+- Core behavior through public Core APIs.
+- Client services and adapters with fakes at external seams.
+- Rendered component tests after the RCL boundary is stable.
+- Narrow source-policy tests listed in the Source-Test Allowlist.
+- Documentation contract tests that guard this guide.
+
+Keep local/manual evidence out of CI until it has stable fixtures, runtime, and pass/fail contracts:
+
+- Browser QA host inspection and screenshot review.
+- Exploratory device checks.
+- Native audio, haptics, wake lock, resume/background, platform storage, packaging, WebView quirks, and touch feel.
+- Broad visual review that still requires human judgment.
+
+## Manual Device Checks
+
+Treat these as the manual device boundary:
+
+- Native audio routing, looping, interruption, and mute behavior on real Android, iOS, and Mac Catalyst devices.
+- Haptic strength, timing feel, and platform availability.
+- Wake lock engagement and release across foreground/background transitions.
+- Resume/background behavior after operating-system process pressure.
+- Platform storage behavior, including file permissions and app data cleanup.
+- Packaging, signing, app icon, splash, and store metadata behavior.
+- WebView quirks in platform hosts, including safe areas, viewport units, keyboard overlays, and platform CSS bugs.
+- Touch feel, including hit target comfort, accidental tap prevention, press-and-hold feel, scroll momentum, and dark-room readability.
+
+Manual check notes must include: claim, device/OS, steps, result, and screenshots or observations when useful.
+
+## Browser QA Host
+
+Use the Browser QA Host for local rendered Moderator UI inspection.
+
+- Seed deterministic states for lobby setup, role selection, dashboard tabs, instruction flows, selection inputs, assignment inputs, victory, empty/error states, and long content.
+- Inspect real HTML/CSS at mobile and desktop-sized viewports.
+- Use screenshots, DOM inspection, computed styles, and agent-assisted visual feedback.
+- Use it for layout, spacing, typography, motion, focus, and accessibility attributes.
+- Do not treat browser-host checks as CI-blocking until fixtures and pass/fail contracts are stable.
+- Pair browser findings with deterministic CI tests whenever a claim can be narrowed.
+
+## Source-Test Allowlist
+
+Rows are active policy. If a retained source-level test no longer matches its condition, replace it or remove it.
+
+| Test or group | Category | Protected claim | Condition |
+| --- | --- | --- | --- |
+| `Werewolves.Client.Tests.Documentation.QaStrategyTests.QaStrategy_DefinesClaimFirstEvidenceGuideAndSourceTestAllowlist` | Permanent policy | This guide keeps claim-first QA, evidence selection, source-test rules, CI/local split, manual device boundary, browser-host guidance, and a populated allowlist. | Markdown is the policy surface; keep a narrow documentation contract test. |
+| `Werewolves.Client.Tests.Platform.AndroidManifestTests.AndroidManifest_DeclaresVibratePermissionForHapticFeedback` | Permanent policy | Android declares the haptics permission needed by MAUI haptic feedback. | Manifest XML is the contract. |
+| `Werewolves.Client.Tests.Resources.ClientStringsTests.ClientStrings_ExposesPortugueseUiCopyThroughGeneratedAccessor` | Permanent policy | Portuguese client UI copy remains resource-backed through the generated accessor. | The generated accessor is the runtime localization surface. |
+| `Werewolves.Client.Tests.Styling.DarkThemeTokenTests`: `AppCss_ConsumesColorValuesThroughDesignTokens`, `RootDocument_UsesDarkThemeTokensBeforePagesRender`, `MauiHost_UsesDarkChromeAcrossSupportedSurfaces`, `TextTokens_HaveReadableContrastAgainstDarkSurfaces`, `Pages_DoNotUseInlineColorLiterals` | Permanent policy | Dark theme tokens, first-paint defaults, platform chrome metadata, contrast, and no-inline-color policy stay intact. | CSS, project, and platform metadata are the contracts. |
+| `Werewolves.Client.Tests.Styling.DarkThemeTokenTests.Pages_RenderInsideDarkShells` | Deprecated temporary scaffold | Pages keep the expected dark shell wrapper. | Replace with rendered shell checks through bUnit or the browser host. |
+| `Werewolves.Client.Tests.Styling.InstructionTransitionTests.DesignTokens_DefineInstructionAnimationDurationBetween200And300Ms` | Permanent policy | Instruction animation duration stays in the approved 200-300 ms token range. | CSS token value is the contract. |
+| `Werewolves.Client.Tests.Styling.InstructionTransitionTests`: `AppCss_DefinesInstructionEnterKeyframes`, `AppCss_InstructionBlockUsesAnimationToken` | Deprecated temporary scaffold | Instruction enter animation exists and consumes the duration token. | Replace with browser-host computed-style or visual-motion checks. |
+| `Werewolves.Client.Tests.Styling.DashboardOverlayLayoutTests`: `ProductionDashboard_FixesTopAndBottomOverlays`, `ProductionDashboard_AddsScrollPaddingForFixedOverlays`, `ProductionDashboard_StatusBarUsesInsetWidthInsteadOfViewportWidth` | Deprecated temporary scaffold | Production dashboard overlays and inset-aware scroll padding stay present. | Replace with browser-host viewport and computed-layout checks. |
+| `Werewolves.Client.Tests.Components.HoldButtonMarkupTests`: `Markup_UsesPointerEventsForHoldDetection`, `DesignTokens_AnimateHoldProgressOverProductionDuration`, `Markup_UsesHoldToConfirmResourceString`, `Markup_DeclaresRequiredParameters`, `Markup_RendersHoldButtonStructure`, `Markup_UsesCssStateClassesForVisualFeedback`, `Markup_DisablesButtonWhenDisabledParameterIsTrue` | Deprecated temporary scaffold | Hold button source keeps touch/cancel handling, progress timing, localized hint, public API, structure, state classes, and disabled mapping. | Replace with bUnit rendered event, text, attribute, and state checks; remove parameter source checks once bUnit instantiates public parameters. |
+| `Werewolves.Client.Tests.Components.SelectPlayersViewMarkupTests`: `Markup_ContainsPlayerListWithSeatNumberAndName`, `Markup_ContainsSelectedStateToggle`, `Markup_ContainsPressAndHoldSubmitButton`, `Markup_PinsSubmitButtonInDashboardActionZone`, `Markup_UsesClientStringsResourceKeys`, `Markup_DeclaresRequiredParameters`, `Markup_SubmitButtonDisabledWhenCannotSubmit` | Deprecated temporary scaffold | Select-player source keeps roster rendering, selected state, hold-to-submit, action-zone placement, resource-backed labels, public API, and disabled submit behavior. | Replace with bUnit rendered list, interaction, text, child-component, and submit checks; remove parameter source checks once bUnit instantiates public parameters. |
+| `Werewolves.Client.Tests.Components.SelectOptionsViewTests`: `Markup_RendersButtonForEachOption`, `Markup_UsesSelectedCssClassForHighlighting`, `Markup_HasSelectionRangeValidation`, `Markup_AcceptsInstructionAndOnResponseParameters`, `Markup_CallsCreateResponseOnSubmit`, `Markup_SubmitUsesPressAndHoldPattern`, `Markup_PinsSubmitButtonInDashboardActionZone`, `Markup_SubmitButtonIsDisabledWhenSelectionInvalid`, `Markup_EnforcesMaximumSelectionCount`, `Markup_UsesClientStringsResourceKeys` | Deprecated temporary scaffold | Select-options source keeps option rendering, selected feedback, selection limits, public API, response submission, hold-to-submit, action-zone placement, disabled submit behavior, maximum selection enforcement, and resource-backed labels. | Replace with bUnit rendered list, interaction, validation, text, child-component, and submit-callback checks; remove parameter source checks once bUnit instantiates public parameters. |
+| `Werewolves.Client.Tests.Components.AssignRolesViewTests`: `Markup_RendersRolesFromInstruction`, `Markup_RendersPlayersForAssignment`, `Markup_AcceptsInstructionAndOnResponseParameters`, `Markup_AcceptsRosterParameterForPlayerNameResolution`, `Markup_CallsCreateResponseOnSubmit`, `Markup_SubmitUsesPressAndHoldPattern`, `Markup_PinsSubmitButtonInDashboardActionZone`, `Markup_SubmitButtonIsDisabledWhenAssignmentsIncomplete`, `Markup_UsesGetPublicNameForRoleDisplay`, `Markup_UsesClientStringsResourceKeys` | Deprecated temporary scaffold | Assign-roles source keeps role/player rendering, public API, roster-based names, response submission, hold-to-submit, action-zone placement, disabled submit behavior, role localization, and resource-backed labels. | Replace with bUnit rendered role/player, interaction, text, child-component, and submit-callback checks; remove parameter source checks once bUnit instantiates public parameters. |
+| `Werewolves.Client.Tests.Components.InstructionRendererTests`: `Markup_HasSelectOptionsInstructionBranch`, `Markup_HasAssignRolesInstructionBranch`, `Markup_PassesRosterToAssignRolesView` | Deprecated temporary scaffold | Instruction renderer routes select-options and assign-roles instructions and passes roster data. | Replace with bUnit rendered branch checks and visible-name or child-parameter evidence. |
+| `Werewolves.Client.Tests.Components.InstructionRendererMarkupTests`: `Markup_ContainsSelectPlayersInstructionBranch`, `Markup_PassesRosterParameterToSelectPlayersView`, `Markup_DoesNotRenderEmptyFixedActionZoneForInputViews`, `Markup_DeclaresRosterParameter` | Deprecated temporary scaffold | Instruction renderer routes select-player instructions, passes roster data, avoids empty action zones, and exposes the current roster parameter. | Replace with bUnit rendered branch/layout checks or browser-host layout checks; remove parameter source checks once bUnit instantiates public parameters. |
+| `Werewolves.Client.Tests.Components.InstructionRendererHapticTests.InstructionRenderer_UsesTransitionKeyForAnimationReMount` | Deprecated temporary scaffold | Instruction changes restart the rendered transition animation. | Replace with browser-host motion checks or bUnit render-tree evidence that does not freeze field names. |

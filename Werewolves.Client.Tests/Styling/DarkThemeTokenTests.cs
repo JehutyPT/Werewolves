@@ -99,23 +99,31 @@ public class DarkThemeTokenTests
 	}
 
 	[Fact]
-	public void Pages_RenderInsideDarkShellsWithoutInlineColorLiterals()
+	public void Pages_DoNotUseInlineColorLiterals()
 	{
 		var pages = Directory.GetFiles(ClientPath("Components/Pages"), "*.razor");
 		pages.Should().NotBeEmpty();
-
-		var pagesWithoutDarkShell = pages
-			.Where(path => !Regex.IsMatch(File.ReadAllText(path), "<main\\s+class=\"ww-(?:app|dashboard)-shell\""))
-			.Select(path => Path.GetRelativePath(RepositoryRoot, path))
-			.ToArray();
-
-		pagesWithoutDarkShell.Should().BeEmpty();
 
 		var inlineColorLiterals = pages
 			.SelectMany(FindColorLiterals)
 			.ToArray();
 
 		inlineColorLiterals.Should().BeEmpty();
+	}
+
+	[Fact]
+	public void Pages_RenderInsideDarkShells()
+	{
+		var pages = Directory.GetFiles(ClientPath("Components/Pages"), "*.razor");
+		pages.Should().NotBeEmpty();
+
+		// Deprecated temporary scaffold: replace with ADR-0006/bUnit or browser-host rendered shell checks.
+		var pagesWithoutDarkShell = pages
+			.Where(path => !Regex.IsMatch(File.ReadAllText(path), "<main\\s+class=\"ww-(?:app|dashboard)-shell\""))
+			.Select(path => Path.GetRelativePath(RepositoryRoot, path))
+			.ToArray();
+
+		pagesWithoutDarkShell.Should().BeEmpty();
 	}
 
 	private static IReadOnlyList<string> FindColorLiterals(string path)
