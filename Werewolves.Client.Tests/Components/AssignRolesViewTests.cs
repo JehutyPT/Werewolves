@@ -254,7 +254,7 @@ public class AssignRolesViewTests
 						name,
 						DashboardRoster.UnknownRoleLabel,
 						false,
-						"Alive",
+						"health label",
 						false,
 						[],
 						DashboardRoster.NoStatusEffectsLabel))

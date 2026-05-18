@@ -1,4 +1,6 @@
+using System.Globalization;
 using FluentAssertions;
+using Werewolves.Client.Resources;
 using Werewolves.Client.Services;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
@@ -63,9 +65,20 @@ public class DashboardStatsSnapshotTests
 		var snapshot = DashboardStatsSnapshot.FromSession(session);
 
 		snapshot.EliminationLog.Select(entry => entry.PlayerName).Should().Equal("Ana", "Bruno");
-		snapshot.EliminationLog.Select(entry => entry.TurnPhaseLabel).Should().Equal("Amanhecer 1", "Dia 2");
-		snapshot.EliminationLog.Select(entry => entry.ReasonLabel).Should().Equal("Ataque dos lobisomens", "Votação da aldeia");
+		snapshot.EliminationLog.Select(entry => entry.TurnPhaseLabel).Should().Equal(
+			PhaseTurnLabel(GamePhase.Dawn, 1),
+			PhaseTurnLabel(GamePhase.Day, 2));
+		snapshot.EliminationLog.Select(entry => entry.ReasonLabel).Should().Equal(
+			DashboardStatsSnapshot.EliminationReasonLabel(EliminationReason.WerewolfAttack),
+			DashboardStatsSnapshot.EliminationReasonLabel(EliminationReason.DayVote));
 	}
+
+	private static string PhaseTurnLabel(GamePhase phase, int turnNumber) =>
+		string.Format(
+			CultureInfo.CurrentCulture,
+			ClientStrings.Dashboard_PhaseTurnFormat,
+			DashboardStatsSnapshot.PhaseLabel(phase),
+			turnNumber);
 
 	private sealed class FakeGameSession(IReadOnlyList<IPlayer> players, IReadOnlyList<GameLogEntryBase>? log = null) : IGameSession
 	{

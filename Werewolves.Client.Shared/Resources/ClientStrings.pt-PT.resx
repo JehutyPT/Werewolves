@@ -310,6 +310,33 @@
   <data name="Dashboard_EliminationCountManyFormat" xml:space="preserve">
     <value>{0} eliminações</value>
   </data>
+  <data name="Dashboard_EliminationReasonWerewolfAttack" xml:space="preserve">
+    <value>Ataque dos lobisomens</value>
+  </data>
+  <data name="Dashboard_EliminationReasonWitchKill" xml:space="preserve">
+    <value>Poção da Bruxa</value>
+  </data>
+  <data name="Dashboard_EliminationReasonHunterShot" xml:space="preserve">
+    <value>Disparo do Caçador</value>
+  </data>
+  <data name="Dashboard_EliminationReasonLoversHeartbreak" xml:space="preserve">
+    <value>Desgosto dos Apaixonados</value>
+  </data>
+  <data name="Dashboard_EliminationReasonRustySword" xml:space="preserve">
+    <value>Espada enferrujada</value>
+  </data>
+  <data name="Dashboard_EliminationReasonScapegoatSacrifice" xml:space="preserve">
+    <value>Sacrifício do Bode Expiatório</value>
+  </data>
+  <data name="Dashboard_EliminationReasonEventElimination" xml:space="preserve">
+    <value>Evento</value>
+  </data>
+  <data name="Dashboard_EliminationReasonDayVote" xml:space="preserve">
+    <value>Votação da aldeia</value>
+  </data>
+  <data name="Dashboard_EliminationReasonUnknown" xml:space="preserve">
+    <value>Motivo desconhecido</value>
+  </data>
   <data name="Dashboard_AudioUnmute" xml:space="preserve">
     <value>Ativar som</value>
   </data>

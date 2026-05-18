@@ -8,7 +8,7 @@ namespace Werewolves.Client.Tests.Services;
 public class SelectPlayersInputStateTests
 {
 	private static DashboardRosterEntry MakeEntry(Guid id, int seat, string name) =>
-		new(id, seat, name, "Desconhecido", false, "Vivo", false, [], "Sem efeitos");
+		new(id, seat, name, "role label", false, "health label", false, [], "status label");
 
 	#region Filtering and ordering
 

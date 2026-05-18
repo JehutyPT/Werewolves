@@ -37,6 +37,8 @@ public class ClientStringsTests
 			ClientStrings.Common_HoldToConfirm.Should().Be("Manter premido para confirmar");
 			ClientStrings.Common_TapToExpand.Should().Be("Tocar para expandir");
 			ClientStrings.Dashboard_DebateTimerLabel.Should().Be("Debate");
+			ClientStrings.Dashboard_EliminationReasonWerewolfAttack.Should().Be("Ataque dos lobisomens");
+			ClientStrings.Dashboard_EliminationReasonDayVote.Should().Be("Votação da aldeia");
 			ClientStrings.Victory_Title.Should().Be("Fim de Jogo");
 			ClientStrings.Victory_StepLabel.Should().Be("Resultado");
 			ClientStrings.Victory_ReturnToLobbyButton.Should().Be("Novo jogo");
