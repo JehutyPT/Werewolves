@@ -8,6 +8,7 @@ public class SelectOptionsViewTests
 	[Fact]
 	public void Markup_RendersButtonForEachOption()
 	{
+		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered option-list checks.
 		var markup = File.ReadAllText(GetViewPath());
 
 		// The view iterates over Instruction.SelectableOptions and renders each as a button
@@ -18,6 +19,7 @@ public class SelectOptionsViewTests
 	[Fact]
 	public void Markup_UsesSelectedCssClassForHighlighting()
 	{
+		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered interaction checks.
 		var markup = File.ReadAllText(GetViewPath());
 
 		markup.Should().Contain("ww-option-btn--selected");
@@ -26,6 +28,7 @@ public class SelectOptionsViewTests
 	[Fact]
 	public void Markup_HasSelectionRangeValidation()
 	{
+		// Deprecated temporary scaffold: replace with ADR-0006/bUnit interaction checks.
 		var markup = File.ReadAllText(GetViewPath());
 
 		// The view must reference SelectionRange for constraint enforcement
@@ -35,6 +38,7 @@ public class SelectOptionsViewTests
 	[Fact]
 	public void Markup_AcceptsInstructionAndOnResponseParameters()
 	{
+		// Deprecated temporary scaffold: remove after ADR-0006/bUnit instantiates the component through public parameters.
 		var markup = File.ReadAllText(GetViewPath());
 
 		markup.Should().Contain("[Parameter");
@@ -45,6 +49,7 @@ public class SelectOptionsViewTests
 	[Fact]
 	public void Markup_CallsCreateResponseOnSubmit()
 	{
+		// Deprecated temporary scaffold: replace with ADR-0006/bUnit submit-callback checks.
 		var markup = File.ReadAllText(GetViewPath());
 
 		markup.Should().Contain("Instruction.CreateResponse");
@@ -54,6 +59,7 @@ public class SelectOptionsViewTests
 	[Fact]
 	public void Markup_SubmitUsesPressAndHoldPattern()
 	{
+		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered submit-event checks.
 		var markup = File.ReadAllText(GetViewPath());
 
 		markup.Should().Contain("<HoldButton");
@@ -64,6 +70,7 @@ public class SelectOptionsViewTests
 	[Fact]
 	public void Markup_PinsSubmitButtonInDashboardActionZone()
 	{
+		// Deprecated temporary scaffold: replace with browser-host layout checks or bUnit rendered structure checks.
 		var markup = File.ReadAllText(GetViewPath());
 
 		markup.Should().MatchRegex(@"(?s)<footer class=""ww-dashboard-action-zone"">\s*<HoldButton");
@@ -72,6 +79,7 @@ public class SelectOptionsViewTests
 	[Fact]
 	public void Markup_SubmitButtonIsDisabledWhenSelectionInvalid()
 	{
+		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered interaction checks.
 		var markup = File.ReadAllText(GetViewPath());
 
 		markup.Should().Contain("Disabled=\"@(!IsSelectionValid)\"");
@@ -80,6 +88,7 @@ public class SelectOptionsViewTests
 	[Fact]
 	public void Markup_EnforcesMaximumSelectionCount()
 	{
+		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered interaction checks.
 		var markup = File.ReadAllText(GetViewPath());
 
 		// Prevents selecting more than Maximum
@@ -89,6 +98,7 @@ public class SelectOptionsViewTests
 	[Fact]
 	public void Markup_UsesClientStringsResourceKeys()
 	{
+		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered Portuguese text checks.
 		var markup = File.ReadAllText(GetViewPath());
 
 		markup.Should().Contain("ClientStrings.SelectOptions_Title");

@@ -8,6 +8,7 @@ public class SelectPlayersViewMarkupTests
 	[Fact]
 	public void Markup_ContainsPlayerListWithSeatNumberAndName()
 	{
+		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered list checks.
 		var markup = File.ReadAllText(GetViewPath());
 
 		markup.Should().Contain("ww-select-players-list");
@@ -19,6 +20,7 @@ public class SelectPlayersViewMarkupTests
 	[Fact]
 	public void Markup_ContainsSelectedStateToggle()
 	{
+		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered interaction checks.
 		var markup = File.ReadAllText(GetViewPath());
 
 		markup.Should().Contain("ww-select-players-item--selected");
@@ -29,6 +31,7 @@ public class SelectPlayersViewMarkupTests
 	[Fact]
 	public void Markup_ContainsPressAndHoldSubmitButton()
 	{
+		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered submit-event checks.
 		var markup = File.ReadAllText(GetViewPath());
 
 		markup.Should().Contain("<HoldButton");
@@ -39,6 +42,7 @@ public class SelectPlayersViewMarkupTests
 	[Fact]
 	public void Markup_PinsSubmitButtonInDashboardActionZone()
 	{
+		// Deprecated temporary scaffold: replace with browser-host layout checks or bUnit rendered structure checks.
 		var markup = File.ReadAllText(GetViewPath());
 
 		markup.Should().MatchRegex(@"(?s)<footer class=""ww-dashboard-action-zone"">\s*<HoldButton");
@@ -47,6 +51,7 @@ public class SelectPlayersViewMarkupTests
 	[Fact]
 	public void Markup_UsesClientStringsResourceKeys()
 	{
+		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered Portuguese text checks.
 		var markup = File.ReadAllText(GetViewPath());
 
 		markup.Should().Contain("ClientStrings.SelectPlayers_SubmitButton");
@@ -56,6 +61,7 @@ public class SelectPlayersViewMarkupTests
 	[Fact]
 	public void Markup_DeclaresRequiredParameters()
 	{
+		// Deprecated temporary scaffold: remove after ADR-0006/bUnit instantiates the component through public parameters.
 		var markup = File.ReadAllText(GetViewPath());
 
 		markup.Should().Contain("[Parameter, EditorRequired]");
@@ -67,6 +73,7 @@ public class SelectPlayersViewMarkupTests
 	[Fact]
 	public void Markup_SubmitButtonDisabledWhenCannotSubmit()
 	{
+		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered interaction checks.
 		var markup = File.ReadAllText(GetViewPath());
 
 		markup.Should().Contain("Disabled=\"@(!_state.CanSubmit)\"");

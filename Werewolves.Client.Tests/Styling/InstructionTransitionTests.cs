@@ -20,6 +20,7 @@ public class InstructionTransitionTests
     [Fact]
     public void AppCss_DefinesInstructionEnterKeyframes()
     {
+        // Deprecated temporary scaffold: replace with browser-host computed-style or motion checks.
         var css = File.ReadAllText(ClientPath("wwwroot/css/app.css"));
 
         css.Should().Contain("@keyframes ww-instruction-enter",
@@ -29,6 +30,7 @@ public class InstructionTransitionTests
     [Fact]
     public void AppCss_InstructionBlockUsesAnimationToken()
     {
+        // Deprecated temporary scaffold: replace with browser-host computed-style checks for rendered instruction blocks.
         var css = File.ReadAllText(ClientPath("wwwroot/css/app.css"));
 
         css.Should().Contain("ww-instruction-enter",
