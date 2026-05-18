@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Werewolves.Client.Components.Pages;
 using Werewolves.Client.Resources;
 using Werewolves.Client.Services;
+using Werewolves.Client.Tests.Helpers;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Models;
@@ -100,11 +101,11 @@ public class DashboardPageAudioControlTests
 			var element = EnumerateElements()
 				.SingleOrDefault(element =>
 					element.Name == "button" &&
-					element.Attributes.TryGetValue("class", out var value) &&
-					value is string className &&
-					className.Split(' ', StringSplitOptions.RemoveEmptyEntries).Contains("ww-audio-toggle"));
+			element.Attributes.TryGetValue("class", out var value) &&
+			value is string className &&
+			className.Split(' ', StringSplitOptions.RemoveEmptyEntries).Contains("ww-audio-toggle"));
 
-			element.Should().NotBeNull("the dashboard status bar should expose the audio mute/unmute toggle");
+			element.Should().NotBeNull(ClientTestReferences.AssertionReasons.AudioToggleExposedInStatusBar);
 			return element!;
 		}
 
@@ -213,7 +214,8 @@ public class DashboardPageAudioControlTests
 
 		protected override void HandleException(Exception exception)
 		{
-			throw new InvalidOperationException("The dashboard component failed while rendering.", exception);
+			throw new InvalidOperationException(
+				ClientTestReferences.ExceptionMessages.ComponentRenderFailure("dashboard"), exception);
 		}
 	}
 

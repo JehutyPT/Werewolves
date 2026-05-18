@@ -1,4 +1,6 @@
 using FluentAssertions;
+using Microsoft.AspNetCore.Components;
+using Werewolves.Client.Tests.Helpers;
 using Xunit;
 
 namespace Werewolves.Client.Tests.Components;
@@ -47,7 +49,7 @@ public class HoldButtonMarkupTests
 		markup.Should().Contain("[Parameter, EditorRequired]");
 		markup.Should().Contain("string Label");
 		markup.Should().Contain("bool Disabled");
-		markup.Should().Contain("EventCallback OnHoldComplete");
+		markup.Should().Contain(nameof(EventCallback) + " OnHoldComplete");
 	}
 
 	[Fact]
@@ -104,6 +106,6 @@ public class HoldButtonMarkupTests
 		}
 
 		throw new FileNotFoundException(
-			$"{Path.Combine(relativeSegments)} could not be found from the test output directory.");
+			ClientTestReferences.ExceptionMessages.TestFileNotFound(Path.Combine(relativeSegments)));
 	}
 }

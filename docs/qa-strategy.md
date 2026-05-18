@@ -25,7 +25,7 @@ Use this QA Evidence Matrix before adding or accepting tests.
 ## Source-Test Rules
 
 - Prefer behavior, rendered, service, adapter, or integration tests.
-- Assert resource-backed copy through the generated resource/localization accessors that production uses; raw localized literals belong only in resource contract tests.
+- Assert resource-backed copy through the generated resource/localization accessors that production uses; derive expected localized values from resource contract data instead of hardcoding localized copy.
 - Treat service, component, and integration tests the same way: use production localization accessors or behavior assertions instead of freezing localized copy.
 - Write a source-level test only when the protected claim is the source shape itself, or when the test is an allowlisted temporary scaffold.
 - Reject raw Razor assertions over component names, event handler names, parameter declarations, CSS classes, resource key names, and implementation methods unless the test is allowlisted.
@@ -60,7 +60,7 @@ Use `ModeratorComponentTestContext` for shared Moderator UI component tests.
 - Set `pt-PT` culture and `ClientStrings.Culture` before rendering.
 - Register fake or no-op services for audio, haptics, wake lock, persistence, and any other host-only dependency.
 - Prove user-visible behavior through rendered markup and event interaction rather than raw Razor source assertions.
-- Use `ClientStrings`, `GameStrings`, or production-derived localization helpers for resource-backed labels and text assertions; do not hardcode Portuguese UI copy in component tests.
+- Use `ClientStrings`, `GameStrings`, or production-derived localization helpers for resource-backed labels and text assertions; do not hardcode localized UI copy in component tests.
 - Treat legacy `Renderer`/`BL0006` component tests as existing interaction scaffolds only; new shared component coverage should use bUnit unless it is deliberately replacing one of those scaffolds.
 - `SelectPlayersViewBunitTests` is the replacement evidence for the removed `SelectPlayersViewMarkupTests` source allowlist row.
 
@@ -103,7 +103,7 @@ Rows are active policy. If a retained source-level test no longer matches its co
 | --- | --- | --- | --- |
 | `Werewolves.Client.Tests.Documentation.QaStrategyTests.QaStrategy_DefinesClaimFirstEvidenceGuideAndSourceTestAllowlist` | Permanent policy | This guide keeps claim-first QA, evidence selection, source-test rules, CI/local split, manual device boundary, browser-host guidance, and a populated allowlist. | Markdown is the policy surface; keep a narrow documentation contract test. |
 | `Werewolves.Client.Tests.Documentation.QaStrategyTests.NativeDeviceChecklist_DefinesManualOnlyClaimAndEvidenceChecks` | Permanent policy | The client docs keep a manual-only native device checklist with named claims, manual scenarios, expected evidence, native behavior coverage, and explicit Core/browser-host boundaries. | Markdown is the policy surface; keep a narrow documentation contract test. |
-| `Werewolves.Client.Tests.Resources.LocalizationPolicyTests.TestProjects_DoNotHardcodeLocalizedProductionCopyOutsideResourceContracts` | Permanent policy | Client and Core tests do not hardcode localized production copy outside resource contract tests. | The client/Core test trees and generated resource files are the contract. |
+| `Werewolves.Client.Tests.Resources.LocalizationPolicyTests.TestProjects_DoNotHardcodeLocalizedProductionCopy` | Permanent policy | Client and Core tests do not hardcode localized production copy. | The client/Core test trees and generated resource files are the contract. |
 | `Werewolves.Client.Tests.Platform.AndroidManifestTests.AndroidManifest_DeclaresVibratePermissionForHapticFeedback` | Permanent policy | Android declares the haptics permission needed by MAUI haptic feedback. | Manifest XML is the contract. |
 | `Werewolves.Client.Tests.Resources.ClientStringsTests.ClientStrings_ExposesPortugueseUiCopyThroughGeneratedAccessor` | Permanent policy | Portuguese client UI copy remains resource-backed through the generated accessor. | The generated accessor is the runtime localization surface. |
 | `Werewolves.Client.Tests.Styling.DarkThemeTokenTests`: `AppCss_ConsumesColorValuesThroughDesignTokens`, `RootDocument_UsesDarkThemeTokensBeforePagesRender`, `MauiHost_UsesDarkChromeAcrossSupportedSurfaces`, `TextTokens_HaveReadableContrastAgainstDarkSurfaces`, `Pages_DoNotUseInlineColorLiterals` | Permanent policy | Dark theme tokens, first-paint defaults, platform chrome metadata, contrast, and no-inline-color policy stay intact. | CSS, project, and platform metadata are the contracts. |

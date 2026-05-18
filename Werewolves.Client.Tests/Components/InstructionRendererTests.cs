@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Werewolves.Client.Tests.Helpers;
 using Xunit;
 
 namespace Werewolves.Client.Tests.Components;
@@ -56,6 +57,6 @@ public class InstructionRendererTests
 			directory = directory.Parent;
 		}
 
-		throw new FileNotFoundException("InstructionRenderer.razor could not be found from the test output directory.");
+		throw new FileNotFoundException(ClientTestReferences.ExceptionMessages.ComponentViewNotFound("InstructionRenderer.razor"));
 	}
 }

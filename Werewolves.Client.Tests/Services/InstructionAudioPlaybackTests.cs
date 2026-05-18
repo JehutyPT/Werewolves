@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Werewolves.Client.Services;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Models;
+using Werewolves.Core.StateModels.Resources;
 using Xunit;
 
 namespace Werewolves.Client.Tests.Services;
@@ -117,7 +118,7 @@ public class InstructionAudioPlaybackTests
 	private sealed record TestInstruction : ModeratorInstruction
 	{
 		public TestInstruction(params SoundEffectsEnum[] soundEffects)
-			: base(privateInstruction: "Teste", soundEffects: soundEffects.ToList())
+			: base(privateInstruction: GameStrings.ConfirmNightStarted, soundEffects: soundEffects.ToList())
 		{
 		}
 	}

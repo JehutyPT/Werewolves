@@ -2,6 +2,8 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using FluentAssertions;
+using Werewolves.Client.Resources;
+using Werewolves.Client.Tests.Helpers;
 using Xunit;
 
 namespace Werewolves.Client.Tests.Resources;
@@ -17,7 +19,7 @@ public class LocalizationPolicyTests
 		RegexOptions.Compiled);
 
 	[Fact]
-	public void TestProjects_DoNotHardcodeLocalizedProductionCopyOutsideResourceContracts()
+	public void TestProjects_DoNotHardcodeLocalizedProductionCopy()
 	{
 		var resources = LoadLocalizedResourceValues();
 		var resourcesByValue = resources
@@ -28,14 +30,13 @@ public class LocalizationPolicyTests
 			.ToDictionary(group => group.Key, group => group.First().Value, StringComparer.Ordinal);
 
 		var violations = EnumeratePolicyTestFiles()
-			.Where(file => !IsResourceContractTest(file))
 			.SelectMany(file => FindStringLiterals(file)
 				.SelectMany(literal => FindResourceLiteralViolations(file, literal, resources, resourcesByValue, resourcesByKey)))
 			.Distinct()
 			.ToArray();
 
 		violations.Should().BeEmpty(
-			"test projects should use ClientStrings, GameStrings, GetPublicName(), or production localization helpers; raw localized copy belongs only in resource contract tests");
+			ClientTestReferences.AssertionReasons.TestProjectsUseProductionLocalizationContracts);
 	}
 
 	private static IEnumerable<string> EnumeratePolicyTestFiles()
@@ -95,7 +96,7 @@ public class LocalizationPolicyTests
 		resource.Value.Length >= 5
 		&& (resource.Value.Any(character => character > 127)
 			|| resource.Value.Contains(' ', StringComparison.Ordinal)
-			|| resource.Key.StartsWith("StatusEffect_", StringComparison.Ordinal)
+			|| resource.Key.StartsWith(StatusEffectResourceKeyPrefix, StringComparison.Ordinal)
 			|| resource.Key.StartsWith("Dashboard_EliminationReason", StringComparison.Ordinal)
 			|| resource.Key == "Dashboard_PhaseDawn");
 
@@ -110,9 +111,18 @@ public class LocalizationPolicyTests
 		return fixedText.Length >= 5
 			&& (fixedText.Any(character => character > 127)
 				|| fixedText.Contains(' ', StringComparison.Ordinal)
-				|| resource.Key.StartsWith("StatusEffect_", StringComparison.Ordinal)
+				|| resource.Key.StartsWith(StatusEffectResourceKeyPrefix, StringComparison.Ordinal)
 				|| resource.Key.StartsWith("Dashboard_EliminationReason", StringComparison.Ordinal)
 				|| resource.Key == "Dashboard_PhaseTurnFormat");
+	}
+
+	private static string StatusEffectResourceKeyPrefix =>
+		ResourceKeyPrefix(nameof(ClientStrings.StatusEffect_Fallback));
+
+	private static string ResourceKeyPrefix(string key)
+	{
+		var separatorIndex = key.IndexOf('_');
+		return separatorIndex < 0 ? key : key[..(separatorIndex + 1)];
 	}
 
 	private static bool IsFormattedResourceExample(string value, string resourceValue)
@@ -165,6 +175,7 @@ public class LocalizationPolicyTests
 	{
 		var resourceFiles = new[]
 		{
+			Path.Combine(RepositoryRoot, "Werewolves.Client.Shared", "Resources", "ClientStrings.resx"),
 			Path.Combine(RepositoryRoot, "Werewolves.Client.Shared", "Resources", "ClientStrings.pt-PT.resx"),
 			Path.Combine(RepositoryRoot, "Werewolves.Core", "Werewolves.Core.StateModels", "Resources", "GameStrings.pt-PT.resx"),
 			Path.Combine(RepositoryRoot, "Werewolves.Core", "Werewolves.Core.StateModels", "Resources", "GameStrings.resx")
@@ -205,13 +216,6 @@ public class LocalizationPolicyTests
 		}
 	}
 
-	private static bool IsResourceContractTest(string file)
-	{
-		var relativePath = RelativePath(file).Replace('\\', '/');
-		return relativePath.Contains("/Resources/", StringComparison.Ordinal)
-			&& relativePath.EndsWith("StringsTests.cs", StringComparison.Ordinal);
-	}
-
 	private static bool IsBuildOutputPath(string file) =>
 		file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
 		|| file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal);
@@ -219,21 +223,7 @@ public class LocalizationPolicyTests
 	private static string RelativePath(string file) =>
 		Path.GetRelativePath(RepositoryRoot, file);
 
-	private static string RepositoryRoot
-	{
-		get
-		{
-			var directory = new DirectoryInfo(AppContext.BaseDirectory);
-
-			while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "Werewolves.sln")))
-			{
-				directory = directory.Parent;
-			}
-
-			return directory?.FullName
-				?? throw new InvalidOperationException("Could not locate the repository root from the test output directory.");
-		}
-	}
+	private static string RepositoryRoot => ClientTestReferences.Paths.RepositoryRoot;
 
 	private sealed record CSharpStringLiteral(string Value, int LineNumber);
 	private sealed record LocalizedResourceValue(string Key, string Value);

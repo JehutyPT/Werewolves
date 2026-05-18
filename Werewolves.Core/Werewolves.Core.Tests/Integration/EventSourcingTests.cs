@@ -51,11 +51,11 @@ public class EventSourcingTests : DiagnosticTestBase
         
         // Should have role assignments
         logEntries.OfType<AssignRoleLogEntry>().Should().NotBeEmpty(
-            "Role assignments should be logged");
-        
+            CoreTestReferences.AssertionReasons.RoleAssignmentsLogged);
+
         // Should have night actions
         logEntries.OfType<NightActionLogEntry>().Should().NotBeEmpty(
-            "Night actions should be logged");
+            CoreTestReferences.AssertionReasons.NightActionsLogged);
 
         MarkTestCompleted();
     }
@@ -85,8 +85,8 @@ public class EventSourcingTests : DiagnosticTestBase
 
         // Assert - All entries from Night 1 should have TurnNumber = 1
         var nightActions = logEntries.OfType<NightActionLogEntry>().ToList();
-        nightActions.Should().AllSatisfy(entry => 
-            entry.TurnNumber.Should().Be(1, "Night 1 actions should have TurnNumber 1"));
+        nightActions.Should().AllSatisfy(entry =>
+            entry.TurnNumber.Should().Be(1, CoreTestReferences.AssertionReasons.NightOneActionsUseTurnOne));
 
         MarkTestCompleted();
     }
@@ -118,7 +118,7 @@ public class EventSourcingTests : DiagnosticTestBase
         // Assert - Night actions should have Night phase
         nightActions.Should().AllSatisfy(entry =>
             entry.CurrentPhase.Should().Be(GamePhase.Night,
-                "Night actions should be recorded with Night phase"));
+                CoreTestReferences.AssertionReasons.NightActionsRecordedWithNightPhase));
 
         MarkTestCompleted();
     }
@@ -161,7 +161,7 @@ public class EventSourcingTests : DiagnosticTestBase
         foreach (var player in finalSession.GetPlayers())
         {
             derivedStates[player.Id].Health.Should().Be(player.State.Health,
-                $"Player {player.Name} health from replay should match cached state");
+                CoreTestReferences.AssertionReasons.PlayerHealthFromReplayMatchesCachedState(player.Name));
         }
 
         MarkTestCompleted();
@@ -204,7 +204,7 @@ public class EventSourcingTests : DiagnosticTestBase
             if (player.State.MainRole.HasValue)
             {
                 derivedStates[player.Id].MainRole.Should().Be(player.State.MainRole,
-                    $"Player {player.Name} role from replay should match cached state");
+                    CoreTestReferences.AssertionReasons.PlayerRoleFromReplayMatchesCachedState(player.Name));
             }
         }
 
@@ -252,17 +252,17 @@ public class EventSourcingTests : DiagnosticTestBase
             
             // Role comparison
             derived.MainRole.Should().Be(player.State.MainRole,
-                $"Player {player.Name} role mismatch");
-            
+                CoreTestReferences.AssertionReasons.PlayerRoleMismatch(player.Name));
+
             // Health comparison
             derived.Health.Should().Be(player.State.Health,
-                $"Player {player.Name} health mismatch");
-            
+                CoreTestReferences.AssertionReasons.PlayerHealthMismatch(player.Name));
+
             // Status effects comparison
             var cachedEffects = player.State.GetActiveStatusEffects();
             var derivedEffects = derived.GetActiveStatusEffects();
             derivedEffects.Should().BeEquivalentTo(cachedEffects,
-                $"Player {player.Name} status effects mismatch");
+                CoreTestReferences.AssertionReasons.PlayerStatusEffectsMismatch(player.Name));
         }
 
         MarkTestCompleted();

@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Werewolves.Client.Components.Pages;
 using Werewolves.Client.Resources;
 using Werewolves.Client.Services;
+using Werewolves.Client.Tests.Helpers;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Models;
@@ -25,9 +26,9 @@ public class DashboardPageInteractionTests
 		await fixture.RenderAsync();
 
 		var confirmButton = fixture.FindButtonByText(ClientStrings.SelectPlayers_SubmitButton);
-		confirmButton.Should().NotBeNull("the start game confirmation should be shown directly");
-		confirmButton!.ClickEventHandlerId.Should().Be(0, "confirmation must not submit from an instant click");
-		confirmButton.HasPointerHandlers.Should().BeTrue("confirmation should use the press-and-hold gate");
+		confirmButton.Should().NotBeNull(ClientTestReferences.AssertionReasons.StartGameConfirmationShownDirectly);
+		confirmButton!.ClickEventHandlerId.Should().Be(0, ClientTestReferences.AssertionReasons.ConfirmationDoesNotSubmitFromInstantClick);
+		confirmButton.HasPointerHandlers.Should().BeTrue(ClientTestReferences.AssertionReasons.ConfirmationUsesPressAndHoldGate);
 	}
 
 	[Fact]
@@ -43,7 +44,7 @@ public class DashboardPageInteractionTests
 		await fixture.CompleteHoldAsync(confirmButton!);
 
 		fixture.Game.CurrentInstruction.Should().NotBeSameAs(instructionBefore,
-			"holding confirm should advance to the next instruction");
+			ClientTestReferences.AssertionReasons.HoldingConfirmAdvancesInstruction);
 	}
 
 	[Fact]
@@ -58,13 +59,13 @@ public class DashboardPageInteractionTests
 		await fixture.CompleteHoldAsync(confirmButton!);
 
 		fixture.Game.CurrentInstruction.Should().NotBeSameAs(instructionBefore,
-			"haptic feedback is optional and must not block game progression");
+			ClientTestReferences.AssertionReasons.HapticFailureDoesNotBlockProgression);
 
 		var audioToggle = fixture.FindButtonByClass("ww-audio-toggle");
 		await fixture.ClickAsync(audioToggle!);
 
 		fixture.Game.IsAudioMuted.Should().BeTrue(
-			"dashboard events should remain dispatchable after the game action");
+			ClientTestReferences.AssertionReasons.DashboardEventsRemainDispatchableAfterGameAction);
 
 		var rosterTab = fixture.FindButtonByText(ClientStrings.Dashboard_TabRoster);
 		await fixture.ClickAsync(rosterTab!);
@@ -86,14 +87,14 @@ public class DashboardPageInteractionTests
 			if (instruction is null) break;
 
 			var typeName = instruction.GetType().Name;
-			steps.Add($"Step {step}: {typeName}");
+			steps.Add(ClientTestReferences.FixtureLabels.RenderedInstructionStep(step, typeName));
 
 			var buttons = fixture.FindAllButtons();
 			var buttonLabels = string.Join(", ",
 				buttons.Select(b => $"'{b.TextContent}' ({b.ClassName})"));
 
 			buttons.Should().NotBeEmpty(
-				$"step {step} ({typeName}) should render buttons. Found: [{buttonLabels}]");
+				ClientTestReferences.AssertionReasons.StepRendersButtons(step, typeName, buttonLabels));
 
 			if (instruction is ConfirmationInstruction)
 			{
@@ -116,7 +117,7 @@ public class DashboardPageInteractionTests
 		}
 
 		steps.Should().HaveCountGreaterThan(1,
-			"the game should have advanced through multiple instructions");
+			ClientTestReferences.AssertionReasons.GameAdvancedThroughMultipleInstructions);
 	}
 
 	[Fact]
@@ -126,8 +127,8 @@ public class DashboardPageInteractionTests
 		await fixture.RenderAsync();
 
 		var rosterTab = fixture.FindButtonByText(ClientStrings.Dashboard_TabRoster);
-		rosterTab.Should().NotBeNull("the Roster tab should be rendered");
-		rosterTab!.ClickEventHandlerId.Should().NotBe(0, "the tab should have a click handler");
+		rosterTab.Should().NotBeNull(ClientTestReferences.AssertionReasons.RosterTabRendered);
+		rosterTab!.ClickEventHandlerId.Should().NotBe(0, ClientTestReferences.AssertionReasons.RosterTabHasClickHandler);
 
 		await fixture.ClickAsync(rosterTab);
 
@@ -142,7 +143,7 @@ public class DashboardPageInteractionTests
 		await fixture.RenderAsync();
 
 		var buttons = fixture.FindAllButtons();
-		buttons.Should().NotBeEmpty("the dashboard should render buttons");
+		buttons.Should().NotBeEmpty(ClientTestReferences.AssertionReasons.DashboardRendersButtons);
 
 		foreach (var button in buttons)
 		{
@@ -151,7 +152,7 @@ public class DashboardPageInteractionTests
 				|| button.IsDisabled;
 
 			hasAnyHandler.Should().BeTrue(
-				$"button '{button.TextContent}' (class={button.ClassName}) should have event handlers or be disabled");
+				ClientTestReferences.AssertionReasons.ButtonHasHandlersOrIsDisabled(button.TextContent, button.ClassName));
 		}
 	}
 
@@ -333,7 +334,7 @@ public class DashboardPageInteractionTests
 		protected override void HandleException(Exception exception)
 		{
 			throw new InvalidOperationException(
-				"Unhandled exception during dashboard rendering or event dispatch.", exception);
+				ClientTestReferences.ExceptionMessages.ComponentRenderOrDispatchFailure("dashboard"), exception);
 		}
 	}
 
@@ -345,8 +346,8 @@ public class DashboardPageInteractionTests
 
 	private sealed class ThrowingHaptic : IHapticFeedbackService
 	{
-		public void Click() => throw new InvalidOperationException("Synthetic haptic failure.");
-		public void LongPress() => throw new InvalidOperationException("Synthetic haptic failure.");
+		public void Click() => throw new InvalidOperationException(ClientTestReferences.ExceptionMessages.SyntheticHapticFailure);
+		public void LongPress() => throw new InvalidOperationException(ClientTestReferences.ExceptionMessages.SyntheticHapticFailure);
 	}
 
 	private sealed class NoOpAudioPlayback : IInstructionAudioPlayback

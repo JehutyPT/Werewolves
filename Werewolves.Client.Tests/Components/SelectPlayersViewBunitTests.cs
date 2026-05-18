@@ -9,6 +9,7 @@ using Werewolves.Client.Services;
 using Werewolves.Client.Tests.Helpers;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
+using Werewolves.Core.StateModels.Resources;
 using Xunit;
 
 namespace Werewolves.Client.Tests.Components;
@@ -21,7 +22,7 @@ public class SelectPlayersViewBunitTests
 	private const string AriaLabelAttribute = "aria-label";
 	private const string DisabledAttribute = "disabled";
 	private const string SelectedPlayerOptionClass = "ww-select-players-item--selected";
-	private const string TestInstructionPrompt = "Select one test player.";
+	private static string TestInstructionPrompt => GameStrings.WerewolvesChooseVictimPrompt;
 	private const int FirstPlayerSeatNumber = 1;
 	private const int SecondPlayerSeatNumber = 2;
 	private const string FirstPlayerName = "Ana";

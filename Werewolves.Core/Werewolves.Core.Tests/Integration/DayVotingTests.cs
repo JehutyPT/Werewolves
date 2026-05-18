@@ -53,7 +53,7 @@ public class DayVotingTests : DiagnosticTestBase
 
         var debateInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
-            "Debate confirmation instruction");
+            CoreTestReferences.InstructionContexts.DebateConfirmationInstruction);
 
         // Act: Confirm debate is complete
         var afterDebate = builder.Process(debateInstruction.CreateResponse(true));
@@ -62,14 +62,14 @@ public class DayVotingTests : DiagnosticTestBase
         // After DetermineVoteType (silent transition), we should get a voting instruction
         var votingInstruction = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
             afterDebate,
-            "Voting selection instruction");
+            CoreTestReferences.InstructionContexts.VotingSelectionInstruction);
 
         // Verify it's a voting instruction with appropriate constraints
         // Uses SingleOptional which has Minimum=1, Maximum=1, IsOptional=true
         // The IsOptional flag allows 0 selections for tie votes
         votingInstruction.CountConstraint.Should().NotBeNull();
-        votingInstruction.CountConstraint!.IsOptional.Should().BeTrue("Tie votes (0 players) should be allowed");
-        votingInstruction.CountConstraint!.Maximum.Should().Be(1, "Only one player can be lynched");
+        votingInstruction.CountConstraint!.IsOptional.Should().BeTrue(CoreTestReferences.AssertionReasons.TieVotesAllowNoSelection);
+        votingInstruction.CountConstraint!.Maximum.Should().Be(1, CoreTestReferences.AssertionReasons.SinglePlayerCanBeLynched);
 
         MarkTestCompleted();
     }
@@ -108,13 +108,13 @@ public class DayVotingTests : DiagnosticTestBase
         // Confirm debate
         var debateInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
-            "Debate confirmation");
+            CoreTestReferences.InstructionContexts.DebateConfirmation);
         var afterDebate = builder.Process(debateInstruction.CreateResponse(true));
 
         // Get voting instruction
         var votingInstruction = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
             afterDebate,
-            "Voting instruction");
+            CoreTestReferences.InstructionContexts.VotingInstruction);
 
         // Act: Vote to lynch villager2 (who is still alive)
         var voteResponse = votingInstruction.CreateResponse([villager2Id]);
@@ -123,7 +123,7 @@ public class DayVotingTests : DiagnosticTestBase
         // Assert: Should get a role assignment instruction for the lynched player
         var roleAssignInstruction = InstructionAssert.ExpectSuccessWithType<AssignRolesInstruction>(
             afterVote,
-            "Role assignment instruction after lynch");
+            CoreTestReferences.InstructionContexts.RoleAssignmentAfterLynch);
 
         roleAssignInstruction.PlayersForAssignment.Should().Contain(villager2Id);
 
@@ -159,13 +159,13 @@ public class DayVotingTests : DiagnosticTestBase
         // Confirm debate
         var debateInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
-            "Debate confirmation");
+            CoreTestReferences.InstructionContexts.DebateConfirmation);
         var afterDebate = builder.Process(debateInstruction.CreateResponse(true));
 
         // Get voting instruction and vote
         var votingInstruction = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
             afterDebate,
-            "Voting instruction");
+            CoreTestReferences.InstructionContexts.VotingInstruction);
 
         // Act: Vote to lynch villager2
         var voteResponse = votingInstruction.CreateResponse([villager2Id]);
@@ -265,13 +265,13 @@ public class DayVotingTests : DiagnosticTestBase
         // Confirm debate
         var debateInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
-            "Debate confirmation");
+            CoreTestReferences.InstructionContexts.DebateConfirmation);
         var afterDebate = builder.Process(debateInstruction.CreateResponse(true));
 
         // Get voting instruction
         var votingInstruction = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
             afterDebate,
-            "Voting instruction");
+            CoreTestReferences.InstructionContexts.VotingInstruction);
 
         // Act: Vote with no player selected (tie)
         var tieResponse = votingInstruction.CreateResponse([]);
@@ -287,7 +287,7 @@ public class DayVotingTests : DiagnosticTestBase
             .Where(e => e.Reason == EliminationReason.DayVote)
             .ToList();
 
-        dayEliminationLogs.Should().BeEmpty("no player should be eliminated on a tie vote");
+        dayEliminationLogs.Should().BeEmpty(CoreTestReferences.AssertionReasons.TieVoteDoesNotEliminatePlayer);
 
         // Living player count should be same as before voting
         var livingPlayersAfter = gameState.GetPlayers()
@@ -326,13 +326,13 @@ public class DayVotingTests : DiagnosticTestBase
         // Confirm debate
         var debateInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
-            "Debate confirmation");
+            CoreTestReferences.InstructionContexts.DebateConfirmation);
         var afterDebate = builder.Process(debateInstruction.CreateResponse(true));
 
         // Get voting instruction
         var votingInstruction = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
             afterDebate,
-            "Voting instruction");
+            CoreTestReferences.InstructionContexts.VotingInstruction);
 
         // Act: Vote with no player selected (tie)
         var tieResponse = votingInstruction.CreateResponse([]);
@@ -345,8 +345,8 @@ public class DayVotingTests : DiagnosticTestBase
             .ToList();
 
         voteLogs.Should().HaveCount(1);
-        voteLogs[0].ReportedOutcomePlayerId.Should().Be(Guid.Empty, 
-            "tie vote should be logged with Empty playerId");
+        voteLogs[0].ReportedOutcomePlayerId.Should().Be(Guid.Empty,
+            CoreTestReferences.AssertionReasons.TieVoteLoggedWithEmptyPlayerId);
 
         MarkTestCompleted();
     }
@@ -392,17 +392,17 @@ public class DayVotingTests : DiagnosticTestBase
         // Confirm debate to get to voting
         var debateInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
-            "Debate confirmation");
+            CoreTestReferences.InstructionContexts.DebateConfirmation);
         var afterDebate = builder.Process(debateInstruction.CreateResponse(true));
 
         // Act: Get the vote selection instruction
         var votingInstruction = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
             afterDebate,
-            "Voting instruction");
+            CoreTestReferences.InstructionContexts.VotingInstruction);
 
         // Assert: Dead player's ID should NOT be in selectable targets
         votingInstruction.SelectablePlayerIds.Should().NotContain(villager1Id,
-            "dead player should not be a valid vote target");
+            CoreTestReferences.AssertionReasons.DeadPlayerInvalidVoteTarget);
 
         // Living players should be selectable
         votingInstruction.SelectablePlayerIds.Should().Contain(werewolfId);

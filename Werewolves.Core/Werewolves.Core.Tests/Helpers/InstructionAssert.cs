@@ -25,9 +25,9 @@ public static class InstructionAssert
     {
         if (instruction is null)
         {
-            var message = $"Expected instruction of type {typeof(TInstruction).Name}, but received null.";
+            var message = CoreTestReferences.ExceptionMessages.ExpectedInstructionReceivedNull(typeof(TInstruction).Name);
             if (context is not null)
-                message = $"{context}: {message}";
+                message = CoreTestReferences.ExceptionMessages.WithContext(context, message);
             throw new InvalidOperationException(message);
         }
 
@@ -36,9 +36,11 @@ public static class InstructionAssert
             return typed;
         }
 
-        var errorMessage = $"Expected instruction of type {typeof(TInstruction).Name}, but received {instruction.GetType().Name}.";
+        var errorMessage = CoreTestReferences.ExceptionMessages.ExpectedInstructionReceivedType(
+            typeof(TInstruction).Name,
+            instruction.GetType().Name);
         if (context is not null)
-            errorMessage = $"{context}: {errorMessage}";
+            errorMessage = CoreTestReferences.ExceptionMessages.WithContext(context, errorMessage);
         
         throw new AssertionException(errorMessage);
     }
@@ -59,9 +61,9 @@ public static class InstructionAssert
     {
         if (!result.IsSuccess)
         {
-            var message = "Expected successful ProcessResult, but IsSuccess was false.";
+            var message = CoreTestReferences.ExceptionMessages.ExpectedSuccessfulProcessResult;
             if (context is not null)
-                message = $"{context}: {message}";
+                message = CoreTestReferences.ExceptionMessages.WithContext(context, message);
             throw new AssertionException(message);
         }
 

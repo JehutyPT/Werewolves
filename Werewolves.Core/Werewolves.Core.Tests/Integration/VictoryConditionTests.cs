@@ -22,7 +22,7 @@ public class VictoryConditionTests : DiagnosticTestBase
     /// VC-001: Last werewolf killed by special ability at dawn triggers villager victory.
     /// Skipped: Simple game has no roles that kill werewolves at dawn (Knight, Witch not implemented).
     /// </summary>
-    [Fact(Skip = "Requires roles not in simple game scope (Knight's rusty sword, Witch's poison)")]
+    [Fact(Skip = CoreTestReferences.SkipReasons.RequiresRolesOutsideSimpleGameScope)]
     public void WerewolfEliminated_AtDawn_VillagerVictory()
     {
         // This test would require:
@@ -60,7 +60,7 @@ public class VictoryConditionTests : DiagnosticTestBase
         // Confirm night end
         var nightEndInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
-            "Night end confirmation");
+            CoreTestReferences.InstructionContexts.NightEndConfirmation);
         builder.Process(nightEndInstruction.CreateResponse(true));
 
         // Dawn: Process victim elimination (villager1 dies)
@@ -73,19 +73,19 @@ public class VictoryConditionTests : DiagnosticTestBase
         // Confirm debate
         var debateInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
-            "Debate confirmation");
+            CoreTestReferences.InstructionContexts.DebateConfirmation);
         builder.Process(debateInstruction.CreateResponse(true));
 
         // Vote for werewolf
         var voteInstruction = InstructionAssert.ExpectType<SelectPlayersInstruction>(
             builder.GetCurrentInstruction(),
-            "Vote selection");
+            CoreTestReferences.InstructionContexts.VoteSelection);
         builder.Process(voteInstruction.CreateResponse([werewolf.Id]));
 
-        // Death announcement confirmation (role already known from night wake)
+        // Confirm the death announcement; role is already known from the night wake.
         var deathAnnouncementInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
-            "Death announcement confirmation");
+            CoreTestReferences.InstructionContexts.DeathAnnouncementConfirmation);
         var result = builder.Process(deathAnnouncementInstruction.CreateResponse(true));
 
         // Assert - Should get FinishedGameConfirmationInstruction
@@ -135,7 +135,7 @@ public class VictoryConditionTests : DiagnosticTestBase
         // Confirm night end
         var nightEndInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
-            "Night end confirmation");
+            CoreTestReferences.InstructionContexts.NightEndConfirmation);
         builder.Process(nightEndInstruction.CreateResponse(true));
 
         // Dawn: Process victim (now 2 WW vs 2 Villagers = WW victory!)
@@ -189,7 +189,7 @@ public class VictoryConditionTests : DiagnosticTestBase
         // Confirm night end
         var nightEndInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
-            "Night end confirmation");
+            CoreTestReferences.InstructionContexts.NightEndConfirmation);
         builder.Process(nightEndInstruction.CreateResponse(true));
 
         // Dawn: Process victim - after this, 3 WW vs 1 Villager
@@ -245,7 +245,7 @@ public class VictoryConditionTests : DiagnosticTestBase
         // Confirm night end
         var nightEndInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
-            "Night end confirmation");
+            CoreTestReferences.InstructionContexts.NightEndConfirmation);
         builder.Process(nightEndInstruction.CreateResponse(true));
 
         // Dawn: Process victim
@@ -260,18 +260,18 @@ public class VictoryConditionTests : DiagnosticTestBase
         // Day: Vote out villager2 (now 1 WW vs 2 Villagers)
         var debateInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
-            "Debate confirmation");
+            CoreTestReferences.InstructionContexts.DebateConfirmation);
         builder.Process(debateInstruction.CreateResponse(true));
 
         var voteInstruction = InstructionAssert.ExpectType<SelectPlayersInstruction>(
             builder.GetCurrentInstruction(),
-            "Vote selection");
+            CoreTestReferences.InstructionContexts.VoteSelection);
         builder.Process(voteInstruction.CreateResponse([villager2.Id]));
 
         // Assign villager role
         var roleInstruction = InstructionAssert.ExpectType<AssignRolesInstruction>(
             builder.GetCurrentInstruction(),
-            "Villager role assignment");
+            CoreTestReferences.InstructionContexts.VillagerRoleAssignment);
         builder.Process(roleInstruction.CreateResponse(new Dictionary<Guid, MainRoleType>
         {
             { villager2.Id, MainRoleType.SimpleVillager }
@@ -280,7 +280,7 @@ public class VictoryConditionTests : DiagnosticTestBase
         // Confirm death
         var deathConfirmation = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
-            "Death confirmation");
+            CoreTestReferences.InstructionContexts.DeathConfirmation);
         builder.Process(deathConfirmation.CreateResponse(true));
 
         // Game continues to Night 2 (1 WW vs 2 Villagers)
@@ -293,7 +293,7 @@ public class VictoryConditionTests : DiagnosticTestBase
         // Confirm night end
         var nightEndInstruction2 = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
-            "Night end confirmation");
+            CoreTestReferences.InstructionContexts.NightEndConfirmation);
         builder.Process(nightEndInstruction2.CreateResponse(true));
 
         // Dawn: Process victim - victory should be detected after elimination
@@ -348,7 +348,7 @@ public class VictoryConditionTests : DiagnosticTestBase
         // Confirm night end
         var nightEndInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
-            "Night end confirmation");
+            CoreTestReferences.InstructionContexts.NightEndConfirmation);
         builder.Process(nightEndInstruction.CreateResponse(true));
 
         // Dawn: Process victim
@@ -365,19 +365,19 @@ public class VictoryConditionTests : DiagnosticTestBase
         // Confirm debate
         var debateInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
-            "Debate confirmation");
+            CoreTestReferences.InstructionContexts.DebateConfirmation);
         builder.Process(debateInstruction.CreateResponse(true));
 
         // Vote for villager2
         var voteInstruction = InstructionAssert.ExpectType<SelectPlayersInstruction>(
             builder.GetCurrentInstruction(),
-            "Vote selection");
+            CoreTestReferences.InstructionContexts.VoteSelection);
         builder.Process(voteInstruction.CreateResponse([villager2.Id]));
 
         // Assign villager role (SimpleVillager doesn't wake at night, so role is unknown)
         var roleInstruction = InstructionAssert.ExpectType<AssignRolesInstruction>(
             builder.GetCurrentInstruction(),
-            "Villager role assignment");
+            CoreTestReferences.InstructionContexts.VillagerRoleAssignment);
         builder.Process(roleInstruction.CreateResponse(new Dictionary<Guid, MainRoleType>
         {
             { villager2.Id, MainRoleType.SimpleVillager }
@@ -386,7 +386,7 @@ public class VictoryConditionTests : DiagnosticTestBase
         // Confirm death announcement
         var deathAnnouncementInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
-            "Death announcement confirmation");
+            CoreTestReferences.InstructionContexts.DeathAnnouncementConfirmation);
         builder.Process(deathAnnouncementInstruction.CreateResponse(true));
 
         // Game should continue to Night 2 (1 WW vs 2 Villagers)
@@ -400,7 +400,7 @@ public class VictoryConditionTests : DiagnosticTestBase
         // Confirm night end
         var nightEndInstruction2 = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
-            "Night end confirmation");
+            CoreTestReferences.InstructionContexts.NightEndConfirmation);
         builder.Process(nightEndInstruction2.CreateResponse(true));
 
         // Dawn 2: Process victim
@@ -456,7 +456,7 @@ public class VictoryConditionTests : DiagnosticTestBase
         // Confirm night end
         var nightEndInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
-            "Night end confirmation");
+            CoreTestReferences.InstructionContexts.NightEndConfirmation);
         builder.Process(nightEndInstruction.CreateResponse(true));
 
         // Dawn: Process victim
@@ -507,7 +507,7 @@ public class VictoryConditionTests : DiagnosticTestBase
         // Confirm night end
         var nightEndInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
-            "Night end confirmation");
+            CoreTestReferences.InstructionContexts.NightEndConfirmation);
         builder.Process(nightEndInstruction.CreateResponse(true));
 
         // Dawn: Process victim
@@ -522,17 +522,17 @@ public class VictoryConditionTests : DiagnosticTestBase
         // Day: Vote out the werewolf
         var debateInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
-            "Debate confirmation");
+            CoreTestReferences.InstructionContexts.DebateConfirmation);
         builder.Process(debateInstruction.CreateResponse(true));
 
         var voteInstruction = InstructionAssert.ExpectType<SelectPlayersInstruction>(
             builder.GetCurrentInstruction(),
-            "Vote selection");
+            CoreTestReferences.InstructionContexts.VoteSelection);
         builder.Process(voteInstruction.CreateResponse([werewolf.Id]));
 
         var deathAnnouncementInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
-            "Death announcement confirmation");
+            CoreTestReferences.InstructionContexts.DeathAnnouncementConfirmation);
         var result = builder.Process(deathAnnouncementInstruction.CreateResponse(true));
 
 		// Assert - Victory detected at Day phase
@@ -574,7 +574,7 @@ public class VictoryConditionTests : DiagnosticTestBase
         // Confirm night end
         var nightEndInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
-            "Night end confirmation");
+            CoreTestReferences.InstructionContexts.NightEndConfirmation);
         builder.Process(nightEndInstruction.CreateResponse(true));
 
         // Dawn: Process victim

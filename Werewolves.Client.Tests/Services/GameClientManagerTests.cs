@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Werewolves.Client.Services;
+using Werewolves.Client.Tests.Helpers;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
@@ -241,7 +242,7 @@ public class GameClientManagerTests
 		foreach (var playerId in assignRoles.PlayersForAssignment)
 		{
 			roster.Should().Contain(r => r.PlayerId == playerId,
-				"roster should contain an entry for each player needing role assignment");
+				ClientTestReferences.AssertionReasons.RosterContainsEntriesForRoleAssignmentPlayers);
 		}
 
 		// Process the assignment and verify game advances
@@ -514,7 +515,7 @@ public class GameClientManagerTests
 		var act = () => manager.ProcessInput(response);
 
 		act.Should().Throw<InvalidOperationException>()
-			.WithMessage("Cannot process moderator response without an active game session.");
+			.WithMessage(ClientTestReferences.ExceptionPatterns.MissingActiveGameSession);
 	}
 
 	[Fact]
@@ -767,11 +768,12 @@ public class GameClientManagerTests
 					break;
 				default:
 					throw new InvalidOperationException(
-						$"Unexpected instruction while reaching victory: {manager.CurrentInstruction?.GetType().Name ?? "null"}.");
+						ClientTestReferences.ExceptionMessages.UnexpectedInstructionWhileReachingVictory(
+							manager.CurrentInstruction?.GetType().Name));
 			}
 		}
 
-		throw new InvalidOperationException("Victory was not reached within the expected number of inputs.");
+		throw new InvalidOperationException(ClientTestReferences.ExceptionMessages.VictoryNotReached);
 	}
 
 	private static void ConfirmCurrentInstruction(GameClientManager manager)
@@ -843,7 +845,7 @@ public class GameClientManagerTests
 			switch (manager.CurrentInstruction)
 			{
 				case FinishedGameConfirmationInstruction:
-					throw new InvalidOperationException("Game ended before reaching next debate.");
+					throw new InvalidOperationException(ClientTestReferences.ExceptionMessages.GameEndedBeforeNextDebate);
 				case ConfirmationInstruction ci:
 					manager.ProcessInput(ci.CreateResponse(true));
 					break;
@@ -867,11 +869,12 @@ public class GameClientManagerTests
 					break;
 				default:
 					throw new InvalidOperationException(
-						$"Unexpected instruction: {manager.CurrentInstruction?.GetType().Name ?? "null"}");
+						ClientTestReferences.ExceptionMessages.UnexpectedInstruction(
+							manager.CurrentInstruction?.GetType().Name));
 			}
 		}
 
-		throw new InvalidOperationException("Next debate instruction was not reached within the expected number of inputs.");
+		throw new InvalidOperationException(ClientTestReferences.ExceptionMessages.NextDebateNotReached);
 	}
 
 	private static void AdvanceToDebate(GameClientManager manager)
@@ -905,11 +908,12 @@ public class GameClientManagerTests
 					break;
 				default:
 					throw new InvalidOperationException(
-						$"Unexpected instruction while advancing to debate: {manager.CurrentInstruction?.GetType().Name ?? "null"}");
+						ClientTestReferences.ExceptionMessages.UnexpectedInstructionWhileAdvancingToDebate(
+							manager.CurrentInstruction?.GetType().Name));
 			}
 		}
 
-		throw new InvalidOperationException("Debate instruction was not reached within the expected number of inputs.");
+		throw new InvalidOperationException(ClientTestReferences.ExceptionMessages.DebateNotReached);
 	}
 
 	private sealed class FakeTimeProvider : TimeProvider
@@ -934,7 +938,7 @@ public class GameClientManagerTests
 		public string? Load() => null;
 
 		public void Save(string serializedSession) =>
-			throw new IOException("Save failed.");
+			throw new IOException(ClientTestReferences.ExceptionMessages.SaveFailed);
 
 		public void Clear()
 		{

@@ -1,5 +1,7 @@
 using FluentAssertions;
 using Werewolves.Client.Services;
+using Werewolves.Client.Tests.Helpers;
+using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Models;
 using Xunit;
 
@@ -8,7 +10,16 @@ namespace Werewolves.Client.Tests.Services;
 public class SelectPlayersInputStateTests
 {
 	private static DashboardRosterEntry MakeEntry(Guid id, int seat, string name) =>
-		new(id, seat, name, "role label", false, "health label", false, [], "status label");
+		new(
+			id,
+			seat,
+			name,
+			DashboardRoster.UnknownRoleLabel,
+			false,
+			DashboardRoster.HealthLabel(PlayerHealth.Alive),
+			false,
+			[],
+			DashboardRoster.NoStatusEffectsLabel);
 
 	#region Filtering and ordering
 
@@ -281,7 +292,7 @@ public class SelectPlayersInputStateTests
 		var selection = state.GetSelection();
 		selection.Clear();
 
-		state.IsSelected(p1).Should().BeTrue("clearing the returned set should not affect internal state");
+		state.IsSelected(p1).Should().BeTrue(ClientTestReferences.AssertionReasons.ReturnedSelectionMutationDoesNotAffectState);
 	}
 
 	#endregion

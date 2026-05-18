@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using FluentAssertions;
+using Werewolves.Client.Tests.Helpers;
 using Xunit;
 
 namespace Werewolves.Client.Tests.Styling;
@@ -120,7 +121,7 @@ public class DarkThemeTokenTests
 		// Deprecated temporary scaffold: replace with ADR-0006/bUnit or browser-host rendered shell checks.
 		var pagesWithoutDarkShell = pages
 			.Where(path => !Regex.IsMatch(File.ReadAllText(path), "<main\\s+class=\"ww-(?:app|dashboard)-shell\""))
-			.Select(path => Path.GetRelativePath(RepositoryRoot, path))
+			.Select(path => Path.GetRelativePath(ClientTestReferences.Paths.RepositoryRoot, path))
 			.ToArray();
 
 		pagesWithoutDarkShell.Should().BeEmpty();
@@ -130,7 +131,7 @@ public class DarkThemeTokenTests
 	{
 		return File.ReadLines(path)
 			.SelectMany((line, index) => ColorLiteralPattern.Matches(line)
-				.Select(match => $"{Path.GetRelativePath(RepositoryRoot, path)}:{index + 1}: {match.Value}"))
+				.Select(match => $"{Path.GetRelativePath(ClientTestReferences.Paths.RepositoryRoot, path)}:{index + 1}: {match.Value}"))
 			.ToArray();
 	}
 
@@ -171,27 +172,11 @@ public class DarkThemeTokenTests
 
 	private static string ClientPath(params string[] relativeSegments)
 	{
-		return Path.Combine([RepositoryRoot, "Werewolves.Client", .. relativeSegments]);
+		return ClientTestReferences.Paths.ClientPath(relativeSegments);
 	}
 
 	private static string SharedPath(params string[] relativeSegments)
 	{
-		return Path.Combine([RepositoryRoot, "Werewolves.Client.Shared", .. relativeSegments]);
-	}
-
-	private static string RepositoryRoot
-	{
-		get
-		{
-			var directory = new DirectoryInfo(AppContext.BaseDirectory);
-
-			while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "Werewolves.sln")))
-			{
-				directory = directory.Parent;
-			}
-
-			return directory?.FullName
-				?? throw new InvalidOperationException("Could not locate the repository root from the test output directory.");
-		}
+		return ClientTestReferences.Paths.SharedPath(relativeSegments);
 	}
 }
