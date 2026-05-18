@@ -25,8 +25,10 @@ Use this QA Evidence Matrix before adding or accepting tests.
 ## Source-Test Rules
 
 - Prefer behavior, rendered, service, adapter, or integration tests.
+- Assert resource-backed copy through the generated resource/localization accessors that production uses; raw localized literals belong only in resource contract tests.
 - Write a source-level test only when the protected claim is the source shape itself, or when the test is an allowlisted temporary scaffold.
 - Reject raw Razor assertions over component names, event handler names, parameter declarations, CSS classes, resource key names, and implementation methods unless the test is allowlisted.
+- Keep source, style, selector, and CSS class assertions to policy, allowlisted, or contractual claims; do not duplicate incidental HTML or CSS shape in rendered component tests.
 - List every retained source-level test in the Source-Test Allowlist with its exact test or test group, category, protected claim, and replacement or removal condition.
 - Put the same replacement or removal direction in a short code comment for every `Deprecated temporary scaffold`.
 - Remove a temporary scaffold as soon as its replacement evidence exists.
@@ -57,6 +59,7 @@ Use `ModeratorComponentTestContext` for shared Moderator UI component tests.
 - Set `pt-PT` culture and `ClientStrings.Culture` before rendering.
 - Register fake or no-op services for audio, haptics, wake lock, persistence, and any other host-only dependency.
 - Prove user-visible behavior through rendered markup and event interaction rather than raw Razor source assertions.
+- Use `ClientStrings`, `GameStrings`, or production-derived localization helpers for resource-backed labels and text assertions; do not hardcode Portuguese UI copy in component tests.
 - Treat legacy `Renderer`/`BL0006` component tests as existing interaction scaffolds only; new shared component coverage should use bUnit unless it is deliberately replacing one of those scaffolds.
 - `SelectPlayersViewBunitTests` is the replacement evidence for the removed `SelectPlayersViewMarkupTests` source allowlist row.
 

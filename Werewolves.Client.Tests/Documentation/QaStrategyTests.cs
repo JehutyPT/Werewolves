@@ -15,6 +15,10 @@ public class QaStrategyTests
 		strategy.Should().Contain("QA Evidence Matrix");
 		strategy.Should().Contain("Choose Evidence");
 		strategy.Should().Contain("Source-Test Rules");
+		strategy.Should().Contain("generated resource/localization accessors");
+		strategy.Should().Contain("raw localized literals belong only in resource contract tests");
+		strategy.Should().Contain("source, style, selector, and CSS class assertions");
+		strategy.Should().Contain("policy, allowlisted, or contractual claims");
 		strategy.Should().Contain("Allowed Source Tests");
 		strategy.Should().Contain("Manual Device Checks");
 		strategy.Should().Contain("manual device boundary");

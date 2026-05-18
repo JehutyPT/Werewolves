@@ -1,4 +1,6 @@
+using System.Globalization;
 using System.Reflection;
+using AngleSharp.Dom;
 using Bunit;
 using FluentAssertions;
 using Werewolves.Client.Components.Game.Views;
@@ -13,6 +15,18 @@ namespace Werewolves.Client.Tests.Components;
 
 public class SelectPlayersViewBunitTests
 {
+	private const string PlayerOptionSelector = "li[role='option']";
+	private const string PlayerListSelector = ".ww-select-players-list";
+	private const string SubmitHoldButtonSelector = "button.ww-btn-hold";
+	private const string AriaLabelAttribute = "aria-label";
+	private const string DisabledAttribute = "disabled";
+	private const string SelectedPlayerOptionClass = "ww-select-players-item--selected";
+	private const string TestInstructionPrompt = "Select one test player.";
+	private const int FirstPlayerSeatNumber = 1;
+	private const int SecondPlayerSeatNumber = 2;
+	private const string FirstPlayerName = "Ana";
+	private const string SecondPlayerName = "Bruno";
+
 	[Fact]
 	public void SelectingPlayerUpdatesRenderedStateAndEnablesSubmit()
 	{
@@ -22,29 +36,42 @@ public class SelectPlayersViewBunitTests
 		var instruction = CreateInstruction(anaId, brunoId);
 		var roster = new[]
 		{
-			CreateRosterEntry(anaId, 1, "Ana"),
-			CreateRosterEntry(brunoId, 2, "Bruno")
+			CreateRosterEntry(anaId, FirstPlayerSeatNumber, FirstPlayerName),
+			CreateRosterEntry(brunoId, SecondPlayerSeatNumber, SecondPlayerName)
 		};
 
 		var cut = context.RenderModeratorComponent<SelectPlayersView>(parameters => parameters
 			.Add(component => component.Instruction, instruction)
 			.Add(component => component.Roster, roster));
 
-		var options = cut.FindAll("li[role='option']");
+		var options = FindPlayerOptions(cut);
 		options.Should().HaveCount(2);
-		options[0].TextContent.Should().Contain("1").And.Contain("Ana");
-		options[1].TextContent.Should().Contain("2").And.Contain("Bruno");
-		cut.Find(".ww-select-players-list")
-			.GetAttribute("aria-label")
+		AssertPlayerOption(options[0], FirstPlayerSeatNumber, FirstPlayerName);
+		AssertPlayerOption(options[1], SecondPlayerSeatNumber, SecondPlayerName);
+		cut.Find(PlayerListSelector)
+			.GetAttribute(AriaLabelAttribute)
 			.Should()
 			.Be(ClientStrings.SelectPlayers_ListAria);
-		cut.Find("button.ww-btn-hold").HasAttribute("disabled").Should().BeTrue();
+		FindSubmitHoldButton(cut).HasAttribute(DisabledAttribute).Should().BeTrue();
 
 		options[1].Click();
 
-		options = cut.FindAll("li[role='option']");
-		options[1].ClassList.Should().Contain("ww-select-players-item--selected");
-		cut.Find("button.ww-btn-hold").HasAttribute("disabled").Should().BeFalse();
+		options = FindPlayerOptions(cut);
+		options[1].ClassList.Should().Contain(SelectedPlayerOptionClass);
+		FindSubmitHoldButton(cut).HasAttribute(DisabledAttribute).Should().BeFalse();
+	}
+
+	private static IReadOnlyList<IElement> FindPlayerOptions(IRenderedComponent<SelectPlayersView> cut) =>
+		cut.FindAll(PlayerOptionSelector).ToArray();
+
+	private static IElement FindSubmitHoldButton(IRenderedComponent<SelectPlayersView> cut) =>
+		cut.Find(SubmitHoldButtonSelector);
+
+	private static void AssertPlayerOption(IElement option, int seatNumber, string playerName)
+	{
+		option.TextContent.Should()
+			.Contain(seatNumber.ToString(CultureInfo.InvariantCulture))
+			.And.Contain(playerName);
 	}
 
 	private static SelectPlayersInstruction CreateInstruction(params Guid[] playerIds) =>
@@ -53,7 +80,7 @@ public class SelectPlayersViewBunitTests
 				playerIds.ToHashSet(),
 				NumberRangeConstraint.Single,
 				null,
-				"Escolhe um jogador.",
+				TestInstructionPrompt,
 				null
 			]);
 

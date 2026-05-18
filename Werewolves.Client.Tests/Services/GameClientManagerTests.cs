@@ -2,6 +2,7 @@ using FluentAssertions;
 using Werewolves.Client.Services;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
@@ -432,21 +433,21 @@ public class GameClientManagerTests
 	}
 
 	[Fact]
-	public void ProcessInput_WithConfirmationOnlyInstructions_AdvancesPhaseAndKeepsVisibleTextPortuguese()
+	public void ProcessInput_WithConfirmationOnlyInstructions_AdvancesPhaseAndUsesResourceBackedVisibleText()
 	{
 		var manager = new GameClientManager();
 		var startInstruction = StartVillagerOnlyGame(manager);
 
 		manager.ProcessInput(startInstruction.CreateResponse(true));
 		var nightStartInstruction = manager.CurrentInstruction.Should().BeOfType<ConfirmationInstruction>().Subject;
-		nightStartInstruction.PublicAnnouncement.Should().Be("A aldeia adormece.");
-		nightStartInstruction.PrivateInstruction.Should().Be("Confirma que todos estão de olhos fechados e em silêncio.");
+		nightStartInstruction.PublicAnnouncement.Should().Be(GameStrings.NightStartsPrompt);
+		nightStartInstruction.PrivateInstruction.Should().Be(GameStrings.ConfirmNightStarted);
 		manager.CurrentPhase.Should().Be(GamePhase.Night);
 		manager.TurnNumber.Should().Be(1);
 
 		manager.ProcessInput(nightStartInstruction.CreateResponse(true));
 		var dawnInstruction = manager.CurrentInstruction.Should().BeOfType<ConfirmationInstruction>().Subject;
-		dawnInstruction.PublicAnnouncement.Should().Be("As ações da noite terminaram. A aldeia acorda.");
+		dawnInstruction.PublicAnnouncement.Should().Be(GameStrings.NightActionsCompletePrompt);
 		manager.CurrentPhase.Should().Be(GamePhase.Dawn);
 		manager.TurnNumber.Should().Be(1);
 
@@ -492,15 +493,16 @@ public class GameClientManagerTests
 		manager.ProcessInput(nightStartInstruction.CreateResponse(true));
 		var identifyWerewolfInstruction = manager.CurrentInstruction.Should().BeOfType<SelectPlayersInstruction>().Subject;
 		var werewolf = manager.CurrentSession!.GetPlayers().First();
+		var werewolfRoleLabel = MainRoleType.SimpleWerewolf.GetPublicName();
 		var eventRosterSnapshots = new List<IReadOnlyList<DashboardRosterEntry>>();
 		manager.StateChanged += (_, _) => eventRosterSnapshots.Add(manager.CurrentRoster);
 
 		manager.ProcessInput(identifyWerewolfInstruction.CreateResponse([werewolf.Id]));
 
-		manager.CurrentRoster[0].RoleLabel.Should().Be("Lobisomem");
+		manager.CurrentRoster[0].RoleLabel.Should().Be(werewolfRoleLabel);
 		manager.CurrentRoster[0].IsRoleKnown.Should().BeTrue();
 		eventRosterSnapshots.Should().ContainSingle();
-		eventRosterSnapshots[0][0].RoleLabel.Should().Be("Lobisomem");
+		eventRosterSnapshots[0][0].RoleLabel.Should().Be(werewolfRoleLabel);
 	}
 
 	[Fact]

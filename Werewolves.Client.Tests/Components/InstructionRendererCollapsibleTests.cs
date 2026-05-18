@@ -41,7 +41,6 @@ public class InstructionRendererCollapsibleTests
 		fixture.VisibleText.Should().Contain("Check that nobody is peeking. ...");
 		fixture.VisibleText.Should().NotContain("Then show the victim privately.");
 		fixture.VisibleText.Should().Contain(ClientStrings.Common_TapToExpand);
-		fixture.VisibleText.Should().NotContain("Mostrar instrução");
 	}
 
 	[Fact]
