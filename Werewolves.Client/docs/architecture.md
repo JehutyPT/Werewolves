@@ -24,6 +24,7 @@
 *   **Device Control:** `Microsoft.Maui.Devices.IDeviceDisplay` (Screen Wake Lock).
 *   **Theme:** Single dark theme. No dynamic switching.
 *   **Localization:** Portuguese for v1. Core uses `GameStrings.resx`; client maintains its own `.resx` for UI-only strings (button labels, validation messages, prompts).
+*   **Native device QA:** Release/device checks for audio output, haptic feel, wake lock behavior, resume/background behavior, platform storage behavior, packaging/install behavior, native WebView rendering quirks, and touch feel live in `docs/native-device-qa-checklist.md`.
 
 ## 3. Architecture Pattern: Model-View-Adapter (MVA)
 

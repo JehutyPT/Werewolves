@@ -31,6 +31,35 @@ public class QaStrategyTests
 		strategy.Should().NotContain("Existing Source-Test Audit");
 	}
 
+	[Fact]
+	public void NativeDeviceChecklist_DefinesManualOnlyClaimAndEvidenceChecks()
+	{
+		var checklistPath = Path.Combine(RepositoryRoot, "Werewolves.Client", "docs", "native-device-qa-checklist.md");
+		var strategy = File.ReadAllText(Path.Combine(RepositoryRoot, "docs", "qa-strategy.md"));
+
+		File.Exists(checklistPath).Should().BeTrue("native behavior needs a repeatable client release checklist");
+
+		var checklist = File.ReadAllText(checklistPath);
+
+		checklist.Should().Contain("Claim");
+		checklist.Should().Contain("Manual scenario");
+		checklist.Should().Contain("Expected evidence");
+		checklist.Should().Contain("real audio output");
+		checklist.Should().Contain("haptic feel");
+		checklist.Should().Contain("wake lock behavior");
+		checklist.Should().Contain("resume/background behavior");
+		checklist.Should().Contain("platform storage behavior");
+		checklist.Should().Contain("packaging/install behavior");
+		checklist.Should().Contain("Native WebView rendering quirks");
+		checklist.Should().Contain("touch feel");
+		checklist.Should().Contain("These checks remain manual");
+		checklist.Should().Contain("one or two tiny device smoke tests");
+		checklist.Should().Contain("Do not use this checklist to replay Core game rules");
+		checklist.Should().Contain("Do not use this checklist to repeat Browser QA Host checks");
+
+		strategy.Should().Contain("Werewolves.Client/docs/native-device-qa-checklist.md");
+	}
+
 	private static string RepositoryRoot
 	{
 		get
