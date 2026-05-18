@@ -310,6 +310,33 @@
   <data name="Dashboard_EliminationCountManyFormat" xml:space="preserve">
     <value>{0} eliminations</value>
   </data>
+  <data name="Dashboard_EliminationReasonWerewolfAttack" xml:space="preserve">
+    <value>Werewolf attack</value>
+  </data>
+  <data name="Dashboard_EliminationReasonWitchKill" xml:space="preserve">
+    <value>Witch potion</value>
+  </data>
+  <data name="Dashboard_EliminationReasonHunterShot" xml:space="preserve">
+    <value>Hunter shot</value>
+  </data>
+  <data name="Dashboard_EliminationReasonLoversHeartbreak" xml:space="preserve">
+    <value>Lovers heartbreak</value>
+  </data>
+  <data name="Dashboard_EliminationReasonRustySword" xml:space="preserve">
+    <value>Rusty sword</value>
+  </data>
+  <data name="Dashboard_EliminationReasonScapegoatSacrifice" xml:space="preserve">
+    <value>Scapegoat sacrifice</value>
+  </data>
+  <data name="Dashboard_EliminationReasonEventElimination" xml:space="preserve">
+    <value>Event</value>
+  </data>
+  <data name="Dashboard_EliminationReasonDayVote" xml:space="preserve">
+    <value>Village vote</value>
+  </data>
+  <data name="Dashboard_EliminationReasonUnknown" xml:space="preserve">
+    <value>Unknown reason</value>
+  </data>
   <data name="Dashboard_AudioUnmute" xml:space="preserve">
     <value>Unmute audio</value>
   </data>

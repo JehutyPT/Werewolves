@@ -10,10 +10,12 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Werewolves.Client.Components.Game.Views;
 using Werewolves.Client.Resources;
 using Werewolves.Client.Services;
+using Werewolves.Client.Tests.Helpers;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
+using Werewolves.Core.StateModels.Resources;
 using Xunit;
 
 #pragma warning disable BL0006
@@ -119,7 +121,7 @@ public class AssignRolesViewTests
 
 		markup.Should().Contain("[Parameter");
 		markup.Should().Contain("AssignRolesInstruction Instruction");
-		markup.Should().Contain("EventCallback<ModeratorResponse> OnResponse");
+		markup.Should().Contain(nameof(EventCallback) + "<ModeratorResponse> OnResponse");
 	}
 
 	[Fact]
@@ -198,7 +200,7 @@ public class AssignRolesViewTests
 		{
 			var candidate = Path.Combine(
 				directory.FullName,
-				"Werewolves.Client",
+				"Werewolves.Client.Shared",
 				"Components",
 				"Game",
 				"Views",
@@ -212,7 +214,7 @@ public class AssignRolesViewTests
 			directory = directory.Parent;
 		}
 
-		throw new FileNotFoundException("AssignRolesView.razor could not be found from the test output directory.");
+		throw new FileNotFoundException(ClientTestReferences.ExceptionMessages.ComponentViewNotFound("AssignRolesView.razor"));
 	}
 
 	private static AssignRolesInstruction CreateInstruction(IReadOnlyList<Guid> playerIds, IReadOnlyList<MainRoleType> roles) =>
@@ -221,7 +223,7 @@ public class AssignRolesViewTests
 				playerIds.ToImmutableHashSet(),
 				roles,
 				null,
-				"Assign a role",
+				GameStrings.RevealRolePromptSpecify,
 				null
 			]);
 
@@ -254,7 +256,7 @@ public class AssignRolesViewTests
 						name,
 						DashboardRoster.UnknownRoleLabel,
 						false,
-						"Alive",
+						DashboardRoster.HealthLabel(PlayerHealth.Alive),
 						false,
 						[],
 						DashboardRoster.NoStatusEffectsLabel))
@@ -432,7 +434,7 @@ public class AssignRolesViewTests
 		protected override void HandleException(Exception exception)
 		{
 			throw new InvalidOperationException(
-				"Unhandled exception during AssignRolesView rendering or event dispatch.", exception);
+				ClientTestReferences.ExceptionMessages.ComponentRenderOrDispatchFailure("AssignRolesView"), exception);
 		}
 	}
 

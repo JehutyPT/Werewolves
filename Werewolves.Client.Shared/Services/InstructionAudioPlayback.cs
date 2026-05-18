@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Plugin.Maui.Audio;
 using Werewolves.Core.StateModels.Models;
 
 namespace Werewolves.Client.Services;
@@ -19,7 +18,15 @@ public interface IAudioAssetLoader
 
 public interface IAudioPlayerFactory
 {
-	IAudioPlayer Create(Stream audioStream);
+	IAudioPlaybackHandle Create(Stream audioStream);
+}
+
+public interface IAudioPlaybackHandle : IDisposable
+{
+	bool IsPlaying { get; }
+	bool Loop { get; set; }
+	void Play();
+	void Stop();
 }
 
 public sealed class DisabledInstructionAudioPlayback : IInstructionAudioPlayback
@@ -47,7 +54,7 @@ public sealed class InstructionAudioPlayback : IInstructionAudioPlayback, IDispo
 	private readonly ILogger<InstructionAudioPlayback> _logger;
 	private readonly SemaphoreSlim _gate = new(1, 1);
 
-	private IAudioPlayer? _activePlayer;
+	private IAudioPlaybackHandle? _activePlayer;
 	private string? _activeFileName;
 
 	public InstructionAudioPlayback(

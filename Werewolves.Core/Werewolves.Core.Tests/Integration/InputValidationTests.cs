@@ -2,6 +2,7 @@ using FluentAssertions;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
+using Werewolves.Core.StateModels.Resources;
 using Werewolves.Core.Tests.Helpers;
 using Xunit;
 using Xunit.Abstractions;
@@ -36,14 +37,14 @@ public class InputValidationTests : DiagnosticTestBase
         // Confirm night starts
         var nightStartInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
-            "Night start confirmation");
+            CoreTestReferences.InstructionContexts.NightStartConfirmation);
         var nightStartResponse = nightStartInstruction.CreateResponse(true);
         builder.Process(nightStartResponse);
 
         // Get the SelectPlayersInstruction (werewolf identification)
         var selectInstruction = InstructionAssert.ExpectType<SelectPlayersInstruction>(
             builder.GetCurrentInstruction(),
-            "Werewolf identification instruction");
+            CoreTestReferences.InstructionContexts.WerewolfIdentificationInstruction);
 
         // Capture game state before the invalid response
         var gameStateBefore = builder.GetGameState()!;
@@ -51,7 +52,7 @@ public class InputValidationTests : DiagnosticTestBase
 
         // Create a wrong response type - ConfirmationResponse instead of SelectPlayersResponse
         // We need to provide at least one announcement string to create the instruction
-        var wrongResponse = new ConfirmationInstruction(privateInstruction: "Test").CreateResponse(true);
+        var wrongResponse = new ConfirmationInstruction(privateInstruction: GameStrings.ConfirmNightStarted).CreateResponse(true);
 
         // Act - Attempt to process with wrong response type
         // The current implementation throws an InvalidOperationException when response type doesn't match
@@ -85,7 +86,7 @@ public class InputValidationTests : DiagnosticTestBase
 
         // Get any pending instruction (the StartGameConfirmation or next)
         var currentInstruction = builder.GetCurrentInstruction();
-        currentInstruction.Should().NotBeNull("Game should have a pending instruction after start");
+        currentInstruction.Should().NotBeNull(CoreTestReferences.AssertionReasons.GameHasPendingInstructionAfterStart);
 
         // Capture game state before the null response
         var gameStateBefore = builder.GetGameState()!;
@@ -130,7 +131,7 @@ public class InputValidationTests : DiagnosticTestBase
         // Get the SelectPlayersInstruction (werewolf identification) with Single constraint
         var selectInstruction = InstructionAssert.ExpectType<SelectPlayersInstruction>(
             builder.GetCurrentInstruction(),
-            "Werewolf identification instruction");
+            CoreTestReferences.InstructionContexts.WerewolfIdentificationInstruction);
 
         // Verify the instruction requires exactly one selection
         selectInstruction.CountConstraint.Should().Be(NumberRangeConstraint.Single);
@@ -140,7 +141,7 @@ public class InputValidationTests : DiagnosticTestBase
 
         // Assert - Should throw an exception for constraint violation
         act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*Minimum*1*required*0*provided*");
+            .WithMessage(CoreTestReferences.ExceptionPatterns.MinimumSelectionCount(required: 1, provided: 0));
 
         MarkTestCompleted();
     }
@@ -166,7 +167,7 @@ public class InputValidationTests : DiagnosticTestBase
         // Get the SelectPlayersInstruction (werewolf identification) with Single constraint
         var selectInstruction = InstructionAssert.ExpectType<SelectPlayersInstruction>(
             builder.GetCurrentInstruction(),
-            "Werewolf identification instruction");
+            CoreTestReferences.InstructionContexts.WerewolfIdentificationInstruction);
 
         // Verify the instruction requires exactly one selection
         selectInstruction.CountConstraint.Should().Be(NumberRangeConstraint.Single);
@@ -179,7 +180,7 @@ public class InputValidationTests : DiagnosticTestBase
 
         // Assert - Should throw an exception for constraint violation
         act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*Maximum*1*allowed*2*provided*");
+            .WithMessage(CoreTestReferences.ExceptionPatterns.MaximumSelectionCount(allowed: 1, provided: 2));
 
         MarkTestCompleted();
     }
@@ -205,7 +206,7 @@ public class InputValidationTests : DiagnosticTestBase
         // Get the SelectPlayersInstruction (werewolf identification)
         var selectInstruction = InstructionAssert.ExpectType<SelectPlayersInstruction>(
             builder.GetCurrentInstruction(),
-            "Werewolf identification instruction");
+            CoreTestReferences.InstructionContexts.WerewolfIdentificationInstruction);
 
         // Generate a random GUID that is not in the game
         var invalidPlayerId = Guid.NewGuid();
@@ -215,7 +216,7 @@ public class InputValidationTests : DiagnosticTestBase
 
         // Assert - Should throw an exception for invalid player ID
         act.Should().Throw<ArgumentException>()
-            .WithMessage("*Selected player IDs are not valid*");
+            .WithMessage(CoreTestReferences.ExceptionPatterns.InvalidSelectedPlayerIds);
 
         MarkTestCompleted();
     }
@@ -244,7 +245,7 @@ public class InputValidationTests : DiagnosticTestBase
         // Get werewolf identification instruction and identify the werewolf
         var identifyInstruction = InstructionAssert.ExpectType<SelectPlayersInstruction>(
             builder.GetCurrentInstruction(),
-            "Werewolf identification instruction");
+            CoreTestReferences.InstructionContexts.WerewolfIdentificationInstruction);
 
         var werewolfPlayer = players[0]; // First player is the werewolf
         var identifyResponse = identifyInstruction.CreateResponse([werewolfPlayer.Id]);
@@ -253,7 +254,7 @@ public class InputValidationTests : DiagnosticTestBase
         // Get victim selection instruction - werewolves should NOT be selectable
         var victimInstruction = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
             afterIdentify,
-            "Werewolf victim selection");
+            CoreTestReferences.InstructionContexts.WerewolfVictimSelection);
 
         // Verify the werewolf is NOT in the selectable list
         victimInstruction.SelectablePlayerIds.Should().NotContain(werewolfPlayer.Id);
@@ -263,7 +264,7 @@ public class InputValidationTests : DiagnosticTestBase
 
         // Assert - Should throw an exception for non-selectable player
         act.Should().Throw<ArgumentException>()
-            .WithMessage("*Selected player IDs are not valid*");
+            .WithMessage(CoreTestReferences.ExceptionPatterns.InvalidSelectedPlayerIds);
 
         MarkTestCompleted();
     }
@@ -277,7 +278,7 @@ public class InputValidationTests : DiagnosticTestBase
     {
         var nightStartInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
-            "Night start confirmation");
+            CoreTestReferences.InstructionContexts.NightStartConfirmation);
         var response = nightStartInstruction.CreateResponse(true);
         builder.Process(response);
     }
@@ -318,7 +319,7 @@ public class InputValidationTests : DiagnosticTestBase
         // Get the AssignRolesInstruction for the eliminated victim
         var assignInstruction = InstructionAssert.ExpectType<AssignRolesInstruction>(
             builder.GetCurrentInstruction(),
-            "Role assignment instruction for eliminated victim");
+            CoreTestReferences.InstructionContexts.RoleAssignmentForEliminatedVictim);
 
         // Verify victim is in the assignment request
         assignInstruction.PlayersForAssignment.Should().Contain(victim.Id);
@@ -333,7 +334,7 @@ public class InputValidationTests : DiagnosticTestBase
 
         // Assert - Should throw an exception for invalid role
         act.Should().Throw<ArgumentException>()
-            .WithMessage($"*{MainRoleType.Witch}*not in the list of assignable roles*");
+            .WithMessage(CoreTestReferences.ExceptionPatterns.RoleNotAssignable(MainRoleType.Witch));
 
         MarkTestCompleted();
     }
@@ -369,7 +370,7 @@ public class InputValidationTests : DiagnosticTestBase
         // Get the AssignRolesInstruction for the eliminated victim
         var assignInstruction = InstructionAssert.ExpectType<AssignRolesInstruction>(
             builder.GetCurrentInstruction(),
-            "Role assignment instruction for eliminated victim");
+            CoreTestReferences.InstructionContexts.RoleAssignmentForEliminatedVictim);
 
         // Verify victim is in the assignment request, but the other villager is NOT
         assignInstruction.PlayersForAssignment.Should().Contain(victim.Id);
@@ -385,7 +386,7 @@ public class InputValidationTests : DiagnosticTestBase
 
         // Assert - Should throw an exception for wrong player
         act.Should().Throw<ArgumentException>()
-            .WithMessage($"*{otherVillager.Id}*not in the list of players that can be assigned roles*");
+            .WithMessage(CoreTestReferences.ExceptionPatterns.PlayerCannotBeAssigned(otherVillager.Id));
 
         MarkTestCompleted();
     }

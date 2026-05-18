@@ -421,7 +421,7 @@ public class LobbySetupStateTests
 	{
 		var mislabeledFirstRole = LobbySetupMetadataFixture.RoleMetadata(MainRoleType.Seer) with
 		{
-			GroupDisplayName = "Unexpected first role group label"
+			GroupDisplayName = ClientTestReferences.FixtureLabels.UnexpectedRoleGroupDisplayName
 		};
 		var state = new LobbySetupState(new LobbySetupMetadata(
 			GameSessionConfig.MinimumPlayerCount,

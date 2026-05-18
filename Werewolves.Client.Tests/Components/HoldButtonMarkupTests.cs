@@ -1,4 +1,6 @@
 using FluentAssertions;
+using Microsoft.AspNetCore.Components;
+using Werewolves.Client.Tests.Helpers;
 using Xunit;
 
 namespace Werewolves.Client.Tests.Components;
@@ -21,7 +23,7 @@ public class HoldButtonMarkupTests
 	public void DesignTokens_AnimateHoldProgressOverProductionDuration()
 	{
 		// Deprecated temporary scaffold: replace with browser-host computed-style checks for rendered hold progress.
-		var designTokens = File.ReadAllText(GetClientPath("wwwroot", "css", "design-tokens.css"));
+		var designTokens = File.ReadAllText(GetSharedPath("wwwroot", "css", "design-tokens.css"));
 
 		designTokens.Should().Contain("transition: width 400ms linear;");
 		designTokens.Should().Contain("transition: left 400ms linear, opacity 80ms ease-in;");
@@ -47,7 +49,7 @@ public class HoldButtonMarkupTests
 		markup.Should().Contain("[Parameter, EditorRequired]");
 		markup.Should().Contain("string Label");
 		markup.Should().Contain("bool Disabled");
-		markup.Should().Contain("EventCallback OnHoldComplete");
+		markup.Should().Contain(nameof(EventCallback) + " OnHoldComplete");
 	}
 
 	[Fact]
@@ -85,15 +87,15 @@ public class HoldButtonMarkupTests
 
 	private static string GetViewPath()
 	{
-		return GetClientPath("Components", "Game", "Views", "HoldButton.razor");
+		return GetSharedPath("Components", "Game", "Views", "HoldButton.razor");
 	}
 
-	private static string GetClientPath(params string[] relativeSegments)
+	private static string GetSharedPath(params string[] relativeSegments)
 	{
 		var directory = new DirectoryInfo(AppContext.BaseDirectory);
 		while (directory is not null)
 		{
-			var candidate = Path.Combine([directory.FullName, "Werewolves.Client", .. relativeSegments]);
+			var candidate = Path.Combine([directory.FullName, "Werewolves.Client.Shared", .. relativeSegments]);
 
 			if (File.Exists(candidate))
 			{
@@ -104,6 +106,6 @@ public class HoldButtonMarkupTests
 		}
 
 		throw new FileNotFoundException(
-			$"{Path.Combine(relativeSegments)} could not be found from the test output directory.");
+			ClientTestReferences.ExceptionMessages.TestFileNotFound(Path.Combine(relativeSegments)));
 	}
 }

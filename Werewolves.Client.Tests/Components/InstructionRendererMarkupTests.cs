@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Werewolves.Client.Tests.Helpers;
 using Xunit;
 
 namespace Werewolves.Client.Tests.Components;
@@ -50,7 +51,7 @@ public class InstructionRendererMarkupTests
 		{
 			var candidate = Path.Combine(
 				directory.FullName,
-				"Werewolves.Client",
+				"Werewolves.Client.Shared",
 				"Components",
 				"Game",
 				"Views",
@@ -64,6 +65,6 @@ public class InstructionRendererMarkupTests
 			directory = directory.Parent;
 		}
 
-		throw new FileNotFoundException("InstructionRenderer.razor could not be found from the test output directory.");
+		throw new FileNotFoundException(ClientTestReferences.ExceptionMessages.ComponentViewNotFound("InstructionRenderer.razor"));
 	}
 }

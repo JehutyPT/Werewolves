@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Werewolves.Client.Services;
+using Werewolves.Client.Tests.Helpers;
 using Xunit;
 
 namespace Werewolves.Client.Tests.Services;
@@ -87,8 +88,8 @@ public class GameplayWakeLockControllerTests
 	{
 		public bool KeepScreenOn
 		{
-			get => throw new InvalidOperationException("Platform wake lock unavailable.");
-			set => throw new InvalidOperationException("Platform wake lock unavailable.");
+			get => throw new InvalidOperationException(ClientTestReferences.ExceptionMessages.PlatformWakeLockUnavailable);
+			set => throw new InvalidOperationException(ClientTestReferences.ExceptionMessages.PlatformWakeLockUnavailable);
 		}
 	}
 }

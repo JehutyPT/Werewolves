@@ -7,8 +7,10 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Werewolves.Client.Components.Game.Views;
 using Werewolves.Client.Resources;
 using Werewolves.Client.Services;
+using Werewolves.Client.Tests.Helpers;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
+using Werewolves.Core.StateModels.Resources;
 using Xunit;
 
 #pragma warning disable BL0006
@@ -58,7 +60,7 @@ public class HoldButtonInteractionTests
 
 		await WaitForAsync(
 			() => fixture.Haptic.LongPresses >= 1,
-			"the zero millisecond long-press pulse should fire immediately");
+			ClientTestReferences.AssertionReasons.ZeroMillisecondLongPressPulseFiresImmediately);
 		await fixture.ReleaseHoldAsync(button);
 		await holdTask;
 		await Task.Delay(450);
@@ -78,7 +80,7 @@ public class HoldButtonInteractionTests
 
 		await WaitForAsync(
 			() => fixture.Haptic.LongPresses >= 1,
-			"the zero millisecond long-press pulse should fire immediately");
+			ClientTestReferences.AssertionReasons.ZeroMillisecondLongPressPulseFiresImmediately);
 		await fixture.CancelHoldAsync(button);
 		await holdTask;
 		await Task.Delay(450);
@@ -271,7 +273,7 @@ public class HoldButtonInteractionTests
 
 		private void Complete(ModeratorResponse _)
 		{
-			_instruction = new FinishedGameConfirmationInstruction("Village wins");
+			_instruction = new FinishedGameConfirmationInstruction(GameStrings.VictoryConditionAllWerewolvesEliminated);
 		}
 	}
 
@@ -318,7 +320,7 @@ public class HoldButtonInteractionTests
 		protected override void HandleException(Exception exception)
 		{
 			throw new InvalidOperationException(
-				"Unhandled exception during HoldButton rendering or event dispatch.", exception);
+				ClientTestReferences.ExceptionMessages.ComponentRenderOrDispatchFailure("HoldButton"), exception);
 		}
 	}
 

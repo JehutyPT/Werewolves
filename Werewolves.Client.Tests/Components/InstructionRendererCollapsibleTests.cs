@@ -8,7 +8,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Werewolves.Client.Components.Game.Views;
 using Werewolves.Client.Resources;
 using Werewolves.Client.Services;
+using Werewolves.Client.Tests.Helpers;
 using Werewolves.Core.StateModels.Models;
+using Werewolves.Core.StateModels.Resources;
 using Xunit;
 
 #pragma warning disable BL0006
@@ -22,8 +24,8 @@ public class InstructionRendererCollapsibleTests
 	{
 		using var fixture = new InstructionRendererFixture(
 			new TestInstruction(
-				publicAnnouncement: "The village sleeps.\nEveryone closes their eyes.",
-				privateInstruction: "Check that nobody is peeking.\nThen show the victim privately."));
+				publicAnnouncement: $"{GameStrings.NightStartsPrompt}\n{GameStrings.DebateStartsPrompt}",
+				privateInstruction: $"{GameStrings.ConfirmNightStarted}\n{GameStrings.RevealRolePromptSpecify}"));
 
 		await fixture.RenderAsync();
 
@@ -36,12 +38,11 @@ public class InstructionRendererCollapsibleTests
 		moderator!.ClassName.Should().Contain("ww-instruction-block--private").And.NotContain("is-expanded");
 		announce.GetAttribute<string>("aria-expanded").Should().Be("true");
 		moderator.GetAttribute<string>("aria-expanded").Should().Be("false");
-		fixture.VisibleText.Should().Contain("The village sleeps.");
-		fixture.VisibleText.Should().Contain("Everyone closes their eyes.");
-		fixture.VisibleText.Should().Contain("Check that nobody is peeking. ...");
-		fixture.VisibleText.Should().NotContain("Then show the victim privately.");
+		fixture.VisibleText.Should().Contain(GameStrings.NightStartsPrompt);
+		fixture.VisibleText.Should().Contain(GameStrings.DebateStartsPrompt);
+		fixture.VisibleText.Should().Contain(CollapsedPreview(GameStrings.ConfirmNightStarted));
+		fixture.VisibleText.Should().NotContain(GameStrings.RevealRolePromptSpecify);
 		fixture.VisibleText.Should().Contain(ClientStrings.Common_TapToExpand);
-		fixture.VisibleText.Should().NotContain("Mostrar instrução");
 	}
 
 	[Fact]
@@ -49,8 +50,8 @@ public class InstructionRendererCollapsibleTests
 	{
 		using var fixture = new InstructionRendererFixture(
 			new TestInstruction(
-				publicAnnouncement: "The village sleeps.",
-				privateInstruction: "Check that nobody is peeking."));
+				publicAnnouncement: GameStrings.NightStartsPrompt,
+				privateInstruction: GameStrings.ConfirmNightStarted));
 
 		await fixture.RenderAsync();
 
@@ -63,9 +64,12 @@ public class InstructionRendererCollapsibleTests
 		moderator.GetAttribute<string>("aria-expanded").Should().Be("true");
 		announce.ClassName.Should().NotContain("is-expanded");
 		moderator.ClassName.Should().Contain("is-expanded");
-		fixture.VisibleText.Should().Contain("Check that nobody is peeking.");
+		fixture.VisibleText.Should().Contain(GameStrings.ConfirmNightStarted);
 		fixture.Haptic.ClickCount.Should().Be(1);
 	}
+
+	private static string CollapsedPreview(string firstLine) =>
+		$"{firstLine}{ClientTestReferences.FixtureLabels.CollapsedInstructionPreviewSuffix}";
 
 	private sealed record TestInstruction : ModeratorInstruction
 	{
@@ -242,7 +246,7 @@ public class InstructionRendererCollapsibleTests
 		protected override void HandleException(Exception exception)
 		{
 			throw new InvalidOperationException(
-				"Unhandled exception during InstructionRenderer rendering or event dispatch.", exception);
+				ClientTestReferences.ExceptionMessages.ComponentRenderOrDispatchFailure("InstructionRenderer"), exception);
 		}
 	}
 

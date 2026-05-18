@@ -69,26 +69,9 @@
     </ItemGroup>
 
     <ItemGroup>
-      <Folder Include="Components\Game\DashboardTabs\" />
-      <Folder Include="Components\Game\Views\" />
-      <Folder Include="Components\Layout\" />
-      <Folder Include="Components\Pages\" />
-      <Folder Include="wwwroot\css\" />
-    </ItemGroup>
-
-    <ItemGroup>
+      <ProjectReference Include="..\Werewolves.Client.Shared\Werewolves.Client.Shared.csproj" />
       <ProjectReference Include="..\Werewolves.Core\Werewolves.Core.GameLogic\Werewolves.Core.GameLogic.csproj" />
       <ProjectReference Include="..\Werewolves.Core\Werewolves.Core.StateModels\Werewolves.Core.StateModels.csproj" />
-    </ItemGroup>
-
-    <ItemGroup>
-      <EmbeddedResource Update="Resources\ClientStrings.resx">
-        <StronglyTypedClassName>ClientStrings</StronglyTypedClassName>
-        <StronglyTypedNamespace>Werewolves.Client.Resources</StronglyTypedNamespace>
-        <StronglyTypedFileName>$(IntermediateOutputPath)ClientStrings.Designer.cs</StronglyTypedFileName>
-        <StronglyTypedLanguage>C#</StronglyTypedLanguage>
-        <PublicClass>true</PublicClass>
-      </EmbeddedResource>
     </ItemGroup>
 
 </Project>

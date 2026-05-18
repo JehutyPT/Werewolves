@@ -1,9 +1,9 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
-using Plugin.Maui.Audio;
 using Werewolves.Client.Services;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Models;
+using Werewolves.Core.StateModels.Resources;
 using Xunit;
 
 namespace Werewolves.Client.Tests.Services;
@@ -118,7 +118,7 @@ public class InstructionAudioPlaybackTests
 	private sealed record TestInstruction : ModeratorInstruction
 	{
 		public TestInstruction(params SoundEffectsEnum[] soundEffects)
-			: base(privateInstruction: "Teste", soundEffects: soundEffects.ToList())
+			: base(privateInstruction: GameStrings.ConfirmNightStarted, soundEffects: soundEffects.ToList())
 		{
 		}
 	}
@@ -183,7 +183,7 @@ public class InstructionAudioPlaybackTests
 	{
 		public List<FakeAudioPlayer> CreatedPlayers { get; } = [];
 
-		public IAudioPlayer Create(Stream audioStream)
+		public IAudioPlaybackHandle Create(Stream audioStream)
 		{
 			var player = new FakeAudioPlayer();
 			CreatedPlayers.Add(player);
@@ -191,31 +191,10 @@ public class InstructionAudioPlaybackTests
 		}
 	}
 
-	private sealed class FakeAudioPlayer : IAudioPlayer
+	private sealed class FakeAudioPlayer : IAudioPlaybackHandle
 	{
-		public event EventHandler? PlaybackEnded
-		{
-			add { }
-			remove { }
-		}
-
-		public event EventHandler? Error
-		{
-			add { }
-			remove { }
-		}
-
-		public double Duration { get; private set; }
-		public double CurrentPosition { get; private set; }
-		public double Volume { get; set; } = 1;
-		public double Balance { get; set; }
-		public double Speed { get; set; } = 1;
-		public double MinimumSpeed => 0.5;
-		public double MaximumSpeed => 2;
-		public bool CanSetSpeed => true;
 		public bool IsPlaying { get; private set; }
 		public bool Loop { get; set; }
-		public bool CanSeek => true;
 		public int PlayCount { get; private set; }
 		public int StopCount { get; private set; }
 		public bool IsDisposed { get; private set; }
@@ -235,17 +214,6 @@ public class InstructionAudioPlaybackTests
 		{
 			StopCount++;
 			IsPlaying = false;
-			CurrentPosition = 0;
-		}
-
-		public void Seek(double position)
-		{
-			CurrentPosition = position;
-		}
-
-		public void SetSource(Stream audioStream)
-		{
-			CurrentPosition = 0;
 		}
 
 		public void Dispose()

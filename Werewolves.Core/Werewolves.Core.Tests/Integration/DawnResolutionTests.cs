@@ -66,7 +66,7 @@ public class DawnResolutionTests : DiagnosticTestBase
     }
 
     /// <summary>
-    /// DR-002: Werewolves must have at least one valid target (non-werewolf) available.
+    /// DR-002: Victim selection exposes at least one non-werewolf target.
     /// </summary>
     [Fact]
     public void Werewolves_VictimSelection_HasValidTargets()
@@ -87,24 +87,24 @@ public class DawnResolutionTests : DiagnosticTestBase
         // Get werewolf identification instruction and identify them
         var identifyInstruction = InstructionAssert.ExpectType<SelectPlayersInstruction>(
             builder.GetCurrentInstruction(),
-            "Werewolf identification");
+            CoreTestReferences.InstructionContexts.WerewolfIdentification);
         var identifyResponse = identifyInstruction.CreateResponse(werewolves);
         var afterIdentify = builder.Process(identifyResponse);
 
         // Act - Get victim selection instruction
         var victimInstruction = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
             afterIdentify,
-            "Werewolf victim selection");
+            CoreTestReferences.InstructionContexts.WerewolfVictimSelection);
 
         // Assert - Verify constraints
         victimInstruction.SelectablePlayerIds.Should().NotBeEmpty(
-            "Werewolves must have at least one valid target");
+            CoreTestReferences.AssertionReasons.WerewolvesNeedValidTarget);
         
         victimInstruction.SelectablePlayerIds.Should().NotContain(werewolves,
-            "Werewolves cannot target other werewolves");
+            CoreTestReferences.AssertionReasons.WerewolvesCannotTargetWerewolves);
 
         victimInstruction.CountConstraint.Minimum.Should().BeGreaterOrEqualTo(1,
-            "Must select at least one victim");
+            CoreTestReferences.AssertionReasons.VictimSelectionRequiresVictim);
 
         MarkTestCompleted();
     }
@@ -143,7 +143,7 @@ public class DawnResolutionTests : DiagnosticTestBase
         // Assert - Should be AssignRolesInstruction containing the victim
         var assignInstruction = instruction.Should().BeOfType<AssignRolesInstruction>().Subject;
         assignInstruction.PlayersForAssignment.Should().Contain(victim.Id,
-            "Victim should be included in role assignment request");
+            CoreTestReferences.AssertionReasons.VictimIncludedInRoleAssignment);
 
         MarkTestCompleted();
     }

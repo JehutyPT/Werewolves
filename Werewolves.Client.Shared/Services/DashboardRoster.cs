@@ -1,6 +1,8 @@
+using Werewolves.Client.Resources;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
+using Werewolves.Core.StateModels.Resources;
 
 namespace Werewolves.Client.Services;
 
@@ -17,8 +19,8 @@ public sealed record DashboardRosterEntry(
 
 public static class DashboardRoster
 {
-	public const string UnknownRoleLabel = "Desconhecido";
-	public const string NoStatusEffectsLabel = "Sem efeitos";
+	public static string UnknownRoleLabel => GameStrings.DefaultLogValue;
+	public static string NoStatusEffectsLabel => ClientStrings.Dashboard_NoStatusEffects;
 
 	public static IReadOnlyList<DashboardRosterEntry> FromSession(IGameSession? session)
 	{
@@ -44,7 +46,9 @@ public static class DashboardRoster
 					HealthLabel(player.State.Health),
 					player.State.Health == PlayerHealth.Dead,
 					statusEffects,
-					statusEffects.Length == 0 ? NoStatusEffectsLabel : string.Join(", ", statusEffects));
+					statusEffects.Length == 0
+						? NoStatusEffectsLabel
+						: string.Join(ClientStrings.Common_ListSeparator, statusEffects));
 			})
 			.ToArray();
 	}
@@ -54,22 +58,22 @@ public static class DashboardRoster
 
 	public static string HealthLabel(PlayerHealth health) => health switch
 	{
-		PlayerHealth.Alive => "Vivo",
-		PlayerHealth.Dead => "Morto",
-		_ => "Estado desconhecido"
+		PlayerHealth.Alive => ClientStrings.Dashboard_HealthAlive,
+		PlayerHealth.Dead => ClientStrings.Dashboard_HealthDead,
+		_ => ClientStrings.Dashboard_HealthUnknown
 	};
 
 	public static string StatusEffectLabel(StatusEffectTypes effect) => effect switch
 	{
-		StatusEffectTypes.ElderProtectionLost => "Proteção perdida",
-		StatusEffectTypes.LycanthropyInfection => "Infetado",
-		StatusEffectTypes.WildChildChanged => "Transformado",
-		StatusEffectTypes.LynchingImmunityUsed => "Imunidade usada",
-		StatusEffectTypes.Sheriff => "Capitão",
-		StatusEffectTypes.Lovers => "Apaixonado",
-		StatusEffectTypes.Charmed => "Encantado",
-		StatusEffectTypes.TownCrier => "Pregoeiro",
-		StatusEffectTypes.Executioner => "Carrasco",
-		_ => "Efeito"
+		StatusEffectTypes.ElderProtectionLost => ClientStrings.StatusEffect_ElderProtectionLost,
+		StatusEffectTypes.LycanthropyInfection => ClientStrings.StatusEffect_LycanthropyInfection,
+		StatusEffectTypes.WildChildChanged => ClientStrings.StatusEffect_WildChildChanged,
+		StatusEffectTypes.LynchingImmunityUsed => ClientStrings.StatusEffect_LynchingImmunityUsed,
+		StatusEffectTypes.Sheriff => ClientStrings.StatusEffect_Sheriff,
+		StatusEffectTypes.Lovers => ClientStrings.StatusEffect_Lovers,
+		StatusEffectTypes.Charmed => ClientStrings.StatusEffect_Charmed,
+		StatusEffectTypes.TownCrier => ClientStrings.StatusEffect_TownCrier,
+		StatusEffectTypes.Executioner => ClientStrings.StatusEffect_Executioner,
+		_ => ClientStrings.StatusEffect_Fallback
 	};
 }

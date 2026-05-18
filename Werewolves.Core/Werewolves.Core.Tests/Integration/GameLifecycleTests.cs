@@ -107,7 +107,7 @@ public class GameLifecycleTests : DiagnosticTestBase
         // Assert
         act.Should()
             .Throw<InvalidOperationException>()
-            .WithMessage($"*unsupported Role*{unsupportedRole}*");
+            .WithMessage(CoreTestReferences.ExceptionPatterns.UnsupportedRole(unsupportedRole));
 
         MarkTestCompleted();
     }

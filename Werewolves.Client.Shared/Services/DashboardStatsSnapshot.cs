@@ -1,3 +1,5 @@
+using System.Globalization;
+using Werewolves.Client.Resources;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
@@ -68,30 +70,34 @@ public sealed record DashboardStatsSnapshot(
 			player.Name,
 			log.TurnNumber,
 			log.CurrentPhase,
-			$"{PhaseLabel(log.CurrentPhase)} {log.TurnNumber}",
+			string.Format(
+				CultureInfo.CurrentCulture,
+				ClientStrings.Dashboard_PhaseTurnFormat,
+				PhaseLabel(log.CurrentPhase),
+				log.TurnNumber),
 			log.Reason,
 			EliminationReasonLabel(log.Reason));
 	}
 
 	public static string PhaseLabel(GamePhase phase) => phase switch
 	{
-		GamePhase.Night => "Noite",
-		GamePhase.Dawn => "Amanhecer",
-		GamePhase.Day => "Dia",
-		_ => "Fase"
+		GamePhase.Night => ClientStrings.Dashboard_PhaseNight,
+		GamePhase.Dawn => ClientStrings.Dashboard_PhaseDawn,
+		GamePhase.Day => ClientStrings.Dashboard_PhaseDay,
+		_ => ClientStrings.Dashboard_PhaseFallback
 	};
 
 	public static string EliminationReasonLabel(EliminationReason reason) => reason switch
 	{
-		EliminationReason.WerewolfAttack => "Ataque dos lobisomens",
-		EliminationReason.WitchKill => "Poção da Bruxa",
-		EliminationReason.HunterShot => "Disparo do Caçador",
-		EliminationReason.LoversHeartbreak => "Desgosto dos Apaixonados",
-		EliminationReason.RustySword => "Espada enferrujada",
-		EliminationReason.ScapegoatSacrifice => "Sacrifício do Bode Expiatório",
-		EliminationReason.EventElimination => "Evento",
-		EliminationReason.DayVote => "Votação da aldeia",
-		_ => "Motivo desconhecido"
+		EliminationReason.WerewolfAttack => ClientStrings.Dashboard_EliminationReasonWerewolfAttack,
+		EliminationReason.WitchKill => ClientStrings.Dashboard_EliminationReasonWitchKill,
+		EliminationReason.HunterShot => ClientStrings.Dashboard_EliminationReasonHunterShot,
+		EliminationReason.LoversHeartbreak => ClientStrings.Dashboard_EliminationReasonLoversHeartbreak,
+		EliminationReason.RustySword => ClientStrings.Dashboard_EliminationReasonRustySword,
+		EliminationReason.ScapegoatSacrifice => ClientStrings.Dashboard_EliminationReasonScapegoatSacrifice,
+		EliminationReason.EventElimination => ClientStrings.Dashboard_EliminationReasonEventElimination,
+		EliminationReason.DayVote => ClientStrings.Dashboard_EliminationReasonDayVote,
+		_ => ClientStrings.Dashboard_EliminationReasonUnknown
 	};
 }
 

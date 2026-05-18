@@ -41,7 +41,7 @@ public class NightActionTests : DiagnosticTestBase
         // The instruction should be to identify the werewolf player
         var wwInstruction = InstructionAssert.ExpectType<SelectPlayersInstruction>(
             builder.GetCurrentInstruction(),
-            "Werewolf wake/identify instruction");
+            CoreTestReferences.InstructionContexts.WerewolfWakeIdentification);
 
         // Identify player 0 as the werewolf
         var werewolfPlayer = players[0];
@@ -51,7 +51,7 @@ public class NightActionTests : DiagnosticTestBase
         // Now we should get victim selection instruction
         var victimInstruction = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
             afterIdentify,
-            "Werewolf victim selection");
+            CoreTestReferences.InstructionContexts.WerewolfVictimSelection);
 
         // Select a villager as victim (player 4 should be a villager)
         var victimPlayer = players[4];
@@ -92,7 +92,7 @@ public class NightActionTests : DiagnosticTestBase
         // Get werewolf identification instruction
         var wwInstruction = InstructionAssert.ExpectType<SelectPlayersInstruction>(
             builder.GetCurrentInstruction(),
-            "Werewolf wake/identify instruction");
+            CoreTestReferences.InstructionContexts.WerewolfWakeIdentification);
 
         // Identify players 0 and 1 as werewolves
         var werewolf1 = players[0];
@@ -103,7 +103,7 @@ public class NightActionTests : DiagnosticTestBase
         // Get victim selection instruction
         var victimInstruction = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
             afterIdentify,
-            "Werewolf victim selection");
+            CoreTestReferences.InstructionContexts.WerewolfVictimSelection);
 
         // Assert - Werewolves should not be in selectable targets
         victimInstruction.SelectablePlayerIds.Should().NotContain(werewolf1.Id);
@@ -144,7 +144,7 @@ public class NightActionTests : DiagnosticTestBase
         // Step 3: Confirm sleep
         var sleepInstruction = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
             result2,
-            "Werewolf sleep confirmation");
+            CoreTestReferences.InstructionContexts.WerewolfSleepConfirmation);
         var sleepResponse = sleepInstruction.CreateResponse(true);
         var result3 = builder.Process(sleepResponse);
 
@@ -185,14 +185,14 @@ public class NightActionTests : DiagnosticTestBase
         // Now Seer should wake up - first instruction is to identify
         var seerIdentifyInstruction = InstructionAssert.ExpectType<SelectPlayersInstruction>(
             builder.GetCurrentInstruction(),
-            "Seer identification");
+            CoreTestReferences.InstructionContexts.SeerIdentification);
         var seerIdentifyResponse = seerIdentifyInstruction.CreateResponse([seerPlayer.Id]);
         var afterSeerIdentify = builder.Process(seerIdentifyResponse);
 
         // Get Seer's target selection instruction
         var seerTargetInstruction = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
             afterSeerIdentify,
-            "Seer target selection");
+            CoreTestReferences.InstructionContexts.SeerTargetSelection);
 
         // Seer checks the werewolf
         var seerTargetResponse = seerTargetInstruction.CreateResponse([werewolfPlayer.Id]);
@@ -201,7 +201,7 @@ public class NightActionTests : DiagnosticTestBase
         // Assert - Verify feedback instruction is returned
         var feedbackInstruction = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
             afterSeerCheck,
-            "Seer feedback instruction");
+            CoreTestReferences.InstructionContexts.SeerFeedbackInstruction);
 
         // Verify feedback indicates target wakes with werewolves
         feedbackInstruction.PrivateInstruction.Should().Contain(GameStrings.SeerResultWerewolfTeam);
@@ -259,7 +259,7 @@ public class NightActionTests : DiagnosticTestBase
         // Assert - Verify feedback instruction is returned
         var feedbackInstruction = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
             afterSeerCheck,
-            "Seer feedback instruction");
+            CoreTestReferences.InstructionContexts.SeerFeedbackInstruction);
 
         // Verify feedback indicates target does NOT wake with werewolves
         feedbackInstruction.PrivateInstruction.Should().Contain(GameStrings.SeerResultNotWerewolfTeam);
@@ -339,18 +339,18 @@ public class NightActionTests : DiagnosticTestBase
         // Identify the Seer
         var seerIdentifyInstruction = InstructionAssert.ExpectType<SelectPlayersInstruction>(
             builder.GetCurrentInstruction(),
-            "Seer identification");
+            CoreTestReferences.InstructionContexts.SeerIdentification);
         var seerIdentifyResponse = seerIdentifyInstruction.CreateResponse([seerPlayer.Id]);
         var afterSeerIdentify = builder.Process(seerIdentifyResponse);
 
         // Get Seer's target selection instruction
         var seerTargetInstruction = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
             afterSeerIdentify,
-            "Seer target selection");
+            CoreTestReferences.InstructionContexts.SeerTargetSelection);
 
         // Assert - Seer's own ID should NOT be in selectable targets
         seerTargetInstruction.SelectablePlayerIds.Should().NotContain(seerPlayer.Id,
-            "Seer should not be able to check themselves");
+            CoreTestReferences.AssertionReasons.SeerCannotCheckSelf);
 
         MarkTestCompleted();
     }
@@ -414,16 +414,16 @@ public class NightActionTests : DiagnosticTestBase
             currentInstruction = builder.GetCurrentInstruction();
         }
 
-        // Werewolf victim selection
+        // Select the night victim.
         var victimInstruction = InstructionAssert.ExpectType<SelectPlayersInstruction>(
             currentInstruction,
-            "Werewolf victim selection (Night 2)");
+            CoreTestReferences.InstructionContexts.WerewolfVictimSelectionNightTwo);
         builder.Process(victimInstruction.CreateResponse([villager3.Id]));
 
         // Confirm werewolf sleep
         var sleepInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
-            "Werewolf sleep confirmation");
+            CoreTestReferences.InstructionContexts.WerewolfSleepConfirmation);
         builder.Process(sleepInstruction.CreateResponse(true));
 
         // Now Seer should wake - on Night 2 they're already identified
@@ -438,19 +438,19 @@ public class NightActionTests : DiagnosticTestBase
         // Get Seer's target selection instruction
         var seerTargetInstruction = InstructionAssert.ExpectType<SelectPlayersInstruction>(
             currentInstruction,
-            "Seer target selection (Night 2)");
+            CoreTestReferences.InstructionContexts.SeerTargetSelectionNightTwo);
 
         // Assert - Dead players should NOT be in selectable targets
         seerTargetInstruction.SelectablePlayerIds.Should().NotContain(villager1.Id,
-            "Villager killed Night 1 should not be selectable");
+            CoreTestReferences.AssertionReasons.NightOneKilledVillagerNotSelectable);
         seerTargetInstruction.SelectablePlayerIds.Should().NotContain(villager2.Id,
-            "Villager lynched Day 1 should not be selectable");
+            CoreTestReferences.AssertionReasons.DayOneLynchedVillagerNotSelectable);
 
         // Also verify that living players ARE selectable (sanity check)
         seerTargetInstruction.SelectablePlayerIds.Should().Contain(werewolfPlayer.Id,
-            "Living werewolf should be selectable");
+            CoreTestReferences.AssertionReasons.LivingWerewolfSelectable);
         seerTargetInstruction.SelectablePlayerIds.Should().Contain(villager3.Id,
-            "Living villager should be selectable");
+            CoreTestReferences.AssertionReasons.LivingVillagerSelectable);
 
         MarkTestCompleted();
     }
@@ -486,7 +486,7 @@ public class NightActionTests : DiagnosticTestBase
         // Seer should still wake up and act (death resolves at Dawn)
         var seerInstruction = builder.GetCurrentInstruction();
         seerInstruction.Should().BeOfType<SelectPlayersInstruction>(
-            "Seer should still wake up even if targeted");
+            CoreTestReferences.AssertionReasons.SeerTargetedNightOneStillWakes);
 
         // Complete Seer's action
         var seerIdentify = InstructionAssert.ExpectType<SelectPlayersInstruction>(seerInstruction);
@@ -504,7 +504,7 @@ public class NightActionTests : DiagnosticTestBase
             .Where(e => e.ActionType == NightActionType.SeerCheck)
             .ToList();
 
-        seerActions.Should().HaveCount(1, "Seer should have acted despite being targeted");
+        seerActions.Should().HaveCount(1, CoreTestReferences.AssertionReasons.SeerActedDespiteBeingTargeted);
 
         MarkTestCompleted();
     }
@@ -579,13 +579,13 @@ public class NightActionTests : DiagnosticTestBase
         // Now we should have the victim selection
         var victimInstruction = InstructionAssert.ExpectType<SelectPlayersInstruction>(
             currentInstruction,
-            "Werewolf victim selection (Night 2)");
+            CoreTestReferences.InstructionContexts.WerewolfVictimSelectionNightTwo);
         builder.Process(victimInstruction.CreateResponse([villager2.Id]));
 
         // Confirm werewolf sleep
         var sleepInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
-            "Werewolf sleep confirmation");
+            CoreTestReferences.InstructionContexts.WerewolfSleepConfirmation);
         builder.Process(sleepInstruction.CreateResponse(true));
 
         // After werewolf completes, the next instruction should NOT be Seer
@@ -595,7 +595,7 @@ public class NightActionTests : DiagnosticTestBase
         // The Seer should be skipped - the next instruction should be a confirmation
         // for night ending, not a SelectPlayersInstruction for Seer
         nextInstruction.Should().BeOfType<ConfirmationInstruction>(
-            "Seer is dead and should be skipped - should go to night end");
+            CoreTestReferences.AssertionReasons.DeadSeerSkippedAtNightEnd);
 
         // Count Seer actions in the log - should only be 1 from Night 1
         var seerActions = gameState.GameHistoryLog
@@ -603,7 +603,7 @@ public class NightActionTests : DiagnosticTestBase
             .Where(e => e.ActionType == NightActionType.SeerCheck)
             .ToList();
 
-        seerActions.Should().HaveCount(1, "Seer should only have acted on Night 1 before dying");
+        seerActions.Should().HaveCount(1, CoreTestReferences.AssertionReasons.SeerActedOnlyBeforeDeath);
 
         MarkTestCompleted();
     }
@@ -628,7 +628,7 @@ public class NightActionTests : DiagnosticTestBase
         var werewolfPlayer = players[0];
 
         // Initially, player should have no role assigned
-        werewolfPlayer.State.MainRole.Should().BeNull("Role not yet identified");
+        werewolfPlayer.State.MainRole.Should().BeNull(CoreTestReferences.AssertionReasons.RoleNotYetIdentified);
 
         // Identify werewolf
         var wwInstruction = InstructionAssert.ExpectType<SelectPlayersInstruction>(
@@ -714,24 +714,24 @@ public class NightActionTests : DiagnosticTestBase
         // Get werewolf victim selection instruction
         var victimInstruction = InstructionAssert.ExpectType<SelectPlayersInstruction>(
             currentInstruction,
-            "Werewolf victim selection (Night 2)");
+            CoreTestReferences.InstructionContexts.WerewolfVictimSelectionNightTwo);
 
         // Assert - Dead players should NOT be in selectable targets
         victimInstruction.SelectablePlayerIds.Should().NotContain(villager1.Id,
-            "Villager killed Night 1 should not be selectable as werewolf target");
+            CoreTestReferences.AssertionReasons.NightOneKilledVillagerNotWerewolfTarget);
         victimInstruction.SelectablePlayerIds.Should().NotContain(villager2.Id,
-            "Villager lynched Day 1 should not be selectable as werewolf target");
+            CoreTestReferences.AssertionReasons.DayOneLynchedVillagerNotWerewolfTarget);
 
         // Also verify that living players ARE selectable (sanity check)
         // Note: Werewolf cannot target themselves, so only villager3 and seer should be selectable
         victimInstruction.SelectablePlayerIds.Should().Contain(seerPlayer.Id,
-            "Living Seer should be selectable");
+            CoreTestReferences.AssertionReasons.LivingSeerSelectable);
         victimInstruction.SelectablePlayerIds.Should().Contain(villager3.Id,
-            "Living villager should be selectable");
+            CoreTestReferences.AssertionReasons.LivingVillagerSelectable);
 
         // Verify werewolf cannot target themselves
         victimInstruction.SelectablePlayerIds.Should().NotContain(werewolfPlayer.Id,
-            "Werewolf should not be able to target themselves");
+            CoreTestReferences.AssertionReasons.WerewolfCannotTargetSelf);
 
         MarkTestCompleted();
     }
@@ -742,8 +742,8 @@ public class NightActionTests : DiagnosticTestBase
 
     /// <summary>
     /// NA-030: First night wake-up instruction includes private identification prompt.
-    /// The instruction should have both a public announcement ("X acorda.") and
-    /// a private instruction ("Identifica o jogador que é X.") for the moderator.
+    /// The instruction should have both a public announcement and a resource-backed
+    /// private role-identification prompt for the moderator.
     /// </summary>
     [Fact]
     public void FirstNight_WakeupInstruction_IncludesPrivateIdentificationPrompt()
@@ -759,15 +759,15 @@ public class NightActionTests : DiagnosticTestBase
         // Act — get the first night wake-up instruction (werewolf)
         var wwInstruction = InstructionAssert.ExpectType<SelectPlayersInstruction>(
             builder.GetCurrentInstruction(),
-            "Werewolf wake/identify instruction");
+            CoreTestReferences.InstructionContexts.WerewolfWakeIdentification);
 
         // Assert — instruction must have both announcement and private identification prompt
         wwInstruction.PublicAnnouncement.Should().Contain(GameStrings.SimpleWerewolfRoleName,
-            "Public announcement should mention the role name");
+            CoreTestReferences.AssertionReasons.PublicAnnouncementMentionsRoleName);
         wwInstruction.PrivateInstruction.Should().NotBeNullOrWhiteSpace(
-            "First-night wake-up must include a private identification prompt for the moderator");
+            CoreTestReferences.AssertionReasons.FirstNightWakeUpIncludesPrivateIdentificationPrompt);
         wwInstruction.PrivateInstruction.Should().Contain(GameStrings.SimpleWerewolfRoleName,
-            "Private instruction should tell the moderator which role to identify");
+            CoreTestReferences.AssertionReasons.PrivateInstructionIdentifiesRole);
 
         MarkTestCompleted();
     }
@@ -783,7 +783,7 @@ public class NightActionTests : DiagnosticTestBase
     {
         var nightStartInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
-            "Night start confirmation");
+            CoreTestReferences.InstructionContexts.NightStartConfirmation);
         var response = nightStartInstruction.CreateResponse(true);
         builder.Process(response);
     }
@@ -796,21 +796,21 @@ public class NightActionTests : DiagnosticTestBase
         // Identify werewolves
         var identifyInstruction = InstructionAssert.ExpectType<SelectPlayersInstruction>(
             builder.GetCurrentInstruction(),
-            "Werewolf identification");
+            CoreTestReferences.InstructionContexts.WerewolfIdentification);
         var identifyResponse = identifyInstruction.CreateResponse(werewolfIds);
         var afterIdentify = builder.Process(identifyResponse);
 
         // Select victim
         var victimInstruction = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
             afterIdentify,
-            "Werewolf victim selection");
+            CoreTestReferences.InstructionContexts.WerewolfVictimSelection);
         var victimResponse = victimInstruction.CreateResponse([victimId]);
         var afterVictim = builder.Process(victimResponse);
 
         // Confirm sleep
         var sleepInstruction = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
             afterVictim,
-            "Werewolf sleep confirmation");
+            CoreTestReferences.InstructionContexts.WerewolfSleepConfirmation);
         var sleepResponse = sleepInstruction.CreateResponse(true);
         builder.Process(sleepResponse);
     }
@@ -823,21 +823,21 @@ public class NightActionTests : DiagnosticTestBase
         // Identify seer
         var identifyInstruction = InstructionAssert.ExpectType<SelectPlayersInstruction>(
             builder.GetCurrentInstruction(),
-            "Seer identification");
+            CoreTestReferences.InstructionContexts.SeerIdentification);
         var identifyResponse = identifyInstruction.CreateResponse([seerId]);
         var afterIdentify = builder.Process(identifyResponse);
 
         // Select target
         var targetInstruction = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
             afterIdentify,
-            "Seer target selection");
+            CoreTestReferences.InstructionContexts.SeerTargetSelection);
         var targetResponse = targetInstruction.CreateResponse([targetId]);
         var afterTarget = builder.Process(targetResponse);
 
         // Confirm sleep
         var sleepInstruction = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
             afterTarget,
-            "Seer sleep confirmation");
+            CoreTestReferences.InstructionContexts.SeerSleepConfirmation);
         var sleepResponse = sleepInstruction.CreateResponse(true);
         builder.Process(sleepResponse);
     }

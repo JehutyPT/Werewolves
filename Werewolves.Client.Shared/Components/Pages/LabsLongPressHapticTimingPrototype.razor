@@ -1,7 +1,7 @@
 @inject IHapticFeedbackService Haptic
 @implements IDisposable
 
-@* PROTOTYPE: Throwaway Labs haptic timing tester for phone long-press feedback; no persistence, embedded from LabsPage. *@
+@* PROTOTYPE: Throwaway Labs haptic timing tester for host-provided long-press feedback; no persistence, embedded from LabsPage. *@
 
 <main class="ww-dashboard-shell" data-lab-haptic-timing aria-labelledby="haptic-timing-title">
     <nav class="ww-dashboard-tabs ww-labs-unified-nav" aria-label="Haptic timing prototype navigation">
@@ -106,8 +106,8 @@
                         <select value="@hapticEvent.Type"
                                 disabled="@_isHolding"
                                 @onchange="args => HandleEventTypeChanged(hapticEvent, args)">
-                            <option value="@PrototypeHapticEventType.Click">MAUI Click</option>
-                            <option value="@PrototypeHapticEventType.LongPress">MAUI LongPress</option>
+                            <option value="@PrototypeHapticEventType.Click">Click pulse</option>
+                            <option value="@PrototypeHapticEventType.LongPress">Long-press pulse</option>
                         </select>
                     </label>
 
@@ -477,8 +477,8 @@
 
     private static string EventTypeLabel(PrototypeHapticEventType type) => type switch
     {
-        PrototypeHapticEventType.LongPress => "MAUI LongPress",
-        _ => "MAUI Click"
+        PrototypeHapticEventType.LongPress => "Long-press pulse",
+        _ => "Click pulse"
     };
 
     private static string EventStatusClass(PrototypeHapticEvent hapticEvent) => hapticEvent.Status switch

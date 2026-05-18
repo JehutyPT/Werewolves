@@ -142,7 +142,7 @@ public class PhaseTransitionTests : DiagnosticTestBase
         // Assert: Should now be in Night phase with turn number incremented
         var gameState = builder.GetGameState();
         gameState!.GetCurrentPhase().Should().Be(GamePhase.Night);
-        gameState!.TurnNumber.Should().Be(2, "Turn number should increment when transitioning from Day to Night");
+        gameState!.TurnNumber.Should().Be(2, CoreTestReferences.AssertionReasons.TurnNumberIncrementsAfterDayToNight);
 
         MarkTestCompleted();
     }
@@ -243,7 +243,7 @@ public class PhaseTransitionTests : DiagnosticTestBase
             // If Dawn had an active stage, it should not be the same after transitioning
             // (either cleared or set to a Day stage)
             currentStage.Should().NotBe(dawnStage,
-                "Dawn sub-phase stage should be cleared after transitioning to Day");
+                CoreTestReferences.AssertionReasons.DawnSubPhaseStageClearedAfterDayTransition);
         }
 
         // Listener should be cleared or be a Day-phase listener
@@ -311,7 +311,7 @@ public class PhaseTransitionTests : DiagnosticTestBase
 
         // Assert
         var instruction = builder.GetCurrentInstruction();
-        instruction.Should().NotBeNull("Night phase should have an active instruction");
+        instruction.Should().NotBeNull(CoreTestReferences.AssertionReasons.NightPhaseHasActiveInstruction);
 
         MarkTestCompleted();
     }

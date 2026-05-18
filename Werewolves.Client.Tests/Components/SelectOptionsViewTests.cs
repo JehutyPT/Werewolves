@@ -1,4 +1,6 @@
 using FluentAssertions;
+using Microsoft.AspNetCore.Components;
+using Werewolves.Client.Tests.Helpers;
 using Xunit;
 
 namespace Werewolves.Client.Tests.Components;
@@ -43,7 +45,7 @@ public class SelectOptionsViewTests
 
 		markup.Should().Contain("[Parameter");
 		markup.Should().Contain("SelectOptionsInstruction Instruction");
-		markup.Should().Contain("EventCallback<ModeratorResponse> OnResponse");
+		markup.Should().Contain(nameof(EventCallback) + "<ModeratorResponse> OnResponse");
 	}
 
 	[Fact]
@@ -113,7 +115,7 @@ public class SelectOptionsViewTests
 		{
 			var candidate = Path.Combine(
 				directory.FullName,
-				"Werewolves.Client",
+				"Werewolves.Client.Shared",
 				"Components",
 				"Game",
 				"Views",
@@ -127,6 +129,6 @@ public class SelectOptionsViewTests
 			directory = directory.Parent;
 		}
 
-		throw new FileNotFoundException("SelectOptionsView.razor could not be found from the test output directory.");
+		throw new FileNotFoundException(ClientTestReferences.ExceptionMessages.ComponentViewNotFound("SelectOptionsView.razor"));
 	}
 }
