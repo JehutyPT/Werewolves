@@ -107,10 +107,10 @@ internal sealed class ControlledHoldButtonTiming : IHoldButtonTiming
 internal static class RenderedHoldButtonDriver
 {
 	public static readonly TimeSpan HoldDuration =
-		TimeSpan.FromMilliseconds(HoldButtonHapticSequence.HoldDurationMs);
+		TimeSpan.FromMilliseconds(HoldButtonTimingContract.HoldDurationMs);
 
 	public static readonly TimeSpan SuccessFlashDuration =
-		TimeSpan.FromMilliseconds(HoldButtonHapticSequence.SuccessFlashMs);
+		TimeSpan.FromMilliseconds(HoldButtonTimingContract.SuccessFlashMs);
 
 	public static async Task CompleteHoldAsync<TComponent>(
 		IRenderedComponent<TComponent> rendered,

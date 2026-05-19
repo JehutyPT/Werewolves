@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Playwright;
 using Microsoft.Playwright.Xunit;
 using Werewolves.Client.BrowserQaHost;
+using Werewolves.Client.Components.Game.Views;
 using Werewolves.Client.Resources;
 using Werewolves.Client.Testing;
 using Xunit;
@@ -10,7 +11,6 @@ namespace Werewolves.Client.BrowserQa.Tests;
 
 public sealed class DashboardBrowserQaTests : PlaywrightTest, IClassFixture<BrowserQaHostFixture>
 {
-	private const double LayoutPrecision = 0.75;
 	private const double OverlayGap = 8;
 	private readonly BrowserQaHostFixture _host;
 
@@ -24,13 +24,7 @@ public sealed class DashboardBrowserQaTests : PlaywrightTest, IClassFixture<Brow
 	public async Task DashboardScenario_RendersSharedUiAndConstrainsFixedOverlaysToPhoneFrame()
 	{
 		await using var browser = await Playwright.Chromium.LaunchAsync();
-		var page = await browser.NewPageAsync();
-
-		await BrowserQaPage.SetWideViewportAsync(page);
-		await page.GotoAsync(_host.DashboardScenarioUri.ToString(), new()
-		{
-			WaitUntil = WaitUntilState.NetworkIdle
-		});
+		var page = await BrowserQaPage.OpenScenarioAsync(browser, _host.DashboardScenarioUri);
 
 		var phoneFrame = page.Locator(BrowserQaCss.PhoneFrameSelector);
 		var shell = page.GetByTestId(ModeratorUiTestIds.DashboardShell);
@@ -53,11 +47,11 @@ public sealed class DashboardBrowserQaTests : PlaywrightTest, IClassFixture<Brow
 		var actionLayout = await BrowserQaPage.ReadLayoutAsync(actionZone);
 		var horizontalInset = await BrowserQaPage.ReadComputedPixelValueAsync(shell, BrowserQaCss.PageHorizontalInset);
 
-		phoneFrameLayout.Width.Should().BeApproximately(360, precision: 0.5);
-		phoneFrameLayout.Height.Should().BeApproximately(800, precision: 0.5);
+		phoneFrameLayout.Width.Should().BeApproximately(BrowserQaPage.PhoneFrameWidth, BrowserQaPage.PhoneFramePrecision);
+		phoneFrameLayout.Height.Should().BeApproximately(BrowserQaPage.PhoneFrameHeight, BrowserQaPage.PhoneFramePrecision);
 		AssertPinnedLayout(phoneFrameLayout, shellLayout);
-		shellLayout.Width.Should().BeApproximately(360, precision: 0.5);
-		shellLayout.Height.Should().BeApproximately(800, precision: 0.5);
+		shellLayout.Width.Should().BeApproximately(BrowserQaPage.PhoneFrameWidth, BrowserQaPage.PhoneFramePrecision);
+		shellLayout.Height.Should().BeApproximately(BrowserQaPage.PhoneFrameHeight, BrowserQaPage.PhoneFramePrecision);
 		(await BrowserQaPage.ReadComputedStyleAsync(compactTabs, BrowserQaCss.PositionProperty))
 			.Should().Be(BrowserQaCss.FixedPositionValue);
 		(await BrowserQaPage.ReadComputedStyleAsync(statusBar, BrowserQaCss.PositionProperty))
@@ -65,31 +59,25 @@ public sealed class DashboardBrowserQaTests : PlaywrightTest, IClassFixture<Brow
 		(await BrowserQaPage.ReadComputedStyleAsync(actionZone, BrowserQaCss.PositionProperty))
 			.Should().Be(BrowserQaCss.FixedPositionValue);
 
-		tabsLayout.X.Should().BeApproximately(shellLayout.X + horizontalInset, precision: LayoutPrecision);
-		tabsLayout.Y.Should().BeApproximately(shellLayout.Y, precision: LayoutPrecision);
-		tabsLayout.Width.Should().BeApproximately(shellLayout.Width - (horizontalInset * 2), precision: LayoutPrecision);
-		tabsLayout.Right.Should().BeApproximately(shellLayout.Right - horizontalInset, precision: LayoutPrecision);
-		statusLayout.X.Should().BeApproximately(shellLayout.X + horizontalInset, precision: LayoutPrecision);
-		statusLayout.Y.Should().BeApproximately(tabsLayout.Bottom, precision: LayoutPrecision);
-		statusLayout.Width.Should().BeApproximately(shellLayout.Width - (horizontalInset * 2), precision: LayoutPrecision);
-		statusLayout.Right.Should().BeApproximately(shellLayout.Right - horizontalInset, precision: LayoutPrecision);
-		actionLayout.X.Should().BeApproximately(shellLayout.X, precision: LayoutPrecision);
-		actionLayout.Width.Should().BeApproximately(shellLayout.Width, precision: LayoutPrecision);
-		actionLayout.Right.Should().BeApproximately(shellLayout.Right, precision: LayoutPrecision);
-		actionLayout.Bottom.Should().BeApproximately(shellLayout.Bottom, precision: LayoutPrecision);
+		tabsLayout.X.Should().BeApproximately(shellLayout.X + horizontalInset, BrowserQaPage.LayoutPrecision);
+		tabsLayout.Y.Should().BeApproximately(shellLayout.Y, BrowserQaPage.LayoutPrecision);
+		tabsLayout.Width.Should().BeApproximately(shellLayout.Width - (horizontalInset * 2), BrowserQaPage.LayoutPrecision);
+		tabsLayout.Right.Should().BeApproximately(shellLayout.Right - horizontalInset, BrowserQaPage.LayoutPrecision);
+		statusLayout.X.Should().BeApproximately(shellLayout.X + horizontalInset, BrowserQaPage.LayoutPrecision);
+		statusLayout.Y.Should().BeApproximately(tabsLayout.Bottom, BrowserQaPage.LayoutPrecision);
+		statusLayout.Width.Should().BeApproximately(shellLayout.Width - (horizontalInset * 2), BrowserQaPage.LayoutPrecision);
+		statusLayout.Right.Should().BeApproximately(shellLayout.Right - horizontalInset, BrowserQaPage.LayoutPrecision);
+		actionLayout.X.Should().BeApproximately(shellLayout.X, BrowserQaPage.LayoutPrecision);
+		actionLayout.Width.Should().BeApproximately(shellLayout.Width, BrowserQaPage.LayoutPrecision);
+		actionLayout.Right.Should().BeApproximately(shellLayout.Right, BrowserQaPage.LayoutPrecision);
+		actionLayout.Bottom.Should().BeApproximately(shellLayout.Bottom, BrowserQaPage.LayoutPrecision);
 	}
 
 	[Fact]
 	public async Task DashboardScenario_KeepsFixedOverlaysStableWhileDashboardContentScrolls()
 	{
 		await using var browser = await Playwright.Chromium.LaunchAsync();
-		var page = await browser.NewPageAsync();
-
-		await BrowserQaPage.SetWideViewportAsync(page);
-		await page.GotoAsync(_host.DashboardScenarioUri.ToString(), new()
-		{
-			WaitUntil = WaitUntilState.NetworkIdle
-		});
+		var page = await BrowserQaPage.OpenScenarioAsync(browser, _host.DashboardScenarioUri);
 
 		var shell = page.GetByTestId(ModeratorUiTestIds.DashboardShell);
 		var compactTabs = page.GetByTestId(ModeratorUiTestIds.DashboardCompactTabs);
@@ -133,9 +121,49 @@ public sealed class DashboardBrowserQaTests : PlaywrightTest, IClassFixture<Brow
 
 	private static void AssertPinnedLayout(ElementLayout before, ElementLayout after)
 	{
-		after.X.Should().BeApproximately(before.X, precision: LayoutPrecision);
-		after.Y.Should().BeApproximately(before.Y, precision: LayoutPrecision);
-		after.Width.Should().BeApproximately(before.Width, precision: LayoutPrecision);
-		after.Height.Should().BeApproximately(before.Height, precision: LayoutPrecision);
+		after.X.Should().BeApproximately(before.X, BrowserQaPage.LayoutPrecision);
+		after.Y.Should().BeApproximately(before.Y, BrowserQaPage.LayoutPrecision);
+		after.Width.Should().BeApproximately(before.Width, BrowserQaPage.LayoutPrecision);
+		after.Height.Should().BeApproximately(before.Height, BrowserQaPage.LayoutPrecision);
+	}
+
+	[Fact]
+	public async Task DashboardScenario_HoldButtonProgressUsesRenderedProductionTiming()
+	{
+		await using var browser = await Playwright.Chromium.LaunchAsync();
+		var page = await BrowserQaPage.OpenScenarioAsync(browser, _host.DashboardScenarioUri);
+
+		var actionZone = page.GetByTestId(ModeratorUiTestIds.DashboardActionZone);
+		var holdZone = BrowserQaHoldProgress.HoldZoneIn(actionZone);
+		var holdButton = holdZone.GetByRole(AriaRole.Button, new() { Name = ClientStrings.Common_HoldToConfirm });
+
+		await Expect(actionZone).ToBeVisibleAsync();
+		await Expect(holdButton).ToBeVisibleAsync();
+		await Expect(holdButton).ToBeEnabledAsync();
+
+		var evidence = await BrowserQaHoldProgress.ReadTransitionEvidenceWhileHoldingAsync(holdZone);
+		var fillTransition = RenderedTransition.From(
+			evidence.FillTransitionProperty,
+			evidence.FillTransitionDuration,
+			evidence.FillTransitionTimingFunction);
+		var edgeTransition = RenderedTransition.From(
+			evidence.EdgeTransitionProperty,
+			evidence.EdgeTransitionDuration,
+			evidence.EdgeTransitionTimingFunction);
+
+		AssertProductionLinearProgressTransition(fillTransition, BrowserQaCss.WidthProperty);
+		AssertProductionLinearProgressTransition(edgeTransition, BrowserQaCss.LeftProperty);
+	}
+
+	private static void AssertProductionLinearProgressTransition(
+		RenderedTransition transition,
+		string progressProperty)
+	{
+		transition.DurationMsFor(progressProperty)
+			.Should()
+			.Be(HoldButtonTimingContract.HoldDurationMs, "the rendered hold progress should track the production hold duration");
+		transition.TimingFunctionFor(progressProperty)
+			.Should()
+			.Be(BrowserQaCss.LinearTimingFunction, "the rendered progress should advance linearly during the hold");
 	}
 }

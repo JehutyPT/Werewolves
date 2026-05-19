@@ -47,14 +47,6 @@ public static partial class ClientTestReferences
 			public const string DarkBackground = "#070C12";
 		}
 
-		public static class Declarations
-		{
-			public const string HoldEdgeProductionTransition = "transition: left 400ms linear, opacity 80ms ease-in;";
-			public const string HoldEdgeSlowTransition = "transition: left 600ms linear, opacity 80ms ease-in;";
-			public const string HoldFillProductionTransition = "transition: width 400ms linear;";
-			public const string HoldFillSlowTransition = "transition: width 600ms linear;";
-		}
-
 		public static class Tokens
 		{
 			public const string Accent = "--ww-accent";

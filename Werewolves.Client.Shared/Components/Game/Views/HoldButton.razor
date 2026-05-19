@@ -20,8 +20,8 @@
 </div>
 
 @code {
-	private static readonly TimeSpan HoldDuration = TimeSpan.FromMilliseconds(HoldButtonHapticSequence.HoldDurationMs);
-	private static readonly TimeSpan SuccessFlashDuration = TimeSpan.FromMilliseconds(HoldButtonHapticSequence.SuccessFlashMs);
+	private static readonly TimeSpan HoldDuration = TimeSpan.FromMilliseconds(HoldButtonTimingContract.HoldDurationMs);
+	private static readonly TimeSpan SuccessFlashDuration = TimeSpan.FromMilliseconds(HoldButtonTimingContract.SuccessFlashMs);
 
 	private readonly HoldConfirmationGate _holdGate = new(HoldDuration);
 	private readonly HoldButtonHapticSequence _hapticSequence = new();
