@@ -25,10 +25,6 @@ public static partial class ClientTestReferences
 			public const string DashboardTabsCompact = "ww-dashboard-tabs--compact";
 			public const string Expanded = "is-expanded";
 			public const string HoldButton = "ww-btn-hold";
-			public const string HoldButtonEdge = "ww-btn-hold__edge";
-			public const string HoldButtonFill = "ww-btn-hold__fill";
-			public const string HoldButtonLabel = "ww-btn-hold__label";
-			public const string HoldHint = "ww-hold-hint";
 			public const string HoldZone = "ww-hold-zone";
 			public const string Holding = "is-holding";
 			public const string HoldComplete = "is-complete";

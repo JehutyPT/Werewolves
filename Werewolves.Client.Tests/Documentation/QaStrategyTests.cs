@@ -40,7 +40,34 @@ public class QaStrategyTests
 		strategy.Should().Contain(QaStrategyContract.NativeChecklistRelativePath);
 	}
 
+	[Fact]
+	public void QaStrategy_SourceTestAllowlistTracksActiveRetainedSourceTests()
+	{
+		var strategy = File.ReadAllText(QaStrategyPath);
+		var allowlist = SourceTestAllowlistSection(strategy);
+
+		foreach (var requiredEntry in QaStrategyContract.RequiredSourceTestAllowlistEntries)
+		{
+			allowlist.Should().Contain(requiredEntry);
+		}
+
+		foreach (var retiredEntry in QaStrategyContract.RetiredSourceTestAllowlistEntries)
+		{
+			allowlist.Should().NotContain(retiredEntry);
+		}
+	}
+
 	private static string RepositoryRoot => ClientTestReferences.Paths.RepositoryRoot;
 
 	private static string QaStrategyPath => Path.Combine(RepositoryRoot, "docs", "agents", "qa-strategy.md");
+
+	private static string SourceTestAllowlistSection(string strategy)
+	{
+		const string header = "## Source-Test Allowlist";
+		var start = strategy.IndexOf(header, StringComparison.Ordinal);
+
+		start.Should().BeGreaterThanOrEqualTo(0, "the QA strategy must define the source-test allowlist section");
+
+		return strategy[start..];
+	}
 }

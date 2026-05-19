@@ -166,6 +166,33 @@ public class InstructionRendererBunitTests
 		actionZones.Single().QuerySelector(HoldButtonSelector).Should().NotBeNull();
 	}
 
+	[Fact]
+	public void SelectOptionsInstruction_RendersCoreProvidedOptionControlsAndSingleInputActionZone()
+	{
+		using var context = new ModeratorComponentTestContext();
+		var options = new[] { "Acordar", "Continuar a dormir", "Alertar a aldeia" };
+		var instruction = CreateSelectOptionsInstruction(NumberRangeConstraint.Single, options);
+
+		var cut = context.RenderModeratorComponent<InstructionRenderer>(parameters => parameters
+			.Add(component => component.Instruction, instruction));
+
+		var optionGroup = cut.FindAll("*")
+			.Single(element => element.GetAttribute(Html.Attributes.AriaLabel) == ClientStrings.SelectOptions_Title);
+		var optionButtons = optionGroup.QuerySelectorAll(Html.Selectors.Button).ToArray();
+		optionButtons.Select(button => button.TextContent.Trim())
+			.Should()
+			.BeEquivalentTo(options);
+		optionButtons.Should().OnlyContain(button =>
+			button.GetAttribute(Html.Attributes.Type) == Html.AttributeValues.ButtonType);
+		optionButtons.Should().OnlyContain(button =>
+			button.GetAttribute(Html.Attributes.AriaPressed) == Html.AriaValues.False);
+
+		var actionZones = cut.FindAll(DashboardActionZoneSelector);
+		actionZones.Should().ContainSingle();
+		actionZones.Single().TextContent.Should().Contain(ClientStrings.Dashboard_ContinueButton);
+		actionZones.Single().QuerySelectorAll(HoldButtonSelector).Should().ContainSingle();
+	}
+
 	private static ConfirmationInstruction CreateConfirmationInstruction(
 		string? publicAnnouncement = null,
 		string? privateInstruction = null) =>
@@ -194,6 +221,18 @@ public class InstructionRendererBunitTests
 				null
 			]);
 
+	private static SelectOptionsInstruction CreateSelectOptionsInstruction(
+		NumberRangeConstraint selectionRange,
+		params string[] options) =>
+		(SelectOptionsInstruction)SelectOptionsConstructor.Invoke(
+			[
+				new HashSet<string>(options, StringComparer.CurrentCulture),
+				selectionRange,
+				null,
+				GameStrings.ConfirmNightStarted,
+				null
+			]);
+
 	private static DashboardRosterEntry CreateRosterEntry(Guid playerId, int seatNumber, string name) =>
 		new(
 			playerId,
@@ -218,6 +257,11 @@ public class InstructionRendererBunitTests
 
 	private static readonly ConstructorInfo SelectPlayersConstructor =
 		typeof(SelectPlayersInstruction)
+			.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic)
+			.Single(ctor => ctor.GetParameters().Length == 5);
+
+	private static readonly ConstructorInfo SelectOptionsConstructor =
+		typeof(SelectOptionsInstruction)
 			.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic)
 			.Single(ctor => ctor.GetParameters().Length == 5);
 }
