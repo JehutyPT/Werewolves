@@ -1,0 +1,11 @@
+html,
+body {
+	min-height: 100%;
+	margin: 0;
+	background: var(--ww-bg);
+	color: var(--ww-text);
+}
+
+body {
+	overscroll-behavior: none;
+}

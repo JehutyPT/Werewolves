@@ -14,6 +14,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Werewolves.Client.BrowserQaHost\Werewolves.Client.BrowserQaHost.csproj" />
     <ProjectReference Include="..\Werewolves.Client.Shared\Werewolves.Client.Shared.csproj" />
     <ProjectReference Include="..\Werewolves.Core\Werewolves.Core.GameLogic\Werewolves.Core.GameLogic.csproj" />
     <ProjectReference Include="..\Werewolves.Core\Werewolves.Core.StateModels\Werewolves.Core.StateModels.csproj" />
