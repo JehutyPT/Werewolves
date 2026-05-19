@@ -30,9 +30,18 @@ internal static class BrowserQaPage
 		var value = await ReadComputedStyleAsync(locator, propertyName);
 		return double.Parse(value.Replace("px", string.Empty, StringComparison.Ordinal), CultureInfo.InvariantCulture);
 	}
+
+	public static Task SetScrollTopAsync(ILocator locator, double scrollTop) =>
+		locator.EvaluateAsync(
+			"(element, scrollTop) => { element.scrollTop = scrollTop; }",
+			scrollTop);
+
+	public static Task<double> ReadScrollTopAsync(ILocator locator) =>
+		locator.EvaluateAsync<double>("element => element.scrollTop");
 }
 
 internal sealed record ElementLayout(double X, double Y, double Width, double Height)
 {
 	public double Bottom => Y + Height;
+	public double Right => X + Width;
 }
