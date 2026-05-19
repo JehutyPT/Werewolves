@@ -9,6 +9,17 @@ Run QA claim-first:
 - Do not use source assertions to prove rendered UI, native behavior, or service behavior when better evidence is available.
 - When evidence is local or manual, record the claim, environment, steps, result, and artifacts.
 
+## Agent QA Gate
+
+Before writing or accepting a test for this repo, record the QA decision in the issue brief, test plan, or implementation notes:
+
+- **Claim:** observable behavior the test or check must prove.
+- **Preferred evidence:** the surface and artifact from the matrix below.
+- **Forbidden evidence:** evidence that would couple the check to implementation shape.
+- **Source-test allowlist needed:** yes/no; if yes, cite or add the allowlist row below.
+
+Use this gate before the first TDD tracer bullet and again whenever adding another test surface.
+
 ## Choose Evidence
 
 Use this QA Evidence Matrix before adding or accepting tests.

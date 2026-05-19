@@ -9,7 +9,7 @@ public class QaStrategyTests
 	[Fact]
 	public void QaStrategy_DefinesClaimFirstEvidenceGuideAndSourceTestAllowlist()
 	{
-		var strategy = File.ReadAllText(Path.Combine(RepositoryRoot, "docs", "qa-strategy.md"));
+		var strategy = File.ReadAllText(QaStrategyPath);
 
 		foreach (var requiredContent in QaStrategyContract.RequiredStrategyContent)
 		{
@@ -26,7 +26,7 @@ public class QaStrategyTests
 	public void NativeDeviceChecklist_DefinesManualOnlyClaimAndEvidenceChecks()
 	{
 		var checklistPath = Path.Combine(RepositoryRoot, "Werewolves.Client", "docs", "native-device-qa-checklist.md");
-		var strategy = File.ReadAllText(Path.Combine(RepositoryRoot, "docs", "qa-strategy.md"));
+		var strategy = File.ReadAllText(QaStrategyPath);
 
 		File.Exists(checklistPath).Should().BeTrue(ClientTestReferences.AssertionReasons.NativeChecklistExists);
 
@@ -41,4 +41,6 @@ public class QaStrategyTests
 	}
 
 	private static string RepositoryRoot => ClientTestReferences.Paths.RepositoryRoot;
+
+	private static string QaStrategyPath => Path.Combine(RepositoryRoot, "docs", "agents", "qa-strategy.md");
 }

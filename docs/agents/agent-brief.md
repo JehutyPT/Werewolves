@@ -30,6 +30,12 @@ Be specific about edge cases and error conditions.
 - [ ] Specific, testable criterion 2
 - [ ] Specific, testable criterion 3
 
+**QA evidence:**
+- **Claim:** observable behavior the tests or checks must prove.
+- **Preferred evidence:** test surface and artifact from `docs/agents/qa-strategy.md`.
+- **Forbidden evidence:** evidence that would couple to implementation shape.
+- **Source-test allowlist needed:** yes/no; if yes, cite or add the allowlist row.
+
 **Out of scope:**
 - Adjacent thing that should NOT be addressed in this issue
 - Future enhancement that might seem related but is separate
@@ -91,6 +97,21 @@ must not crash the app.
       (app does not crash; Moderator returns to Lobby).
 - [ ] All user-facing strings are in Portuguese.
 
+**QA evidence:**
+- **Claim:** save/recovery behavior follows Core stable-boundary rules.
+  **Preferred evidence:** service tests through `GameClientManager` with fake
+  persistence and observable session state.
+  **Forbidden evidence:** assertions over private fields or serialized
+  implementation details not owned by the recovery contract.
+  **Source-test allowlist needed:** no.
+- **Claim:** recoverable corrupt-save errors return the Moderator to Lobby.
+  **Preferred evidence:** service or rendered UI evidence through public app
+  flow and resource-backed Portuguese copy.
+  **Forbidden evidence:** raw Razor/source scans for specific component names,
+  CSS classes, or resource keys.
+  **Source-test allowlist needed:** no for this issue; any new source scan must
+  cite or add the matching `docs/agents/qa-strategy.md` allowlist row.
+
 **Out of scope:**
 - Multiple save slots / game list management.
 - Cloud sync or cross-device resume.
@@ -101,7 +122,7 @@ must not crash the app.
 ## When The Brief Isn't Ready
 
 If you cannot write a specific, behavioral brief with testable acceptance
-criteria, the issue is not `ready-for-agent`. Common signs:
+criteria and QA evidence choices, the issue is not `ready-for-agent`. Common signs:
 
 - You catch yourself writing "or" / "either" / "depending on" in acceptance criteria.
 - A criterion is shaped like "X works correctly" rather than "X produces Y given input Z".
