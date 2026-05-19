@@ -20,7 +20,6 @@ using Xunit;
 using Css = Werewolves.Client.Tests.Helpers.ClientTestReferences.Css;
 using Html = Werewolves.Client.Tests.Helpers.ClientTestReferences.Html;
 using PlayerNames = Werewolves.Client.Tests.Helpers.ClientTestReferences.PlayerNames;
-using RazorMarkup = Werewolves.Client.Tests.Helpers.ClientTestReferences.RazorMarkup;
 
 #pragma warning disable BL0006
 
@@ -97,128 +96,6 @@ public class AssignRolesViewTests
 		text.IndexOf(RoleGroup.Villagers.GetDisplayName()).Should().BeLessThan(text.IndexOf(RoleGroup.Werewolves.GetDisplayName()));
 		text.IndexOf(RoleGroup.Werewolves.GetDisplayName()).Should().BeLessThan(text.IndexOf(RoleGroup.Ambiguous.GetDisplayName()));
 		text.IndexOf(MainRoleType.SimpleVillager.GetPublicName()).Should().BeLessThan(text.IndexOf(MainRoleType.Seer.GetPublicName()));
-	}
-
-	[Fact]
-	public void Markup_RendersRolesFromInstruction()
-	{
-		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered role-list checks.
-		var markup = File.ReadAllText(GetViewPath());
-
-		markup.Should().Contain(RazorMarkup.RolesForAssignment);
-	}
-
-	[Fact]
-	public void Markup_RendersPlayersForAssignment()
-	{
-		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered Player navigation checks.
-		var markup = File.ReadAllText(GetViewPath());
-
-		markup.Should().Contain(RazorMarkup.PlayerAssignmentSource);
-	}
-
-	[Fact]
-	public void Markup_AcceptsInstructionAndOnResponseParameters()
-	{
-		// Deprecated temporary scaffold: remove after ADR-0006/bUnit instantiates the component through public parameters.
-		var markup = File.ReadAllText(GetViewPath());
-
-		markup.Should().Contain(RazorMarkup.ParameterAttribute);
-		markup.Should().Contain(RazorMarkup.AssignRolesInstructionParameter);
-		markup.Should().Contain(nameof(EventCallback) + RazorMarkup.EventCallbackModeratorResponseParameterSuffix);
-	}
-
-	[Fact]
-	public void Markup_AcceptsRosterParameterForPlayerNameResolution()
-	{
-		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered Player-name checks.
-		var markup = File.ReadAllText(GetViewPath());
-
-		markup.Should().Contain(RazorMarkup.RosterParameter);
-	}
-
-	[Fact]
-	public void Markup_CallsCreateResponseOnSubmit()
-	{
-		// Deprecated temporary scaffold: replace with ADR-0006/bUnit submit-callback checks.
-		var markup = File.ReadAllText(GetViewPath());
-
-		markup.Should().Contain(RazorMarkup.CreateResponseCall);
-		markup.Should().Contain(RazorMarkup.OnResponseParameterName);
-	}
-
-	[Fact]
-	public void Markup_SubmitUsesPressAndHoldPattern()
-	{
-		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered submit-event checks.
-		var markup = File.ReadAllText(GetViewPath());
-
-		markup.Should().Contain(RazorMarkup.HoldButtonTag);
-		markup.Should().Contain(RazorMarkup.SubmitButtonResourceLabelAttribute);
-		markup.Should().Contain(RazorMarkup.OnHoldCompleteHandleSubmitAttribute);
-	}
-
-	[Fact]
-	public void Markup_PinsSubmitButtonInDashboardActionZone()
-	{
-		// Deprecated temporary scaffold: replace with browser-host layout checks or bUnit rendered structure checks.
-		var markup = File.ReadAllText(GetViewPath());
-
-		markup.Should().MatchRegex(RazorMarkup.DashboardActionFooterWithHoldButtonPattern);
-	}
-
-	[Fact]
-	public void Markup_SubmitButtonIsDisabledWhenAssignmentsIncomplete()
-	{
-		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered interaction checks.
-		var markup = File.ReadAllText(GetViewPath());
-
-		markup.Should().Contain(RazorMarkup.DisabledAssignmentsIncompleteAttribute);
-	}
-
-	[Fact]
-	public void Markup_UsesGetPublicNameForRoleDisplay()
-	{
-		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered role-label checks.
-		var markup = File.ReadAllText(GetViewPath());
-
-		// Roles should use the existing GetPublicName() extension for localization
-		markup.Should().Contain(RazorMarkup.GetPublicNameCall);
-	}
-
-	[Fact]
-	public void Markup_UsesClientStringsResourceKeys()
-	{
-		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered Portuguese text checks.
-		var markup = File.ReadAllText(GetViewPath());
-
-		markup.Should().Contain(RazorMarkup.AssignRolesTitleResource);
-		markup.Should().Contain(RazorMarkup.AssignRolesPromptResource);
-		markup.Should().Contain(RazorMarkup.SubmitButtonResource);
-	}
-
-	private static string GetViewPath()
-	{
-		var directory = new DirectoryInfo(AppContext.BaseDirectory);
-		while (directory is not null)
-		{
-			var candidate = Path.Combine(
-				directory.FullName,
-				"Werewolves.Client.Shared",
-				"Components",
-				"Game",
-				"Views",
-				"AssignRolesView.razor");
-
-			if (File.Exists(candidate))
-			{
-				return candidate;
-			}
-
-			directory = directory.Parent;
-		}
-
-		throw new FileNotFoundException(ClientTestReferences.ExceptionMessages.ComponentViewNotFound("AssignRolesView.razor"));
 	}
 
 	private static AssignRolesInstruction CreateInstruction(IReadOnlyList<Guid> playerIds, IReadOnlyList<MainRoleType> roles) =>
