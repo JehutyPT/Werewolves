@@ -261,11 +261,11 @@ public class HoldButtonInteractionTests
 				attributes);
 		}
 
-		private static string PointerDownEventName => ClientTestReferences.RazorMarkup.PointerDownEventName;
+		private static string PointerDownEventName => Html.Events.PointerDown;
 
-		private static string PointerUpEventName => ClientTestReferences.RazorMarkup.PointerUpEventName;
+		private static string PointerUpEventName => Html.Events.PointerUp;
 
-		private static string PointerCancelEventName => ClientTestReferences.RazorMarkup.PointerCancelEventName;
+		private static string PointerCancelEventName => Html.Events.PointerCancel;
 
 		public void Dispose()
 		{
