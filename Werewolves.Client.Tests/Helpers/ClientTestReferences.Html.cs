@@ -15,8 +15,10 @@ public static partial class ClientTestReferences
 			public const string AriaExpanded = "aria-expanded";
 			public const string AriaLabel = "aria-label";
 			public const string AriaPressed = "aria-pressed";
+			public const string AriaSelected = "aria-selected";
 			public const string Class = "class";
 			public const string Disabled = "disabled";
+			public const string Role = "role";
 			public const string Title = "title";
 			public const string Type = "type";
 		}
@@ -43,6 +45,7 @@ public static partial class ClientTestReferences
 
 		public static class Roles
 		{
+			public const string Listbox = "listbox";
 			public const string Option = "option";
 		}
 

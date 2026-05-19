@@ -23,6 +23,9 @@ public class InstructionRendererBunitTests
 {
 	private static string PublicInstructionSelector => $".{ClientTestReferences.Css.Classes.InstructionAnnouncement}";
 	private static string PrivateInstructionSelector => $".{ClientTestReferences.Css.Classes.InstructionPrivate}";
+	private static string DashboardActionZoneSelector => $".{ClientTestReferences.Css.Classes.DashboardActionZone}";
+	private static string HoldButtonSelector => Html.Selectors.ButtonWithClass(ClientTestReferences.Css.Classes.HoldButton);
+	private static string PlayerOptionSelector => Html.Selectors.ElementWithRole(Html.Elements.ListItem, Html.Roles.Option);
 
 	[Fact]
 	public void ConfirmationInstruction_WithPublicAndPrivateGuidance_ShowsBothGuidanceBlocks()
@@ -135,6 +138,34 @@ public class InstructionRendererBunitTests
 				button.TextContent.Contains(MainRoleType.SimpleVillager.GetPublicName(), StringComparison.CurrentCulture));
 	}
 
+	[Fact]
+	public void SelectPlayersInstruction_RendersRosterResolvedPlayerChoicesAndSingleInputActionZone()
+	{
+		using var context = new ModeratorComponentTestContext();
+		var selectableId = Guid.NewGuid();
+		var nonSelectableId = Guid.NewGuid();
+		var instruction = CreateSelectPlayersInstruction(selectableId);
+		var roster = new[]
+		{
+			CreateRosterEntry(nonSelectableId, 1, PlayerNames.Bruno),
+			CreateRosterEntry(selectableId, 2, PlayerNames.Ana)
+		};
+
+		var cut = context.RenderModeratorComponent<InstructionRenderer>(parameters => parameters
+			.Add(component => component.Instruction, instruction)
+			.Add(component => component.Roster, roster));
+
+		var options = cut.FindAll(PlayerOptionSelector);
+		options.Should().ContainSingle();
+		options.Single().TextContent.Should().Contain(PlayerNames.Ana);
+		options.Single().TextContent.Should().NotContain(PlayerNames.Bruno);
+
+		var actionZones = cut.FindAll(DashboardActionZoneSelector);
+		actionZones.Should().ContainSingle();
+		actionZones.Single().TextContent.Should().Contain(ClientStrings.SelectPlayers_SubmitButton);
+		actionZones.Single().QuerySelector(HoldButtonSelector).Should().NotBeNull();
+	}
+
 	private static ConfirmationInstruction CreateConfirmationInstruction(
 		string? publicAnnouncement = null,
 		string? privateInstruction = null) =>
@@ -150,6 +181,16 @@ public class InstructionRendererBunitTests
 				roles,
 				null,
 				GameStrings.RevealRolePromptSpecify,
+				null
+			]);
+
+	private static SelectPlayersInstruction CreateSelectPlayersInstruction(params Guid[] playerIds) =>
+		(SelectPlayersInstruction)SelectPlayersConstructor.Invoke(
+			[
+				playerIds.ToHashSet(),
+				NumberRangeConstraint.Single,
+				null,
+				GameStrings.WerewolvesChooseVictimPrompt,
 				null
 			]);
 
@@ -172,6 +213,11 @@ public class InstructionRendererBunitTests
 
 	private static readonly ConstructorInfo AssignRolesConstructor =
 		typeof(AssignRolesInstruction)
+			.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic)
+			.Single(ctor => ctor.GetParameters().Length == 5);
+
+	private static readonly ConstructorInfo SelectPlayersConstructor =
+		typeof(SelectPlayersInstruction)
 			.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic)
 			.Single(ctor => ctor.GetParameters().Length == 5);
 }
