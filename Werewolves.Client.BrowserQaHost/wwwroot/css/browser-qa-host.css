@@ -17,7 +17,7 @@ body {
 	--browser-qa-action-space: 120px;
 	position: relative;
 	width: 360px;
-	height: min(800px, 100vh);
+	height: 800px;
 	background: var(--ww-bg);
 	overflow: hidden;
 	border-radius: 12px;

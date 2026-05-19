@@ -1,23 +1,23 @@
 @implements IDisposable
 @inject GameClientManager Game
 
-<main class="ww-dashboard-shell" data-production-dashboard aria-label="@DashboardStatusLabel">
-	<nav class="ww-dashboard-tabs ww-dashboard-tabs--compact" aria-label="@ClientStrings.Dashboard_TabsAria">
+<main class="ww-dashboard-shell" data-production-dashboard data-testid="@ModeratorUiTestIds.DashboardShell" aria-label="@DashboardStatusLabel">
+	<nav class="ww-dashboard-tabs ww-dashboard-tabs--compact" data-testid="@ModeratorUiTestIds.DashboardCompactTabs" aria-label="@ClientStrings.Dashboard_TabsAria">
 		<button type="button"
 				class="@TabButtonClass(DashboardTab.Roster)"
-				aria-selected="@(_activeTab == DashboardTab.Roster)"
+				aria-selected="@AriaSelected(DashboardTab.Roster)"
 				@onclick="() => SelectTab(DashboardTab.Roster)">@ClientStrings.Dashboard_TabRoster</button>
 		<button type="button"
 				class="@TabButtonClass(DashboardTab.Action)"
-				aria-selected="@(_activeTab == DashboardTab.Action)"
+				aria-selected="@AriaSelected(DashboardTab.Action)"
 				@onclick="() => SelectTab(DashboardTab.Action)">@ClientStrings.Dashboard_TabAction</button>
 		<button type="button"
 				class="@TabButtonClass(DashboardTab.Stats)"
-				aria-selected="@(_activeTab == DashboardTab.Stats)"
+				aria-selected="@AriaSelected(DashboardTab.Stats)"
 				@onclick="() => SelectTab(DashboardTab.Stats)">@ClientStrings.Dashboard_TabStats</button>
 	</nav>
 
-	<header class="ww-labs-status-bar ww-dashboard-status-bar" aria-label="@DashboardStatusLabel">
+	<header class="ww-labs-status-bar ww-dashboard-status-bar" data-testid="@ModeratorUiTestIds.DashboardStatusBar" aria-label="@DashboardStatusLabel">
 		<span class="ww-labs-status-bar__dot" aria-hidden="true"></span>
 		<span class="ww-labs-status-bar__turn">@PhaseTurnLabel</span>
 		<span class="ww-labs-status-bar__phase">@Format(ClientStrings.Dashboard_AliveCountFormat, AliveCount)</span>
@@ -238,6 +238,8 @@
 
 	private string TabButtonClass(DashboardTab tab) =>
 		_activeTab == tab ? "ww-dashboard-tab ww-dashboard-tab--active" : "ww-dashboard-tab";
+
+	private string AriaSelected(DashboardTab tab) => _activeTab == tab ? "true" : "false";
 
 	private string PanelStyle(DashboardTab tab) =>
 		_activeTab == tab ? "display:block;" : "display:none;";
