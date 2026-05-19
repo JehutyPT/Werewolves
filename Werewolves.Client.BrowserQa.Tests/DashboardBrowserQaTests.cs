@@ -166,4 +166,42 @@ public sealed class DashboardBrowserQaTests : PlaywrightTest, IClassFixture<Brow
 			.Should()
 			.Be(BrowserQaCss.LinearTimingFunction, "the rendered progress should advance linearly during the hold");
 	}
+
+	[Fact]
+	public async Task DashboardScenario_RecordsInstructionTransitionAnimationAndTiming()
+	{
+		await using var browser = await Playwright.Chromium.LaunchAsync();
+		var page = await browser.NewPageAsync();
+
+		await BrowserQaInstructionAnimations.InstallRecorderAsync(page, ModeratorUiTestIds.InstructionBlock);
+		await BrowserQaPage.SetWideViewportAsync(page);
+		await page.GotoAsync(_host.DashboardScenarioUri.ToString(), new()
+		{
+			WaitUntil = WaitUntilState.NetworkIdle
+		});
+
+		var instructionBlock = page.GetByTestId(ModeratorUiTestIds.InstructionBlock).First;
+
+		await Expect(instructionBlock).ToBeVisibleAsync();
+		await BrowserQaInstructionAnimations.WaitForRecordedEvidenceAsync(
+			page,
+			ModeratorUiTestIds.InstructionBlock);
+		var evidence = await BrowserQaInstructionAnimations.ReadRecordedEvidenceAsync(
+			page,
+			ModeratorUiTestIds.InstructionBlock);
+
+		evidence.AnimationName.Should().NotBeNullOrWhiteSpace();
+		evidence.ComputedAnimationName.Should().Contain(evidence.AnimationName);
+		evidence.DurationMs.Should().BeInRange(200, 300);
+		evidence.ResolvedTokenDurationMs.Should().BeApproximately(evidence.DurationMs, precision: 0.5);
+		evidence.TimingFunction.Should().Be(BrowserQaCss.EaseOutTimingFunctionValue);
+		evidence.WebAnimationsDurationMs.Should().NotBeNull();
+		evidence.WebAnimationsDurationMs!.Value.Should().BeInRange(200, 300);
+		evidence.KeyframeCount.Should().BeGreaterThanOrEqualTo(2);
+		evidence.FirstOpacity.Should().Be(BrowserQaCss.HiddenOpacityValue);
+		evidence.LastOpacity.Should().Be(BrowserQaCss.VisibleOpacityValue);
+		evidence.FirstTransform.Should().NotBeNullOrWhiteSpace();
+		evidence.LastTransform.Should().NotBeNullOrWhiteSpace();
+		evidence.FirstTransform.Should().NotBe(evidence.LastTransform);
+	}
 }

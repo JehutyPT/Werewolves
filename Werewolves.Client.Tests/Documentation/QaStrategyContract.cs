@@ -49,8 +49,7 @@ internal static class QaStrategyContract
 		"| `Werewolves.Client.Tests.Resources.ClientStringsTests.ClientStrings_ExposesPortugueseUiCopyThroughGeneratedAccessor` | Permanent policy | Portuguese client UI copy remains resource-backed through the generated accessor. | The generated accessor is the runtime localization surface. |",
 		"| `Werewolves.Client.Tests.BrowserQaHost.BrowserQaHostCompositionTests.BrowserQaHostProject_ReferencesSharedBoundaryWithoutMaui` | Permanent policy | The browser QA host project stays on the host-agnostic shared boundary without MAUI. | Project XML is the architecture-boundary contract. |",
 		"| `Werewolves.Client.Tests.Styling.DarkThemeTokenTests`: `AppCss_ConsumesColorValuesThroughDesignTokens`, `RootDocument_UsesDarkThemeTokensBeforePagesRender`, `MauiHost_UsesDarkChromeAcrossSupportedSurfaces`, `TextTokens_HaveReadableContrastAgainstDarkSurfaces`, `Pages_DoNotUseInlineColorLiterals` | Permanent policy | Dark theme tokens, first-paint defaults, platform chrome metadata, contrast, and no-inline-color policy stay intact. | CSS, project, and platform metadata are the contracts. |",
-		"| `Werewolves.Client.Tests.Styling.InstructionTransitionTests.DesignTokens_DefineInstructionAnimationDurationBetween200And300Ms` | Permanent policy | Instruction animation duration stays in the approved 200-300 ms token range. | CSS token value is the contract. |",
-		"| `Werewolves.Client.Tests.Styling.InstructionTransitionTests`: `AppCss_DefinesInstructionEnterKeyframes`, `AppCss_InstructionBlockUsesAnimationToken` | Deprecated temporary scaffold | Instruction enter animation exists and consumes the duration token. | Replace with browser-host computed-style or visual-motion checks. |"
+		"| `Werewolves.Client.Tests.Styling.InstructionTransitionTests.DesignTokens_DefineInstructionAnimationDurationBetween200And300Ms` | Permanent policy | Instruction animation duration stays in the approved 200-300 ms token range. | CSS token value is the contract. |"
 	];
 
 	public static readonly string[] RetiredSourceTestAllowlistEntries =
@@ -60,7 +59,9 @@ internal static class QaStrategyContract
 		"`Werewolves.Client.Tests.Styling.DarkThemeTokenTests.Pages_RenderInsideDarkShells`",
 		"`Werewolves.Client.Tests.Components.InstructionRendererHapticTests.InstructionRenderer_UsesTransitionKeyForAnimationReMount`",
 		"`Werewolves.Client.Tests.Styling.DashboardOverlayLayoutTests`",
-		"`Werewolves.Client.Tests.Styling.HoldButtonTokenTests.DesignTokens_AnimateHoldProgressOverProductionDuration`"
+		"`Werewolves.Client.Tests.Styling.HoldButtonTokenTests.DesignTokens_AnimateHoldProgressOverProductionDuration`",
+		"`AppCss_DefinesInstructionEnterKeyframes`",
+		"`AppCss_InstructionBlockUsesAnimationToken`"
 	];
 
 	public static readonly string[] RequiredNativeChecklistContent =
