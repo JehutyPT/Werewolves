@@ -59,12 +59,16 @@ public class HoldButtonInteractionTests
 		var button = fixture.FindHoldButton();
 		var holdTask = fixture.StartHoldAsync(button);
 
-		await WaitForAsync(
-			() => fixture.Haptic.LongPresses >= 1,
-			ClientTestReferences.AssertionReasons.ZeroMillisecondLongPressPulseFiresImmediately);
+		await fixture.FlushAsync();
+		fixture.Haptic.LongPresses.Should()
+			.Be(1, ClientTestReferences.AssertionReasons.ZeroMillisecondLongPressPulseFiresImmediately);
+
+		fixture.Timing.AdvanceBy(TimeSpan.FromMilliseconds(199));
+		await fixture.FlushAsync();
 		await fixture.ReleaseHoldAsync(button);
 		await holdTask;
-		await Task.Delay(450);
+		fixture.Timing.AdvanceBy(TimeSpan.FromMilliseconds(450));
+		await fixture.FlushAsync();
 
 		fixture.Haptic.LongPresses.Should().Be(1);
 		fixture.Haptic.Clicks.Should().Be(0);
@@ -79,30 +83,19 @@ public class HoldButtonInteractionTests
 		var button = fixture.FindHoldButton();
 		var holdTask = fixture.StartHoldAsync(button);
 
-		await WaitForAsync(
-			() => fixture.Haptic.LongPresses >= 1,
-			ClientTestReferences.AssertionReasons.ZeroMillisecondLongPressPulseFiresImmediately);
+		await fixture.FlushAsync();
+		fixture.Haptic.LongPresses.Should()
+			.Be(1, ClientTestReferences.AssertionReasons.ZeroMillisecondLongPressPulseFiresImmediately);
+
+		fixture.Timing.AdvanceBy(TimeSpan.FromMilliseconds(199));
+		await fixture.FlushAsync();
 		await fixture.CancelHoldAsync(button);
 		await holdTask;
-		await Task.Delay(450);
+		fixture.Timing.AdvanceBy(TimeSpan.FromMilliseconds(450));
+		await fixture.FlushAsync();
 
 		fixture.Haptic.LongPresses.Should().Be(1);
 		fixture.Haptic.Clicks.Should().Be(0);
-	}
-
-	private static async Task WaitForAsync(Func<bool> condition, string because)
-	{
-		var deadline = DateTime.UtcNow.AddSeconds(1);
-		while (!condition())
-		{
-			if (DateTime.UtcNow >= deadline)
-			{
-				condition().Should().BeTrue(because);
-				return;
-			}
-
-			await Task.Delay(10);
-		}
 	}
 
 	private sealed class HoldButtonFixture : IDisposable
@@ -115,6 +108,7 @@ public class HoldButtonInteractionTests
 		{
 			var services = new ServiceCollection();
 			services.AddSingleton<IHapticFeedbackService>(Haptic);
+			services.AddSingleton<IHoldButtonTiming>(Timing);
 			_serviceProvider = services.BuildServiceProvider();
 
 			_renderer = new ComponentTestRenderer(_serviceProvider);
@@ -122,15 +116,29 @@ public class HoldButtonInteractionTests
 		}
 
 		public RecordingHapticFeedbackService Haptic { get; } = new();
+		public ControlledHoldButtonTiming Timing { get; } = new();
 
 		public Task RenderAsync() =>
 			_renderer.Dispatcher.InvokeAsync(() => _renderer.RenderRootAsync(_rootComponentId));
 
+		public Task FlushAsync() =>
+			_renderer.Dispatcher.InvokeAsync(() => Task.CompletedTask);
+
 		public Task StartHoldAsync(ButtonSnapshot button) =>
 			_renderer.Dispatcher.InvokeAsync(() => _renderer.DispatchPointerDownAsync(button.PointerDownEventHandlerId));
 
-		public Task CompleteHoldAsync(ButtonSnapshot button) =>
-			StartHoldAsync(button);
+		public async Task CompleteHoldAsync(ButtonSnapshot button)
+		{
+			var holdTask = StartHoldAsync(button);
+			await FlushAsync();
+
+			Timing.AdvanceBy(RenderedHoldButtonDriver.HoldDuration);
+			await FlushAsync();
+
+			Timing.AdvanceBy(RenderedHoldButtonDriver.SuccessFlashDuration);
+			await holdTask;
+			await FlushAsync();
+		}
 
 		public Task ReleaseHoldAsync(ButtonSnapshot button) =>
 			_renderer.Dispatcher.InvokeAsync(() => _renderer.DispatchPointerUpAsync(button.PointerUpEventHandlerId));

@@ -1,4 +1,6 @@
+@using Microsoft.Extensions.DependencyInjection
 @inject IHapticFeedbackService Haptic
+@inject IServiceProvider Services
 @implements IDisposable
 
 <div class="ww-hold-zone @HoldClass">
@@ -19,6 +21,7 @@
 
 @code {
 	private static readonly TimeSpan HoldDuration = TimeSpan.FromMilliseconds(HoldButtonHapticSequence.HoldDurationMs);
+	private static readonly TimeSpan SuccessFlashDuration = TimeSpan.FromMilliseconds(HoldButtonHapticSequence.SuccessFlashMs);
 
 	private readonly HoldConfirmationGate _holdGate = new(HoldDuration);
 	private readonly HoldButtonHapticSequence _hapticSequence = new();
@@ -28,6 +31,8 @@
 	private long _holdSequence;
 	private long _holdStartedAtTimestamp;
 	private bool _isDisposed;
+	private IHoldButtonTiming Timing =>
+		Services.GetService<IHoldButtonTiming>() ?? SystemHoldButtonTiming.Instance;
 
 	[Parameter, EditorRequired]
 	public string Label { get; set; } = default!;
@@ -55,7 +60,7 @@
 		_holdCts = new CancellationTokenSource();
 		var token = _holdCts.Token;
 
-		_holdStartedAtTimestamp = System.Diagnostics.Stopwatch.GetTimestamp();
+		_holdStartedAtTimestamp = Timing.GetTimestamp();
 		_holdGate.Begin();
 		_hapticSequence.Reset();
 		_isHolding = true;
@@ -65,7 +70,7 @@
 
 		try
 		{
-			await Task.Delay(HoldButtonHapticSequence.HoldDurationMs, token);
+			await Timing.DelayAsync(HoldDuration, token);
 			if (!IsCurrentHold(holdSequence, token))
 			{
 				return;
@@ -80,7 +85,7 @@
 
 	private async Task HandlePointerUp()
 	{
-		var elapsed = System.Diagnostics.Stopwatch.GetElapsedTime(_holdStartedAtTimestamp);
+		var elapsed = Timing.GetElapsedTime(_holdStartedAtTimestamp);
 		await ApplyHoldResultAsync(_holdGate.ReleaseAfter(elapsed));
 	}
 
@@ -101,7 +106,7 @@
 			Haptic.TryLongPress();
 			StateHasChanged();
 
-			await Task.Delay(HoldButtonHapticSequence.SuccessFlashMs);
+			await Timing.DelayAsync(SuccessFlashDuration);
 			await OnHoldComplete.InvokeAsync();
 			return;
 		}
@@ -134,7 +139,7 @@
 				var delayMs = offsetMs - previousOffsetMs;
 				if (delayMs > 0)
 				{
-					await Task.Delay(delayMs, token);
+					await Timing.DelayAsync(TimeSpan.FromMilliseconds(delayMs), token);
 				}
 
 				if (!IsCurrentHold(holdSequence, token))
