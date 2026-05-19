@@ -4,6 +4,7 @@ using Werewolves.Client.Tests.Helpers;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Models;
 using Xunit;
+using PlayerNames = Werewolves.Client.Tests.Helpers.ClientTestReferences.PlayerNames;
 
 namespace Werewolves.Client.Tests.Services;
 
@@ -31,16 +32,16 @@ public class SelectPlayersInputStateTests
 		var p3 = Guid.NewGuid();
 		var roster = new[]
 		{
-			MakeEntry(p1, 1, "Ana"),
-			MakeEntry(p2, 2, "Bruno"),
-			MakeEntry(p3, 3, "Catarina")
+			MakeEntry(p1, 1, PlayerNames.Ana),
+			MakeEntry(p2, 2, PlayerNames.Bruno),
+			MakeEntry(p3, 3, PlayerNames.Catarina)
 		};
 		var selectable = new HashSet<Guid> { p1, p3 };
 
 		var state = new SelectPlayersInputState(roster, selectable, NumberRangeConstraint.Single);
 
 		state.SelectablePlayers.Should().HaveCount(2);
-		state.SelectablePlayers.Select(p => p.Name).Should().Equal("Ana", "Catarina");
+		state.SelectablePlayers.Select(p => p.Name).Should().Equal(PlayerNames.Ana, PlayerNames.Catarina);
 	}
 
 	[Fact]
@@ -51,15 +52,15 @@ public class SelectPlayersInputStateTests
 		var p3 = Guid.NewGuid();
 		var roster = new[]
 		{
-			MakeEntry(p2, 3, "Bruno"),
-			MakeEntry(p3, 1, "Catarina"),
-			MakeEntry(p1, 2, "Ana")
+			MakeEntry(p2, 3, PlayerNames.Bruno),
+			MakeEntry(p3, 1, PlayerNames.Catarina),
+			MakeEntry(p1, 2, PlayerNames.Ana)
 		};
 		var selectable = new HashSet<Guid> { p1, p2, p3 };
 
 		var state = new SelectPlayersInputState(roster, selectable, NumberRangeConstraint.Single);
 
-		state.SelectablePlayers.Select(p => p.Name).Should().Equal("Catarina", "Ana", "Bruno");
+		state.SelectablePlayers.Select(p => p.Name).Should().Equal(PlayerNames.Catarina, PlayerNames.Ana, PlayerNames.Bruno);
 	}
 
 	#endregion
@@ -70,7 +71,7 @@ public class SelectPlayersInputStateTests
 	public void ToggleSelection_SingleSelect_SelectsPlayer()
 	{
 		var p1 = Guid.NewGuid();
-		var roster = new[] { MakeEntry(p1, 1, "Ana") };
+		var roster = new[] { MakeEntry(p1, 1, PlayerNames.Ana) };
 		var state = new SelectPlayersInputState(roster, new HashSet<Guid> { p1 }, NumberRangeConstraint.Single);
 
 		var changed = state.ToggleSelection(p1);
@@ -84,7 +85,7 @@ public class SelectPlayersInputStateTests
 	public void ToggleSelection_SingleSelect_DeselectsAlreadySelectedPlayer()
 	{
 		var p1 = Guid.NewGuid();
-		var roster = new[] { MakeEntry(p1, 1, "Ana") };
+		var roster = new[] { MakeEntry(p1, 1, PlayerNames.Ana) };
 		var state = new SelectPlayersInputState(roster, new HashSet<Guid> { p1 }, NumberRangeConstraint.Single);
 		state.ToggleSelection(p1);
 
@@ -100,7 +101,7 @@ public class SelectPlayersInputStateTests
 	{
 		var p1 = Guid.NewGuid();
 		var p2 = Guid.NewGuid();
-		var roster = new[] { MakeEntry(p1, 1, "Ana"), MakeEntry(p2, 2, "Bruno") };
+		var roster = new[] { MakeEntry(p1, 1, PlayerNames.Ana), MakeEntry(p2, 2, PlayerNames.Bruno) };
 		var state = new SelectPlayersInputState(roster, new HashSet<Guid> { p1, p2 }, NumberRangeConstraint.Single);
 		state.ToggleSelection(p1);
 
@@ -116,7 +117,7 @@ public class SelectPlayersInputStateTests
 	public void IsSingleSelect_WhenConstraintMaxIsOne_ReturnsTrue()
 	{
 		var p1 = Guid.NewGuid();
-		var roster = new[] { MakeEntry(p1, 1, "Ana") };
+		var roster = new[] { MakeEntry(p1, 1, PlayerNames.Ana) };
 		var state = new SelectPlayersInputState(roster, new HashSet<Guid> { p1 }, NumberRangeConstraint.Single);
 
 		state.IsSingleSelect.Should().BeTrue();
@@ -131,7 +132,7 @@ public class SelectPlayersInputStateTests
 	{
 		var p1 = Guid.NewGuid();
 		var p2 = Guid.NewGuid();
-		var roster = new[] { MakeEntry(p1, 1, "Ana"), MakeEntry(p2, 2, "Bruno") };
+		var roster = new[] { MakeEntry(p1, 1, PlayerNames.Ana), MakeEntry(p2, 2, PlayerNames.Bruno) };
 		var state = new SelectPlayersInputState(roster, new HashSet<Guid> { p1, p2 }, NumberRangeConstraint.Exact(2));
 
 		state.ToggleSelection(p1);
@@ -150,9 +151,9 @@ public class SelectPlayersInputStateTests
 		var p3 = Guid.NewGuid();
 		var roster = new[]
 		{
-			MakeEntry(p1, 1, "Ana"),
-			MakeEntry(p2, 2, "Bruno"),
-			MakeEntry(p3, 3, "Catarina")
+			MakeEntry(p1, 1, PlayerNames.Ana),
+			MakeEntry(p2, 2, PlayerNames.Bruno),
+			MakeEntry(p3, 3, PlayerNames.Catarina)
 		};
 		var state = new SelectPlayersInputState(roster, new HashSet<Guid> { p1, p2, p3 }, NumberRangeConstraint.Exact(2));
 		state.ToggleSelection(p1);
@@ -170,7 +171,7 @@ public class SelectPlayersInputStateTests
 	{
 		var p1 = Guid.NewGuid();
 		var p2 = Guid.NewGuid();
-		var roster = new[] { MakeEntry(p1, 1, "Ana"), MakeEntry(p2, 2, "Bruno") };
+		var roster = new[] { MakeEntry(p1, 1, PlayerNames.Ana), MakeEntry(p2, 2, PlayerNames.Bruno) };
 		var state = new SelectPlayersInputState(roster, new HashSet<Guid> { p1, p2 }, NumberRangeConstraint.Exact(2));
 		state.ToggleSelection(p1);
 		state.ToggleSelection(p2);
@@ -187,7 +188,7 @@ public class SelectPlayersInputStateTests
 	public void IsSingleSelect_WhenConstraintMaxIsGreaterThanOne_ReturnsFalse()
 	{
 		var p1 = Guid.NewGuid();
-		var roster = new[] { MakeEntry(p1, 1, "Ana") };
+		var roster = new[] { MakeEntry(p1, 1, PlayerNames.Ana) };
 		var state = new SelectPlayersInputState(roster, new HashSet<Guid> { p1 }, NumberRangeConstraint.Exact(2));
 
 		state.IsSingleSelect.Should().BeFalse();
@@ -201,7 +202,7 @@ public class SelectPlayersInputStateTests
 	public void CanSubmit_WhenSelectionMeetsConstraint_ReturnsTrue()
 	{
 		var p1 = Guid.NewGuid();
-		var roster = new[] { MakeEntry(p1, 1, "Ana") };
+		var roster = new[] { MakeEntry(p1, 1, PlayerNames.Ana) };
 		var state = new SelectPlayersInputState(roster, new HashSet<Guid> { p1 }, NumberRangeConstraint.Single);
 		state.ToggleSelection(p1);
 
@@ -212,7 +213,7 @@ public class SelectPlayersInputStateTests
 	public void CanSubmit_WhenSelectionIsEmpty_ReturnsFalse()
 	{
 		var p1 = Guid.NewGuid();
-		var roster = new[] { MakeEntry(p1, 1, "Ana") };
+		var roster = new[] { MakeEntry(p1, 1, PlayerNames.Ana) };
 		var state = new SelectPlayersInputState(roster, new HashSet<Guid> { p1 }, NumberRangeConstraint.Single);
 
 		state.CanSubmit.Should().BeFalse();
@@ -223,7 +224,7 @@ public class SelectPlayersInputStateTests
 	{
 		var p1 = Guid.NewGuid();
 		var p2 = Guid.NewGuid();
-		var roster = new[] { MakeEntry(p1, 1, "Ana"), MakeEntry(p2, 2, "Bruno") };
+		var roster = new[] { MakeEntry(p1, 1, PlayerNames.Ana), MakeEntry(p2, 2, PlayerNames.Bruno) };
 		var state = new SelectPlayersInputState(roster, new HashSet<Guid> { p1, p2 }, NumberRangeConstraint.Exact(2));
 		state.ToggleSelection(p1);
 
@@ -234,7 +235,7 @@ public class SelectPlayersInputStateTests
 	public void CanSubmit_OptionalConstraint_WhenSelectionIsEmpty_ReturnsTrue()
 	{
 		var p1 = Guid.NewGuid();
-		var roster = new[] { MakeEntry(p1, 1, "Ana") };
+		var roster = new[] { MakeEntry(p1, 1, PlayerNames.Ana) };
 		var state = new SelectPlayersInputState(roster, new HashSet<Guid> { p1 }, NumberRangeConstraint.SingleOptional);
 
 		state.CanSubmit.Should().BeTrue();
@@ -248,9 +249,9 @@ public class SelectPlayersInputStateTests
 		var p3 = Guid.NewGuid();
 		var roster = new[]
 		{
-			MakeEntry(p1, 1, "Ana"),
-			MakeEntry(p2, 2, "Bruno"),
-			MakeEntry(p3, 3, "Catarina")
+			MakeEntry(p1, 1, PlayerNames.Ana),
+			MakeEntry(p2, 2, PlayerNames.Bruno),
+			MakeEntry(p3, 3, PlayerNames.Catarina)
 		};
 		var state = new SelectPlayersInputState(
 			roster,
@@ -271,7 +272,7 @@ public class SelectPlayersInputStateTests
 	{
 		var p1 = Guid.NewGuid();
 		var p2 = Guid.NewGuid();
-		var roster = new[] { MakeEntry(p1, 1, "Ana"), MakeEntry(p2, 2, "Bruno") };
+		var roster = new[] { MakeEntry(p1, 1, PlayerNames.Ana), MakeEntry(p2, 2, PlayerNames.Bruno) };
 		var state = new SelectPlayersInputState(roster, new HashSet<Guid> { p1, p2 }, NumberRangeConstraint.Exact(2));
 		state.ToggleSelection(p1);
 		state.ToggleSelection(p2);
@@ -285,7 +286,7 @@ public class SelectPlayersInputStateTests
 	public void GetSelection_ReturnsDefensiveCopy()
 	{
 		var p1 = Guid.NewGuid();
-		var roster = new[] { MakeEntry(p1, 1, "Ana") };
+		var roster = new[] { MakeEntry(p1, 1, PlayerNames.Ana) };
 		var state = new SelectPlayersInputState(roster, new HashSet<Guid> { p1 }, NumberRangeConstraint.Single);
 		state.ToggleSelection(p1);
 
@@ -309,10 +310,10 @@ public class SelectPlayersInputStateTests
 		var villager3 = Guid.NewGuid();
 		var roster = new[]
 		{
-			MakeEntry(wolf, 1, "Lobo"),
-			MakeEntry(villager1, 2, "Ana"),
-			MakeEntry(villager2, 3, "Bruno"),
-			MakeEntry(villager3, 4, "Catarina")
+			MakeEntry(wolf, 1, PlayerNames.Lobo),
+			MakeEntry(villager1, 2, PlayerNames.Ana),
+			MakeEntry(villager2, 3, PlayerNames.Bruno),
+			MakeEntry(villager3, 4, PlayerNames.Catarina)
 		};
 		// Only non-werewolves are selectable
 		var selectable = new HashSet<Guid> { villager1, villager2, villager3 };
@@ -320,7 +321,7 @@ public class SelectPlayersInputStateTests
 		var state = new SelectPlayersInputState(roster, selectable, NumberRangeConstraint.Single);
 
 		state.SelectablePlayers.Should().HaveCount(3);
-		state.SelectablePlayers.Select(p => p.Name).Should().Equal("Ana", "Bruno", "Catarina");
+		state.SelectablePlayers.Select(p => p.Name).Should().Equal(PlayerNames.DefaultThree);
 
 		state.ToggleSelection(villager2);
 		state.CanSubmit.Should().BeTrue();
@@ -338,11 +339,11 @@ public class SelectPlayersInputStateTests
 		var p5 = Guid.NewGuid();
 		var roster = new[]
 		{
-			MakeEntry(p1, 1, "Ana"),
-			MakeEntry(p2, 2, "Bruno"),
-			MakeEntry(p3, 3, "Catarina"),
-			MakeEntry(p4, 4, "Diana"),
-			MakeEntry(p5, 5, "Eduardo")
+			MakeEntry(p1, 1, PlayerNames.Ana),
+			MakeEntry(p2, 2, PlayerNames.Bruno),
+			MakeEntry(p3, 3, PlayerNames.Catarina),
+			MakeEntry(p4, 4, PlayerNames.Diana),
+			MakeEntry(p5, 5, PlayerNames.Eduardo)
 		};
 		// All unassigned players are selectable for identification
 		var selectable = new HashSet<Guid> { p1, p2, p3, p4, p5 };

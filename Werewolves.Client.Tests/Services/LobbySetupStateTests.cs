@@ -6,6 +6,7 @@ using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Models;
 using Xunit;
+using PlayerNames = Werewolves.Client.Tests.Helpers.ClientTestReferences.PlayerNames;
 
 namespace Werewolves.Client.Tests.Services;
 
@@ -26,59 +27,59 @@ public class LobbySetupStateTests
 	{
 		var state = LobbySetupMetadataFixture.DefaultState();
 
-		state.AddPlayer("Ana").Should().Be(AddPlayerResult.Success);
-		state.AddPlayer("Bruno").Should().Be(AddPlayerResult.Success);
-		state.AddPlayer("Catarina").Should().Be(AddPlayerResult.Success);
+		state.AddPlayer(PlayerNames.Ana).Should().Be(AddPlayerResult.Success);
+		state.AddPlayer(PlayerNames.Bruno).Should().Be(AddPlayerResult.Success);
+		state.AddPlayer(PlayerNames.Catarina).Should().Be(AddPlayerResult.Success);
 
-		state.PlayerNames.Should().Equal("Ana", "Bruno", "Catarina");
+		state.PlayerNames.Should().Equal(PlayerNames.DefaultThree);
 	}
 
 	[Fact]
 	public void RemovePlayerAt_RemovesNameFromSeatingOrder()
 	{
 		var state = LobbySetupMetadataFixture.DefaultState();
-		state.AddPlayer("Ana");
-		state.AddPlayer("Bruno");
-		state.AddPlayer("Catarina");
+		state.AddPlayer(PlayerNames.Ana);
+		state.AddPlayer(PlayerNames.Bruno);
+		state.AddPlayer(PlayerNames.Catarina);
 
 		state.RemovePlayerAt(1).Should().BeTrue();
 
-		state.PlayerNames.Should().Equal("Ana", "Catarina");
+		state.PlayerNames.Should().Equal(PlayerNames.Ana, PlayerNames.Catarina);
 	}
 
 	[Fact]
 	public void MovePlayerUp_SwapsPlayerWithPreviousSeat()
 	{
 		var state = LobbySetupMetadataFixture.DefaultState();
-		state.AddPlayer("Ana");
-		state.AddPlayer("Bruno");
-		state.AddPlayer("Catarina");
+		state.AddPlayer(PlayerNames.Ana);
+		state.AddPlayer(PlayerNames.Bruno);
+		state.AddPlayer(PlayerNames.Catarina);
 
 		state.MovePlayerUp(2).Should().BeTrue();
 
-		state.PlayerNames.Should().Equal("Ana", "Catarina", "Bruno");
+		state.PlayerNames.Should().Equal(PlayerNames.Ana, PlayerNames.Catarina, PlayerNames.Bruno);
 	}
 
 	[Fact]
 	public void MovePlayerDown_SwapsPlayerWithNextSeat()
 	{
 		var state = LobbySetupMetadataFixture.DefaultState();
-		state.AddPlayer("Ana");
-		state.AddPlayer("Bruno");
-		state.AddPlayer("Catarina");
+		state.AddPlayer(PlayerNames.Ana);
+		state.AddPlayer(PlayerNames.Bruno);
+		state.AddPlayer(PlayerNames.Catarina);
 
 		state.MovePlayerDown(0).Should().BeTrue();
 
-		state.PlayerNames.Should().Equal("Bruno", "Ana", "Catarina");
+		state.PlayerNames.Should().Equal(PlayerNames.Bruno, PlayerNames.Ana, PlayerNames.Catarina);
 	}
 
 	[Fact]
 	public void CanMovePlayer_ReportsDisabledAtSeatingOrderBoundaries()
 	{
 		var state = LobbySetupMetadataFixture.DefaultState();
-		state.AddPlayer("Ana");
-		state.AddPlayer("Bruno");
-		state.AddPlayer("Catarina");
+		state.AddPlayer(PlayerNames.Ana);
+		state.AddPlayer(PlayerNames.Bruno);
+		state.AddPlayer(PlayerNames.Catarina);
 
 		state.CanMovePlayerUp(0).Should().BeFalse();
 		state.CanMovePlayerDown(2).Should().BeFalse();
@@ -90,8 +91,8 @@ public class LobbySetupStateTests
 	public void HasPlayerConfigIssues_ReturnsTooFewPlayers_WhenUnderMinimum()
 	{
 		var state = LobbySetupMetadataFixture.DefaultState();
-		state.AddPlayer("Ana");
-		state.AddPlayer("Bruno");
+		state.AddPlayer(PlayerNames.Ana);
+		state.AddPlayer(PlayerNames.Bruno);
 
 		state.HasPlayerConfigIssues(out var issues).Should().BeTrue();
 		issues.Should().ContainSingle(e => e.Type == GameConfigValidationErrorType.TooFewPlayers);
@@ -101,23 +102,23 @@ public class LobbySetupStateTests
 	public void AddPlayer_RejectsDuplicateNameCaseInsensitive()
 	{
 		var state = LobbySetupMetadataFixture.DefaultState();
-		state.AddPlayer("Ana").Should().Be(AddPlayerResult.Success);
+		state.AddPlayer(PlayerNames.Ana).Should().Be(AddPlayerResult.Success);
 
-		state.AddPlayer("ana").Should().Be(AddPlayerResult.DuplicateName);
-		state.AddPlayer("ANA").Should().Be(AddPlayerResult.DuplicateName);
+		state.AddPlayer(PlayerNames.AnaLowercase).Should().Be(AddPlayerResult.DuplicateName);
+		state.AddPlayer(PlayerNames.AnaUppercase).Should().Be(AddPlayerResult.DuplicateName);
 
-		state.PlayerNames.Should().Equal("Ana");
+		state.PlayerNames.Should().Equal(PlayerNames.Ana);
 	}
 
 	[Fact]
 	public void HasPlayerConfigIssues_ReturnsNoIssues_WhenRosterIsValid()
 	{
 		var state = LobbySetupMetadataFixture.DefaultState();
-		state.AddPlayer("Ana");
-		state.AddPlayer("Bruno");
-		state.AddPlayer("Catarina");
-		state.AddPlayer("Diana");
-		state.AddPlayer("Eduardo");
+		state.AddPlayer(PlayerNames.Ana);
+		state.AddPlayer(PlayerNames.Bruno);
+		state.AddPlayer(PlayerNames.Catarina);
+		state.AddPlayer(PlayerNames.Diana);
+		state.AddPlayer(PlayerNames.Eduardo);
 
 		state.HasPlayerConfigIssues(out var issues).Should().BeFalse();
 		issues.Should().BeEmpty();
@@ -241,7 +242,7 @@ public class LobbySetupStateTests
 			MainRoleType.Thief,
 			MainRoleType.Actor);
 		for (var i = 0; i < 5; i++)
-			state.AddPlayer($"Player{i}");
+			state.AddPlayer(PlayerNames.GeneratedPlayer(i));
 
 		state.ExpectedRoleCount.Should().Be(5);
 
@@ -257,7 +258,7 @@ public class LobbySetupStateTests
 	{
 		var state = LobbySetupMetadataFixture.DefaultState();
 		for (var i = 0; i < 5; i++)
-			state.AddPlayer($"Player{i}");
+			state.AddPlayer(PlayerNames.GeneratedPlayer(i));
 
 		state.IncrementRole(MainRoleType.SimpleWerewolf);
 		state.IncrementRole(MainRoleType.SimpleVillager);
@@ -270,8 +271,8 @@ public class LobbySetupStateTests
 	public void HasRoleConfigIssues_ReturnsOnlyRoleIssues_WhenPlayerIssuesAlsoExist()
 	{
 		var state = LobbySetupMetadataFixture.DefaultState();
-		state.AddPlayer("Ana");
-		state.AddPlayer("Bruno");
+		state.AddPlayer(PlayerNames.Ana);
+		state.AddPlayer(PlayerNames.Bruno);
 
 		state.HasRoleConfigIssues(out var issues).Should().BeTrue();
 		issues.Should().ContainSingle(e => e.Type == GameConfigValidationErrorType.TooFewRoles);
@@ -283,7 +284,7 @@ public class LobbySetupStateTests
 	{
 		var state = LobbySetupMetadataFixture.DefaultState();
 		for (var i = 0; i < 5; i++)
-			state.AddPlayer($"Player{i}");
+			state.AddPlayer(PlayerNames.GeneratedPlayer(i));
 
 		state.IncrementRole(MainRoleType.SimpleWerewolf);
 		state.IncrementRole(MainRoleType.SimpleVillager);
@@ -440,9 +441,9 @@ public class LobbySetupStateTests
 	public void Reset_ClearsPlayersAndRoleCounts()
 	{
 		var state = LobbySetupMetadataFixture.DefaultState();
-		state.AddPlayer("Ana");
-		state.AddPlayer("Bruno");
-		state.AddPlayer("Catarina");
+		state.AddPlayer(PlayerNames.Ana);
+		state.AddPlayer(PlayerNames.Bruno);
+		state.AddPlayer(PlayerNames.Catarina);
 		state.IncrementRole(MainRoleType.SimpleWerewolf);
 		state.IncrementRole(MainRoleType.Seer);
 

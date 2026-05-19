@@ -18,6 +18,8 @@ using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Resources;
 using Xunit;
 using Css = Werewolves.Client.Tests.Helpers.ClientTestReferences.Css;
+using Html = Werewolves.Client.Tests.Helpers.ClientTestReferences.Html;
+using PlayerNames = Werewolves.Client.Tests.Helpers.ClientTestReferences.PlayerNames;
 using RazorMarkup = Werewolves.Client.Tests.Helpers.ClientTestReferences.RazorMarkup;
 
 #pragma warning disable BL0006
@@ -63,17 +65,17 @@ public class AssignRolesViewTests
 	public async Task PlayerNavigation_IsBoundedAndUsesRosterOrder()
 	{
 		using var fixture = new AssignRolesInteractionFixture(
-			["Alice", "Bob"],
+			PlayerNames.AssignRolesPair,
 			[MainRoleType.SimpleWerewolf, MainRoleType.SimpleVillager]);
 		await fixture.RenderAsync();
 
-		fixture.VisibleText.Should().Contain("Alice").And.NotContain("Bob");
+		fixture.VisibleText.Should().Contain(PlayerNames.Alice).And.NotContain(PlayerNames.Bob);
 		fixture.FindButtonByAriaLabel(ClientStrings.AssignRoles_PreviousPlayerAria)!.IsDisabled.Should().BeTrue();
 		fixture.FindButtonByAriaLabel(ClientStrings.AssignRoles_NextPlayerAria)!.IsDisabled.Should().BeFalse();
 
 		await fixture.ClickAsync(fixture.FindButtonByAriaLabel(ClientStrings.AssignRoles_NextPlayerAria)!);
 
-		fixture.VisibleText.Should().Contain("Bob").And.NotContain("Alice");
+		fixture.VisibleText.Should().Contain(PlayerNames.Bob).And.NotContain(PlayerNames.Alice);
 		fixture.FindButtonByAriaLabel(ClientStrings.AssignRoles_PreviousPlayerAria)!.IsDisabled.Should().BeFalse();
 		fixture.FindButtonByAriaLabel(ClientStrings.AssignRoles_NextPlayerAria)!.IsDisabled.Should().BeTrue();
 	}
@@ -82,7 +84,7 @@ public class AssignRolesViewTests
 	public async Task Roles_AreGroupedByRoleTypeAndSortedByDisplayName()
 	{
 		using var fixture = new AssignRolesInteractionFixture(
-			["Alice"],
+			PlayerNames.AssignRolesSingle,
 			[
 				MainRoleType.SimpleWerewolf,
 				MainRoleType.WildChild,
@@ -142,7 +144,7 @@ public class AssignRolesViewTests
 		var markup = File.ReadAllText(GetViewPath());
 
 		markup.Should().Contain(RazorMarkup.CreateResponseCall);
-		markup.Should().Contain("OnResponse");
+		markup.Should().Contain(RazorMarkup.OnResponseParameterName);
 	}
 
 	[Fact]
@@ -241,7 +243,7 @@ public class AssignRolesViewTests
 		private readonly ServiceProvider _serviceProvider;
 
 		public AssignRolesInteractionFixture()
-			: this(["Alice"], [MainRoleType.SimpleWerewolf, MainRoleType.SimpleVillager])
+			: this(PlayerNames.AssignRolesSingle, [MainRoleType.SimpleWerewolf, MainRoleType.SimpleVillager])
 		{
 		}
 
@@ -285,7 +287,7 @@ public class AssignRolesViewTests
 
 		public ButtonSnapshot? FindButtonByAriaLabel(string label) =>
 			FindAllButtons().FirstOrDefault(button =>
-				button.Attributes.TryGetValue("aria-label", out var value) &&
+				button.Attributes.TryGetValue(Html.Attributes.AriaLabel, out var value) &&
 				value is string text &&
 				text.Equals(label, StringComparison.OrdinalIgnoreCase));
 
@@ -313,7 +315,7 @@ public class AssignRolesViewTests
 				for (var index = 0; index < frames.Count; index++)
 				{
 					var frame = frames.Array[index];
-					if (frame.FrameType != RenderTreeFrameType.Element || frame.ElementName != "button")
+					if (frame.FrameType != RenderTreeFrameType.Element || frame.ElementName != Html.Elements.Button)
 					{
 						continue;
 					}
@@ -360,12 +362,12 @@ public class AssignRolesViewTests
 				{
 					case RenderTreeFrameType.Attribute:
 						attributes[frame.AttributeName] = frame.AttributeValue;
-						if (frame.AttributeName == "onclick")
+						if (frame.AttributeName == Html.Events.Click)
 						{
 							clickHandlerId = frame.AttributeEventHandlerId;
 						}
 
-						if (frame.AttributeName == "disabled" && frame.AttributeValue is true)
+						if (frame.AttributeName == Html.Attributes.Disabled && frame.AttributeValue is true)
 						{
 							isDisabled = true;
 						}
@@ -376,7 +378,7 @@ public class AssignRolesViewTests
 				}
 			}
 
-			var className = attributes.TryGetValue("class", out var cls) && cls is string s ? s : "";
+			var className = attributes.TryGetValue(Html.Attributes.Class, out var cls) && cls is string s ? s : "";
 			return new ButtonSnapshot(
 				className,
 				string.Concat(text),

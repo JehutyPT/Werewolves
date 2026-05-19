@@ -12,6 +12,7 @@ using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Resources;
 using Xunit;
+using Html = Werewolves.Client.Tests.Helpers.ClientTestReferences.Html;
 
 #pragma warning disable BL0006
 
@@ -148,7 +149,7 @@ public class HoldButtonInteractionTests
 
 		private List<ButtonSnapshot> FindAllButtons() =>
 			FindAllElements()
-				.Where(element => element.ElementName == "button")
+				.Where(element => element.ElementName == Html.Elements.Button)
 				.Select(element => new ButtonSnapshot(
 					element.ClassName,
 					element.TextContent,
@@ -241,7 +242,7 @@ public class HoldButtonInteractionTests
 				}
 			}
 
-			var className = attributes.TryGetValue("class", out var cls) && cls is string s ? s : "";
+			var className = attributes.TryGetValue(Html.Attributes.Class, out var cls) && cls is string s ? s : "";
 			return new ElementSnapshot(
 				element.ElementName,
 				className,

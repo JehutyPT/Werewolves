@@ -9,6 +9,7 @@ using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Resources;
 using Xunit;
+using PlayerNames = Werewolves.Client.Tests.Helpers.ClientTestReferences.PlayerNames;
 
 namespace Werewolves.Client.Tests.Services;
 
@@ -18,7 +19,7 @@ public class GameClientManagerTests
 	public void StartGame_FromLobbyConfiguration_CreatesCoreSessionAndExposesInstruction()
 	{
 		var manager = new GameClientManager();
-		var players = new[] { "Ana", "Bruno", "Catarina", "Diana", "Eduardo" };
+		var players = PlayerNames.DefaultFive;
 		var roles = new[]
 		{
 			MainRoleType.SimpleWerewolf,
@@ -210,7 +211,7 @@ public class GameClientManagerTests
 	{
 		var manager = new GameClientManager();
 		var startInstruction = manager.StartGame(
-			["Ana", "Bruno", "Catarina", "Diana", "Eduardo"],
+			PlayerNames.DefaultFive,
 			[
 				MainRoleType.SimpleWerewolf,
 				MainRoleType.SimpleWerewolf,
@@ -674,7 +675,7 @@ public class GameClientManagerTests
 
 	private static StartGameConfirmationInstruction StartSimpleGame(GameClientManager manager)
 	{
-		var players = new[] { "Ana", "Bruno", "Catarina", "Diana", "Eduardo" };
+		var players = PlayerNames.DefaultFive;
 		var roles = new[]
 		{
 			MainRoleType.SimpleWerewolf,
@@ -689,7 +690,7 @@ public class GameClientManagerTests
 
 	private static StartGameConfirmationInstruction StartTwoWerewolfGame(GameClientManager manager)
 	{
-		var players = new[] { "Ana", "Bruno", "Catarina", "Diana", "Eduardo" };
+		var players = PlayerNames.DefaultFive;
 		var roles = new[]
 		{
 			MainRoleType.SimpleWerewolf,
@@ -731,7 +732,7 @@ public class GameClientManagerTests
 	private static void PlayToWerewolfVictoryAtDawn(GameClientManager manager)
 	{
 		var startInstruction = manager.StartGame(
-			["Ana", "Bruno", "Catarina", "Diana", "Eduardo"],
+			PlayerNames.DefaultFive,
 			[
 				MainRoleType.SimpleWerewolf,
 				MainRoleType.SimpleWerewolf,
@@ -991,7 +992,7 @@ public class GameClientManagerTests
 
 	private static StartGameConfirmationInstruction StartVillagerOnlyGame(GameClientManager manager)
 	{
-		var players = new[] { "Ana", "Bruno", "Catarina", "Diana", "Eduardo" };
+		var players = PlayerNames.DefaultFive;
 		var roles = Enumerable.Repeat(MainRoleType.SimpleVillager, players.Length).ToArray();
 
 		return manager.StartGame(players, roles);

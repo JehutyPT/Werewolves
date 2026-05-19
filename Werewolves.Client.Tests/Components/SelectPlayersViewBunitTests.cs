@@ -11,22 +11,22 @@ using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Resources;
 using Xunit;
+using Html = Werewolves.Client.Tests.Helpers.ClientTestReferences.Html;
+using PlayerNames = Werewolves.Client.Tests.Helpers.ClientTestReferences.PlayerNames;
 
 namespace Werewolves.Client.Tests.Components;
 
 public class SelectPlayersViewBunitTests
 {
-	private const string PlayerOptionSelector = "li[role='option']";
-	private const string AriaLabelAttribute = "aria-label";
-	private const string DisabledAttribute = "disabled";
+	private static string PlayerOptionSelector => Html.Selectors.ElementWithRole(Html.Elements.ListItem, Html.Roles.Option);
 	private static string PlayerListSelector => $".{ClientTestReferences.Css.Classes.SelectPlayersList}";
-	private static string SubmitHoldButtonSelector => $"button.{ClientTestReferences.Css.Classes.HoldButton}";
+	private static string SubmitHoldButtonSelector => Html.Selectors.ButtonWithClass(ClientTestReferences.Css.Classes.HoldButton);
 	private static string SelectedPlayerOptionClass => ClientTestReferences.Css.Classes.SelectPlayersItemSelected;
 	private static string TestInstructionPrompt => GameStrings.WerewolvesChooseVictimPrompt;
 	private const int FirstPlayerSeatNumber = 1;
 	private const int SecondPlayerSeatNumber = 2;
-	private const string FirstPlayerName = "Ana";
-	private const string SecondPlayerName = "Bruno";
+	private const string FirstPlayerName = PlayerNames.Ana;
+	private const string SecondPlayerName = PlayerNames.Bruno;
 
 	[Fact]
 	public void SelectingPlayerUpdatesRenderedStateAndEnablesSubmit()
@@ -50,16 +50,16 @@ public class SelectPlayersViewBunitTests
 		AssertPlayerOption(options[0], FirstPlayerSeatNumber, FirstPlayerName);
 		AssertPlayerOption(options[1], SecondPlayerSeatNumber, SecondPlayerName);
 		cut.Find(PlayerListSelector)
-			.GetAttribute(AriaLabelAttribute)
+			.GetAttribute(Html.Attributes.AriaLabel)
 			.Should()
 			.Be(ClientStrings.SelectPlayers_ListAria);
-		FindSubmitHoldButton(cut).HasAttribute(DisabledAttribute).Should().BeTrue();
+		FindSubmitHoldButton(cut).HasAttribute(Html.Attributes.Disabled).Should().BeTrue();
 
 		options[1].Click();
 
 		options = FindPlayerOptions(cut);
 		options[1].ClassList.Should().Contain(SelectedPlayerOptionClass);
-		FindSubmitHoldButton(cut).HasAttribute(DisabledAttribute).Should().BeFalse();
+		FindSubmitHoldButton(cut).HasAttribute(Html.Attributes.Disabled).Should().BeFalse();
 	}
 
 	private static IReadOnlyList<IElement> FindPlayerOptions(IRenderedComponent<SelectPlayersView> cut) =>

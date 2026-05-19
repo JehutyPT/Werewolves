@@ -13,6 +13,8 @@ using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Xunit;
 using CssClasses = Werewolves.Client.Tests.Helpers.ClientTestReferences.Css.Classes;
+using Html = Werewolves.Client.Tests.Helpers.ClientTestReferences.Html;
+using PlayerNames = Werewolves.Client.Tests.Helpers.ClientTestReferences.PlayerNames;
 
 #pragma warning disable BL0006
 
@@ -74,7 +76,7 @@ public class DashboardPageInteractionTests
 		await fixture.ClickAsync(rosterTab!);
 
 		var updatedRosterTab = fixture.FindButtonByText(ClientStrings.Dashboard_TabRoster);
-		updatedRosterTab!.Attributes.Should().Contain("class", ActiveDashboardTabClasses);
+		updatedRosterTab!.Attributes.Should().Contain(Html.Attributes.Class, ActiveDashboardTabClasses);
 	}
 
 	[Fact]
@@ -136,7 +138,7 @@ public class DashboardPageInteractionTests
 		await fixture.ClickAsync(rosterTab);
 
 		var updatedRosterTab = fixture.FindButtonByText(ClientStrings.Dashboard_TabRoster);
-		updatedRosterTab!.Attributes.Should().Contain("class", ActiveDashboardTabClasses);
+		updatedRosterTab!.Attributes.Should().Contain(Html.Attributes.Class, ActiveDashboardTabClasses);
 	}
 
 	[Fact]
@@ -172,7 +174,7 @@ public class DashboardPageInteractionTests
 				new NoOpAudioPlayback(),
 				new InMemoryStore());
 			Game.StartGame(
-				["Ana", "Bruno", "Catarina", "Diana", "Eduardo"],
+				PlayerNames.DefaultFive,
 				[
 					MainRoleType.SimpleWerewolf,
 					MainRoleType.Seer,
@@ -218,7 +220,7 @@ public class DashboardPageInteractionTests
 				for (var index = 0; index < frames.Count; index++)
 				{
 					var frame = frames.Array[index];
-					if (frame.FrameType != RenderTreeFrameType.Element || frame.ElementName != "button")
+					if (frame.FrameType != RenderTreeFrameType.Element || frame.ElementName != Html.Elements.Button)
 						continue;
 
 					buttons.Add(CreateButtonSnapshot(frames, index));
@@ -268,13 +270,13 @@ public class DashboardPageInteractionTests
 						if (collectingButtonAttributes)
 						{
 							attributes[frame.AttributeName] = frame.AttributeValue;
-							if (frame.AttributeName == "onclick")
+							if (frame.AttributeName == Html.Events.Click)
 								clickHandlerId = frame.AttributeEventHandlerId;
-							if (frame.AttributeName == "onpointerdown")
+							if (frame.AttributeName == Html.Events.PointerDown)
 								pointerDownHandlerId = frame.AttributeEventHandlerId;
-							if (frame.AttributeName is "onpointerdown" or "onpointerup")
+							if (frame.AttributeName is Html.Events.PointerDown or Html.Events.PointerUp)
 								hasPointerHandlers = true;
-							if (frame.AttributeName == "disabled" && frame.AttributeValue is true)
+							if (frame.AttributeName == Html.Attributes.Disabled && frame.AttributeValue is true)
 								isDisabled = true;
 						}
 						break;
@@ -288,7 +290,7 @@ public class DashboardPageInteractionTests
 				}
 			}
 
-			var className = attributes.TryGetValue("class", out var cls) && cls is string s ? s : "";
+			var className = attributes.TryGetValue(Html.Attributes.Class, out var cls) && cls is string s ? s : "";
 			return new ButtonSnapshot(
 				className,
 				string.Concat(text),

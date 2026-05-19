@@ -57,7 +57,7 @@ public class SelectOptionsViewTests
 		var markup = File.ReadAllText(GetViewPath());
 
 		markup.Should().Contain(RazorMarkup.CreateResponseCall);
-		markup.Should().Contain("OnResponse");
+		markup.Should().Contain(RazorMarkup.OnResponseParameterName);
 	}
 
 	[Fact]

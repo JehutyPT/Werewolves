@@ -6,6 +6,7 @@ using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Log;
 using Xunit;
+using PlayerNames = Werewolves.Client.Tests.Helpers.ClientTestReferences.PlayerNames;
 
 namespace Werewolves.Client.Tests.Services;
 
@@ -23,9 +24,9 @@ public class DashboardRosterTests
 		};
 		var brunoStatusLabels = brunoStatusEffects.Select(DashboardRoster.StatusEffectLabel).ToArray();
 		var session = new TestGameSession([
-			new TestPlayer("Ana"),
+			new TestPlayer(PlayerNames.Ana),
 			new TestPlayer(
-				"Bruno",
+				PlayerNames.Bruno,
 				MainRoleType.SimpleWerewolf,
 				PlayerHealth.Dead,
 				brunoStatusEffects)
@@ -37,7 +38,7 @@ public class DashboardRosterTests
 		roster[0].Should().BeEquivalentTo(new
 		{
 			SeatNumber = 1,
-			Name = "Ana",
+			Name = PlayerNames.Ana,
 			RoleLabel = DashboardRoster.RoleLabel(null),
 			IsRoleKnown = false,
 			HealthLabel = DashboardRoster.HealthLabel(PlayerHealth.Alive),
@@ -48,7 +49,7 @@ public class DashboardRosterTests
 		roster[1].Should().BeEquivalentTo(new
 		{
 			SeatNumber = 2,
-			Name = "Bruno",
+			Name = PlayerNames.Bruno,
 			RoleLabel = MainRoleType.SimpleWerewolf.GetPublicName(),
 			IsRoleKnown = true,
 			HealthLabel = DashboardRoster.HealthLabel(PlayerHealth.Dead),

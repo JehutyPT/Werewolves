@@ -11,6 +11,7 @@ using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Resources;
 using Xunit;
+using Html = Werewolves.Client.Tests.Helpers.ClientTestReferences.Html;
 
 namespace Werewolves.Client.Tests.Components;
 
@@ -50,8 +51,8 @@ public class InstructionRendererBunitTests
 			.TextContent.Should()
 			.Contain(GameStrings.NightStartsPrompt);
 		cut.FindAll(PrivateInstructionSelector).Should().BeEmpty();
-		cut.FindAll("button").Should().NotContain(button =>
-			button.GetAttribute("aria-label") == ClientStrings.Dashboard_ModeratorLabel);
+		cut.FindAll(Html.Selectors.Button).Should().NotContain(button =>
+			button.GetAttribute(Html.Attributes.AriaLabel) == ClientStrings.Dashboard_ModeratorLabel);
 	}
 
 	[Fact]
@@ -67,8 +68,8 @@ public class InstructionRendererBunitTests
 			.TextContent.Should()
 			.Contain(GameStrings.ConfirmNightStarted);
 		cut.FindAll(PublicInstructionSelector).Should().BeEmpty();
-		cut.FindAll("button").Should().NotContain(button =>
-			button.GetAttribute("aria-label") == ClientStrings.Dashboard_AnnounceLabel);
+		cut.FindAll(Html.Selectors.Button).Should().NotContain(button =>
+			button.GetAttribute(Html.Attributes.AriaLabel) == ClientStrings.Dashboard_AnnounceLabel);
 	}
 
 	[Fact]
@@ -88,10 +89,10 @@ public class InstructionRendererBunitTests
 					response => receivedResponse = response)));
 
 		var action = cut.FindButtonByAccessibleName(ClientStrings.Common_HoldToConfirm);
-		action.GetAttribute("type").Should().Be("button");
+		action.GetAttribute(Html.Attributes.Type).Should().Be(Html.AttributeValues.ButtonType);
 		action.TextContent.Should().Contain(ClientStrings.SelectPlayers_SubmitButton);
 
-		await action.TriggerEventAsync("onpointerdown", new PointerEventArgs());
+		await action.TriggerEventAsync(Html.Events.PointerDown, new PointerEventArgs());
 
 		receivedResponse.Should().NotBeNull();
 		receivedResponse!.Type.Should().Be(ExpectedInputType.Confirmation);
@@ -116,6 +117,6 @@ internal static class InstructionRendererBunitTestExtensions
 		this Bunit.IRenderedComponent<TComponent> rendered,
 		string accessibleName)
 		where TComponent : IComponent =>
-		rendered.FindAll("button")
-			.Single(button => button.GetAttribute("aria-label") == accessibleName);
+		rendered.FindAll(Html.Selectors.Button)
+			.Single(button => button.GetAttribute(Html.Attributes.AriaLabel) == accessibleName);
 }

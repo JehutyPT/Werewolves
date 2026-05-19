@@ -7,6 +7,7 @@ using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Log;
 using Xunit;
+using PlayerNames = Werewolves.Client.Tests.Helpers.ClientTestReferences.PlayerNames;
 
 namespace Werewolves.Client.Tests.Services;
 
@@ -17,12 +18,12 @@ public class DashboardStatsSnapshotTests
 	{
 		var players = new[]
 		{
-			FakePlayer.Create("Ana", MainRoleType.SimpleVillager),
-			FakePlayer.Create("Bruno", MainRoleType.Seer),
-			FakePlayer.Create("Carla", MainRoleType.SimpleWerewolf),
-			FakePlayer.Create("Diana", MainRoleType.SimpleWerewolf, PlayerHealth.Dead),
-			FakePlayer.Create("Eva", MainRoleType.WildChild),
-			FakePlayer.Create("Filipe")
+			FakePlayer.Create(PlayerNames.Ana, MainRoleType.SimpleVillager),
+			FakePlayer.Create(PlayerNames.Bruno, MainRoleType.Seer),
+			FakePlayer.Create(PlayerNames.Carla, MainRoleType.SimpleWerewolf),
+			FakePlayer.Create(PlayerNames.Diana, MainRoleType.SimpleWerewolf, PlayerHealth.Dead),
+			FakePlayer.Create(PlayerNames.Eva, MainRoleType.WildChild),
+			FakePlayer.Create(PlayerNames.Filipe)
 		};
 		var session = new FakeGameSession(players);
 
@@ -39,8 +40,8 @@ public class DashboardStatsSnapshotTests
 	[Fact]
 	public void FromSession_ListsEliminationsInChronologicalOrderWithTurnAndPhase()
 	{
-		var ana = FakePlayer.Create("Ana", MainRoleType.SimpleVillager, PlayerHealth.Dead);
-		var bruno = FakePlayer.Create("Bruno", MainRoleType.SimpleWerewolf, PlayerHealth.Dead);
+		var ana = FakePlayer.Create(PlayerNames.Ana, MainRoleType.SimpleVillager, PlayerHealth.Dead);
+		var bruno = FakePlayer.Create(PlayerNames.Bruno, MainRoleType.SimpleWerewolf, PlayerHealth.Dead);
 		var session = new FakeGameSession(
 			[ana, bruno],
 			[
@@ -64,7 +65,7 @@ public class DashboardStatsSnapshotTests
 
 		var snapshot = DashboardStatsSnapshot.FromSession(session);
 
-		snapshot.EliminationLog.Select(entry => entry.PlayerName).Should().Equal("Ana", "Bruno");
+		snapshot.EliminationLog.Select(entry => entry.PlayerName).Should().Equal(PlayerNames.DefaultTwo);
 		snapshot.EliminationLog.Select(entry => entry.TurnPhaseLabel).Should().Equal(
 			PhaseTurnLabel(GamePhase.Dawn, 1),
 			PhaseTurnLabel(GamePhase.Day, 2));

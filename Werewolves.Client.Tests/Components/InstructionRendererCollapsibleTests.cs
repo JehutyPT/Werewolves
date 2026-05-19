@@ -13,6 +13,7 @@ using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Resources;
 using Xunit;
 using CssClasses = Werewolves.Client.Tests.Helpers.ClientTestReferences.Css.Classes;
+using Html = Werewolves.Client.Tests.Helpers.ClientTestReferences.Html;
 
 #pragma warning disable BL0006
 
@@ -37,8 +38,8 @@ public class InstructionRendererCollapsibleTests
 		moderator.Should().NotBeNull();
 		announce!.ClassName.Should().Contain(CssClasses.InstructionBlockAnnouncement).And.Contain(CssClasses.Expanded);
 		moderator!.ClassName.Should().Contain(CssClasses.InstructionBlockPrivate).And.NotContain(CssClasses.Expanded);
-		announce.GetAttribute<string>("aria-expanded").Should().Be("true");
-		moderator.GetAttribute<string>("aria-expanded").Should().Be("false");
+		announce.GetAttribute<string>(Html.Attributes.AriaExpanded).Should().Be(Html.AriaValues.True);
+		moderator.GetAttribute<string>(Html.Attributes.AriaExpanded).Should().Be(Html.AriaValues.False);
 		fixture.VisibleText.Should().Contain(GameStrings.NightStartsPrompt);
 		fixture.VisibleText.Should().Contain(GameStrings.DebateStartsPrompt);
 		fixture.VisibleText.Should().Contain(CollapsedPreview(GameStrings.ConfirmNightStarted));
@@ -61,8 +62,8 @@ public class InstructionRendererCollapsibleTests
 		var announce = fixture.FindButtonByAriaLabel(ClientStrings.Dashboard_AnnounceLabel)!;
 		var moderator = fixture.FindButtonByAriaLabel(ClientStrings.Dashboard_ModeratorLabel)!;
 
-		announce.GetAttribute<string>("aria-expanded").Should().Be("false");
-		moderator.GetAttribute<string>("aria-expanded").Should().Be("true");
+		announce.GetAttribute<string>(Html.Attributes.AriaExpanded).Should().Be(Html.AriaValues.False);
+		moderator.GetAttribute<string>(Html.Attributes.AriaExpanded).Should().Be(Html.AriaValues.True);
 		announce.ClassName.Should().NotContain(CssClasses.Expanded);
 		moderator.ClassName.Should().Contain(CssClasses.Expanded);
 		fixture.VisibleText.Should().Contain(GameStrings.ConfirmNightStarted);
@@ -106,7 +107,7 @@ public class InstructionRendererCollapsibleTests
 
 		public ButtonSnapshot? FindButtonByAriaLabel(string label) =>
 			FindAllButtons().SingleOrDefault(button =>
-				button.Attributes.TryGetValue("aria-label", out var value) &&
+				button.Attributes.TryGetValue(Html.Attributes.AriaLabel, out var value) &&
 				value as string == label);
 
 		public string VisibleText => string.Concat(VisibleTextItems);
@@ -128,7 +129,7 @@ public class InstructionRendererCollapsibleTests
 				for (var index = 0; index < frames.Count; index++)
 				{
 					var frame = frames.Array[index];
-					if (frame.FrameType == RenderTreeFrameType.Element && frame.ElementName == "button")
+					if (frame.FrameType == RenderTreeFrameType.Element && frame.ElementName == Html.Elements.Button)
 					{
 						buttons.Add(CreateButtonSnapshot(frames, index));
 					}
@@ -174,7 +175,7 @@ public class InstructionRendererCollapsibleTests
 					if (collectingButtonAttributes)
 					{
 						attributes[frame.AttributeName] = frame.AttributeValue;
-						if (frame.AttributeName == "onclick")
+						if (frame.AttributeName == Html.Events.Click)
 						{
 							clickHandlerId = frame.AttributeEventHandlerId;
 						}
@@ -191,7 +192,7 @@ public class InstructionRendererCollapsibleTests
 				}
 			}
 
-			var className = attributes.TryGetValue("class", out var cls) && cls is string s ? s : "";
+			var className = attributes.TryGetValue(Html.Attributes.Class, out var cls) && cls is string s ? s : "";
 			return new ButtonSnapshot(className, string.Concat(text), clickHandlerId, attributes);
 		}
 
