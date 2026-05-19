@@ -14,7 +14,9 @@
 	<HeadOutlet @rendermode="new InteractiveServerRenderMode(prerender: false)" />
 </head>
 <body>
-	<BrowserQaRoot @rendermode="new InteractiveServerRenderMode(prerender: false)" />
+	<div class="phone-frame">
+		<BrowserQaRoot @rendermode="new InteractiveServerRenderMode(prerender: false)" />
+	</div>
 	<script src="_framework/blazor.web.js"></script>
 </body>
 </html>
