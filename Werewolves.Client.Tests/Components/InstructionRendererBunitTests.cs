@@ -2,7 +2,7 @@ using System.Reflection;
 using Bunit;
 using FluentAssertions;
 using Microsoft.AspNetCore.Components;
-using Microsoft.AspNetCore.Components.Web;
+using Microsoft.Extensions.DependencyInjection;
 using Werewolves.Client.Components.Game.Views;
 using Werewolves.Client.Resources;
 using Werewolves.Client.Tests.Helpers;
@@ -75,7 +75,9 @@ public class InstructionRendererBunitTests
 	[Fact]
 	public async Task ConfirmationInstruction_HoldAction_HasAccessibleNameAndEmitsConfirmationResponse()
 	{
+		var timing = new ControlledHoldButtonTiming();
 		using var context = new ModeratorComponentTestContext();
+		context.Services.AddSingleton<IHoldButtonTiming>(timing);
 		var instruction = CreateConfirmationInstruction(
 			publicAnnouncement: GameStrings.NightActionsCompletePrompt,
 			privateInstruction: GameStrings.ConfirmNightStarted);
@@ -92,7 +94,7 @@ public class InstructionRendererBunitTests
 		action.GetAttribute(Html.Attributes.Type).Should().Be(Html.AttributeValues.ButtonType);
 		action.TextContent.Should().Contain(ClientStrings.SelectPlayers_SubmitButton);
 
-		await action.TriggerEventAsync(Html.Events.PointerDown, new PointerEventArgs());
+		await RenderedHoldButtonDriver.CompleteHoldAsync(cut, action, timing);
 
 		receivedResponse.Should().NotBeNull();
 		receivedResponse!.Type.Should().Be(ExpectedInputType.Confirmation);
