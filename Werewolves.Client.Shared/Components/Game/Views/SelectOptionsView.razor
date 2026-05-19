@@ -1,11 +1,12 @@
 @using Werewolves.Core.StateModels.Models
 @using Werewolves.Core.StateModels.Models.Instructions
 
-<div class="ww-option-list" aria-label="@ClientStrings.SelectOptions_Title">
+<div class="ww-option-list" role="group" aria-label="@ClientStrings.SelectOptions_Title">
 	@foreach (var option in Instruction.SelectableOptions)
 	{
 		<button type="button"
 				class="@OptionClass(option)"
+				aria-pressed="@AriaPressed(option)"
 				@onclick="() => ToggleOption(option)">@option</button>
 	}
 </div>
@@ -40,7 +41,12 @@
 	{
 		if (!_selectedOptions.Remove(option))
 		{
-			if (_selectedOptions.Count < Instruction.SelectionRange.Maximum)
+			if (Instruction.SelectionRange.Maximum == 1)
+			{
+				_selectedOptions.Clear();
+				_selectedOptions.Add(option);
+			}
+			else if (_selectedOptions.Count < Instruction.SelectionRange.Maximum)
 			{
 				_selectedOptions.Add(option);
 			}
@@ -57,4 +63,7 @@
 		_selectedOptions.Contains(option)
 			? "ww-option-btn ww-option-btn--selected"
 			: "ww-option-btn";
+
+	private string AriaPressed(string option) =>
+		_selectedOptions.Contains(option) ? "true" : "false";
 }
