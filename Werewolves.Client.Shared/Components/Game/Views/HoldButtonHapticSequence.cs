@@ -2,8 +2,6 @@ namespace Werewolves.Client.Components.Game.Views;
 
 internal sealed class HoldButtonHapticSequence
 {
-	public const int HoldDurationMs = 400;
-	public const int SuccessFlashMs = 250;
 	public static readonly int[] PendingLongPressHapticOffsetsMs = [0, 200, 280, 330, 360, 380];
 
 	private readonly object _sync = new();

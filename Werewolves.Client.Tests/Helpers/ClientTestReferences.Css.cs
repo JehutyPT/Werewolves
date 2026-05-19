@@ -53,10 +53,6 @@ public static partial class ClientTestReferences
 		public static class Declarations
 		{
 			public const string DashboardActionPaddingFallback = "padding-bottom: var(--ww-dashboard-action-height, 88px)";
-			public const string HoldEdgeProductionTransition = "transition: left 400ms linear, opacity 80ms ease-in;";
-			public const string HoldEdgeSlowTransition = "transition: left 600ms linear, opacity 80ms ease-in;";
-			public const string HoldFillProductionTransition = "transition: width 400ms linear;";
-			public const string HoldFillSlowTransition = "transition: width 600ms linear;";
 			public const string PositionFixed = "position: fixed";
 			public const string WidthAuto = "width: auto";
 			public const string WidthFull = "width: 100%";
