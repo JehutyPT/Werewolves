@@ -8,9 +8,6 @@ public static partial class ClientTestReferences
 
 		public static class Animations
 		{
-			public const string InstructionEnterKeyframes = "@keyframes ww-instruction-enter";
-			public const string InstructionEnterName = "ww-instruction-enter";
-			public static string InstructionAnimationTokenReference => $"var({Tokens.InstructionAnimation})";
 			public static string InstructionAnimationDurationPattern => $@"{Tokens.InstructionAnimation}:\s*(\d+)ms";
 		}
 

@@ -16,6 +16,7 @@
 
 			<button type="button"
 					class="@InstructionBlockClass(InstructionSection.Public, publicExpanded)"
+					data-testid="@ModeratorUiTestIds.InstructionBlock"
 					aria-expanded="@AriaExpanded(publicExpanded)"
 					aria-label="@InstructionToggleLabel(ClientStrings.Dashboard_AnnounceLabel)"
 					@onclick="() => Expand(InstructionSection.Public)">
@@ -36,6 +37,7 @@
 
 			<button type="button"
 					class="@InstructionBlockClass(InstructionSection.Private, privateExpanded)"
+					data-testid="@ModeratorUiTestIds.InstructionBlock"
 					aria-expanded="@AriaExpanded(privateExpanded)"
 					aria-label="@InstructionToggleLabel(ClientStrings.Dashboard_ModeratorLabel)"
 					@onclick="() => Expand(InstructionSection.Private)">
