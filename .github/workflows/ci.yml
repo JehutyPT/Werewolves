@@ -8,9 +8,6 @@ on:
 
 env:
   DOTNET_VERSION: '10.0.x'
-  HOME: /Users/runner
-  DOTNET_CLI_HOME: /Users/runner
-  MD_APPLE_SDK_ROOT: /Applications/Xcode_26.4.1.app
 
 jobs:
   build-and-test:
@@ -26,18 +23,13 @@ jobs:
           xcrun --sdk macosx --show-sdk-path
           xcrun --sdk macosx --find actool
 
-      - name: Prepare Apple SDK settings directories
-        run: |
-          mkdir -p "$HOME/Library/Preferences/maui"
-          mkdir -p "$HOME/Library/Preferences/Xamarin"
-
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: Install MAUI workload
-        run: dotnet workload install maui
+        run: dotnet workload install maui --version 10.0.300.1
 
       - name: Restore
         run: dotnet restore Werewolves.sln
