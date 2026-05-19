@@ -102,6 +102,8 @@ Use the Browser QA Host for local rendered Moderator UI inspection. It lives in 
 
 - Run it locally with `dotnet run --project Werewolves.Client.BrowserQaHost/Werewolves.Client.BrowserQaHost.csproj`, then open `http://localhost:5098`.
 - Use `/?qa=lobby`, `/?qa=dashboard`, and `/?qa=victory` for deterministic access to lobby/role selection, dashboard/action instruction, and victory states.
+- Run the narrow browser automation smoke/layout check on demand with `dotnet test Werewolves.Client.BrowserQa.Tests/Werewolves.Client.BrowserQa.Tests.csproj -- Playwright.BrowserName=chromium`.
+- Install the Playwright Chromium browser before the first local run after package restore/build. With PowerShell available, run `pwsh Werewolves.Client.BrowserQa.Tests/bin/Debug/net10.0/playwright.ps1 install chromium`; otherwise run the Playwright package CLI for the restored `Microsoft.Playwright` version, for example `node ~/.nuget/packages/microsoft.playwright/1.59.0/.playwright/package/cli.js install chromium`.
 - Inspect the shared `Routes` root from `Werewolves.Client.Shared`; the browser host must not copy or fork lobby, dashboard, instruction, or victory pages.
 - Treat haptics, wake lock, audio playback, and local save storage as browser-safe substitutes: no-op, disabled, or in-memory local QA behavior only.
 - Inspect real HTML/CSS at mobile and desktop-sized viewports.
@@ -109,6 +111,7 @@ Use the Browser QA Host for local rendered Moderator UI inspection. It lives in 
 - Use it for layout, spacing, typography, motion, focus, and accessibility attributes.
 - Do not treat the browser host as a public deployment target, account or multiplayer surface, production persistence surface, or second maintained web product.
 - Do not add a required CI gate for browser-host launch or smoke checks. Any browser smoke check should stay local or run-on-demand, lightweight, semantic, and focused on launch plus representative Moderator UI access rather than visual regression coverage.
+- Keep browser automation as a small smoke/layout evidence layer for browser-observable facts: host launch, deterministic scenario access, loaded CSS, viewport geometry, computed styles, focus order, and scroll behavior. It does not replace Core integration tests, client service tests, bUnit rendered component tests, native device checks, or broad visual-regression baselines.
 - Pair browser findings with deterministic CI tests whenever a claim can be narrowed.
 
 ## Source-Test Allowlist
