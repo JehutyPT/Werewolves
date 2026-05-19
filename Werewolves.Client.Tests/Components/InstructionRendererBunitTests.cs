@@ -16,6 +16,9 @@ namespace Werewolves.Client.Tests.Components;
 
 public class InstructionRendererBunitTests
 {
+	private static string PublicInstructionSelector => $".{ClientTestReferences.Css.Classes.InstructionAnnouncement}";
+	private static string PrivateInstructionSelector => $".{ClientTestReferences.Css.Classes.InstructionPrivate}";
+
 	[Fact]
 	public void ConfirmationInstruction_WithPublicAndPrivateGuidance_ShowsBothGuidanceBlocks()
 	{
@@ -43,10 +46,10 @@ public class InstructionRendererBunitTests
 		var cut = context.RenderModeratorComponent<InstructionRenderer>(parameters => parameters
 			.Add(component => component.Instruction, instruction));
 
-		cut.Find(".ww-announcement")
+		cut.Find(PublicInstructionSelector)
 			.TextContent.Should()
 			.Contain(GameStrings.NightStartsPrompt);
-		cut.FindAll(".ww-private-instruction").Should().BeEmpty();
+		cut.FindAll(PrivateInstructionSelector).Should().BeEmpty();
 		cut.FindAll("button").Should().NotContain(button =>
 			button.GetAttribute("aria-label") == ClientStrings.Dashboard_ModeratorLabel);
 	}
@@ -60,10 +63,10 @@ public class InstructionRendererBunitTests
 		var cut = context.RenderModeratorComponent<InstructionRenderer>(parameters => parameters
 			.Add(component => component.Instruction, instruction));
 
-		cut.Find(".ww-private-instruction")
+		cut.Find(PrivateInstructionSelector)
 			.TextContent.Should()
 			.Contain(GameStrings.ConfirmNightStarted);
-		cut.FindAll(".ww-announcement").Should().BeEmpty();
+		cut.FindAll(PublicInstructionSelector).Should().BeEmpty();
 		cut.FindAll("button").Should().NotContain(button =>
 			button.GetAttribute("aria-label") == ClientStrings.Dashboard_AnnounceLabel);
 	}

@@ -17,11 +17,11 @@ namespace Werewolves.Client.Tests.Components;
 public class SelectPlayersViewBunitTests
 {
 	private const string PlayerOptionSelector = "li[role='option']";
-	private const string PlayerListSelector = ".ww-select-players-list";
-	private const string SubmitHoldButtonSelector = "button.ww-btn-hold";
 	private const string AriaLabelAttribute = "aria-label";
 	private const string DisabledAttribute = "disabled";
-	private const string SelectedPlayerOptionClass = "ww-select-players-item--selected";
+	private static string PlayerListSelector => $".{ClientTestReferences.Css.Classes.SelectPlayersList}";
+	private static string SubmitHoldButtonSelector => $"button.{ClientTestReferences.Css.Classes.HoldButton}";
+	private static string SelectedPlayerOptionClass => ClientTestReferences.Css.Classes.SelectPlayersItemSelected;
 	private static string TestInstructionPrompt => GameStrings.WerewolvesChooseVictimPrompt;
 	private const int FirstPlayerSeatNumber = 1;
 	private const int SecondPlayerSeatNumber = 2;

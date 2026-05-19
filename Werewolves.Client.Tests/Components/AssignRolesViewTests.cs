@@ -17,6 +17,8 @@ using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Resources;
 using Xunit;
+using Css = Werewolves.Client.Tests.Helpers.ClientTestReferences.Css;
+using RazorMarkup = Werewolves.Client.Tests.Helpers.ClientTestReferences.RazorMarkup;
 
 #pragma warning disable BL0006
 
@@ -34,12 +36,12 @@ public class AssignRolesViewTests
 
 		await fixture.ClickAsync(fixture.FindButtonByText(roleLabel)!);
 
-		fixture.FindButtonByText(roleLabel)!.ClassName.Should().Contain("ww-role-btn--selected");
+		fixture.FindButtonByText(roleLabel)!.ClassName.Should().Contain(Css.Classes.RoleButtonSelected);
 		fixture.FindButtonByText(ClientStrings.Dashboard_ContinueButton)!.IsDisabled.Should().BeFalse();
 
 		await fixture.ClickAsync(fixture.FindButtonByText(roleLabel)!);
 
-		fixture.FindButtonByText(roleLabel)!.ClassName.Should().NotContain("ww-role-btn--selected");
+		fixture.FindButtonByText(roleLabel)!.ClassName.Should().NotContain(Css.Classes.RoleButtonSelected);
 		fixture.FindButtonByText(ClientStrings.Dashboard_ContinueButton)!.IsDisabled.Should().BeTrue();
 	}
 
@@ -101,7 +103,7 @@ public class AssignRolesViewTests
 		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered role-list checks.
 		var markup = File.ReadAllText(GetViewPath());
 
-		markup.Should().Contain("Instruction.RolesForAssignment");
+		markup.Should().Contain(RazorMarkup.RolesForAssignment);
 	}
 
 	[Fact]
@@ -110,7 +112,7 @@ public class AssignRolesViewTests
 		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered Player navigation checks.
 		var markup = File.ReadAllText(GetViewPath());
 
-		markup.Should().Contain("Instruction.PlayersForAssignment");
+		markup.Should().Contain(RazorMarkup.PlayerAssignmentSource);
 	}
 
 	[Fact]
@@ -119,9 +121,9 @@ public class AssignRolesViewTests
 		// Deprecated temporary scaffold: remove after ADR-0006/bUnit instantiates the component through public parameters.
 		var markup = File.ReadAllText(GetViewPath());
 
-		markup.Should().Contain("[Parameter");
-		markup.Should().Contain("AssignRolesInstruction Instruction");
-		markup.Should().Contain(nameof(EventCallback) + "<ModeratorResponse> OnResponse");
+		markup.Should().Contain(RazorMarkup.ParameterAttribute);
+		markup.Should().Contain(RazorMarkup.AssignRolesInstructionParameter);
+		markup.Should().Contain(nameof(EventCallback) + RazorMarkup.EventCallbackModeratorResponseParameterSuffix);
 	}
 
 	[Fact]
@@ -130,7 +132,7 @@ public class AssignRolesViewTests
 		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered Player-name checks.
 		var markup = File.ReadAllText(GetViewPath());
 
-		markup.Should().Contain("IReadOnlyList<DashboardRosterEntry> Roster");
+		markup.Should().Contain(RazorMarkup.RosterParameter);
 	}
 
 	[Fact]
@@ -139,7 +141,7 @@ public class AssignRolesViewTests
 		// Deprecated temporary scaffold: replace with ADR-0006/bUnit submit-callback checks.
 		var markup = File.ReadAllText(GetViewPath());
 
-		markup.Should().Contain("Instruction.CreateResponse");
+		markup.Should().Contain(RazorMarkup.CreateResponseCall);
 		markup.Should().Contain("OnResponse");
 	}
 
@@ -149,9 +151,9 @@ public class AssignRolesViewTests
 		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered submit-event checks.
 		var markup = File.ReadAllText(GetViewPath());
 
-		markup.Should().Contain("<HoldButton");
-		markup.Should().Contain("Label=\"@ClientStrings.Dashboard_ContinueButton\"");
-		markup.Should().Contain("OnHoldComplete=\"HandleSubmit\"");
+		markup.Should().Contain(RazorMarkup.HoldButtonTag);
+		markup.Should().Contain(RazorMarkup.SubmitButtonResourceLabelAttribute);
+		markup.Should().Contain(RazorMarkup.OnHoldCompleteHandleSubmitAttribute);
 	}
 
 	[Fact]
@@ -160,7 +162,7 @@ public class AssignRolesViewTests
 		// Deprecated temporary scaffold: replace with browser-host layout checks or bUnit rendered structure checks.
 		var markup = File.ReadAllText(GetViewPath());
 
-		markup.Should().MatchRegex(@"(?s)<footer class=""ww-dashboard-action-zone"">\s*<HoldButton");
+		markup.Should().MatchRegex(RazorMarkup.DashboardActionFooterWithHoldButtonPattern);
 	}
 
 	[Fact]
@@ -169,7 +171,7 @@ public class AssignRolesViewTests
 		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered interaction checks.
 		var markup = File.ReadAllText(GetViewPath());
 
-		markup.Should().Contain("Disabled=\"@(!AllPlayersAssigned)\"");
+		markup.Should().Contain(RazorMarkup.DisabledAssignmentsIncompleteAttribute);
 	}
 
 	[Fact]
@@ -179,7 +181,7 @@ public class AssignRolesViewTests
 		var markup = File.ReadAllText(GetViewPath());
 
 		// Roles should use the existing GetPublicName() extension for localization
-		markup.Should().Contain("GetPublicName");
+		markup.Should().Contain(RazorMarkup.GetPublicNameCall);
 	}
 
 	[Fact]
@@ -188,9 +190,9 @@ public class AssignRolesViewTests
 		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered Portuguese text checks.
 		var markup = File.ReadAllText(GetViewPath());
 
-		markup.Should().Contain("ClientStrings.AssignRoles_Title");
-		markup.Should().Contain("ClientStrings.AssignRoles_SelectRolePrompt");
-		markup.Should().Contain("ClientStrings.Dashboard_ContinueButton");
+		markup.Should().Contain(RazorMarkup.AssignRolesTitleResource);
+		markup.Should().Contain(RazorMarkup.AssignRolesPromptResource);
+		markup.Should().Contain(RazorMarkup.SubmitButtonResource);
 	}
 
 	private static string GetViewPath()

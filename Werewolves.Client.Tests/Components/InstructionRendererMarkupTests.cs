@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Werewolves.Client.Tests.Helpers;
 using Xunit;
+using RazorMarkup = Werewolves.Client.Tests.Helpers.ClientTestReferences.RazorMarkup;
 
 namespace Werewolves.Client.Tests.Components;
 
@@ -12,8 +13,8 @@ public class InstructionRendererMarkupTests
 		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered branch checks.
 		var markup = File.ReadAllText(GetRendererPath());
 
-		markup.Should().Contain("is SelectPlayersInstruction selectPlayersInstruction");
-		markup.Should().Contain("<SelectPlayersView");
+		markup.Should().Contain(RazorMarkup.SelectPlayersInstructionBranch);
+		markup.Should().Contain(RazorMarkup.SelectPlayersViewTag);
 	}
 
 	[Fact]
@@ -22,7 +23,7 @@ public class InstructionRendererMarkupTests
 		// Deprecated temporary scaffold: replace with ADR-0006/bUnit visible Player-name checks.
 		var markup = File.ReadAllText(GetRendererPath());
 
-		markup.Should().Contain("Roster=\"Roster\"");
+		markup.Should().Contain(RazorMarkup.RosterAttribute);
 	}
 
 	[Fact]
@@ -31,8 +32,8 @@ public class InstructionRendererMarkupTests
 		// Deprecated temporary scaffold: replace with browser-host or bUnit rendered layout checks.
 		var markup = File.ReadAllText(GetRendererPath());
 
-		markup.Should().Contain("ShouldRenderDashboardActionZone");
-		markup.Should().Contain("Instruction is not (SelectPlayersInstruction or SelectOptionsInstruction or AssignRolesInstruction)");
+		markup.Should().Contain(RazorMarkup.ShouldRenderDashboardActionZone);
+		markup.Should().Contain(RazorMarkup.InputViewsWithoutDashboardActionZonePredicate);
 	}
 
 	[Fact]
@@ -41,7 +42,7 @@ public class InstructionRendererMarkupTests
 		// Deprecated temporary scaffold: remove after ADR-0006/bUnit instantiates the component through public parameters.
 		var markup = File.ReadAllText(GetRendererPath());
 
-		markup.Should().Contain("IReadOnlyList<DashboardRosterEntry> Roster");
+		markup.Should().Contain(RazorMarkup.RosterParameter);
 	}
 
 	private static string GetRendererPath()

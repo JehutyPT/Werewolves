@@ -13,10 +13,10 @@ public class HoldButtonMarkupTests
 		// Deprecated temporary scaffold: replace with ADR-0006/bUnit pointer-event rendering coverage.
 		var markup = File.ReadAllText(GetViewPath());
 
-		markup.Should().Contain("@onpointerdown");
-		markup.Should().Contain("@onpointerup");
-		markup.Should().Contain("@onpointerleave");
-		markup.Should().Contain("@onpointercancel");
+		markup.Should().Contain(ClientTestReferences.RazorMarkup.OnPointerDown);
+		markup.Should().Contain(ClientTestReferences.RazorMarkup.OnPointerUp);
+		markup.Should().Contain(ClientTestReferences.RazorMarkup.OnPointerLeave);
+		markup.Should().Contain(ClientTestReferences.RazorMarkup.OnPointerCancel);
 	}
 
 	[Fact]
@@ -25,10 +25,10 @@ public class HoldButtonMarkupTests
 		// Deprecated temporary scaffold: replace with browser-host computed-style checks for rendered hold progress.
 		var designTokens = File.ReadAllText(GetSharedPath("wwwroot", "css", "design-tokens.css"));
 
-		designTokens.Should().Contain("transition: width 400ms linear;");
-		designTokens.Should().Contain("transition: left 400ms linear, opacity 80ms ease-in;");
-		designTokens.Should().NotContain("transition: width 600ms linear;");
-		designTokens.Should().NotContain("transition: left 600ms linear, opacity 80ms ease-in;");
+		designTokens.Should().Contain(ClientTestReferences.Css.Declarations.HoldFillProductionTransition);
+		designTokens.Should().Contain(ClientTestReferences.Css.Declarations.HoldEdgeProductionTransition);
+		designTokens.Should().NotContain(ClientTestReferences.Css.Declarations.HoldFillSlowTransition);
+		designTokens.Should().NotContain(ClientTestReferences.Css.Declarations.HoldEdgeSlowTransition);
 	}
 
 	[Fact]
@@ -37,7 +37,7 @@ public class HoldButtonMarkupTests
 		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered text checks.
 		var markup = File.ReadAllText(GetViewPath());
 
-		markup.Should().Contain("ClientStrings.Common_HoldToConfirm");
+		markup.Should().Contain(ClientTestReferences.RazorMarkup.HoldToConfirmResource);
 	}
 
 	[Fact]
@@ -46,10 +46,11 @@ public class HoldButtonMarkupTests
 		// Deprecated temporary scaffold: remove after ADR-0006/bUnit instantiates HoldButton through public parameters.
 		var markup = File.ReadAllText(GetViewPath());
 
-		markup.Should().Contain("[Parameter, EditorRequired]");
+		markup.Should().Contain(ClientTestReferences.RazorMarkup.RequiredParameterAttribute);
 		markup.Should().Contain("string Label");
 		markup.Should().Contain("bool Disabled");
-		markup.Should().Contain(nameof(EventCallback) + " OnHoldComplete");
+		markup.Should().Contain(
+			nameof(EventCallback) + ClientTestReferences.RazorMarkup.EventCallbackOnHoldCompleteParameterSuffix);
 	}
 
 	[Fact]
@@ -58,12 +59,12 @@ public class HoldButtonMarkupTests
 		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered markup or browser-host visual checks.
 		var markup = File.ReadAllText(GetViewPath());
 
-		markup.Should().Contain("ww-hold-zone");
-		markup.Should().Contain("ww-btn-hold");
-		markup.Should().Contain("ww-btn-hold__fill");
-		markup.Should().Contain("ww-btn-hold__edge");
-		markup.Should().Contain("ww-btn-hold__label");
-		markup.Should().Contain("ww-hold-hint");
+		markup.Should().Contain(ClientTestReferences.Css.Classes.HoldZone);
+		markup.Should().Contain(ClientTestReferences.Css.Classes.HoldButton);
+		markup.Should().Contain(ClientTestReferences.Css.Classes.HoldButtonFill);
+		markup.Should().Contain(ClientTestReferences.Css.Classes.HoldButtonEdge);
+		markup.Should().Contain(ClientTestReferences.Css.Classes.HoldButtonLabel);
+		markup.Should().Contain(ClientTestReferences.Css.Classes.HoldHint);
 	}
 
 	[Fact]
@@ -72,8 +73,8 @@ public class HoldButtonMarkupTests
 		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered state-transition checks.
 		var markup = File.ReadAllText(GetViewPath());
 
-		markup.Should().Contain("is-holding");
-		markup.Should().Contain("is-complete");
+		markup.Should().Contain(ClientTestReferences.Css.Classes.Holding);
+		markup.Should().Contain(ClientTestReferences.Css.Classes.HoldComplete);
 	}
 
 	[Fact]
@@ -82,7 +83,7 @@ public class HoldButtonMarkupTests
 		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered disabled-attribute checks.
 		var markup = File.ReadAllText(GetViewPath());
 
-		markup.Should().Contain("disabled=\"@Disabled\"");
+		markup.Should().Contain(ClientTestReferences.RazorMarkup.DisabledParameterAttribute);
 	}
 
 	private static string GetViewPath()

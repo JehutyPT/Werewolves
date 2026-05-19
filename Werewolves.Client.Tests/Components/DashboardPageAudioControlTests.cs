@@ -11,6 +11,7 @@ using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Models;
 using Xunit;
+using CssClasses = Werewolves.Client.Tests.Helpers.ClientTestReferences.Css.Classes;
 
 #pragma warning disable BL0006
 
@@ -18,6 +19,9 @@ namespace Werewolves.Client.Tests.Components;
 
 public class DashboardPageAudioControlTests
 {
+	private static string AudioToggleClasses => $"{CssClasses.IconButton} {CssClasses.AudioToggle}";
+	private static string MutedAudioToggleClasses => $"{AudioToggleClasses} {CssClasses.AudioToggleMuted}";
+
 	[Fact]
 	public async Task StatusBar_RendersAudioToggleAsOperableMuteControl()
 	{
@@ -27,7 +31,7 @@ public class DashboardPageAudioControlTests
 		var toggle = dashboard.FindAudioToggleButton();
 
 		toggle.Attributes.Should().Contain("type", "button");
-		toggle.Attributes.Should().Contain("class", "ww-icon-button ww-audio-toggle");
+		toggle.Attributes.Should().Contain("class", AudioToggleClasses);
 		toggle.Attributes.Should().Contain("aria-label", ClientStrings.Dashboard_AudioMute);
 		toggle.Attributes.Should().Contain("title", ClientStrings.Dashboard_AudioMute);
 		toggle.Attributes.Should().Contain("aria-pressed", "false");
@@ -51,7 +55,7 @@ public class DashboardPageAudioControlTests
 		updatedToggle.Attributes.Should().Contain("aria-pressed", "true");
 		updatedToggle.Attributes.Should().Contain("aria-label", ClientStrings.Dashboard_AudioUnmute);
 		updatedToggle.Attributes.Should().Contain("title", ClientStrings.Dashboard_AudioUnmute);
-		updatedToggle.Attributes.Should().Contain("class", "ww-icon-button ww-audio-toggle ww-audio-toggle--muted");
+		updatedToggle.Attributes.Should().Contain("class", MutedAudioToggleClasses);
 		updatedToggle.TextContent.Should().BeEmpty();
 	}
 
@@ -103,7 +107,7 @@ public class DashboardPageAudioControlTests
 					element.Name == "button" &&
 			element.Attributes.TryGetValue("class", out var value) &&
 			value is string className &&
-			className.Split(' ', StringSplitOptions.RemoveEmptyEntries).Contains("ww-audio-toggle"));
+			className.Split(' ', StringSplitOptions.RemoveEmptyEntries).Contains(CssClasses.AudioToggle));
 
 			element.Should().NotBeNull(ClientTestReferences.AssertionReasons.AudioToggleExposedInStatusBar);
 			return element!;

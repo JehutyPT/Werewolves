@@ -32,8 +32,8 @@ public class HoldButtonInteractionTests
 
 		var updatedZone = fixture.FindHoldZone();
 		var updatedButton = fixture.FindHoldButton();
-		updatedZone.ClassName.Should().NotContain("is-complete");
-		updatedZone.ClassName.Should().NotContain("is-holding");
+		updatedZone.ClassName.Should().NotContain(ClientTestReferences.Css.Classes.HoldComplete);
+		updatedZone.ClassName.Should().NotContain(ClientTestReferences.Css.Classes.Holding);
 		updatedButton.TextContent.Should().Be(ClientStrings.SelectPlayers_SubmitButton);
 	}
 
@@ -138,11 +138,13 @@ public class HoldButtonInteractionTests
 			_renderer.Dispatcher.InvokeAsync(() => _renderer.DispatchPointerCancelAsync(button.PointerCancelEventHandlerId));
 
 		public ButtonSnapshot FindHoldButton() =>
-			FindAllButtons().Single(button => button.ClassName.Contains("ww-btn-hold", StringComparison.Ordinal));
+			FindAllButtons().Single(button =>
+				button.ClassName.Contains(ClientTestReferences.Css.Classes.HoldButton, StringComparison.Ordinal));
 
 		public ElementSnapshot FindHoldZone() =>
 			FindAllElements()
-				.Single(element => element.ClassName.Contains("ww-hold-zone", StringComparison.Ordinal));
+				.Single(element =>
+					element.ClassName.Contains(ClientTestReferences.Css.Classes.HoldZone, StringComparison.Ordinal));
 
 		private List<ButtonSnapshot> FindAllButtons() =>
 			FindAllElements()
@@ -215,15 +217,15 @@ public class HoldButtonInteractionTests
 						if (collectingElementAttributes)
 						{
 							attributes[frame.AttributeName] = frame.AttributeValue;
-							if (frame.AttributeName == "onpointerdown")
+							if (frame.AttributeName == PointerDownEventName)
 							{
 								pointerDownHandlerId = frame.AttributeEventHandlerId;
 							}
-							if (frame.AttributeName == "onpointerup")
+							if (frame.AttributeName == PointerUpEventName)
 							{
 								pointerUpHandlerId = frame.AttributeEventHandlerId;
 							}
-							if (frame.AttributeName == "onpointercancel")
+							if (frame.AttributeName == PointerCancelEventName)
 							{
 								pointerCancelHandlerId = frame.AttributeEventHandlerId;
 							}
@@ -249,6 +251,12 @@ public class HoldButtonInteractionTests
 				pointerCancelHandlerId,
 				attributes);
 		}
+
+		private static string PointerDownEventName => ClientTestReferences.RazorMarkup.PointerDownEventName;
+
+		private static string PointerUpEventName => ClientTestReferences.RazorMarkup.PointerUpEventName;
+
+		private static string PointerCancelEventName => ClientTestReferences.RazorMarkup.PointerCancelEventName;
 
 		public void Dispose()
 		{

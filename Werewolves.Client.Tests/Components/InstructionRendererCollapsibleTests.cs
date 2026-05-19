@@ -12,6 +12,7 @@ using Werewolves.Client.Tests.Helpers;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Resources;
 using Xunit;
+using CssClasses = Werewolves.Client.Tests.Helpers.ClientTestReferences.Css.Classes;
 
 #pragma warning disable BL0006
 
@@ -34,8 +35,8 @@ public class InstructionRendererCollapsibleTests
 
 		announce.Should().NotBeNull();
 		moderator.Should().NotBeNull();
-		announce!.ClassName.Should().Contain("ww-instruction-block--announcement").And.Contain("is-expanded");
-		moderator!.ClassName.Should().Contain("ww-instruction-block--private").And.NotContain("is-expanded");
+		announce!.ClassName.Should().Contain(CssClasses.InstructionBlockAnnouncement).And.Contain(CssClasses.Expanded);
+		moderator!.ClassName.Should().Contain(CssClasses.InstructionBlockPrivate).And.NotContain(CssClasses.Expanded);
 		announce.GetAttribute<string>("aria-expanded").Should().Be("true");
 		moderator.GetAttribute<string>("aria-expanded").Should().Be("false");
 		fixture.VisibleText.Should().Contain(GameStrings.NightStartsPrompt);
@@ -62,8 +63,8 @@ public class InstructionRendererCollapsibleTests
 
 		announce.GetAttribute<string>("aria-expanded").Should().Be("false");
 		moderator.GetAttribute<string>("aria-expanded").Should().Be("true");
-		announce.ClassName.Should().NotContain("is-expanded");
-		moderator.ClassName.Should().Contain("is-expanded");
+		announce.ClassName.Should().NotContain(CssClasses.Expanded);
+		moderator.ClassName.Should().Contain(CssClasses.Expanded);
 		fixture.VisibleText.Should().Contain(GameStrings.ConfirmNightStarted);
 		fixture.Haptic.ClickCount.Should().Be(1);
 	}

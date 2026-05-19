@@ -1,6 +1,8 @@
 using System.Text.RegularExpressions;
 using FluentAssertions;
 using Werewolves.Client.Tests.Helpers;
+using Css = Werewolves.Client.Tests.Helpers.ClientTestReferences.Css;
+using PlatformChrome = Werewolves.Client.Tests.Helpers.ClientTestReferences.PlatformChrome;
 using Xunit;
 
 namespace Werewolves.Client.Tests.Styling;
@@ -24,63 +26,45 @@ public class DarkThemeTokenTests
 	{
 		var appCss = File.ReadAllText(SharedPath("wwwroot/css/app.css"));
 
-		appCss.Should().MatchRegex(@"(?s)html,\s*body,\s*#app\s*\{.*background:\s*var\(--ww-bg\).*color:\s*var\(--ww-text\).*color-scheme:\s*dark");
+		appCss.Should().MatchRegex(Css.RootDocumentDarkThemePattern);
 	}
 
 	[Fact]
 	public void MauiHost_UsesDarkChromeAcrossSupportedSurfaces()
 	{
 		File.ReadAllText(ClientPath("App.xaml"))
-			.Should().Contain("<Color x:Key=\"WerewolvesBackground\">#070C12</Color>");
+			.Should().Contain(PlatformChrome.AppBackgroundColorResource);
 
 		File.ReadAllText(ClientPath("App.xaml.cs"))
-			.Should().Contain("UserAppTheme = Microsoft.Maui.ApplicationModel.AppTheme.Dark;");
+			.Should().Contain(PlatformChrome.AppDarkThemeAssignment);
 
 		File.ReadAllText(ClientPath("MainPage.xaml"))
-			.Should().Contain("BackgroundColor=\"{StaticResource WerewolvesBackground}\"");
+			.Should().Contain(PlatformChrome.MainPageBackgroundResource);
 
 		var projectFile = File.ReadAllText(ClientPath("Werewolves.UI.MobileClient.csproj"));
-		projectFile.Should().Contain("MauiIcon Include=\"Resources\\AppIcon\\appicon.svg\" ForegroundFile=\"Resources\\AppIcon\\appiconfg.svg\" Color=\"#070C12\"");
-		projectFile.Should().Contain("MauiSplashScreen Include=\"Resources\\Splash\\splash.svg\" Color=\"#070C12\"");
+		projectFile.Should().Contain(PlatformChrome.MauiIconDarkBackground);
+		projectFile.Should().Contain(PlatformChrome.MauiSplashDarkBackground);
 
 		var androidColors = File.ReadAllText(ClientPath("Platforms/Android/Resources/values/colors.xml"));
-		androidColors.Should().Contain("<color name=\"colorPrimary\">#070C12</color>");
-		androidColors.Should().Contain("<color name=\"colorPrimaryDark\">#070C12</color>");
-		androidColors.Should().Contain("<color name=\"colorAccent\">#3FE0C8</color>");
+		androidColors.Should().Contain(PlatformChrome.AndroidPrimaryColor);
+		androidColors.Should().Contain(PlatformChrome.AndroidPrimaryDarkColor);
+		androidColors.Should().Contain(PlatformChrome.AndroidAccentColor);
 
 		File.ReadAllText(ClientPath("Platforms/iOS/Info.plist"))
-			.Should().Contain("<key>UIUserInterfaceStyle</key>")
-			.And.Contain("<string>Dark</string>");
+			.Should().Contain(PlatformChrome.PlistUserInterfaceStyleKey)
+			.And.Contain(PlatformChrome.PlistDarkStyle);
 
 		File.ReadAllText(ClientPath("Platforms/MacCatalyst/Info.plist"))
-			.Should().Contain("<key>UIUserInterfaceStyle</key>")
-			.And.Contain("<string>Dark</string>");
+			.Should().Contain(PlatformChrome.PlistUserInterfaceStyleKey)
+			.And.Contain(PlatformChrome.PlistDarkStyle);
 	}
 
 	[Fact]
 	public void TextTokens_HaveReadableContrastAgainstDarkSurfaces()
 	{
 		var tokens = ReadHexTokens();
-		var foregrounds = new[]
-		{
-			"--ww-text",
-			"--ww-text-dim",
-			"--ww-text-muted",
-			"--ww-accent",
-			"--ww-accent-bright",
-			"--ww-faction-werewolf",
-			"--ww-faction-villager",
-			"--ww-faction-loner",
-			"--ww-faction-ambiguous"
-		};
-		var backgrounds = new[]
-		{
-			"--ww-bg",
-			"--ww-bg-raised",
-			"--ww-surface",
-			"--ww-surface-hi",
-			"--ww-surface-deeper"
-		};
+		var foregrounds = Css.Tokens.ReadableForegrounds;
+		var backgrounds = Css.Tokens.DarkSurfaces;
 
 		var failures = foregrounds
 			.SelectMany(foreground => backgrounds.Select(background => new
@@ -89,14 +73,16 @@ public class DarkThemeTokenTests
 				Background = background,
 				Ratio = ContrastRatio(tokens[foreground], tokens[background])
 			}))
-			.Where(result => result.Ratio < 4.5)
+			.Where(result => result.Ratio < Css.MinimumTextContrastRatio)
 			.Select(result => $"{result.Foreground} on {result.Background}: {result.Ratio:F2}")
 			.ToArray();
 
 		failures.Should().BeEmpty();
 
-		ContrastRatio(tokens["--ww-bg"], tokens["--ww-accent"]).Should().BeGreaterThanOrEqualTo(4.5);
-		ContrastRatio(tokens["--ww-bg"], tokens["--ww-accent-bright"]).Should().BeGreaterThanOrEqualTo(4.5);
+		ContrastRatio(tokens[Css.Tokens.Background], tokens[Css.Tokens.Accent])
+			.Should().BeGreaterThanOrEqualTo(Css.MinimumTextContrastRatio);
+		ContrastRatio(tokens[Css.Tokens.Background], tokens[Css.Tokens.AccentBright])
+			.Should().BeGreaterThanOrEqualTo(Css.MinimumTextContrastRatio);
 	}
 
 	[Fact]
@@ -120,7 +106,7 @@ public class DarkThemeTokenTests
 
 		// Deprecated temporary scaffold: replace with ADR-0006/bUnit or browser-host rendered shell checks.
 		var pagesWithoutDarkShell = pages
-			.Where(path => !Regex.IsMatch(File.ReadAllText(path), "<main\\s+class=\"ww-(?:app|dashboard)-shell\""))
+			.Where(path => !Regex.IsMatch(File.ReadAllText(path), Css.PageDarkShellPattern))
 			.Select(path => Path.GetRelativePath(ClientTestReferences.Paths.RepositoryRoot, path))
 			.ToArray();
 

@@ -2,6 +2,8 @@ using FluentAssertions;
 using Microsoft.AspNetCore.Components;
 using Werewolves.Client.Tests.Helpers;
 using Xunit;
+using Css = Werewolves.Client.Tests.Helpers.ClientTestReferences.Css;
+using RazorMarkup = Werewolves.Client.Tests.Helpers.ClientTestReferences.RazorMarkup;
 
 namespace Werewolves.Client.Tests.Components;
 
@@ -14,8 +16,8 @@ public class SelectOptionsViewTests
 		var markup = File.ReadAllText(GetViewPath());
 
 		// The view iterates over Instruction.SelectableOptions and renders each as a button
-		markup.Should().Contain("Instruction.SelectableOptions");
-		markup.Should().Contain("@option");
+		markup.Should().Contain(RazorMarkup.SelectableOptions);
+		markup.Should().Contain(RazorMarkup.OptionVariable);
 	}
 
 	[Fact]
@@ -24,7 +26,7 @@ public class SelectOptionsViewTests
 		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered interaction checks.
 		var markup = File.ReadAllText(GetViewPath());
 
-		markup.Should().Contain("ww-option-btn--selected");
+		markup.Should().Contain(Css.Classes.OptionButtonSelected);
 	}
 
 	[Fact]
@@ -34,7 +36,7 @@ public class SelectOptionsViewTests
 		var markup = File.ReadAllText(GetViewPath());
 
 		// The view must reference SelectionRange for constraint enforcement
-		markup.Should().Contain("SelectionRange");
+		markup.Should().Contain(RazorMarkup.SelectionRange);
 	}
 
 	[Fact]
@@ -43,9 +45,9 @@ public class SelectOptionsViewTests
 		// Deprecated temporary scaffold: remove after ADR-0006/bUnit instantiates the component through public parameters.
 		var markup = File.ReadAllText(GetViewPath());
 
-		markup.Should().Contain("[Parameter");
-		markup.Should().Contain("SelectOptionsInstruction Instruction");
-		markup.Should().Contain(nameof(EventCallback) + "<ModeratorResponse> OnResponse");
+		markup.Should().Contain(RazorMarkup.ParameterAttribute);
+		markup.Should().Contain(RazorMarkup.SelectOptionsInstructionParameter);
+		markup.Should().Contain(nameof(EventCallback) + RazorMarkup.EventCallbackModeratorResponseParameterSuffix);
 	}
 
 	[Fact]
@@ -54,7 +56,7 @@ public class SelectOptionsViewTests
 		// Deprecated temporary scaffold: replace with ADR-0006/bUnit submit-callback checks.
 		var markup = File.ReadAllText(GetViewPath());
 
-		markup.Should().Contain("Instruction.CreateResponse");
+		markup.Should().Contain(RazorMarkup.CreateResponseCall);
 		markup.Should().Contain("OnResponse");
 	}
 
@@ -64,9 +66,9 @@ public class SelectOptionsViewTests
 		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered submit-event checks.
 		var markup = File.ReadAllText(GetViewPath());
 
-		markup.Should().Contain("<HoldButton");
-		markup.Should().Contain("Label=\"@ClientStrings.Dashboard_ContinueButton\"");
-		markup.Should().Contain("OnHoldComplete=\"HandleSubmit\"");
+		markup.Should().Contain(RazorMarkup.HoldButtonTag);
+		markup.Should().Contain(RazorMarkup.SubmitButtonResourceLabelAttribute);
+		markup.Should().Contain(RazorMarkup.OnHoldCompleteHandleSubmitAttribute);
 	}
 
 	[Fact]
@@ -75,7 +77,7 @@ public class SelectOptionsViewTests
 		// Deprecated temporary scaffold: replace with browser-host layout checks or bUnit rendered structure checks.
 		var markup = File.ReadAllText(GetViewPath());
 
-		markup.Should().MatchRegex(@"(?s)<footer class=""ww-dashboard-action-zone"">\s*<HoldButton");
+		markup.Should().MatchRegex(RazorMarkup.DashboardActionFooterWithHoldButtonPattern);
 	}
 
 	[Fact]
@@ -84,7 +86,7 @@ public class SelectOptionsViewTests
 		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered interaction checks.
 		var markup = File.ReadAllText(GetViewPath());
 
-		markup.Should().Contain("Disabled=\"@(!IsSelectionValid)\"");
+		markup.Should().Contain(RazorMarkup.DisabledSelectionInvalidAttribute);
 	}
 
 	[Fact]
@@ -94,7 +96,7 @@ public class SelectOptionsViewTests
 		var markup = File.ReadAllText(GetViewPath());
 
 		// Prevents selecting more than Maximum
-		markup.Should().Contain("SelectionRange.Maximum");
+		markup.Should().Contain(RazorMarkup.SelectionRangeMaximum);
 	}
 
 	[Fact]
@@ -103,9 +105,9 @@ public class SelectOptionsViewTests
 		// Deprecated temporary scaffold: replace with ADR-0006/bUnit rendered Portuguese text checks.
 		var markup = File.ReadAllText(GetViewPath());
 
-		markup.Should().Contain("ClientStrings.SelectOptions_Title");
-		markup.Should().Contain("ClientStrings.SelectOptions_SelectionCountFormat");
-		markup.Should().Contain("ClientStrings.Dashboard_ContinueButton");
+		markup.Should().Contain(RazorMarkup.SelectOptionsTitleResource);
+		markup.Should().Contain(RazorMarkup.SelectOptionsCountResource);
+		markup.Should().Contain(RazorMarkup.SubmitButtonResource);
 	}
 
 	private static string GetViewPath()

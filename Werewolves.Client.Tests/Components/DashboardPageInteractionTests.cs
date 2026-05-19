@@ -12,6 +12,7 @@ using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Xunit;
+using CssClasses = Werewolves.Client.Tests.Helpers.ClientTestReferences.Css.Classes;
 
 #pragma warning disable BL0006
 
@@ -19,6 +20,8 @@ namespace Werewolves.Client.Tests.Components;
 
 public class DashboardPageInteractionTests
 {
+	private static string ActiveDashboardTabClasses => $"{CssClasses.DashboardTab} {CssClasses.DashboardTabActive}";
+
 	[Fact]
 	public async Task InitialRender_ShowsHoldConfirmButtonForStartGameInstruction()
 	{
@@ -61,7 +64,7 @@ public class DashboardPageInteractionTests
 		fixture.Game.CurrentInstruction.Should().NotBeSameAs(instructionBefore,
 			ClientTestReferences.AssertionReasons.HapticFailureDoesNotBlockProgression);
 
-		var audioToggle = fixture.FindButtonByClass("ww-audio-toggle");
+		var audioToggle = fixture.FindButtonByClass(CssClasses.AudioToggle);
 		await fixture.ClickAsync(audioToggle!);
 
 		fixture.Game.IsAudioMuted.Should().BeTrue(
@@ -71,7 +74,7 @@ public class DashboardPageInteractionTests
 		await fixture.ClickAsync(rosterTab!);
 
 		var updatedRosterTab = fixture.FindButtonByText(ClientStrings.Dashboard_TabRoster);
-		updatedRosterTab!.Attributes.Should().Contain("class", "ww-dashboard-tab ww-dashboard-tab--active");
+		updatedRosterTab!.Attributes.Should().Contain("class", ActiveDashboardTabClasses);
 	}
 
 	[Fact]
@@ -99,7 +102,7 @@ public class DashboardPageInteractionTests
 			if (instruction is ConfirmationInstruction)
 			{
 				var confirm = fixture.FindButtonByText(ClientStrings.SelectPlayers_SubmitButton)
-					?? fixture.FindButtonByClass("ww-btn-hold");
+					?? fixture.FindButtonByClass(CssClasses.HoldButton);
 
 				if (confirm is not null)
 				{
@@ -133,7 +136,7 @@ public class DashboardPageInteractionTests
 		await fixture.ClickAsync(rosterTab);
 
 		var updatedRosterTab = fixture.FindButtonByText(ClientStrings.Dashboard_TabRoster);
-		updatedRosterTab!.Attributes.Should().Contain("class", "ww-dashboard-tab ww-dashboard-tab--active");
+		updatedRosterTab!.Attributes.Should().Contain("class", ActiveDashboardTabClasses);
 	}
 
 	[Fact]

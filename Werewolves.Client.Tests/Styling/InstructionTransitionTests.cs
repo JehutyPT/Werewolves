@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using FluentAssertions;
 using Werewolves.Client.Tests.Helpers;
+using Css = Werewolves.Client.Tests.Helpers.ClientTestReferences.Css;
 using Xunit;
 
 namespace Werewolves.Client.Tests.Styling;
@@ -11,7 +12,7 @@ public class InstructionTransitionTests
     public void DesignTokens_DefineInstructionAnimationDurationBetween200And300Ms()
     {
         var css = File.ReadAllText(ClientTestReferences.Paths.SharedPath("wwwroot/css/design-tokens.css"));
-        var match = Regex.Match(css, @"--ww-anim-instruction:\s*(\d+)ms");
+        var match = Regex.Match(css, Css.Animations.InstructionAnimationDurationPattern);
 
         match.Success.Should().BeTrue(ClientTestReferences.AssertionReasons.DesignTokensDefineInstructionAnimation);
         var duration = int.Parse(match.Groups[1].Value);
@@ -24,7 +25,7 @@ public class InstructionTransitionTests
         // Deprecated temporary scaffold: replace with browser-host computed-style or motion checks.
         var css = File.ReadAllText(ClientTestReferences.Paths.SharedPath("wwwroot/css/app.css"));
 
-        css.Should().Contain("@keyframes ww-instruction-enter",
+        css.Should().Contain(Css.Animations.InstructionEnterKeyframes,
             ClientTestReferences.AssertionReasons.AppCssDefinesInstructionEnterKeyframes);
     }
 
@@ -34,9 +35,9 @@ public class InstructionTransitionTests
         // Deprecated temporary scaffold: replace with browser-host computed-style checks for rendered instruction blocks.
         var css = File.ReadAllText(ClientTestReferences.Paths.SharedPath("wwwroot/css/app.css"));
 
-        css.Should().Contain("ww-instruction-enter",
+        css.Should().Contain(Css.Animations.InstructionEnterName,
             ClientTestReferences.AssertionReasons.InstructionBlockReferencesEnterAnimation);
-        css.Should().Contain("var(--ww-anim-instruction)",
+        css.Should().Contain(Css.Animations.InstructionAnimationTokenReference,
             ClientTestReferences.AssertionReasons.InstructionBlockUsesAnimationDurationToken);
     }
 }

@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Werewolves.Client.Tests.Helpers;
 using Xunit;
+using RazorMarkup = Werewolves.Client.Tests.Helpers.ClientTestReferences.RazorMarkup;
 
 namespace Werewolves.Client.Tests.Components;
 
@@ -33,7 +34,7 @@ public class InstructionRendererTests
 		var markup = File.ReadAllText(GetViewPath());
 
 		// AssignRolesView needs roster for player name resolution
-		markup.Should().Contain("Roster=");
+		markup.Should().Contain(RazorMarkup.RosterAttribute);
 	}
 
 	private static string GetViewPath()
