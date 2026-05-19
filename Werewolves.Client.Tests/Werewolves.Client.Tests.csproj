@@ -10,40 +10,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="..\Werewolves.Client\Components\Game\Views\HoldConfirmationGate.cs" Link="Components\HoldConfirmationGate.cs" />
-    <Compile Include="..\Werewolves.Client\Components\Game\Views\HoldButtonHapticSequence.cs" Link="Components\HoldButtonHapticSequence.cs" />
-    <Compile Include="..\Werewolves.Client\Services\AudioMap.cs" Link="Services\AudioMap.cs" />
-    <Compile Include="..\Werewolves.Client\Services\BenchmarkClientManager.cs" Link="Services\BenchmarkClientManager.cs" />
-    <Compile Include="..\Werewolves.Client\Services\DashboardRoster.cs" Link="Services\DashboardRoster.cs" />
-    <Compile Include="..\Werewolves.Client\Services\DashboardStatsSnapshot.cs" Link="Services\DashboardStatsSnapshot.cs" />
     <Compile Include="..\Werewolves.Client\Services\FileGameSessionSaveStore.cs" Link="Services\FileGameSessionSaveStore.cs" />
-    <Compile Include="..\Werewolves.Client\Services\GameClientManager.cs" Link="Services\GameClientManager.cs" />
-    <Compile Include="..\Werewolves.Client\Services\GameplayWakeLockController.cs" Link="Services\GameplayWakeLockController.cs" />
-    <Compile Include="..\Werewolves.Client\Services\HapticFeedbackService.cs" Link="Services\HapticFeedbackService.cs" />
-    <Compile Include="..\Werewolves.Client\Services\InstructionAudioPlayback.cs" Link="Services\InstructionAudioPlayback.cs" />
-    <Compile Include="..\Werewolves.Client\Services\InstructionDisplayFlow.cs" Link="Services\InstructionDisplayFlow.cs" />
-    <Compile Include="..\Werewolves.Client\Services\LobbySetupState.cs" Link="Services\LobbySetupState.cs" />
-    <Compile Include="..\Werewolves.Client\Services\SelectPlayersInputState.cs" Link="Services\SelectPlayersInputState.cs" />
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="..\Werewolves.Client\Components\_Imports.razor" Link="Components\_Imports.razor" />
-    <Content Include="..\Werewolves.Client\Components\Pages\DashboardPage.razor" Link="Components\Pages\DashboardPage.razor" />
-    <Content Include="..\Werewolves.Client\Components\Game\Views\*.razor" Link="Components\Game\Views\%(Filename)%(Extension)" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <EmbeddedResource Include="..\Werewolves.Client\Resources\ClientStrings.resx" Link="Resources\ClientStrings.resx">
-      <StronglyTypedClassName>ClientStrings</StronglyTypedClassName>
-      <StronglyTypedNamespace>Werewolves.Client.Resources</StronglyTypedNamespace>
-      <StronglyTypedFileName>$(IntermediateOutputPath)ClientStrings.Designer.cs</StronglyTypedFileName>
-      <StronglyTypedLanguage>C#</StronglyTypedLanguage>
-      <PublicClass>true</PublicClass>
-    </EmbeddedResource>
-    <EmbeddedResource Include="..\Werewolves.Client\Resources\ClientStrings.pt-PT.resx" Link="Resources\ClientStrings.pt-PT.resx" />
-  </ItemGroup>
-
-  <ItemGroup>
+    <ProjectReference Include="..\Werewolves.Client.BrowserQaHost\Werewolves.Client.BrowserQaHost.csproj" />
+    <ProjectReference Include="..\Werewolves.Client.Shared\Werewolves.Client.Shared.csproj" />
     <ProjectReference Include="..\Werewolves.Core\Werewolves.Core.GameLogic\Werewolves.Core.GameLogic.csproj" />
     <ProjectReference Include="..\Werewolves.Core\Werewolves.Core.StateModels\Werewolves.Core.StateModels.csproj" />
   </ItemGroup>
@@ -54,10 +26,9 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="bunit" Version="2.7.2" />
     <PackageReference Include="FluentAssertions" Version="6.12.0" />
-    <PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" PrivateAssets="all" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
-    <PackageReference Include="Plugin.Maui.Audio" Version="4.0.0" />
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
       <PrivateAssets>all</PrivateAssets>

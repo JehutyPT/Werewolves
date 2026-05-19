@@ -1,0 +1,16 @@
+@using Werewolves.Client.Components
+@inject NavigationManager Navigation
+@inject LobbySetupState Lobby
+@inject GameClientManager Game
+
+<Routes />
+
+@code {
+	protected override void OnInitialized()
+	{
+		BrowserQaScenarioSeeder.Apply(
+			BrowserQaScenarioSelection.FromUri(Navigation.Uri),
+			Lobby,
+			Game);
+	}
+}

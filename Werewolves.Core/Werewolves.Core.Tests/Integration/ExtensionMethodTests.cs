@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
+using Werewolves.Core.Tests.Helpers;
 using Xunit;
 
 namespace Werewolves.Core.Tests.Integration;
@@ -141,7 +142,7 @@ public class ExtensionMethodTests
         foreach (var role in allRoles)
         {
             var act = () => role.GetRoleGroup();
-            act.Should().NotThrow($"GetRoleGroup should handle {role}");
+            act.Should().NotThrow(CoreTestReferences.AssertionReasons.GetRoleGroupHandlesRole(role));
 
             var group = role.GetRoleGroup();
             group.Should().BeOneOf(

@@ -1,9 +1,12 @@
 using FluentAssertions;
+using Werewolves.Client.Resources;
 using Werewolves.Client.Services;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Log;
 using Xunit;
+using PlayerNames = Werewolves.Client.Tests.Helpers.ClientTestReferences.PlayerNames;
 
 namespace Werewolves.Client.Tests.Services;
 
@@ -12,18 +15,21 @@ public class DashboardRosterTests
 	[Fact]
 	public void FromSession_ProjectsKnownRosterInformationInPortuguese()
 	{
+		var brunoStatusEffects = new[]
+		{
+			StatusEffectTypes.Sheriff,
+			StatusEffectTypes.Lovers,
+			StatusEffectTypes.Charmed,
+			StatusEffectTypes.LycanthropyInfection
+		};
+		var brunoStatusLabels = brunoStatusEffects.Select(DashboardRoster.StatusEffectLabel).ToArray();
 		var session = new TestGameSession([
-			new TestPlayer("Ana"),
+			new TestPlayer(PlayerNames.Ana),
 			new TestPlayer(
-				"Bruno",
+				PlayerNames.Bruno,
 				MainRoleType.SimpleWerewolf,
 				PlayerHealth.Dead,
-				[
-					StatusEffectTypes.Sheriff,
-					StatusEffectTypes.Lovers,
-					StatusEffectTypes.Charmed,
-					StatusEffectTypes.LycanthropyInfection
-				])
+				brunoStatusEffects)
 		]);
 
 		var roster = DashboardRoster.FromSession(session);
@@ -32,24 +38,24 @@ public class DashboardRosterTests
 		roster[0].Should().BeEquivalentTo(new
 		{
 			SeatNumber = 1,
-			Name = "Ana",
-			RoleLabel = "Desconhecido",
+			Name = PlayerNames.Ana,
+			RoleLabel = DashboardRoster.RoleLabel(null),
 			IsRoleKnown = false,
-			HealthLabel = "Vivo",
+			HealthLabel = DashboardRoster.HealthLabel(PlayerHealth.Alive),
 			IsDead = false,
-			StatusEffectsLabel = "Sem efeitos",
+			StatusEffectsLabel = DashboardRoster.NoStatusEffectsLabel,
 			StatusEffects = Array.Empty<string>()
 		});
 		roster[1].Should().BeEquivalentTo(new
 		{
 			SeatNumber = 2,
-			Name = "Bruno",
-			RoleLabel = "Lobisomem",
+			Name = PlayerNames.Bruno,
+			RoleLabel = MainRoleType.SimpleWerewolf.GetPublicName(),
 			IsRoleKnown = true,
-			HealthLabel = "Morto",
+			HealthLabel = DashboardRoster.HealthLabel(PlayerHealth.Dead),
 			IsDead = true,
-			StatusEffectsLabel = "Capitão, Apaixonado, Encantado, Infetado",
-			StatusEffects = new[] { "Capitão", "Apaixonado", "Encantado", "Infetado" }
+			StatusEffectsLabel = string.Join(ClientStrings.Common_ListSeparator, brunoStatusLabels),
+			StatusEffects = brunoStatusLabels
 		});
 	}
 

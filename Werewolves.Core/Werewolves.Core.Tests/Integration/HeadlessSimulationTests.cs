@@ -5,6 +5,7 @@ using Werewolves.Core.GameLogic.Strategies;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
+using Werewolves.Core.StateModels.Resources;
 using Xunit;
 
 namespace Werewolves.Core.Tests.Integration;
@@ -29,7 +30,7 @@ public class HeadlessSimulationTests
 		var instruction = new SelectPlayersInstruction(
 			[players[3].Id, players[1].Id, players[2].Id],
 			NumberRangeConstraint.Exact(2),
-			privateInstruction: "Select two players.");
+			privateInstruction: GameStrings.WerewolvesChooseVictimPrompt);
 		var strategy = new FirstValidOptionStrategy();
 
 		var response = strategy.CreateResponse(instruction, session);
@@ -55,7 +56,7 @@ public class HeadlessSimulationTests
 		var instruction = new AssignRolesInstruction(
 			ImmutableHashSet.Create(players[4].Id, players[2].Id),
 			[MainRoleType.SimpleVillager, MainRoleType.Seer],
-			privateInstruction: "Assign roles.");
+			privateInstruction: GameStrings.RevealRolePromptSpecify);
 		var strategy = new FirstValidOptionStrategy();
 
 		var response = strategy.CreateResponse(instruction, session);

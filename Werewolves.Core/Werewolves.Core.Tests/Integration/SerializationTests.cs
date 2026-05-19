@@ -56,7 +56,7 @@ public class SerializationTests : DiagnosticTestBase
         // Assert
         json.Should().NotBeNullOrEmpty();
         var act = () => JsonDocument.Parse(json);
-        act.Should().NotThrow("Serialized session should be valid JSON");
+        act.Should().NotThrow(CoreTestReferences.AssertionReasons.SerializedSessionValidJson);
 
         MarkTestCompleted();
     }
@@ -117,7 +117,7 @@ public class SerializationTests : DiagnosticTestBase
         foreach (var original in originalPlayers)
         {
             var rehydrated = rehydratedPlayers.FirstOrDefault(p => p.Id == original.Id);
-            rehydrated.Should().NotBeNull($"Player {original.Name} should be preserved");
+            rehydrated.Should().NotBeNull(CoreTestReferences.AssertionReasons.PlayerPreserved(original.Name));
             rehydrated!.Name.Should().Be(original.Name);
         }
 
@@ -150,7 +150,7 @@ public class SerializationTests : DiagnosticTestBase
         foreach (var player in players)
         {
             player.State.GetActiveStatusEffects().Should().BeEmpty(
-                "New game should have no status effects");
+                CoreTestReferences.AssertionReasons.FreshSessionsStartWithoutActiveStatusEffects);
         }
 
         MarkTestCompleted();
@@ -543,17 +543,17 @@ public class SerializationTests : DiagnosticTestBase
             
             // Role should match
             derived.MainRole.Should().Be(player.State.MainRole,
-                $"Player {player.Name} role should match");
-            
+                CoreTestReferences.AssertionReasons.PlayerRoleShouldMatch(player.Name));
+
             // Health should match
             derived.Health.Should().Be(player.State.Health,
-                $"Player {player.Name} health should match");
+                CoreTestReferences.AssertionReasons.PlayerHealthShouldMatch(player.Name));
             
             // Status effects should match
             var cachedEffects = player.State.GetActiveStatusEffects();
             var derivedEffects = derived.GetActiveStatusEffects();
             derivedEffects.Should().BeEquivalentTo(cachedEffects,
-                $"Player {player.Name} status effects should match");
+                CoreTestReferences.AssertionReasons.PlayerStatusEffectsShouldMatch(player.Name));
         }
 
         MarkTestCompleted();

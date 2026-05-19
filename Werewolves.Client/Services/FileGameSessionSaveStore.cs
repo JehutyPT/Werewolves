@@ -1,12 +1,5 @@
 namespace Werewolves.Client.Services;
 
-public interface IGameSessionSaveStore
-{
-	string? Load();
-	void Save(string serializedSession);
-	void Clear();
-}
-
 public sealed class FileGameSessionSaveStore : IGameSessionSaveStore
 {
 	public const string SaveFileName = "active-game-session.json";

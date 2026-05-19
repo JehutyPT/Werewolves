@@ -1,0 +1,22 @@
+@page "/"
+@using Microsoft.AspNetCore.Components.Web
+
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+	<base href="/" />
+	<title>Werewolves Moderator Browser QA</title>
+	<link rel="stylesheet" href="_content/Werewolves.Client.Shared/css/design-tokens.css" />
+	<link rel="stylesheet" href="_content/Werewolves.Client.Shared/css/app.css" />
+	<link rel="stylesheet" href="css/browser-qa-host.css" />
+	<HeadOutlet @rendermode="new InteractiveServerRenderMode(prerender: false)" />
+</head>
+<body>
+	<div class="phone-frame">
+		<BrowserQaRoot @rendermode="new InteractiveServerRenderMode(prerender: false)" />
+	</div>
+	<script src="_framework/blazor.web.js"></script>
+</body>
+</html>

@@ -1,12 +1,15 @@
 using FluentAssertions;
 using Werewolves.Client.Services;
+using Werewolves.Client.Tests.Helpers;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Resources;
 using Xunit;
+using PlayerNames = Werewolves.Client.Tests.Helpers.ClientTestReferences.PlayerNames;
 
 namespace Werewolves.Client.Tests.Services;
 
@@ -16,7 +19,7 @@ public class GameClientManagerTests
 	public void StartGame_FromLobbyConfiguration_CreatesCoreSessionAndExposesInstruction()
 	{
 		var manager = new GameClientManager();
-		var players = new[] { "Ana", "Bruno", "Catarina", "Diana", "Eduardo" };
+		var players = PlayerNames.DefaultFive;
 		var roles = new[]
 		{
 			MainRoleType.SimpleWerewolf,
@@ -208,7 +211,7 @@ public class GameClientManagerTests
 	{
 		var manager = new GameClientManager();
 		var startInstruction = manager.StartGame(
-			["Ana", "Bruno", "Catarina", "Diana", "Eduardo"],
+			PlayerNames.DefaultFive,
 			[
 				MainRoleType.SimpleWerewolf,
 				MainRoleType.SimpleWerewolf,
@@ -240,7 +243,7 @@ public class GameClientManagerTests
 		foreach (var playerId in assignRoles.PlayersForAssignment)
 		{
 			roster.Should().Contain(r => r.PlayerId == playerId,
-				"roster should contain an entry for each player needing role assignment");
+				ClientTestReferences.AssertionReasons.RosterContainsEntriesForRoleAssignmentPlayers);
 		}
 
 		// Process the assignment and verify game advances
@@ -432,21 +435,21 @@ public class GameClientManagerTests
 	}
 
 	[Fact]
-	public void ProcessInput_WithConfirmationOnlyInstructions_AdvancesPhaseAndKeepsVisibleTextPortuguese()
+	public void ProcessInput_WithConfirmationOnlyInstructions_AdvancesPhaseAndUsesResourceBackedVisibleText()
 	{
 		var manager = new GameClientManager();
 		var startInstruction = StartVillagerOnlyGame(manager);
 
 		manager.ProcessInput(startInstruction.CreateResponse(true));
 		var nightStartInstruction = manager.CurrentInstruction.Should().BeOfType<ConfirmationInstruction>().Subject;
-		nightStartInstruction.PublicAnnouncement.Should().Be("A aldeia adormece.");
-		nightStartInstruction.PrivateInstruction.Should().Be("Confirma que todos estão a dormir e em silêncio.");
+		nightStartInstruction.PublicAnnouncement.Should().Be(GameStrings.NightStartsPrompt);
+		nightStartInstruction.PrivateInstruction.Should().Be(GameStrings.ConfirmNightStarted);
 		manager.CurrentPhase.Should().Be(GamePhase.Night);
 		manager.TurnNumber.Should().Be(1);
 
 		manager.ProcessInput(nightStartInstruction.CreateResponse(true));
 		var dawnInstruction = manager.CurrentInstruction.Should().BeOfType<ConfirmationInstruction>().Subject;
-		dawnInstruction.PublicAnnouncement.Should().Be("As ações da noite terminaram. A aldeia acorda.");
+		dawnInstruction.PublicAnnouncement.Should().Be(GameStrings.NightActionsCompletePrompt);
 		manager.CurrentPhase.Should().Be(GamePhase.Dawn);
 		manager.TurnNumber.Should().Be(1);
 
@@ -492,15 +495,16 @@ public class GameClientManagerTests
 		manager.ProcessInput(nightStartInstruction.CreateResponse(true));
 		var identifyWerewolfInstruction = manager.CurrentInstruction.Should().BeOfType<SelectPlayersInstruction>().Subject;
 		var werewolf = manager.CurrentSession!.GetPlayers().First();
+		var werewolfRoleLabel = MainRoleType.SimpleWerewolf.GetPublicName();
 		var eventRosterSnapshots = new List<IReadOnlyList<DashboardRosterEntry>>();
 		manager.StateChanged += (_, _) => eventRosterSnapshots.Add(manager.CurrentRoster);
 
 		manager.ProcessInput(identifyWerewolfInstruction.CreateResponse([werewolf.Id]));
 
-		manager.CurrentRoster[0].RoleLabel.Should().Be("Lobisomem");
+		manager.CurrentRoster[0].RoleLabel.Should().Be(werewolfRoleLabel);
 		manager.CurrentRoster[0].IsRoleKnown.Should().BeTrue();
 		eventRosterSnapshots.Should().ContainSingle();
-		eventRosterSnapshots[0][0].RoleLabel.Should().Be("Lobisomem");
+		eventRosterSnapshots[0][0].RoleLabel.Should().Be(werewolfRoleLabel);
 	}
 
 	[Fact]
@@ -512,7 +516,7 @@ public class GameClientManagerTests
 		var act = () => manager.ProcessInput(response);
 
 		act.Should().Throw<InvalidOperationException>()
-			.WithMessage("Cannot process moderator response without an active game session.");
+			.WithMessage(ClientTestReferences.ExceptionPatterns.MissingActiveGameSession);
 	}
 
 	[Fact]
@@ -671,7 +675,7 @@ public class GameClientManagerTests
 
 	private static StartGameConfirmationInstruction StartSimpleGame(GameClientManager manager)
 	{
-		var players = new[] { "Ana", "Bruno", "Catarina", "Diana", "Eduardo" };
+		var players = PlayerNames.DefaultFive;
 		var roles = new[]
 		{
 			MainRoleType.SimpleWerewolf,
@@ -686,7 +690,7 @@ public class GameClientManagerTests
 
 	private static StartGameConfirmationInstruction StartTwoWerewolfGame(GameClientManager manager)
 	{
-		var players = new[] { "Ana", "Bruno", "Catarina", "Diana", "Eduardo" };
+		var players = PlayerNames.DefaultFive;
 		var roles = new[]
 		{
 			MainRoleType.SimpleWerewolf,
@@ -728,7 +732,7 @@ public class GameClientManagerTests
 	private static void PlayToWerewolfVictoryAtDawn(GameClientManager manager)
 	{
 		var startInstruction = manager.StartGame(
-			["Ana", "Bruno", "Catarina", "Diana", "Eduardo"],
+			PlayerNames.DefaultFive,
 			[
 				MainRoleType.SimpleWerewolf,
 				MainRoleType.SimpleWerewolf,
@@ -765,11 +769,12 @@ public class GameClientManagerTests
 					break;
 				default:
 					throw new InvalidOperationException(
-						$"Unexpected instruction while reaching victory: {manager.CurrentInstruction?.GetType().Name ?? "null"}.");
+						ClientTestReferences.ExceptionMessages.UnexpectedInstructionWhileReachingVictory(
+							manager.CurrentInstruction?.GetType().Name));
 			}
 		}
 
-		throw new InvalidOperationException("Victory was not reached within the expected number of inputs.");
+		throw new InvalidOperationException(ClientTestReferences.ExceptionMessages.VictoryNotReached);
 	}
 
 	private static void ConfirmCurrentInstruction(GameClientManager manager)
@@ -841,7 +846,7 @@ public class GameClientManagerTests
 			switch (manager.CurrentInstruction)
 			{
 				case FinishedGameConfirmationInstruction:
-					throw new InvalidOperationException("Game ended before reaching next debate.");
+					throw new InvalidOperationException(ClientTestReferences.ExceptionMessages.GameEndedBeforeNextDebate);
 				case ConfirmationInstruction ci:
 					manager.ProcessInput(ci.CreateResponse(true));
 					break;
@@ -865,11 +870,12 @@ public class GameClientManagerTests
 					break;
 				default:
 					throw new InvalidOperationException(
-						$"Unexpected instruction: {manager.CurrentInstruction?.GetType().Name ?? "null"}");
+						ClientTestReferences.ExceptionMessages.UnexpectedInstruction(
+							manager.CurrentInstruction?.GetType().Name));
 			}
 		}
 
-		throw new InvalidOperationException("Next debate instruction was not reached within the expected number of inputs.");
+		throw new InvalidOperationException(ClientTestReferences.ExceptionMessages.NextDebateNotReached);
 	}
 
 	private static void AdvanceToDebate(GameClientManager manager)
@@ -903,11 +909,12 @@ public class GameClientManagerTests
 					break;
 				default:
 					throw new InvalidOperationException(
-						$"Unexpected instruction while advancing to debate: {manager.CurrentInstruction?.GetType().Name ?? "null"}");
+						ClientTestReferences.ExceptionMessages.UnexpectedInstructionWhileAdvancingToDebate(
+							manager.CurrentInstruction?.GetType().Name));
 			}
 		}
 
-		throw new InvalidOperationException("Debate instruction was not reached within the expected number of inputs.");
+		throw new InvalidOperationException(ClientTestReferences.ExceptionMessages.DebateNotReached);
 	}
 
 	private sealed class FakeTimeProvider : TimeProvider
@@ -932,7 +939,7 @@ public class GameClientManagerTests
 		public string? Load() => null;
 
 		public void Save(string serializedSession) =>
-			throw new IOException("Save failed.");
+			throw new IOException(ClientTestReferences.ExceptionMessages.SaveFailed);
 
 		public void Clear()
 		{
@@ -985,7 +992,7 @@ public class GameClientManagerTests
 
 	private static StartGameConfirmationInstruction StartVillagerOnlyGame(GameClientManager manager)
 	{
-		var players = new[] { "Ana", "Bruno", "Catarina", "Diana", "Eduardo" };
+		var players = PlayerNames.DefaultFive;
 		var roles = Enumerable.Repeat(MainRoleType.SimpleVillager, players.Length).ToArray();
 
 		return manager.StartGame(players, roles);

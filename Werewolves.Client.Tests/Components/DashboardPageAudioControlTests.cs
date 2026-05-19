@@ -6,10 +6,14 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Werewolves.Client.Components.Pages;
 using Werewolves.Client.Resources;
 using Werewolves.Client.Services;
+using Werewolves.Client.Tests.Helpers;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Models;
 using Xunit;
+using CssClasses = Werewolves.Client.Tests.Helpers.ClientTestReferences.Css.Classes;
+using Html = Werewolves.Client.Tests.Helpers.ClientTestReferences.Html;
+using PlayerNames = Werewolves.Client.Tests.Helpers.ClientTestReferences.PlayerNames;
 
 #pragma warning disable BL0006
 
@@ -17,6 +21,9 @@ namespace Werewolves.Client.Tests.Components;
 
 public class DashboardPageAudioControlTests
 {
+	private static string AudioToggleClasses => $"{CssClasses.IconButton} {CssClasses.AudioToggle}";
+	private static string MutedAudioToggleClasses => $"{AudioToggleClasses} {CssClasses.AudioToggleMuted}";
+
 	[Fact]
 	public async Task StatusBar_RendersAudioToggleAsOperableMuteControl()
 	{
@@ -25,11 +32,11 @@ public class DashboardPageAudioControlTests
 
 		var toggle = dashboard.FindAudioToggleButton();
 
-		toggle.Attributes.Should().Contain("type", "button");
-		toggle.Attributes.Should().Contain("class", "ww-icon-button ww-audio-toggle");
-		toggle.Attributes.Should().Contain("aria-label", ClientStrings.Dashboard_AudioMute);
-		toggle.Attributes.Should().Contain("title", ClientStrings.Dashboard_AudioMute);
-		toggle.Attributes.Should().Contain("aria-pressed", "false");
+		toggle.Attributes.Should().Contain(Html.Attributes.Type, Html.AttributeValues.ButtonType);
+		toggle.Attributes.Should().Contain(Html.Attributes.Class, AudioToggleClasses);
+		toggle.Attributes.Should().Contain(Html.Attributes.AriaLabel, ClientStrings.Dashboard_AudioMute);
+		toggle.Attributes.Should().Contain(Html.Attributes.Title, ClientStrings.Dashboard_AudioMute);
+		toggle.Attributes.Should().Contain(Html.Attributes.AriaPressed, Html.AriaValues.False);
 		toggle.TextContent.Should().BeEmpty();
 		toggle.ClickEventHandlerId.Should().NotBe(0);
 	}
@@ -47,10 +54,10 @@ public class DashboardPageAudioControlTests
 		dashboard.AudioPlayback.MuteRequests.Should().Equal(true);
 
 		var updatedToggle = dashboard.FindAudioToggleButton();
-		updatedToggle.Attributes.Should().Contain("aria-pressed", "true");
-		updatedToggle.Attributes.Should().Contain("aria-label", ClientStrings.Dashboard_AudioUnmute);
-		updatedToggle.Attributes.Should().Contain("title", ClientStrings.Dashboard_AudioUnmute);
-		updatedToggle.Attributes.Should().Contain("class", "ww-icon-button ww-audio-toggle ww-audio-toggle--muted");
+		updatedToggle.Attributes.Should().Contain(Html.Attributes.AriaPressed, Html.AriaValues.True);
+		updatedToggle.Attributes.Should().Contain(Html.Attributes.AriaLabel, ClientStrings.Dashboard_AudioUnmute);
+		updatedToggle.Attributes.Should().Contain(Html.Attributes.Title, ClientStrings.Dashboard_AudioUnmute);
+		updatedToggle.Attributes.Should().Contain(Html.Attributes.Class, MutedAudioToggleClasses);
 		updatedToggle.TextContent.Should().BeEmpty();
 	}
 
@@ -68,7 +75,7 @@ public class DashboardPageAudioControlTests
 				AudioPlayback,
 				new InMemoryGameSessionSaveStore());
 			Game.StartGame(
-				["Ana", "Bruno", "Catarina", "Diana", "Eduardo"],
+				PlayerNames.DefaultFive,
 				[
 					MainRoleType.SimpleWerewolf,
 					MainRoleType.Seer,
@@ -99,12 +106,12 @@ public class DashboardPageAudioControlTests
 		{
 			var element = EnumerateElements()
 				.SingleOrDefault(element =>
-					element.Name == "button" &&
-					element.Attributes.TryGetValue("class", out var value) &&
+					element.Name == Html.Elements.Button &&
+					element.Attributes.TryGetValue(Html.Attributes.Class, out var value) &&
 					value is string className &&
-					className.Split(' ', StringSplitOptions.RemoveEmptyEntries).Contains("ww-audio-toggle"));
+					className.Split(' ', StringSplitOptions.RemoveEmptyEntries).Contains(CssClasses.AudioToggle));
 
-			element.Should().NotBeNull("the dashboard status bar should expose the audio mute/unmute toggle");
+			element.Should().NotBeNull(ClientTestReferences.AssertionReasons.AudioToggleExposedInStatusBar);
 			return element!;
 		}
 
@@ -170,7 +177,7 @@ public class DashboardPageAudioControlTests
 				{
 					case RenderTreeFrameType.Attribute:
 						attributes[frame.AttributeName] = frame.AttributeValue;
-						if (frame.AttributeName == "onclick")
+						if (frame.AttributeName == Html.Events.Click)
 						{
 							clickEventHandlerId = frame.AttributeEventHandlerId;
 						}
@@ -213,7 +220,8 @@ public class DashboardPageAudioControlTests
 
 		protected override void HandleException(Exception exception)
 		{
-			throw new InvalidOperationException("The dashboard component failed while rendering.", exception);
+			throw new InvalidOperationException(
+				ClientTestReferences.ExceptionMessages.ComponentRenderFailure("dashboard"), exception);
 		}
 	}
 

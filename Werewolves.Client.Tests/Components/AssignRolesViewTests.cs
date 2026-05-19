@@ -10,11 +10,16 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Werewolves.Client.Components.Game.Views;
 using Werewolves.Client.Resources;
 using Werewolves.Client.Services;
+using Werewolves.Client.Tests.Helpers;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
+using Werewolves.Core.StateModels.Resources;
 using Xunit;
+using Css = Werewolves.Client.Tests.Helpers.ClientTestReferences.Css;
+using Html = Werewolves.Client.Tests.Helpers.ClientTestReferences.Html;
+using PlayerNames = Werewolves.Client.Tests.Helpers.ClientTestReferences.PlayerNames;
 
 #pragma warning disable BL0006
 
@@ -32,12 +37,12 @@ public class AssignRolesViewTests
 
 		await fixture.ClickAsync(fixture.FindButtonByText(roleLabel)!);
 
-		fixture.FindButtonByText(roleLabel)!.ClassName.Should().Contain("ww-role-btn--selected");
+		fixture.FindButtonByText(roleLabel)!.ClassName.Should().Contain(Css.Classes.RoleButtonSelected);
 		fixture.FindButtonByText(ClientStrings.Dashboard_ContinueButton)!.IsDisabled.Should().BeFalse();
 
 		await fixture.ClickAsync(fixture.FindButtonByText(roleLabel)!);
 
-		fixture.FindButtonByText(roleLabel)!.ClassName.Should().NotContain("ww-role-btn--selected");
+		fixture.FindButtonByText(roleLabel)!.ClassName.Should().NotContain(Css.Classes.RoleButtonSelected);
 		fixture.FindButtonByText(ClientStrings.Dashboard_ContinueButton)!.IsDisabled.Should().BeTrue();
 	}
 
@@ -59,17 +64,17 @@ public class AssignRolesViewTests
 	public async Task PlayerNavigation_IsBoundedAndUsesRosterOrder()
 	{
 		using var fixture = new AssignRolesInteractionFixture(
-			["Alice", "Bob"],
+			PlayerNames.AssignRolesPair,
 			[MainRoleType.SimpleWerewolf, MainRoleType.SimpleVillager]);
 		await fixture.RenderAsync();
 
-		fixture.VisibleText.Should().Contain("Alice").And.NotContain("Bob");
+		fixture.VisibleText.Should().Contain(PlayerNames.Alice).And.NotContain(PlayerNames.Bob);
 		fixture.FindButtonByAriaLabel(ClientStrings.AssignRoles_PreviousPlayerAria)!.IsDisabled.Should().BeTrue();
 		fixture.FindButtonByAriaLabel(ClientStrings.AssignRoles_NextPlayerAria)!.IsDisabled.Should().BeFalse();
 
 		await fixture.ClickAsync(fixture.FindButtonByAriaLabel(ClientStrings.AssignRoles_NextPlayerAria)!);
 
-		fixture.VisibleText.Should().Contain("Bob").And.NotContain("Alice");
+		fixture.VisibleText.Should().Contain(PlayerNames.Bob).And.NotContain(PlayerNames.Alice);
 		fixture.FindButtonByAriaLabel(ClientStrings.AssignRoles_PreviousPlayerAria)!.IsDisabled.Should().BeFalse();
 		fixture.FindButtonByAriaLabel(ClientStrings.AssignRoles_NextPlayerAria)!.IsDisabled.Should().BeTrue();
 	}
@@ -78,7 +83,7 @@ public class AssignRolesViewTests
 	public async Task Roles_AreGroupedByRoleTypeAndSortedByDisplayName()
 	{
 		using var fixture = new AssignRolesInteractionFixture(
-			["Alice"],
+			PlayerNames.AssignRolesSingle,
 			[
 				MainRoleType.SimpleWerewolf,
 				MainRoleType.WildChild,
@@ -93,125 +98,13 @@ public class AssignRolesViewTests
 		text.IndexOf(MainRoleType.SimpleVillager.GetPublicName()).Should().BeLessThan(text.IndexOf(MainRoleType.Seer.GetPublicName()));
 	}
 
-	[Fact]
-	public void Markup_RendersRolesFromInstruction()
-	{
-		var markup = File.ReadAllText(GetViewPath());
-
-		markup.Should().Contain("Instruction.RolesForAssignment");
-	}
-
-	[Fact]
-	public void Markup_RendersPlayersForAssignment()
-	{
-		var markup = File.ReadAllText(GetViewPath());
-
-		markup.Should().Contain("Instruction.PlayersForAssignment");
-	}
-
-	[Fact]
-	public void Markup_AcceptsInstructionAndOnResponseParameters()
-	{
-		var markup = File.ReadAllText(GetViewPath());
-
-		markup.Should().Contain("[Parameter");
-		markup.Should().Contain("AssignRolesInstruction Instruction");
-		markup.Should().Contain("EventCallback<ModeratorResponse> OnResponse");
-	}
-
-	[Fact]
-	public void Markup_AcceptsRosterParameterForPlayerNameResolution()
-	{
-		var markup = File.ReadAllText(GetViewPath());
-
-		markup.Should().Contain("IReadOnlyList<DashboardRosterEntry> Roster");
-	}
-
-	[Fact]
-	public void Markup_CallsCreateResponseOnSubmit()
-	{
-		var markup = File.ReadAllText(GetViewPath());
-
-		markup.Should().Contain("Instruction.CreateResponse");
-		markup.Should().Contain("OnResponse");
-	}
-
-	[Fact]
-	public void Markup_SubmitUsesPressAndHoldPattern()
-	{
-		var markup = File.ReadAllText(GetViewPath());
-
-		markup.Should().Contain("<HoldButton");
-		markup.Should().Contain("Label=\"@ClientStrings.Dashboard_ContinueButton\"");
-		markup.Should().Contain("OnHoldComplete=\"HandleSubmit\"");
-	}
-
-	[Fact]
-	public void Markup_PinsSubmitButtonInDashboardActionZone()
-	{
-		var markup = File.ReadAllText(GetViewPath());
-
-		markup.Should().MatchRegex(@"(?s)<footer class=""ww-dashboard-action-zone"">\s*<HoldButton");
-	}
-
-	[Fact]
-	public void Markup_SubmitButtonIsDisabledWhenAssignmentsIncomplete()
-	{
-		var markup = File.ReadAllText(GetViewPath());
-
-		markup.Should().Contain("Disabled=\"@(!AllPlayersAssigned)\"");
-	}
-
-	[Fact]
-	public void Markup_UsesGetPublicNameForRoleDisplay()
-	{
-		var markup = File.ReadAllText(GetViewPath());
-
-		// Roles should use the existing GetPublicName() extension for localization
-		markup.Should().Contain("GetPublicName");
-	}
-
-	[Fact]
-	public void Markup_UsesClientStringsResourceKeys()
-	{
-		var markup = File.ReadAllText(GetViewPath());
-
-		markup.Should().Contain("ClientStrings.AssignRoles_Title");
-		markup.Should().Contain("ClientStrings.AssignRoles_SelectRolePrompt");
-		markup.Should().Contain("ClientStrings.Dashboard_ContinueButton");
-	}
-
-	private static string GetViewPath()
-	{
-		var directory = new DirectoryInfo(AppContext.BaseDirectory);
-		while (directory is not null)
-		{
-			var candidate = Path.Combine(
-				directory.FullName,
-				"Werewolves.Client",
-				"Components",
-				"Game",
-				"Views",
-				"AssignRolesView.razor");
-
-			if (File.Exists(candidate))
-			{
-				return candidate;
-			}
-
-			directory = directory.Parent;
-		}
-
-		throw new FileNotFoundException("AssignRolesView.razor could not be found from the test output directory.");
-	}
-
 	private static AssignRolesInstruction CreateInstruction(IReadOnlyList<Guid> playerIds, IReadOnlyList<MainRoleType> roles) =>
 		(AssignRolesInstruction)AssignRolesConstructor.Invoke(
 			[
 				playerIds.ToImmutableHashSet(),
 				roles,
 				null,
-				"Assign a role",
+				GameStrings.RevealRolePromptSpecify,
 				null
 			]);
 
@@ -227,7 +120,7 @@ public class AssignRolesViewTests
 		private readonly ServiceProvider _serviceProvider;
 
 		public AssignRolesInteractionFixture()
-			: this(["Alice"], [MainRoleType.SimpleWerewolf, MainRoleType.SimpleVillager])
+			: this(PlayerNames.AssignRolesSingle, [MainRoleType.SimpleWerewolf, MainRoleType.SimpleVillager])
 		{
 		}
 
@@ -244,7 +137,7 @@ public class AssignRolesViewTests
 						name,
 						DashboardRoster.UnknownRoleLabel,
 						false,
-						"Alive",
+						DashboardRoster.HealthLabel(PlayerHealth.Alive),
 						false,
 						[],
 						DashboardRoster.NoStatusEffectsLabel))
@@ -271,7 +164,7 @@ public class AssignRolesViewTests
 
 		public ButtonSnapshot? FindButtonByAriaLabel(string label) =>
 			FindAllButtons().FirstOrDefault(button =>
-				button.Attributes.TryGetValue("aria-label", out var value) &&
+				button.Attributes.TryGetValue(Html.Attributes.AriaLabel, out var value) &&
 				value is string text &&
 				text.Equals(label, StringComparison.OrdinalIgnoreCase));
 
@@ -299,7 +192,7 @@ public class AssignRolesViewTests
 				for (var index = 0; index < frames.Count; index++)
 				{
 					var frame = frames.Array[index];
-					if (frame.FrameType != RenderTreeFrameType.Element || frame.ElementName != "button")
+					if (frame.FrameType != RenderTreeFrameType.Element || frame.ElementName != Html.Elements.Button)
 					{
 						continue;
 					}
@@ -346,12 +239,12 @@ public class AssignRolesViewTests
 				{
 					case RenderTreeFrameType.Attribute:
 						attributes[frame.AttributeName] = frame.AttributeValue;
-						if (frame.AttributeName == "onclick")
+						if (frame.AttributeName == Html.Events.Click)
 						{
 							clickHandlerId = frame.AttributeEventHandlerId;
 						}
 
-						if (frame.AttributeName == "disabled" && frame.AttributeValue is true)
+						if (frame.AttributeName == Html.Attributes.Disabled && frame.AttributeValue is true)
 						{
 							isDisabled = true;
 						}
@@ -362,7 +255,7 @@ public class AssignRolesViewTests
 				}
 			}
 
-			var className = attributes.TryGetValue("class", out var cls) && cls is string s ? s : "";
+			var className = attributes.TryGetValue(Html.Attributes.Class, out var cls) && cls is string s ? s : "";
 			return new ButtonSnapshot(
 				className,
 				string.Concat(text),
@@ -422,7 +315,7 @@ public class AssignRolesViewTests
 		protected override void HandleException(Exception exception)
 		{
 			throw new InvalidOperationException(
-				"Unhandled exception during AssignRolesView rendering or event dispatch.", exception);
+				ClientTestReferences.ExceptionMessages.ComponentRenderOrDispatchFailure("AssignRolesView"), exception);
 		}
 	}
 

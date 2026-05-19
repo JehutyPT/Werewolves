@@ -117,7 +117,7 @@ internal partial class DiagnosticStateObserver : IStateChangeObserver
             {
                 var (type, content) = entries[i];
                 
-                string phs = type == "Phase" ? " X " : "   ";
+                string phs = type == CoreTestReferences.DiagnosticLogLabels.Phase ? " X " : "   ";
                 string sub = type == "SubPhase" ? " X " : "   ";
                 string stg = type == "Stage" ? " X " : "   ";
                 string ins = type == "Instruction" ? " X " : "   ";
@@ -137,7 +137,7 @@ internal partial class DiagnosticStateObserver : IStateChangeObserver
     {
         // Parse entries like "[Phase] → Night" or "[Log] NightActionLogEntry: ..."
         if (logLine.StartsWith("[Phase]"))
-            return ("Phase", logLine.Substring("[Phase] → ".Length));
+            return (CoreTestReferences.DiagnosticLogLabels.Phase, logLine.Substring("[Phase] → ".Length));
         if (logLine.StartsWith("[SubPhaseStage]"))
             return ("Stage", logLine.Substring("[SubPhaseStage] → ".Length));
         if (logLine.StartsWith("[SubPhase]"))

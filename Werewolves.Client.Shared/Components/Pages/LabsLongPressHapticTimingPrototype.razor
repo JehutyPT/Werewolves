@@ -1,0 +1,527 @@
+@inject IHapticFeedbackService Haptic
+@implements IDisposable
+
+@* PROTOTYPE: Throwaway Labs haptic timing tester for host-provided long-press feedback; no persistence, embedded from LabsPage. *@
+
+<main class="ww-dashboard-shell" data-lab-haptic-timing aria-labelledby="haptic-timing-title">
+    <nav class="ww-dashboard-tabs ww-labs-unified-nav" aria-label="Haptic timing prototype navigation">
+        <button type="button" class="ww-dashboard-tab" @onclick="Back">Back</button>
+    </nav>
+
+    <header class="ww-labs-status-bar" aria-label="@StatusLabel">
+        <span class="ww-labs-status-bar__dot" aria-hidden="true"></span>
+        <span class="ww-labs-status-bar__turn">PROTOTYPE</span>
+        <span class="ww-labs-status-bar__phase">@_holdStatus</span>
+    </header>
+
+    <section class="ww-dashboard-panel ww-labs-haptic-panel" aria-labelledby="haptic-timing-title">
+        <div class="ww-section-head">
+            <span id="haptic-timing-title">Long-press haptic timing</span>
+        </div>
+
+        <div class="ww-labs-haptic-button-zone" style="@ProgressStyle">
+            <button type="button"
+                    class="ww-labs-haptic-hold-button @HoldButtonClass"
+                    aria-label="Hold to test scheduled haptic feedback"
+                    @onpointerdown="HandlePointerDown"
+                    @onpointerup="HandlePointerUp"
+                    @onpointerleave="HandlePointerCancel"
+                    @onpointercancel="HandlePointerCancel"
+                    @oncontextmenu:preventDefault="true">
+                <span class="ww-labs-haptic-hold-button__fill" aria-hidden="true"></span>
+                <span class="ww-labs-haptic-hold-button__copy">
+                    <strong>@HoldButtonLabel</strong>
+                    <small>@ProgressPercentLabel</small>
+                </span>
+            </button>
+        </div>
+
+        <dl class="ww-labs-haptic-state" aria-label="Current hold state">
+            <div>
+                <dt>Duration</dt>
+                <dd>@_durationMs ms</dd>
+            </div>
+            <div>
+                <dt>Elapsed</dt>
+                <dd>@_elapsedMs ms</dd>
+            </div>
+            <div>
+                <dt>Fired</dt>
+                <dd>@FiredEventCount / @_events.Count</dd>
+            </div>
+            <div>
+                <dt>Last</dt>
+                <dd>@_lastEventSummary</dd>
+            </div>
+        </dl>
+    </section>
+
+    <section class="ww-dashboard-panel ww-labs-haptic-panel" aria-label="Timing controls">
+        <div class="ww-section-head">
+            <span>Timing</span>
+        </div>
+
+        <label class="ww-labs-haptic-control">
+            <span>Long press duration</span>
+            <input type="number"
+                   min="0"
+                   max="1000"
+                   step="25"
+                   value="@_durationMs"
+                   disabled="@_isHolding"
+                   @oninput="HandleDurationInput" />
+        </label>
+        <input class="ww-labs-haptic-range"
+               type="range"
+               min="0"
+               max="1000"
+               step="25"
+               value="@_durationMs"
+               disabled="@_isHolding"
+               @oninput="HandleDurationInput" />
+
+        @if (_isHolding)
+        {
+            <p class="ww-labs-haptic-note">Editing is locked while a hold is active so the scheduled timeline stays stable.</p>
+        }
+    </section>
+
+    <section class="ww-dashboard-panel ww-labs-haptic-panel" aria-label="Haptic event list">
+        <div class="ww-section-head">
+            <span>Haptic events</span>
+        </div>
+
+        <div class="ww-labs-haptic-events">
+            @for (var i = 0; i < _events.Count; i++)
+            {
+                var hapticEvent = _events[i];
+                <article class="ww-labs-haptic-event" @key="hapticEvent.Id">
+                    <div class="ww-labs-haptic-event__head">
+                        <strong>Event @(i + 1)</strong>
+                        <span>@TriggerDelayMs(hapticEvent) ms into hold</span>
+                    </div>
+
+                    <label class="ww-labs-haptic-control">
+                        <span>Type</span>
+                        <select value="@hapticEvent.Type"
+                                disabled="@_isHolding"
+                                @onchange="args => HandleEventTypeChanged(hapticEvent, args)">
+                            <option value="@PrototypeHapticEventType.Click">Click pulse</option>
+                            <option value="@PrototypeHapticEventType.LongPress">Long-press pulse</option>
+                        </select>
+                    </label>
+
+                    <label class="ww-labs-haptic-control">
+                        <span>Trigger point</span>
+                        <input type="number"
+                               min="0"
+                               max="100"
+                               step="5"
+                               value="@hapticEvent.Percent"
+                               disabled="@_isHolding"
+                               @oninput="args => HandleEventPercentInput(hapticEvent, args)" />
+                    </label>
+                    <input class="ww-labs-haptic-range"
+                           type="range"
+                           min="0"
+                           max="100"
+                           step="5"
+                           value="@hapticEvent.Percent"
+                           disabled="@_isHolding"
+                           @oninput="args => HandleEventPercentInput(hapticEvent, args)" />
+
+                    <div class="ww-labs-haptic-event__foot">
+                        <span class="@EventStatusClass(hapticEvent)">@EventStatusLabel(hapticEvent)</span>
+                        <button type="button"
+                                class="ww-secondary-button"
+                                disabled="@(_isHolding || _events.Count == 1)"
+                                @onclick="() => RemoveEvent(hapticEvent)">Remove</button>
+                    </div>
+                </article>
+            }
+        </div>
+
+        <div class="ww-labs-haptic-actions">
+            <button type="button" class="ww-secondary-button" disabled="@_isHolding" @onclick="AddClickEvent">Add Click</button>
+            <button type="button" class="ww-secondary-button" disabled="@_isHolding" @onclick="AddLongPressEvent">Add LongPress</button>
+            <button type="button" class="ww-secondary-button" disabled="@_isHolding" @onclick="ResetDefaults">Reset</button>
+        </div>
+    </section>
+</main>
+
+@code {
+    [Parameter]
+    public EventCallback OnBack { get; set; }
+
+    private const int MinimumDurationMs = 0;
+    private const int MaximumDurationMs = 1000;
+    private const int MinimumPercent = 0;
+    private const int MaximumPercent = 100;
+    private const string ReadyStatus = "Ready";
+    private const string QueuedStatus = "Queued";
+    private const string FiredStatus = "Fired";
+    private const string CanceledStatus = "Canceled";
+
+    private readonly List<PrototypeHapticEvent> _events =
+    [
+        new(1, PrototypeHapticEventType.Click, 0),
+        new(2, PrototypeHapticEventType.Click, 50),
+        new(3, PrototypeHapticEventType.LongPress, 100),
+    ];
+
+    private int _durationMs = 600;
+    private int _elapsedMs;
+    private int _nextEventId = 4;
+    private int _holdSequence;
+    private long _holdStartedAtTimestamp;
+    private bool _isHolding;
+    private string _holdStatus = "Idle";
+    private string _lastEventSummary = "None";
+    private CancellationTokenSource? _holdCts;
+
+    private int FiredEventCount => _events.Count(e => e.Status == FiredStatus);
+
+    private int PendingEventCount => _events.Count(e => e.Status == QueuedStatus);
+
+    private string StatusLabel => $"Prototype haptic timing status: {_holdStatus}";
+
+    private string HoldButtonClass => _isHolding ? "is-holding" : string.Empty;
+
+    private string HoldButtonLabel => _isHolding ? "Release to cancel pending haptics" : "Hold to test";
+
+    private double ProgressPercent =>
+        _durationMs == 0
+            ? (_isHolding || FiredEventCount > 0 ? 100 : 0)
+            : Math.Clamp(_elapsedMs * 100d / _durationMs, 0, 100);
+
+    private string ProgressPercentLabel => $"{ProgressPercent:0}% timeline progress";
+
+    private string ProgressStyle =>
+        $"--ww-lab-haptic-progress: {ProgressPercent.ToString("0.###", CultureInfo.InvariantCulture)}%;";
+
+    private void HandlePointerDown()
+    {
+        if (_isHolding)
+        {
+            return;
+        }
+
+        CancelActiveHold("Restarted");
+        _holdCts = new CancellationTokenSource();
+        _holdSequence++;
+        _holdStartedAtTimestamp = System.Diagnostics.Stopwatch.GetTimestamp();
+        _elapsedMs = 0;
+        _isHolding = true;
+        _holdStatus = _durationMs == 0 ? "Holding; zero-duration events fire immediately." : "Holding";
+        _lastEventSummary = "None";
+
+        foreach (var hapticEvent in _events)
+        {
+            hapticEvent.Status = QueuedStatus;
+            hapticEvent.FiredAtMs = null;
+        }
+
+        var token = _holdCts.Token;
+        var sequence = _holdSequence;
+        var eventGroups = _events
+            .OrderBy(TriggerDelayMs)
+            .ThenBy(e => e.Id)
+            .GroupBy(TriggerDelayMs)
+            .Select(group => new
+            {
+                DelayMs = group.Key,
+                Events = group.ToArray()
+            })
+            .ToArray();
+
+        foreach (var eventGroup in eventGroups)
+        {
+            _ = RunHapticEventGroupAsync(eventGroup.Events, eventGroup.DelayMs, sequence, token);
+        }
+
+        _ = RunProgressLoopAsync(sequence, token);
+    }
+
+    private void HandlePointerUp()
+    {
+        if (!_isHolding)
+        {
+            return;
+        }
+
+        var fired = FiredEventCount;
+        CancelActiveHold($"Released after {CurrentElapsedMs()} ms; fired {fired} of {_events.Count}");
+    }
+
+    private void HandlePointerCancel()
+    {
+        if (!_isHolding)
+        {
+            return;
+        }
+
+        var fired = FiredEventCount;
+        CancelActiveHold($"Canceled after {CurrentElapsedMs()} ms; fired {fired} of {_events.Count}");
+    }
+
+    private async Task RunHapticEventGroupAsync(
+        IReadOnlyList<PrototypeHapticEvent> hapticEvents,
+        int delayMs,
+        int sequence,
+        CancellationToken token)
+    {
+        try
+        {
+            if (delayMs > 0)
+            {
+                await Task.Delay(delayMs, token);
+            }
+
+            token.ThrowIfCancellationRequested();
+
+            await InvokeAsync(() =>
+            {
+                if (sequence != _holdSequence || !_isHolding || token.IsCancellationRequested)
+                {
+                    return;
+                }
+
+                foreach (var hapticEvent in hapticEvents)
+                {
+                    FireHaptic(hapticEvent.Type);
+                    var firedAtMs = CurrentElapsedMs();
+                    hapticEvent.Status = FiredStatus;
+                    hapticEvent.FiredAtMs = firedAtMs;
+                    _lastEventSummary = $"{EventTypeLabel(hapticEvent.Type)} at {firedAtMs} ms";
+                }
+
+                if (PendingEventCount == 0 && _isHolding)
+                {
+                    _holdStatus = "All scheduled haptics fired; release to reset.";
+                }
+
+                StateHasChanged();
+            });
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private async Task RunProgressLoopAsync(int sequence, CancellationToken token)
+    {
+        try
+        {
+            while (!token.IsCancellationRequested)
+            {
+                await InvokeAsync(() =>
+                {
+                    if (sequence != _holdSequence || !_isHolding)
+                    {
+                        return;
+                    }
+
+                    _elapsedMs = CurrentElapsedMs();
+                    if (_durationMs > 0 && _elapsedMs >= _durationMs && PendingEventCount == 0)
+                    {
+                        _holdStatus = "Duration reached; release to reset.";
+                    }
+
+                    StateHasChanged();
+                });
+
+                await Task.Delay(40, token);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void FireHaptic(PrototypeHapticEventType type)
+    {
+        if (type == PrototypeHapticEventType.LongPress)
+        {
+            Haptic.TryLongPress();
+            return;
+        }
+
+        Haptic.TryClick();
+    }
+
+    private void CancelActiveHold(string status)
+    {
+        _holdCts?.Cancel();
+        _holdCts?.Dispose();
+        _holdCts = null;
+
+        if (!_isHolding)
+        {
+            return;
+        }
+
+        _holdSequence++;
+        _elapsedMs = CurrentElapsedMs();
+        foreach (var hapticEvent in _events.Where(e => e.Status == QueuedStatus))
+        {
+            hapticEvent.Status = CanceledStatus;
+        }
+
+        _isHolding = false;
+        _holdStatus = status;
+        StateHasChanged();
+    }
+
+    private void HandleDurationInput(ChangeEventArgs args)
+    {
+        _durationMs = ClampChangeValue(args, MinimumDurationMs, MaximumDurationMs, _durationMs);
+        ResetTimelineReadout();
+    }
+
+    private void HandleEventPercentInput(PrototypeHapticEvent hapticEvent, ChangeEventArgs args)
+    {
+        hapticEvent.Percent = ClampChangeValue(args, MinimumPercent, MaximumPercent, hapticEvent.Percent);
+        ResetTimelineReadout();
+    }
+
+    private void HandleEventTypeChanged(PrototypeHapticEvent hapticEvent, ChangeEventArgs args)
+    {
+        if (Enum.TryParse<PrototypeHapticEventType>(args.Value?.ToString(), out var type))
+        {
+            hapticEvent.Type = type;
+            ResetTimelineReadout();
+        }
+    }
+
+    private void AddClickEvent() => AddEvent(PrototypeHapticEventType.Click);
+
+    private void AddLongPressEvent() => AddEvent(PrototypeHapticEventType.LongPress);
+
+    private void AddEvent(PrototypeHapticEventType type)
+    {
+        _events.Add(new PrototypeHapticEvent(_nextEventId++, type, 50));
+        ResetTimelineReadout();
+    }
+
+    private void RemoveEvent(PrototypeHapticEvent hapticEvent)
+    {
+        if (_events.Count <= 1)
+        {
+            return;
+        }
+
+        _events.Remove(hapticEvent);
+        ResetTimelineReadout();
+    }
+
+    private void ResetDefaults()
+    {
+        CancelActiveHold("Idle");
+        _durationMs = 600;
+        _elapsedMs = 0;
+        _lastEventSummary = "None";
+        _events.Clear();
+        _events.Add(new PrototypeHapticEvent(_nextEventId++, PrototypeHapticEventType.Click, 0));
+        _events.Add(new PrototypeHapticEvent(_nextEventId++, PrototypeHapticEventType.Click, 50));
+        _events.Add(new PrototypeHapticEvent(_nextEventId++, PrototypeHapticEventType.LongPress, 100));
+        ResetTimelineReadout();
+    }
+
+    private async Task Back()
+    {
+        CancelActiveHold("Leaving prototype");
+        await OnBack.InvokeAsync();
+    }
+
+    private int CurrentElapsedMs()
+    {
+        if (_holdStartedAtTimestamp == 0)
+        {
+            return _elapsedMs;
+        }
+
+        var elapsed = System.Diagnostics.Stopwatch.GetElapsedTime(_holdStartedAtTimestamp);
+        return Math.Max(0, (int)Math.Round(elapsed.TotalMilliseconds));
+    }
+
+    private int TriggerDelayMs(PrototypeHapticEvent hapticEvent) =>
+        (int)Math.Round(_durationMs * Math.Clamp(hapticEvent.Percent, MinimumPercent, MaximumPercent) / 100d);
+
+    private void ResetTimelineReadout()
+    {
+        if (_isHolding)
+        {
+            return;
+        }
+
+        _elapsedMs = 0;
+        _holdStatus = "Idle";
+        _lastEventSummary = "None";
+
+        foreach (var hapticEvent in _events)
+        {
+            hapticEvent.Status = ReadyStatus;
+            hapticEvent.FiredAtMs = null;
+        }
+    }
+
+    private static int ClampChangeValue(ChangeEventArgs args, int minimum, int maximum, int fallback)
+    {
+        if (!int.TryParse(args.Value?.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var value))
+        {
+            return fallback;
+        }
+
+        return Math.Clamp(value, minimum, maximum);
+    }
+
+    private static string EventTypeLabel(PrototypeHapticEventType type) => type switch
+    {
+        PrototypeHapticEventType.LongPress => "Long-press pulse",
+        _ => "Click pulse"
+    };
+
+    private static string EventStatusClass(PrototypeHapticEvent hapticEvent) => hapticEvent.Status switch
+    {
+        FiredStatus => "ww-labs-haptic-event__status is-fired",
+        CanceledStatus => "ww-labs-haptic-event__status is-canceled",
+        QueuedStatus => "ww-labs-haptic-event__status is-queued",
+        _ => "ww-labs-haptic-event__status"
+    };
+
+    private static string EventStatusLabel(PrototypeHapticEvent hapticEvent) =>
+        hapticEvent.Status == FiredStatus && hapticEvent.FiredAtMs is not null
+            ? $"Fired at {hapticEvent.FiredAtMs} ms"
+            : hapticEvent.Status;
+
+    public void Dispose()
+    {
+        _holdSequence++;
+        _isHolding = false;
+        _holdCts?.Cancel();
+        _holdCts?.Dispose();
+        _holdCts = null;
+    }
+
+    private enum PrototypeHapticEventType
+    {
+        Click,
+        LongPress
+    }
+
+    private sealed class PrototypeHapticEvent
+    {
+        public PrototypeHapticEvent(int id, PrototypeHapticEventType type, int percent)
+        {
+            Id = id;
+            Type = type;
+            Percent = percent;
+        }
+
+        public int Id { get; }
+        public PrototypeHapticEventType Type { get; set; }
+        public int Percent { get; set; }
+        public string Status { get; set; } = ReadyStatus;
+        public int? FiredAtMs { get; set; }
+    }
+}

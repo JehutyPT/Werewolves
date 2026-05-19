@@ -8,8 +8,12 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Werewolves.Client.Components.Game.Views;
 using Werewolves.Client.Resources;
 using Werewolves.Client.Services;
+using Werewolves.Client.Tests.Helpers;
 using Werewolves.Core.StateModels.Models;
+using Werewolves.Core.StateModels.Resources;
 using Xunit;
+using CssClasses = Werewolves.Client.Tests.Helpers.ClientTestReferences.Css.Classes;
+using Html = Werewolves.Client.Tests.Helpers.ClientTestReferences.Html;
 
 #pragma warning disable BL0006
 
@@ -22,8 +26,8 @@ public class InstructionRendererCollapsibleTests
 	{
 		using var fixture = new InstructionRendererFixture(
 			new TestInstruction(
-				publicAnnouncement: "The village sleeps.\nEveryone closes their eyes.",
-				privateInstruction: "Check that nobody is peeking.\nThen show the victim privately."));
+				publicAnnouncement: $"{GameStrings.NightStartsPrompt}\n{GameStrings.DebateStartsPrompt}",
+				privateInstruction: $"{GameStrings.ConfirmNightStarted}\n{GameStrings.RevealRolePromptSpecify}"));
 
 		await fixture.RenderAsync();
 
@@ -32,16 +36,15 @@ public class InstructionRendererCollapsibleTests
 
 		announce.Should().NotBeNull();
 		moderator.Should().NotBeNull();
-		announce!.ClassName.Should().Contain("ww-instruction-block--announcement").And.Contain("is-expanded");
-		moderator!.ClassName.Should().Contain("ww-instruction-block--private").And.NotContain("is-expanded");
-		announce.GetAttribute<string>("aria-expanded").Should().Be("true");
-		moderator.GetAttribute<string>("aria-expanded").Should().Be("false");
-		fixture.VisibleText.Should().Contain("The village sleeps.");
-		fixture.VisibleText.Should().Contain("Everyone closes their eyes.");
-		fixture.VisibleText.Should().Contain("Check that nobody is peeking. ...");
-		fixture.VisibleText.Should().NotContain("Then show the victim privately.");
+		announce!.ClassName.Should().Contain(CssClasses.InstructionBlockAnnouncement).And.Contain(CssClasses.Expanded);
+		moderator!.ClassName.Should().Contain(CssClasses.InstructionBlockPrivate).And.NotContain(CssClasses.Expanded);
+		announce.GetAttribute<string>(Html.Attributes.AriaExpanded).Should().Be(Html.AriaValues.True);
+		moderator.GetAttribute<string>(Html.Attributes.AriaExpanded).Should().Be(Html.AriaValues.False);
+		fixture.VisibleText.Should().Contain(GameStrings.NightStartsPrompt);
+		fixture.VisibleText.Should().Contain(GameStrings.DebateStartsPrompt);
+		fixture.VisibleText.Should().Contain(CollapsedPreview(GameStrings.ConfirmNightStarted));
+		fixture.VisibleText.Should().NotContain(GameStrings.RevealRolePromptSpecify);
 		fixture.VisibleText.Should().Contain(ClientStrings.Common_TapToExpand);
-		fixture.VisibleText.Should().NotContain("Mostrar instrução");
 	}
 
 	[Fact]
@@ -49,8 +52,8 @@ public class InstructionRendererCollapsibleTests
 	{
 		using var fixture = new InstructionRendererFixture(
 			new TestInstruction(
-				publicAnnouncement: "The village sleeps.",
-				privateInstruction: "Check that nobody is peeking."));
+				publicAnnouncement: GameStrings.NightStartsPrompt,
+				privateInstruction: GameStrings.ConfirmNightStarted));
 
 		await fixture.RenderAsync();
 
@@ -59,13 +62,16 @@ public class InstructionRendererCollapsibleTests
 		var announce = fixture.FindButtonByAriaLabel(ClientStrings.Dashboard_AnnounceLabel)!;
 		var moderator = fixture.FindButtonByAriaLabel(ClientStrings.Dashboard_ModeratorLabel)!;
 
-		announce.GetAttribute<string>("aria-expanded").Should().Be("false");
-		moderator.GetAttribute<string>("aria-expanded").Should().Be("true");
-		announce.ClassName.Should().NotContain("is-expanded");
-		moderator.ClassName.Should().Contain("is-expanded");
-		fixture.VisibleText.Should().Contain("Check that nobody is peeking.");
+		announce.GetAttribute<string>(Html.Attributes.AriaExpanded).Should().Be(Html.AriaValues.False);
+		moderator.GetAttribute<string>(Html.Attributes.AriaExpanded).Should().Be(Html.AriaValues.True);
+		announce.ClassName.Should().NotContain(CssClasses.Expanded);
+		moderator.ClassName.Should().Contain(CssClasses.Expanded);
+		fixture.VisibleText.Should().Contain(GameStrings.ConfirmNightStarted);
 		fixture.Haptic.ClickCount.Should().Be(1);
 	}
+
+	private static string CollapsedPreview(string firstLine) =>
+		$"{firstLine}{ClientTestReferences.FixtureLabels.CollapsedInstructionPreviewSuffix}";
 
 	private sealed record TestInstruction : ModeratorInstruction
 	{
@@ -101,7 +107,7 @@ public class InstructionRendererCollapsibleTests
 
 		public ButtonSnapshot? FindButtonByAriaLabel(string label) =>
 			FindAllButtons().SingleOrDefault(button =>
-				button.Attributes.TryGetValue("aria-label", out var value) &&
+				button.Attributes.TryGetValue(Html.Attributes.AriaLabel, out var value) &&
 				value as string == label);
 
 		public string VisibleText => string.Concat(VisibleTextItems);
@@ -123,7 +129,7 @@ public class InstructionRendererCollapsibleTests
 				for (var index = 0; index < frames.Count; index++)
 				{
 					var frame = frames.Array[index];
-					if (frame.FrameType == RenderTreeFrameType.Element && frame.ElementName == "button")
+					if (frame.FrameType == RenderTreeFrameType.Element && frame.ElementName == Html.Elements.Button)
 					{
 						buttons.Add(CreateButtonSnapshot(frames, index));
 					}
@@ -169,7 +175,7 @@ public class InstructionRendererCollapsibleTests
 					if (collectingButtonAttributes)
 					{
 						attributes[frame.AttributeName] = frame.AttributeValue;
-						if (frame.AttributeName == "onclick")
+						if (frame.AttributeName == Html.Events.Click)
 						{
 							clickHandlerId = frame.AttributeEventHandlerId;
 						}
@@ -186,7 +192,7 @@ public class InstructionRendererCollapsibleTests
 				}
 			}
 
-			var className = attributes.TryGetValue("class", out var cls) && cls is string s ? s : "";
+			var className = attributes.TryGetValue(Html.Attributes.Class, out var cls) && cls is string s ? s : "";
 			return new ButtonSnapshot(className, string.Concat(text), clickHandlerId, attributes);
 		}
 
@@ -242,7 +248,7 @@ public class InstructionRendererCollapsibleTests
 		protected override void HandleException(Exception exception)
 		{
 			throw new InvalidOperationException(
-				"Unhandled exception during InstructionRenderer rendering or event dispatch.", exception);
+				ClientTestReferences.ExceptionMessages.ComponentRenderOrDispatchFailure("InstructionRenderer"), exception);
 		}
 	}
 

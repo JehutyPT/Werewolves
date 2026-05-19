@@ -1,0 +1,190 @@
+@using Microsoft.Extensions.DependencyInjection
+@inject IHapticFeedbackService Haptic
+@inject IServiceProvider Services
+@implements IDisposable
+
+<div class="ww-hold-zone @HoldClass">
+	<span class="ww-hold-hint">@ClientStrings.Common_HoldToConfirm</span>
+	<button type="button"
+			class="ww-btn-hold"
+			disabled="@Disabled"
+			aria-label="@ClientStrings.Common_HoldToConfirm"
+			@onpointerdown="HandlePointerDown"
+			@onpointerup="HandlePointerUp"
+			@onpointerleave="HandlePointerCancel"
+			@onpointercancel="HandlePointerCancel">
+		<span class="ww-btn-hold__fill"></span>
+		<span class="ww-btn-hold__edge"></span>
+		<span class="ww-btn-hold__label">@DisplayLabel</span>
+	</button>
+</div>
+
+@code {
+	private static readonly TimeSpan HoldDuration = TimeSpan.FromMilliseconds(HoldButtonTimingContract.HoldDurationMs);
+	private static readonly TimeSpan SuccessFlashDuration = TimeSpan.FromMilliseconds(HoldButtonTimingContract.SuccessFlashMs);
+
+	private readonly HoldConfirmationGate _holdGate = new(HoldDuration);
+	private readonly HoldButtonHapticSequence _hapticSequence = new();
+	private bool _isHolding;
+	private bool _isComplete;
+	private CancellationTokenSource? _holdCts;
+	private long _holdSequence;
+	private long _holdStartedAtTimestamp;
+	private bool _isDisposed;
+	private IHoldButtonTiming Timing =>
+		Services.GetService<IHoldButtonTiming>() ?? SystemHoldButtonTiming.Instance;
+
+	[Parameter, EditorRequired]
+	public string Label { get; set; } = default!;
+
+	[Parameter]
+	public bool Disabled { get; set; }
+
+	[Parameter]
+	public EventCallback OnHoldComplete { get; set; }
+
+	private string HoldClass =>
+		Disabled ? "" :
+		_isComplete ? "is-complete" :
+		_isHolding ? "is-holding" : "";
+
+	private string DisplayLabel =>
+		_isComplete ? "✓" : Label;
+
+	private async Task HandlePointerDown()
+	{
+		if (Disabled) return;
+
+		CancelPendingHold();
+		var holdSequence = ++_holdSequence;
+		_holdCts = new CancellationTokenSource();
+		var token = _holdCts.Token;
+
+		_holdStartedAtTimestamp = Timing.GetTimestamp();
+		_holdGate.Begin();
+		_hapticSequence.Reset();
+		_isHolding = true;
+		_isComplete = false;
+		StateHasChanged();
+		_ = PlayPendingLongPressHapticsAsync(holdSequence, token);
+
+		try
+		{
+			await Timing.DelayAsync(HoldDuration, token);
+			if (!IsCurrentHold(holdSequence, token))
+			{
+				return;
+			}
+
+			await ApplyHoldResultAsync(_holdGate.ThresholdReached());
+		}
+		catch (TaskCanceledException)
+		{
+		}
+	}
+
+	private async Task HandlePointerUp()
+	{
+		var elapsed = Timing.GetElapsedTime(_holdStartedAtTimestamp);
+		await ApplyHoldResultAsync(_holdGate.ReleaseAfter(elapsed));
+	}
+
+	private void HandlePointerCancel()
+	{
+		ApplyHoldResult(_holdGate.Cancel());
+	}
+
+	private async Task ApplyHoldResultAsync(HoldConfirmationResult result)
+	{
+		if (result == HoldConfirmationResult.Completed)
+		{
+			PlayRemainingPendingLongPressHaptics();
+			CancelPendingHold();
+			_isHolding = false;
+			_isComplete = true;
+
+			Haptic.TryLongPress();
+			StateHasChanged();
+
+			await Timing.DelayAsync(SuccessFlashDuration);
+			await OnHoldComplete.InvokeAsync();
+			return;
+		}
+
+		ApplyHoldResult(result);
+	}
+
+	private void ApplyHoldResult(HoldConfirmationResult result)
+	{
+		if (result != HoldConfirmationResult.Canceled)
+		{
+			return;
+		}
+
+		CancelPendingHold();
+		_isHolding = false;
+		StateHasChanged();
+	}
+
+	private async Task PlayPendingLongPressHapticsAsync(long holdSequence, CancellationToken token)
+	{
+		var previousOffsetMs = 0;
+		var offsets = HoldButtonHapticSequence.PendingLongPressHapticOffsetsMs;
+
+		try
+		{
+			for (var offsetIndex = 0; offsetIndex < offsets.Length; offsetIndex++)
+			{
+				var offsetMs = offsets[offsetIndex];
+				var delayMs = offsetMs - previousOffsetMs;
+				if (delayMs > 0)
+				{
+					await Timing.DelayAsync(TimeSpan.FromMilliseconds(delayMs), token);
+				}
+
+				if (!IsCurrentHold(holdSequence, token))
+				{
+					return;
+				}
+
+				if (_hapticSequence.TryReservePendingLongPress(offsetIndex))
+				{
+					Haptic.TryLongPress();
+				}
+
+				previousOffsetMs = offsetMs;
+			}
+		}
+		catch (TaskCanceledException)
+		{
+		}
+	}
+
+	private void PlayRemainingPendingLongPressHaptics()
+	{
+		var remainingCount = _hapticSequence.ReserveRemainingPendingLongPresses();
+		for (var index = 0; index < remainingCount; index++)
+		{
+			Haptic.TryLongPress();
+		}
+	}
+
+	private bool IsCurrentHold(long holdSequence, CancellationToken token) =>
+		!_isDisposed &&
+		_holdCts is not null &&
+		holdSequence == _holdSequence &&
+		!token.IsCancellationRequested;
+
+	private void CancelPendingHold()
+	{
+		_holdCts?.Cancel();
+		_holdCts?.Dispose();
+		_holdCts = null;
+	}
+
+	public void Dispose()
+	{
+		_isDisposed = true;
+		CancelPendingHold();
+	}
+}

@@ -7,9 +7,12 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Werewolves.Client.Components.Game.Views;
 using Werewolves.Client.Resources;
 using Werewolves.Client.Services;
+using Werewolves.Client.Tests.Helpers;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
+using Werewolves.Core.StateModels.Resources;
 using Xunit;
+using Html = Werewolves.Client.Tests.Helpers.ClientTestReferences.Html;
 
 #pragma warning disable BL0006
 
@@ -30,8 +33,8 @@ public class HoldButtonInteractionTests
 
 		var updatedZone = fixture.FindHoldZone();
 		var updatedButton = fixture.FindHoldButton();
-		updatedZone.ClassName.Should().NotContain("is-complete");
-		updatedZone.ClassName.Should().NotContain("is-holding");
+		updatedZone.ClassName.Should().NotContain(ClientTestReferences.Css.Classes.HoldComplete);
+		updatedZone.ClassName.Should().NotContain(ClientTestReferences.Css.Classes.Holding);
 		updatedButton.TextContent.Should().Be(ClientStrings.SelectPlayers_SubmitButton);
 	}
 
@@ -56,12 +59,16 @@ public class HoldButtonInteractionTests
 		var button = fixture.FindHoldButton();
 		var holdTask = fixture.StartHoldAsync(button);
 
-		await WaitForAsync(
-			() => fixture.Haptic.LongPresses >= 1,
-			"the zero millisecond long-press pulse should fire immediately");
+		await fixture.FlushAsync();
+		fixture.Haptic.LongPresses.Should()
+			.Be(1, ClientTestReferences.AssertionReasons.ZeroMillisecondLongPressPulseFiresImmediately);
+
+		fixture.Timing.AdvanceBy(TimeSpan.FromMilliseconds(199));
+		await fixture.FlushAsync();
 		await fixture.ReleaseHoldAsync(button);
 		await holdTask;
-		await Task.Delay(450);
+		fixture.Timing.AdvanceBy(TimeSpan.FromMilliseconds(450));
+		await fixture.FlushAsync();
 
 		fixture.Haptic.LongPresses.Should().Be(1);
 		fixture.Haptic.Clicks.Should().Be(0);
@@ -76,30 +83,19 @@ public class HoldButtonInteractionTests
 		var button = fixture.FindHoldButton();
 		var holdTask = fixture.StartHoldAsync(button);
 
-		await WaitForAsync(
-			() => fixture.Haptic.LongPresses >= 1,
-			"the zero millisecond long-press pulse should fire immediately");
+		await fixture.FlushAsync();
+		fixture.Haptic.LongPresses.Should()
+			.Be(1, ClientTestReferences.AssertionReasons.ZeroMillisecondLongPressPulseFiresImmediately);
+
+		fixture.Timing.AdvanceBy(TimeSpan.FromMilliseconds(199));
+		await fixture.FlushAsync();
 		await fixture.CancelHoldAsync(button);
 		await holdTask;
-		await Task.Delay(450);
+		fixture.Timing.AdvanceBy(TimeSpan.FromMilliseconds(450));
+		await fixture.FlushAsync();
 
 		fixture.Haptic.LongPresses.Should().Be(1);
 		fixture.Haptic.Clicks.Should().Be(0);
-	}
-
-	private static async Task WaitForAsync(Func<bool> condition, string because)
-	{
-		var deadline = DateTime.UtcNow.AddSeconds(1);
-		while (!condition())
-		{
-			if (DateTime.UtcNow >= deadline)
-			{
-				condition().Should().BeTrue(because);
-				return;
-			}
-
-			await Task.Delay(10);
-		}
 	}
 
 	private sealed class HoldButtonFixture : IDisposable
@@ -112,6 +108,7 @@ public class HoldButtonInteractionTests
 		{
 			var services = new ServiceCollection();
 			services.AddSingleton<IHapticFeedbackService>(Haptic);
+			services.AddSingleton<IHoldButtonTiming>(Timing);
 			_serviceProvider = services.BuildServiceProvider();
 
 			_renderer = new ComponentTestRenderer(_serviceProvider);
@@ -119,15 +116,29 @@ public class HoldButtonInteractionTests
 		}
 
 		public RecordingHapticFeedbackService Haptic { get; } = new();
+		public ControlledHoldButtonTiming Timing { get; } = new();
 
 		public Task RenderAsync() =>
 			_renderer.Dispatcher.InvokeAsync(() => _renderer.RenderRootAsync(_rootComponentId));
 
+		public Task FlushAsync() =>
+			_renderer.Dispatcher.InvokeAsync(() => Task.CompletedTask);
+
 		public Task StartHoldAsync(ButtonSnapshot button) =>
 			_renderer.Dispatcher.InvokeAsync(() => _renderer.DispatchPointerDownAsync(button.PointerDownEventHandlerId));
 
-		public Task CompleteHoldAsync(ButtonSnapshot button) =>
-			StartHoldAsync(button);
+		public async Task CompleteHoldAsync(ButtonSnapshot button)
+		{
+			var holdTask = StartHoldAsync(button);
+			await FlushAsync();
+
+			Timing.AdvanceBy(RenderedHoldButtonDriver.HoldDuration);
+			await FlushAsync();
+
+			Timing.AdvanceBy(RenderedHoldButtonDriver.SuccessFlashDuration);
+			await holdTask;
+			await FlushAsync();
+		}
 
 		public Task ReleaseHoldAsync(ButtonSnapshot button) =>
 			_renderer.Dispatcher.InvokeAsync(() => _renderer.DispatchPointerUpAsync(button.PointerUpEventHandlerId));
@@ -136,15 +147,17 @@ public class HoldButtonInteractionTests
 			_renderer.Dispatcher.InvokeAsync(() => _renderer.DispatchPointerCancelAsync(button.PointerCancelEventHandlerId));
 
 		public ButtonSnapshot FindHoldButton() =>
-			FindAllButtons().Single(button => button.ClassName.Contains("ww-btn-hold", StringComparison.Ordinal));
+			FindAllButtons().Single(button =>
+				button.ClassName.Contains(ClientTestReferences.Css.Classes.HoldButton, StringComparison.Ordinal));
 
 		public ElementSnapshot FindHoldZone() =>
 			FindAllElements()
-				.Single(element => element.ClassName.Contains("ww-hold-zone", StringComparison.Ordinal));
+				.Single(element =>
+					element.ClassName.Contains(ClientTestReferences.Css.Classes.HoldZone, StringComparison.Ordinal));
 
 		private List<ButtonSnapshot> FindAllButtons() =>
 			FindAllElements()
-				.Where(element => element.ElementName == "button")
+				.Where(element => element.ElementName == Html.Elements.Button)
 				.Select(element => new ButtonSnapshot(
 					element.ClassName,
 					element.TextContent,
@@ -213,15 +226,15 @@ public class HoldButtonInteractionTests
 						if (collectingElementAttributes)
 						{
 							attributes[frame.AttributeName] = frame.AttributeValue;
-							if (frame.AttributeName == "onpointerdown")
+							if (frame.AttributeName == PointerDownEventName)
 							{
 								pointerDownHandlerId = frame.AttributeEventHandlerId;
 							}
-							if (frame.AttributeName == "onpointerup")
+							if (frame.AttributeName == PointerUpEventName)
 							{
 								pointerUpHandlerId = frame.AttributeEventHandlerId;
 							}
-							if (frame.AttributeName == "onpointercancel")
+							if (frame.AttributeName == PointerCancelEventName)
 							{
 								pointerCancelHandlerId = frame.AttributeEventHandlerId;
 							}
@@ -237,7 +250,7 @@ public class HoldButtonInteractionTests
 				}
 			}
 
-			var className = attributes.TryGetValue("class", out var cls) && cls is string s ? s : "";
+			var className = attributes.TryGetValue(Html.Attributes.Class, out var cls) && cls is string s ? s : "";
 			return new ElementSnapshot(
 				element.ElementName,
 				className,
@@ -247,6 +260,12 @@ public class HoldButtonInteractionTests
 				pointerCancelHandlerId,
 				attributes);
 		}
+
+		private static string PointerDownEventName => Html.Events.PointerDown;
+
+		private static string PointerUpEventName => Html.Events.PointerUp;
+
+		private static string PointerCancelEventName => Html.Events.PointerCancel;
 
 		public void Dispose()
 		{
@@ -271,7 +290,7 @@ public class HoldButtonInteractionTests
 
 		private void Complete(ModeratorResponse _)
 		{
-			_instruction = new FinishedGameConfirmationInstruction("Village wins");
+			_instruction = new FinishedGameConfirmationInstruction(GameStrings.VictoryConditionAllWerewolvesEliminated);
 		}
 	}
 
@@ -318,7 +337,7 @@ public class HoldButtonInteractionTests
 		protected override void HandleException(Exception exception)
 		{
 			throw new InvalidOperationException(
-				"Unhandled exception during HoldButton rendering or event dispatch.", exception);
+				ClientTestReferences.ExceptionMessages.ComponentRenderOrDispatchFailure("HoldButton"), exception);
 		}
 	}
 

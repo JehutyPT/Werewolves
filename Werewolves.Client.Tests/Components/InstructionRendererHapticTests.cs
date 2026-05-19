@@ -1,64 +1,91 @@
-using System.Text.RegularExpressions;
+using AngleSharp.Dom;
+using Bunit;
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
+using Werewolves.Client.Components.Game.Views;
+using Werewolves.Client.Services;
+using Werewolves.Client.Tests.Helpers;
+using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Models.Instructions;
 using Xunit;
+using Html = Werewolves.Client.Tests.Helpers.ClientTestReferences.Html;
+using PlayerNames = Werewolves.Client.Tests.Helpers.ClientTestReferences.PlayerNames;
 
 namespace Werewolves.Client.Tests.Components;
 
 public class InstructionRendererHapticTests
 {
-    [Fact]
-    public void InstructionRenderer_InjectsHapticFeedbackService()
-    {
-        var markup = File.ReadAllText(InstructionRendererPath());
+	[Fact]
+	public void InstructionRenderer_RemountsInputStateWhenInstructionChanges()
+	{
+		using var context = new ModeratorComponentTestContext();
+		var game = context.Services.GetRequiredService<GameClientManager>();
+		var firstInstruction = ReachAssignRolesInstruction(game);
+		var secondInstruction = firstInstruction with { };
+		var roster = game.CurrentRoster;
 
-        markup.Should().Contain("IHapticFeedbackService",
-            "InstructionRenderer should inject IHapticFeedbackService to fire haptic on instruction expansion taps");
-    }
+		var cut = context.RenderModeratorComponent<InstructionRenderer>(parameters => parameters
+			.Add(component => component.Instruction, firstInstruction)
+			.Add(component => component.Roster, roster));
 
-    [Fact]
-    public void InstructionRenderer_UsesTransitionKeyForAnimationReMount()
-    {
-        var markup = File.ReadAllText(InstructionRendererPath());
+		FindRoleButtons(cut).First().Click();
 
-        markup.Should().Contain("_flow.TransitionKey",
-            "InstructionRenderer should use _flow.TransitionKey as @key so instruction changes trigger animation");
-    }
+		FindSelectedRoleButtons(cut)
+			.Should()
+			.ContainSingle();
 
-    [Fact]
-    public void ConfirmationView_UsesHoldButtonForSubmission()
-    {
-        var markup = File.ReadAllText(ConfirmationViewPath());
+		cut.Render(parameters => parameters
+			.Add(component => component.Instruction, secondInstruction)
+			.Add(component => component.Roster, roster));
 
-        markup.Should().Contain("<HoldButton",
-            "confirmation game actions should use the same press-and-hold confirmation gate as other submissions");
-        markup.Should().Contain("OnHoldComplete=\"Confirm\"");
-        markup.Should().NotContain("@onclick=\"Confirm\"",
-            "confirmation must not keep an instant-click submit path");
-    }
+		FindSelectedRoleButtons(cut)
+			.Should()
+			.BeEmpty();
+	}
 
-    private static string InstructionRendererPath()
-    {
-        return Path.Combine(RepositoryRoot, "Werewolves.Client", "Components", "Game", "Views", "InstructionRenderer.razor");
-    }
+	private static AssignRolesInstruction ReachAssignRolesInstruction(GameClientManager game)
+	{
+		var startInstruction = game.StartGame(
+			PlayerNames.DefaultFive,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
 
-    private static string ConfirmationViewPath()
-    {
-        return Path.Combine(RepositoryRoot, "Werewolves.Client", "Components", "Game", "Views", "ConfirmationView.razor");
-    }
+		game.ProcessInput(startInstruction.CreateResponse(true));
+		var players = game.CurrentSession!.GetPlayers().ToList();
+		var werewolfIds = players.Take(2).Select(player => player.Id).ToHashSet();
+		var victimId = players[2].Id;
 
-    private static string RepositoryRoot
-    {
-        get
-        {
-            var directory = new DirectoryInfo(AppContext.BaseDirectory);
+		ConfirmCurrentInstruction(game);
+		SelectCurrentPlayers(game, werewolfIds);
+		SelectCurrentPlayers(game, [victimId]);
+		ConfirmCurrentInstruction(game);
+		ConfirmCurrentInstruction(game);
 
-            while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "Werewolves.sln")))
-            {
-                directory = directory.Parent;
-            }
+		return game.CurrentInstruction.Should().BeOfType<AssignRolesInstruction>().Subject;
+	}
 
-            return directory?.FullName
-                ?? throw new InvalidOperationException("Could not locate the repository root from the test output directory.");
-        }
-    }
+	private static void ConfirmCurrentInstruction(GameClientManager game)
+	{
+		var instruction = game.CurrentInstruction.Should().BeOfType<ConfirmationInstruction>().Subject;
+		game.ProcessInput(instruction.CreateResponse(true));
+	}
+
+	private static void SelectCurrentPlayers(GameClientManager game, HashSet<Guid> playerIds)
+	{
+		var instruction = game.CurrentInstruction.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		game.ProcessInput(instruction.CreateResponse(playerIds));
+	}
+
+	private static IReadOnlyList<IElement> FindRoleButtons(IRenderedComponent<InstructionRenderer> rendered) =>
+		rendered.FindAll(Html.Selectors.ButtonWithClass(ClientTestReferences.Css.Classes.RoleButton));
+
+	private static IReadOnlyList<IElement> FindSelectedRoleButtons(IRenderedComponent<InstructionRenderer> rendered) =>
+		FindRoleButtons(rendered)
+			.Where(button => button.ClassList.Contains(ClientTestReferences.Css.Classes.RoleButtonSelected))
+			.ToArray();
 }

@@ -1,8 +1,16 @@
 # Razor Class Library for Blazor component testing
 
-When bUnit is adopted for Blazor component testing, Blazor components will be extracted from the MAUI project (`Werewolves.UI.MobileClient`) into a Razor Class Library (RCL) targeting `net10.0`. The MAUI app references the RCL for rendering. A bUnit test project also references the RCL, giving it direct access to components without depending on platform-specific MAUI targets.
+The shared Moderator Blazor UI lives in `Werewolves.Client.Shared`, a Razor Class Library (RCL) targeting `net10.0`. The MAUI app (`Werewolves.UI.MobileClient`) references the RCL and renders the shared `Routes` root component through `BlazorWebView`. `Werewolves.Client.Tests` also references the RCL directly, giving bUnit direct access to shared components without depending on platform-specific MAUI targets.
 
-The MAUI project targets `net10.0-android;net10.0-ios;net10.0-maccatalyst`. Test projects cannot reference it directly because the platform-specific TFMs are incompatible with a standard `net10.0` test host. The current client test project works around this by linking individual source files via `<Compile Include>`, which is viable for services but breaks down for Razor components that have cross-dependencies (partials, code-behind, CSS isolation, `_Imports.razor` chains). An RCL targeting `net10.0` eliminates the TFM mismatch entirely: bUnit renders the components in a headless test context with no MAUI workload required, and CI runs them identically to Core.Tests.
+The MAUI project targets `net10.0-android;net10.0-ios;net10.0-maccatalyst`. Test projects cannot reference it directly because the platform-specific TFMs are incompatible with a standard `net10.0` test host. The RCL eliminates the TFM mismatch: bUnit renders the shared components in a headless test context with no MAUI workload required, and CI runs them identically to Core.Tests.
+
+The boundary is host-agnostic. Shared pages, game input views, hold-confirmation helpers, `GameClientManager`, lobby/dashboard projection services, client resources, and shared CSS live in the RCL. Native behavior remains behind contracts: audio playback, asset loading, haptics, wake lock, and session persistence are registered by each host. The mobile host provides the MAUI implementations, including `Plugin.Maui.Audio`, app-package audio loading, `DeviceDisplay`, haptic feedback, and file-backed session storage. Tests provide fake or no-op implementations through `ModeratorComponentTestContext`.
+
+Every host that renders the RCL must register the shared UI contract dependencies before mounting `Routes`: `GameClientManager`, `LobbySetupState`, `GameplayWakeLockController`, `IInstructionAudioPlayback`, `IHapticFeedbackService`, `IScreenWakeLock`, and `IGameSessionSaveStore`. Native hosts bind those contracts to platform adapters; test and browser QA hosts can use fake, no-op, or in-memory implementations.
+
+`Werewolves.Client.BrowserQaHost` is the local browser QA consumer of this boundary. It references the RCL directly, mounts `Routes`, and seeds shared services/Core public APIs for local lobby, dashboard, instruction, and victory inspection without becoming a public deployment target or second maintained gameplay UI.
+
+This keeps the mobile app as the native shell and composition root while giving tests and local QA hosts one shared Moderator UI surface to consume.
 
 ## Considered options
 

@@ -17,6 +17,10 @@ Default label vocabulary (needs-triage, needs-info, ready-for-agent, ready-for-h
 
 Template and conventions for issues moving to `ready-for-agent`. See `docs/agents/agent-brief.md`.
 
+### QA strategy
+
+Claim-first QA evidence rules and the source-test allowlist live in `docs/agents/qa-strategy.md`. Read it before writing or evaluating tests.
+
 ### Domain docs
 
 Single-context layout — one CONTEXT.md + docs/adr/ at the repo root. See `docs/agents/domain.md`.

@@ -33,5 +33,30 @@ public sealed class PluginAudioPlayerFactory : IAudioPlayerFactory
 		_audioManager = audioManager;
 	}
 
-	public IAudioPlayer Create(Stream audioStream) => _audioManager.CreatePlayer(audioStream);
+	public IAudioPlaybackHandle Create(Stream audioStream) =>
+		new PluginAudioPlaybackHandle(_audioManager.CreatePlayer(audioStream));
+
+	private sealed class PluginAudioPlaybackHandle : IAudioPlaybackHandle
+	{
+		private readonly IAudioPlayer _player;
+
+		public PluginAudioPlaybackHandle(IAudioPlayer player)
+		{
+			_player = player;
+		}
+
+		public bool IsPlaying => _player.IsPlaying;
+
+		public bool Loop
+		{
+			get => _player.Loop;
+			set => _player.Loop = value;
+		}
+
+		public void Play() => _player.Play();
+
+		public void Stop() => _player.Stop();
+
+		public void Dispose() => _player.Dispose();
+	}
 }

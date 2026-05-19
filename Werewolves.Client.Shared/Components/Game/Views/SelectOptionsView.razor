@@ -1,0 +1,69 @@
+@using Werewolves.Core.StateModels.Models
+@using Werewolves.Core.StateModels.Models.Instructions
+
+<div class="ww-option-list" role="group" aria-label="@ClientStrings.SelectOptions_Title">
+	@foreach (var option in Instruction.SelectableOptions)
+	{
+		<button type="button"
+				class="@OptionClass(option)"
+				aria-pressed="@AriaPressed(option)"
+				@onclick="() => ToggleOption(option)">@option</button>
+	}
+</div>
+
+<span class="ww-selection-count">@SelectionCountLabel</span>
+
+<footer class="ww-dashboard-action-zone" data-testid="@ModeratorUiTestIds.DashboardActionZone">
+	<HoldButton Label="@ClientStrings.Dashboard_ContinueButton"
+				Disabled="@(!IsSelectionValid)"
+				OnHoldComplete="HandleSubmit" />
+</footer>
+
+@code {
+	private readonly HashSet<string> _selectedOptions = new();
+
+	[Parameter, EditorRequired]
+	public SelectOptionsInstruction Instruction { get; set; } = default!;
+
+	[Parameter]
+	public EventCallback<ModeratorResponse> OnResponse { get; set; }
+
+	private bool IsSelectionValid => Instruction.SelectionRange.IsValid(_selectedOptions);
+
+	private string SelectionCountLabel =>
+		string.Format(
+			System.Globalization.CultureInfo.CurrentCulture,
+			ClientStrings.SelectOptions_SelectionCountFormat,
+			_selectedOptions.Count,
+			Instruction.SelectionRange.Maximum);
+
+	private void ToggleOption(string option)
+	{
+		if (!_selectedOptions.Remove(option))
+		{
+			if (Instruction.SelectionRange.Maximum == 1)
+			{
+				_selectedOptions.Clear();
+				_selectedOptions.Add(option);
+			}
+			else if (_selectedOptions.Count < Instruction.SelectionRange.Maximum)
+			{
+				_selectedOptions.Add(option);
+			}
+		}
+	}
+
+	private Task HandleSubmit()
+	{
+		var response = Instruction.CreateResponse(new HashSet<string>(_selectedOptions));
+		return OnResponse.InvokeAsync(response);
+	}
+
+	private string OptionClass(string option) =>
+		_selectedOptions.Contains(option)
+			? "ww-option-btn ww-option-btn--selected"
+			: "ww-option-btn";
+
+	private string AriaPressed(string option) =>
+		_selectedOptions.Contains(option) ? "true" : "false";
+}

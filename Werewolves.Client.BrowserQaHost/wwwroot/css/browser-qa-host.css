@@ -1,0 +1,81 @@
+html,
+body {
+	height: 100%;
+	margin: 0;
+	background: #1a1a1a;
+	color: var(--ww-text);
+}
+
+body {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	overscroll-behavior: none;
+}
+
+.phone-frame {
+	--browser-qa-action-space: 120px;
+	position: relative;
+	width: 360px;
+	height: 800px;
+	background: var(--ww-bg);
+	overflow: hidden;
+	border-radius: 12px;
+	box-shadow: 0 0 40px rgba(0, 0, 0, 0.5);
+	transform: translateZ(0);
+	container: browser-qa-phone / inline-size;
+}
+
+.phone-frame .ww-app-shell,
+.phone-frame .ww-dashboard-shell {
+	height: 100%;
+	min-height: 100%;
+	overflow-x: hidden;
+	overflow-y: auto;
+}
+
+.phone-frame .ww-app-shell {
+	padding-bottom: calc(var(--browser-qa-action-space) + 24px);
+}
+
+.phone-frame .ww-action-bar,
+.phone-frame .ww-dashboard-action-zone {
+	z-index: 30;
+	pointer-events: none;
+}
+
+.phone-frame .ww-action-bar > *,
+.phone-frame .ww-dashboard-action-zone > * {
+	pointer-events: auto;
+}
+
+@container browser-qa-phone (max-width: 390px) {
+	.phone-frame .ww-lobby-header h1 {
+		font-size: 30px;
+	}
+
+	.phone-frame .ww-add-row {
+		grid-template-columns: 1fr;
+	}
+
+	.phone-frame .ww-roster-item {
+		grid-template-columns: 28px minmax(0, 1fr);
+	}
+
+	.phone-frame .ww-row-actions {
+		grid-column: 1 / -1;
+		justify-content: flex-end;
+	}
+
+	.phone-frame .ww-dashboard-tab {
+		font-size: 11px;
+	}
+
+	.phone-frame .ww-stats-grid {
+		grid-template-columns: 1fr;
+	}
+
+	.phone-frame .ww-elimination-log__entry {
+		grid-template-columns: 1fr;
+	}
+}
