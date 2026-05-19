@@ -8,7 +8,9 @@ The boundary is host-agnostic. Shared pages, game input views, hold-confirmation
 
 Every host that renders the RCL must register the shared UI contract dependencies before mounting `Routes`: `GameClientManager`, `LobbySetupState`, `GameplayWakeLockController`, `IInstructionAudioPlayback`, `IHapticFeedbackService`, `IScreenWakeLock`, and `IGameSessionSaveStore`. Native hosts bind those contracts to platform adapters; test and browser QA hosts can use fake, no-op, or in-memory implementations.
 
-This keeps the mobile app as the native shell and composition root while giving tests and future local QA hosts one shared Moderator UI surface to consume.
+`Werewolves.Client.BrowserQaHost` is the local browser QA consumer of this boundary. It references the RCL directly, mounts `Routes`, and seeds shared services/Core public APIs for local lobby, dashboard, instruction, and victory inspection without becoming a public deployment target or second maintained gameplay UI.
+
+This keeps the mobile app as the native shell and composition root while giving tests and local QA hosts one shared Moderator UI surface to consume.
 
 ## Considered options
 

@@ -35,7 +35,19 @@ else
 	protected override void OnInitialized()
 	{
 		Game.StateChanged += HandleGameStateChanged;
-		MoveTo(LobbyStep.Roster);
+		MoveToInitialStep();
+	}
+
+	private void MoveToInitialStep()
+	{
+		if (Game.CurrentInstruction is FinishedGameConfirmationInstruction finished)
+		{
+			_victoryDescription = finished.VictoryDescription;
+			MoveTo(LobbyStep.Victory);
+			return;
+		}
+
+		MoveTo(Game.HasActiveSession ? LobbyStep.Dashboard : LobbyStep.Roster);
 	}
 
 	private void ShowRoleSelection()

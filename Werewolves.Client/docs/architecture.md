@@ -4,7 +4,7 @@
 
 *   **Goal:** Thin client for the `Werewolves` game engine.
 *   **Role of the UI:** Render state from Core, collect input, never perform game logic.
-*   **Target Platform:** Mobile-first (Android/iOS) via .NET MAUI Blazor Hybrid.
+*   **Target Platform:** Mobile-first (Android/iOS) via .NET MAUI Blazor Hybrid. The browser QA host is local tooling, not a public web product surface.
 *   **Two-Tempo Model:** The UI serves two distinct usage modes on the same device:
     *   **High-intensity (bursty):** Phase transitions, role wake-ups, vote outcomes. The moderator glances at the phone, acts, and returns attention to the table. UI must be streamlined, consistent, and operable with minimal attention.
     *   **Low-intensity (calm):** Debate, setup. The moderator has time and attention to browse state, review the roster, and plan. Extra information surfaces are appropriate here.
@@ -12,7 +12,7 @@
 
 ## 2. Technology Stack
 
-*   **Framework:** .NET 10 MAUI Blazor Hybrid shell plus a host-agnostic Razor Class Library (`Werewolves.Client.Shared`) for the shared Moderator UI.
+*   **Framework:** .NET 10 MAUI Blazor Hybrid shell plus a host-agnostic Razor Class Library (`Werewolves.Client.Shared`) for the shared Moderator UI. A separate `Werewolves.Client.BrowserQaHost` ASP.NET Core Blazor host runs locally for browser inspection/debug only.
 *   **UI Components:** Shared Blazor components styled through RCL static web assets in `Werewolves.Client.Shared/wwwroot/css/`.
     *   Prefer semantic component classes and CSS variables with the `--ww-*` token set.
     *   Shared behavior such as tabs, expansion panels, dialogs, and notifications should live behind thin app components/services rather than a comprehensive third-party design system.
@@ -46,7 +46,14 @@
 *   Singleton in each host. Proxies moderator input to Core, holds the active session, coordinates audio playback, and handles persistence through host-safe interfaces.
 *   Monolithic for v1 — audio, persistence, and session management live in one class. The seams for future decomposition are clear (audio, persistence, session) but splitting is deferred until complexity warrants it.
 *   **Audio:** Coordinates `IInstructionAudioPlayback`. The shared implementation maps Core sound effects and delegates stream loading/player creation to host adapters. The mobile host uses app-package audio files and `Plugin.Maui.Audio`; tests use no-op or fake services.
-*   **Persistence:** Writes through `IGameSessionSaveStore` after successful `ProcessInput()`, but the Core payload represents only the latest stable Main Phase recovery boundary. The mobile host injects `FileGameSessionSaveStore` rooted at `FileSystem.AppDataDirectory`; shared UI tests can inject in-memory or disabled storage.
+*   **Persistence:** Writes through `IGameSessionSaveStore` after successful `ProcessInput()`, but the Core payload represents only the latest stable Main Phase recovery boundary. The mobile host injects `FileGameSessionSaveStore` rooted at `FileSystem.AppDataDirectory`; shared UI tests and the browser QA host can inject in-memory or disabled storage.
+
+### 3.4. Browser QA Host
+*   `Werewolves.Client.BrowserQaHost` is a local-only ASP.NET Core Blazor composition root for browser inspection, screenshots, DOM inspection, viewport checks, and representative interactions.
+*   It mounts the shared `Routes` root from `Werewolves.Client.Shared`; it does not own copied web pages for lobby, role selection, dashboard, instruction, or victory flows.
+*   It registers browser-safe substitutes for native-only contracts: no-op haptics, no-op wake lock effect, disabled/no-op audio playback, and in-memory local QA save storage.
+*   It sets `pt-PT` culture and keeps Moderator-visible copy resource-backed through the same shared resources as the mobile app.
+*   Query fixtures such as `/?qa=lobby`, `/?qa=dashboard`, and `/?qa=victory` seed shared services and Core public APIs for inspection only. They are not product navigation, accounts, multiplayer, production persistence, or a required CI gate.
 
 ## 4. Navigation & Layout
 
@@ -149,6 +156,7 @@
 *   `Werewolves.Client.Shared/Resources/` contains client UI localization strings.
 *   `Werewolves.Client.Shared/wwwroot/css/` contains shared design tokens and app CSS served as RCL static web assets.
 *   `Werewolves.Client/` remains the MAUI shell, native service composition root, platform metadata owner, and `BlazorWebView` host for the shared `Routes` component.
+*   `Werewolves.Client.BrowserQaHost/` is the local browser QA composition root for the shared `Routes` component and browser-safe service adapters.
 *   `Werewolves.Client/Resources/Raw/Audio/` contains native audio assets loaded by the mobile host.
 *   `Werewolves.Client/Services/` contains native adapters such as file persistence and `Plugin.Maui.Audio` player creation.
 *   `Werewolves.Client.Tests/Helpers/ModeratorComponentTestContext.cs` is the bUnit fixture pattern: set `pt-PT` culture, use `ClientStrings`, register fake/no-op host services, and render shared components through the RCL reference.

@@ -86,13 +86,17 @@ Manual check notes must include: claim, device/OS, app build, steps, result, and
 
 ## Browser QA Host
 
-Use the Browser QA Host for local rendered Moderator UI inspection. It is a follow-up consumer of the same shared RCL boundary used by the MAUI host and bUnit tests.
+Use the Browser QA Host for local rendered Moderator UI inspection. It lives in `Werewolves.Client.BrowserQaHost` and consumes the same shared RCL boundary used by the MAUI host and bUnit tests.
 
-- Seed deterministic states for lobby setup, role selection, dashboard tabs, instruction flows, selection inputs, assignment inputs, victory, empty/error states, and long content.
+- Run it locally with `dotnet run --project Werewolves.Client.BrowserQaHost/Werewolves.Client.BrowserQaHost.csproj`, then open `http://localhost:5098`.
+- Use `/?qa=lobby`, `/?qa=dashboard`, and `/?qa=victory` for deterministic access to lobby/role selection, dashboard/action instruction, and victory states.
+- Inspect the shared `Routes` root from `Werewolves.Client.Shared`; the browser host must not copy or fork lobby, dashboard, instruction, or victory pages.
+- Treat haptics, wake lock, audio playback, and local save storage as browser-safe substitutes: no-op, disabled, or in-memory local QA behavior only.
 - Inspect real HTML/CSS at mobile and desktop-sized viewports.
 - Use screenshots, DOM inspection, computed styles, and agent-assisted visual feedback.
 - Use it for layout, spacing, typography, motion, focus, and accessibility attributes.
-- Do not treat browser-host checks as CI-blocking until fixtures and pass/fail contracts are stable.
+- Do not treat the browser host as a public deployment target, account or multiplayer surface, production persistence surface, or second maintained web product.
+- Do not add a required CI gate for browser-host launch or smoke checks. Any browser smoke check should stay local or run-on-demand, lightweight, semantic, and focused on launch plus representative Moderator UI access rather than visual regression coverage.
 - Pair browser findings with deterministic CI tests whenever a claim can be narrowed.
 
 ## Source-Test Allowlist

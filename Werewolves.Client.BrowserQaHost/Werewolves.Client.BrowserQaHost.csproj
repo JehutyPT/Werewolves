@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Werewolves.Client.BrowserQaHost</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Werewolves.Client.Shared\Werewolves.Client.Shared.csproj" />
+    <ProjectReference Include="..\Werewolves.Core\Werewolves.Core.GameLogic\Werewolves.Core.GameLogic.csproj" />
+    <ProjectReference Include="..\Werewolves.Core\Werewolves.Core.StateModels\Werewolves.Core.StateModels.csproj" />
+  </ItemGroup>
+
+</Project>
