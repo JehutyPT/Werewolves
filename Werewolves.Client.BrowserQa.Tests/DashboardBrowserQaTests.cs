@@ -70,7 +70,7 @@ public sealed class DashboardBrowserQaTests : PlaywrightTest, IClassFixture<Brow
 		await using var browser = await Playwright.Chromium.LaunchAsync();
 		var page = await browser.NewPageAsync();
 
-		await InstallInstructionAnimationRecorderAsync(page);
+		await BrowserQaInstructionAnimations.InstallRecorderAsync(page, ModeratorUiTestIds.InstructionBlock);
 		await BrowserQaPage.SetWideViewportAsync(page);
 		await page.GotoAsync(_host.DashboardScenarioUri.ToString(), new()
 		{
@@ -80,95 +80,25 @@ public sealed class DashboardBrowserQaTests : PlaywrightTest, IClassFixture<Brow
 		var instructionBlock = page.GetByTestId(ModeratorUiTestIds.InstructionBlock).First;
 
 		await Expect(instructionBlock).ToBeVisibleAsync();
-		await page.WaitForFunctionAsync(
-			"testId => window.__wwInstructionAnimations?.some(animation => animation.TestId === testId)",
+		await BrowserQaInstructionAnimations.WaitForRecordedEvidenceAsync(
+			page,
 			ModeratorUiTestIds.InstructionBlock);
-
-		var evidence = await page.EvaluateAsync<InstructionAnimationEvidence>(
-			"testId => window.__wwInstructionAnimations.find(animation => animation.TestId === testId)",
+		var evidence = await BrowserQaInstructionAnimations.ReadRecordedEvidenceAsync(
+			page,
 			ModeratorUiTestIds.InstructionBlock);
 
 		evidence.AnimationName.Should().NotBeNullOrWhiteSpace();
 		evidence.ComputedAnimationName.Should().Contain(evidence.AnimationName);
 		evidence.DurationMs.Should().BeInRange(200, 300);
 		evidence.ResolvedTokenDurationMs.Should().BeApproximately(evidence.DurationMs, precision: 0.5);
-		evidence.TimingFunction.Should().Be("ease-out");
+		evidence.TimingFunction.Should().Be(BrowserQaCss.EaseOutTimingFunctionValue);
 		evidence.WebAnimationsDurationMs.Should().NotBeNull();
 		evidence.WebAnimationsDurationMs!.Value.Should().BeInRange(200, 300);
 		evidence.KeyframeCount.Should().BeGreaterThanOrEqualTo(2);
-		evidence.FirstOpacity.Should().Be("0");
-		evidence.LastOpacity.Should().Be("1");
+		evidence.FirstOpacity.Should().Be(BrowserQaCss.HiddenOpacityValue);
+		evidence.LastOpacity.Should().Be(BrowserQaCss.VisibleOpacityValue);
 		evidence.FirstTransform.Should().NotBeNullOrWhiteSpace();
 		evidence.LastTransform.Should().NotBeNullOrWhiteSpace();
 		evidence.FirstTransform.Should().NotBe(evidence.LastTransform);
-	}
-
-	private static Task InstallInstructionAnimationRecorderAsync(IPage page) =>
-		page.AddInitScriptAsync($$"""
-			(() => {
-				window.__wwInstructionAnimations = [];
-
-				const instructionTestId = "{{ModeratorUiTestIds.InstructionBlock}}";
-				const animationToken = "--ww-anim-instruction";
-				const toMilliseconds = value => {
-					const firstValue = value.split(",")[0].trim();
-					if (firstValue.endsWith("ms")) {
-						return Number.parseFloat(firstValue.slice(0, -2));
-					}
-
-					if (firstValue.endsWith("s")) {
-						return Number.parseFloat(firstValue.slice(0, -1)) * 1000;
-					}
-
-					return Number.NaN;
-				};
-
-				document.addEventListener("animationstart", event => {
-					const target = event.target;
-					if (!(target instanceof HTMLElement) ||
-						target.getAttribute("data-testid") !== instructionTestId) {
-						return;
-					}
-
-					const styles = getComputedStyle(target);
-					const runtimeAnimation = target.getAnimations()
-						.find(animation => animation.animationName === event.animationName);
-					const runtimeTiming = runtimeAnimation?.effect?.getTiming();
-					const runtimeDuration = runtimeTiming?.duration;
-					const runtimeKeyframes = runtimeAnimation?.effect?.getKeyframes() ?? [];
-					const firstKeyframe = runtimeKeyframes[0] ?? {};
-					const lastKeyframe = runtimeKeyframes[runtimeKeyframes.length - 1] ?? {};
-
-					window.__wwInstructionAnimations.push({
-						TestId: instructionTestId,
-						AnimationName: event.animationName,
-						ComputedAnimationName: styles.animationName,
-						DurationMs: toMilliseconds(styles.animationDuration),
-						ResolvedTokenDurationMs: toMilliseconds(styles.getPropertyValue(animationToken)),
-						TimingFunction: styles.animationTimingFunction,
-						WebAnimationsDurationMs: typeof runtimeDuration === "number" ? runtimeDuration : null,
-						KeyframeCount: runtimeKeyframes.length,
-						FirstOpacity: String(firstKeyframe.opacity ?? ""),
-						LastOpacity: String(lastKeyframe.opacity ?? ""),
-						FirstTransform: String(firstKeyframe.transform ?? ""),
-						LastTransform: String(lastKeyframe.transform ?? "")
-					});
-				}, true);
-			})();
-			""");
-
-	private sealed class InstructionAnimationEvidence
-	{
-		public string AnimationName { get; init; } = string.Empty;
-		public string ComputedAnimationName { get; init; } = string.Empty;
-		public double DurationMs { get; init; }
-		public double ResolvedTokenDurationMs { get; init; }
-		public string TimingFunction { get; init; } = string.Empty;
-		public double? WebAnimationsDurationMs { get; init; }
-		public int KeyframeCount { get; init; }
-		public string FirstOpacity { get; init; } = string.Empty;
-		public string LastOpacity { get; init; } = string.Empty;
-		public string FirstTransform { get; init; } = string.Empty;
-		public string LastTransform { get; init; } = string.Empty;
 	}
 }
