@@ -40,18 +40,20 @@ public sealed class DashboardBrowserQaTests : PlaywrightTest, IClassFixture<Brow
 		await Expect(statusBar).ToBeVisibleAsync();
 		await Expect(actionZone).ToBeVisibleAsync();
 		await Expect(compactTabs.GetByRole(AriaRole.Button, new() { Name = ClientStrings.Dashboard_TabAction }))
-			.ToHaveAttributeAsync("aria-selected", "true");
+			.ToHaveAttributeAsync(BrowserQaAttributes.AriaSelected, BrowserQaAttributes.AriaTrue);
 
 		var shellLayout = await BrowserQaPage.ReadLayoutAsync(shell);
 		var tabsLayout = await BrowserQaPage.ReadLayoutAsync(compactTabs);
 		var statusLayout = await BrowserQaPage.ReadLayoutAsync(statusBar);
 		var actionLayout = await BrowserQaPage.ReadLayoutAsync(actionZone);
-		var horizontalInset = await BrowserQaPage.ReadComputedPixelValueAsync(shell, "--ww-page-px");
+		var horizontalInset = await BrowserQaPage.ReadComputedPixelValueAsync(shell, BrowserQaCss.PageHorizontalInset);
 
 		shellLayout.Width.Should().BeApproximately(360, precision: 0.5);
 		shellLayout.Height.Should().BeApproximately(800, precision: 0.5);
-		(await BrowserQaPage.ReadComputedStyleAsync(statusBar, "position")).Should().Be("fixed");
-		(await BrowserQaPage.ReadComputedStyleAsync(actionZone, "position")).Should().Be("fixed");
+		(await BrowserQaPage.ReadComputedStyleAsync(statusBar, BrowserQaCss.PositionProperty))
+			.Should().Be(BrowserQaCss.FixedPositionValue);
+		(await BrowserQaPage.ReadComputedStyleAsync(actionZone, BrowserQaCss.PositionProperty))
+			.Should().Be(BrowserQaCss.FixedPositionValue);
 
 		tabsLayout.X.Should().BeApproximately(shellLayout.X + horizontalInset, precision: 0.75);
 		tabsLayout.Width.Should().BeApproximately(shellLayout.Width - (horizontalInset * 2), precision: 0.75);
