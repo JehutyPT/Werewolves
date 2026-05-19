@@ -13,13 +13,20 @@ namespace Werewolves.Client.Tests.Services;
 public class LobbySetupStateTests
 {
 	[Fact]
-	public void Construction_PublicSeamRequiresLobbySetupMetadata()
+	public void Construction_ProjectsLobbySetupMetadataIntoInitialState()
 	{
-		var publicConstructors = typeof(LobbySetupState).GetConstructors();
+		var metadata = LobbySetupMetadataFixture.ForRoles(
+			MainRoleType.Seer,
+			MainRoleType.SimpleWerewolf);
 
-		publicConstructors.Should().ContainSingle()
-			.Which.GetParameters().Should().ContainSingle()
-			.Which.ParameterType.Should().Be(typeof(LobbySetupMetadata));
+		var state = new LobbySetupState(metadata);
+
+		state.MinimumPlayerCount.Should().Be(metadata.MinimumPlayerCount);
+		state.AvailableRoles.Should().Equal(
+			MainRoleType.Seer,
+			MainRoleType.SimpleWerewolf);
+		state.PlayerNames.Should().BeEmpty();
+		state.TotalSelectedRoleCount.Should().Be(0);
 	}
 
 	[Fact]

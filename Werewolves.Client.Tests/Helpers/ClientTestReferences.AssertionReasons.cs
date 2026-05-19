@@ -18,7 +18,6 @@ public static partial class ClientTestReferences
 		public static string AppCssDefinesInstructionEnterKeyframes => nameof(AppCssDefinesInstructionEnterKeyframes);
 		public static string InstructionBlockReferencesEnterAnimation => nameof(InstructionBlockReferencesEnterAnimation);
 		public static string InstructionBlockUsesAnimationDurationToken => nameof(InstructionBlockUsesAnimationDurationToken);
-		public static string InstructionRendererUsesTransitionKey => nameof(InstructionRendererUsesTransitionKey);
 		public static string StartGameConfirmationShownDirectly => nameof(StartGameConfirmationShownDirectly);
 		public static string ConfirmationDoesNotSubmitFromInstantClick => nameof(ConfirmationDoesNotSubmitFromInstantClick);
 		public static string ConfirmationUsesPressAndHoldGate => nameof(ConfirmationUsesPressAndHoldGate);

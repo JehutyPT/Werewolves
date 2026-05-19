@@ -45,11 +45,9 @@ public class QaStrategyTests
 	{
 		var strategy = File.ReadAllText(QaStrategyPath);
 		var allowlist = SourceTestAllowlistSection(strategy);
+		var allowlistRows = SourceTestAllowlistRows(strategy);
 
-		foreach (var requiredEntry in QaStrategyContract.RequiredSourceTestAllowlistEntries)
-		{
-			allowlist.Should().Contain(requiredEntry);
-		}
+		allowlistRows.Should().Equal(QaStrategyContract.RequiredSourceTestAllowlistEntries);
 
 		foreach (var retiredEntry in QaStrategyContract.RetiredSourceTestAllowlistEntries)
 		{
@@ -70,4 +68,10 @@ public class QaStrategyTests
 
 		return strategy[start..];
 	}
+
+	private static IReadOnlyList<string> SourceTestAllowlistRows(string strategy) =>
+		SourceTestAllowlistSection(strategy)
+			.Split(Environment.NewLine)
+			.Where(line => line.StartsWith("| `", StringComparison.Ordinal))
+			.ToArray();
 }

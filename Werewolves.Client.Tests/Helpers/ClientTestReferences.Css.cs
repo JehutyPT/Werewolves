@@ -16,9 +16,11 @@ public static partial class ClientTestReferences
 
 		public static class Classes
 		{
+			public const string AppShell = "ww-app-shell";
 			public const string AudioToggle = "ww-audio-toggle";
 			public const string AudioToggleMuted = "ww-audio-toggle--muted";
 			public const string DashboardActionZone = "ww-dashboard-action-zone";
+			public const string DashboardShell = "ww-dashboard-shell";
 			public const string DashboardStatusBar = "ww-dashboard-status-bar";
 			public const string DashboardTab = "ww-dashboard-tab";
 			public const string DashboardTabActive = "ww-dashboard-tab--active";
@@ -33,8 +35,10 @@ public static partial class ClientTestReferences
 			public const string InstructionBlockAnnouncement = "ww-instruction-block--announcement";
 			public const string InstructionBlockPrivate = "ww-instruction-block--private";
 			public const string InstructionPrivate = "ww-private-instruction";
+			public const string InstructionStack = "ww-instruction-stack";
 			public const string LabsStatusBar = "ww-labs-status-bar";
 			public const string OptionButtonSelected = "ww-option-btn--selected";
+			public const string RoleButton = "ww-role-btn";
 			public const string RoleButtonSelected = "ww-role-btn--selected";
 			public const string SelectPlayersItemSelected = "ww-select-players-item--selected";
 			public const string SelectPlayersList = "ww-select-players-list";
@@ -122,7 +126,5 @@ public static partial class ClientTestReferences
 
 		public static string RootDocumentDarkThemePattern =>
 			$@"(?s)html,\s*body,\s*#app\s*\{{.*background:\s*var\({Tokens.Background}\).*color:\s*var\({Tokens.Text}\).*color-scheme:\s*dark";
-
-		public const string PageDarkShellPattern = "<main\\s+class=\"ww-(?:app|dashboard)-shell\"";
 	}
 }

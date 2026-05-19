@@ -1,5 +1,11 @@
 using System.Text.RegularExpressions;
+using Bunit;
 using FluentAssertions;
+using Microsoft.AspNetCore.Components;
+using Microsoft.Extensions.DependencyInjection;
+using Werewolves.Client.BrowserQaHost;
+using Werewolves.Client.Components.Pages;
+using Werewolves.Client.Services;
 using Werewolves.Client.Tests.Helpers;
 using Css = Werewolves.Client.Tests.Helpers.ClientTestReferences.Css;
 using PlatformChrome = Werewolves.Client.Tests.Helpers.ClientTestReferences.PlatformChrome;
@@ -101,16 +107,19 @@ public class DarkThemeTokenTests
 	[Fact]
 	public void Pages_RenderInsideDarkShells()
 	{
-		var pages = Directory.GetFiles(SharedPath("Components/Pages"), "*.razor");
-		pages.Should().NotBeEmpty();
-
-		// Deprecated temporary scaffold: replace with ADR-0006/bUnit or browser-host rendered shell checks.
-		var pagesWithoutDarkShell = pages
-			.Where(path => !Regex.IsMatch(File.ReadAllText(path), Css.PageDarkShellPattern))
-			.Select(path => Path.GetRelativePath(ClientTestReferences.Paths.RepositoryRoot, path))
-			.ToArray();
-
-		pagesWithoutDarkShell.Should().BeEmpty();
+		AssertPageRendersInsideShell<LobbyRosterPage>(Css.Classes.AppShell);
+		AssertPageRendersInsideShell<RoleSelectionPage>(Css.Classes.AppShell);
+		AssertPageRendersInsideShell<DashboardPage>(
+			Css.Classes.DashboardShell,
+			SeedDashboardGame);
+		AssertPageRendersInsideShell<VictoryPage>(
+			Css.Classes.AppShell,
+			parameters: parameters => parameters
+				.Add(component => component.VictoryDescription, "A aldeia venceu."));
+		AssertPageRendersInsideShell<BenchmarkPage>(Css.Classes.AppShell);
+		AssertPageRendersInsideShell<LabsPage>(Css.Classes.AppShell);
+		AssertPageRendersInsideShell<LabsUnifiedInstructionPrototype>(Css.Classes.DashboardShell);
+		AssertPageRendersInsideShell<LabsLongPressHapticTimingPrototype>(Css.Classes.DashboardShell);
 	}
 
 	private static IReadOnlyList<string> FindColorLiterals(string path)
@@ -154,6 +163,30 @@ public class DarkThemeTokenTests
 		return channel <= 0.03928
 			? channel / 12.92
 			: Math.Pow((channel + 0.055) / 1.055, 2.4);
+	}
+
+	private static void AssertPageRendersInsideShell<TComponent>(
+		string expectedShellClass,
+		Action<ModeratorComponentTestContext>? arrange = null,
+		Action<ComponentParameterCollectionBuilder<TComponent>>? parameters = null)
+		where TComponent : IComponent
+	{
+		using var context = new ModeratorComponentTestContext();
+		context.Services.AddSingleton<BenchmarkClientManager>();
+		arrange?.Invoke(context);
+
+		var rendered = context.RenderModeratorComponent(parameters);
+
+		rendered.Find("main").ClassList.Should().Contain(expectedShellClass);
+	}
+
+	private static void SeedDashboardGame(ModeratorComponentTestContext context)
+	{
+		var game = context.Services.GetRequiredService<GameClientManager>();
+
+		game.StartGame(
+			BrowserQaFixtures.DefaultPlayerNames,
+			BrowserQaFixtures.DefaultRoles);
 	}
 
 	private static string ClientPath(params string[] relativeSegments)
