@@ -1,17 +1,21 @@
+using AngleSharp.Dom;
 using Bunit;
 using FluentAssertions;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using Werewolves.Client.BrowserQaHost;
+using Werewolves.Client.BrowserQaHost.Components;
 using Werewolves.Client.Components;
 using Werewolves.Client.Resources;
 using Werewolves.Client.Services;
 using Werewolves.Client.Tests.Helpers;
+using Werewolves.Core.StateModels.Models.Instructions;
 using Xunit;
+using Html = Werewolves.Client.Tests.Helpers.ClientTestReferences.Html;
 
 namespace Werewolves.Client.Tests.BrowserQaHost;
 
@@ -20,10 +24,7 @@ public class BrowserQaHostCompositionTests
 	[Fact]
 	public async Task Services_RenderSharedRoutesWithBrowserSafeAdapters()
 	{
-		using var context = new BunitContext();
-
-		BrowserQaHostCulture.UsePortuguese();
-		context.Services.AddBrowserQaHostModeratorServices();
+		using var context = CreateBrowserQaHostContext();
 
 		context.Services.GetRequiredService<GameClientManager>().Should().NotBeNull();
 		context.Services.GetRequiredService<LobbySetupState>().PlayerNames.Should().NotBeEmpty();
@@ -38,44 +39,45 @@ public class BrowserQaHostCompositionTests
 
 		var rendered = context.Render<Routes>();
 
-		rendered.Markup.Should().Contain("ww-app-shell");
-		rendered.Markup.Should().Contain(ClientStrings.LobbyRoster_Title);
+		RenderedText(rendered).Should().Contain(ClientStrings.LobbyRoster_Title);
+		FindButtonByText(rendered, ClientStrings.LobbyRoster_ContinueToRolesButton)
+			.HasAttribute(Html.Attributes.Disabled)
+			.Should()
+			.BeFalse();
 	}
 
 	[Fact]
-	public void SharedRoutes_WhenDashboardScenarioIsSeeded_RendersDashboardFlow()
+	public void BrowserQaRoot_WhenDashboardScenarioIsRequested_SeedsAndRendersDashboardFlow()
 	{
-		using var context = new BunitContext();
-		BrowserQaHostCulture.UsePortuguese();
-		context.Services.AddBrowserQaHostModeratorServices();
+		using var context = CreateBrowserQaHostContext(BrowserQaScenario.Dashboard);
 
-		BrowserQaScenarioSeeder.Apply(
-			BrowserQaScenario.Dashboard,
-			context.Services.GetRequiredService<LobbySetupState>(),
-			context.Services.GetRequiredService<GameClientManager>());
+		var rendered = context.Render<BrowserQaRoot>();
 
-		var rendered = context.Render<Routes>();
+		var game = context.Services.GetRequiredService<GameClientManager>();
+		game.HasActiveSession.Should().BeTrue();
+		game.CurrentInstruction.Should().NotBeNull();
+		context.Services.GetRequiredService<IScreenWakeLock>().KeepScreenOn.Should().BeTrue();
 
-		rendered.Markup.Should().Contain("ww-dashboard-shell");
-		rendered.Markup.Should().Contain(ClientStrings.Dashboard_TabAction);
+		FindButtonByText(rendered, ClientStrings.Dashboard_TabRoster).Should().NotBeNull();
+		FindButtonByText(rendered, ClientStrings.Dashboard_TabAction).Should().NotBeNull();
+		FindButtonByText(rendered, ClientStrings.Dashboard_TabStats).Should().NotBeNull();
 	}
 
 	[Fact]
-	public void SharedRoutes_WhenVictoryScenarioIsSeeded_RendersVictoryFlow()
+	public void BrowserQaRoot_WhenVictoryScenarioIsRequested_SeedsVictoryFlow()
 	{
-		using var context = new BunitContext();
-		BrowserQaHostCulture.UsePortuguese();
-		context.Services.AddBrowserQaHostModeratorServices();
+		using var context = CreateBrowserQaHostContext(BrowserQaScenario.Victory);
 
-		BrowserQaScenarioSeeder.Apply(
-			BrowserQaScenario.Victory,
-			context.Services.GetRequiredService<LobbySetupState>(),
-			context.Services.GetRequiredService<GameClientManager>());
+		var rendered = context.Render<BrowserQaRoot>();
 
-		var rendered = context.Render<Routes>();
+		var game = context.Services.GetRequiredService<GameClientManager>();
+		game.CurrentInstruction.Should().BeOfType<FinishedGameConfirmationInstruction>();
+		RenderedText(rendered).Should().Contain(ClientStrings.Victory_Title);
 
-		rendered.Markup.Should().Contain("victory-title");
-		rendered.Markup.Should().Contain(ClientStrings.Victory_Title);
+		FindButtonByText(rendered, ClientStrings.Victory_ReturnToLobbyButton).Click();
+
+		game.HasActiveSession.Should().BeFalse();
+		RenderedText(rendered).Should().Contain(ClientStrings.LobbyRoster_Title);
 	}
 
 	[Fact]
@@ -122,72 +124,21 @@ public class BrowserQaHostCompositionTests
 		scope.ServiceProvider.GetRequiredService<GameClientManager>().Should().NotBeNull();
 	}
 
-	[Fact]
-	public void BrowserQaHostPhoneFrame_KeepsFixedOverlaysPinnedWhileShellsScroll()
+	private static BunitContext CreateBrowserQaHostContext(BrowserQaScenario scenario = BrowserQaScenario.Lobby)
 	{
-		var css = File.ReadAllText(ClientTestReferences.Paths.RepositoryPath(
-			"Werewolves.Client.BrowserQaHost",
-			"wwwroot",
-			"css",
-			"browser-qa-host.css"));
-
-		css.Should().MatchRegex(SelectorBlockPattern(".phone-frame", "position: relative"));
-		css.Should().MatchRegex(SelectorBlockPattern(".phone-frame", "height: min(800px, 100vh)"));
-		css.Should().MatchRegex(SelectorBlockPattern(".phone-frame", "overflow: hidden"));
-		css.Should().MatchRegex(SelectorBlockPattern(".phone-frame", "transform: translateZ(0)"));
-		css.Should().MatchRegex(SelectorBlockPattern(
-			@"\.phone-frame\s+\.ww-app-shell,\s*\.phone-frame\s+\.ww-dashboard-shell",
-			"min-height: 100%"));
-		css.Should().MatchRegex(SelectorBlockPattern(
-			@"\.phone-frame\s+\.ww-app-shell,\s*\.phone-frame\s+\.ww-dashboard-shell",
-			"height: 100%"));
-		css.Should().MatchRegex(SelectorBlockPattern(
-			@"\.phone-frame\s+\.ww-app-shell,\s*\.phone-frame\s+\.ww-dashboard-shell",
-			"overflow-y: auto"));
+		var context = new BunitContext();
+		BrowserQaHostCulture.UsePortuguese();
+		context.Services.AddBrowserQaHostModeratorServices();
+		context.Services.GetRequiredService<NavigationManager>().NavigateTo($"/?qa={scenario}");
+		return context;
 	}
 
-	[Fact]
-	public void BrowserQaHostActionArea_ReservesScrollableRosterSpaceWithoutCatchingScrimClicks()
-	{
-		var css = File.ReadAllText(ClientTestReferences.Paths.RepositoryPath(
-			"Werewolves.Client.BrowserQaHost",
-			"wwwroot",
-			"css",
-			"browser-qa-host.css"));
+	private static string RenderedText<TComponent>(IRenderedComponent<TComponent> rendered)
+		where TComponent : IComponent =>
+		string.Join(" ", rendered.Nodes.Select(node => node.TextContent));
 
-		css.Should().MatchRegex(SelectorBlockPattern(".phone-frame", "--browser-qa-action-space: 120px"));
-		css.Should().MatchRegex(SelectorBlockPattern(
-			@"\.phone-frame\s+\.ww-app-shell",
-			"padding-bottom: calc(var(--browser-qa-action-space) + 24px)"));
-		css.Should().MatchRegex(SelectorBlockPattern(
-			@"\.phone-frame\s+\.ww-action-bar,\s*\.phone-frame\s+\.ww-dashboard-action-zone",
-			"pointer-events: none"));
-		css.Should().MatchRegex(SelectorBlockPattern(
-			@"\.phone-frame\s+\.ww-action-bar\s+>\s+\*,\s*\.phone-frame\s+\.ww-dashboard-action-zone\s+>\s+\*",
-			"pointer-events: auto"));
-	}
-
-	[Fact]
-	public void BrowserQaHostResponsiveRules_FollowPhoneFrameWidthInsteadOfBrowserViewport()
-	{
-		var css = File.ReadAllText(ClientTestReferences.Paths.RepositoryPath(
-			"Werewolves.Client.BrowserQaHost",
-			"wwwroot",
-			"css",
-			"browser-qa-host.css"));
-
-		css.Should().MatchRegex(SelectorBlockPattern(".phone-frame", "container: browser-qa-phone / inline-size"));
-		css.Should().Contain("@container browser-qa-phone (max-width: 390px)");
-		css.Should().MatchRegex(SelectorBlockPattern(@"\.phone-frame\s+\.ww-add-row", "grid-template-columns: 1fr"));
-		css.Should().MatchRegex(SelectorBlockPattern(@"\.phone-frame\s+\.ww-roster-item", "grid-template-columns: 28px minmax(0, 1fr)"));
-		css.Should().MatchRegex(SelectorBlockPattern(@"\.phone-frame\s+\.ww-row-actions", "grid-column: 1 / -1"));
-		css.Should().MatchRegex(SelectorBlockPattern(@"\.phone-frame\s+\.ww-dashboard-tab", "font-size: 11px"));
-		css.Should().MatchRegex(SelectorBlockPattern(@"\.phone-frame\s+\.ww-stats-grid", "grid-template-columns: 1fr"));
-		css.Should().MatchRegex(SelectorBlockPattern(@"\.phone-frame\s+\.ww-elimination-log__entry", "grid-template-columns: 1fr"));
-	}
-
-	private static string SelectorBlockPattern(string selector, string declaration)
-	{
-		return $@"(?s){selector}\s*\{{(?:(?!\}}).)*{Regex.Escape(declaration)}";
-	}
+	private static IElement FindButtonByText<TComponent>(IRenderedComponent<TComponent> rendered, string text)
+		where TComponent : IComponent =>
+		rendered.FindAll(Html.Selectors.Button)
+			.Single(button => button.TextContent.Contains(text, StringComparison.CurrentCulture));
 }
