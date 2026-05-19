@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Reflection;
 using Bunit;
 using FluentAssertions;
@@ -5,13 +6,16 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Werewolves.Client.Components.Game.Views;
 using Werewolves.Client.Resources;
+using Werewolves.Client.Services;
 using Werewolves.Client.Tests.Helpers;
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Resources;
 using Xunit;
 using Html = Werewolves.Client.Tests.Helpers.ClientTestReferences.Html;
+using PlayerNames = Werewolves.Client.Tests.Helpers.ClientTestReferences.PlayerNames;
 
 namespace Werewolves.Client.Tests.Components;
 
@@ -101,16 +105,75 @@ public class InstructionRendererBunitTests
 		receivedResponse.Confirmation.Should().BeTrue();
 	}
 
+	[Fact]
+	public void AssignRolesInstruction_RendersAssignmentSurfaceWithRosterLabels()
+	{
+		using var context = new ModeratorComponentTestContext();
+		var assignablePlayerId = Guid.NewGuid();
+		var otherRosterPlayerId = Guid.NewGuid();
+		var instruction = CreateAssignRolesInstruction(
+			[assignablePlayerId],
+			[MainRoleType.SimpleVillager]);
+
+		var cut = context.RenderModeratorComponent<InstructionRenderer>(parameters => parameters
+			.Add(component => component.Instruction, instruction)
+			.Add(component => component.Roster,
+				[
+					CreateRosterEntry(assignablePlayerId, 1, PlayerNames.Ana),
+					CreateRosterEntry(otherRosterPlayerId, 2, PlayerNames.Carla)
+				]));
+
+		cut.FindAll("[role='group']")
+			.Should()
+			.ContainSingle(group =>
+				group.GetAttribute(Html.Attributes.AriaLabel) == ClientStrings.AssignRoles_Title &&
+				group.TextContent.Contains(PlayerNames.Ana, StringComparison.CurrentCulture));
+		cut.Markup.Should().NotContain(PlayerNames.Carla);
+		cut.FindAll(Html.Selectors.Button)
+			.Should()
+			.ContainSingle(button =>
+				button.TextContent.Contains(MainRoleType.SimpleVillager.GetPublicName(), StringComparison.CurrentCulture));
+	}
+
 	private static ConfirmationInstruction CreateConfirmationInstruction(
 		string? publicAnnouncement = null,
 		string? privateInstruction = null) =>
 		(ConfirmationInstruction)ConfirmationConstructor.Invoke(
 			[publicAnnouncement, privateInstruction, null]);
 
+	private static AssignRolesInstruction CreateAssignRolesInstruction(
+		IEnumerable<Guid> playerIds,
+		IReadOnlyList<MainRoleType> roles) =>
+		(AssignRolesInstruction)AssignRolesConstructor.Invoke(
+			[
+				playerIds.ToImmutableHashSet(),
+				roles,
+				null,
+				GameStrings.RevealRolePromptSpecify,
+				null
+			]);
+
+	private static DashboardRosterEntry CreateRosterEntry(Guid playerId, int seatNumber, string name) =>
+		new(
+			playerId,
+			seatNumber,
+			name,
+			DashboardRoster.UnknownRoleLabel,
+			IsRoleKnown: false,
+			DashboardRoster.HealthLabel(PlayerHealth.Alive),
+			IsDead: false,
+			StatusEffects: [],
+			DashboardRoster.NoStatusEffectsLabel);
+
 	private static readonly ConstructorInfo ConfirmationConstructor =
 		typeof(ConfirmationInstruction)
 			.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic)
 			.Single(ctor => ctor.GetParameters().Length == 3);
+
+	private static readonly ConstructorInfo AssignRolesConstructor =
+		typeof(AssignRolesInstruction)
+			.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic)
+			.Single(ctor => ctor.GetParameters().Length == 5);
 }
 
 internal static class InstructionRendererBunitTestExtensions

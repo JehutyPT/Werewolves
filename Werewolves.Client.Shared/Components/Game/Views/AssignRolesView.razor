@@ -7,7 +7,7 @@
 	var activePlayerId = ActiveAssignmentPlayer;
 }
 
-<div class="ww-role-assignment" aria-label="@ClientStrings.AssignRoles_Title">
+<div class="ww-role-assignment" role="group" aria-label="@ClientStrings.AssignRoles_Title">
 	<div class="ww-player-picker">
 		<button type="button"
 				class="ww-icon-button ww-player-arrow"
@@ -32,11 +32,12 @@
 				<div class="ww-section-head">
 					<span>@group.DisplayName</span>
 				</div>
-				<div class="ww-role-group-choices" aria-label="@group.DisplayName">
+				<div class="ww-role-group-choices" role="group" aria-label="@group.DisplayName">
 					@foreach (var role in group.Roles)
 					{
 						<button type="button"
 								class="@RoleClass(activePlayerId, role)"
+								aria-pressed="@AriaPressed(IsRoleSelected(activePlayerId, role))"
 								@onclick="() => AssignRole(activePlayerId, role)">@role.GetPublicName()</button>
 					}
 				</div>
@@ -181,6 +182,12 @@
 		_assignments.TryGetValue(playerId, out var assigned) && assigned == role
 			? "ww-role-btn ww-role-btn--selected"
 			: "ww-role-btn";
+
+	private bool IsRoleSelected(Guid playerId, MainRoleType role) =>
+		_assignments.TryGetValue(playerId, out var assigned) && assigned == role;
+
+	private static string AriaPressed(bool isSelected) =>
+		isSelected ? "true" : "false";
 
 	private sealed record RoleGroupDisplay(RoleGroup Group, string DisplayName, IReadOnlyList<MainRoleType> Roles);
 }
