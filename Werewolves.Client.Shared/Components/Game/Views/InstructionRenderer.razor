@@ -88,7 +88,7 @@
 			}
 			else if (Instruction is not (SelectPlayersInstruction or SelectOptionsInstruction or AssignRolesInstruction))
 			{
-				<button type="button" class="ww-btn-primary" disabled>Responder</button>
+				<button type="button" class="ww-btn-primary" disabled>@ClientStrings.Dashboard_RespondButton</button>
 			}
 		}
 	</footer>
@@ -163,7 +163,7 @@
 	private static string FirstLine(string text)
 	{
 		var newlineIndex = text.IndexOf('\n');
-		return newlineIndex >= 0 ? text[..newlineIndex] + " ..." : text;
+		return newlineIndex >= 0 ? text[..newlineIndex] + ClientStrings.Common_CollapsedTextSuffix : text;
 	}
 
 	private void Toggle(InstructionSection section)

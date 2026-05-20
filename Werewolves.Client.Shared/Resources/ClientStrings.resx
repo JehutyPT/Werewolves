@@ -139,6 +139,9 @@
   <data name="Common_TapToExpand" xml:space="preserve">
     <value>Tap to expand</value>
   </data>
+  <data name="Common_CollapsedTextSuffix" xml:space="preserve">
+    <value> ...</value>
+  </data>
   <data name="RoleSelection_StepLabel" xml:space="preserve">
     <value>Step 2 of 2</value>
   </data>
