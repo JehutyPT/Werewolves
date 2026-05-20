@@ -19,7 +19,7 @@
 					data-testid="@ModeratorUiTestIds.InstructionBlock"
 					aria-expanded="@AriaExpanded(publicExpanded)"
 					aria-label="@InstructionToggleLabel(ClientStrings.Dashboard_AnnounceLabel)"
-					@onclick="() => Expand(InstructionSection.Public)">
+					@onclick="() => Toggle(InstructionSection.Public)">
 				<span class="ww-label ww-label--accent">@ClientStrings.Dashboard_AnnounceLabel</span>
 				<span class="@InstructionTextClass(InstructionSection.Public, publicExpanded)">
 					@InstructionText(Instruction!.PublicAnnouncement, publicExpanded)
@@ -40,7 +40,7 @@
 					data-testid="@ModeratorUiTestIds.InstructionBlock"
 					aria-expanded="@AriaExpanded(privateExpanded)"
 					aria-label="@InstructionToggleLabel(ClientStrings.Dashboard_ModeratorLabel)"
-					@onclick="() => Expand(InstructionSection.Private)">
+					@onclick="() => Toggle(InstructionSection.Private)">
 				<span class="ww-label">@ClientStrings.Dashboard_ModeratorLabel</span>
 				<span class="@InstructionTextClass(InstructionSection.Private, privateExpanded)">
 					@InstructionText(Instruction!.PrivateInstruction, privateExpanded)
@@ -96,7 +96,7 @@
 
 @code {
 	private readonly InstructionDisplayFlow _flow = new();
-	private InstructionSection _expandedSection;
+	private InstructionSection _expandedSections;
 
 	[Parameter]
 	public ModeratorInstruction? Instruction { get; set; }
@@ -117,7 +117,7 @@
 
 		if (!ReferenceEquals(previousInstruction, Instruction))
 		{
-			_expandedSection = InitialExpandedSection(Instruction);
+			_expandedSections = InitialExpandedSections(Instruction);
 		}
 	}
 
@@ -133,7 +133,7 @@
 			Instruction is not (SelectPlayersInstruction or SelectOptionsInstruction or AssignRolesInstruction));
 
 	private bool IsExpanded(InstructionSection section) =>
-		_expandedSection == section;
+		_expandedSections.HasFlag(section);
 
 	private static string InstructionBlockClass(InstructionSection section, bool isExpanded)
 	{
@@ -166,19 +166,44 @@
 		return newlineIndex >= 0 ? text[..newlineIndex] + " ..." : text;
 	}
 
-	private void Expand(InstructionSection section)
+	private void Toggle(InstructionSection section)
 	{
-		if (_expandedSection == section)
+		if (Instruction is not null && ModeratorInstructionDisplayDefaults.RequiresModeratorDataEntryForDisplay(Instruction))
 		{
+			if (_expandedSections.HasFlag(section))
+			{
+				return;
+			}
+
+			_expandedSections = section;
+			Haptic.TryClick();
 			return;
 		}
 
-		_expandedSection = section;
+		_expandedSections = _expandedSections.HasFlag(section)
+			? _expandedSections & ~section
+			: _expandedSections | section;
 		Haptic.TryClick();
 	}
 
-	private static InstructionSection InitialExpandedSection(ModeratorInstruction? instruction)
+	private static InstructionSection InitialExpandedSections(ModeratorInstruction? instruction)
 	{
+		if (instruction is not null && !ModeratorInstructionDisplayDefaults.RequiresModeratorDataEntryForDisplay(instruction))
+		{
+			var expandedSections = InstructionSection.None;
+			if (!string.IsNullOrWhiteSpace(instruction.PublicAnnouncement))
+			{
+				expandedSections |= InstructionSection.Public;
+			}
+
+			if (!string.IsNullOrWhiteSpace(instruction.PrivateInstruction))
+			{
+				expandedSections |= InstructionSection.Private;
+			}
+
+			return expandedSections;
+		}
+
 		if (!string.IsNullOrWhiteSpace(instruction?.PublicAnnouncement))
 		{
 			return InstructionSection.Public;
@@ -198,5 +223,6 @@
 	private static string AriaExpanded(bool isExpanded) =>
 		isExpanded ? "true" : "false";
 
-	private enum InstructionSection { None, Public, Private }
+	[Flags]
+	private enum InstructionSection { None = 0, Public = 1, Private = 2 }
 }
