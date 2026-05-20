@@ -1,6 +1,9 @@
 using FluentAssertions;
+using Werewolves.Core.GameLogic.Services;
+using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
+using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.Tests.Helpers;
 using Xunit;
@@ -76,7 +79,7 @@ public class DayVotingTests : DiagnosticTestBase
 
     #endregion
 
-    #region DV-002 to DV-005: Normal Vote Flow
+    #region DV-002 to DV-006: Normal Vote Flow
 
     /// <summary>
     /// DV-002: Vote outcome with a deterministic role reveal announces the elimination.
@@ -188,6 +191,55 @@ public class DayVotingTests : DiagnosticTestBase
             .ContainSingle(entry =>
                 entry.PlayerId == lynchedPlayer.Id &&
                 entry.Reason == EliminationReason.DayVote);
+
+        MarkTestCompleted();
+    }
+
+    /// <summary>
+    /// DV-006: Vote outcome with multiple possible role types still requests Moderator role assignment.
+    /// </summary>
+    [Fact]
+    public void VoteOutcome_MultiplePossibleRoles_RequestsRoleAssignment()
+    {
+        var session = new GameSession(
+            Guid.NewGuid(),
+            new ConfirmationInstruction(privateInstruction: nameof(VoteOutcome_MultiplePossibleRoles_RequestsRoleAssignment)),
+            new GameSessionConfig(
+                ["Werewolf", "Seer", "Wild Child", "Villager A", "Villager B"],
+                [
+                    MainRoleType.SimpleWerewolf,
+                    MainRoleType.Seer,
+                    MainRoleType.WildChild,
+                    MainRoleType.SimpleVillager,
+                    MainRoleType.SimpleVillager
+                ]));
+
+        var players = session.GetPlayers().ToList();
+        var knownWerewolf = players[0];
+        var lynchedPlayer = players[1];
+
+        session.AssignRole(knownWerewolf.Id, MainRoleType.SimpleWerewolf);
+        session.TransitionMainPhase(GamePhase.Day);
+        session.PerformDayVote(lynchedPlayer.Id);
+
+        var instruction = DayPhaseHandlers.RequestRoleRevealIfNeeded(session, lynchedPlayer.Id);
+
+        var assignment = instruction.Should().BeOfType<AssignRolesInstruction>().Subject;
+        assignment.PlayersForAssignment.Should().Contain(lynchedPlayer.Id);
+        assignment.RolesForAssignment.Distinct().Should().HaveCountGreaterThan(1);
+        session.GetPlayer(lynchedPlayer.Id).State.MainRole.Should().BeNull();
+
+        var announcement = DayPhaseHandlers.ResolveNonTieVote(
+            session,
+            assignment.CreateResponse(new Dictionary<Guid, MainRoleType>
+            {
+                [lynchedPlayer.Id] = MainRoleType.Seer
+            }));
+
+        announcement.Should().BeOfType<ConfirmationInstruction>()
+            .Which.PublicAnnouncement.Should().Contain(lynchedPlayer.Name);
+        session.GetPlayer(lynchedPlayer.Id).State.MainRole.Should().Be(MainRoleType.Seer);
+        session.GetPlayer(lynchedPlayer.Id).State.Health.Should().Be(PlayerHealth.Dead);
 
         MarkTestCompleted();
     }

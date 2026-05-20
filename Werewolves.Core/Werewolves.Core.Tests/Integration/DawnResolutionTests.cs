@@ -209,6 +209,56 @@ public class DawnResolutionTests : DiagnosticTestBase
     }
 
     /// <summary>
+    /// DR-010c: Multiple dawn victims still require Moderator assignment even when their remaining role type is duplicated.
+    /// </summary>
+    [Fact]
+    public void VictimsEliminated_MultipleVictimsWithSamePossibleRole_RequestRoleAssignment()
+    {
+        var session = new GameSession(
+            Guid.NewGuid(),
+            new ConfirmationInstruction(privateInstruction: nameof(VictimsEliminated_MultipleVictimsWithSamePossibleRole_RequestRoleAssignment)),
+            new GameSessionConfig(
+                ["Werewolf", "Villager A", "Villager B", "Villager C", "Villager D"],
+                [
+                    MainRoleType.SimpleWerewolf,
+                    MainRoleType.SimpleVillager,
+                    MainRoleType.SimpleVillager,
+                    MainRoleType.SimpleVillager,
+                    MainRoleType.SimpleVillager
+                ]));
+
+        var players = session.GetPlayers().ToList();
+        var werewolf = players[0];
+        var victimIds = players.Skip(1).Select(player => player.Id).ToHashSet();
+
+        session.AssignRole(werewolf.Id, MainRoleType.SimpleWerewolf);
+        session.TransitionMainPhase(GamePhase.Dawn);
+        foreach (var victimId in victimIds)
+        {
+            session.EliminatePlayer(victimId, EliminationReason.WerewolfAttack);
+        }
+
+        var instruction = DawnPhaseHandlers.AnnounceVictimsAndRequestRoles(session, new ModeratorResponse());
+
+        var assignment = instruction.Should().BeOfType<AssignRolesInstruction>().Subject;
+        assignment.PlayersForAssignment.Should().BeEquivalentTo(victimIds);
+        assignment.RolesForAssignment.Should().BeEquivalentTo(
+            [
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager
+            ]);
+
+        foreach (var victimId in victimIds)
+        {
+            session.GetPlayer(victimId).State.MainRole.Should().BeNull();
+        }
+
+        MarkTestCompleted();
+    }
+
+    /// <summary>
     /// DR-011: Role assignment for eliminated victim creates AssignRoleLogEntry.
     /// </summary>
     [Fact]
