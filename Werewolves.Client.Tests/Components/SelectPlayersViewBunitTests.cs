@@ -136,8 +136,8 @@ public class SelectPlayersViewBunitTests
 
 		var options = FindPlayerOptions(cut);
 		options.Should().HaveCount(3);
-		AssertPlayerOption(options[0], FirstPlayerSeatNumber, FirstPlayerName);
-		AssertPlayerOption(options[1], SecondPlayerSeatNumber, SecondPlayerName);
+		AssertPlayerOption(options[1], FirstPlayerSeatNumber, FirstPlayerName);
+		AssertPlayerOption(options[2], SecondPlayerSeatNumber, SecondPlayerName);
 
 		var emptySelectionOption = FindPlayerOptionByText(cut, GameStrings.DayVoteNoEliminationOption);
 		AssertSelectionState(emptySelectionOption, isSelected: false);
