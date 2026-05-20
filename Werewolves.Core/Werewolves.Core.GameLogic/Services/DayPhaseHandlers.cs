@@ -23,7 +23,10 @@ internal static class DayPhaseHandlers
             alivePlayers.ToIdSet(),
             NumberRangeConstraint.SingleOptional,
             publicAnnouncement: GameStrings.VoteStartsPublicInstruction,
-            privateInstruction: GameStrings.VoteStartsModeratorInstruction);
+            privateInstruction: GameStrings.VoteStartsModeratorInstruction)
+        {
+            EmptySelectionOptionLabel = GameStrings.DayVoteNoEliminationOption
+        };
     }
 
     internal static Guid? RecordNormalVoteOutcome(GameSession session, ModeratorResponse input)

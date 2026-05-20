@@ -197,6 +197,10 @@
     <value>Fase de votação diurna. Determina o resultado e reporta o jogador eliminado (ou reporta um empate).</value>
     <comment/>
   </data>
+  <data name="DayVoteNoEliminationOption" xml:space="preserve">
+    <value>Empate, sem eliminação</value>
+    <comment/>
+  </data>
   <data name="SeerRoleName" xml:space="preserve">
     <value>Vidente</value>
     <comment/>

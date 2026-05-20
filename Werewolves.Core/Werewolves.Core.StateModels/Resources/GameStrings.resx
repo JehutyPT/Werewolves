@@ -197,6 +197,10 @@
     <value>Fase de votação do dia. Determina o resultado e indica o único jogador eliminado, ou indica empate.</value>
     <comment/>
   </data>
+  <data name="DayVoteNoEliminationOption" xml:space="preserve">
+    <value>Empate, sem eliminação</value>
+    <comment/>
+  </data>
   <data name="SeerRoleName" xml:space="preserve">
     <value>Vidente</value>
     <comment/>

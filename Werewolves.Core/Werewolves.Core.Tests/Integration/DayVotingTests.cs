@@ -2,6 +2,7 @@ using FluentAssertions;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models.Instructions;
+using Werewolves.Core.StateModels.Resources;
 using Werewolves.Core.Tests.Helpers;
 using Xunit;
 using Xunit.Abstractions;
@@ -70,6 +71,7 @@ public class DayVotingTests : DiagnosticTestBase
         votingInstruction.CountConstraint.Should().NotBeNull();
         votingInstruction.CountConstraint!.IsOptional.Should().BeTrue(CoreTestReferences.AssertionReasons.TieVotesAllowNoSelection);
         votingInstruction.CountConstraint!.Maximum.Should().Be(1, CoreTestReferences.AssertionReasons.SinglePlayerCanBeLynched);
+        votingInstruction.EmptySelectionOptionLabel.Should().Be(GameStrings.DayVoteNoEliminationOption);
 
         MarkTestCompleted();
     }
