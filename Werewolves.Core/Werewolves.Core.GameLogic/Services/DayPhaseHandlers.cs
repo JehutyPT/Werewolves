@@ -50,6 +50,12 @@ internal static class DayPhaseHandlers
             return null;
         }
 
+        if (GameSessionQueries.TryGetOnlyPossibleUnassignedRole(session, requiredAssignmentCount: 1, out var role))
+        {
+            session.AssignRole(playerId, role);
+            return null;
+        }
+
         return new AssignRolesInstruction(
             [playerId],
             GameSessionQueries.GetUnassignedRoles(session),

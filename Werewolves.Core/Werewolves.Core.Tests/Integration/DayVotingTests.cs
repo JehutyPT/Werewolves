@@ -76,14 +76,14 @@ public class DayVotingTests : DiagnosticTestBase
 
     #endregion
 
-    #region DV-002 to DV-004: Normal Vote Flow
+    #region DV-002 to DV-005: Normal Vote Flow
 
     /// <summary>
-    /// DV-002: Vote outcome with single player selected requests role reveal.
-    /// When a player is voted out, the game should request their role assignment.
+    /// DV-002: Vote outcome with a deterministic role reveal announces the elimination.
+    /// When the lynched player's only possible role type is known, the game should assign it automatically.
     /// </summary>
     [Fact]
-    public void VoteOutcome_SinglePlayer_RequestsRoleReveal()
+    public void VoteOutcome_SinglePlayer_WithSinglePossibleRole_AnnouncesElimination()
     {
         // Arrange: Simple game (5 players: 1 WW, 1 Seer, 3 Villagers)
         var builder = CreateBuilder()
@@ -95,14 +95,14 @@ public class DayVotingTests : DiagnosticTestBase
         var werewolfId = players[0].Id;
         var seerId = players[1].Id;
         var villager1Id = players[2].Id;
-        var villager2Id = players[3].Id;
+        var villager2 = players[3];
 
         // Complete night and dawn phases
         builder.CompleteNightPhase(
             werewolfIds: [werewolfId],
             victimId: villager1Id,
             seerId: seerId,
-            seerTargetId: villager2Id);
+            seerTargetId: villager2.Id);
         builder.CompleteDawnPhase();
 
         // Confirm debate
@@ -117,15 +117,77 @@ public class DayVotingTests : DiagnosticTestBase
             CoreTestReferences.InstructionContexts.VotingInstruction);
 
         // Act: Vote to lynch villager2 (who is still alive)
-        var voteResponse = votingInstruction.CreateResponse([villager2Id]);
+        var voteResponse = votingInstruction.CreateResponse([villager2.Id]);
         var afterVote = builder.Process(voteResponse);
 
-        // Assert: Should get a role assignment instruction for the lynched player
-        var roleAssignInstruction = InstructionAssert.ExpectSuccessWithType<AssignRolesInstruction>(
+        // Assert: Should get the death announcement without a role assignment instruction.
+        var deathAnnouncement = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
             afterVote,
-            CoreTestReferences.InstructionContexts.RoleAssignmentAfterLynch);
+            CoreTestReferences.InstructionContexts.DeathAnnouncementConfirmation);
 
-        roleAssignInstruction.PlayersForAssignment.Should().Contain(villager2Id);
+        deathAnnouncement.PublicAnnouncement.Should().Contain(villager2.Name);
+        builder.GetGameState()!.GetPlayer(villager2.Id).State.MainRole
+            .Should().Be(MainRoleType.SimpleVillager);
+
+        MarkTestCompleted();
+    }
+
+    /// <summary>
+    /// DV-005: Vote outcome with a single possible role type assigns it automatically.
+    /// </summary>
+    [Fact]
+    public void VoteOutcome_SinglePossibleRole_AutoAssignsRoleAndAnnouncesElimination()
+    {
+        // Arrange: 1 Werewolf and 4 Villagers leaves only Villager roles unknown after night.
+        var builder = CreateBuilder()
+            .WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: false);
+        builder.StartGame();
+        builder.ConfirmGameStart();
+
+        var players = builder.GetGameState()!.GetPlayers().ToList();
+        var werewolf = players[0];
+        var dawnVictim = players[1];
+        var lynchedPlayer = players[2];
+
+        builder.CompleteNightPhase(
+            werewolfIds: [werewolf.Id],
+            victimId: dawnVictim.Id);
+        builder.CompleteDawnPhase();
+
+        var debateInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
+            builder.GetCurrentInstruction(),
+            CoreTestReferences.InstructionContexts.DebateConfirmation);
+        var afterDebate = builder.Process(debateInstruction.CreateResponse(true));
+
+        var votingInstruction = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+            afterDebate,
+            CoreTestReferences.InstructionContexts.VotingInstruction);
+
+        // Act: Vote to lynch a player whose only possible role type is SimpleVillager.
+        var afterVote = builder.Process(votingInstruction.CreateResponse([lynchedPlayer.Id]));
+
+        // Assert: The engine skips Moderator role assignment and announces the elimination.
+        var announcement = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+            afterVote,
+            CoreTestReferences.InstructionContexts.DeathAnnouncementConfirmation);
+        announcement.PublicAnnouncement.Should().Contain(lynchedPlayer.Name);
+
+        var gameState = builder.GetGameState()!;
+        gameState.GetPlayer(lynchedPlayer.Id).State.MainRole.Should().Be(MainRoleType.SimpleVillager);
+        gameState.GetPlayer(lynchedPlayer.Id).State.Health.Should().Be(PlayerHealth.Dead);
+
+        var roleLog = gameState.GameHistoryLog
+            .OfType<AssignRoleLogEntry>()
+            .Single(entry => entry.PlayerIds.Contains(lynchedPlayer.Id));
+        roleLog.AssignedMainRole.Should().Be(MainRoleType.SimpleVillager);
+        roleLog.CurrentPhase.Should().Be(GamePhase.Day);
+
+        gameState.GameHistoryLog
+            .OfType<PlayerEliminatedLogEntry>()
+            .Should()
+            .ContainSingle(entry =>
+                entry.PlayerId == lynchedPlayer.Id &&
+                entry.Reason == EliminationReason.DayVote);
 
         MarkTestCompleted();
     }

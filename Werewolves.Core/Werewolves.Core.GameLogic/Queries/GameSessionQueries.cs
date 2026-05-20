@@ -118,6 +118,35 @@ internal static class GameSessionQueries
         return unassignedRoles;
     }
 
+    internal static bool TryGetOnlyPossibleUnassignedRole(
+        IGameSession session,
+        int requiredAssignmentCount,
+        out MainRoleType role)
+    {
+        role = default;
+
+        if (requiredAssignmentCount <= 0)
+        {
+            return false;
+        }
+
+        var unassignedRoles = GetUnassignedRoles(session);
+        if (unassignedRoles.Count < requiredAssignmentCount)
+        {
+            return false;
+        }
+
+        // Duplicate card copies of the same role type do not create a Moderator decision.
+        var possibleRoleTypes = unassignedRoles.Distinct().ToList();
+        if (possibleRoleTypes.Count != 1)
+        {
+            return false;
+        }
+
+        role = possibleRoleTypes.Single();
+        return true;
+    }
+
     internal static Guid? GetCurrentVoteTarget(IGameSession session)
     {
         var voteEntry = FindLogEntries<VoteOutcomeReportedLogEntry>(

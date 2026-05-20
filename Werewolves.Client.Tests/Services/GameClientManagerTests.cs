@@ -207,7 +207,7 @@ public class GameClientManagerTests
 	}
 
 	[Fact]
-	public void PlayToVictory_EncountersAssignRolesInstruction_RosterResolvesPlayerNames()
+	public void PlayToDawn_DeterministicRoleReveal_RosterResolvesVictimName()
 	{
 		var manager = new GameClientManager();
 		var startInstruction = manager.StartGame(
@@ -231,29 +231,17 @@ public class GameClientManagerTests
 		ConfirmCurrentInstruction(manager);
 		ConfirmCurrentInstruction(manager);
 
-		// At this point in the flow, an AssignRolesInstruction should be encountered
-		var assignRoles = manager.CurrentInstruction.Should().BeOfType<AssignRolesInstruction>().Subject;
+		var announcement = manager.CurrentInstruction.Should().BeOfType<ConfirmationInstruction>().Subject;
+		announcement.PublicAnnouncement.Should().Contain(players[2].Name);
 
-		assignRoles.PlayersForAssignment.Should().NotBeEmpty();
-		assignRoles.RolesForAssignment.Should().NotBeEmpty();
-		assignRoles.PlayersForAssignment.Count.Should().BeLessOrEqualTo(assignRoles.RolesForAssignment.Count);
-
-		// Verify roster can resolve the player names for the affected players
 		var roster = manager.CurrentRoster;
-		foreach (var playerId in assignRoles.PlayersForAssignment)
-		{
-			roster.Should().Contain(r => r.PlayerId == playerId,
-				ClientTestReferences.AssertionReasons.RosterContainsEntriesForRoleAssignmentPlayers);
-		}
+		roster.Should().Contain(r => r.PlayerId == victimId,
+			ClientTestReferences.AssertionReasons.RosterContainsEntriesForRoleAssignmentPlayers);
 
-		// Process the assignment and verify game advances
-		var assignments = assignRoles.PlayersForAssignment.ToDictionary(
-			playerId => playerId,
-			_ => MainRoleType.SimpleVillager);
-		var result = manager.ProcessInput(assignRoles.CreateResponse(assignments));
+		var result = manager.ProcessInput(announcement.CreateResponse(true));
 
 		result.IsSuccess.Should().BeTrue();
-		manager.CurrentInstruction.Should().NotBe(assignRoles);
+		manager.CurrentInstruction.Should().NotBe(announcement);
 	}
 
 	[Fact]

@@ -291,43 +291,24 @@ public class InputValidationTests : DiagnosticTestBase
 
     /// <summary>
     /// IV-020: AssignRole with invalid role returns failure.
-    /// Given: AssignRolesInstruction requesting role for eliminated player
+    /// Given: AssignRolesInstruction requesting a SimpleVillager role
     /// When: Moderator provides a role not in RolesInPlay (e.g., assign Witch when only SimpleWerewolf, Seer, SimpleVillager are in play)
     /// Then: ProcessResult.IsSuccess is false (exception thrown)
     /// </summary>
     [Fact]
     public void AssignRole_InvalidRole_ReturnsFailure()
     {
-        // Arrange - 5 players: 1 WW, 1 Seer, 3 Villagers (no Witch in play)
-        var builder = CreateBuilder()
-            .WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);
-        builder.StartGame();
-        builder.ConfirmGameStart();
-
-        var gameState = builder.GetGameState()!;
-        var players = gameState.GetPlayers().ToList();
-        var werewolf = players[0]; // Index 0 is werewolf per WithSimpleGame
-        var victim = players[2];   // Index 2 is first villager
-
-        // Complete night phase - werewolf attacks victim
-        builder.CompleteNightPhase(
-            werewolfIds: [werewolf.Id],
-            victimId: victim.Id,
-            seerId: players[1].Id,
-            seerTargetId: werewolf.Id);
-
-        // Get the AssignRolesInstruction for the eliminated victim
-        var assignInstruction = InstructionAssert.ExpectType<AssignRolesInstruction>(
-            builder.GetCurrentInstruction(),
-            CoreTestReferences.InstructionContexts.RoleAssignmentForEliminatedVictim);
-
-        // Verify victim is in the assignment request
-        assignInstruction.PlayersForAssignment.Should().Contain(victim.Id);
+        // Arrange
+        var victimId = Guid.NewGuid();
+        var assignInstruction = new AssignRolesInstruction(
+            playersForAssignment: [victimId],
+            rolesForAssignment: [MainRoleType.SimpleVillager],
+            privateInstruction: nameof(AssignRole_InvalidRole_ReturnsFailure));
 
         // Act - Attempt to assign a role that's NOT in the game (Witch is not in play)
         var invalidRoleAssignment = new Dictionary<Guid, MainRoleType>
         {
-            { victim.Id, MainRoleType.Witch }
+            { victimId, MainRoleType.Witch }
         };
 
         Action act = () => assignInstruction.CreateResponse(invalidRoleAssignment);
@@ -341,52 +322,32 @@ public class InputValidationTests : DiagnosticTestBase
 
     /// <summary>
     /// IV-021: AssignRole with wrong player returns failure.
-    /// Given: AssignRolesInstruction for specific player (e.g., eliminated victim)
+    /// Given: AssignRolesInstruction for a specific player
     /// When: Moderator provides a different player's ID than the one specified in the instruction
     /// Then: ProcessResult.IsSuccess is false (exception thrown)
     /// </summary>
     [Fact]
     public void AssignRole_WrongPlayer_ReturnsFailure()
     {
-        // Arrange - 5 players: 1 WW, 1 Seer, 3 Villagers
-        var builder = CreateBuilder()
-            .WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);
-        builder.StartGame();
-        builder.ConfirmGameStart();
-
-        var gameState = builder.GetGameState()!;
-        var players = gameState.GetPlayers().ToList();
-        var werewolf = players[0]; // Index 0 is werewolf per WithSimpleGame
-        var victim = players[2];   // Index 2 is first villager
-        var otherVillager = players[3]; // Index 3 is second villager (NOT eliminated)
-
-        // Complete night phase - werewolf attacks victim
-        builder.CompleteNightPhase(
-            werewolfIds: [werewolf.Id],
-            victimId: victim.Id,
-            seerId: players[1].Id,
-            seerTargetId: werewolf.Id);
-
-        // Get the AssignRolesInstruction for the eliminated victim
-        var assignInstruction = InstructionAssert.ExpectType<AssignRolesInstruction>(
-            builder.GetCurrentInstruction(),
-            CoreTestReferences.InstructionContexts.RoleAssignmentForEliminatedVictim);
-
-        // Verify victim is in the assignment request, but the other villager is NOT
-        assignInstruction.PlayersForAssignment.Should().Contain(victim.Id);
-        assignInstruction.PlayersForAssignment.Should().NotContain(otherVillager.Id);
+        // Arrange
+        var victimId = Guid.NewGuid();
+        var otherPlayerId = Guid.NewGuid();
+        var assignInstruction = new AssignRolesInstruction(
+            playersForAssignment: [victimId],
+            rolesForAssignment: [MainRoleType.SimpleVillager],
+            privateInstruction: nameof(AssignRole_WrongPlayer_ReturnsFailure));
 
         // Act - Attempt to assign a role to the WRONG player (other villager instead of victim)
         var wrongPlayerAssignment = new Dictionary<Guid, MainRoleType>
         {
-            { otherVillager.Id, MainRoleType.SimpleVillager }
+            { otherPlayerId, MainRoleType.SimpleVillager }
         };
 
         Action act = () => assignInstruction.CreateResponse(wrongPlayerAssignment);
 
         // Assert - Should throw an exception for wrong player
         act.Should().Throw<ArgumentException>()
-            .WithMessage(CoreTestReferences.ExceptionPatterns.PlayerCannotBeAssigned(otherVillager.Id));
+            .WithMessage(CoreTestReferences.ExceptionPatterns.PlayerCannotBeAssigned(otherPlayerId));
 
         MarkTestCompleted();
     }

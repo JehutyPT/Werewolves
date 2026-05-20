@@ -268,16 +268,7 @@ public class VictoryConditionTests : DiagnosticTestBase
             CoreTestReferences.InstructionContexts.VoteSelection);
         builder.Process(voteInstruction.CreateResponse([villager2.Id]));
 
-        // Assign villager role
-        var roleInstruction = InstructionAssert.ExpectType<AssignRolesInstruction>(
-            builder.GetCurrentInstruction(),
-            CoreTestReferences.InstructionContexts.VillagerRoleAssignment);
-        builder.Process(roleInstruction.CreateResponse(new Dictionary<Guid, MainRoleType>
-        {
-            { villager2.Id, MainRoleType.SimpleVillager }
-        }));
-
-        // Confirm death
+        // Confirm death; the villager role is assigned automatically because it is deterministic.
         var deathConfirmation = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
             CoreTestReferences.InstructionContexts.DeathConfirmation);
@@ -374,16 +365,7 @@ public class VictoryConditionTests : DiagnosticTestBase
             CoreTestReferences.InstructionContexts.VoteSelection);
         builder.Process(voteInstruction.CreateResponse([villager2.Id]));
 
-        // Assign villager role (SimpleVillager doesn't wake at night, so role is unknown)
-        var roleInstruction = InstructionAssert.ExpectType<AssignRolesInstruction>(
-            builder.GetCurrentInstruction(),
-            CoreTestReferences.InstructionContexts.VillagerRoleAssignment);
-        builder.Process(roleInstruction.CreateResponse(new Dictionary<Guid, MainRoleType>
-        {
-            { villager2.Id, MainRoleType.SimpleVillager }
-        }));
-
-        // Confirm death announcement
+        // Confirm death announcement; the villager role is assigned automatically because it is deterministic.
         var deathAnnouncementInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
             CoreTestReferences.InstructionContexts.DeathAnnouncementConfirmation);
