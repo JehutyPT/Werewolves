@@ -7,4 +7,5 @@ public static class ModeratorUiTestIds
 	public const string DashboardStatusBar = "dashboard-status-bar";
 	public const string DashboardActionZone = "dashboard-action-zone";
 	public const string InstructionBlock = "instruction-block";
+	public const string AbandonGameButton = "abandon-game-button";
 }

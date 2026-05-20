@@ -469,4 +469,7 @@
   <data name="Victory_ReturnToLobbyButton" xml:space="preserve">
     <value>New game</value>
   </data>
+  <data name="Dashboard_AbandonGameButton" xml:space="preserve">
+    <value>Abandon game</value>
+  </data>
 </root>

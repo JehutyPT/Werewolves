@@ -175,6 +175,13 @@
 				</ol>
 			}
 		</section>
+
+		<footer class="ww-abandon-game">
+			<button type="button"
+					class="ww-secondary-button"
+					data-testid="@ModeratorUiTestIds.AbandonGameButton"
+					@onclick="AbandonGame">@ClientStrings.Dashboard_AbandonGameButton</button>
+		</footer>
 	</section>
 </main>
 
@@ -185,6 +192,9 @@
 @using Werewolves.Core.StateModels.Models
 
 @code {
+	[Parameter]
+	public EventCallback OnAbandonGame { get; set; }
+
 	private DashboardTab _activeTab = DashboardTab.Action;
 	private Timer? _debateTickTimer;
 
@@ -235,6 +245,8 @@
 	}
 
 	private Task ToggleAudioMute() => Game.ToggleAudioMuteAsync();
+
+	private Task AbandonGame() => OnAbandonGame.InvokeAsync();
 
 	private string TabButtonClass(DashboardTab tab) =>
 		_activeTab == tab ? "ww-dashboard-tab ww-dashboard-tab--active" : "ww-dashboard-tab";
