@@ -2,6 +2,20 @@
 @using Werewolves.Core.StateModels.Models.Instructions
 
 <ul class="ww-select-players-list" role="listbox" aria-label="@ClientStrings.SelectPlayers_ListAria">
+	@if (ShouldRenderEmptySelectionOption)
+	{
+		<li class="ww-select-players-item @(_state.IsEmptySelectionSelected ? "ww-select-players-item--selected" : "")"
+			@key="Instruction.EmptySelectionOptionLabel"
+			@onclick="HandleSelectEmptySelection"
+			role="option"
+			aria-selected="@(_state.IsEmptySelectionSelected ? "true" : "false")">
+			<span class="ww-seat-number" aria-hidden="true"></span>
+			<span class="ww-player-name">@Instruction.EmptySelectionOptionLabel</span>
+			<span class="ww-select-players-check" aria-hidden="true">
+				@if (_state.IsEmptySelectionSelected) { <text>&#x2713;</text> }
+			</span>
+		</li>
+	}
 	@foreach (var player in _state.SelectablePlayers)
 	{
 		var playerId = player.PlayerId;
@@ -43,12 +57,25 @@
 		_state = new SelectPlayersInputState(
 			Roster,
 			Instruction.SelectablePlayerIds,
-			Instruction.CountConstraint);
+			Instruction.CountConstraint,
+			ShouldRenderEmptySelectionOption);
 	}
+
+	private bool ShouldRenderEmptySelectionOption =>
+		Instruction.CountConstraint.IsOptional &&
+		!string.IsNullOrWhiteSpace(Instruction.EmptySelectionOptionLabel);
 
 	private void HandleToggle(Guid playerId)
 	{
 		if (_state.ToggleSelection(playerId))
+		{
+			StateHasChanged();
+		}
+	}
+
+	private void HandleSelectEmptySelection()
+	{
+		if (_state.SelectEmptySelection())
 		{
 			StateHasChanged();
 		}

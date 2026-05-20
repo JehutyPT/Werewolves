@@ -30,6 +30,13 @@ internal static class DawnPhaseHandlers
             return new ConfirmationInstruction(publicAnnouncement: announcement);
         }
 
+        if (victimsNeedingRoles.Count == 1 &&
+            GameSessionQueries.TryGetOnlyPossibleUnassignedRole(session, requiredAssignmentCount: 1, out var role))
+        {
+            session.AssignRole(victimsNeedingRoles.Single().Id, role);
+            return new ConfirmationInstruction(publicAnnouncement: announcement);
+        }
+
         return new AssignRolesInstruction(
             publicAnnouncement: announcement,
             privateInstruction: GameStrings.RevealRolePromptSpecify,

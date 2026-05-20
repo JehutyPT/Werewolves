@@ -834,6 +834,12 @@ button.ww-instruction-block {
   font-weight: 600;
 }
 
+.ww-abandon-game {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--ww-border);
+}
+
 .ww-benchmark-panel {
   display: grid;
   gap: 16px;

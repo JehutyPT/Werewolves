@@ -272,6 +272,46 @@ public class SerializationTests : DiagnosticTestBase
         MarkTestCompleted();
     }
 
+    [Fact]
+    public void Serialize_DayVoteInstruction_PreservesExplicitEmptySelectionOption()
+    {
+        var builder = CreateBuilder()
+            .WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);
+        builder.StartGame();
+        builder.ConfirmGameStart();
+
+        var players = builder.GetGameState()!.GetPlayers().ToList();
+        var werewolfId = players[0].Id;
+        var seerId = players[1].Id;
+        var villager1Id = players[2].Id;
+        var villager2Id = players[3].Id;
+
+        builder.CompleteNightPhase(
+            werewolfIds: [werewolfId],
+            victimId: villager1Id,
+            seerId: seerId,
+            seerTargetId: villager2Id);
+        builder.CompleteDawnPhase();
+
+        var debateInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
+            builder.GetCurrentInstruction(),
+            CoreTestReferences.InstructionContexts.DebateConfirmation);
+        var afterDebate = builder.Process(debateInstruction.CreateResponse(true));
+        InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+            afterDebate,
+            CoreTestReferences.InstructionContexts.VotingInstruction);
+
+        var json = builder.GetGameState()!.Serialize();
+        var rehydratedId = builder.GameService.RehydrateSession(json);
+
+        var rehydratedInstruction = builder.GameService.GetCurrentInstruction(rehydratedId)
+            .Should().BeOfType<SelectPlayersInstruction>()
+            .Subject;
+        rehydratedInstruction.EmptySelectionOptionLabel.Should().Be(GameStrings.DayVoteNoEliminationOption);
+
+        MarkTestCompleted();
+    }
+
     /// <summary>
     /// SZ-012: Serialize NightActionLogEntry preserves ActionType enum.
     /// </summary>

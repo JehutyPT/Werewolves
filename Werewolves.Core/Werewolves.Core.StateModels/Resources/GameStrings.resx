@@ -154,7 +154,7 @@
     <comment/>
   </data>
   <data name="MultipleVictimEliminatedAnnounce" xml:space="preserve">
-    <value>Os seguintes jogadores foram eliminados durante a noite: \n{0}</value>
+    <value>Os seguintes jogadores foram eliminados durante a noite: {0}</value>
     <comment/>
   </data>
   <data name="RevealRolePromptSpecify" xml:space="preserve">
@@ -195,6 +195,10 @@
   </data>
   <data name="VoteStartsModeratorInstruction" xml:space="preserve">
     <value>Fase de votação do dia. Determina o resultado e indica o único jogador eliminado, ou indica empate.</value>
+    <comment/>
+  </data>
+  <data name="DayVoteNoEliminationOption" xml:space="preserve">
+    <value>Empate, sem eliminação</value>
     <comment/>
   </data>
   <data name="SeerRoleName" xml:space="preserve">

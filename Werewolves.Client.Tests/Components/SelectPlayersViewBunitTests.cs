@@ -114,6 +114,118 @@ public class SelectPlayersViewBunitTests
 	}
 
 	[Fact]
+	public void ExplicitEmptySelectionOptionRendersWithInitialDisabledHold()
+	{
+		using var context = new ModeratorComponentTestContext();
+		var anaId = Guid.NewGuid();
+		var brunoId = Guid.NewGuid();
+		var instruction = CreateInstruction(
+			NumberRangeConstraint.SingleOptional,
+			GameStrings.DayVoteNoEliminationOption,
+			anaId,
+			brunoId);
+		var roster = new[]
+		{
+			CreateRosterEntry(anaId, FirstPlayerSeatNumber, FirstPlayerName),
+			CreateRosterEntry(brunoId, SecondPlayerSeatNumber, SecondPlayerName)
+		};
+
+		var cut = context.RenderModeratorComponent<SelectPlayersView>(parameters => parameters
+			.Add(component => component.Instruction, instruction)
+			.Add(component => component.Roster, roster));
+
+		var options = FindPlayerOptions(cut);
+		options.Should().HaveCount(3);
+		AssertPlayerOption(options[1], FirstPlayerSeatNumber, FirstPlayerName);
+		AssertPlayerOption(options[2], SecondPlayerSeatNumber, SecondPlayerName);
+
+		var emptySelectionOption = FindPlayerOptionByText(cut, GameStrings.DayVoteNoEliminationOption);
+		AssertSelectionState(emptySelectionOption, isSelected: false);
+		FindSubmitHoldButton(cut).HasAttribute(Html.Attributes.Disabled).Should().BeTrue();
+	}
+
+	[Fact]
+	public async Task ExplicitEmptySelectionOptionEmitsEmptyPlayerSelectionResponse()
+	{
+		var timing = new ControlledHoldButtonTiming();
+		using var context = CreateContext(timing);
+		var responses = new List<ModeratorResponse>();
+		var anaId = Guid.NewGuid();
+		var brunoId = Guid.NewGuid();
+		var instruction = CreateInstruction(
+			NumberRangeConstraint.SingleOptional,
+			GameStrings.DayVoteNoEliminationOption,
+			anaId,
+			brunoId);
+		var roster = new[]
+		{
+			CreateRosterEntry(anaId, FirstPlayerSeatNumber, FirstPlayerName),
+			CreateRosterEntry(brunoId, SecondPlayerSeatNumber, SecondPlayerName)
+		};
+
+		var cut = context.RenderModeratorComponent<SelectPlayersView>(parameters => parameters
+			.Add(component => component.Instruction, instruction)
+			.Add(component => component.Roster, roster)
+			.Add(component => component.OnResponse,
+				EventCallback.Factory.Create<ModeratorResponse>(this, responses.Add)));
+
+		FindPlayerOptionByName(cut, FirstPlayerName).Click();
+		FindPlayerOptionByText(cut, GameStrings.DayVoteNoEliminationOption).Click();
+
+		var emptySelectionOption = FindPlayerOptionByText(cut, GameStrings.DayVoteNoEliminationOption);
+		AssertSelectionState(emptySelectionOption, isSelected: true);
+		AssertSelectionState(FindPlayerOptionByName(cut, FirstPlayerName), isSelected: false);
+		var holdButton = FindSubmitHoldButton(cut);
+		holdButton.HasAttribute(Html.Attributes.Disabled).Should().BeFalse();
+		await RenderedHoldButtonDriver.CompleteHoldAsync(cut, holdButton, timing);
+
+		responses.Should().ContainSingle();
+		var response = responses.Single();
+		response.Type.Should().Be(ExpectedInputType.PlayerSelection);
+		response.SelectedPlayerIds.Should().BeEmpty();
+	}
+
+	[Fact]
+	public async Task PlayerSelectionClearsExplicitEmptySelectionAndEmitsSelectedPlayerResponse()
+	{
+		var timing = new ControlledHoldButtonTiming();
+		using var context = CreateContext(timing);
+		var responses = new List<ModeratorResponse>();
+		var anaId = Guid.NewGuid();
+		var brunoId = Guid.NewGuid();
+		var instruction = CreateInstruction(
+			NumberRangeConstraint.SingleOptional,
+			GameStrings.DayVoteNoEliminationOption,
+			anaId,
+			brunoId);
+		var roster = new[]
+		{
+			CreateRosterEntry(anaId, FirstPlayerSeatNumber, FirstPlayerName),
+			CreateRosterEntry(brunoId, SecondPlayerSeatNumber, SecondPlayerName)
+		};
+
+		var cut = context.RenderModeratorComponent<SelectPlayersView>(parameters => parameters
+			.Add(component => component.Instruction, instruction)
+			.Add(component => component.Roster, roster)
+			.Add(component => component.OnResponse,
+				EventCallback.Factory.Create<ModeratorResponse>(this, responses.Add)));
+
+		FindPlayerOptionByText(cut, GameStrings.DayVoteNoEliminationOption).Click();
+		FindPlayerOptionByName(cut, FirstPlayerName).Click();
+
+		AssertSelectionState(FindPlayerOptionByText(cut, GameStrings.DayVoteNoEliminationOption), isSelected: false);
+		AssertSelectionState(FindPlayerOptionByName(cut, FirstPlayerName), isSelected: true);
+		var holdButton = FindSubmitHoldButton(cut);
+		holdButton.HasAttribute(Html.Attributes.Disabled).Should().BeFalse();
+		await RenderedHoldButtonDriver.CompleteHoldAsync(cut, holdButton, timing);
+
+		responses.Should().ContainSingle();
+		var response = responses.Single();
+		response.Type.Should().Be(ExpectedInputType.PlayerSelection);
+		response.SelectedPlayerIds.Should().BeEquivalentTo([anaId]);
+	}
+
+	[Fact]
 	public async Task IncompleteSelectionKeepsHoldDisabledAndDoesNotSubmit()
 	{
 		var timing = new ControlledHoldButtonTiming();
@@ -189,6 +301,10 @@ public class SelectPlayersViewBunitTests
 		FindPlayerOptions(cut)
 			.Single(option => option.TextContent.Contains(playerName, StringComparison.CurrentCulture));
 
+	private static IElement FindPlayerOptionByText(IRenderedComponent<SelectPlayersView> cut, string text) =>
+		FindPlayerOptions(cut)
+			.Single(option => option.TextContent.Contains(text, StringComparison.CurrentCulture));
+
 	private static void AssertPlayerOption(IElement option, int seatNumber, string playerName)
 	{
 		option.TextContent.Should()
@@ -236,6 +352,16 @@ public class SelectPlayersViewBunitTests
 				TestInstructionPrompt,
 				null
 			]);
+
+	private static SelectPlayersInstruction CreateInstruction(
+		NumberRangeConstraint countConstraint,
+		string? emptySelectionOptionLabel,
+		params Guid[] playerIds)
+	{
+		var instruction = CreateInstruction(countConstraint, playerIds);
+
+		return instruction with { EmptySelectionOptionLabel = emptySelectionOptionLabel };
+	}
 
 	private static ModeratorComponentTestContext CreateContext(ControlledHoldButtonTiming timing)
 	{

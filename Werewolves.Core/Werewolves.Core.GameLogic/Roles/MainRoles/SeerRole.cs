@@ -1,6 +1,7 @@
 using Werewolves.Core.GameLogic.Models.GameHookListeners;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Resources;
@@ -42,8 +43,9 @@ internal class SeerRole : ImmediateFeedbackNightRoleHookListener
 
         bool targetWakesWithWerewolves = targetPlayer.State.Team == Team.Werewolves;
 
-        string privateFeedback = targetWakesWithWerewolves ?
-            GameStrings.SeerResultWerewolfTeam : GameStrings.SeerResultNotWerewolfTeam;
+        var privateFeedback = (targetWakesWithWerewolves
+            ? GameStrings.SeerResultWerewolfTeam
+            : GameStrings.SeerResultNotWerewolfTeam).Format(targetPlayer.Name);
 
         session.PerformNightAction(NightActionType.SeerCheck, targetId);
 

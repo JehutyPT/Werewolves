@@ -20,6 +20,11 @@ public record SelectPlayersInstruction : ModeratorInstruction
     public NumberRangeConstraint CountConstraint { get; }
 
     /// <summary>
+    /// Optional label for an explicit empty-selection choice when the constraint allows no players.
+    /// </summary>
+    public string? EmptySelectionOptionLabel { get; init; }
+
+    /// <summary>
     /// Initializes a new instance of SelectPlayersInstruction.
     /// </summary>
     /// <param name="selectablePlayerIds">The list of player IDs that can be selected.</param>

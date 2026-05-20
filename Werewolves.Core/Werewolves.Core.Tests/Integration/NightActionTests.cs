@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models.Instructions;
@@ -203,8 +204,9 @@ public class NightActionTests : DiagnosticTestBase
             afterSeerCheck,
             CoreTestReferences.InstructionContexts.SeerFeedbackInstruction);
 
-        // Verify feedback indicates target wakes with werewolves
-        feedbackInstruction.PrivateInstruction.Should().Contain(GameStrings.SeerResultWerewolfTeam);
+        // Verify feedback indicates the named target wakes with werewolves
+        feedbackInstruction.PrivateInstruction.Should().Be(
+            GameStrings.SeerResultWerewolfTeam.Format(werewolfPlayer.Name));
 
         // Assert - Check that a SeerCheck action was logged
         var updatedState = builder.GetGameState()!;
@@ -261,8 +263,9 @@ public class NightActionTests : DiagnosticTestBase
             afterSeerCheck,
             CoreTestReferences.InstructionContexts.SeerFeedbackInstruction);
 
-        // Verify feedback indicates target does NOT wake with werewolves
-        feedbackInstruction.PrivateInstruction.Should().Contain(GameStrings.SeerResultNotWerewolfTeam);
+        // Verify feedback indicates the named target does NOT wake with werewolves
+        feedbackInstruction.PrivateInstruction.Should().Be(
+            GameStrings.SeerResultNotWerewolfTeam.Format(villagerToCheck.Name));
 
         // Assert - Check that a SeerCheck action was logged
         var updatedState = builder.GetGameState()!;
