@@ -8,6 +8,7 @@ using Werewolves.Client.Components.Game.Views;
 using Werewolves.Client.Resources;
 using Werewolves.Client.Services;
 using Werewolves.Client.Tests.Helpers;
+using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Models;
@@ -167,6 +168,47 @@ public class InstructionRendererBunitTests
 	}
 
 	[Fact]
+	public async Task DayVoteInstruction_RendersExplicitDrawChoiceAndRequiresAChosenOutcome()
+	{
+		var timing = new ControlledHoldButtonTiming();
+		using var context = new ModeratorComponentTestContext();
+		context.Services.AddSingleton<IHoldButtonTiming>(timing);
+		var manager = CreateManagerAtDayVote();
+		var instruction = manager.CurrentInstruction.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		var responses = new List<ModeratorResponse>();
+
+		var cut = context.RenderModeratorComponent<InstructionRenderer>(parameters => parameters
+			.Add(component => component.Instruction, instruction)
+			.Add(component => component.Roster, DashboardRoster.FromSession(manager.CurrentSession))
+			.Add(component => component.OnResponse,
+				EventCallback.Factory.Create<ModeratorResponse>(this, responses.Add)));
+
+		var options = cut.FindAll(PlayerOptionSelector);
+		options.Should().HaveCount(instruction.SelectablePlayerIds.Count + 1);
+		var drawOption = options.Single(option =>
+			option.TextContent.Contains(GameStrings.DayVoteNoEliminationOption, StringComparison.CurrentCulture));
+		AssertOptionSelected(drawOption, isSelected: false);
+
+		var holdButton = cut.Find(HoldButtonSelector);
+		holdButton.HasAttribute(Html.Attributes.Disabled).Should().BeTrue();
+		await AttemptDisabledHoldAsync(cut, holdButton, timing);
+		responses.Should().BeEmpty();
+
+		drawOption.Click();
+
+		drawOption = cut.FindAll(PlayerOptionSelector).Single(option =>
+			option.TextContent.Contains(GameStrings.DayVoteNoEliminationOption, StringComparison.CurrentCulture));
+		AssertOptionSelected(drawOption, isSelected: true);
+		holdButton = cut.Find(HoldButtonSelector);
+		holdButton.HasAttribute(Html.Attributes.Disabled).Should().BeFalse();
+		await RenderedHoldButtonDriver.CompleteHoldAsync(cut, holdButton, timing);
+
+		responses.Should().ContainSingle();
+		responses.Single().Type.Should().Be(ExpectedInputType.PlayerSelection);
+		responses.Single().SelectedPlayerIds.Should().BeEmpty();
+	}
+
+	[Fact]
 	public void SelectOptionsInstruction_RendersCoreProvidedOptionControlsAndSingleInputActionZone()
 	{
 		using var context = new ModeratorComponentTestContext();
@@ -244,6 +286,85 @@ public class InstructionRendererBunitTests
 			IsDead: false,
 			StatusEffects: [],
 			DashboardRoster.NoStatusEffectsLabel);
+
+	private static async Task AttemptDisabledHoldAsync<TComponent>(
+		IRenderedComponent<TComponent> cut,
+		AngleSharp.Dom.IElement holdButton,
+		ControlledHoldButtonTiming timing)
+		where TComponent : IComponent
+	{
+		var holdTask = RenderedHoldButtonDriver.StartHoldAsync(holdButton);
+		timing.AdvanceBy(RenderedHoldButtonDriver.HoldDuration + RenderedHoldButtonDriver.SuccessFlashDuration);
+		await holdTask;
+		await RenderedHoldButtonDriver.FlushAsync(cut);
+	}
+
+	private static void AssertOptionSelected(AngleSharp.Dom.IElement option, bool isSelected)
+	{
+		option.GetAttribute(Html.Attributes.AriaSelected)
+			.Should()
+			.Be(isSelected ? Html.AriaValues.True : Html.AriaValues.False);
+
+		if (isSelected)
+		{
+			option.ClassList.Should().Contain(ClientTestReferences.Css.Classes.SelectPlayersItemSelected);
+		}
+		else
+		{
+			option.ClassList.Should().NotContain(ClientTestReferences.Css.Classes.SelectPlayersItemSelected);
+		}
+	}
+
+	private static GameClientManager CreateManagerAtDayVote()
+	{
+		var manager = new GameClientManager(new GameService());
+		var startInstruction = StartSimpleGame(manager);
+		manager.ProcessInput(startInstruction.CreateResponse(true));
+
+		for (var step = 0; step < 50; step++)
+		{
+			if (manager.CurrentPhase == GamePhase.Day &&
+				manager.CurrentInstruction is ConfirmationInstruction debateInstruction &&
+				debateInstruction.PublicAnnouncement == GameStrings.DebateStartsPrompt)
+			{
+				manager.ProcessInput(debateInstruction.CreateResponse(true));
+				manager.CurrentInstruction.Should().BeOfType<SelectPlayersInstruction>();
+				return manager;
+			}
+
+			switch (manager.CurrentInstruction)
+			{
+				case ConfirmationInstruction confirmation:
+					manager.ProcessInput(confirmation.CreateResponse(true));
+					break;
+				case SelectPlayersInstruction selectPlayers:
+					manager.ProcessInput(selectPlayers.CreateResponse([selectPlayers.SelectablePlayerIds.First()]));
+					break;
+				case AssignRolesInstruction assignRoles:
+					var assignments = assignRoles.PlayersForAssignment.ToDictionary(
+						playerId => playerId,
+						_ => MainRoleType.SimpleVillager);
+					manager.ProcessInput(assignRoles.CreateResponse(assignments));
+					break;
+				default:
+					throw new InvalidOperationException(
+						$"Unexpected instruction while advancing to day vote: {manager.CurrentInstruction?.GetType().Name}");
+			}
+		}
+
+		throw new InvalidOperationException("Day vote instruction was not reached.");
+	}
+
+	private static StartGameConfirmationInstruction StartSimpleGame(GameClientManager manager) =>
+		manager.StartGame(
+			PlayerNames.DefaultFive,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Seer,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
 
 	private static readonly ConstructorInfo ConfirmationConstructor =
 		typeof(ConfirmationInstruction)

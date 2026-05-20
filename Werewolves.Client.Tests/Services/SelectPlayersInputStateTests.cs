@@ -242,6 +242,40 @@ public class SelectPlayersInputStateTests
 	}
 
 	[Fact]
+	public void CanSubmit_ExplicitEmptySelectionRequired_WhenSelectionIsEmptyAndNotChosen_ReturnsFalse()
+	{
+		var p1 = Guid.NewGuid();
+		var roster = new[] { MakeEntry(p1, 1, PlayerNames.Ana) };
+		var state = new SelectPlayersInputState(
+			roster,
+			new HashSet<Guid> { p1 },
+			NumberRangeConstraint.SingleOptional,
+			requiresExplicitEmptySelection: true);
+
+		state.CanSubmit.Should().BeFalse();
+		state.IsEmptySelectionSelected.Should().BeFalse();
+	}
+
+	[Fact]
+	public void SelectEmptySelection_ExplicitEmptySelectionRequired_MakesEmptySelectionSubmittable()
+	{
+		var p1 = Guid.NewGuid();
+		var roster = new[] { MakeEntry(p1, 1, PlayerNames.Ana) };
+		var state = new SelectPlayersInputState(
+			roster,
+			new HashSet<Guid> { p1 },
+			NumberRangeConstraint.SingleOptional,
+			requiresExplicitEmptySelection: true);
+
+		var changed = state.SelectEmptySelection();
+
+		changed.Should().BeTrue();
+		state.IsEmptySelectionSelected.Should().BeTrue();
+		state.SelectedPlayerIds.Should().BeEmpty();
+		state.CanSubmit.Should().BeTrue();
+	}
+
+	[Fact]
 	public void CanSubmit_RangeConstraint_WhenSelectionWithinRange_ReturnsTrue()
 	{
 		var p1 = Guid.NewGuid();
