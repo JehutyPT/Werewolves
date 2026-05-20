@@ -29,12 +29,14 @@ public class InstructionRendererBunitTests
 	private static string PlayerOptionSelector => Html.Selectors.ElementWithRole(Html.Elements.ListItem, Html.Roles.Option);
 
 	[Fact]
-	public void ConfirmationInstruction_WithPublicAndPrivateGuidance_ShowsBothGuidanceBlocks()
+	public void ConfirmationInstruction_WithPublicAndPrivateGuidance_InitiallyExpandsBothGuidanceBlocks()
 	{
 		using var context = new ModeratorComponentTestContext();
+		var publicAnnouncement = $"{GameStrings.NightStartsPrompt}\n{GameStrings.DebateStartsPrompt}";
+		var privateInstruction = $"{GameStrings.ConfirmNightStarted}\n{GameStrings.RevealRolePromptSpecify}";
 		var instruction = CreateConfirmationInstruction(
-			publicAnnouncement: GameStrings.NightStartsPrompt,
-			privateInstruction: GameStrings.ConfirmNightStarted);
+			publicAnnouncement: publicAnnouncement,
+			privateInstruction: privateInstruction);
 
 		var cut = context.RenderModeratorComponent<InstructionRenderer>(parameters => parameters
 			.Add(component => component.Instruction, instruction));
@@ -42,8 +44,47 @@ public class InstructionRendererBunitTests
 		var publicToggle = cut.FindButtonByAccessibleName(ClientStrings.Dashboard_AnnounceLabel);
 		var privateToggle = cut.FindButtonByAccessibleName(ClientStrings.Dashboard_ModeratorLabel);
 
+		publicToggle.GetAttribute(Html.Attributes.AriaExpanded).Should().Be(Html.AriaValues.True);
+		privateToggle.GetAttribute(Html.Attributes.AriaExpanded).Should().Be(Html.AriaValues.True);
 		publicToggle.TextContent.Should().Contain(GameStrings.NightStartsPrompt);
+		publicToggle.TextContent.Should().Contain(GameStrings.DebateStartsPrompt);
 		privateToggle.TextContent.Should().Contain(GameStrings.ConfirmNightStarted);
+		privateToggle.TextContent.Should().Contain(GameStrings.RevealRolePromptSpecify);
+		cut.Markup.Should().NotContain(ClientStrings.Common_TapToExpand);
+	}
+
+	[Fact]
+	public void ConfirmationInstruction_WithPublicAndPrivateGuidance_CanToggleEachExpandedBlockIndependently()
+	{
+		using var context = new ModeratorComponentTestContext();
+		var instruction = CreateConfirmationInstruction(
+			publicAnnouncement: $"{GameStrings.NightStartsPrompt}\n{GameStrings.DebateStartsPrompt}",
+			privateInstruction: $"{GameStrings.ConfirmNightStarted}\n{GameStrings.RevealRolePromptSpecify}");
+
+		var cut = context.RenderModeratorComponent<InstructionRenderer>(parameters => parameters
+			.Add(component => component.Instruction, instruction));
+
+		var publicToggle = cut.FindButtonByAccessibleName(ClientStrings.Dashboard_AnnounceLabel);
+		var privateToggle = cut.FindButtonByAccessibleName(ClientStrings.Dashboard_ModeratorLabel);
+
+		publicToggle.Click();
+		publicToggle = cut.FindButtonByAccessibleName(ClientStrings.Dashboard_AnnounceLabel);
+		privateToggle = cut.FindButtonByAccessibleName(ClientStrings.Dashboard_ModeratorLabel);
+
+		publicToggle.GetAttribute(Html.Attributes.AriaExpanded).Should().Be(Html.AriaValues.False);
+		privateToggle.GetAttribute(Html.Attributes.AriaExpanded).Should().Be(Html.AriaValues.True);
+		publicToggle.TextContent.Should().NotContain(GameStrings.DebateStartsPrompt);
+		privateToggle.TextContent.Should().Contain(GameStrings.RevealRolePromptSpecify);
+
+		publicToggle.Click();
+		privateToggle.Click();
+		publicToggle = cut.FindButtonByAccessibleName(ClientStrings.Dashboard_AnnounceLabel);
+		privateToggle = cut.FindButtonByAccessibleName(ClientStrings.Dashboard_ModeratorLabel);
+
+		publicToggle.GetAttribute(Html.Attributes.AriaExpanded).Should().Be(Html.AriaValues.True);
+		privateToggle.GetAttribute(Html.Attributes.AriaExpanded).Should().Be(Html.AriaValues.False);
+		publicToggle.TextContent.Should().Contain(GameStrings.DebateStartsPrompt);
+		privateToggle.TextContent.Should().NotContain(GameStrings.RevealRolePromptSpecify);
 	}
 
 	[Fact]
@@ -209,6 +250,35 @@ public class InstructionRendererBunitTests
 	}
 
 	[Fact]
+	public void SelectOptionsInstruction_WithPublicAndPrivateGuidance_KeepsPrivateGuidanceCollapsedInitially()
+	{
+		using var context = new ModeratorComponentTestContext();
+		var options = new[] { "Acordar", "Continuar a dormir", "Alertar a aldeia" };
+		var instruction = CreateSelectOptionsInstruction(
+			NumberRangeConstraint.Single,
+			options,
+			publicAnnouncement: GameStrings.NightStartsPrompt,
+			privateInstruction: $"{GameStrings.ConfirmNightStarted}\n{GameStrings.RevealRolePromptSpecify}");
+
+		var cut = context.RenderModeratorComponent<InstructionRenderer>(parameters => parameters
+			.Add(component => component.Instruction, instruction));
+
+		var publicToggle = cut.FindButtonByAccessibleName(ClientStrings.Dashboard_AnnounceLabel);
+		var privateToggle = cut.FindButtonByAccessibleName(ClientStrings.Dashboard_ModeratorLabel);
+
+		publicToggle.GetAttribute(Html.Attributes.AriaExpanded).Should().Be(Html.AriaValues.True);
+		privateToggle.GetAttribute(Html.Attributes.AriaExpanded).Should().Be(Html.AriaValues.False);
+		publicToggle.TextContent.Should().Contain(GameStrings.NightStartsPrompt);
+		privateToggle.TextContent.Should().Contain(GameStrings.ConfirmNightStarted);
+		privateToggle.TextContent.Should().NotContain(GameStrings.RevealRolePromptSpecify);
+
+		var actionZones = cut.FindAll(DashboardActionZoneSelector);
+		actionZones.Should().ContainSingle();
+		actionZones.Single().TextContent.Should().Contain(ClientStrings.Dashboard_ContinueButton);
+		actionZones.Single().QuerySelectorAll(HoldButtonSelector).Should().ContainSingle();
+	}
+
+	[Fact]
 	public void SelectOptionsInstruction_RendersCoreProvidedOptionControlsAndSingleInputActionZone()
 	{
 		using var context = new ModeratorComponentTestContext();
@@ -266,12 +336,23 @@ public class InstructionRendererBunitTests
 	private static SelectOptionsInstruction CreateSelectOptionsInstruction(
 		NumberRangeConstraint selectionRange,
 		params string[] options) =>
+		CreateSelectOptionsInstruction(
+			selectionRange,
+			options,
+			publicAnnouncement: null,
+			privateInstruction: GameStrings.ConfirmNightStarted);
+
+	private static SelectOptionsInstruction CreateSelectOptionsInstruction(
+		NumberRangeConstraint selectionRange,
+		IEnumerable<string> options,
+		string? publicAnnouncement,
+		string? privateInstruction) =>
 		(SelectOptionsInstruction)SelectOptionsConstructor.Invoke(
 			[
 				new HashSet<string>(options, StringComparer.CurrentCulture),
 				selectionRange,
-				null,
-				GameStrings.ConfirmNightStarted,
+				publicAnnouncement,
+				privateInstruction,
 				null
 			]);
 

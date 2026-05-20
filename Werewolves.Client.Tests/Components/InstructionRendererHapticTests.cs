@@ -1,3 +1,5 @@
+using System.Collections.Immutable;
+using System.Reflection;
 using AngleSharp.Dom;
 using Bunit;
 using FluentAssertions;
@@ -20,7 +22,7 @@ public class InstructionRendererHapticTests
 	{
 		using var context = new ModeratorComponentTestContext();
 		var game = context.Services.GetRequiredService<GameClientManager>();
-		var firstInstruction = ReachAssignRolesInstruction(game);
+		var firstInstruction = CreateAssignRolesInstruction(game);
 		var secondInstruction = firstInstruction with { };
 		var roster = game.CurrentRoster;
 
@@ -43,42 +45,27 @@ public class InstructionRendererHapticTests
 			.BeEmpty();
 	}
 
-	private static AssignRolesInstruction ReachAssignRolesInstruction(GameClientManager game)
+	private static AssignRolesInstruction CreateAssignRolesInstruction(GameClientManager game)
 	{
-		var startInstruction = game.StartGame(
+		game.StartGame(
 			PlayerNames.DefaultFive,
 			[
 				MainRoleType.SimpleWerewolf,
-				MainRoleType.SimpleWerewolf,
+				MainRoleType.Seer,
 				MainRoleType.SimpleVillager,
 				MainRoleType.SimpleVillager,
 				MainRoleType.SimpleVillager
 			]);
 
-		game.ProcessInput(startInstruction.CreateResponse(true));
-		var players = game.CurrentSession!.GetPlayers().ToList();
-		var werewolfIds = players.Take(2).Select(player => player.Id).ToHashSet();
-		var victimId = players[2].Id;
-
-		ConfirmCurrentInstruction(game);
-		SelectCurrentPlayers(game, werewolfIds);
-		SelectCurrentPlayers(game, [victimId]);
-		ConfirmCurrentInstruction(game);
-		ConfirmCurrentInstruction(game);
-
-		return game.CurrentInstruction.Should().BeOfType<AssignRolesInstruction>().Subject;
-	}
-
-	private static void ConfirmCurrentInstruction(GameClientManager game)
-	{
-		var instruction = game.CurrentInstruction.Should().BeOfType<ConfirmationInstruction>().Subject;
-		game.ProcessInput(instruction.CreateResponse(true));
-	}
-
-	private static void SelectCurrentPlayers(GameClientManager game, HashSet<Guid> playerIds)
-	{
-		var instruction = game.CurrentInstruction.Should().BeOfType<SelectPlayersInstruction>().Subject;
-		game.ProcessInput(instruction.CreateResponse(playerIds));
+		var playerId = game.CurrentRoster[2].PlayerId;
+		return (AssignRolesInstruction)AssignRolesConstructor.Invoke(
+			[
+				ImmutableHashSet.Create(playerId),
+				new[] { MainRoleType.SimpleVillager },
+				null,
+				nameof(InstructionRenderer_RemountsInputStateWhenInstructionChanges),
+				null
+			]);
 	}
 
 	private static IReadOnlyList<IElement> FindRoleButtons(IRenderedComponent<InstructionRenderer> rendered) =>
@@ -88,4 +75,9 @@ public class InstructionRendererHapticTests
 		FindRoleButtons(rendered)
 			.Where(button => button.ClassList.Contains(ClientTestReferences.Css.Classes.RoleButtonSelected))
 			.ToArray();
+
+	private static readonly ConstructorInfo AssignRolesConstructor =
+		typeof(AssignRolesInstruction)
+			.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic)
+			.Single(ctor => ctor.GetParameters().Length == 5);
 }

@@ -1,3 +1,4 @@
+using System.Reflection;
 using FluentAssertions;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Rendering;
@@ -9,7 +10,9 @@ using Werewolves.Client.Components.Game.Views;
 using Werewolves.Client.Resources;
 using Werewolves.Client.Services;
 using Werewolves.Client.Tests.Helpers;
+using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Models;
+using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Resources;
 using Xunit;
 using CssClasses = Werewolves.Client.Tests.Helpers.ClientTestReferences.Css.Classes;
@@ -22,7 +25,7 @@ namespace Werewolves.Client.Tests.Components;
 public class InstructionRendererCollapsibleTests
 {
 	[Fact]
-	public async Task TwoPartInstruction_RendersPublicAndPrivateInstructionBlocks()
+	public async Task TwoPartPassiveInstruction_RendersPublicAndPrivateInstructionBlocksExpanded()
 	{
 		using var fixture = new InstructionRendererFixture(
 			new TestInstruction(
@@ -37,23 +40,23 @@ public class InstructionRendererCollapsibleTests
 		announce.Should().NotBeNull();
 		moderator.Should().NotBeNull();
 		announce!.ClassName.Should().Contain(CssClasses.InstructionBlockAnnouncement).And.Contain(CssClasses.Expanded);
-		moderator!.ClassName.Should().Contain(CssClasses.InstructionBlockPrivate).And.NotContain(CssClasses.Expanded);
+		moderator!.ClassName.Should().Contain(CssClasses.InstructionBlockPrivate).And.Contain(CssClasses.Expanded);
 		announce.GetAttribute<string>(Html.Attributes.AriaExpanded).Should().Be(Html.AriaValues.True);
-		moderator.GetAttribute<string>(Html.Attributes.AriaExpanded).Should().Be(Html.AriaValues.False);
+		moderator.GetAttribute<string>(Html.Attributes.AriaExpanded).Should().Be(Html.AriaValues.True);
 		fixture.VisibleText.Should().Contain(GameStrings.NightStartsPrompt);
 		fixture.VisibleText.Should().Contain(GameStrings.DebateStartsPrompt);
-		fixture.VisibleText.Should().Contain(CollapsedPreview(GameStrings.ConfirmNightStarted));
-		fixture.VisibleText.Should().NotContain(GameStrings.RevealRolePromptSpecify);
-		fixture.VisibleText.Should().Contain(ClientStrings.Common_TapToExpand);
+		fixture.VisibleText.Should().Contain(GameStrings.ConfirmNightStarted);
+		fixture.VisibleText.Should().Contain(GameStrings.RevealRolePromptSpecify);
+		fixture.VisibleText.Should().NotContain(ClientStrings.Common_TapToExpand);
 	}
 
 	[Fact]
-	public async Task ClickingCollapsedInstructionBlock_ExpandsItAndCollapsesTheOtherBlock()
+	public async Task ClickingCollapsedDataEntryInstructionBlock_ExpandsItAndCollapsesTheOtherBlock()
 	{
 		using var fixture = new InstructionRendererFixture(
-			new TestInstruction(
-				publicAnnouncement: GameStrings.NightStartsPrompt,
-				privateInstruction: GameStrings.ConfirmNightStarted));
+			CreateSelectOptionsInstruction(
+				publicAnnouncement: $"{GameStrings.NightStartsPrompt}\n{GameStrings.DebateStartsPrompt}",
+				privateInstruction: $"{GameStrings.ConfirmNightStarted}\n{GameStrings.RevealRolePromptSpecify}"));
 
 		await fixture.RenderAsync();
 
@@ -67,11 +70,31 @@ public class InstructionRendererCollapsibleTests
 		announce.ClassName.Should().NotContain(CssClasses.Expanded);
 		moderator.ClassName.Should().Contain(CssClasses.Expanded);
 		fixture.VisibleText.Should().Contain(GameStrings.ConfirmNightStarted);
+		fixture.VisibleText.Should().Contain(GameStrings.RevealRolePromptSpecify);
+		fixture.VisibleText.Should().Contain(CollapsedPreview(GameStrings.NightStartsPrompt));
+		fixture.VisibleText.Should().NotContain(GameStrings.DebateStartsPrompt);
 		fixture.Haptic.ClickCount.Should().Be(1);
 	}
 
 	private static string CollapsedPreview(string firstLine) =>
 		$"{firstLine}{ClientTestReferences.FixtureLabels.CollapsedInstructionPreviewSuffix}";
+
+	private static SelectOptionsInstruction CreateSelectOptionsInstruction(
+		string? publicAnnouncement,
+		string? privateInstruction) =>
+		(SelectOptionsInstruction)SelectOptionsConstructor.Invoke(
+			[
+				new HashSet<string>(["option-alpha"], StringComparer.CurrentCulture),
+				NumberRangeConstraint.Single,
+				publicAnnouncement,
+				privateInstruction,
+				null
+			]);
+
+	private static readonly ConstructorInfo SelectOptionsConstructor =
+		typeof(SelectOptionsInstruction)
+			.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic)
+			.Single(ctor => ctor.GetParameters().Length == 5);
 
 	private sealed record TestInstruction : ModeratorInstruction
 	{
