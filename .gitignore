@@ -19,3 +19,5 @@ package-lock.json
 
 # MAUI
 Werewolves.Client/nuget.config
+
+.codegraph/
