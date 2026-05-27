@@ -88,9 +88,9 @@ The game alternates between Night and Day phases. The helper app guides the Mode
 
 *Goal: Make their side win; side can change.*
 
-*   **Thief:** On the first night, shown two unused Character Cards. Must swap their Thief card for one of them. If both available cards are Werewolves, *must* take one. Plays as the chosen role for the rest of the game. (Requires 2 extra Villager cards added during setup).
+*   **Thief:** On the first night, shown the two Character Cards left undealt after random role distribution. These cards are not chosen or set aside specifically for the Thief. Must swap their Thief card for one of them. If both available cards are Werewolves, *must* take one. Plays as the chosen role for the rest of the game. (Requires 2 extra Villager cards added during setup).
 *   **Devoted Servant:** Before an eliminated player's card is revealed (after the vote), the Servant can reveal their own card. They take the eliminated player's card (without revealing it) and role, discarding the Servant card. Any states affecting the eliminated player (infected, charmed, Sheriff, Lover, etc.) are removed; the Servant starts fresh with the new role's ability reset. Cannot use if they are a Lover. If infected, remains infected.
-*   **Actor:** Each night, chooses one of three face-up Character Cards (chosen by Moderator during setup, cannot be Werewolf roles). Uses that card's power until the next night. Once a card is used, it's removed from play.
+*   **Actor:** Each night, chooses one of three face-up Character Cards (chosen by Moderator during setup, must be Villager hard-aligned roles with minimum count of 1, (i.e. excluding twin sisters and three brothers)). Uses that card's power until the next night, but does not inherit that card's win condition. Once a card is used, it's removed from play.
 *   **Wild Child:** On the first night, chooses another player as their role model. Remains a Villager as long as the model is alive. If the model is eliminated, the Wild Child immediately becomes a Werewolf and wakes with them on subsequent nights. Wins with Villagers if model survives and WWs lose; wins with WWs if model dies and WWs win.
 *   **Wolf Hound:** On the first night, decides privately whether to be a Simple Villager or a Werewolf for the entire game. If Werewolf, wakes with them each night.
 

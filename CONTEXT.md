@@ -29,8 +29,16 @@ A Player's secret identity, determining their abilities, wake-up schedule, and d
 _Avoid_: Character, class, card (when referring to the assigned identity)
 
 **Role Composition**:
-The multiset of Roles selected for the physical game deck before a Game Session starts, independent of which Player receives each Role.
+The multiset of Roles selected for the physical game deck before a Game Session starts, independent of which Player receives each Role. Includes extra undealt Character Cards required by Thief; excludes Actor Setup Cards.
 _Avoid_: Combination, setup (too broad), assignment (implies Player-specific Role knowledge)
+
+**Actor Setup Cards**:
+The three face-up Character Cards selected by the Moderator during setup for the Actor to borrow powers from. Actor Setup Cards are not part of the Role Composition and do not contribute Starting Factions or Possible Factions.
+_Avoid_: Actor Role Composition, Actor deck
+
+**Minimum Viable Role Composition**:
+The smallest Role Composition the app treats as a meaningful Game Session: 5 Players, exactly one hard-aligned Werewolf Role, and four hard-aligned Villager Roles. Ambiguous Roles and Loner Roles are not meaningful at this size.
+_Avoid_: Starter deck, tutorial setup
 
 **Already-Decided Role Composition**:
 A Role Composition where at least one Faction's win condition is already met before Turn 1 begins.
@@ -45,11 +53,31 @@ A Role Composition whose starting Factions have similar pre-game win probabiliti
 _Avoid_: Fair game (too vague), duration-balanced
 
 **Faction**:
-A distinct win condition together with the set of Players who benefit from it being met. A Faction comes into being whenever at least one Player holds a win condition not shared by any existing Faction. Membership can change during the game (e.g., Wild Child turning, infection). Examples: the Villager Faction (all Villagers win when every Werewolf is Eliminated), the Piper Faction (the Piper alone wins when all surviving Players are Charmed).
+A distinct win condition together with the set of Players who benefit from it being met. A Faction comes into being whenever at least one Player holds a win condition not shared by any existing Faction. Membership can change during the game. Examples: the Villager Faction (all Villagers win when every Werewolf is Eliminated), the Piper Faction (the Piper alone wins when all surviving Players are Charmed).
 _Avoid_: Team (implies cooperation — the Piper's Charmed targets aren't allies), side, alignment
 
+**Starting Faction**:
+A Faction represented in the Role Composition before Turn 1 as a stable win-condition beneficiary. Starting Factions are counted by Initial Faction Count even when a setup branch means that Faction never appears in a particular Game Session.
+_Avoid_: Initial Faction (ambiguous with Initial Faction Count), default side
+
+**Possible Faction**:
+A Faction implied by the Roles present in the Moderator-selected Role Composition, regardless of whether that Faction appears as a beneficiary in a particular Game Session. Possible Factions are listed in probability output even when their observed win rate is 0%.
+_Avoid_: Observed Faction, winning Faction
+
+**Hard-Aligned Role**:
+A Role whose starting win condition belongs to either the Villager Faction or the Werewolf Faction without depending on setup choices, Status Effects, or Events.
+_Avoid_: Basic Role, normal Role, Team Role
+
+**Transient Faction**:
+A Faction that can win only during a limited window, then disappears or merges into another Faction. Transient Factions are not counted by Initial Faction Count.
+_Avoid_: Temporary Team, short-lived side
+
+**Latent Faction**:
+A Faction that is not present at the beginning of a Game Session but can come into being through setup choices, Night Actions, Status Effects, or Events. Latent Factions are not counted by Initial Faction Count.
+_Avoid_: Possible Faction, hidden Team
+
 **Initial Faction Count**:
-The number of Factions treated as present for pre-game balance based on starting win-condition beneficiaries, not every conditional outcome the simulator may later produce.
+The count of Starting Factions in a Role Composition.
 _Avoid_: Possible outcome count, Role Group count
 
 **Reference Turn Horizon**:
@@ -125,8 +153,12 @@ An elected Status Effect granting double voting power. Passed to a successor on 
 _Avoid_: Leader, mayor
 
 **Lovers**:
-A pair of Players linked by Cupid on Night 1. If one is Eliminated, the other dies of heartbreak. If cross-team, their goal shifts to being the last two alive.
+A pair of Players linked by Cupid on Night 1. If one is Eliminated, the other dies of heartbreak. If they become Cross-Faction Lovers, their goal shifts to being the last two alive.
 _Avoid_: Couple, pair
+
+**Cross-Faction Lovers**:
+Lovers whose current win-condition beneficiaries differ when Cupid links them. Cross-Faction Lovers create a Latent Faction with the goal of being the last two Players alive.
+_Avoid_: Cross-team Lovers, mixed Lovers
 
 **New Moon Event**:
 An event card drawn daily that temporarily or permanently modifies game rules. Physical cards exist at the table; the app tracks their effects.
@@ -147,12 +179,24 @@ _Avoid_: Load game, restore
 - A **Game Session** has an ordered list of **Players** in **Seating Order** within the **Supported Player Count**
 - A **Game Session** starts from one **Role Composition**
 - Each **Player** has exactly one **Role** and zero or more **Status Effects**
-- A **Role Composition** contains one **Role** per **Player**, plus any extra Character Cards required by setup Roles such as Thief or Actor
+- A **Role Composition** contains one **Role** per **Player**, plus extra undealt Character Cards required by Thief
+- **Actor Setup Cards** are selected through a separate setup flow and are not part of the **Role Composition**
+- Any **Role** present in the Moderator-selected **Role Composition** can contribute **Starting Factions** and **Possible Factions** even if a particular simulation run never assigns that Role
+- The **Minimum Viable Role Composition** is one hard-aligned Werewolf **Role** and four hard-aligned Villager **Roles**
+- A supported **Role Composition** must include at least one Villager hard-aligned **Role** and at least one Werewolf hard-aligned **Role**
+- Ambiguous **Roles** do not create **Starting Factions**; their choices or later state changes resolve into existing Factions or later outcomes
+- Ambiguous **Roles** default to Villager Faction beneficiaries unless their Role definition explicitly says otherwise
+- Loner **Roles** do not share a Loner **Faction**; each Loner **Role** defines its own Faction lifecycle
+- **Cross-Faction Lovers** are a **Latent Faction**; same-Faction **Lovers** remain only a **Status Effect**
+- A Player changing which Faction they benefit from does not create a new **Faction**
+- **New Moon Events** do not create **Factions** unless they define a distinct win condition
+- Faction lifecycle describes how **Initial Faction Count** is computed; probability output is still reported as Faction win rates
+- Probability output lists every **Possible Faction** for the **Role Composition**, including Starting Factions, Transient Factions, and Latent Factions, even when a possible Faction has a 0% observed win rate
 - An **Already-Decided Role Composition** is rejected without simulation
 - A **Degenerate Role Composition** is classified by a 1,000-run baseline screening simulation before running a 10,000-run probability simulation
 - A **Balanced Role Composition** is evaluated by comparing starting Faction win probabilities, not by comparing winning Turn to the **Reference Turn Horizon**
 - The Moderator judges whether a Role Composition is balanced; the app only blocks Already-Decided and Degenerate Role Compositions
-- **Initial Faction Count** excludes latent or transient Factions such as cross-team Lovers and Angel's early solo win condition
+- **Initial Faction Count** counts **Starting Factions** and excludes **Transient Factions** and **Latent Factions**
 - **Reference Turn Horizon** is derived from **Player** count and **Initial Faction Count**
 - **Run Seed Material** is stored as a string and hashed only at the boundary where a random generator needs a numeric seed
 - A **Role** belongs to one **Role Group** and determines a default **Team**, but a Player's actual **Team** can change via **Status Effects** (e.g., infection)
@@ -185,6 +229,14 @@ _Avoid_: Load game, restore
 - "Invalid" Role Compositions — split into **Already-Decided Role Composition** for pre-game win-condition rejection and **Degenerate Role Composition** for legal but probably unfun Turn 1 endings.
 - "Simulation failure" vs early game end — resolved: a Game Session ending on Turn 1 is a completed outcome, not a failed simulation.
 - "Faction count" for balance — resolved: use **Initial Faction Count**, excluding latent or transient Factions from the pre-game balance denominator even if they may appear in simulator outcomes.
+- "Ambiguous" Role Group as Faction — resolved: Ambiguous **Roles** do not create a Starting Faction of their own.
+- Ambiguous **Role** beneficiary defaults — resolved: Ambiguous Roles default to Villager Faction beneficiaries unless their Role definition explicitly says otherwise.
+- "Loners" Role Group as Faction — resolved: Loner **Roles** do not share a Faction; White Werewolf, Piper, Prejudiced Manipulator, and Angel each need their own Faction lifecycle.
+- "Cross-team Lovers" — resolved: use **Cross-Faction Lovers**. Only Cross-Faction Lovers create a Latent Faction; same-Faction Lovers remain a Status Effect.
+- "New Moon" as Faction — resolved: New Moon Events and Role Groups are not Factions unless a specific effect defines a distinct win condition.
+- "Extra Character Cards" as Starting Factions — resolved: any Role present in the Moderator-selected Role Composition can contribute Starting Factions and Possible Factions even if a setup branch means that Role is never assigned in a particular Game Session.
+- "Actor cards" as Role Composition — resolved: **Actor Setup Cards** are a separate setup artifact, not part of the Role Composition and not a source of Possible Factions.
+- "Zero-win Factions" — resolved: probability output includes every possible Faction for the Role Composition, not only Factions observed to win in simulation.
 - "Balanced" vs "long enough" — resolved: **Balanced Role Composition** means similar starting Faction win probabilities; **Reference Turn Horizon** is not used to block Role Compositions.
 - "Balance judgment" — resolved: the app surfaces pre-game Faction probabilities for the Moderator to interpret, and only blocks Role Compositions that are Already-Decided or Degenerate.
 - "Degenerate threshold" — resolved: do not use a percentage threshold; block legal Role Compositions when a 1,000-run baseline screening simulation only observes Turn 1 endings.
