@@ -136,8 +136,12 @@ _Avoid_: Draw, stalemate
 The probability that a Faction is among the winners of a simulated Game Session. Shared Victory Outcomes credit every winning Faction, so Faction Win Probabilities can sum above 100%.
 _Avoid_: Outcome share, exclusive probability
 
+**Exclusive Outcome Bucket**:
+The canonical bucket for one completed Game Session Outcome in mutually exclusive aggregation. A single-Faction win is bucketed by that one Faction, a Shared Victory Outcome is bucketed by the sorted set of winning Factions, and a No-Winner Outcome is bucketed separately. Exclusive Outcome Buckets are used to count outcomes that cannot overlap with each other.
+_Avoid_: Faction row, winner key
+
 **Exclusive Outcome Share**:
-The probability of each mutually exclusive Game Session Outcome, including single-Faction wins, Shared Victory Outcome tuples, and No-Winner Outcome. Exclusive Outcome Shares sum to 100% across completed runs.
+The probability of each mutually exclusive Game Session Outcome, including single-Faction wins, Shared Victory Outcome buckets, and No-Winner Outcome. Exclusive Outcome Shares aggregate completed runs by Exclusive Outcome Bucket and sum to 100% across completed runs.
 _Avoid_: Faction probability, win rate
 
 **Starting Faction**:
@@ -169,8 +173,20 @@ A rough descriptive duration baseline equal to Player count divided by Initial F
 _Avoid_: Expected Turn count, predicted duration
 
 **Run Seed Material**:
-The canonical string used to identify a simulated run's random choices, including simulator version, strategy/profile, run number, Player count, Role Composition, and Simulation Scenario assumptions, with profile defaults implicit in the strategy/profile version.
+The canonical string used to identify a simulated run's random choices, including simulator version, strategy/profile, run number, Player count, Role Composition, and Simulation Scenario assumptions, with profile defaults implicit in the strategy/profile version. Run Seed Material is stable replay evidence for both Completed and Incomplete Simulation Runs.
 _Avoid_: Seed (ambiguous with PRNG integer), random key
+
+**Completed Simulation Run**:
+A simulation run that reaches exactly one Game Session Outcome. A run ending during Turn 1 is still a Completed Simulation Run when win-condition resolution produced a Game Session Outcome.
+_Avoid_: Successful run (ambiguous with desirable outcome), valid game
+
+**Incomplete Simulation Run**:
+A simulation run that does not reach a Game Session Outcome because the simulator could not generate, drive, or finish the run. Incomplete Simulation Runs are not Game Session Outcomes, are not No-Winner Outcomes, and do not contribute to Faction Win Probability or Exclusive Outcome Share.
+_Avoid_: Draw, degenerate run, early ending
+
+**Simulation Result Evidence**:
+The stable domain evidence reported by a simulation run or batch: the Simulation Scenario/profile identity, run count evidence, one minimal source record per attempted run, Completed versus Incomplete Simulation Run counts, completed Game Session Outcomes, ending Turns and Victory Check Windows, Run Seed Material needed for replay evidence, the Simulation Scenario's Possible Faction inventory, and source data sufficient to derive aggregate Faction and outcome views. Final Player/Faction state snapshots, full transcripts, instruction counts, exception details, timing, memory, raw engine traces, and driver limits are diagnostics rather than Simulation Result Evidence.
+_Avoid_: Debug log, transcript
 
 **Team** _(deprecated — use Faction for win-condition grouping)_:
 Legacy term still present in the codebase (`Team` enum). Refers to runtime allegiance — who wakes together, who can target whom. Being migrated toward Faction as the canonical concept.
@@ -351,13 +367,28 @@ _Avoid_: Load game, restore
 - Probability output lists every **Possible Faction** for the **Role Composition**, including Starting Factions, Transient Factions, and Latent Factions, even when a possible Faction has a 0% observed win rate or never came into being in the simulation batch
 - Probability output includes a **No-Winner Outcome** row in addition to **Possible Faction** rows
 - **Faction Win Probability** credits every winning Faction in a **Shared Victory Outcome**
-- **Exclusive Outcome Share** preserves mutually exclusive outcomes separately, including Shared Victory Outcome tuples
+- **Exclusive Outcome Share** aggregates only **Completed Simulation Runs** by **Exclusive Outcome Bucket**: single-Faction wins, sorted Shared Victory Outcome Faction sets, and No-Winner Outcome
+- **Faction Win Probability** and **Exclusive Outcome Share** are views derived from **Simulation Result Evidence**; raw simulator run output does not need to materialize those views directly
+- A simulation batch's stable source data includes one minimal source record per attempted run: run identity, **Run Seed Material**, completion state, and for **Completed Simulation Runs** the **Game Session Outcome**, ending **Turn**, and ending **Victory Check Window**
+- The simulation result contract requires per-run source records, but whether cache artifacts store those records verbatim or compact them is deferred to cache artifact design
+- Batch-level **Simulation Result Evidence** includes the Simulation Scenario's **Possible Faction** inventory so unobserved or never-came-into-being Factions can still be shown as 0% probability rows
+- Screening and probability batches share the same per-run **Simulation Result Evidence** contract; they differ by batch purpose, requested run count, and interpretation
+- Batch-level **Simulation Result Evidence** must support screening and probability interpretation from source data: requested runs, Completed and Incomplete Simulation Run counts, Possible Faction inventory, completed outcomes by ending **Victory Check Window**, completed outcomes by **Exclusive Outcome Bucket**, and winner participation counts derivable from completed outcomes
+- **Shared Victory Outcome**, **No-Winner Outcome**, and never-came-into-being **Possible Factions** are represented through the same source evidence rather than special-case summary records
+- Simulation result contract design stops at what evidence a run or batch must provide; cache record shape, schema versioning, artifact compression, whether per-run records are retained verbatim, precomputed aggregate projections, and lookup/index layout are cache artifact design concerns
 - **Already-Decided Role Composition** classification can only use Faction victory evidence available at **Lobby Exit**; **Degenerate Simulation Scenario** and probability evidence can observe Starting, Possible, Transient, and Latent Factions through completed simulation outcomes
 - An **Already-Decided Role Composition** is rejected without simulation
+- **Already-Decided Role Composition** records can share **Game Session Outcome** language, including **Shared Victory Outcome**, but they are not simulation runs and do not have **Run Seed Material**, per-run source records, or Completed/Incomplete Simulation Run counts
 - A **Degenerate Simulation Scenario** is classified by a 1,000-run baseline screening simulation before running a 10,000-run probability simulation; any incomplete screening run makes the screening batch invalid rather than degenerate
 - For **Degenerate Simulation Scenario** classification, "ending by the end of Turn 1" includes completed Game Sessions ending at the Dawn Victory Check Window after Night 1 resolution or at the pre-Night Victory Check Window after Day 1 vote resolution and cascades
 - A **Degenerate Simulation Scenario** cache record stores screening evidence, not probability output: the Canonical Simulation Scenario, simulator version/profile, 1,000 requested and completed runs, Turn 1 cutoff definition, aggregate completed outcomes by ending window, and batch seed material
 - A failed or incomplete screening batch is a "could not evaluate" state; it is not an **Already-Decided Role Composition**, not a **Degenerate Simulation Scenario**, and does not block **Lobby Exit**
+- "Could not evaluate" is a product evaluation state, not a **Game Session Outcome**; it is not included in **Exclusive Outcome Bucket**, **No-Winner Outcome**, **Faction Win Probability**, or degenerate evidence
+- A simulation run ending during Turn 1 is a **Completed Simulation Run** when it reaches a **Game Session Outcome**; it is not an **Incomplete Simulation Run**
+- **Incomplete Simulation Runs** do not contribute to **Faction Win Probability** or **Exclusive Outcome Share**
+- Stable **Simulation Result Evidence** for an **Incomplete Simulation Run** includes replay identity and completion state, while failure details remain diagnostic
+- Stable **Simulation Result Evidence** for a completed run includes the **Game Session Outcome**, ending **Turn**, ending **Victory Check Window**, Simulation Scenario/profile identity, and **Run Seed Material**
+- Final Player/Faction state snapshots, full transcripts, instruction counts, exception details, timing, memory, raw engine traces, and driver limits are diagnostics rather than stable **Simulation Result Evidence**
 - A **Balanced Role Composition** is evaluated by comparing starting Faction win probabilities, not by comparing winning Turn to the **Reference Turn Horizon**
 - The Moderator judges whether a Role Composition is balanced; the app only blocks **Already-Decided Role Compositions** and **Degenerate Simulation Scenarios**
 - **Initial Faction Count** counts **Starting Factions** and excludes **Transient Factions** and **Latent Factions**
@@ -392,6 +423,7 @@ _Avoid_: Load game, restore
 - "Supported" vs "recommended" player counts — resolved: the app supports 5-30 Players; product guidance may still describe a narrower ergonomic sweet spot for physical play.
 - "Invalid" simulation inputs — split into **Already-Decided Role Composition** for pre-game win-condition rejection and **Degenerate Simulation Scenario** for legal but probably unfun Turn 1 endings.
 - "Simulation failure" vs early game end — resolved: a Game Session ending on Turn 1 is a completed outcome, not a failed simulation; an incomplete screening run invalidates the screening batch and is not evidence for **Degenerate Simulation Scenario** classification.
+- "Instruction counts in simulation results" — resolved: instruction counts and driver limits are implementation diagnostics, not stable **Simulation Result Evidence**.
 - "Faction count" for balance — resolved: use **Initial Faction Count**, excluding latent or transient Factions from the pre-game balance denominator even if they may appear in simulator outcomes.
 - "Ambiguous" Role Group as Faction — resolved: Ambiguous **Roles** do not create a Starting Faction of their own.
 - Ambiguous **Role** beneficiary defaults — resolved: Ambiguous Roles default to Villager Faction beneficiaries unless their Role definition explicitly says otherwise.
@@ -416,7 +448,7 @@ _Avoid_: Load game, restore
 - "Town Crier as Role" — resolved: Town Crier is a **New Moon Assignment** like Sheriff, not part of the **Role Composition**.
 - "Player cap vs card count" — resolved: **Supported Player Count** caps Players only; Thief extras and Actor Setup Cards can increase physical card count without increasing Player count.
 - "Zero-win Factions" — resolved: probability output includes every **Possible Faction** for the Role Composition, not only Factions observed to win or come into being in simulation.
-- "Shared victory probability" — resolved: each winning Faction receives **Faction Win Probability** credit, while **Exclusive Outcome Share** preserves the shared outcome tuple separately.
+- "Shared victory probability" — resolved: each winning Faction receives **Faction Win Probability** credit, while **Exclusive Outcome Share** preserves the Shared Victory Outcome as a separate **Exclusive Outcome Bucket**.
 - "Werewolf parity" — resolved: parity is a **Werewolf Control Shortcut** for Villager-vs-Werewolf endgames, not the Werewolf Faction's full win condition once active solo or latent Factions are present.
 - "Operational Faction vs beneficiary Faction" — resolved: use **Faction Beneficiary** for win-condition membership and **Faction Agent** for operational behavior such as waking, acting, or being perceived with a Faction.
 - "Seer detection" — resolved: Seer checks whether the target is a Werewolf **Faction Agent**, not whether the target is a Werewolf **Faction Beneficiary**.
@@ -439,7 +471,9 @@ _Avoid_: Load game, restore
 - "Balance judgment" — resolved: the app surfaces pre-game Faction probabilities for the Moderator to interpret, and only blocks **Already-Decided Role Compositions** and **Degenerate Simulation Scenarios**.
 - "Already-decided evidence" — resolved: **Already-Decided Role Composition** means a Role Composition would already trigger a Faction victory at **Lobby Exit** from Role Composition evidence alone.
 - "Already-decided shared outcomes" — resolved: if multiple Faction victory predicates are already true at **Lobby Exit**, preserve them as a **Shared Victory Outcome** without priority ordering.
+- "Already-decided as simulation result" — resolved: **Already-Decided Role Composition** records share outcome language but are not simulation runs and do not have **Run Seed Material** or per-run simulation evidence.
 - "Degenerate threshold" — resolved: do not use a percentage threshold; block legal supported **Simulation Scenarios** when a 1,000-run baseline screening simulation completes every run and only observes Turn 1 endings.
 - "Could not evaluate" vs blocked — resolved: incomplete screening is an error state and does not block **Lobby Exit** as already-decided or degenerate.
+- "Could not evaluate as outcome" — resolved: "could not evaluate" is a product evaluation state, not a **Game Session Outcome** or probability bucket.
 - "Current runtime limits" — resolved: the full Faction model remains the domain contract, but the active **Simulator Profile Role Set** controls which scenarios can be evaluated now; unsupported or unevaluable scenarios are not mislabeled as already-decided or degenerate.
 - "Seed" — resolved: store **Run Seed Material** as a canonical string for replay evidence; hash it into a numeric seed only when constructing a random generator.

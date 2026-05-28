@@ -85,33 +85,59 @@ The planned branch order after Already-Decided / Degenerate Classification is:
 
 24. The full Faction model remains the domain contract, but the active Simulator Profile Role Set controls which Simulation Scenarios can be evaluated today. If the current runtime cannot evaluate a full Faction trigger or scenario, it is not simulator-supported/cacheable or it becomes a nonblocking "could not evaluate" state; it must not be mislabeled as already-decided or degenerate.
 
-25. **Balanced Role Composition** remains a domain concept for similar starting Faction win probabilities under the baseline decision model, but the app does not block on that.
+25. Simulation result contracts separate stable Simulation Result Evidence from implementation diagnostics. Simulation Result Evidence must contain the source data needed to derive probability views, but raw simulator run output does not need to materialize those views directly. Final Player/Faction state snapshots, transcripts, instruction counts, exception details, timing, memory, raw engine traces, and driver limits are diagnostics, not stable result evidence.
 
-26. **Initial Faction Count** is the denominator concept for pre-game balance discussions: count starting win-condition beneficiaries, not every conditional outcome the simulator may later produce.
+26. A simulation run that reaches a Game Session Outcome is a Completed Simulation Run even when it ends during Turn 1. An Incomplete Simulation Run is a simulator/generation/driver failure to reach a Game Session Outcome; it is not a No-Winner Outcome and does not contribute to probability output.
 
-27. Initial Faction Count excludes latent or transient Factions such as Cross-Faction Lovers and Angel's early solo win condition.
+27. Stable Simulation Result Evidence for a completed run includes only the Game Session Outcome, ending Turn, ending Victory Check Window, Simulation Scenario/profile identity, and Run Seed Material. Deterministic replay identity is the stable audit mechanism; diagnostics can be optional.
 
-28. **Reference Turn Horizon** was retained only as a dormant descriptive metric: `Player count / Initial Faction Count`. It is not part of degenerate blocking and should not be added to lobby UI yet.
+28. Exclusive Outcome Share is derived by aggregating Completed Simulation Runs by Exclusive Outcome Bucket: one single-Faction winner, the sorted set of winning Factions for a Shared Victory Outcome, or No-Winner Outcome.
 
-29. Angel is special because it has a transient solo win condition and then falls back into the Villager Faction. Do not let Angel inflate Initial Faction Count.
+29. A simulation batch's stable source data includes one minimal source record per attempted run: run identity, Run Seed Material, completion state, and for Completed Simulation Runs the Game Session Outcome, ending Turn, and ending Victory Check Window. Whether Topic 6 cache artifacts store per-run source records verbatim or compact them is deferred.
 
-30. Cross-Faction Lovers are conditional/latent. Track Lovers outcomes if they occur, but do not include them in Initial Faction Count.
+30. Batch-level Simulation Result Evidence includes the Simulation Scenario's Possible Faction inventory so unobserved or never-came-into-being Factions can still be shown as 0% probability rows.
 
-31. Prejudiced Manipulator has setup-dependent balance. The baseline simulator profile defaults to an even public group split; only non-default group models need explicit Simulation Scenario material.
+31. Stable evidence for Incomplete Simulation Runs includes replay identity and completion state; specific failure details remain diagnostic.
 
-32. Run reproducibility uses **Run Seed Material**: a canonical string stored for replay evidence, hashed only at the random-generator boundary.
+32. Screening and probability batches share the same per-run Simulation Result Evidence contract; they differ by batch purpose, requested run count, and interpretation.
 
-33. Run Seed Material includes simulator version, profile/strategy, run number, Player count, canonical Role Composition, and any non-default Simulation Scenario assumptions. Example:
+33. Batch-level Simulation Result Evidence must support screening and probability interpretation from source data: requested runs, Completed and Incomplete Simulation Run counts, Possible Faction inventory, completed outcomes by ending Victory Check Window, completed outcomes by Exclusive Outcome Bucket, and winner participation counts derivable from completed outcomes.
+
+34. Shared Victory Outcome, No-Winner Outcome, and never-came-into-being Possible Factions are represented through the same source evidence rather than special-case summary records.
+
+35. Simulation result contract design stops at what evidence a run or batch must provide. Cache record shape, schema versioning, artifact compression, whether per-run records are retained verbatim, precomputed aggregate projections, and lookup/index layout are Topic 6 cache artifact design concerns.
+
+36. Already-decided records stay outside the simulation run/batch result contract. They can share Game Session Outcome language, including Shared Victory Outcome, but they are not simulation runs and do not have Run Seed Material, per-run source records, or Completed/Incomplete Simulation Run counts.
+
+37. "Could not evaluate" is a product evaluation state, not a Game Session Outcome. It must not be grouped into Exclusive Outcome Bucket, No-Winner Outcome, Faction Win Probability, or degenerate evidence.
+
+38. **Balanced Role Composition** remains a domain concept for similar starting Faction win probabilities under the baseline decision model, but the app does not block on that.
+
+39. **Initial Faction Count** is the denominator concept for pre-game balance discussions: count starting win-condition beneficiaries, not every conditional outcome the simulator may later produce.
+
+40. Initial Faction Count excludes latent or transient Factions such as Cross-Faction Lovers and Angel's early solo win condition.
+
+41. **Reference Turn Horizon** was retained only as a dormant descriptive metric: `Player count / Initial Faction Count`. It is not part of degenerate blocking and should not be added to lobby UI yet.
+
+42. Angel is special because it has a transient solo win condition and then falls back into the Villager Faction. Do not let Angel inflate Initial Faction Count.
+
+43. Cross-Faction Lovers are conditional/latent. Track Lovers outcomes if they occur, but do not include them in Initial Faction Count.
+
+44. Prejudiced Manipulator has setup-dependent balance. The baseline simulator profile defaults to an even public group split; only non-default group models need explicit Simulation Scenario material.
+
+45. Run reproducibility uses **Run Seed Material**: a canonical string stored for replay evidence, hashed only at the random-generator boundary.
+
+46. Run Seed Material includes simulator version, profile/strategy, run number, Player count, canonical Role Composition, and any non-default Simulation Scenario assumptions. Example:
 
 ```text
 sim-v1|baseline-random-screening|players=10|run=17|Seer-1,SimpleVillager-7,SimpleWerewolf-2,WildChild-1
 ```
 
-34. Run numbers are 1-based within a batch. A single-run simulation uses `run=1`; a 1,000-run batch uses `run=1` through `run=1000`.
+47. Run numbers are 1-based within a batch. A single-run simulation uses `run=1`; a 1,000-run batch uses `run=1` through `run=1000`.
 
-35. Canonical Role Composition segments include only non-zero Role counts, sorted alphabetically by exact enum name, not localized display name or UI insertion order.
+48. Canonical Role Composition segments include only non-zero Role counts, sorted alphabetically by exact enum name, not localized display name or UI insertion order.
 
-36. Cache keys use the same canonical Role Composition rule, but identify the profile and run count rather than an individual run. Examples:
+49. Cache keys use the same canonical Role Composition rule, but identify the profile and run count rather than an individual run. Examples:
 
 ```text
 sim-v1|baseline-random-screening|players=10|runs=1000|Seer-1,SimpleVillager-7,SimpleWerewolf-2,WildChild-1
@@ -151,7 +177,7 @@ Key general semantics:
 - Durable Voting Power includes permanent voting changes currently in force, including event-originated ones, and excludes one-window effects.
 - Shared Victory Outcome is allowed when multiple win conditions are true in one Victory Check Window.
 - No-Winner Outcome occurs when no Faction win condition is true and every Player is Eliminated.
-- Faction Win Probability credits every winning Faction in shared wins; Exclusive Outcome Share preserves mutually exclusive outcome tuples.
+- Faction Win Probability credits every winning Faction in shared wins; Exclusive Outcome Share preserves mutually exclusive Exclusive Outcome Buckets.
 - Probability output includes every Possible Faction, even 0% / never-came-into-being rows, plus No-Winner.
 
 Key role-specific semantics:
