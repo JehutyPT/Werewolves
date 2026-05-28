@@ -28,13 +28,57 @@ _Avoid_: Player order, turn order
 A Player's secret identity, determining their abilities, wake-up schedule, and default allegiance. Drawn from a physical Character Card.
 _Avoid_: Character, class, card (when referring to the assigned identity)
 
+**Rules Role Set**:
+The Roles described by the physical rules in `docs/game-rules.md`, regardless of whether the app has implemented them.
+_Avoid_: Supported roles, implemented roles
+
+**Implemented Role Set**:
+The Roles with working engine behavior in the app.
+_Avoid_: Rules Role Set, selectable roles
+
+**Simulator Profile Role Set**:
+The Roles the active simulator profile can execute under its configured setup artifacts and baseline decision behavior.
+_Avoid_: Implemented Role Set, selectable roles
+
+**Selectable Role Set**:
+The Roles exposed to the Moderator in the current role-selection UI.
+_Avoid_: Rules Role Set, implemented roles
+
 **Role Composition**:
-The multiset of Roles selected for the physical game deck before a Game Session starts, independent of which Player receives each Role. Includes extra undealt Character Cards required by Thief; excludes Actor Setup Cards.
+The multiset of Roles selected for the physical game deck before a Game Session starts, independent of which Player receives each Role. Includes the two extra Character Cards required by Thief; excludes Actor Setup Cards, New Moon Events, Player names, Seating Order, Status Effects, and setup choices.
 _Avoid_: Combination, setup (too broad), assignment (implies Player-specific Role knowledge)
 
+**Rules-Valid Role Composition**:
+A Role Composition that satisfies the physical game rules for card count, role counts, and required hard-aligned Faction coverage, without considering whether the app or active simulator profile implements every included Role.
+_Avoid_: Valid (too broad), app-supported
+
+**App-Supported Role Composition**:
+A Rules-Valid Role Composition that falls within the app's product support boundaries, including Supported Player Count and supported feature scope.
+_Avoid_: Rules-valid, simulator-supported
+
 **Actor Setup Cards**:
-The three face-up Character Cards selected by the Moderator during setup for the Actor to borrow powers from. Actor Setup Cards must be hard-aligned Villager Roles with actionable individual powers. Actor Setup Cards are not part of the Role Composition and do not contribute Starting Factions or Possible Factions. The Actor Role itself is a hard-aligned Villager Role.
+The three face-up Character Cards selected by the Moderator during setup for the Actor to borrow powers from. Actor Setup Cards must be hard-aligned Villager Roles with actionable individual powers that are not already part of the Role Composition. Actor Setup Cards are not part of the Role Composition and do not contribute Starting Factions or Possible Factions. The Actor Role itself is a hard-aligned Villager Role.
 _Avoid_: Actor Role Composition, Actor deck
+
+**Simulation Scenario**:
+The complete pre-game simulator input used for lobby-level cache lookup or pre-game simulation. A Simulation Scenario always includes a canonical Role Composition and may also include setup artifacts or non-default assumptions, such as Actor Setup Cards, New Moon Event support, or a non-default Prejudiced Manipulator group model. Profile defaults, such as the baseline even split for Prejudiced Manipulator, do not need to be repeated in every Simulation Scenario.
+_Avoid_: Role Composition (when setup artifacts are also included), setup (too broad)
+
+**Canonical Role Composition**:
+The stable string representation of a Role Composition for cache keys, simulation scenarios, and replay evidence. It contains non-zero Role counts only, sorted alphabetically by exact enum identifier, using enum identifiers rather than localized names. It counts every physical Role card in the Role Composition, including Thief extras, and never includes Actor Setup Cards.
+_Avoid_: Display role list, localized composition
+
+**Canonical Simulation Scenario**:
+The stable string representation of a Simulation Scenario. It includes Player count separately from the Canonical Role Composition because Thief can make card count differ from Player count. It also includes setup artifacts or non-default assumptions that affect simulation, such as Actor Setup Cards, while leaving profile defaults implicit in the profile/version.
+_Avoid_: Canonical Role Composition (when Player count or setup artifacts are included)
+
+**Simulator-Supported Simulation Scenario**:
+A Simulation Scenario that the active simulator profile can execute with implemented Roles, setup artifacts, and baseline decision behavior.
+_Avoid_: App-supported Role Composition, cacheable
+
+**Cacheable Simulation Scenario**:
+A Simulator-Supported Simulation Scenario that is eligible for offline cache generation and lookup.
+_Avoid_: Role Composition, simulator-supported
 
 **Minimum Viable Role Composition**:
 The smallest Role Composition the app treats as a meaningful Game Session: 5 Players, exactly one hard-aligned Werewolf Role, and four hard-aligned Villager Roles. Ambiguous Roles and Loner Roles are not meaningful at this size.
@@ -44,9 +88,9 @@ _Avoid_: Starter deck, tutorial setup
 A Role Composition where at least one Faction's win condition is already met before Turn 1 begins.
 _Avoid_: Simulated loss, failed run
 
-**Degenerate Role Composition**:
-A legal Role Composition whose 1,000-run baseline screening simulation only observes Game Sessions ending by the end of Turn 1, before Players get meaningful agency.
-_Avoid_: Invalid (ambiguous with rules-invalid), failed simulation, mathematically proven early ending
+**Degenerate Simulation Scenario**:
+A legal, supported Simulation Scenario whose 1,000-run baseline screening simulation only observes Game Sessions ending by the end of Turn 1, before Players get meaningful agency.
+_Avoid_: Degenerate Role Composition, invalid (ambiguous with rules-invalid), failed simulation, mathematically proven early ending
 
 **Balanced Role Composition**:
 A Role Composition whose starting Factions have similar pre-game win probabilities under the simulator's baseline decision model.
@@ -105,7 +149,7 @@ A Faction implied by the Roles present in the Moderator-selected Role Compositio
 _Avoid_: Observed Faction, winning Faction
 
 **Hard-Aligned Role**:
-A Role whose starting win condition belongs to either the Villager Faction or the Werewolf Faction without depending on setup choices, Status Effects, or Events.
+A Role whose starting win condition belongs to either the Villager Faction or the Werewolf Faction without depending on setup choices, Status Effects, or Events. For Role Composition validation, hard-aligned Werewolf Roles are Simple Werewolf, Big Bad Wolf, and Accursed Wolf-Father. Hard-aligned Villager Roles are Simple Villager, Villager-Villager, Seer, Cupid, Witch, Hunter, Little Girl, Defender, Elder, Scapegoat, Village Idiot, Two Sisters, Three Brothers, Fox, Bear Tamer, Stuttering Judge, Knight with the Rusty Sword, and Actor. Gypsy is hard-aligned Villager only in New-Moon-enabled Simulation Scenarios. White Werewolf is not hard-aligned Werewolf because it is a White Werewolf Faction Beneficiary.
 _Avoid_: Basic Role, normal Role, Team Role
 
 **Transient Faction**:
@@ -125,7 +169,7 @@ A rough descriptive duration baseline equal to Player count divided by Initial F
 _Avoid_: Expected Turn count, predicted duration
 
 **Run Seed Material**:
-The canonical string used to identify a simulated run's random choices, including simulator version, strategy, run number, and Role Composition.
+The canonical string used to identify a simulated run's random choices, including simulator version, strategy/profile, run number, Player count, Role Composition, and Simulation Scenario assumptions, with profile defaults implicit in the strategy/profile version.
 _Avoid_: Seed (ambiguous with PRNG integer), random key
 
 **Team** _(deprecated — use Faction for win-condition grouping)_:
@@ -140,11 +184,19 @@ _Avoid_: Faction (overloaded with Team)
 A persistent condition applied to a Player that modifies their state or abilities. Multiple can stack (e.g., Sheriff + Infected + Charmed). Tracked as flags.
 _Avoid_: Buff, debuff, modifier, secondary role (historically used, now unified under Status Effect)
 
+**New Moon Assignment**:
+A non-Role responsibility or state introduced by New Moon rules or Events, such as Town Crier, Executioner, Double Agent, or Little Rascal. New Moon Assignments are not part of the Role Composition.
+_Avoid_: Role, Character Card
+
 ### Game Flow
 
 **Game Session**:
 A single game instance from configuration through to victory. Owns all state for one game.
 _Avoid_: Game, match, room
+
+**Simulation Start State**:
+The fully defined Game Session state from which a simulation batch begins. A pre-game Simulation Start State can be derived from a Simulation Scenario; a mid-game Simulation Start State can be captured from an in-progress Game Session once that state is representable.
+_Avoid_: Role Composition (when current Game Session state matters), snapshot (too implementation-specific)
 
 **Turn**:
 A complete cycle through Night, Dawn, and Day. Numbered starting at 1.
@@ -223,20 +275,36 @@ _Avoid_: Load game, restore
 - A **Game Session** has an ordered list of **Players** in **Seating Order** within the **Supported Player Count**
 - A **Game Session** starts from one **Role Composition**
 - Each **Player** has exactly one **Role** and zero or more **Status Effects**
-- A **Role Composition** contains one **Role** per **Player**, plus extra undealt Character Cards required by Thief
+- A **Role Composition** contains one **Role** per **Player**, plus two extra undealt Character Cards when Thief is present; Actor does not change **Role Composition** size
 - **Actor Setup Cards** are selected through a separate setup flow and are not part of the **Role Composition**
 - Actor is a hard-aligned Villager **Role**; **Actor Setup Cards** provide borrowed powers only and do not change the Actor's **Faction Beneficiary**
 - Actor counts toward hard-aligned Villager **Role** requirements for supported **Role Compositions**
-- **Actor Setup Cards** must be hard-aligned Villager **Roles** with actionable individual powers; Simple Villager, Villager-Villager, Two Sisters, and Three Brothers are not eligible
+- **Actor Setup Cards** must be hard-aligned Villager **Roles** with actionable individual powers that are not already selected in the **Role Composition**; Simple Villager, Villager-Villager, Two Sisters, and Three Brothers are not eligible
+- If Actor is in the **Role Composition**, the app must require at least three eligible **Actor Setup Cards** to remain outside the **Role Composition** before setup can advance
+- **New Moon Events**, Player names, **Seating Order**, **Status Effects**, Sheriff, Lovers, Charmed, Prejudiced Manipulator groups, and physical traits such as youngest Player are not part of the **Role Composition**
+- New-Moon-dependent Roles and Event effects are outside the v1 simulator scope unless a **Simulation Scenario** explicitly includes New Moon support
+- Cache and simulation inputs use a **Simulation Scenario** when setup artifacts or profile assumptions matter beyond the **Role Composition**
+- The simulator runs from a **Simulation Start State**; pre-game cache generation derives that state from a **Simulation Scenario**, while mid-game projection can use the same simulation mechanism from a later fully defined Game Session state
+- **Canonical Role Composition** omits zero-count Roles, uses exact enum identifiers rather than localized names, and sorts Role entries alphabetically by enum identifier
+- **Canonical Simulation Scenario** includes `players=N` separately from **Canonical Role Composition** because Thief can make Role card count differ from Player count
+- Prejudiced Manipulator group splitting is not part of **Role Composition**; an even split is the baseline simulator profile default, and only non-default group models need explicit **Simulation Scenario** material
 - Any **Role** present in the Moderator-selected **Role Composition** can contribute **Starting Factions** and **Possible Factions** even if a particular simulation run never assigns that Role
+- A **Cacheable Simulation Scenario** is limited by the active **Simulator Profile Role Set**, not the full **Rules Role Set**
+- A Role becomes **App-Supported** only when the app can actually guide the Moderator through it; Roles that exist only in the **Rules Role Set** are Rules-Valid but not App-Supported
+- **Supported Player Count** caps Players only, not total physical cards; Thief can make a **Role Composition** larger than the Player count, and **Actor Setup Cards** are additional physical cards outside the **Role Composition**
+- A **Rules-Valid Role Composition** must include at least one hard-aligned Villager **Role** and at least one hard-aligned Werewolf **Role**, but Simple Villager and Simple Werewolf are not mandatory by role name
+- Role-count constraints such as single-copy special Roles, exactly two Sisters, and exactly three Brothers are domain rules; Supported Player Count, currently implemented Roles, New Moon exclusion, and simulator profile support are app/product constraints
 - The **Minimum Viable Role Composition** is one hard-aligned Werewolf **Role** and four hard-aligned Villager **Roles**
 - A supported **Role Composition** must include at least one Villager hard-aligned **Role** and at least one Werewolf hard-aligned **Role**
+- Classification order is: **Rules-Valid Role Composition**, **App-Supported Role Composition**, **Simulator-Supported Simulation Scenario**, **Already-Decided Role Composition**, **Degenerate Simulation Scenario**, then probability simulation
+- Enumeration conceptually starts from **Rules Role Set** plus Player count to generate **Rules-Valid Role Compositions**, then filters to **App-Supported Role Compositions**, **Simulator-Supported Simulation Scenarios**, and **Cacheable Simulation Scenarios**
 - Ambiguous **Roles** do not create **Starting Factions**; their choices or later state changes resolve into existing Factions or later outcomes
 - Ambiguous **Roles** default to Villager Faction beneficiaries unless their Role definition explicitly says otherwise
 - Loner **Roles** do not share a Loner **Faction**; each Loner **Role** defines its own Faction lifecycle
 - **Cross-Faction Lovers** are a **Latent Faction**; same-Faction **Lovers** remain only a **Status Effect**
 - A Player changing which Faction they benefit from does not create a new **Faction**
 - **New Moon Events** do not create **Factions** unless they define a distinct win condition
+- Town Crier is a **New Moon Assignment** like Sheriff, not a **Role** in the Role Composition
 - Elimination-style Faction win conditions are evaluated against **Faction Beneficiaries**
 - In the current ruleset, a Player has exactly one beneficiary Faction at a time; changes such as Cross-Faction Lovers, Wild Child transformation, Wolf Hound choice, Thief swap, Devoted Servant swap, or Double Agent replace the Player's previous beneficiary link
 - Infection changes a Player's **Faction Agent** status, not their **Faction Beneficiary**
@@ -276,9 +344,9 @@ _Avoid_: Load game, restore
 - **Faction Win Probability** credits every winning Faction in a **Shared Victory Outcome**
 - **Exclusive Outcome Share** preserves mutually exclusive outcomes separately, including Shared Victory Outcome tuples
 - An **Already-Decided Role Composition** is rejected without simulation
-- A **Degenerate Role Composition** is classified by a 1,000-run baseline screening simulation before running a 10,000-run probability simulation
+- A **Degenerate Simulation Scenario** is classified by a 1,000-run baseline screening simulation before running a 10,000-run probability simulation
 - A **Balanced Role Composition** is evaluated by comparing starting Faction win probabilities, not by comparing winning Turn to the **Reference Turn Horizon**
-- The Moderator judges whether a Role Composition is balanced; the app only blocks Already-Decided and Degenerate Role Compositions
+- The Moderator judges whether a Role Composition is balanced; the app only blocks **Already-Decided Role Compositions** and **Degenerate Simulation Scenarios**
 - **Initial Faction Count** counts **Starting Factions** and excludes **Transient Factions** and **Latent Factions**
 - **Reference Turn Horizon** is derived from **Player** count and **Initial Faction Count**
 - **Run Seed Material** is stored as a string and hashed only at the boundary where a random generator needs a numeric seed
@@ -309,7 +377,7 @@ _Avoid_: Load game, restore
 - "Morning" — avoided: too ambiguous. **Dawn** is the resolution phase (app-internal). **Day** is when players are awake and active.
 - "Combination" — resolved: use **Role Composition** for pre-game balance and simulation discussions. It does not mean a Player-specific Role assignment or a Seating Order permutation.
 - "Supported" vs "recommended" player counts — resolved: the app supports 5-30 Players; product guidance may still describe a narrower ergonomic sweet spot for physical play.
-- "Invalid" Role Compositions — split into **Already-Decided Role Composition** for pre-game win-condition rejection and **Degenerate Role Composition** for legal but probably unfun Turn 1 endings.
+- "Invalid" simulation inputs — split into **Already-Decided Role Composition** for pre-game win-condition rejection and **Degenerate Simulation Scenario** for legal but probably unfun Turn 1 endings.
 - "Simulation failure" vs early game end — resolved: a Game Session ending on Turn 1 is a completed outcome, not a failed simulation.
 - "Faction count" for balance — resolved: use **Initial Faction Count**, excluding latent or transient Factions from the pre-game balance denominator even if they may appear in simulator outcomes.
 - "Ambiguous" Role Group as Faction — resolved: Ambiguous **Roles** do not create a Starting Faction of their own.
@@ -318,8 +386,21 @@ _Avoid_: Load game, restore
 - "Cross-team Lovers" — resolved: use **Cross-Faction Lovers**. Only Cross-Faction Lovers create a Latent Faction; same-Faction Lovers remain a Status Effect.
 - "New Moon" as Faction — resolved: New Moon Events and Role Groups are not Factions unless a specific effect defines a distinct win condition.
 - "Extra Character Cards" as Starting Factions — resolved: any Role present in the Moderator-selected Role Composition can contribute Starting Factions and Possible Factions even if a setup branch means that Role is never assigned in a particular Game Session.
-- "Actor cards" as Role Composition — resolved: **Actor Setup Cards** are a separate setup artifact, not part of the Role Composition and not a source of Possible Factions.
+- "Actor cards" as Role Composition — resolved: **Actor Setup Cards** are a separate setup artifact, not part of the Role Composition and not a source of Possible Factions; Actor setup requires three eligible hard-aligned Villager Roles to remain outside the Role Composition.
+- "Thief extra cards" as setup artifact — resolved: Thief's two extra Character Cards are part of the **Role Composition**, but they are not preselected as undealt cards before the random deal.
+- "Role Composition as full simulator input" — resolved: use **Simulation Scenario** when cache or simulation inputs include setup artifacts or profile assumptions beyond the Role Composition.
+- "New Moon Events in Role Composition" — resolved: New Moon Events are outside Role Composition, and New-Moon-dependent simulation is out of v1 scope unless a **Simulation Scenario** explicitly includes New Moon support.
+- "Canonical Role Composition" — resolved: count every physical Role card in the Role Composition, including Thief extras, omit zero-count Roles, sort by exact enum identifier, and never include Actor Setup Cards.
+- "Player count inference" — resolved: **Canonical Simulation Scenario** and **Run Seed Material** include `players=N` separately from Role counts because Thief changes card count.
+- "Prejudiced Manipulator groups in Role Composition" — resolved: group splitting is not part of Role Composition; even split is the baseline simulator profile default, and only non-default group models need explicit **Simulation Scenario** material.
+- "Mid-game projection vs pre-game simulation" — resolved: the simulator runs from a **Simulation Start State**. Pre-game cache generation derives that state from a **Simulation Scenario**; mid-game projection uses the same simulation mechanism from a later fully defined Game Session state.
 - "Actor as Ambiguous Role" — resolved: Actor is a hard-aligned Villager **Role**, counts toward hard-aligned Villager Role Composition requirements, and **Actor Setup Cards** provide powers only without affecting Faction lifecycle.
+- "Valid Role Composition" — resolved: split into **Rules-Valid Role Composition**, **App-Supported Role Composition**, **Simulator-Supported Simulation Scenario**, and **Cacheable Simulation Scenario** instead of overloading "valid."
+- "Mandatory Simple Werewolf/Simple Villager" — resolved: the domain requires hard-aligned Werewolf and Villager coverage, not Simple Werewolf or Simple Villager by role name.
+- "Already-decided/degenerated on unsupported inputs" — resolved: already-decided and degenerate classification only apply after rules, app, and simulator support checks pass.
+- "Supported roles" — resolved: use **Rules Role Set**, **Implemented Role Set**, **Simulator Profile Role Set**, or **Selectable Role Set** depending on the boundary being discussed.
+- "Town Crier as Role" — resolved: Town Crier is a **New Moon Assignment** like Sheriff, not part of the **Role Composition**.
+- "Player cap vs card count" — resolved: **Supported Player Count** caps Players only; Thief extras and Actor Setup Cards can increase physical card count without increasing Player count.
 - "Zero-win Factions" — resolved: probability output includes every **Possible Faction** for the Role Composition, not only Factions observed to win or come into being in simulation.
 - "Shared victory probability" — resolved: each winning Faction receives **Faction Win Probability** credit, while **Exclusive Outcome Share** preserves the shared outcome tuple separately.
 - "Werewolf parity" — resolved: parity is a **Werewolf Control Shortcut** for Villager-vs-Werewolf endgames, not the Werewolf Faction's full win condition once active solo or latent Factions are present.
@@ -341,6 +422,6 @@ _Avoid_: Load game, restore
 - "Tie" as final result — resolved: use **Shared Victory Outcome** for multiple Factions winning in the same **Victory Check Window**; keep "tie" for Vote ties.
 - "Everybody dies" — resolved: use **No-Winner Outcome** for completed Game Sessions where no Faction wins.
 - "Balanced" vs "long enough" — resolved: **Balanced Role Composition** means similar starting Faction win probabilities; **Reference Turn Horizon** is not used to block Role Compositions.
-- "Balance judgment" — resolved: the app surfaces pre-game Faction probabilities for the Moderator to interpret, and only blocks Role Compositions that are Already-Decided or Degenerate.
-- "Degenerate threshold" — resolved: do not use a percentage threshold; block legal Role Compositions when a 1,000-run baseline screening simulation only observes Turn 1 endings.
+- "Balance judgment" — resolved: the app surfaces pre-game Faction probabilities for the Moderator to interpret, and only blocks **Already-Decided Role Compositions** and **Degenerate Simulation Scenarios**.
+- "Degenerate threshold" — resolved: do not use a percentage threshold; block legal supported **Simulation Scenarios** when a 1,000-run baseline screening simulation only observes Turn 1 endings.
 - "Seed" — resolved: store **Run Seed Material** as a canonical string for replay evidence; hash it into a numeric seed only when constructing a random generator.
