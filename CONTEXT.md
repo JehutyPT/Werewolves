@@ -85,11 +85,11 @@ The smallest Role Composition the app treats as a meaningful Game Session: 5 Pla
 _Avoid_: Starter deck, tutorial setup
 
 **Already-Decided Role Composition**:
-A Role Composition where at least one Faction's win condition is already met before Turn 1 begins.
+A Role Composition where at least one Faction would already win at Lobby Exit based only on the Role Composition, before random assignment, setup artifacts, simulation, or Turn 1 choices.
 _Avoid_: Simulated loss, failed run
 
 **Degenerate Simulation Scenario**:
-A legal, supported Simulation Scenario whose 1,000-run baseline screening simulation only observes Game Sessions ending by the end of Turn 1, before Players get meaningful agency.
+A legal, supported Simulation Scenario whose 1,000-run baseline screening simulation completes every run and only observes Game Sessions ending by the end of Turn 1, before Players get meaningful agency.
 _Avoid_: Degenerate Role Composition, invalid (ambiguous with rules-invalid), failed simulation, mathematically proven early ending
 
 **Balanced Role Composition**:
@@ -194,6 +194,10 @@ _Avoid_: Role, Character Card
 A single game instance from configuration through to victory. Owns all state for one game.
 _Avoid_: Game, match, room
 
+**Lobby Exit**:
+The boundary where the Moderator attempts to leave pre-game configuration and start the physical Game Session with the selected Role Composition.
+_Avoid_: Game start (too broad), setup complete
+
 **Simulation Start State**:
 The fully defined Game Session state from which a simulation batch begins. A pre-game Simulation Start State can be derived from a Simulation Scenario; a mid-game Simulation Start State can be captured from an in-progress Game Session once that state is representable.
 _Avoid_: Role Composition (when current Game Session state matters), snapshot (too implementation-specific)
@@ -285,6 +289,7 @@ _Avoid_: Load game, restore
 - New-Moon-dependent Roles and Event effects are outside the v1 simulator scope unless a **Simulation Scenario** explicitly includes New Moon support
 - Cache and simulation inputs use a **Simulation Scenario** when setup artifacts or profile assumptions matter beyond the **Role Composition**
 - The simulator runs from a **Simulation Start State**; pre-game cache generation derives that state from a **Simulation Scenario**, while mid-game projection can use the same simulation mechanism from a later fully defined Game Session state
+- **Degenerate Simulation Scenario** classification applies to the **Simulation Scenario**; each screening run derives its own seeded pre-game **Simulation Start State** from that scenario, including random assignment and profile/default setup choices
 - **Canonical Role Composition** omits zero-count Roles, uses exact enum identifiers rather than localized names, and sorts Role entries alphabetically by enum identifier
 - **Canonical Simulation Scenario** includes `players=N` separately from **Canonical Role Composition** because Thief can make Role card count differ from Player count
 - Prejudiced Manipulator group splitting is not part of **Role Composition**; an even split is the baseline simulator profile default, and only non-default group models need explicit **Simulation Scenario** material
@@ -297,6 +302,10 @@ _Avoid_: Load game, restore
 - The **Minimum Viable Role Composition** is one hard-aligned Werewolf **Role** and four hard-aligned Villager **Roles**
 - A supported **Role Composition** must include at least one Villager hard-aligned **Role** and at least one Werewolf hard-aligned **Role**
 - Classification order is: **Rules-Valid Role Composition**, **App-Supported Role Composition**, **Simulator-Supported Simulation Scenario**, **Already-Decided Role Composition**, **Degenerate Simulation Scenario**, then probability simulation
+- **Already-Decided Role Composition** classification runs every Faction victory trigger that can be evaluated from the Role Composition alone at **Lobby Exit**; possible Player assignments, setup branches, and Night 1 choices are not evidence for this classification
+- **Already-Decided Role Composition** classification does not derive or simulate a **Simulation Start State**
+- If multiple Faction victory triggers are true at **Lobby Exit** from Role Composition evidence alone, the **Already-Decided Role Composition** record uses **Shared Victory Outcome** semantics rather than a priority order
+- Lobby result lookup can use the **Canonical Simulation Scenario** key for uniform cache access, but an **Already-Decided Role Composition** record must state that its evidence came only from the **Canonical Role Composition**
 - Enumeration conceptually starts from **Rules Role Set** plus Player count to generate **Rules-Valid Role Compositions**, then filters to **App-Supported Role Compositions**, **Simulator-Supported Simulation Scenarios**, and **Cacheable Simulation Scenarios**
 - Ambiguous **Roles** do not create **Starting Factions**; their choices or later state changes resolve into existing Factions or later outcomes
 - Ambiguous **Roles** default to Villager Faction beneficiaries unless their Role definition explicitly says otherwise
@@ -343,8 +352,12 @@ _Avoid_: Load game, restore
 - Probability output includes a **No-Winner Outcome** row in addition to **Possible Faction** rows
 - **Faction Win Probability** credits every winning Faction in a **Shared Victory Outcome**
 - **Exclusive Outcome Share** preserves mutually exclusive outcomes separately, including Shared Victory Outcome tuples
+- **Already-Decided Role Composition** classification can only use Faction victory evidence available at **Lobby Exit**; **Degenerate Simulation Scenario** and probability evidence can observe Starting, Possible, Transient, and Latent Factions through completed simulation outcomes
 - An **Already-Decided Role Composition** is rejected without simulation
-- A **Degenerate Simulation Scenario** is classified by a 1,000-run baseline screening simulation before running a 10,000-run probability simulation
+- A **Degenerate Simulation Scenario** is classified by a 1,000-run baseline screening simulation before running a 10,000-run probability simulation; any incomplete screening run makes the screening batch invalid rather than degenerate
+- For **Degenerate Simulation Scenario** classification, "ending by the end of Turn 1" includes completed Game Sessions ending at the Dawn Victory Check Window after Night 1 resolution or at the pre-Night Victory Check Window after Day 1 vote resolution and cascades
+- A **Degenerate Simulation Scenario** cache record stores screening evidence, not probability output: the Canonical Simulation Scenario, simulator version/profile, 1,000 requested and completed runs, Turn 1 cutoff definition, aggregate completed outcomes by ending window, and batch seed material
+- A failed or incomplete screening batch is a "could not evaluate" state; it is not an **Already-Decided Role Composition**, not a **Degenerate Simulation Scenario**, and does not block **Lobby Exit**
 - A **Balanced Role Composition** is evaluated by comparing starting Faction win probabilities, not by comparing winning Turn to the **Reference Turn Horizon**
 - The Moderator judges whether a Role Composition is balanced; the app only blocks **Already-Decided Role Compositions** and **Degenerate Simulation Scenarios**
 - **Initial Faction Count** counts **Starting Factions** and excludes **Transient Factions** and **Latent Factions**
@@ -378,7 +391,7 @@ _Avoid_: Load game, restore
 - "Combination" — resolved: use **Role Composition** for pre-game balance and simulation discussions. It does not mean a Player-specific Role assignment or a Seating Order permutation.
 - "Supported" vs "recommended" player counts — resolved: the app supports 5-30 Players; product guidance may still describe a narrower ergonomic sweet spot for physical play.
 - "Invalid" simulation inputs — split into **Already-Decided Role Composition** for pre-game win-condition rejection and **Degenerate Simulation Scenario** for legal but probably unfun Turn 1 endings.
-- "Simulation failure" vs early game end — resolved: a Game Session ending on Turn 1 is a completed outcome, not a failed simulation.
+- "Simulation failure" vs early game end — resolved: a Game Session ending on Turn 1 is a completed outcome, not a failed simulation; an incomplete screening run invalidates the screening batch and is not evidence for **Degenerate Simulation Scenario** classification.
 - "Faction count" for balance — resolved: use **Initial Faction Count**, excluding latent or transient Factions from the pre-game balance denominator even if they may appear in simulator outcomes.
 - "Ambiguous" Role Group as Faction — resolved: Ambiguous **Roles** do not create a Starting Faction of their own.
 - Ambiguous **Role** beneficiary defaults — resolved: Ambiguous Roles default to Villager Faction beneficiaries unless their Role definition explicitly says otherwise.
@@ -394,6 +407,7 @@ _Avoid_: Load game, restore
 - "Player count inference" — resolved: **Canonical Simulation Scenario** and **Run Seed Material** include `players=N` separately from Role counts because Thief changes card count.
 - "Prejudiced Manipulator groups in Role Composition" — resolved: group splitting is not part of Role Composition; even split is the baseline simulator profile default, and only non-default group models need explicit **Simulation Scenario** material.
 - "Mid-game projection vs pre-game simulation" — resolved: the simulator runs from a **Simulation Start State**. Pre-game cache generation derives that state from a **Simulation Scenario**; mid-game projection uses the same simulation mechanism from a later fully defined Game Session state.
+- "Scenario classification vs start states" — resolved: degenerate screening classifies a **Simulation Scenario**, while each completed screening run starts from its own seeded **Simulation Start State** derived from that scenario.
 - "Actor as Ambiguous Role" — resolved: Actor is a hard-aligned Villager **Role**, counts toward hard-aligned Villager Role Composition requirements, and **Actor Setup Cards** provide powers only without affecting Faction lifecycle.
 - "Valid Role Composition" — resolved: split into **Rules-Valid Role Composition**, **App-Supported Role Composition**, **Simulator-Supported Simulation Scenario**, and **Cacheable Simulation Scenario** instead of overloading "valid."
 - "Mandatory Simple Werewolf/Simple Villager" — resolved: the domain requires hard-aligned Werewolf and Villager coverage, not Simple Werewolf or Simple Villager by role name.
@@ -423,5 +437,9 @@ _Avoid_: Load game, restore
 - "Everybody dies" — resolved: use **No-Winner Outcome** for completed Game Sessions where no Faction wins.
 - "Balanced" vs "long enough" — resolved: **Balanced Role Composition** means similar starting Faction win probabilities; **Reference Turn Horizon** is not used to block Role Compositions.
 - "Balance judgment" — resolved: the app surfaces pre-game Faction probabilities for the Moderator to interpret, and only blocks **Already-Decided Role Compositions** and **Degenerate Simulation Scenarios**.
-- "Degenerate threshold" — resolved: do not use a percentage threshold; block legal supported **Simulation Scenarios** when a 1,000-run baseline screening simulation only observes Turn 1 endings.
+- "Already-decided evidence" — resolved: **Already-Decided Role Composition** means a Role Composition would already trigger a Faction victory at **Lobby Exit** from Role Composition evidence alone.
+- "Already-decided shared outcomes" — resolved: if multiple Faction victory predicates are already true at **Lobby Exit**, preserve them as a **Shared Victory Outcome** without priority ordering.
+- "Degenerate threshold" — resolved: do not use a percentage threshold; block legal supported **Simulation Scenarios** when a 1,000-run baseline screening simulation completes every run and only observes Turn 1 endings.
+- "Could not evaluate" vs blocked — resolved: incomplete screening is an error state and does not block **Lobby Exit** as already-decided or degenerate.
+- "Current runtime limits" — resolved: the full Faction model remains the domain contract, but the active **Simulator Profile Role Set** controls which scenarios can be evaluated now; unsupported or unevaluable scenarios are not mislabeled as already-decided or degenerate.
 - "Seed" — resolved: store **Run Seed Material** as a canonical string for replay evidence; hash it into a numeric seed only when constructing a random generator.

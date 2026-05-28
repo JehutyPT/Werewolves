@@ -20,11 +20,12 @@ The design follow-up is being handled as a staged grilling sequence. Each branch
 
 3. **Role Composition Space** was completed inline using `$grill-with-docs-batched` after the user clarified that this branch should not be offloaded to another sub-agent.
 
-The planned branch order after Role Composition Space is:
+4. **Already-Decided / Degenerate Classification** was completed inline using `$grill-with-docs-batched`.
 
-1. Already-Decided / Degenerate Classification
-2. Simulation Result Contract
-3. Cache Artifact Design
+The planned branch order after Already-Decided / Degenerate Classification is:
+
+1. Simulation Result Contract
+2. Cache Artifact Design
 
 ## Resolved Decisions
 
@@ -38,58 +39,79 @@ The planned branch order after Role Composition Space is:
 
 5. The app blocks only two categories: **Already-Decided Role Composition** and **Degenerate Simulation Scenario**.
 
-6. **Already-Decided Role Composition** means a Faction's win condition is already satisfied before Turn 1 begins and before any setup or Night 1 choices.
+6. **Already-Decided Role Composition** means a Faction would already win at Lobby Exit from Role Composition evidence alone, before random Player assignment, setup artifacts, simulation, or Turn 1 choices.
 
-7. Already-decided detection is rule-based and does not run simulation.
+7. Already-decided detection is rule-based and does not run simulation. The classifier runs every Faction victory trigger that can be evaluated from the Role Composition alone.
 
-8. **Degenerate Simulation Scenario** means a legal, supported Simulation Scenario whose 1,000-run baseline screening simulation only observes Game Sessions ending by the end of Turn 1.
+8. Already-decided lookup may use the same Canonical Simulation Scenario cache key as other lobby results, but the record must state that the evidence came only from the Canonical Role Composition. It does not need simulator profile, seed, run count, or setup artifact evidence.
 
-9. A Turn 1 ending is a completed game outcome, not a simulation failure.
+9. If multiple Faction victory triggers are true at Lobby Exit, already-decided records use Shared Victory Outcome semantics rather than priority ordering.
 
-10. Degenerate classification is practical product screening, not mathematical proof over every possible branch.
+10. Already-decided classification does not derive or simulate a Simulation Start State.
 
-11. Do not use percentage thresholds such as 50%, 80%, or 90% for degenerate blocking. The screen is defensive: all 1,000 screening runs ended by Turn 1.
+11. **Degenerate Simulation Scenario** means a legal, supported Simulation Scenario whose 1,000-run baseline screening simulation completes every run and only observes Game Sessions ending by the end of Turn 1.
 
-12. Use a layered simulation pipeline:
+12. Degenerate classification is scenario-level evidence. Each screening run derives its own seeded pre-game Simulation Start State from the Simulation Scenario, including random assignment and profile/default setup choices.
+
+13. A Turn 1 ending is a completed game outcome, not a simulation failure. The Turn 1 cutoff includes both Turn 1 Victory Check Windows: Dawn after Night 1 resolution and the pre-Night check after Day 1 vote resolution and cascades.
+
+14. An incomplete screening run, regardless of cause, is an error state that invalidates the whole screening batch. It is not evidence for degenerate classification and must not block Lobby Exit.
+
+15. Degenerate classification is practical product screening, not mathematical proof over every possible branch.
+
+16. Do not use percentage thresholds such as 50%, 80%, or 90% for degenerate blocking. The screen is defensive: all 1,000 screening runs completed and ended by Turn 1.
+
+17. Use a layered simulation pipeline:
     - 1,000-run `baseline-random-screening` batch for validity screening.
     - 10,000-run `baseline-random-probability` batch only for Simulation Scenarios that pass screening.
 
-13. `baseline-random-screening` and `baseline-random-probability` use the same decision behavior. They differ by profile name, run count, and result interpretation.
+18. `baseline-random-screening` and `baseline-random-probability` use the same decision behavior. They differ by profile name, run count, and result interpretation.
 
-14. Offline cache records should have three result types:
+19. Offline cache records should have three result types:
     - `already-decided`: no simulation; records the winning Faction and reason.
-    - `degenerate`: screening observed only Turn 1 endings; records evidence summary.
+    - `degenerate`: screening completed all 1,000 runs and observed only Turn 1 endings; records evidence summary.
     - `probability`: passed screening; records 10,000-run PMF/CDF/overall probabilities.
 
-15. Do not store probability records for already-decided Role Compositions or degenerate Simulation Scenarios. Store classification records instead.
+20. Degenerate records store evidence rather than probability output: canonical scenario, simulator version/profile, requested runs `1000`, completed runs `1000`, cutoff definition, aggregate counts by Game Session Outcome and ending window, and the batch seed/material contract.
 
-16. **Balanced Role Composition** remains a domain concept for similar starting Faction win probabilities under the baseline decision model, but the app does not block on that.
+21. Do not store probability records for already-decided Role Compositions or degenerate Simulation Scenarios. Store classification records instead.
 
-17. **Initial Faction Count** is the denominator concept for pre-game balance discussions: count starting win-condition beneficiaries, not every conditional outcome the simulator may later produce.
+22. Moderator-facing behavior:
+    - Already-decided blocks Lobby Exit and explains that the selected roles already produce a win before the first night.
+    - Degenerate blocks Lobby Exit and explains that every baseline screening game ended during Turn 1, making the composition likely unplayable.
+    - Incomplete screening or cache-generation errors are "could not evaluate" states; they are not degenerate and do not block Lobby Exit.
 
-18. Initial Faction Count excludes latent or transient Factions such as cross-team Lovers and Angel's early solo win condition.
+23. Already-decided classification only uses Faction victory evidence available at Lobby Exit. Degenerate and probability evidence can observe Starting, Possible, Transient, and Latent Factions through completed simulation outcomes.
 
-19. **Reference Turn Horizon** was retained only as a dormant descriptive metric: `Player count / Initial Faction Count`. It is not part of degenerate blocking and should not be added to lobby UI yet.
+24. The full Faction model remains the domain contract, but the active Simulator Profile Role Set controls which Simulation Scenarios can be evaluated today. If the current runtime cannot evaluate a full Faction trigger or scenario, it is not simulator-supported/cacheable or it becomes a nonblocking "could not evaluate" state; it must not be mislabeled as already-decided or degenerate.
 
-20. Angel is special because it has a transient solo win condition and then falls back into the Villager Faction. Do not let Angel inflate Initial Faction Count.
+25. **Balanced Role Composition** remains a domain concept for similar starting Faction win probabilities under the baseline decision model, but the app does not block on that.
 
-21. Cross-team Lovers are conditional/latent. Track Lovers outcomes if they occur, but do not include them in Initial Faction Count.
+26. **Initial Faction Count** is the denominator concept for pre-game balance discussions: count starting win-condition beneficiaries, not every conditional outcome the simulator may later produce.
 
-22. Prejudiced Manipulator has setup-dependent balance. The baseline simulator profile defaults to an even public group split; only non-default group models need explicit Simulation Scenario material.
+27. Initial Faction Count excludes latent or transient Factions such as Cross-Faction Lovers and Angel's early solo win condition.
 
-23. Run reproducibility uses **Run Seed Material**: a canonical string stored for replay evidence, hashed only at the random-generator boundary.
+28. **Reference Turn Horizon** was retained only as a dormant descriptive metric: `Player count / Initial Faction Count`. It is not part of degenerate blocking and should not be added to lobby UI yet.
 
-24. Run Seed Material includes simulator version, profile/strategy, run number, Player count, canonical Role Composition, and any non-default Simulation Scenario assumptions. Example:
+29. Angel is special because it has a transient solo win condition and then falls back into the Villager Faction. Do not let Angel inflate Initial Faction Count.
+
+30. Cross-Faction Lovers are conditional/latent. Track Lovers outcomes if they occur, but do not include them in Initial Faction Count.
+
+31. Prejudiced Manipulator has setup-dependent balance. The baseline simulator profile defaults to an even public group split; only non-default group models need explicit Simulation Scenario material.
+
+32. Run reproducibility uses **Run Seed Material**: a canonical string stored for replay evidence, hashed only at the random-generator boundary.
+
+33. Run Seed Material includes simulator version, profile/strategy, run number, Player count, canonical Role Composition, and any non-default Simulation Scenario assumptions. Example:
 
 ```text
 sim-v1|baseline-random-screening|players=10|run=17|Seer-1,SimpleVillager-7,SimpleWerewolf-2,WildChild-1
 ```
 
-25. Run numbers are 1-based within a batch. A single-run simulation uses `run=1`; a 1,000-run batch uses `run=1` through `run=1000`.
+34. Run numbers are 1-based within a batch. A single-run simulation uses `run=1`; a 1,000-run batch uses `run=1` through `run=1000`.
 
-26. Canonical Role Composition segments include only non-zero Role counts, sorted alphabetically by exact enum name, not localized display name or UI insertion order.
+35. Canonical Role Composition segments include only non-zero Role counts, sorted alphabetically by exact enum name, not localized display name or UI insertion order.
 
-27. Cache keys use the same canonical Role Composition rule, but identify the profile and run count rather than an individual run. Examples:
+36. Cache keys use the same canonical Role Composition rule, but identify the profile and run count rather than an individual run. Examples:
 
 ```text
 sim-v1|baseline-random-screening|players=10|runs=1000|Seer-1,SimpleVillager-7,SimpleWerewolf-2,WildChild-1
