@@ -33,7 +33,7 @@ The multiset of Roles selected for the physical game deck before a Game Session 
 _Avoid_: Combination, setup (too broad), assignment (implies Player-specific Role knowledge)
 
 **Actor Setup Cards**:
-The three face-up Character Cards selected by the Moderator during setup for the Actor to borrow powers from. Actor Setup Cards are not part of the Role Composition and do not contribute Starting Factions or Possible Factions.
+The three face-up Character Cards selected by the Moderator during setup for the Actor to borrow powers from. Actor Setup Cards must be hard-aligned Villager Roles with actionable individual powers. Actor Setup Cards are not part of the Role Composition and do not contribute Starting Factions or Possible Factions. The Actor Role itself is a hard-aligned Villager Role.
 _Avoid_: Actor Role Composition, Actor deck
 
 **Minimum Viable Role Composition**:
@@ -56,12 +56,52 @@ _Avoid_: Fair game (too vague), duration-balanced
 A distinct win condition together with the set of Players who benefit from it being met. A Faction comes into being whenever at least one Player holds a win condition not shared by any existing Faction. Membership can change during the game. Examples: the Villager Faction (all Villagers win when every Werewolf is Eliminated), the Piper Faction (the Piper alone wins when all surviving Players are Charmed).
 _Avoid_: Team (implies cooperation — the Piper's Charmed targets aren't allies), side, alignment
 
+**Werewolf Control Shortcut**:
+The special case where the Werewolf Faction is treated as having already won because living Werewolf Faction Beneficiaries have daytime voting control over the remaining opposition. This shortcut applies only when every living non-Werewolf Faction Beneficiary is a Villager Faction Beneficiary.
+_Avoid_: Werewolf win condition, parity win
+
+**Durable Voting Power**:
+A Player's stable voting weight for Werewolf Control Shortcut evaluation. Durable Voting Power includes permanent voting changes already in force, even when they originated from Events, and excludes temporary one-window voting effects from Events or role-triggered vote restrictions. Examples that count once in force: Sheriff double vote, Village Idiot vote loss, Little Rascal triple vote. Examples that do not count: Scapegoat next-day restrictions and temporary Event vote rules.
+_Avoid_: Vote count, current poll result
+
+**Game Session Outcome**:
+The final result of a Game Session after win-condition resolution. A Game Session Outcome can be a single winning Faction, a Shared Victory Outcome, or a No-Winner Outcome.
+_Avoid_: Winning Team, result (too generic)
+
+**Faction Beneficiary**:
+A living Player who would win if a specific Faction's win condition is satisfied at the current point in the Game Session. Each Player has exactly one beneficiary Faction at a time in the current ruleset. This is based on the Player's current allegiance and Status Effects, not only their original Role or who they wake with.
+_Avoid_: Team member, ally, Role owner
+
+**Faction Agent**:
+A living Player who currently acts for, wakes with, is perceived as, or is counted by a Faction for operational mechanics without necessarily benefiting from that Faction's win condition. Examples: White Werewolf is a Werewolf Faction Agent while remaining a White Werewolf Faction Beneficiary; Double Agent is a Werewolf Faction Beneficiary while remaining operationally outside the Werewolf night group.
+_Avoid_: Team member, ally, operative
+
+**Permanent Role Swap**:
+A Role replacement that permanently changes a Player's Role for the rest of the Game Session. By default, a Permanent Role Swap changes the Player's Faction Beneficiary to the new Role's default Faction unless another rule explicitly takes precedence, such as Cross-Faction Lovers.
+_Avoid_: Transformation (too broad), conversion (ambiguous with infection)
+
+**Shared Victory Outcome**:
+A Game Session Outcome where multiple Factions win because their win conditions become true in the same Victory Check Window.
+_Avoid_: Tie (ambiguous with Vote ties), co-winners (too informal)
+
+**No-Winner Outcome**:
+A Game Session Outcome where no Faction wins because no Faction win condition is true and every Player is Eliminated.
+_Avoid_: Draw, stalemate
+
+**Faction Win Probability**:
+The probability that a Faction is among the winners of a simulated Game Session. Shared Victory Outcomes credit every winning Faction, so Faction Win Probabilities can sum above 100%.
+_Avoid_: Outcome share, exclusive probability
+
+**Exclusive Outcome Share**:
+The probability of each mutually exclusive Game Session Outcome, including single-Faction wins, Shared Victory Outcome tuples, and No-Winner Outcome. Exclusive Outcome Shares sum to 100% across completed runs.
+_Avoid_: Faction probability, win rate
+
 **Starting Faction**:
 A Faction represented in the Role Composition before Turn 1 as a stable win-condition beneficiary. Starting Factions are counted by Initial Faction Count even when a setup branch means that Faction never appears in a particular Game Session.
 _Avoid_: Initial Faction (ambiguous with Initial Faction Count), default side
 
 **Possible Faction**:
-A Faction implied by the Roles present in the Moderator-selected Role Composition, regardless of whether that Faction appears as a beneficiary in a particular Game Session. Possible Factions are listed in probability output even when their observed win rate is 0%.
+A Faction implied by the Roles present in the Moderator-selected Role Composition, regardless of whether that Faction appears as a beneficiary in a particular Game Session or simulation batch. Possible Factions are listed in probability output even when their observed win rate is 0%, because never coming into being is useful balance feedback.
 _Avoid_: Observed Faction, winning Faction
 
 **Hard-Aligned Role**:
@@ -109,6 +149,10 @@ _Avoid_: Game, match, room
 **Turn**:
 A complete cycle through Night, Dawn, and Day. Numbered starting at 1.
 _Avoid_: Round
+
+**Victory Check Window**:
+A resolved boundary where the app evaluates all win conditions against the current Game Session state. Victory Check Windows happen at Dawn after Night eliminations and related cascades are resolved, and before the next Night after Day vote resolution and related cascades are resolved. The latter is sometimes conversationally called "dusk," but it is not a separate app phase.
+_Avoid_: Instant win check, Dusk Phase
 
 **Night Phase**:
 When the Moderator wakes Roles one by one to perform secret actions (attacks, checks, protections). All Players have their eyes closed except when called.
@@ -181,6 +225,9 @@ _Avoid_: Load game, restore
 - Each **Player** has exactly one **Role** and zero or more **Status Effects**
 - A **Role Composition** contains one **Role** per **Player**, plus extra undealt Character Cards required by Thief
 - **Actor Setup Cards** are selected through a separate setup flow and are not part of the **Role Composition**
+- Actor is a hard-aligned Villager **Role**; **Actor Setup Cards** provide borrowed powers only and do not change the Actor's **Faction Beneficiary**
+- Actor counts toward hard-aligned Villager **Role** requirements for supported **Role Compositions**
+- **Actor Setup Cards** must be hard-aligned Villager **Roles** with actionable individual powers; Simple Villager, Villager-Villager, Two Sisters, and Three Brothers are not eligible
 - Any **Role** present in the Moderator-selected **Role Composition** can contribute **Starting Factions** and **Possible Factions** even if a particular simulation run never assigns that Role
 - The **Minimum Viable Role Composition** is one hard-aligned Werewolf **Role** and four hard-aligned Villager **Roles**
 - A supported **Role Composition** must include at least one Villager hard-aligned **Role** and at least one Werewolf hard-aligned **Role**
@@ -190,8 +237,44 @@ _Avoid_: Load game, restore
 - **Cross-Faction Lovers** are a **Latent Faction**; same-Faction **Lovers** remain only a **Status Effect**
 - A Player changing which Faction they benefit from does not create a new **Faction**
 - **New Moon Events** do not create **Factions** unless they define a distinct win condition
+- Elimination-style Faction win conditions are evaluated against **Faction Beneficiaries**
+- In the current ruleset, a Player has exactly one beneficiary Faction at a time; changes such as Cross-Faction Lovers, Wild Child transformation, Wolf Hound choice, Thief swap, Devoted Servant swap, or Double Agent replace the Player's previous beneficiary link
+- Infection changes a Player's **Faction Agent** status, not their **Faction Beneficiary**
+- A **Permanent Role Swap** changes the Player's **Faction Beneficiary** to the new Role's default Faction unless an explicit precedence rule says otherwise
+- Cross-Faction Lovers immediately replace both Lovers' **Faction Beneficiary** links; same-Faction **Lovers** remain only a **Status Effect**
+- Cross-Faction Lovers take precedence over later beneficiary-changing effects, including Double Agent, Wild Child transformation, Wolf Hound choice, Thief swap, Specter, and Backfire; the Lover can gain operational state or information without changing **Faction Beneficiary**
+- A Lover cannot use Devoted Servant's swap ability
+- If Miracle revives only one eliminated Cross-Faction Lover after the Lovers were Eliminated, the revived Player is no longer a Cross-Faction Lover
+- Devoted Servant's successful swap changes the Servant's **Faction Beneficiary** to the new Role's default Faction
+- The Villager Faction wins when every living non-Villager **Faction Beneficiary** has been Eliminated
+- The Werewolf Faction's full win condition is eliminating all other **Faction Beneficiaries**; **Werewolf Control Shortcut** is only a shortcut for Villager-vs-Werewolf endgames
+- **Werewolf Control Shortcut** uses **Durable Voting Power**, not temporary vote effects
+- The White Werewolf Faction wins when the White Werewolf is the sole surviving Player
+- White Werewolf is a Werewolf **Faction Agent** for night targeting and Seer detection, and a White Werewolf **Faction Beneficiary** for win conditions
+- Generic rules that check, target, count, or react to "Werewolves" use Werewolf **Faction Agents** unless the rule explicitly says Role or Character Card
+- Werewolf group attacks cannot target Werewolf **Faction Agents**
+- White Werewolf's solo attack targets another Werewolf **Faction Agent**
+- Big Bad Wolf's extra attack is disabled once any non-temporary Werewolf **Faction Agent** has been Eliminated; temporary Werewolf **Faction Agents** from Full Moon Rising do not count
+- Temporary Werewolf **Faction Agents** from Full Moon Rising affect operational Werewolf **Faction Agent** checks while active, such as Seer, Fox, Bear Tamer, Knight with the Rusty Sword, and night targeting checks
+- Elder's village-vote penalty removes powers from all Villager **Roles**, including Actor, regardless of those Players' **Faction Beneficiaries**
+- Elder's village-vote penalty is a continuing suppression of Villager **Role** powers for the rest of the Game Session, so later Permanent Role Swaps into Villager Roles enter with their powers suppressed
+- Double Agent can be assigned only to a living non-Werewolf **Faction Agent**
+- The Piper Faction wins when every surviving non-Piper Player is Charmed
+- The Prejudiced Manipulator Faction wins when every living Player in the opposing public group has been Eliminated, regardless of those Players' **Faction Beneficiaries**
+- A Player can be a **Faction Agent** for one Faction while benefiting from another Faction's win condition, such as White Werewolf waking with Werewolves or Double Agent benefiting from Werewolf victory without waking with Werewolves
+- The Seer detects Werewolf **Faction Agents**, not Werewolf **Faction Beneficiaries**
+- Win conditions are evaluated only during **Victory Check Windows**
+- Angel's transient Faction expires immediately after the Dawn **Victory Check Window** that resolves Night 2 if the Angel did not win, and the Angel then becomes a Simple Villager
+- During a **Victory Check Window**, all win-condition predicates are evaluated against the same resolved Game Session state; if multiple Factions' predicates are true, the Game Session ends with a **Shared Victory Outcome**
+- A **No-Winner Outcome** is evaluated only when no Faction win condition is true in the Victory Check Window and every Player is Eliminated
+- A **Game Session** ends with exactly one **Game Session Outcome**
+- A **No-Winner Outcome** can occur when mutually assured Elimination leaves no Faction able to win
+- The current runtime victory check is a two-Faction `Team` shortcut and is not the complete future **Faction** win-condition model
 - Faction lifecycle describes how **Initial Faction Count** is computed; probability output is still reported as Faction win rates
-- Probability output lists every **Possible Faction** for the **Role Composition**, including Starting Factions, Transient Factions, and Latent Factions, even when a possible Faction has a 0% observed win rate
+- Probability output lists every **Possible Faction** for the **Role Composition**, including Starting Factions, Transient Factions, and Latent Factions, even when a possible Faction has a 0% observed win rate or never came into being in the simulation batch
+- Probability output includes a **No-Winner Outcome** row in addition to **Possible Faction** rows
+- **Faction Win Probability** credits every winning Faction in a **Shared Victory Outcome**
+- **Exclusive Outcome Share** preserves mutually exclusive outcomes separately, including Shared Victory Outcome tuples
 - An **Already-Decided Role Composition** is rejected without simulation
 - A **Degenerate Role Composition** is classified by a 1,000-run baseline screening simulation before running a 10,000-run probability simulation
 - A **Balanced Role Composition** is evaluated by comparing starting Faction win probabilities, not by comparing winning Turn to the **Reference Turn Horizon**
@@ -236,7 +319,27 @@ _Avoid_: Load game, restore
 - "New Moon" as Faction — resolved: New Moon Events and Role Groups are not Factions unless a specific effect defines a distinct win condition.
 - "Extra Character Cards" as Starting Factions — resolved: any Role present in the Moderator-selected Role Composition can contribute Starting Factions and Possible Factions even if a setup branch means that Role is never assigned in a particular Game Session.
 - "Actor cards" as Role Composition — resolved: **Actor Setup Cards** are a separate setup artifact, not part of the Role Composition and not a source of Possible Factions.
-- "Zero-win Factions" — resolved: probability output includes every possible Faction for the Role Composition, not only Factions observed to win in simulation.
+- "Actor as Ambiguous Role" — resolved: Actor is a hard-aligned Villager **Role**, counts toward hard-aligned Villager Role Composition requirements, and **Actor Setup Cards** provide powers only without affecting Faction lifecycle.
+- "Zero-win Factions" — resolved: probability output includes every **Possible Faction** for the Role Composition, not only Factions observed to win or come into being in simulation.
+- "Shared victory probability" — resolved: each winning Faction receives **Faction Win Probability** credit, while **Exclusive Outcome Share** preserves the shared outcome tuple separately.
+- "Werewolf parity" — resolved: parity is a **Werewolf Control Shortcut** for Villager-vs-Werewolf endgames, not the Werewolf Faction's full win condition once active solo or latent Factions are present.
+- "Operational Faction vs beneficiary Faction" — resolved: use **Faction Beneficiary** for win-condition membership and **Faction Agent** for operational behavior such as waking, acting, or being perceived with a Faction.
+- "Seer detection" — resolved: Seer checks whether the target is a Werewolf **Faction Agent**, not whether the target is a Werewolf **Faction Beneficiary**.
+- "Dual Faction beneficiaries" — resolved: in the current ruleset, each Player has exactly one beneficiary Faction; beneficiary changes are exclusive replacements even when operational behavior, wake groups, or public identity stay unchanged.
+- "Infection beneficiary" — resolved: infection changes **Faction Agent** status but does not change **Faction Beneficiary**.
+- "Permanent Role Swap beneficiary" — resolved: permanent Role swaps change **Faction Beneficiary** to the new Role's default Faction unless an explicit precedence rule says otherwise.
+- "Cross-Faction Lovers precedence" — resolved: Cross-Faction Lovers keep their beneficiary precedence over later effects; Lover status blocks Devoted Servant's swap ability, and Miracle reviving only one eliminated Lover breaks the Cross-Faction Lovers outcome.
+- "Werewolf voting control" — resolved: **Werewolf Control Shortcut** uses **Durable Voting Power** and ignores temporary vote effects.
+- "Generic Werewolf checks" — resolved: use Werewolf **Faction Agent** unless a rule explicitly refers to Role or Character Card.
+- "Elder power loss" — resolved: the Elder's village-vote penalty affects all Villager **Roles**, including Actor, regardless of **Faction Beneficiary**, and continues to suppress later Villager Role powers.
+- "Big Bad Wolf disablement" — resolved: the extra attack is disabled once any non-temporary Werewolf **Faction Agent** has been Eliminated; Full Moon Rising's temporary Werewolf Faction Agents do not count.
+- "Temporary Werewolf Faction Agents" — resolved: Full Moon Rising affects operational Werewolf Faction Agent checks while active, but does not change Faction Beneficiaries or Big Bad Wolf disablement.
+- "Double Agent eligibility" — resolved: the target must be a living non-Werewolf **Faction Agent**.
+- "Angel expiry" — resolved: Angel's transient Faction expires immediately after the Dawn **Victory Check Window** that resolves Night 2 if the Angel did not win.
+- "Victory timing" — resolved: win conditions are checked at **Victory Check Windows**: Dawn after Night resolution, and before the next Night after Day resolution. There is no separate Dusk Phase.
+- "Win-condition priority" — resolved: evaluate all win-condition predicates in the same **Victory Check Window** before deciding the **Game Session Outcome**.
+- "Tie" as final result — resolved: use **Shared Victory Outcome** for multiple Factions winning in the same **Victory Check Window**; keep "tie" for Vote ties.
+- "Everybody dies" — resolved: use **No-Winner Outcome** for completed Game Sessions where no Faction wins.
 - "Balanced" vs "long enough" — resolved: **Balanced Role Composition** means similar starting Faction win probabilities; **Reference Turn Horizon** is not used to block Role Compositions.
 - "Balance judgment" — resolved: the app surfaces pre-game Faction probabilities for the Moderator to interpret, and only blocks Role Compositions that are Already-Decided or Degenerate.
 - "Degenerate threshold" — resolved: do not use a percentage threshold; block legal Role Compositions when a 1,000-run baseline screening simulation only observes Turn 1 endings.
