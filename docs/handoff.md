@@ -22,10 +22,9 @@ The design follow-up is being handled as a staged grilling sequence. Each branch
 
 4. **Already-Decided / Degenerate Classification** was completed inline using `$grill-with-docs-batched`.
 
-The planned branch order after Already-Decided / Degenerate Classification is:
+5. **Simulation Result Contract** was completed inline using `$grill-with-docs-batched`.
 
-1. Simulation Result Contract
-2. Cache Artifact Design
+6. **Cache Artifact Design** was completed inline using `$grill-with-docs-batched`.
 
 ## Resolved Decisions
 
@@ -43,7 +42,7 @@ The planned branch order after Already-Decided / Degenerate Classification is:
 
 7. Already-decided detection is rule-based and does not run simulation. The classifier runs every Faction victory trigger that can be evaluated from the Role Composition alone.
 
-8. Already-decided lookup may use the same Canonical Simulation Scenario cache key as other lobby results, but the record must state that the evidence came only from the Canonical Role Composition. It does not need simulator profile, seed, run count, or setup artifact evidence.
+8. Already-decided lookup may use the same Canonical Simulation Scenario identity as other lobby results. The already-decided classification still relies only on the Canonical Role Composition, and the app should consume the cached lobby evaluation without second-guessing that evidence boundary.
 
 9. If multiple Faction victory triggers are true at Lobby Exit, already-decided records use Shared Victory Outcome semantics rather than priority ordering.
 
@@ -67,19 +66,47 @@ The planned branch order after Already-Decided / Degenerate Classification is:
 
 18. `baseline-random-screening` and `baseline-random-probability` use the same decision behavior. They differ by profile name, run count, and result interpretation.
 
-19. Offline cache records should have three result types:
-    - `already-decided`: no simulation; records the winning Faction and reason.
-    - `degenerate`: screening completed all 1,000 runs and observed only Turn 1 endings; records evidence summary.
-    - `probability`: passed screening; records 10,000-run PMF/CDF/overall probabilities.
+19. Bundled Simulator Cache entries should be terminal lobby evaluations only:
+    - already-decided: no simulation; records the winning Faction and reason.
+    - degenerate: screening completed all 1,000 runs and observed only Turn 1 endings; records evidence summary.
+    - probability: passed screening; records probability summaries.
 
-20. Degenerate records store evidence rather than probability output: canonical scenario, simulator version/profile, requested runs `1000`, completed runs `1000`, cutoff definition, aggregate counts by Game Session Outcome and ending window, and the batch seed/material contract.
+20. Degenerate cache entries store screening conclusion evidence rather than probability output: canonical scenario, simulator/profile identity, Turn 1 cutoff definition, and aggregate counts by Game Session Outcome and ending window. The app-facing cache does not need requested/completed screening run counts or per-run seed material.
 
 21. Do not store probability records for already-decided Role Compositions or degenerate Simulation Scenarios. Store classification records instead.
 
 22. Moderator-facing behavior:
     - Already-decided blocks Lobby Exit and explains that the selected roles already produce a win before the first night.
     - Degenerate blocks Lobby Exit and explains that every baseline screening game ended during Turn 1, making the composition likely unplayable.
-    - Incomplete screening or cache-generation errors are "could not evaluate" states; they are not degenerate and do not block Lobby Exit.
+    - Incomplete screening, build-time cache-generation errors, and incomplete on-device fallback generation are "could not evaluate" states; they are not degenerate and do not block Lobby Exit.
+
+22a. Build-Time Cache Generation means producing Bundled Simulator Cache artifacts outside the Moderator's phone, such as on a development machine, CI worker, or backend job. It must not mean trying to enumerate every cacheable scenario on the Moderator's phone.
+
+22b. On-device fallback generation is allowed only after the Bundled Simulator Cache has no usable lobby evaluation for the selected Simulation Scenario. It may produce a usable local already-decided, degenerate, or probability evaluation only if the same classification pipeline completes successfully.
+
+22c. Failed, incomplete, or operationally suspect generation attempts are omitted from the Bundled Simulator Cache. Any logs for those attempts are implementation/build concerns, not part of the domain cache contract.
+
+22d. Probability cache entries store Game Result Frequency and Game Result Frequency by Turn. The app-facing cache does not need requested, completed, or incomplete run counts, and it does not ship per-run replay evidence.
+
+22e. Game Result means one mutually exclusive final result: a single-Faction win, a specific Shared Victory Outcome, or No-Winner Outcome. Shared victories are represented as their own Game Result instead of crediting each winning Faction separately.
+
+22f. Game Result Frequency by Turn records how often each Game Result happened on each ending Turn out of all completed runs. Game Result Frequency is derived by summing Game Result Frequency by Turn across Turns, and the full distribution sums to 100%.
+
+22g. Cache lookup identity is the Canonical Simulation Scenario plus simulator profile/version. Batch sizes are generation policy rather than cache identity or Moderator-facing cache evidence.
+
+22h. Run Seed Material stays in Simulation Result Evidence and replay/audit workflows. It is not part of the Bundled Simulator Cache.
+
+22i. Bundled Simulator Cache entries are invalidated by changes to rule interpretation, Role behavior, simulator profile behavior, supported scenario scope, Canonical Simulation Scenario construction, already-decided or degenerate classification semantics, Game Result Frequency semantics, or Turn cutoff semantics. Localization, visual presentation, and explanatory copy changes do not invalidate cache entries.
+
+22j. On-device fallback generation only applies when the selected Simulation Scenario is simulator-supported by the current profile. Cache misses and failed fallback generation are nonblocking "could not evaluate" states and must not make balance, already-decided, or degenerate claims.
+
+22k. Simulator profile/version identifies already-decided cache compatibility; it is not evidence that simulation ran. Already-decided evidence remains Role Composition classification only.
+
+22l. Probability cache entries are coherent only when Game Result Frequency and Game Result Frequency by Turn describe the same Game Result set. Game Result Frequency is the row-sum projection of Game Result Frequency by Turn.
+
+22m. Game Result evidence in a degenerate cache entry explains the Turn 1 endings; it is not presented as balance probability.
+
+22n. Domain docs define Bundled Simulator Cache entries semantically. Serialized schema, file format, compression, and lookup/index layout are implementation concerns.
 
 23. Already-decided classification only uses Faction victory evidence available at Lobby Exit. Degenerate and probability evidence can observe Starting, Possible, Transient, and Latent Factions through completed simulation outcomes.
 
@@ -87,29 +114,29 @@ The planned branch order after Already-Decided / Degenerate Classification is:
 
 25. Simulation result contracts separate stable Simulation Result Evidence from implementation diagnostics. Simulation Result Evidence must contain the source data needed to derive probability views, but raw simulator run output does not need to materialize those views directly. Final Player/Faction state snapshots, transcripts, instruction counts, exception details, timing, memory, raw engine traces, and driver limits are diagnostics, not stable result evidence.
 
-26. A simulation run that reaches a Game Session Outcome is a Completed Simulation Run even when it ends during Turn 1. An Incomplete Simulation Run is a simulator/generation/driver failure to reach a Game Session Outcome; it is not a No-Winner Outcome and does not contribute to probability output.
+26. A simulation run that reaches a Game Session Outcome is a Completed Simulation Run even when it ends during Turn 1. An Incomplete Simulation Run is a simulator/generation/driver failure to reach a Game Session Outcome; it is not a No-Winner Outcome and does not contribute to Game Result Frequency.
 
 27. Stable Simulation Result Evidence for a completed run includes only the Game Session Outcome, ending Turn, ending Victory Check Window, Simulation Scenario/profile identity, and Run Seed Material. Deterministic replay identity is the stable audit mechanism; diagnostics can be optional.
 
-28. Exclusive Outcome Share is derived by aggregating Completed Simulation Runs by Exclusive Outcome Bucket: one single-Faction winner, the sorted set of winning Factions for a Shared Victory Outcome, or No-Winner Outcome.
+28. Game Result Frequency is derived by aggregating Completed Simulation Runs by Game Result: one single-Faction winner, a specific Shared Victory Outcome, or No-Winner Outcome.
 
-29. A simulation batch's stable source data includes one minimal source record per attempted run: run identity, Run Seed Material, completion state, and for Completed Simulation Runs the Game Session Outcome, ending Turn, and ending Victory Check Window. Whether Topic 6 cache artifacts store per-run source records verbatim or compact them is deferred.
+29. A simulation batch's stable source data includes one minimal source record per attempted run: run identity, Run Seed Material, completion state, and for Completed Simulation Runs the Game Session Outcome, ending Turn, and ending Victory Check Window. Topic 6 resolved that the app-facing Bundled Simulator Cache does not store per-run source records.
 
-30. Batch-level Simulation Result Evidence includes the Simulation Scenario's Possible Faction inventory so unobserved or never-came-into-being Factions can still be shown as 0% probability rows.
+30. Batch-level Simulation Result Evidence includes the Simulation Scenario's Possible Faction inventory so unobserved or never-came-into-being Factions can still be shown as zero-frequency Game Results where useful to the Moderator.
 
 31. Stable evidence for Incomplete Simulation Runs includes replay identity and completion state; specific failure details remain diagnostic.
 
 32. Screening and probability batches share the same per-run Simulation Result Evidence contract; they differ by batch purpose, requested run count, and interpretation.
 
-33. Batch-level Simulation Result Evidence must support screening and probability interpretation from source data: requested runs, Completed and Incomplete Simulation Run counts, Possible Faction inventory, completed outcomes by ending Victory Check Window, completed outcomes by Exclusive Outcome Bucket, and winner participation counts derivable from completed outcomes.
+33. Batch-level Simulation Result Evidence must support screening and probability interpretation from source data: requested runs, Completed and Incomplete Simulation Run counts, Possible Faction inventory, completed outcomes by ending Victory Check Window, completed outcomes by Game Result, and ending Turn.
 
-34. Shared Victory Outcome, No-Winner Outcome, and never-came-into-being Possible Factions are represented through the same source evidence rather than special-case summary records.
+34. Shared Victory Outcome, No-Winner Outcome, and zero-frequency Game Results are represented through the same source evidence rather than special-case summary records.
 
-35. Simulation result contract design stops at what evidence a run or batch must provide. Cache record shape, schema versioning, artifact compression, whether per-run records are retained verbatim, precomputed aggregate projections, and lookup/index layout are Topic 6 cache artifact design concerns.
+35. Simulation result contract design stops at what evidence a run or batch must provide. Topic 6 resolved that the app-facing Bundled Simulator Cache stores compressed lobby evaluations derived from simulation evidence, not per-run source records.
 
 36. Already-decided records stay outside the simulation run/batch result contract. They can share Game Session Outcome language, including Shared Victory Outcome, but they are not simulation runs and do not have Run Seed Material, per-run source records, or Completed/Incomplete Simulation Run counts.
 
-37. "Could not evaluate" is a product evaluation state, not a Game Session Outcome. It must not be grouped into Exclusive Outcome Bucket, No-Winner Outcome, Faction Win Probability, or degenerate evidence.
+37. "Could not evaluate" is a product evaluation state, not a Game Session Outcome. It must not be grouped into Game Result, No-Winner Outcome, Game Result Frequency, or degenerate evidence.
 
 38. **Balanced Role Composition** remains a domain concept for similar starting Faction win probabilities under the baseline decision model, but the app does not block on that.
 
@@ -137,12 +164,7 @@ sim-v1|baseline-random-screening|players=10|run=17|Seer-1,SimpleVillager-7,Simpl
 
 48. Canonical Role Composition segments include only non-zero Role counts, sorted alphabetically by exact enum name, not localized display name or UI insertion order.
 
-49. Cache keys use the same canonical Role Composition rule, but identify the profile and run count rather than an individual run. Examples:
-
-```text
-sim-v1|baseline-random-screening|players=10|runs=1000|Seer-1,SimpleVillager-7,SimpleWerewolf-2,WildChild-1
-sim-v1|baseline-random-probability|players=10|runs=10000|Seer-1,SimpleVillager-7,SimpleWerewolf-2,WildChild-1
-```
+49. Cache lookup identity uses the Canonical Simulation Scenario and simulator profile/version. Batch sizes are generation policy, not cache identity or Moderator-facing cache evidence.
 
 ## Topic 1: Faction Model Settlements
 
@@ -159,7 +181,7 @@ Topic 1 also clarified `docs/game-rules.md`:
 - Thief sees undealt cards after random distribution; cards are not planned or set aside in advance.
 - Actor Setup Cards must be eligible hard-aligned Villager Roles and do not transfer win conditions.
 
-Role Composition now includes Thief undealt cards and excludes Actor Setup Cards. Probability output should list every Possible Faction, including rows that end at 0%.
+Role Composition now includes Thief undealt cards and excludes Actor Setup Cards. Cache-facing probability output should include zero-frequency Game Results that are useful to the Moderator, including single-Faction results for Possible Factions that never win.
 
 ## Topic 2: Win Condition Semantics Settlements
 
@@ -177,8 +199,8 @@ Key general semantics:
 - Durable Voting Power includes permanent voting changes currently in force, including event-originated ones, and excludes one-window effects.
 - Shared Victory Outcome is allowed when multiple win conditions are true in one Victory Check Window.
 - No-Winner Outcome occurs when no Faction win condition is true and every Player is Eliminated.
-- Faction Win Probability credits every winning Faction in shared wins; Exclusive Outcome Share preserves mutually exclusive Exclusive Outcome Buckets.
-- Probability output includes every Possible Faction, even 0% / never-came-into-being rows, plus No-Winner.
+- Cache-facing probability output uses Game Result Frequency, where Shared Victory Outcomes are their own Game Results and the distribution sums to 100%.
+- Probability output includes zero-frequency Game Results that are useful to the Moderator, including single-Faction results for Possible Factions that never win, plus No-Winner.
 
 Key role-specific semantics:
 
@@ -214,7 +236,7 @@ Topic 3 added validity/support layers:
 - **Rules-Valid Role Composition** satisfies physical card-count, role-count, and hard-aligned Faction coverage rules.
 - **App-Supported Role Composition** is rules-valid and actually supported by the app's product/UX implementation.
 - **Simulator-Supported Simulation Scenario** can be executed by the active simulator profile.
-- **Cacheable Simulation Scenario** is simulator-supported and eligible for offline cache generation.
+- **Cacheable Simulation Scenario** is simulator-supported and eligible for build-time cache generation.
 - Classification order is: Rules-Valid Role Composition, App-Supported Role Composition, Simulator-Supported Simulation Scenario, Already-Decided Role Composition, Degenerate Simulation Scenario, then probability simulation.
 
 Topic 3 also clarified role-set and canonicalization language:
@@ -241,9 +263,10 @@ Not separate Factions: Role Groups such as Ambiguous, Loners, New Moon; Status E
 ## Files Already Updated
 
 - `CONTEXT.md`: added and clarified Supported Player Count, Role Composition, Actor Setup Cards, Already-Decided Role Composition, Degenerate Simulation Scenario, Balanced Role Composition, Faction lifecycle terms, Initial Faction Count, Reference Turn Horizon, Run Seed Material, Simulation Scenario, Canonical Role Composition, Canonical Simulation Scenario, Simulation Start State, and role-set/support layers.
-- `CONTEXT.md`: later branches added Faction Beneficiary, Faction Agent, win-condition outcome terminology, and related probability-output terms.
+- `CONTEXT.md`: later branches added Faction Beneficiary, Faction Agent, win-condition outcome terminology, Game Result Frequency terms, and Bundled Simulator Cache terminology.
 - `docs/game-rules.md`: clarified Thief undealt-card behavior, Actor Setup Card constraints, win-condition semantics from Topic 2, and Town Crier as a New Moon Assignment rather than a Role Composition Role.
-- `docs/loose-ends.md`: records implementation follow-ups for Actor Setup Card validation and hard-aligned coverage validation.
+- `docs/handoff.md`: records the staged simulator/cache decisions and follow-up leads.
+- `docs/loose-ends.md`: records implementation follow-ups for Actor Setup Card validation, hard-aligned coverage validation, and Bundled Simulator Cache implementation.
 
 ## Follow-Up Leads
 
@@ -259,7 +282,7 @@ Not separate Factions: Role Groups such as Ambiguous, Loners, New Moon; Status E
 
 6. Define the already-decided pre-Turn-1 win-condition check using the Topic 2 Faction Beneficiary semantics. The current runtime still only supports two `Team`s, so implementation should bridge carefully rather than pretending full Faction support already exists.
 
-7. Design offline cache generation records: `already-decided`, `degenerate`, and `probability`, with versioned schema and simulator/profile identifiers. The `degenerate` record applies to a Simulation Scenario, not just a Role Composition.
+7. Implement Bundled Simulator Cache terminal lobby evaluations for already-decided, degenerate, and probability results, preserving the semantic contract without putting per-run simulation evidence in the app-facing cache.
 
 8. Define deterministic seed hashing at the last-mile PRNG boundary. Store canonical Run Seed Material as string evidence.
 
@@ -278,8 +301,6 @@ Not separate Factions: Role Groups such as Ambiguous, Loners, New Moon; Status E
 11. Keep `Reference Turn Horizon` out of UI until there is a clear Moderator action attached to it.
 
 12. Suggested next skills:
-    - `grill-with-docs-batched` for the remaining staged grilling branches.
-    - `grill-with-docs` only when a branch has one central blocking question.
     - `to-issues` if converting this design into GitHub issues.
     - `triage` if updating issue labels/briefs.
-    - `tdd` when implementing canonicalization, cache record types, and simulator screening.
+    - `tdd` when implementing canonicalization, cache artifacts, and simulator screening.

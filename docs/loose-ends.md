@@ -27,3 +27,14 @@ Follow-up:
 - Replace mandatory Simple Villager/Simple Werewolf validation with hard-aligned Faction coverage validation.
 - Keep single-copy and exact-group role count constraints as domain rules.
 - Keep current implemented role catalog and v1 New Moon exclusion as app/product support constraints, not rules-validity constraints.
+
+## Bundled Simulator Cache Implementation
+
+Settled domain rule: Bundled Simulator Cache entries are app-facing compressed lobby evaluations, not per-run simulation evidence. They are identified by Canonical Simulation Scenario plus simulator profile/version, and cache misses are nonblocking unless a usable already-decided or degenerate evaluation exists.
+
+Follow-up:
+
+- Add cache artifact read/write tests that prove a terminal lobby evaluation round-trips without changing its meaning.
+- Implement cache invalidation around rules, role behavior, simulator profile behavior, supported scenario scope, Canonical Simulation Scenario construction, classification semantics, Game Result Frequency semantics, and Turn cutoff semantics.
+- Implement on-device fallback only for simulator-supported Simulation Scenarios, with failed fallback producing a nonblocking "could not evaluate" state.
+- Decide serialized schema, file format, compression, storage, and lookup layout in implementation issues rather than in domain docs.
