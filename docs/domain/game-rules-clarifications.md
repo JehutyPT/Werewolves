@@ -1,6 +1,6 @@
 # Game Rules Clarifications
 
-This document records domain rule rulings for interactions that are too detailed for `CONTEXT.md`. It clarifies `docs/game-rules.md`; it is not an architecture note, product requirement, or implementation issue.
+This document records domain rule rulings for interactions that are too detailed for `CONTEXT.md`. It clarifies `docs/domain/game-rules.md`; it is not an architecture note, product requirement, or implementation issue.
 
 ## Allegiance and Operational Status
 

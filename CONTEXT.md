@@ -2,7 +2,7 @@
 
 A mobile app that assists a human **Moderator** running a physical game of "The Werewolves of Miller's Hollow." The app tracks game state, guides the Moderator through phases, and prompts for input — it never replaces the Moderator or makes decisions for them.
 
-This file is the shared glossary for domain language and avoided synonyms. Stable invariants live in `docs/domain/invariants.md`; rule interaction disambiguations live in `docs/game-rules-clarifications.md`; architectural tradeoffs live in `docs/adr/`; and the active simulator decision log lives in `docs/handoff.md`.
+This file is the shared glossary for domain language and avoided synonyms. Stable invariants live in `docs/domain/invariants.md`; rule interaction disambiguations live in `docs/domain/game-rules-clarifications.md`; architectural tradeoffs live in `docs/adr/`; and the active simulator decision log lives in `docs/handoff.md`.
 
 ## Language
 
@@ -31,7 +31,7 @@ A Player's secret identity, determining their abilities, wake-up schedule, and d
 _Avoid_: Character, class, card (when referring to the assigned identity)
 
 **Rules Role Set**:
-The Roles described by the physical rules in `docs/game-rules.md`, regardless of whether the app has implemented them.
+The Roles described by the physical rules in `docs/domain/game-rules.md`, regardless of whether the app has implemented them.
 _Avoid_: Supported roles, implemented roles
 
 **Implemented Role Set**:
@@ -364,7 +364,7 @@ _Avoid_: Load game, restore
 - Infection changes a Player's **Faction Agent** status, not their **Faction Beneficiary**
 - A **Permanent Role Swap** changes the Player's **Faction Beneficiary** to the new Role's default Faction unless an explicit precedence rule says otherwise
 - Cross-Faction Lovers immediately replace both Lovers' **Faction Beneficiary** links; same-Faction **Lovers** remain only a **Status Effect**
-- Detailed Role interaction rulings, including Cross-Faction Lovers precedence, Devoted Servant, Miracle, Elder, Big Bad Wolf, Full Moon Rising, Double Agent, Angel, and other edge cases, live in `docs/game-rules-clarifications.md`
+- Detailed Role interaction rulings, including Cross-Faction Lovers precedence, Devoted Servant, Miracle, Elder, Big Bad Wolf, Full Moon Rising, Double Agent, Angel, and other edge cases, live in `docs/domain/game-rules-clarifications.md`
 - Devoted Servant's successful swap is a **Permanent Role Swap**
 - The Villager Faction wins when every living non-Villager **Faction Beneficiary** has been Eliminated
 - The Werewolf Faction's full win condition is eliminating all other **Faction Beneficiaries**; **Werewolf Control Shortcut** is only a shortcut for Villager-vs-Werewolf endgames

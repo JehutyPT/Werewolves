@@ -13,7 +13,7 @@ Use these homes for the simulator cleanup so the design trail stays parseable:
 | Active simulator grilling log, unresolved decisions, PRD rewrite notes, and stale-issue rewrite notes | `docs/handoff.md` |
 | Canonical vocabulary and avoided synonyms | `CONTEXT.md` |
 | Stable domain facts that tests and implementation can assert | `docs/domain/invariants.md` |
-| Physical game-rule disambiguations and role interaction rulings | `docs/game-rules-clarifications.md` |
+| Physical game-rule disambiguations and role interaction rulings | `docs/domain/game-rules-clarifications.md` |
 | Durable architectural decisions with alternatives and tradeoffs | `docs/adr/` |
 | Product behavior, UI copy/display choices, and acceptance criteria | PRD #29 and replacement/updated GitHub issues |
 
@@ -135,7 +135,7 @@ The design follow-up is being handled as a staged grilling sequence. Each branch
 
 22f.9. Simulator profile/version, cache provenance, canonical identities, Possible Faction inventory, Possible Game Result inventory, rounded one-or-two-decimal internal frequencies, timing aggregates by Victory Check Window, invalidation identity, Run Seed Material, per-run source records, and replay/audit details are internal/cache or QA evidence rather than Moderator-facing probability output.
 
-22f.10. Topic 7 documentation stops at domain and product-output semantics. `CONTEXT.md` defines the canonical terms and constraints, `docs/handoff.md` records the decision chain, and `docs/game-rules.md` remains unchanged because probability output is not a physical game rule. Do not create a separate `docs/loose-ends.md` section for Topic 7; the implementation work belongs in the PRD and updated/new GitHub issues.
+22f.10. Topic 7 documentation stops at domain and product-output semantics. `CONTEXT.md` defines the canonical terms and constraints, `docs/handoff.md` records the decision chain, and `docs/domain/game-rules.md` remains unchanged because probability output is not a physical game rule. Do not create a separate `docs/loose-ends.md` section for Topic 7; the implementation work belongs in the PRD and updated/new GitHub issues.
 
 22g. Cache lookup identity is the Canonical Simulation Scenario plus simulator profile/version. Batch sizes are generation policy rather than cache identity or Moderator-facing cache evidence.
 
@@ -221,7 +221,7 @@ Topic 1 added and clarified these domain concepts in `CONTEXT.md`:
 - **Cross-Faction Lovers** are a distinct Faction outcome; same-Faction Lovers are not.
 - **Actor Setup Cards** are setup artifacts, not part of Role Composition.
 
-Topic 1 also clarified `docs/game-rules.md`:
+Topic 1 also clarified `docs/domain/game-rules.md`:
 
 - Thief sees undealt cards after random distribution; cards are not planned or set aside in advance.
 - Actor Setup Cards must be eligible hard-aligned Villager Roles and do not transfer win conditions.
@@ -293,7 +293,7 @@ Topic 3 also clarified role-set and canonicalization language:
 
 ## Faction Inventory Notes
 
-A read-only explorer produced this high-level faction inventory from `docs/game-rules.md`:
+A read-only explorer produced this high-level faction inventory from `docs/domain/game-rules.md`:
 
 - Villager Faction: Starting Faction if represented by the Role Composition. Supported Role Compositions require at least one hard-aligned Villager Role.
 - Werewolf Faction: Starting Faction if represented by the Role Composition. Supported Role Compositions require at least one hard-aligned Werewolf Role.
@@ -309,8 +309,8 @@ Not separate Factions: Role Groups such as Ambiguous, Loners, New Moon; Status E
 
 - `CONTEXT.md`: added and clarified Supported Player Count, Role Composition, Actor Setup Cards, Already-Decided Role Composition, Degenerate Simulation Scenario, Balanced Role Composition, Faction lifecycle terms, Initial Faction Count, Reference Turn Horizon, Run Seed Material, Simulation Scenario, Canonical Role Composition, Canonical Simulation Scenario, Simulation Start State, and role-set/support layers.
 - `CONTEXT.md`: later branches added Faction Beneficiary, Faction Agent, win-condition outcome terminology, Game Result Frequency terms, and Bundled Simulator Cache terminology.
-- `docs/game-rules.md`: clarified Thief undealt-card behavior, Actor Setup Card constraints, win-condition semantics from Topic 2, and Town Crier as a New Moon Assignment rather than a Role Composition Role.
-- `docs/game-rules-clarifications.md`: records role interaction rulings and physical-rule disambiguations that should not live in the glossary.
+- `docs/domain/game-rules.md`: clarified Thief undealt-card behavior, Actor Setup Card constraints, win-condition semantics from Topic 2, and Town Crier as a New Moon Assignment rather than a Role Composition Role.
+- `docs/domain/game-rules-clarifications.md`: records role interaction rulings and physical-rule disambiguations that should not live in the glossary.
 - `docs/domain/invariants.md`: records stable domain facts that implementation and tests can assert without carrying rationale.
 - `docs/agents/domain.md`: teaches future agents to use the new invariants and rules-clarification homes.
 - `docs/adr/0007-simulation-scenario-boundary.md`: records the Simulation Scenario boundary between Role Composition and per-run Simulation Start State.
