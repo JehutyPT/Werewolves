@@ -105,7 +105,7 @@ A legal, supported Simulation Scenario whose 1,000-run baseline screening simula
 _Avoid_: Degenerate Role Composition, invalid (ambiguous with rules-invalid), failed simulation, mathematically proven early ending
 
 **Balanced Role Composition**:
-A Role Composition whose starting Factions have similar pre-game win probabilities under the simulator's baseline decision model.
+A Role Composition whose Game Result Frequency is not obviously concentrated in one Starting Faction's single-Faction Game Result. This is a descriptive concept for Moderator judgment, not an app verdict.
 _Avoid_: Fair game (too vague), duration-balanced
 
 **Faction**:
@@ -148,13 +148,25 @@ _Avoid_: Draw, stalemate
 The mutually exclusive final result category for a completed simulated Game Session: one Faction wins, a specific Shared Victory Outcome occurs, or No-Winner occurs.
 _Avoid_: Outcome bucket, winner key
 
+**Possible Game Result**:
+A scenario-specific Game Result that probability output should be able to show even when the completed simulation batch observes it zero times. Possible Game Results include one single-Faction result for each Possible Faction, No-Winner, and each scenario-specific Shared Victory Outcome combination the rules/profile can produce. Factions and shared combinations outside the Simulation Scenario's Possible Game Result inventory are not shown as global catalog rows.
+_Avoid_: Global result catalog, observed result
+
 **Game Result Frequency**:
 The share of completed simulation runs ending in each Game Result; Game Result Frequencies sum to 100%.
-_Avoid_: Faction Win Probability, Exclusive Outcome Share, win rate
+_Avoid_: win rate
 
 **Game Result Frequency by Turn**:
-The share of completed simulation runs ending with each Game Result on each ending Turn; all cells sum to 100%, and summing a Game Result across Turns gives its Game Result Frequency.
-_Avoid_: Timing table (too vague), per-turn Faction Win Probability
+The share of completed simulation runs ending with each Game Result on each ending Turn and Victory Check Window; all cells sum to 100%, and summing a Game Result across Turns and Victory Check Windows gives its Game Result Frequency. Moderator-facing timing output collapses across Victory Check Windows and shows ending Turn only; the Victory Check Window stays in evidence/cache semantics.
+_Avoid_: PMF, timing table (too vague)
+
+**Ended-By-Turn Frequency**:
+A derived probability view showing the share of completed simulation runs that have ended by a given Turn, optionally filtered to a specific Game Result. It is computed from Game Result Frequency by Turn and is not a separate stored probability model.
+_Avoid_: CDF, duration metric
+
+**Unlikely Possible Result**:
+A Possible Game Result whose exact frequency is below 1% of completed runs, including zero-frequency results. Unlikely Possible Results can be grouped into a named "possible but unlikely outcomes" list to keep the main probability view readable; grouping is presentation only and the underlying Game Result Frequency remains complete.
+_Avoid_: Impossible result, error bucket
 
 **Starting Faction**:
 A Faction represented in the Role Composition before Turn 1 as a stable win-condition beneficiary. Starting Factions are counted by Initial Faction Count even when a setup branch means that Faction never appears in a particular Game Session.
@@ -197,7 +209,7 @@ A simulation run that does not reach a Game Session Outcome because the simulato
 _Avoid_: Draw, degenerate run, early ending
 
 **Simulation Result Evidence**:
-The stable domain evidence reported by a simulation run or batch: the Simulation Scenario/profile identity, run count evidence, one minimal source record per attempted run, Completed versus Incomplete Simulation Run counts, completed Game Session Outcomes, ending Turns and Victory Check Windows, Run Seed Material needed for replay evidence, the Simulation Scenario's Possible Faction inventory, and source data sufficient to derive aggregate Game Result views. Final Player/Faction state snapshots, full transcripts, instruction counts, exception details, timing, memory, raw engine traces, and driver limits are diagnostics rather than Simulation Result Evidence.
+The stable domain evidence reported by a simulation run or batch: the Simulation Scenario/profile identity, run count evidence, one minimal source record per attempted run, Completed versus Incomplete Simulation Run counts, completed Game Session Outcomes, ending Turns and Victory Check Windows, Run Seed Material needed for replay evidence, the Simulation Scenario's Possible Faction and Possible Game Result inventories, and source data sufficient to derive aggregate Game Result views. Final Player/Faction state snapshots, full transcripts, instruction counts, exception details, timing, memory, raw engine traces, and driver limits are diagnostics rather than Simulation Result Evidence.
 _Avoid_: Debug log, transcript
 
 **Team** _(deprecated — use Faction for win-condition grouping)_:
@@ -380,19 +392,36 @@ _Avoid_: Load game, restore
 - The current runtime victory check is a two-Faction `Team` shortcut and is not the complete future **Faction** win-condition model
 - Faction lifecycle describes how **Initial Faction Count** is computed; cache-facing probability output is reported as **Game Result Frequency**
 - **Game Result Frequency** includes mutually exclusive **Game Results** only: single-Faction wins, specific **Shared Victory Outcomes**, and **No-Winner Outcome**
-- Probability output includes zero-frequency **Game Results** that are useful to the Moderator, including single-Faction results for **Possible Factions** that never win in the simulation batch
-- Shared victories are represented as their own **Game Result** instead of crediting each winning Faction separately
-- **Game Result Frequency by Turn** records how often each **Game Result** happened on each ending **Turn**, out of all completed simulation runs
-- **Game Result Frequency** is derived by summing **Game Result Frequency by Turn** across Turns
+- Probability output includes the Simulation Scenario's **Possible Game Results**, including zero-frequency rows
+- Every **Possible Faction** contributes a single-Faction **Game Result** row, even when that Faction never wins or never comes into being in the completed simulation batch
+- **No-Winner Outcome** always appears as a **Game Result Frequency** row, even at zero frequency
+- Scenario-specific possible **Shared Victory Outcome** combinations appear as **Game Result Frequency** rows even when unobserved; shared rows are identified by the exact winning Faction set
+- Probability output does not include global catalog rows for Factions or shared combinations outside the Simulation Scenario's **Possible Game Result** inventory
+- Shared victories are represented as their own **Game Result** instead of crediting each winning Faction separately; probability output does not include a separate credited Faction view
+- **Game Result Frequency by Turn** records how often each **Game Result** happened on each ending **Turn** and **Victory Check Window**, out of all completed simulation runs
+- **Game Result Frequency** is derived by summing **Game Result Frequency by Turn** across Turns and **Victory Check Windows**
+- Moderator-facing detailed timing output derives ending frequency by **Turn** only, collapsing across **Victory Check Windows**
+- **Ended-By-Turn Frequency** is a derived view from **Game Result Frequency by Turn** that shows how often completed runs have ended by each **Turn**, optionally filtered by **Game Result**
+- Probability output does not include additional duration metrics such as expected Turn, average duration, median Turn, real-time estimate, instruction count, or **Reference Turn Horizon** comparison
+- Moderator-facing probability output uses whole percentages with no decimal places; do not mathematically round every nonzero result up to 1%
+- Rounded and grouped Moderator-facing percentages do not need to visually total to 100%; do not add reconciliation UI just to explain rounding differences
+- Cache/internal frequency evidence is rounded to the nearest one or two decimal places; no probability evidence needs more precision than that for this product
+- A detailed view may briefly state that probability output is a baseline simulation estimate from a finite batch, but this caveat should not be front and center in the main lobby summary
+- Moderator-facing output avoids confidence intervals, margins of error, standard error, and statistical terminology
+- Zero-frequency **Possible Game Results** mean "not observed in this simulation batch," not "impossible"; **Unlikely Possible Results** are grouped by outcome name in a possible-but-unlikely outcomes list rather than shown as primary percentage rows
+- Probability output avoids labels such as balanced, fair, good, bad, recommended, or warning; the Moderator interprets **Game Result Frequency** for their table
+- Compact lobby probability output shows primary **Game Result Frequency** rows as whole percentages plus a possible-but-unlikely outcomes list when relevant; it does not show run counts, cache provenance, simulator profile/version, finite-batch caveats, or timing detail
+- Detailed Moderator-facing probability output may show primary and possible-but-unlikely outcomes, ending frequency by **Turn**, **Ended-By-Turn Frequency**, simple "<1%" versus "0%" distinction for unlikely outcomes, and one brief baseline simulation estimate note; it does not show **Victory Check Window**, cache provenance, simulator profile/version, confidence intervals, statistical terminology, or replay/audit evidence
+- Simulator profile/version, cache provenance, canonical identities, Possible Faction inventory, Possible Game Result inventory, rounded one-or-two-decimal internal frequencies, timing aggregates by **Victory Check Window**, invalidation identity, **Run Seed Material**, per-run source records, and replay/audit details are internal/cache or QA evidence rather than Moderator-facing probability output
 - **Game Result Frequency** and **Game Result Frequency by Turn** are views derived from **Simulation Result Evidence**; raw simulator run output does not need to materialize those views directly
 - A simulation batch's stable source data includes one minimal source record per attempted run: run identity, **Run Seed Material**, completion state, and for **Completed Simulation Runs** the **Game Session Outcome**, ending **Turn**, and ending **Victory Check Window**
 - The **Bundled Simulator Cache** stores compressed lobby evaluations, not per-run source records
 - **Run Seed Material** stays in **Simulation Result Evidence** and replay/audit workflows; it is not part of the **Bundled Simulator Cache**
 - A probability entry in the **Bundled Simulator Cache** stores **Game Result Frequency** and **Game Result Frequency by Turn**, not attempted-run counts or per-run replay evidence
 - A probability entry in the **Bundled Simulator Cache** is coherent only when **Game Result Frequency** and **Game Result Frequency by Turn** describe the same **Game Result** set
-- Batch-level **Simulation Result Evidence** includes the Simulation Scenario's **Possible Faction** inventory so unobserved or never-came-into-being Factions can still be shown as zero-frequency **Game Results** where useful to the Moderator
+- Batch-level **Simulation Result Evidence** includes the Simulation Scenario's **Possible Faction** and **Possible Game Result** inventories so unobserved or never-came-into-being results can still be shown at zero frequency where useful to the Moderator
 - Screening and probability batches share the same per-run **Simulation Result Evidence** contract; they differ by batch purpose, requested run count, and interpretation
-- Batch-level **Simulation Result Evidence** must support screening and probability interpretation from source data: requested runs, Completed and Incomplete Simulation Run counts, Possible Faction inventory, completed outcomes by ending **Victory Check Window**, completed outcomes by **Game Result**, and ending **Turn**
+- Batch-level **Simulation Result Evidence** must support screening and probability interpretation from source data: requested runs, Completed and Incomplete Simulation Run counts, Possible Faction inventory, Possible Game Result inventory, completed outcomes by ending **Victory Check Window**, completed outcomes by **Game Result**, and ending **Turn**
 - **Shared Victory Outcome**, **No-Winner Outcome**, and zero-frequency **Game Results** are represented through the same source evidence rather than special-case summary records
 - **Simulation Result Evidence** defines replayable source evidence; the **Bundled Simulator Cache** defines compressed lobby evaluations derived from that evidence
 - **Already-Decided Role Composition** classification can only use Faction victory evidence available at **Lobby Exit**; **Degenerate Simulation Scenario** and probability evidence can observe Starting, Possible, Transient, and Latent Factions through completed simulation outcomes
@@ -416,7 +445,7 @@ _Avoid_: Load game, restore
 - Stable **Simulation Result Evidence** for an **Incomplete Simulation Run** includes replay identity and completion state, while failure details remain diagnostic
 - Stable **Simulation Result Evidence** for a completed run includes the **Game Session Outcome**, ending **Turn**, ending **Victory Check Window**, Simulation Scenario/profile identity, and **Run Seed Material**
 - Final Player/Faction state snapshots, full transcripts, instruction counts, exception details, timing, memory, raw engine traces, and driver limits are diagnostics rather than stable **Simulation Result Evidence**
-- A **Balanced Role Composition** is evaluated by comparing starting Faction win probabilities, not by comparing winning Turn to the **Reference Turn Horizon**
+- A **Balanced Role Composition** is considered from **Game Result Frequency**, not by comparing winning Turn to the **Reference Turn Horizon**
 - The Moderator judges whether a Role Composition is balanced; the app only blocks **Already-Decided Role Compositions** and **Degenerate Simulation Scenarios**
 - **Initial Faction Count** counts **Starting Factions** and excludes **Transient Factions** and **Latent Factions**
 - **Reference Turn Horizon** is derived from **Player** count and **Initial Faction Count**
@@ -474,7 +503,7 @@ _Avoid_: Load game, restore
 - "Supported roles" — resolved: use **Rules Role Set**, **Implemented Role Set**, **Simulator Profile Role Set**, or **Selectable Role Set** depending on the boundary being discussed.
 - "Town Crier as Role" — resolved: Town Crier is a **New Moon Assignment** like Sheriff, not part of the **Role Composition**.
 - "Player cap vs card count" — resolved: **Supported Player Count** caps Players only; Thief extras and Actor Setup Cards can increase physical card count without increasing Player count.
-- "Zero-frequency results" — resolved: cache-facing probability output includes zero-frequency **Game Results** useful to the Moderator, including single-Faction results for **Possible Factions** that never win in the simulation batch.
+- "Zero-frequency results" — resolved: cache-facing probability output includes the Simulation Scenario's **Possible Game Results** as rows, including zero-frequency single-Faction rows for every **Possible Faction**, zero-frequency **No-Winner Outcome**, and zero-frequency scenario-specific **Shared Victory Outcome** combinations.
 - "Shared victory probability" — resolved: cache-facing probability output represents a **Shared Victory Outcome** as its own **Game Result** instead of crediting each winning Faction separately.
 - "Werewolf parity" — resolved: parity is a **Werewolf Control Shortcut** for Villager-vs-Werewolf endgames, not the Werewolf Faction's full win condition once active solo or latent Factions are present.
 - "Operational Faction vs beneficiary Faction" — resolved: use **Faction Beneficiary** for win-condition membership and **Faction Agent** for operational behavior such as waking, acting, or being perceived with a Faction.
@@ -494,8 +523,8 @@ _Avoid_: Load game, restore
 - "Win-condition priority" — resolved: evaluate all win-condition predicates in the same **Victory Check Window** before deciding the **Game Session Outcome**.
 - "Tie" as final result — resolved: use **Shared Victory Outcome** for multiple Factions winning in the same **Victory Check Window**; keep "tie" for Vote ties.
 - "Everybody dies" — resolved: use **No-Winner Outcome** for completed Game Sessions where no Faction wins.
-- "Balanced" vs "long enough" — resolved: **Balanced Role Composition** means similar starting Faction win probabilities; **Reference Turn Horizon** is not used to block Role Compositions.
-- "Balance judgment" — resolved: the app surfaces pre-game Faction probabilities for the Moderator to interpret, and only blocks **Already-Decided Role Compositions** and **Degenerate Simulation Scenarios**.
+- "Balanced" vs "long enough" — resolved: **Balanced Role Composition** is interpreted from **Game Result Frequency**; **Reference Turn Horizon** is not used to block Role Compositions.
+- "Balance judgment" — resolved: the app surfaces **Game Result Frequency** for the Moderator to interpret, and only blocks **Already-Decided Role Compositions** and **Degenerate Simulation Scenarios**.
 - "Already-decided evidence" — resolved: **Already-Decided Role Composition** means a Role Composition would already trigger a Faction victory at **Lobby Exit** from Role Composition evidence alone.
 - "Already-decided shared outcomes" — resolved: if multiple Faction victory predicates are already true at **Lobby Exit**, preserve them as a **Shared Victory Outcome** without priority ordering.
 - "Already-decided as simulation result" — resolved: **Already-Decided Role Composition** records share outcome language but are not simulation runs and do not have **Run Seed Material** or per-run simulation evidence.

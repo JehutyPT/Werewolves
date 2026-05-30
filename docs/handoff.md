@@ -26,6 +26,8 @@ The design follow-up is being handled as a staged grilling sequence. Each branch
 
 6. **Cache Artifact Design** was completed inline using `$grill-with-docs-batched`.
 
+7. **Probability Output** was completed inline using `$grill-with-docs-batched`.
+
 ## Resolved Decisions
 
 1. Cache-first applies only to normal pre-game UX. On-device simulation still exists as fallback, implementation substrate, and QA evidence.
@@ -34,7 +36,7 @@ The design follow-up is being handled as a staged grilling sequence. Each branch
 
 3. Use **Role Composition** as the canonical term for the pre-game multiset of Role cards, independent of Player assignment or Seating Order.
 
-4. The app should not try to decide whether a Role Composition is generally balanced. It surfaces pre-game Faction probabilities; the Moderator judges balance.
+4. The app should not try to decide whether a Role Composition is generally balanced. It surfaces Game Result Frequency; the Moderator judges balance.
 
 5. The app blocks only two categories: **Already-Decided Role Composition** and **Degenerate Simulation Scenario**.
 
@@ -90,7 +92,31 @@ The design follow-up is being handled as a staged grilling sequence. Each branch
 
 22e. Game Result means one mutually exclusive final result: a single-Faction win, a specific Shared Victory Outcome, or No-Winner Outcome. Shared victories are represented as their own Game Result instead of crediting each winning Faction separately.
 
-22f. Game Result Frequency by Turn records how often each Game Result happened on each ending Turn out of all completed runs. Game Result Frequency is derived by summing Game Result Frequency by Turn across Turns, and the full distribution sums to 100%.
+22e.1. Probability output uses Game Result Frequency only. It does not include Faction Win Probability, credited Faction views, or Exclusive Outcome Share language.
+
+22e.2. Probability output rows come from the Simulation Scenario's Possible Game Result inventory: one single-Faction row for every Possible Faction, No-Winner, and every scenario-specific possible Shared Victory Outcome combination. These rows appear even at 0%, including Factions that never came into being in the completed batch and shared-victory combinations that were not observed. Rows are not generated from a global Faction or outcome catalog.
+
+22f. Game Result Frequency by Turn records how often each Game Result happened on each ending Turn and Victory Check Window out of all completed runs. Game Result Frequency is derived by summing Game Result Frequency by Turn across Turns and Victory Check Windows, and the full distribution sums to 100%. Moderator-facing detailed timing output shows ending frequency by Turn only, collapsing across Victory Check Windows; Victory Check Window stays in evidence/cache semantics.
+
+22f.1. Ended-By-Turn Frequency is a derived view from Game Result Frequency by Turn showing how often completed runs have ended by each Turn, optionally filtered by Game Result. Do not use PMF/CDF acronyms in Moderator-facing language.
+
+22f.2. Probability output does not include additional duration metrics such as expected Turn, average duration, median Turn, real-time estimate, instruction count, or Reference Turn Horizon comparison.
+
+22f.3. Moderator-facing probability output uses whole percentages with no decimal places. Do not mathematically round every nonzero result up to 1%. Rounded and grouped Moderator-facing percentages do not need to visually total to 100%, and the UI should not add reconciliation text just to explain rounding differences. Cache/internal frequency evidence is rounded to the nearest one or two decimal places where needed for display rounding and zero versus nonzero distinctions; no probability evidence needs more precision than that for this product.
+
+22f.4. A detailed view may briefly state that probability output is a baseline simulation estimate from a finite batch, but this caveat should not be front and center in the main lobby summary. Moderator-facing output should avoid confidence intervals, margins of error, standard error, and statistical terminology.
+
+22f.5. Zero-frequency Possible Game Results mean "not observed in this simulation batch," not "impossible." Possible Game Results below 1% exact frequency, including zero-frequency rows, are Unlikely Possible Results. They may be grouped by individual outcome name as possible-but-unlikely outcomes instead of shown as primary percentage rows. Grouping is presentation only; the underlying Game Result Frequency and Game Result Frequency by Turn remain complete.
+
+22f.6. Probability output avoids labels such as balanced, fair, good, bad, recommended, or warning. The Moderator interprets Game Result Frequency for their table.
+
+22f.7. Compact lobby probability output shows primary Game Result Frequency rows as whole percentages plus a possible-but-unlikely outcomes list when relevant. It does not show run counts, cache provenance, simulator profile/version, finite-batch caveats, or timing detail.
+
+22f.8. Detailed Moderator-facing probability output may show primary and possible-but-unlikely outcomes, ending frequency by Turn, Ended-By-Turn Frequency, simple "<1%" versus "0%" distinction for unlikely outcomes, and one brief baseline simulation estimate note. It does not show Victory Check Window, cache provenance, simulator profile/version, confidence intervals, statistical terminology, or replay/audit evidence.
+
+22f.9. Simulator profile/version, cache provenance, canonical identities, Possible Faction inventory, Possible Game Result inventory, rounded one-or-two-decimal internal frequencies, timing aggregates by Victory Check Window, invalidation identity, Run Seed Material, per-run source records, and replay/audit details are internal/cache or QA evidence rather than Moderator-facing probability output.
+
+22f.10. Topic 7 documentation stops at domain and product-output semantics. `CONTEXT.md` defines the canonical terms and constraints, `docs/handoff.md` records the decision chain, and `docs/game-rules.md` remains unchanged because probability output is not a physical game rule. Do not create a separate `docs/loose-ends.md` section for Topic 7; the implementation work belongs in the PRD and updated/new GitHub issues.
 
 22g. Cache lookup identity is the Canonical Simulation Scenario plus simulator profile/version. Batch sizes are generation policy rather than cache identity or Moderator-facing cache evidence.
 
@@ -102,7 +128,7 @@ The design follow-up is being handled as a staged grilling sequence. Each branch
 
 22k. Simulator profile/version identifies already-decided cache compatibility; it is not evidence that simulation ran. Already-decided evidence remains Role Composition classification only.
 
-22l. Probability cache entries are coherent only when Game Result Frequency and Game Result Frequency by Turn describe the same Game Result set. Game Result Frequency is the row-sum projection of Game Result Frequency by Turn.
+22l. Probability cache entries are coherent only when Game Result Frequency and Game Result Frequency by Turn describe the same Game Result set. Game Result Frequency is the row-sum projection of Game Result Frequency by Turn across Turns and Victory Check Windows.
 
 22m. Game Result evidence in a degenerate cache entry explains the Turn 1 endings; it is not presented as balance probability.
 
@@ -122,13 +148,13 @@ The design follow-up is being handled as a staged grilling sequence. Each branch
 
 29. A simulation batch's stable source data includes one minimal source record per attempted run: run identity, Run Seed Material, completion state, and for Completed Simulation Runs the Game Session Outcome, ending Turn, and ending Victory Check Window. Topic 6 resolved that the app-facing Bundled Simulator Cache does not store per-run source records.
 
-30. Batch-level Simulation Result Evidence includes the Simulation Scenario's Possible Faction inventory so unobserved or never-came-into-being Factions can still be shown as zero-frequency Game Results where useful to the Moderator.
+30. Batch-level Simulation Result Evidence includes the Simulation Scenario's Possible Faction and Possible Game Result inventories so unobserved or never-came-into-being rows can still be shown at zero frequency where useful to the Moderator.
 
 31. Stable evidence for Incomplete Simulation Runs includes replay identity and completion state; specific failure details remain diagnostic.
 
 32. Screening and probability batches share the same per-run Simulation Result Evidence contract; they differ by batch purpose, requested run count, and interpretation.
 
-33. Batch-level Simulation Result Evidence must support screening and probability interpretation from source data: requested runs, Completed and Incomplete Simulation Run counts, Possible Faction inventory, completed outcomes by ending Victory Check Window, completed outcomes by Game Result, and ending Turn.
+33. Batch-level Simulation Result Evidence must support screening and probability interpretation from source data: requested runs, Completed and Incomplete Simulation Run counts, Possible Faction inventory, Possible Game Result inventory, completed outcomes by ending Victory Check Window, completed outcomes by Game Result, and ending Turn.
 
 34. Shared Victory Outcome, No-Winner Outcome, and zero-frequency Game Results are represented through the same source evidence rather than special-case summary records.
 
@@ -138,7 +164,7 @@ The design follow-up is being handled as a staged grilling sequence. Each branch
 
 37. "Could not evaluate" is a product evaluation state, not a Game Session Outcome. It must not be grouped into Game Result, No-Winner Outcome, Game Result Frequency, or degenerate evidence.
 
-38. **Balanced Role Composition** remains a domain concept for similar starting Faction win probabilities under the baseline decision model, but the app does not block on that.
+38. **Balanced Role Composition** remains a descriptive domain concept interpreted from Game Result Frequency under the baseline decision model, but the app does not block on that.
 
 39. **Initial Faction Count** is the denominator concept for pre-game balance discussions: count starting win-condition beneficiaries, not every conditional outcome the simulator may later produce.
 
@@ -181,7 +207,7 @@ Topic 1 also clarified `docs/game-rules.md`:
 - Thief sees undealt cards after random distribution; cards are not planned or set aside in advance.
 - Actor Setup Cards must be eligible hard-aligned Villager Roles and do not transfer win conditions.
 
-Role Composition now includes Thief undealt cards and excludes Actor Setup Cards. Cache-facing probability output should include zero-frequency Game Results that are useful to the Moderator, including single-Faction results for Possible Factions that never win.
+Role Composition now includes Thief undealt cards and excludes Actor Setup Cards. Cache-facing probability output should include the Simulation Scenario's zero-frequency Possible Game Result rows where useful to the Moderator, including single-Faction results for Possible Factions that never win or never come into being, No-Winner, and scenario-specific possible Shared Victory Outcome combinations.
 
 ## Topic 2: Win Condition Semantics Settlements
 
@@ -200,7 +226,7 @@ Key general semantics:
 - Shared Victory Outcome is allowed when multiple win conditions are true in one Victory Check Window.
 - No-Winner Outcome occurs when no Faction win condition is true and every Player is Eliminated.
 - Cache-facing probability output uses Game Result Frequency, where Shared Victory Outcomes are their own Game Results and the distribution sums to 100%.
-- Probability output includes zero-frequency Game Results that are useful to the Moderator, including single-Faction results for Possible Factions that never win, plus No-Winner.
+- Probability output includes the Simulation Scenario's Possible Game Result inventory as rows, including zero-frequency single-Faction results for Possible Factions that never win or never come into being, No-Winner, and scenario-specific Shared Victory Outcome combinations.
 
 Key role-specific semantics:
 
@@ -270,9 +296,9 @@ Not separate Factions: Role Groups such as Ambiguous, Loners, New Moon; Status E
 
 ## Follow-Up Leads
 
-1. Update PRD #29 to replace stale on-device-first/cache-as-repeat language with cache-first pre-game Role Composition lookup and on-device fallback.
+1. Update PRD #29 to replace stale on-device-first/cache-as-repeat language with cache-first pre-game Role Composition lookup, on-device fallback, and the Topic 7 Game Result Frequency probability-output contract.
 
-2. Update #38/#39/#40/#41/#59/#60 or create replacement issues so they reflect the new layered cache pipeline rather than the stale issue split.
+2. Update #38/#39/#40/#41/#59/#60 or create replacement issues so they reflect the new layered cache pipeline and probability-output contract rather than the stale issue split.
 
 3. Decide whether this change deserves an ADR. It may, because cache-first pre-game lookup plus on-device fallback is a meaningful architectural/product trade-off against the current PRD wording.
 

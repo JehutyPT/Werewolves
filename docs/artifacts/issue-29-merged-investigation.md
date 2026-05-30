@@ -16,9 +16,9 @@ The highest-leverage next step is to tighten the data contracts before implement
 
 ## Current Tracker Snapshot
 
-- #29, `PRD: Win Probability Simulator`: open PRD, milestone `Faction Win Probability Calculator`.
+- #29, `PRD: Win Probability Simulator`: open PRD, attached to the stale simulator milestone.
 - #38, `Win Probability Simulator: overall pre-game probability in lobby`: open, `ready-for-agent`.
-- #39, `Win Probability Simulator: per-Turn PMF and CDF in lobby`: open, formally blocked by #38, not `ready-for-agent`.
+- #39, `Win Probability Simulator: per-Turn PMF and CDF in lobby`: open with stale PMF/CDF wording, formally blocked by #38, not `ready-for-agent`.
 - #59, `Win Probability Simulator: record replayable headless run transcripts`: open, `needs-triage`, formally unblocked.
 - #60, `Win Probability Simulator: validate sampled games with structural invariants`: open, formally blocked by #38 and #59.
 
@@ -45,14 +45,15 @@ Required edits:
 
 - Add to #29 that v1 surfaces two Factions because the current `Team` enum has only `Villagers` and `Werewolves`.
 - State that additional Factions should appear as `Team`/victory-condition support expands.
-- In #38 and #39, permit internal aggregation by `Team` while presenting results as Faction probabilities.
+- In #38 and #39, permit internal aggregation by `Team` while presenting results as Game Result Frequency rows.
 - Keep engine-wide `Team` to `Faction` migration out of scope for #38, #39, and #59.
 - Avoid introducing a second independent Faction model inside the simulator.
 
-Open decision for #39:
+Resolved by later Topic 7 design:
 
-- Should all-zero PMF rows be statically enumerated from possible engine Factions, or dynamically materialized only for Factions that can exist in the selected composition?
-- The current #39 acceptance criterion says a never-winning Faction appears as all-zero, while `CONTEXT.md` says a Faction comes into being only when at least one Player holds that win condition. Tighten this before implementation.
+- All-zero rows are enumerated from the Simulation Scenario's Possible Game Result inventory, not from a global catalog.
+- The row inventory includes one single-Faction Game Result for every Possible Faction, No-Winner, and scenario-specific possible Shared Victory Outcome combinations, even when those rows are unobserved.
+- A Possible Faction can have a zero-frequency single-Faction row even when that Faction never came into being in the completed batch.
 
 ### 3. Resolve #39's Data Contract Before Starting
 
@@ -63,19 +64,19 @@ Required contract points:
 - #38 should expose structured outcomes, not only rendered percentages.
 - Each run should include total runs, completed runs, incomplete runs, winning Team/Faction, ending Turn, and failure reason when present.
 - Define whether per-run detail is retained directly or projected into an aggregate DTO.
-- Define the PMF denominator: total requested runs or completed runs.
-- Preserve #39's current invariant that the total across all `(Faction, Turn)` entries equals `completedRuns / totalRuns`.
+- Define the exact ending frequency denominator: completed runs.
+- Preserve #39's current invariant using Game Result Frequency by Turn and Victory Check Window; the exact-ending cells sum to 100% of completed runs.
 - Define how incomplete runs are displayed in the lobby.
 
 Turn semantics:
 
 - Lock the authoritative source for "winning on Turn T": `VictoryConditionMetLogEntry`, `HeadlessGameResult.TurnCount`, or final `IGameSession.TurnNumber`.
 - Current engine behavior checks victory at main-phase transitions entering Day or Night. `HeadlessGameResult.TurnCount` reads `session.TurnNumber` at the end, so "Dawn of Turn 3" and "Day-finalize of Turn 3" can both report `3`.
-- Decide whether that Turn-level granularity is sufficient for #39, or whether the result needs phase context too.
+- Later Topic 7 design settled that Turn alone is insufficient; timing evidence is keyed by ending Turn and Victory Check Window.
 
 Display and statistical scope:
 
-- Decide whether #39 is table-only, table plus CDF, or charted. The current "table acceptable; charts nice-to-have" plus "CDF or aggregate view" leaves too much implementation latitude.
+- Later Topic 7 design settled that evidence retains ending Turn and Victory Check Window, while Moderator-facing detailed output shows exact ending frequency by Turn only plus derived Ended-By-Turn Frequency. Do not use PMF/CDF acronyms in Moderator-facing language.
 - Decide whether 1,000 runs is acceptable for tail cells, or whether #39 waits for #40's configurable run count. The PRD itself notes per-Turn probabilities need more runs for comparable precision.
 - Define rounding rules for displayed percentages.
 - Keep all user-facing UI text in Portuguese.
@@ -179,7 +180,7 @@ Recommended brief updates:
 - Add or tighten a structured agent brief for #59 before implementation.
 - Include key interface expectations from #38.
 - Include claim-first QA expectations from `docs/agents/qa-strategy.md`.
-- Prefer Core/service tests for PMF math and transcript/replay behavior.
+- Prefer Core/service tests for Game Result Frequency by Turn, Ended-By-Turn Frequency, and transcript/replay behavior.
 - Prefer bUnit or client component tests for lobby display behavior when applicable.
 - For phone-screen manual criteria, name the evidence expected: browser QA host screenshot review and/or native manual observation.
 
