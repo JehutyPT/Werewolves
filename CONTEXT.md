@@ -2,6 +2,8 @@
 
 A mobile app that assists a human **Moderator** running a physical game of "The Werewolves of Miller's Hollow." The app tracks game state, guides the Moderator through phases, and prompts for input — it never replaces the Moderator or makes decisions for them.
 
+This file is the shared glossary for domain language and avoided synonyms. Stable invariants live in `docs/domain/invariants.md`; rule interaction disambiguations live in `docs/game-rules-clarifications.md`; architectural tradeoffs live in `docs/adr/`; and the active simulator decision log lives in `docs/handoff.md`.
+
 ## Language
 
 ### Game Participants
@@ -362,10 +364,8 @@ _Avoid_: Load game, restore
 - Infection changes a Player's **Faction Agent** status, not their **Faction Beneficiary**
 - A **Permanent Role Swap** changes the Player's **Faction Beneficiary** to the new Role's default Faction unless an explicit precedence rule says otherwise
 - Cross-Faction Lovers immediately replace both Lovers' **Faction Beneficiary** links; same-Faction **Lovers** remain only a **Status Effect**
-- Cross-Faction Lovers take precedence over later beneficiary-changing effects, including Double Agent, Wild Child transformation, Wolf Hound choice, Thief swap, Specter, and Backfire; the Lover can gain operational state or information without changing **Faction Beneficiary**
-- A Lover cannot use Devoted Servant's swap ability
-- If Miracle revives only one eliminated Cross-Faction Lover after the Lovers were Eliminated, the revived Player is no longer a Cross-Faction Lover
-- Devoted Servant's successful swap changes the Servant's **Faction Beneficiary** to the new Role's default Faction
+- Detailed Role interaction rulings, including Cross-Faction Lovers precedence, Devoted Servant, Miracle, Elder, Big Bad Wolf, Full Moon Rising, Double Agent, Angel, and other edge cases, live in `docs/game-rules-clarifications.md`
+- Devoted Servant's successful swap is a **Permanent Role Swap**
 - The Villager Faction wins when every living non-Villager **Faction Beneficiary** has been Eliminated
 - The Werewolf Faction's full win condition is eliminating all other **Faction Beneficiaries**; **Werewolf Control Shortcut** is only a shortcut for Villager-vs-Werewolf endgames
 - **Werewolf Control Shortcut** uses **Durable Voting Power**, not temporary vote effects
@@ -374,11 +374,6 @@ _Avoid_: Load game, restore
 - Generic rules that check, target, count, or react to "Werewolves" use Werewolf **Faction Agents** unless the rule explicitly says Role or Character Card
 - Werewolf group attacks cannot target Werewolf **Faction Agents**
 - White Werewolf's solo attack targets another Werewolf **Faction Agent**
-- Big Bad Wolf's extra attack is disabled once any non-temporary Werewolf **Faction Agent** has been Eliminated; temporary Werewolf **Faction Agents** from Full Moon Rising do not count
-- Temporary Werewolf **Faction Agents** from Full Moon Rising affect operational Werewolf **Faction Agent** checks while active, such as Seer, Fox, Bear Tamer, Knight with the Rusty Sword, and night targeting checks
-- Elder's village-vote penalty removes powers from all Villager **Roles**, including Actor, regardless of those Players' **Faction Beneficiaries**
-- Elder's village-vote penalty is a continuing suppression of Villager **Role** powers for the rest of the Game Session, so later Permanent Role Swaps into Villager Roles enter with their powers suppressed
-- Double Agent can be assigned only to a living non-Werewolf **Faction Agent**
 - The Piper Faction wins when every surviving non-Piper Player is Charmed
 - The Prejudiced Manipulator Faction wins when every living Player in the opposing public group has been Eliminated, regardless of those Players' **Faction Beneficiaries**
 - A Player can be a **Faction Agent** for one Faction while benefiting from another Faction's win condition, such as White Werewolf waking with Werewolves or Double Agent benefiting from Werewolf victory without waking with Werewolves
@@ -390,66 +385,17 @@ _Avoid_: Load game, restore
 - A **Game Session** ends with exactly one **Game Session Outcome**
 - A **No-Winner Outcome** can occur when mutually assured Elimination leaves no Faction able to win
 - The current runtime victory check is a two-Faction `Team` shortcut and is not the complete future **Faction** win-condition model
-- Faction lifecycle describes how **Initial Faction Count** is computed; cache-facing probability output is reported as **Game Result Frequency**
+- Faction lifecycle describes how **Initial Faction Count** is computed; **Initial Faction Count** counts **Starting Factions** and excludes **Transient Factions** and **Latent Factions**
+- **Reference Turn Horizon** is derived from **Player** count and **Initial Faction Count**
 - **Game Result Frequency** includes mutually exclusive **Game Results** only: single-Faction wins, specific **Shared Victory Outcomes**, and **No-Winner Outcome**
-- Probability output includes the Simulation Scenario's **Possible Game Results**, including zero-frequency rows
-- Every **Possible Faction** contributes a single-Faction **Game Result** row, even when that Faction never wins or never comes into being in the completed simulation batch
-- **No-Winner Outcome** always appears as a **Game Result Frequency** row, even at zero frequency
-- Scenario-specific possible **Shared Victory Outcome** combinations appear as **Game Result Frequency** rows even when unobserved; shared rows are identified by the exact winning Faction set
-- Probability output does not include global catalog rows for Factions or shared combinations outside the Simulation Scenario's **Possible Game Result** inventory
-- Shared victories are represented as their own **Game Result** instead of crediting each winning Faction separately; probability output does not include a separate credited Faction view
-- **Game Result Frequency by Turn** records how often each **Game Result** happened on each ending **Turn** and **Victory Check Window**, out of all completed simulation runs
-- **Game Result Frequency** is derived by summing **Game Result Frequency by Turn** across Turns and **Victory Check Windows**
-- Moderator-facing detailed timing output derives ending frequency by **Turn** only, collapsing across **Victory Check Windows**
-- **Ended-By-Turn Frequency** is a derived view from **Game Result Frequency by Turn** that shows how often completed runs have ended by each **Turn**, optionally filtered by **Game Result**
-- Probability output does not include additional duration metrics such as expected Turn, average duration, median Turn, real-time estimate, instruction count, or **Reference Turn Horizon** comparison
-- Moderator-facing probability output uses whole percentages with no decimal places; do not mathematically round every nonzero result up to 1%
-- Rounded and grouped Moderator-facing percentages do not need to visually total to 100%; do not add reconciliation UI just to explain rounding differences
-- Cache/internal frequency evidence is rounded to the nearest one or two decimal places; no probability evidence needs more precision than that for this product
-- A detailed view may briefly state that probability output is a baseline simulation estimate from a finite batch, but this caveat should not be front and center in the main lobby summary
-- Moderator-facing output avoids confidence intervals, margins of error, standard error, and statistical terminology
-- Zero-frequency **Possible Game Results** mean "not observed in this simulation batch," not "impossible"; **Unlikely Possible Results** are grouped by outcome name in a possible-but-unlikely outcomes list rather than shown as primary percentage rows
-- Probability output avoids labels such as balanced, fair, good, bad, recommended, or warning; the Moderator interprets **Game Result Frequency** for their table
-- Compact lobby probability output shows primary **Game Result Frequency** rows as whole percentages plus a possible-but-unlikely outcomes list when relevant; it does not show run counts, cache provenance, simulator profile/version, finite-batch caveats, or timing detail
-- Detailed Moderator-facing probability output may show primary and possible-but-unlikely outcomes, ending frequency by **Turn**, **Ended-By-Turn Frequency**, simple "<1%" versus "0%" distinction for unlikely outcomes, and one brief baseline simulation estimate note; it does not show **Victory Check Window**, cache provenance, simulator profile/version, confidence intervals, statistical terminology, or replay/audit evidence
-- Simulator profile/version, cache provenance, canonical identities, Possible Faction inventory, Possible Game Result inventory, rounded one-or-two-decimal internal frequencies, timing aggregates by **Victory Check Window**, invalidation identity, **Run Seed Material**, per-run source records, and replay/audit details are internal/cache or QA evidence rather than Moderator-facing probability output
-- **Game Result Frequency** and **Game Result Frequency by Turn** are views derived from **Simulation Result Evidence**; raw simulator run output does not need to materialize those views directly
-- A simulation batch's stable source data includes one minimal source record per attempted run: run identity, **Run Seed Material**, completion state, and for **Completed Simulation Runs** the **Game Session Outcome**, ending **Turn**, and ending **Victory Check Window**
-- The **Bundled Simulator Cache** stores compressed lobby evaluations, not per-run source records
-- **Run Seed Material** stays in **Simulation Result Evidence** and replay/audit workflows; it is not part of the **Bundled Simulator Cache**
-- A probability entry in the **Bundled Simulator Cache** stores **Game Result Frequency** and **Game Result Frequency by Turn**, not attempted-run counts or per-run replay evidence
-- A probability entry in the **Bundled Simulator Cache** is coherent only when **Game Result Frequency** and **Game Result Frequency by Turn** describe the same **Game Result** set
-- Batch-level **Simulation Result Evidence** includes the Simulation Scenario's **Possible Faction** and **Possible Game Result** inventories so unobserved or never-came-into-being results can still be shown at zero frequency where useful to the Moderator
-- Screening and probability batches share the same per-run **Simulation Result Evidence** contract; they differ by batch purpose, requested run count, and interpretation
-- Batch-level **Simulation Result Evidence** must support screening and probability interpretation from source data: requested runs, Completed and Incomplete Simulation Run counts, Possible Faction inventory, Possible Game Result inventory, completed outcomes by ending **Victory Check Window**, completed outcomes by **Game Result**, and ending **Turn**
-- **Shared Victory Outcome**, **No-Winner Outcome**, and zero-frequency **Game Results** are represented through the same source evidence rather than special-case summary records
-- **Simulation Result Evidence** defines replayable source evidence; the **Bundled Simulator Cache** defines compressed lobby evaluations derived from that evidence
-- **Already-Decided Role Composition** classification can only use Faction victory evidence available at **Lobby Exit**; **Degenerate Simulation Scenario** and probability evidence can observe Starting, Possible, Transient, and Latent Factions through completed simulation outcomes
-- An **Already-Decided Role Composition** is rejected without simulation
-- **Already-Decided Role Composition** records can share **Game Session Outcome** language, including **Shared Victory Outcome**, but they are not simulation runs and do not have **Run Seed Material**, per-run source records, or Completed/Incomplete Simulation Run counts
-- Simulator profile/version identifies **Already-Decided Role Composition** cache compatibility; it is not evidence that simulation ran
-- A **Degenerate Simulation Scenario** is classified by a 1,000-run baseline screening simulation before running a 10,000-run probability simulation; any incomplete screening run makes the screening batch invalid rather than degenerate
-- For **Degenerate Simulation Scenario** classification, "ending by the end of Turn 1" includes completed Game Sessions ending at the Dawn Victory Check Window after Night 1 resolution or at the pre-Night Victory Check Window after Day 1 vote resolution and cascades
-- A **Degenerate Simulation Scenario** entry in the **Bundled Simulator Cache** stores screening conclusion evidence, not probability output: the Canonical Simulation Scenario, simulator/profile identity, Turn 1 cutoff definition, and aggregate completed outcomes by ending window
-- **Game Result** evidence in a **Degenerate Simulation Scenario** entry explains the Turn 1 endings; it is not presented as balance probability
-- A failed or incomplete screening batch is a "could not evaluate" state; it is not an **Already-Decided Role Composition**, not a **Degenerate Simulation Scenario**, and does not block **Lobby Exit**
-- Failed or incomplete **Build-Time Cache Generation** attempts are omitted from the **Bundled Simulator Cache**
-- A usable **Bundled Simulator Cache** entry is a terminal lobby evaluation: already-decided, degenerate, or probability evidence
-- A cache miss or failed **On-Device Fallback Generation** is a nonblocking "could not evaluate" state and must not imply that the setup is balanced, already-decided, or degenerate
-- A **Bundled Simulator Cache** entry is invalidated by changes to rule interpretation, Role behavior, simulator profile behavior, supported scenario scope, **Canonical Simulation Scenario** construction, already-decided or degenerate classification semantics, **Game Result Frequency** semantics, or Turn cutoff semantics
-- Localization, visual presentation, and explanatory copy changes do not invalidate **Bundled Simulator Cache** entries
-- Domain docs define **Bundled Simulator Cache** entries semantically; serialized schema, file format, compression, and lookup layout are implementation concerns
-- "Could not evaluate" is a product evaluation state, not a **Game Session Outcome**; it is not included in **Game Result**, **No-Winner Outcome**, **Game Result Frequency**, or degenerate evidence
-- A simulation run ending during Turn 1 is a **Completed Simulation Run** when it reaches a **Game Session Outcome**; it is not an **Incomplete Simulation Run**
-- **Incomplete Simulation Runs** do not contribute to **Game Result Frequency**
-- Stable **Simulation Result Evidence** for an **Incomplete Simulation Run** includes replay identity and completion state, while failure details remain diagnostic
-- Stable **Simulation Result Evidence** for a completed run includes the **Game Session Outcome**, ending **Turn**, ending **Victory Check Window**, Simulation Scenario/profile identity, and **Run Seed Material**
-- Final Player/Faction state snapshots, full transcripts, instruction counts, exception details, timing, memory, raw engine traces, and driver limits are diagnostics rather than stable **Simulation Result Evidence**
+- **Game Result Frequency by Turn** is the source timing view for deriving **Game Result Frequency** and **Ended-By-Turn Frequency**
+- **Simulation Result Evidence** defines stable replayable evidence; diagnostics and cache artifact boundaries are architectural concerns covered by ADR-0009
+- Product presentation rules for probability output live in `docs/handoff.md` until they are rewritten into PRD #29 and implementation issues
+- Cache distribution remains an unresolved decision recorded in `docs/handoff.md`; **Build-Time Cache Generation**, **Bundled Simulator Cache**, and **On-Device Fallback Generation** remain glossary terms
+- "Could not evaluate" is a product evaluation state, not a **Game Session Outcome**, **Game Result**, **No-Winner Outcome**, or probability bucket
+- A simulation run ending during Turn 1 is a **Completed Simulation Run** when it reaches a **Game Session Outcome**; **Incomplete Simulation Runs** do not contribute to **Game Result Frequency**
 - A **Balanced Role Composition** is considered from **Game Result Frequency**, not by comparing winning Turn to the **Reference Turn Horizon**
 - The Moderator judges whether a Role Composition is balanced; the app only blocks **Already-Decided Role Compositions** and **Degenerate Simulation Scenarios**
-- **Initial Faction Count** counts **Starting Factions** and excludes **Transient Factions** and **Latent Factions**
-- **Reference Turn Horizon** is derived from **Player** count and **Initial Faction Count**
-- **Run Seed Material** is stored as a string and hashed only at the boundary where a random generator needs a numeric seed
 - A **Role** belongs to one **Role Group** and determines a default **Team**, but a Player's actual **Team** can change via **Status Effects** (e.g., infection)
 - A **Turn** consists of one **Night Phase**, one **Dawn Phase**, and one **Day Phase**, in that order
 - During each **Night Phase**, Roles perform **Night Actions** which are resolved during **Dawn Phase**

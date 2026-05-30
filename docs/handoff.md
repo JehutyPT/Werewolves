@@ -4,6 +4,25 @@ Date: 2026-05-28
 
 This handoff captures the design grilling session about stale PRD #29, especially the shift from on-device-first pre-game simulation to cache-first pre-game Role Composition lookup. It does not replace the settled glossary in `CONTEXT.md`; use that file as the source of truth for domain terms.
 
+## Document Routing
+
+Use these homes for the simulator cleanup so the design trail stays parseable:
+
+| Material | Destination |
+| --- | --- |
+| Active simulator grilling log, unresolved decisions, PRD rewrite notes, and stale-issue rewrite notes | `docs/handoff.md` |
+| Canonical vocabulary and avoided synonyms | `CONTEXT.md` |
+| Stable domain facts that tests and implementation can assert | `docs/domain/invariants.md` |
+| Physical game-rule disambiguations and role interaction rulings | `docs/game-rules-clarifications.md` |
+| Durable architectural decisions with alternatives and tradeoffs | `docs/adr/` |
+| Product behavior, UI copy/display choices, and acceptance criteria | PRD #29 and replacement/updated GitHub issues |
+
+## Deferred Decisions
+
+Cache distribution remains deliberately unresolved. A bundled simulator cache is acceptable only if the full-role artifact is negligible in app-package terms; the current rough comfort range is under 5-10 MB, with the upper end already feeling expensive. If the complete cache grows beyond that range, a static remote cache, such as one hosted through GitHub Pages, is a live alternative.
+
+On-device fallback remains mandatory regardless of the cache distribution shape. The final bundled-versus-remote decision should wait until the simulator, implemented role catalog, cache schema, and cache generation are far enough along to measure realistic artifact size.
+
 ## Starting Problem
 
 PRD #29 had grown stale around the Win Probability Simulator. The current investigation in `docs/artifacts/issue-29-merged-investigation.md` recommended tightening several contracts before implementation, but the main design question reopened here was whether pre-game results should be computed on device with repeat caching, or whether the app should be cache-first for normal pre-game UX.
@@ -291,6 +310,14 @@ Not separate Factions: Role Groups such as Ambiguous, Loners, New Moon; Status E
 - `CONTEXT.md`: added and clarified Supported Player Count, Role Composition, Actor Setup Cards, Already-Decided Role Composition, Degenerate Simulation Scenario, Balanced Role Composition, Faction lifecycle terms, Initial Faction Count, Reference Turn Horizon, Run Seed Material, Simulation Scenario, Canonical Role Composition, Canonical Simulation Scenario, Simulation Start State, and role-set/support layers.
 - `CONTEXT.md`: later branches added Faction Beneficiary, Faction Agent, win-condition outcome terminology, Game Result Frequency terms, and Bundled Simulator Cache terminology.
 - `docs/game-rules.md`: clarified Thief undealt-card behavior, Actor Setup Card constraints, win-condition semantics from Topic 2, and Town Crier as a New Moon Assignment rather than a Role Composition Role.
+- `docs/game-rules-clarifications.md`: records role interaction rulings and physical-rule disambiguations that should not live in the glossary.
+- `docs/domain/invariants.md`: records stable domain facts that implementation and tests can assert without carrying rationale.
+- `docs/agents/domain.md`: teaches future agents to use the new invariants and rules-clarification homes.
+- `docs/adr/0007-simulation-scenario-boundary.md`: records the Simulation Scenario boundary between Role Composition and per-run Simulation Start State.
+- `docs/adr/0008-lobby-evaluation-pipeline-uses-layered-gates.md`: records the layered lobby evaluation gates and evidence boundaries.
+- `docs/adr/0009-simulation-evidence-diagnostics-and-cache-artifacts.md`: records the Simulation Result Evidence, diagnostics, and compressed cache artifact boundary.
+- `docs/adr/0010-faction-model-separates-beneficiaries-from-agents.md`: records the Faction Beneficiary/Faction Agent split and the limits of legacy Team.
+- `docs/adr/0011-victory-check-windows-are-resolution-boundaries.md`: records Victory Check Windows as outcome-resolution transaction boundaries.
 - `docs/handoff.md`: records the staged simulator/cache decisions and follow-up leads.
 - `docs/loose-ends.md`: records implementation follow-ups for Actor Setup Card validation, hard-aligned coverage validation, and Bundled Simulator Cache implementation.
 
@@ -300,7 +327,7 @@ Not separate Factions: Role Groups such as Ambiguous, Loners, New Moon; Status E
 
 2. Update #38/#39/#40/#41/#59/#60 or create replacement issues so they reflect the new layered cache pipeline and probability-output contract rather than the stale issue split.
 
-3. Decide whether this change deserves an ADR. It may, because cache-first pre-game lookup plus on-device fallback is a meaningful architectural/product trade-off against the current PRD wording.
+3. Defer the cache distribution ADR until realistic full-role cache size is measurable. Bundled cache, static remote cache, and any hybrid distribution choice are still open; on-device fallback is not open.
 
 4. Implement a shared Role Composition canonicalizer. It must sort exact enum names alphabetically, include non-zero counts only, include Thief extras, exclude Actor Setup Cards, and be reused by cache keys and Run Seed Material.
 
