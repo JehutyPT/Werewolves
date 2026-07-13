@@ -30,6 +30,7 @@ Single-context repo:
 ├── docs/agents/
 │   ├── issue-tracker.md
 │   ├── issue-labels.md
+│   ├── implementation-contract.md
 │   ├── qa-strategy.md
 │   └── domain.md
 ├── Werewolves.Client/

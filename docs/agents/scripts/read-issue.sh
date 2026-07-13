@@ -12,5 +12,5 @@ fi
 ISSUE_NUMBER=$1
 
 gh issue view "$ISSUE_NUMBER" --comments \
-  --json number,title,body,state,labels,milestone,comments \
-  --jq '{number, title, body, state, labels: [.labels[].name], milestone: .milestone.title, comments: [.comments[].body]}'
+  --json number,title,body,state,labels,milestone,comments,updatedAt,closedAt,closedByPullRequestsReferences \
+  --jq '{number, title, body, state, updatedAt, closedAt, labels: [.labels[].name], milestone: .milestone.title, closingPullRequests: [.closedByPullRequestsReferences[] | {number, title, state, mergedAt, url}], comments: [.comments[].body]}'

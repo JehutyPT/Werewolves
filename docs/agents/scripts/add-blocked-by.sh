@@ -25,3 +25,9 @@ gh api graphql -f query='
   }'
 
 echo "Issue #$ISSUE_NUMBER is now blocked by #$BLOCKER_NUMBER"
+
+HAS_READY=$(gh issue view "$ISSUE_NUMBER" --json labels --jq '.labels | any(.name == "ready-for-agent")')
+if [ "$HAS_READY" = "true" ]; then
+  gh issue edit "$ISSUE_NUMBER" --remove-label ready-for-agent
+  echo "Removed ready-for-agent from issue #$ISSUE_NUMBER; its implementation contract is provisional while blocked."
+fi

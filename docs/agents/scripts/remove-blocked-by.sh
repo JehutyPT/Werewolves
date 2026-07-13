@@ -24,3 +24,4 @@ gh api graphql -f query='
   }'
 
 echo "Issue #$ISSUE_NUMBER is no longer blocked by #$BLOCKER_NUMBER"
+echo "Readiness was not added. Prepare and validate the current implementation contract before adding ready-for-agent."

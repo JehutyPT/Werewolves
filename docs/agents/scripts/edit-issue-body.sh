@@ -12,6 +12,7 @@ fi
 ISSUE_NUMBER=$1
 BODY=$2
 
-gh issue edit "$ISSUE_NUMBER" --body "$BODY"
+gh issue edit "$ISSUE_NUMBER" --body "$BODY" --remove-label ready-for-agent
 
-echo "Issue #$ISSUE_NUMBER body updated."
+echo "Issue #$ISSUE_NUMBER body updated; ready-for-agent was invalidated if present."
+echo "Prepare and validate the current implementation contract before adding ready-for-agent again."

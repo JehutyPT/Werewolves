@@ -1,4 +1,4 @@
-name: Maintain issue relationships
+name: Audit issue readiness invariants
 
 on:
   issues:
@@ -7,78 +7,28 @@ on:
     - cron: '0 * * * *'
   workflow_dispatch:
 
+concurrency:
+  group: issue-readiness-invariant-audit
+  cancel-in-progress: false
+
 jobs:
-  maintain:
+  audit:
     runs-on: ubuntu-latest
     permissions:
       issues: write
     steps:
-      - name: Clear relationships on closed issue
-        if: github.event_name == 'issues'
+      - name: Remove readiness from the closed issue
+        if: github.event_name == 'issues' && contains(github.event.issue.labels.*.name, 'ready-for-agent')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
-          OWNER: ${{ github.repository_owner }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
           set -euo pipefail
-          NAME="${REPO#*/}"
-          CLOSED_ID="${{ github.event.issue.node_id }}"
-          CLOSED_NUM="${{ github.event.issue.number }}"
+          echo "#$ISSUE_NUMBER is closed; removing ready-for-agent"
+          gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --remove-label ready-for-agent
 
-          # GraphQL variables are intentionally passed in a single-quoted query.
-          # shellcheck disable=SC2016
-          RELS=$(gh api graphql \
-            -f owner="$OWNER" -f name="$NAME" -F number="$CLOSED_NUM" \
-            -f query='
-              query($owner: String!, $name: String!, $number: Int!) {
-                repository(owner: $owner, name: $name) {
-                  issue(number: $number) {
-                    blocking(first: 50)  { nodes { id number } }
-                    blockedBy(first: 50) { nodes { id number } }
-                    labels(first: 100) { nodes { name } }
-                  }
-                }
-              }')
-
-          CLOSED_HAS_READY_FOR_AGENT=$(echo "$RELS" | jq '[.data.repository.issue.labels.nodes[].name] | any(. == "ready-for-agent")')
-          if [ "$CLOSED_HAS_READY_FOR_AGENT" = "true" ]; then
-            echo "Removing ready-for-agent from closed issue #$CLOSED_NUM"
-            gh issue edit "$CLOSED_NUM" --repo "$REPO" --remove-label ready-for-agent
-          fi
-
-          # Remove this issue as a blocker of other issues. Readiness is
-          # independent of blocker relationships and must not change here.
-          echo "$RELS" | jq -r '.data.repository.issue.blocking.nodes[] | "\(.id) \(.number)"' \
-            | while read -r BLOCKEE_ID BLOCKEE_NUM; do
-              echo "Removing #$CLOSED_NUM as blocker of #$BLOCKEE_NUM"
-              # shellcheck disable=SC2016
-              if ! OUT=$(gh api graphql -f query='
-                mutation($blockedId: ID!, $blockerId: ID!) {
-                  removeBlockedBy(input: { issueId: $blockedId, blockingIssueId: $blockerId }) {
-                    clientMutationId
-                  }
-                }' -f blockedId="$BLOCKEE_ID" -f blockerId="$CLOSED_ID" 2>&1); then
-                echo "  failed: $OUT"
-                continue
-              fi
-            done
-
-          # Clean up this issue's own blockedBy relationships
-          echo "$RELS" | jq -r '.data.repository.issue.blockedBy.nodes[] | "\(.id) \(.number)"' \
-            | while read -r BLOCKER_ID BLOCKER_NUM; do
-              echo "Removing #$BLOCKER_NUM as blocker of #$CLOSED_NUM"
-              # shellcheck disable=SC2016
-              if ! OUT=$(gh api graphql -f query='
-                mutation($blockedId: ID!, $blockerId: ID!) {
-                  removeBlockedBy(input: { issueId: $blockedId, blockingIssueId: $blockerId }) {
-                    clientMutationId
-                  }
-                }' -f blockedId="$CLOSED_ID" -f blockerId="$BLOCKER_ID" 2>&1); then
-                echo "  failed: $OUT"
-              fi
-            done
-
-      - name: Sweep stale blocking relationships
+      - name: Sweep ready issues for invariant violations
         if: github.event_name != 'issues'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -88,40 +38,41 @@ jobs:
           set -euo pipefail
           NAME="${REPO#*/}"
 
-          for NUM in $(gh issue list --repo "$REPO" --state open --limit 200 \
-            --json number --jq '.[].number'); do
-
-            # GraphQL variables are intentionally passed in a single-quoted query.
-            # shellcheck disable=SC2016
-            DATA=$(gh api graphql \
-              -f owner="$OWNER" -f name="$NAME" -F number="$NUM" \
-              -f query='
-                query($owner: String!, $name: String!, $number: Int!) {
-                  repository(owner: $owner, name: $name) {
-                    issue(number: $number) {
-                      id
-                      blockedBy(first: 50) { nodes { id number state } }
-                    }
-                  }
-                }')
-
-            CLOSED_BLOCKER_COUNT=$(echo "$DATA" | jq '[.data.repository.issue.blockedBy.nodes[] | select(.state == "CLOSED")] | length')
-            [ "$CLOSED_BLOCKER_COUNT" -eq 0 ] && continue
-
-            ISSUE_ID=$(echo "$DATA" | jq -r '.data.repository.issue.id')
-
-            # Clear each closed blocker even when other blockers remain open.
-            echo "$DATA" | jq -r '.data.repository.issue.blockedBy.nodes[] | select(.state == "CLOSED") | "\(.id) \(.number)"' \
-              | while read -r BLOCKER_ID BLOCKER_NUM; do
-                echo "#$NUM: clearing stale blocker #$BLOCKER_NUM"
-                # shellcheck disable=SC2016
-                if ! OUT=$(gh api graphql -f query='
-                  mutation($blockedId: ID!, $blockerId: ID!) {
-                    removeBlockedBy(input: { issueId: $blockedId, blockingIssueId: $blockerId }) {
-                      clientMutationId
-                    }
-                  }' -f blockedId="$ISSUE_ID" -f blockerId="$BLOCKER_ID" 2>&1); then
-                  echo "  failed: $OUT"
+          gh issue list --repo "$REPO" --state all --label ready-for-agent \
+            --limit 1000 --json number,state \
+            --jq '.[] | "\(.number) \(.state)"' \
+            | while read -r NUMBER STATE; do
+                if [ "$STATE" = "CLOSED" ]; then
+                  echo "#$NUMBER is closed; removing ready-for-agent"
+                  gh issue edit "$NUMBER" --repo "$REPO" --remove-label ready-for-agent
+                  continue
                 fi
+
+                # GraphQL variables intentionally remain outside the quoted query.
+                # shellcheck disable=SC2016
+                DATA=$(gh api graphql \
+                  -f owner="$OWNER" -f name="$NAME" -F number="$NUMBER" \
+                  -f query='
+                    query($owner: String!, $name: String!, $number: Int!) {
+                      repository(owner: $owner, name: $name) {
+                        issue(number: $number) {
+                          blockedBy(first: 100) {
+                            nodes { number state }
+                          }
+                        }
+                      }
+                    }')
+
+                OPEN_BLOCKERS=$(echo "$DATA" \
+                  | jq '[.data.repository.issue.blockedBy.nodes[] | select(.state == "OPEN")] | length')
+                if [ "$OPEN_BLOCKERS" -eq 0 ]; then
+                  continue
+                fi
+
+                BLOCKER_NUMBERS=$(echo "$DATA" \
+                  | jq -r '[.data.repository.issue.blockedBy.nodes[] | select(.state == "OPEN") | ("#" + (.number | tostring))] | join(", ")')
+                echo "#$NUMBER has open blocker(s) $BLOCKER_NUMBERS; removing ready-for-agent"
+                gh issue edit "$NUMBER" --repo "$REPO" --remove-label ready-for-agent
               done
-          done
+
+          echo "Audit complete. Native relationships were retained; no issue was promoted."

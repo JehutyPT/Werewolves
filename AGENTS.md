@@ -13,9 +13,9 @@ Issues are tracked in GitHub Issues on bicheichane/Werewolves. See `docs/agents/
 
 Internal issue categories, the `ready-for-agent` readiness signal, blocker semantics, and PRD labeling are defined in `docs/agents/issue-labels.md`.
 
-### Agent briefs
+### Implementation contracts
 
-Implementation-contract options and conventions for issues carrying `ready-for-agent` are defined in `docs/agents/agent-brief.md`.
+The canonical issue-body contract, freshness anchor, and `/prepare-ticket` gate for issues carrying `ready-for-agent` are defined in `docs/agents/implementation-contract.md`.
 
 ### QA strategy
 
