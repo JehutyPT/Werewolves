@@ -59,6 +59,15 @@ run_success() {
   local text=$4
   local expected=$5
 
+  printf -v body '%s\n%s\n%s' \
+    $'## Implementation Contract\n\n### Acceptance criteria' \
+    "$body" \
+    $'\n### Scope boundaries\nIn scope.'
+  printf -v expected '%s\n%s\n%s' \
+    $'## Implementation Contract\n\n### Acceptance criteria' \
+    "$expected" \
+    $'\n### Scope boundaries\nIn scope.'
+
   printf '%s' "$body" > "$BODY_FILE"
   rm -f "$EDIT_FILE" "$ERR_FILE"
 
@@ -83,6 +92,11 @@ run_failure() {
   local script=$2
   local body=$3
   local text=$4
+
+  printf -v body '%s\n%s\n%s' \
+    $'## Implementation Contract\n\n### Acceptance criteria' \
+    "$body" \
+    $'\n### Scope boundaries\nIn scope.'
 
   printf '%s' "$body" > "$BODY_FILE"
   rm -f "$EDIT_FILE" "$ERR_FILE"
@@ -166,3 +180,33 @@ run_failure \
   mark-criterion-complete.sh \
   "- [x] Foo" \
   "Foo"
+
+run_failure \
+  "task outside acceptance criteria is not a criterion" \
+  mark-criterion-complete.sh \
+  $'- [ ] Real criterion\n\n### Scope boundaries\n- [ ] Scope note' \
+  "Scope note"
+
+run_failure \
+  "task in fenced acceptance example is not a criterion" \
+  mark-criterion-complete.sh \
+  $'```markdown\n- [ ] Example only\n```\n- [ ] Real criterion' \
+  "Example only"
+
+run_failure \
+  "shorter nested fence does not close an outer fence" \
+  mark-criterion-complete.sh \
+  $'````markdown\n```markdown\n- [ ] Nested example only\n```\n````\n- [ ] Real criterion' \
+  "Nested example only"
+
+run_failure \
+  "blockquoted task is not a canonical criterion" \
+  mark-criterion-complete.sh \
+  $'> - [ ] Quoted example\n- [ ] Real criterion' \
+  "Quoted example"
+
+run_failure \
+  "numbered task is not a canonical criterion" \
+  mark-criterion-complete.sh \
+  $'1. [ ] Numbered example\n- [ ] Real criterion' \
+  "Numbered example"

@@ -15,13 +15,18 @@ SCRIPTS_DIR="$(dirname "$0")"
 
 NODE_ID=$("$SCRIPTS_DIR/resolve-node-id.sh" "$ISSUE_NUMBER")
 
+# GraphQL variables are intentionally literal inside the query string.
+# shellcheck disable=SC2016
 gh api graphql \
+  --paginate \
+  -f nodeId="$NODE_ID" \
   -f query='
-  query {
-    node(id: "'"$NODE_ID"'") {
+  query($nodeId: ID!, $endCursor: String) {
+    node(id: $nodeId) {
       ... on Issue {
-        blockedBy(first: 50) {
+        blockedBy(first: 100, after: $endCursor) {
           nodes { number state }
+          pageInfo { hasNextPage endCursor }
         }
       }
     }

@@ -104,8 +104,10 @@ Only blockers whose state is `OPEN` gate readiness.
 | Unmark criterion complete | `docs/agents/scripts/unmark-criterion-complete.sh <issue> "<criterion_text>"` |
 
 Pass criterion text without the `- [ ]` or `- [x]` marker. The scripts match
-exactly one Markdown task-list item, normalize whitespace for wrapped criteria,
-and fail rather than editing an ambiguous match.
+exactly one Markdown task-list item inside the canonical `### Acceptance
+criteria` section, ignore fenced examples and task lists elsewhere, normalize
+whitespace for wrapped criteria, and fail rather than editing an ambiguous
+match.
 
 These two wrappers are progress-only exceptions to body-edit invalidation. They
 toggle an existing checkbox without changing contract text, so they preserve
@@ -113,15 +115,20 @@ toggle an existing checkbox without changing contract text, so they preserve
 
 ## Invariant Audit
 
-`.github/workflows/maintain-issue-relationships.yml` is a readiness invariant
-audit. It removes `ready-for-agent` from closed issues and, on scheduled or
-manual sweeps, from open ready issues that have an open blocker. It retains all
-native relationships and never promotes an issue.
+`.github/workflows/maintain-issue-relationships.yml` dispatches the tested
+`audit-issue-readiness.sh` invariant audit. Material body edits invalidate
+readiness immediately; checkbox-only progress edits preserve it. Closing an
+issue removes its own readiness and invalidates every ready open issue on its
+retained `blocking` edges. Scheduled and manual sweeps remove readiness from
+closed issues and open ready issues with an open blocker. Every relationship
+query is paginated; the audit retains all native relationships and never
+promotes an issue.
 
 Ordinary GitHub Actions issue events do not cover native dependency changes.
 The relationship wrappers enforce invariants immediately for normal repository
-operations; the scheduled/manual sweep catches relationships changed outside
-the wrappers and blockers that reopen.
+operations; blocker-close events close the add-then-close race, while the
+scheduled/manual sweep catches relationships changed outside the wrappers and
+blockers that reopen.
 
 Closing or removing the last blocker never adds readiness. Run preparation
 against the landed predecessor result and add the label last only when the

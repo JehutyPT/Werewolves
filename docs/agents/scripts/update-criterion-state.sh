@@ -68,6 +68,11 @@ TARGET_TEXT=$(normalize_text "$TEXT")
 
 TASK_RE='^([[:blank:]]*)- \[([ xX])\] (.*)$'
 CONTINUATION_RE='^[[:blank:]]+(.+)$'
+FENCE_OPEN_RE='^[[:blank:]]*(`{3,}|~{3,})'
+CONTRACT_HEADING_RE='^##[[:blank:]]+Implementation Contract[[:blank:]]*$'
+ACCEPTANCE_HEADING_RE='^###[[:blank:]]+Acceptance criteria[[:blank:]]*$'
+UP_TO_TWO_HEADING_RE='^#{1,2}[[:blank:]]+'
+UP_TO_THREE_HEADING_RE='^#{1,3}[[:blank:]]+'
 
 LINES=()
 if [ -n "$BODY" ]; then
@@ -79,10 +84,67 @@ fi
 MATCH_COUNT=0
 MATCH_INDEX=-1
 LINE_COUNT=${#LINES[@]}
+IN_CONTRACT=false
+IN_ACCEPTANCE=false
+FENCE_CHAR=""
+FENCE_LENGTH=0
 
 i=0
 while [ "$i" -lt "$LINE_COUNT" ]; do
   line=${LINES[$i]}
+  heading_line=${line%$'\r'}
+
+  if [ -n "$FENCE_CHAR" ]; then
+    FENCE_CLOSE_RE="^[[:blank:]]*${FENCE_CHAR}{${FENCE_LENGTH},}[[:blank:]]*$"
+    if [[ "$heading_line" =~ $FENCE_CLOSE_RE ]]; then
+      FENCE_CHAR=""
+      FENCE_LENGTH=0
+    fi
+    i=$((i + 1))
+    continue
+  fi
+
+  if [[ "$heading_line" =~ $FENCE_OPEN_RE ]]; then
+    marker=${BASH_REMATCH[1]}
+    FENCE_CHAR=${marker:0:1}
+    FENCE_LENGTH=${#marker}
+    i=$((i + 1))
+    continue
+  fi
+
+  if [[ "$heading_line" =~ $CONTRACT_HEADING_RE ]]; then
+    IN_CONTRACT=true
+    IN_ACCEPTANCE=false
+    i=$((i + 1))
+    continue
+  fi
+
+  if [ "$IN_CONTRACT" = true ] \
+    && [[ "$heading_line" =~ $UP_TO_TWO_HEADING_RE ]]; then
+    IN_CONTRACT=false
+    IN_ACCEPTANCE=false
+    i=$((i + 1))
+    continue
+  fi
+
+  if [ "$IN_CONTRACT" = true ] \
+    && [[ "$heading_line" =~ $ACCEPTANCE_HEADING_RE ]]; then
+    IN_ACCEPTANCE=true
+    i=$((i + 1))
+    continue
+  fi
+
+  if [ "$IN_ACCEPTANCE" = true ] \
+    && [[ "$heading_line" =~ $UP_TO_THREE_HEADING_RE ]]; then
+    IN_ACCEPTANCE=false
+    i=$((i + 1))
+    continue
+  fi
+
+  if [ "$IN_ACCEPTANCE" != true ]; then
+    i=$((i + 1))
+    continue
+  fi
 
   if [[ "$line" =~ $TASK_RE ]]; then
     state=${BASH_REMATCH[2]}

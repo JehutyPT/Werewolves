@@ -50,15 +50,17 @@ bounds the cheap comparison for contract-relevant changes.
   created.
 - A generic issue-body edit removes `ready-for-agent`, because the body is the
   canonical contract.
-- Marking or unmarking an existing criterion through the criterion-state
-  wrappers is progress-only and does not remove readiness.
+- Marking or unmarking an existing item in the canonical `### Acceptance
+  criteria` section through the criterion-state wrappers is progress-only and
+  does not remove readiness.
 - Closing an issue removes readiness.
 - Closing or removing the last blocker never adds readiness.
 - Closed blocker edges remain as durable provenance. If a retained blocker is
   reopened, it naturally becomes an open blocker again and gates the issue.
-- The invariant-audit workflow removes invalid readiness from closed issues and
-  open issues with open blockers. It retains all relationships and never adds
-  readiness.
+- The invariant-audit workflow removes invalid readiness after material body
+  edits, when a blocker closes, from closed issues, and from open issues with
+  open blockers. It paginates retained relationships, preserves checkbox-only
+  progress edits, retains every edge, and never adds readiness.
 
 Comments are discussion or evidence only. Adding, editing, or superseding a
 comment never changes the canonical Implementation Contract.
