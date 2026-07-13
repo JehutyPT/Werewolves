@@ -2,12 +2,10 @@
 set -euo pipefail
 
 # Removes a label from a GitHub issue.
-# Usage: remove-role.sh <issue_number> <label>
-#
-# Map the role name to its label string via docs/agents/triage-labels.md.
+# Usage: remove-label.sh <issue_number> <label>
 
 if [ $# -ne 2 ]; then
-  echo "Usage: remove-role.sh <issue_number> <label>" >&2
+  echo "Usage: remove-label.sh <issue_number> <label>" >&2
   exit 1
 fi
 

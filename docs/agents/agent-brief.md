@@ -1,8 +1,13 @@
 # Agent Briefs
 
-This document defines Werewolves-specific additions to the global triage skill's agent brief format. Use it together with the global `AGENT-BRIEF.md`.
+An issue carrying `ready-for-agent` must contain a complete implementation contract in one of two places:
 
-In this repository, an agent brief is a structured comment on a GitHub issue. It is the authoritative specification for a `ready-for-agent` issue; the issue body and discussion remain context. The issue body is product-level (what to build, acceptance criteria); the agent brief comment is implementation-level (how to approach it, key interfaces, scope boundaries).
+- A sufficiently explicit issue body. Tickets produced by `to-tickets` can be ready in this form without an additional comment.
+- A structured `## Agent Brief` comment using the format below.
+
+When any Agent Brief comments exist, the newest Agent Brief is the authoritative implementation contract. The issue body and older comments remain context. A newer brief can therefore refine or supersede an earlier brief without rewriting the issue body.
+
+Whichever form is authoritative must make the desired behavior, scope boundaries, acceptance criteria, and QA evidence explicit enough that an implementation agent can proceed without choosing product behavior. The structured template is useful when the issue body does not already meet that bar.
 
 ## Template
 
@@ -46,16 +51,18 @@ Be specific about edge cases and error conditions.
 - **All user-facing UI text must be in Portuguese.** Mention this in `Desired behavior` when a slice adds visible UI surface area.
 - **Cite ADRs.** If the work touches an area covered by an ADR (`docs/adr/`), reference it in `Key interfaces` or `Desired behavior` so the agent honours the decision.
 - **Use the domain glossary.** Phrase the brief in `CONTEXT.md` terminology: Faction, not Team; Moderator, not GM; Phase, not Round.
-- **Categories.** This repo uses `feature` / `bug` / `architecture` / `spike`; see `docs/agents/triage-labels.md`. Skill docs sometimes say `enhancement`; that maps to `feature` here.
+- **Categories.** This repo uses `feature` / `bug` / `architecture` / `spike`; see `docs/agents/issue-labels.md`. Skill docs sometimes say `enhancement`; that maps to `feature` here.
 
 ## Relationships
 
 Parent and blocker relationships are **formal tracker relationships**, not body-text sections. They are managed via the `set-parent` and `add-blocked-by` verbs defined in `docs/agents/issue-tracker.md`.
 
 - **Parent** — set via `set-parent(child_id, parent_id)`. Points to the PRD or umbrella slice this issue is part of. Agents can query it with `query-parent(id)` for context.
-- **Blocked by** — set via `add-blocked-by(id, blocker_id)`. The auto-promotion workflow watches these formal relationships: when all blockers close, the issue auto-promotes from `blocked` to `needs-triage`. Query with `query-blockers(id)`.
+- **Blocked by** — set via `add-blocked-by(id, blocker_id)`. Query with `query-blockers(id)`. Open blockers prevent execution but do not change whether the issue is sufficiently specified.
 
 Do not embed parent or blocker references inside the agent brief comment or issue body. They are project state managed at the tracker level, not specification text.
+
+The relationship-maintenance workflow removes stale formal blocker links when blockers close. It never adds or removes `ready-for-agent` on an open issue: readiness and executability are independent.
 
 ## Example
 
@@ -121,11 +128,15 @@ must not crash the app.
 
 ## When The Brief Isn't Ready
 
-If you cannot write a specific, behavioral brief with testable acceptance
-criteria and QA evidence choices, the issue is not `ready-for-agent`. Common signs:
+If the authoritative implementation contract is not specific and behavioral,
+with testable acceptance criteria and QA evidence choices, the issue is not
+`ready-for-agent`. Common signs:
 
 - You catch yourself writing "or" / "either" / "depending on" in acceptance criteria.
 - A criterion is shaped like "X works correctly" rather than "X produces Y given input Z".
 - The brief bundles unrelated concerns that a single PR cannot land cleanly.
 
-In those cases, move the issue back to `needs-info` or `needs-triage` and sharpen the brief, or split the issue.
+In those cases, remove `ready-for-agent` if present, then refine the issue or
+split it into independently implementable work. Leave the resulting open issues
+with their category labels only until their implementation contracts are ready;
+do not apply a negative readiness-state label.

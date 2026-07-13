@@ -9,13 +9,13 @@
 
 Issues are tracked in GitHub Issues on bicheichane/Werewolves. See `docs/agents/issue-tracker.md`.
 
-### Triage labels
+### Issue labels and readiness
 
-Default label vocabulary (needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix). See `docs/agents/triage-labels.md`.
+Internal issue categories, the `ready-for-agent` readiness signal, blocker semantics, and PRD labeling are defined in `docs/agents/issue-labels.md`.
 
 ### Agent briefs
 
-Template and conventions for issues moving to `ready-for-agent`. See `docs/agents/agent-brief.md`.
+Implementation-contract options and conventions for issues carrying `ready-for-agent` are defined in `docs/agents/agent-brief.md`.
 
 ### QA strategy
 

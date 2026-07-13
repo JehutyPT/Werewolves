@@ -29,8 +29,7 @@ Single-context repo:
 │   └── 0002-*.md
 ├── docs/agents/
 │   ├── issue-tracker.md
-│   ├── issue-lifecycle.md
-│   ├── triage-labels.md
+│   ├── issue-labels.md
 │   ├── qa-strategy.md
 │   └── domain.md
 ├── Werewolves.Client/
