@@ -5,19 +5,19 @@ namespace Werewolves.Core.GameLogic.Simulation;
 
 public sealed class SimulatorProfile
 {
-	private static readonly MainRoleType[] ActiveSupportedRoles =
+	private static readonly SimulatorProfileRoleDescriptor[] ActiveRoleDescriptors =
 	[
-		MainRoleType.SimpleWerewolf,
-		MainRoleType.Seer,
-		MainRoleType.WildChild,
-		MainRoleType.SimpleVillager
+		new(MainRoleType.SimpleWerewolf, Faction.Werewolf),
+		new(MainRoleType.Seer, Faction.Villager),
+		new(MainRoleType.WildChild, Faction.Villager),
+		new(MainRoleType.SimpleVillager, Faction.Villager)
 	];
 
-	private readonly HashSet<MainRoleType> _supportedRoleSet;
+	private readonly IReadOnlyDictionary<MainRoleType, Faction> _beneficiaryFactions;
 
 	public static SimulatorProfile Active { get; } = new(
 		new SimulatorProfileIdentity("core-simulator", "1"),
-		ActiveSupportedRoles);
+		ActiveRoleDescriptors);
 
 	public SimulatorProfileIdentity Identity { get; }
 
@@ -25,18 +25,29 @@ public sealed class SimulatorProfile
 
 	public bool SupportsActorSetupCards => false;
 
-	private SimulatorProfile(
+	public SimulatorProfile(
 		SimulatorProfileIdentity identity,
-		IEnumerable<MainRoleType> supportedRoles)
+		IEnumerable<SimulatorProfileRoleDescriptor> roleDescriptors)
 	{
+		ArgumentNullException.ThrowIfNull(identity);
+		ArgumentNullException.ThrowIfNull(roleDescriptors);
 		Identity = identity;
-		var snapshot = supportedRoles.ToArray();
-		SupportedRoles = Array.AsReadOnly(snapshot);
-		_supportedRoleSet = snapshot.ToHashSet();
+		var snapshot = roleDescriptors.ToArray();
+		_beneficiaryFactions = snapshot.ToDictionary(
+			descriptor => descriptor.Role,
+			descriptor => descriptor.BeneficiaryFaction);
+		SupportedRoles = Array.AsReadOnly(snapshot.Select(descriptor => descriptor.Role).ToArray());
 	}
 
-	public bool SupportsRole(MainRoleType role) => _supportedRoleSet.Contains(role);
+	public bool SupportsRole(MainRoleType role) => _beneficiaryFactions.ContainsKey(role);
+
+	public bool TryGetBeneficiaryFaction(MainRoleType role, out Faction faction) =>
+		_beneficiaryFactions.TryGetValue(role, out faction);
 
 	public bool SupportsRuleState(SimulationRuleState ruleState) =>
 		ruleState == SimulationRuleState.Default;
 }
+
+public sealed record SimulatorProfileRoleDescriptor(
+	MainRoleType Role,
+	Faction BeneficiaryFaction);

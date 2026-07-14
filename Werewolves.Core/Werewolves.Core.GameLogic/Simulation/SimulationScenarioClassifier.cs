@@ -8,9 +8,14 @@ namespace Werewolves.Core.GameLogic.Simulation;
 public static class SimulationScenarioClassifier
 {
 	public static SimulationScenarioClassification Classify(SimulationScenario scenario)
+		=> Classify(scenario, SimulatorProfile.Active);
+
+	public static SimulationScenarioClassification Classify(
+		SimulationScenario scenario,
+		SimulatorProfile profile)
 	{
 		ArgumentNullException.ThrowIfNull(scenario);
-		var profile = SimulatorProfile.Active;
+		ArgumentNullException.ThrowIfNull(profile);
 
 		GameSessionConfig.TryGetPhysicalSetupIssues(
 			scenario.PlayerCount,
@@ -77,7 +82,8 @@ public static class SimulationScenarioClassifier
 		}
 
 		var alreadyDecided = AlreadyDecidedRoleCompositionClassifier.Classify(
-			scenario.ToCanonical().RoleComposition);
+			scenario.ToCanonical().RoleComposition,
+			profile);
 		if (alreadyDecided.IsAlreadyDecided)
 		{
 			return new SimulationScenarioClassification(

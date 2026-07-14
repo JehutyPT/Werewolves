@@ -36,6 +36,20 @@ public class AlreadyDecidedRoleCompositionClassifierTests
 	}
 
 	[Fact]
+	public void CurrentProfileBridge_UsesProfileOwnedBeneficiaryDescriptor()
+	{
+		var profile = new SimulatorProfile(
+			new SimulatorProfileIdentity("descriptor-test", "1"),
+			[new(MainRoleType.Seer, Faction.Villager)]);
+		var composition = CanonicalRoleComposition.Create([MainRoleType.Seer]);
+
+		var evidence = CurrentProfileFactionBridge.Map(composition, profile);
+
+		evidence.GetBeneficiaryCount(Faction.Villager).Should().Be(1);
+		evidence.GetBeneficiaryCount(Faction.Werewolf).Should().Be(0);
+	}
+
+	[Fact]
 	public void Resolve_WithNoSatisfiedPredicates_ReturnsExplicitNotAlreadyDecided()
 	{
 		var result = AlreadyDecidedRoleCompositionClassifier.Resolve(
@@ -75,11 +89,43 @@ public class AlreadyDecidedRoleCompositionClassifierTests
 			new(Faction.Werewolf, true, AlreadyDecidedReason.WerewolfControlShortcut)
 		]);
 
-		forward.Reason.Should().Be(AlreadyDecidedReason.MultipleLobbyExitVictoryPredicatesSatisfied);
-		forward.GameResult.Should().BeOfType<SharedVictoryGameResult>()
-			.Which.Factions.Should().Equal(Faction.Villager, Faction.Werewolf);
-		reverse.GameResult.Should().BeOfType<SharedVictoryGameResult>()
-			.Which.Factions.Should().Equal(Faction.Villager, Faction.Werewolf);
+		forward.Should().Be(reverse);
+		forward.Should().Be(
+			new AlreadyDecidedRoleCompositionResult(
+				new SharedVictoryGameResult([Faction.Villager, Faction.Werewolf]),
+				AlreadyDecidedReason.MultipleLobbyExitVictoryPredicatesSatisfied));
+	}
+
+	[Fact]
+	public void Resolve_WithMultipleSatisfiedPredicatesForOneFaction_ReturnsSingleFactionResult()
+	{
+		var forward = AlreadyDecidedRoleCompositionClassifier.Resolve(
+		[
+			new(Faction.Werewolf, true, AlreadyDecidedReason.WerewolfControlShortcut),
+			new(Faction.Werewolf, true, AlreadyDecidedReason.NoWerewolfFactionBeneficiariesAtLobbyExit)
+		]);
+		var reverse = AlreadyDecidedRoleCompositionClassifier.Resolve(
+		[
+			new(Faction.Werewolf, true, AlreadyDecidedReason.NoWerewolfFactionBeneficiariesAtLobbyExit),
+			new(Faction.Werewolf, true, AlreadyDecidedReason.WerewolfControlShortcut)
+		]);
+
+		forward.Should().Be(reverse);
+		forward.Should().Be(
+			new AlreadyDecidedRoleCompositionResult(
+				new SingleFactionGameResult(Faction.Werewolf),
+				AlreadyDecidedReason.NoWerewolfFactionBeneficiariesAtLobbyExit));
+	}
+
+	[Fact]
+	public void SharedVictoryGameResult_WithFewerThanTwoDistinctFactions_IsRejected()
+	{
+		var empty = () => new SharedVictoryGameResult([]);
+		var duplicate = () => new SharedVictoryGameResult(
+			[Faction.Werewolf, Faction.Werewolf]);
+
+		empty.Should().Throw<ArgumentException>();
+		duplicate.Should().Throw<ArgumentException>();
 	}
 
 	[Fact]

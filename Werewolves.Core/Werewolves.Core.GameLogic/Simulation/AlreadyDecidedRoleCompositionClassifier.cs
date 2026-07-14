@@ -3,74 +3,26 @@ using Werewolves.Core.StateModels.Models.Simulation;
 
 namespace Werewolves.Core.GameLogic.Simulation;
 
-public enum Faction
-{
-	Villager,
-	Werewolf
-}
-
-public enum AlreadyDecidedReason
-{
-	NoLobbyExitVictoryPredicateSatisfied,
-	NoWerewolfFactionBeneficiariesAtLobbyExit,
-	WerewolfControlShortcut,
-	MultipleLobbyExitVictoryPredicatesSatisfied
-}
-
-public abstract record GameResult;
-
-public sealed record SingleFactionGameResult(Faction Faction) : GameResult;
-
-public sealed record SharedVictoryGameResult : GameResult
-{
-	public IReadOnlyList<Faction> Factions { get; }
-
-	public SharedVictoryGameResult(IEnumerable<Faction> factions)
-	{
-		ArgumentNullException.ThrowIfNull(factions);
-		var snapshot = factions.ToArray();
-		if (snapshot.Any(faction => !Enum.IsDefined(faction)))
-		{
-			throw new ArgumentOutOfRangeException(nameof(factions));
-		}
-
-		Factions = Array.AsReadOnly(snapshot.Distinct().Order().ToArray());
-	}
-}
-
-public sealed record FactionVictoryPredicateResult(
-	Faction Faction,
-	bool IsSatisfied,
-	AlreadyDecidedReason Reason);
-
-public sealed class FactionBeneficiaryComposition
-{
-	private readonly IReadOnlyDictionary<Faction, int> _counts;
-
-	internal FactionBeneficiaryComposition(IReadOnlyDictionary<Faction, int> counts) =>
-		_counts = counts;
-
-	public int GetBeneficiaryCount(Faction faction) =>
-		_counts.TryGetValue(faction, out var count) ? count : 0;
-}
-
 public static class CurrentProfileFactionBridge
 {
 	public static FactionBeneficiaryComposition Map(CanonicalRoleComposition composition)
+		=> Map(composition, SimulatorProfile.Active);
+
+	public static FactionBeneficiaryComposition Map(
+		CanonicalRoleComposition composition,
+		SimulatorProfile profile)
 	{
 		ArgumentNullException.ThrowIfNull(composition);
+		ArgumentNullException.ThrowIfNull(profile);
 		var counts = new Dictionary<Faction, int>();
 		foreach (var entry in composition.Entries)
 		{
-			var faction = entry.Role switch
+			if (!profile.TryGetBeneficiaryFaction(entry.Role, out var faction))
 			{
-				MainRoleType.SimpleWerewolf => Faction.Werewolf,
-				MainRoleType.Seer or MainRoleType.WildChild or MainRoleType.SimpleVillager =>
-					Faction.Villager,
-				_ => throw new ArgumentException(
+				throw new ArgumentException(
 					$"Role {entry.Role} is not supported by the current simulator profile.",
-					nameof(composition))
-			};
+					nameof(composition));
+			}
 
 			counts[faction] = counts.GetValueOrDefault(faction) + entry.Count;
 		}
@@ -79,20 +31,19 @@ public static class CurrentProfileFactionBridge
 	}
 }
 
-public sealed record AlreadyDecidedRoleCompositionResult(
-	GameResult? GameResult,
-	AlreadyDecidedReason Reason)
-{
-	public bool IsAlreadyDecided => GameResult is not null;
-}
-
 public static class AlreadyDecidedRoleCompositionClassifier
 {
 	public static AlreadyDecidedRoleCompositionResult Classify(
 		CanonicalRoleComposition composition)
+		=> Classify(composition, SimulatorProfile.Active);
+
+	public static AlreadyDecidedRoleCompositionResult Classify(
+		CanonicalRoleComposition composition,
+		SimulatorProfile profile)
 	{
 		ArgumentNullException.ThrowIfNull(composition);
-		var evidence = CurrentProfileFactionBridge.Map(composition);
+		ArgumentNullException.ThrowIfNull(profile);
+		var evidence = CurrentProfileFactionBridge.Map(composition, profile);
 		var werewolves = evidence.GetBeneficiaryCount(Faction.Werewolf);
 		var villagers = evidence.GetBeneficiaryCount(Faction.Villager);
 
@@ -119,7 +70,12 @@ public static class AlreadyDecidedRoleCompositionClassifier
 			throw new ArgumentOutOfRangeException(nameof(predicateResults));
 		}
 
-		var satisfied = snapshot.Where(result => result.IsSatisfied).ToArray();
+		var satisfied = snapshot
+			.Where(result => result.IsSatisfied)
+			.GroupBy(result => result.Faction)
+			.Select(group => group.OrderBy(result => result.Reason).First())
+			.OrderBy(result => result.Faction)
+			.ToArray();
 		if (satisfied.Length == 0)
 		{
 			return new(null, AlreadyDecidedReason.NoLobbyExitVictoryPredicateSatisfied);
