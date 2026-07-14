@@ -2,7 +2,7 @@
 
 A mobile app that assists a human **Moderator** running a physical game of "The Werewolves of Miller's Hollow." The app tracks game state, guides the Moderator through phases, and prompts for input — it never replaces the Moderator or makes decisions for them.
 
-This file is the shared glossary for domain language and avoided synonyms. Stable invariants live in `docs/domain/invariants.md`; rule interaction disambiguations live in `docs/domain/game-rules-clarifications.md`; architectural tradeoffs live in `docs/adr/`; and the active simulator decision log lives in `docs/handoff.md`.
+This file is the shared glossary for domain language and avoided synonyms. Stable invariants live in `docs/domain/invariants.md`; rule interaction disambiguations live in `docs/domain/game-rules-clarifications.md`; architectural tradeoffs live in `docs/adr/`; product behavior lives in PRD #29; and implementation scope lives in canonical GitHub issue-body Implementation Contracts.
 
 ## Language
 
@@ -402,8 +402,8 @@ _Avoid_: Load game, restore
 - **Game Result Frequency** includes mutually exclusive **Game Results** only: single-Faction wins, specific **Shared Victory Outcomes**, and **No-Winner Outcome**
 - **Game Result Frequency by Turn** is the source timing view for deriving **Game Result Frequency** and **Ended-By-Turn Frequency**
 - **Simulation Result Evidence** defines stable replayable evidence; diagnostics and cache artifact boundaries are architectural concerns covered by ADR-0009
-- Product presentation rules for probability output live in `docs/handoff.md` until they are rewritten into PRD #29 and implementation issues
-- Cache distribution remains an unresolved decision recorded in `docs/handoff.md`; **Build-Time Cache Generation**, **Bundled Simulator Cache**, and **On-Device Fallback Generation** remain glossary terms
+- Product presentation rules for probability output live in PRD #29 and the relevant canonical issue-body Implementation Contracts
+- Cache distribution remains deferred under ADR-0009 until realistic full-role artifact size is measured; **Build-Time Cache Generation**, **Bundled Simulator Cache**, and **On-Device Fallback Generation** remain glossary terms
 - "Could not evaluate" is a product evaluation state, not a **Game Session Outcome**, **Game Result**, **No-Winner Outcome**, or probability bucket
 - A simulation run ending during Turn 1 is a **Completed Simulation Run** when it reaches a **Game Session Outcome**; **Incomplete Simulation Runs** do not contribute to **Game Result Frequency**
 - A **Balanced Role Composition** is considered from **Game Result Frequency**, not by comparing winning Turn to the **Reference Turn Horizon**

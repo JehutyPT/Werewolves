@@ -1,6 +1,6 @@
 # Domain invariants
 
-This document records stable domain rules that implementation and tests can assert without carrying the rationale for why those rules were chosen. Use `CONTEXT.md` for vocabulary, `docs/domain/game-rules-clarifications.md` for rule disambiguation, `docs/adr/` for architectural tradeoffs, and `docs/handoff.md` for the active simulator design ledger.
+This document records stable domain rules that implementation and tests can assert without carrying the rationale for why those rules were chosen. Use `CONTEXT.md` for vocabulary, `docs/domain/game-rules-clarifications.md` for rule disambiguation, and `docs/adr/` for architectural tradeoffs.
 
 ## Role composition
 
