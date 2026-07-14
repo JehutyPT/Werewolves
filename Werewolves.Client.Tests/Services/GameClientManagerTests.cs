@@ -423,10 +423,10 @@ public class GameClientManagerTests
 	}
 
 	[Fact]
-	public void ProcessInput_WithConfirmationOnlyInstructions_AdvancesPhaseAndUsesResourceBackedVisibleText()
+	public void ProcessInput_AcrossNightBoundary_UsesResourceBackedConfirmationText()
 	{
 		var manager = new GameClientManager();
-		var startInstruction = StartVillagerOnlyGame(manager);
+		var startInstruction = StartSimpleGame(manager);
 
 		manager.ProcessInput(startInstruction.CreateResponse(true));
 		var nightStartInstruction = manager.CurrentInstruction.Should().BeOfType<ConfirmationInstruction>().Subject;
@@ -436,15 +436,35 @@ public class GameClientManagerTests
 		manager.TurnNumber.Should().Be(1);
 
 		manager.ProcessInput(nightStartInstruction.CreateResponse(true));
-		var dawnInstruction = manager.CurrentInstruction.Should().BeOfType<ConfirmationInstruction>().Subject;
+
+		for (var step = 0; step < 20; step++)
+		{
+			if (manager.CurrentInstruction is ConfirmationInstruction confirmation
+				&& confirmation.PublicAnnouncement == GameStrings.NightActionsCompletePrompt)
+			{
+				break;
+			}
+
+			switch (manager.CurrentInstruction)
+			{
+				case ConfirmationInstruction currentConfirmation:
+					manager.ProcessInput(currentConfirmation.CreateResponse(true));
+					break;
+				case SelectPlayersInstruction selectPlayers:
+					manager.ProcessInput(selectPlayers.CreateResponse(
+						[selectPlayers.SelectablePlayerIds.First()]));
+					break;
+				default:
+					throw new InvalidOperationException(
+						ClientTestReferences.ExceptionMessages.UnexpectedInstruction(
+							manager.CurrentInstruction?.GetType().Name));
+			}
+		}
+
+		var dawnInstruction = manager.CurrentInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		dawnInstruction.PublicAnnouncement.Should().Be(GameStrings.NightActionsCompletePrompt);
 		manager.CurrentPhase.Should().Be(GamePhase.Dawn);
-		manager.TurnNumber.Should().Be(1);
-
-		manager.ProcessInput(dawnInstruction.CreateResponse(true));
-
-		manager.CurrentInstruction.Should().BeOfType<FinishedGameConfirmationInstruction>();
-		manager.CurrentPhase.Should().Be(GamePhase.Day);
 		manager.TurnNumber.Should().Be(1);
 	}
 
@@ -978,11 +998,4 @@ public class GameClientManagerTests
 		File.Exists(saveFilePath).Should().BeFalse();
 	}
 
-	private static StartGameConfirmationInstruction StartVillagerOnlyGame(GameClientManager manager)
-	{
-		var players = PlayerNames.DefaultFive;
-		var roles = Enumerable.Repeat(MainRoleType.SimpleVillager, players.Length).ToArray();
-
-		return manager.StartGame(players, roles);
-	}
 }

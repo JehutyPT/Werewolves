@@ -243,7 +243,7 @@ public class LobbySetupStateTests
 	}
 
 	[Fact]
-	public void ExpectedRoleCount_MatchesPlayerCountPlusSpecialRoleExtras()
+	public void ExpectedRoleCount_CountsOnlyThiefRoleCompositionExtras()
 	{
 		var state = LobbySetupMetadataFixture.StateWithRoles(
 			MainRoleType.Thief,
@@ -257,7 +257,7 @@ public class LobbySetupStateTests
 		state.ExpectedRoleCount.Should().Be(7);
 
 		state.IncrementRole(MainRoleType.Actor);
-		state.ExpectedRoleCount.Should().Be(10);
+		state.ExpectedRoleCount.Should().Be(7);
 	}
 
 	[Fact]

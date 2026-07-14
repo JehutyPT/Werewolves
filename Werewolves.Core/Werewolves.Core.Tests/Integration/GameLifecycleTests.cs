@@ -350,10 +350,10 @@ public class GameLifecycleTests : DiagnosticTestBase
     }
 
     /// <summary>
-    /// GL-035: GetExpectedRoleCount with Actor returns player count + 3.
+    /// GL-035: GetExpectedRoleCount with Actor returns player count because Actor Setup Cards are separate.
     /// </summary>
     [Fact]
-    public void GetExpectedRoleCount_WithActor_ReturnsPlayerCountPlus3()
+    public void GetExpectedRoleCount_WithActor_ReturnsPlayerCount()
     {
         // Arrange
         var playerCount = 6;
@@ -361,29 +361,26 @@ public class GameLifecycleTests : DiagnosticTestBase
         {
             MainRoleType.SimpleWerewolf,
             MainRoleType.Seer,
-            MainRoleType.Actor, // Requires 3 extra roles
+            MainRoleType.Actor,
             MainRoleType.SimpleVillager,
             MainRoleType.SimpleVillager,
-            MainRoleType.SimpleVillager,
-            MainRoleType.SimpleVillager, // Extra for Actor
-            MainRoleType.SimpleVillager, // Extra for Actor
-            MainRoleType.SimpleVillager  // Extra for Actor
+            MainRoleType.SimpleVillager
         };
 
         // Act
         var expectedCount = Werewolves.Core.StateModels.Models.GameSessionConfig.GetExpectedRoleCount(playerCount, roles);
 
         // Assert
-        expectedCount.Should().Be(playerCount + 3);
+        expectedCount.Should().Be(playerCount);
 
         MarkTestCompleted();
     }
 
     /// <summary>
-    /// GL-036: GetExpectedRoleCount with Thief and Actor returns player count + 5.
+    /// GL-036: GetExpectedRoleCount with Thief and Actor counts only Thief's two Role Composition extras.
     /// </summary>
     [Fact]
-    public void GetExpectedRoleCount_WithThiefAndActor_ReturnsPlayerCountPlus5()
+    public void GetExpectedRoleCount_WithThiefAndActor_ReturnsPlayerCountPlus2()
     {
         // Arrange
         var playerCount = 7;
@@ -391,12 +388,8 @@ public class GameLifecycleTests : DiagnosticTestBase
         {
             MainRoleType.SimpleWerewolf,
             MainRoleType.Seer,
-            MainRoleType.Thief, // +2
-            MainRoleType.Actor, // +3
-            MainRoleType.SimpleVillager,
-            MainRoleType.SimpleVillager,
-            MainRoleType.SimpleVillager,
-            // 5 extras for Thief + Actor
+            MainRoleType.Thief, // +2 Role Composition cards
+            MainRoleType.Actor, // Actor Setup Cards stay outside Role Composition
             MainRoleType.SimpleVillager,
             MainRoleType.SimpleVillager,
             MainRoleType.SimpleVillager,
@@ -408,7 +401,7 @@ public class GameLifecycleTests : DiagnosticTestBase
         var expectedCount = Werewolves.Core.StateModels.Models.GameSessionConfig.GetExpectedRoleCount(playerCount, roles);
 
         // Assert
-        expectedCount.Should().Be(playerCount + 5);
+        expectedCount.Should().Be(playerCount + 2);
 
         MarkTestCompleted();
     }

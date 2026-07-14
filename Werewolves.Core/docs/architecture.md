@@ -347,23 +347,24 @@ Encapsulates and validates all configuration parameters required to start a new 
 
 *   **Properties:**
     *   `Players` (List<string>): List of player names in clockwise seating order.
-    *   `Roles` (List<MainRoleType>): List of roles included in the game.
+    *   `Roles` (List<MainRoleType>): The physical Role Composition. It contains one Role card per Player plus Thief's two extra Character Cards when Thief is present.
+    *   `ActorSetupCards` (`ActorSetupCards`): The Actor's three setup cards as a separate setup artifact outside the Role Composition.
 
 *   **Validation & Constraints:**
-    *   **`EnforceValidity(List<string> players, List<MainRoleType> roles)` (static):** Validates configuration before construction. Throws `InvalidOperationException` if validation fails.
+    *   **`EnforceValidity(List<string> players, List<MainRoleType> roles, ActorSetupCards? actorSetupCards)` (static):** Validates configuration before construction. Throws `InvalidOperationException` if validation fails.
     *   **`EnforceValidity()` (instance):** Validates the current instance. Called automatically during construction.
-    *   **`TryGetConfigIssues(List<string> players, List<MainRoleType> roles, out List<GameConfigValidationError> issues)` (static):** Diagnostic method that returns validation issues without throwing. Returns `true` if issues were found, `false` if configuration is valid. Returns a list of `GameConfigValidationError` objects describing each validation issue. Internally delegates to `TryGetPlayerConfigIssues` for player validation.
-    *   **`TryGetPlayerConfigIssues(List<string> players, out List<GameConfigValidationError> issues)` (static):** Public helper for validating player-related configuration independently of roles. Checks for non-unique names (case-insensitive) and minimum player count (5). Useful for early UI validation before role selection.
-    *   **`GetExpectedRoleCount(int playerCount, List<MainRoleType> roles)` (static):** Public helper for UI to display expected vs. actual role count. Returns the expected total role count accounting for special roles: Thief adds +2, Actor adds +3.
+    *   **`TryGetConfigIssues(List<string> players, List<MainRoleType> roles, ActorSetupCards actorSetupCards, out List<GameConfigValidationError> issues)` (static):** Diagnostic method that returns validation issues without throwing. The two-argument setup overload uses no Actor Setup Cards. Both paths expose structured validation results to Core and Client callers.
+    *   **`TryGetPlayerConfigIssues(List<string> players, out List<GameConfigValidationError> issues)` (static):** Public helper for validating player-related configuration independently of Roles. Checks for non-unique names (case-insensitive) and the Supported Player Count of 5-30.
+    *   **`GetExpectedRoleCount(int playerCount, List<MainRoleType> roles)` (static):** Public helper for the expected Role Composition card count. Thief adds two Character Cards; Actor Setup Cards are excluded.
 
 *   **Validation Rules:**
-    *   **Player Count:** At least 5 players required.
+    *   **Player Count:** 5-30 Players are supported.
     *   **Player Names:** All player names must be unique (case-insensitive).
-    *   **Role Count:** The total number of roles must match the number of players, with adjustments for special roles:
-        *   **Thief:** Requires 2 extra roles.
-        *   **Actor:** Requires 3 extra roles.
+    *   **Role Composition Count:** One Role card per Player, plus two Character Cards exactly when Thief is present. Actor adds no Role Composition cards.
+    *   **Hard-Aligned Coverage:** At least one hard-aligned Villager Role and one hard-aligned Werewolf Role are required; Simple Villager and Simple Werewolf are not mandatory by name.
+    *   **Actor Setup Cards:** When Actor is present, exactly three eligible hard-aligned Villager Roles with actionable individual powers must be provided outside the Role Composition. A selected Role cannot also be an Actor Setup Card; Simple Villager, Villager-Villager, Two Sisters, and Three Brothers are ineligible.
     *   **Per-Role Constraints:** Each role has specific count constraints defined in `RoleCountConstraints` dictionary:
-        *   Basic roles (Simple Werewolf, and Simple Villager) use `AtLeast(1)` constraints.
+        *   Simple Werewolf and Simple Villager use `Any`; hard-aligned coverage supplies the Faction requirement.
         *   Special roles use `SingleOptional` constraints (e.g., Seer, Cupid, Witch).
         *   Group roles like Two Sisters and Three Brothers have exact optional count constraints (e.g., `ExactOptional(2)` for Two Sisters).
 
@@ -371,14 +372,18 @@ Encapsulates and validates all configuration parameters required to start a new 
     *   Maps `MainRoleType` to `NumberRangeConstraint` for validation.
 
 *   **Validation Error Types:**
-    *   `TooFewPlayers`: Fewer than 1 player provided.
+    *   `TooFewPlayers`: Fewer than 5 Players provided.
+    *   `TooManyPlayers`: More than 30 Players provided.
     *   `NonUniquePlayerNames`: Duplicate player names found.
     *   `TooFewRoles`: Insufficient roles for the player count.
     *   `TooManyRoles`: Excessive roles for the player count.
     *   `RoleCountMismatch`: A specific role violates its per-role constraint.
-    *   `MissingExtraActorRoles`: Insufficient extra roles for Actor role.
     *   `MissingExtraThiefRoles`: Insufficient extra roles for Thief role.
-    *   `MissingExtraThiefActorRoles`: Insufficient extra roles for both Thief and Actor.
+    *   `ActorSetupCardCountMismatch`: Actor does not have exactly three separate setup cards.
+    *   `ActorSetupCardInRoleComposition`: An Actor Setup Card repeats a Role selected in the Role Composition.
+    *   `IneligibleActorSetupCard`: An Actor Setup Card is not an eligible hard-aligned Villager Role with an actionable individual power.
+    *   `MissingHardAlignedWerewolf`: The Role Composition has no hard-aligned Werewolf Role.
+    *   `MissingHardAlignedVillager`: The Role Composition has no hard-aligned Villager Role.
 
 ## `NumberRangeConstraint` Structure
 
@@ -546,11 +551,13 @@ Located in `Werewolves.Core.StateModels/Extensions/MainRoleTypeExtensions.cs`. P
 
 *   **`GetRoleGroup(this MainRoleType role)` (RoleGroup):** Returns the logical group that the specified role belongs to. Categorizes all 28 roles:
     *   **Werewolves:** SimpleWerewolf, BigBadWolf, AccursedWolfFather, WhiteWerewolf
-    *   **Villagers:** SimpleVillager, VillagerVillager, Seer, Cupid, Witch, Hunter, LittleGirl, Defender, Elder, Scapegoat, VillageIdiot, TwoSisters, ThreeBrothers, Fox, BearTamer, StutteringJudge, KnightWithRustySword
-    *   **Ambiguous:** Thief, DevotedServant, Actor, WildChild, WolfHound (roles that can change sides or have flexible allegiance)
+    *   **Villagers:** SimpleVillager, VillagerVillager, Seer, Cupid, Witch, Hunter, LittleGirl, Defender, Elder, Scapegoat, VillageIdiot, TwoSisters, ThreeBrothers, Fox, BearTamer, StutteringJudge, KnightWithRustySword, Actor
+    *   **Ambiguous:** Thief, DevotedServant, WildChild, WolfHound (roles that can change sides or have flexible allegiance)
     *   **Loners:** Angel, Piper, PrejudicedManipulator (roles with independent win conditions)
     *   **NewMoon:** Gypsy (expansion roles)
-*   **Usage:** Useful for UI grouping, role selection screens, and validation logic that needs to categorize roles by faction.
+*   **`IsHardAlignedVillager` / `IsHardAlignedWerewolf`:** Classify stable setup allegiance independently of UI Role Group. White Werewolf remains grouped with Werewolves but is not hard-aligned Werewolf; Actor is hard-aligned Villager.
+*   **`IsEligibleActorSetupCard`:** Identifies hard-aligned Villager Roles whose individual powers can be used as Actor Setup Cards.
+*   **Usage:** `GetRoleGroup` supports UI grouping and role selection; the explicit hard-alignment predicates support setup validity.
 
 # Game Loop Outline (Declarative Sub-Phase Architecture)
 
@@ -635,7 +642,7 @@ The `GameFlowManager` implements automatic victory condition checking to ensure 
 
 ## Test Infrastructure
 
-All tests are integration tests that drive the full `GameService` → `GameFlowManager` → `GameSession` pipeline. The test infrastructure provides fluent helpers to reduce boilerplate when constructing games and advancing through phases.
+Game Session integration tests drive the full `GameService` → `GameFlowManager` → `GameSession` pipeline. Public setup-validation and value/model tests exercise their public Core boundaries directly when creating a Game Session would cross into unrelated runtime support. The test infrastructure provides fluent helpers to reduce boilerplate when constructing games and advancing through phases.
 
 ### `DiagnosticTestBase` (Base Class)
 

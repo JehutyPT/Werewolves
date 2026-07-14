@@ -64,7 +64,7 @@ Tests covering the complete game creation and lifecycle flow.
   - Then: Returns `false` with empty issues list
 
 - **GL-033**: `GetExpectedRoleCount_WithoutSpecialRoles_ReturnsPlayerCount`
-  - Given: 5 players, roles without Thief or Actor
+  - Given: 5 players, roles without Thief
   - When: `GetExpectedRoleCount` is called
   - Then: Returns 5
 
@@ -73,15 +73,15 @@ Tests covering the complete game creation and lifecycle flow.
   - When: `GetExpectedRoleCount` is called
   - Then: Returns 7
 
-- **GL-035**: `GetExpectedRoleCount_WithActor_ReturnsPlayerCountPlus3`
+- **GL-035**: `GetExpectedRoleCount_WithActor_ReturnsPlayerCount`
   - Given: 5 players, roles including Actor
   - When: `GetExpectedRoleCount` is called
-  - Then: Returns 8
+  - Then: Returns 5 because Actor Setup Cards are outside the Role Composition
 
-- **GL-036**: `GetExpectedRoleCount_WithThiefAndActor_ReturnsPlayerCountPlus5`
+- **GL-036**: `GetExpectedRoleCount_WithThiefAndActor_ReturnsPlayerCountPlus2`
   - Given: 5 players, roles including both Thief and Actor
   - When: `GetExpectedRoleCount` is called
-  - Then: Returns 10
+  - Then: Returns 7 because only Thief adds Role Composition cards
 
 ### 1.2 Game Start Confirmation
 - **GL-010**: `ConfirmGameStart_TransitionsToNightPhase`
@@ -443,12 +443,12 @@ Tests for extension methods and helper utilities.
   - Then: Returns `RoleGroup.Werewolves`
 
 - **EX-002**: `GetRoleGroup_Villagers_ReturnsVillagersGroup`
-  - Given: Villager roles (Seer, Witch, Hunter, Defender, etc.)
+  - Given: Villager roles (Seer, Witch, Hunter, Defender, Actor, etc.)
   - When: `GetRoleGroup()` is called
   - Then: Returns `RoleGroup.Villagers`
 
 - **EX-003**: `GetRoleGroup_Ambiguous_ReturnsAmbiguousGroup`
-  - Given: Ambiguous roles (Thief, DevotedServant, Actor, WildChild, WolfHound)
+  - Given: Ambiguous roles (Thief, DevotedServant, WildChild, WolfHound)
   - When: `GetRoleGroup()` is called
   - Then: Returns `RoleGroup.Ambiguous`
 
@@ -697,12 +697,12 @@ When adding support for additional roles, add corresponding test sections:
 - Test method names follow: `MethodUnderTest_Scenario_ExpectedResult`
 - Test IDs use prefixes: GL (Lifecycle), PT (Transitions), NA (Night), DR (Dawn), DV (Day), VC (Victory), IV (Input Validation), ES (Event Sourcing)
 - Each test should be independent and not rely on other tests' execution order
-- Use `GameTestBuilder` for consistent setup across tests
+- Use `GameTestBuilder` for Game Session scenarios; public value/configuration boundary tests call their public APIs directly
 
 ### DiagnosticTestBase Pattern
 - All integration tests should extend `DiagnosticTestBase` for automatic state change logging on failure
 - Call `MarkTestCompleted()` at the end of each successful test to suppress diagnostic dump
-- Use `CreateBuilder()` to get a builder with diagnostics wired up
+- Use `CreateBuilder()` when the test creates or drives a Game Session so diagnostics are wired up
 - On test failure, the complete state change timeline is automatically dumped to test output
 
 ### Victory Timing

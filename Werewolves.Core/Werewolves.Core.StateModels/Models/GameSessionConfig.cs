@@ -1,23 +1,26 @@
 ﻿using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Extensions;
 
 namespace Werewolves.Core.StateModels.Models;
 
 public class GameSessionConfig
 {
 	public const int MinimumPlayerCount = 5;
+	public const int MaximumPlayerCount = 30;
 
 	public List<string> Players { get; init; } = new();
 	public List<MainRoleType> Roles { get; init; } = new();
+	public ActorSetupCards ActorSetupCards { get; init; }
 
 	public static Dictionary<MainRoleType, NumberRangeConstraint> RoleCountConstraints { get; } = new()
 	{
 		// insert all roles with default Any constraint
-		[MainRoleType.SimpleWerewolf] = NumberRangeConstraint.AtLeast(1),
+		[MainRoleType.SimpleWerewolf] = NumberRangeConstraint.Any,
 		[MainRoleType.BigBadWolf] = NumberRangeConstraint.SingleOptional,
 		[MainRoleType.AccursedWolfFather] = NumberRangeConstraint.SingleOptional,
 		[MainRoleType.WhiteWerewolf] = NumberRangeConstraint.SingleOptional,
 
-		[MainRoleType.SimpleVillager] = NumberRangeConstraint.AtLeast(1),
+		[MainRoleType.SimpleVillager] = NumberRangeConstraint.Any,
 		[MainRoleType.VillagerVillager] = NumberRangeConstraint.SingleOptional,
 		[MainRoleType.Seer] = NumberRangeConstraint.SingleOptional,
 		[MainRoleType.Cupid] = NumberRangeConstraint.SingleOptional,
@@ -48,9 +51,16 @@ public class GameSessionConfig
 		[MainRoleType.Gypsy] = NumberRangeConstraint.SingleOptional,
 	};
 
-	internal static void EnforceValidity(List<string> players, List<MainRoleType> roles)
+	internal static void EnforceValidity(
+		List<string> players,
+		List<MainRoleType> roles,
+		ActorSetupCards? actorSetupCards = null)
 	{
-		if (TryGetConfigIssues(players, roles, out var issues))
+		if (TryGetConfigIssues(
+			players,
+			roles,
+			actorSetupCards ?? global::Werewolves.Core.StateModels.Models.ActorSetupCards.None,
+			out var issues))
 		{
 			throw new InvalidOperationException("Game session configuration is invalid:\n" + string.Join(", ", issues));
 		}
@@ -58,7 +68,7 @@ public class GameSessionConfig
 
 	internal void EnforceValidity()
 	{
-		EnforceValidity(Players, Roles);
+		EnforceValidity(Players, Roles, ActorSetupCards);
 	}
 
 	/// <summary>
@@ -86,20 +96,25 @@ public class GameSessionConfig
 		{
 			issues.Add(new GameConfigValidationError(GameConfigValidationErrorType.TooFewPlayers, "At least five players are required."));
 		}
+		else if (players.Count > MaximumPlayerCount)
+		{
+			issues.Add(new GameConfigValidationError(GameConfigValidationErrorType.TooManyPlayers, "At most thirty players are supported."));
+		}
 
 		return issues.Count > 0;
 	}
 
 	/// <summary>
 	/// Helper for UI to display expected vs actual role count.
-	/// Returns the number of roles expected based on player count and special roles (Thief needs +2, Actor needs +3).
+	/// Returns the number of Role Composition cards expected based on Player count.
+	/// Thief contributes two extra Character Cards; Actor Setup Cards are separate setup artifacts.
 	/// </summary>
 	/// <param name="playerCount">The number of players in the game.</param>
 	/// <param name="roles">The list of roles selected for the game.</param>
 	/// <returns>The expected total role count.</returns>
 	public static int GetExpectedRoleCount(int playerCount, List<MainRoleType> roles)
 	{
-		return playerCount + (roles.Contains(MainRoleType.Thief) ? 2 : 0) + (roles.Contains(MainRoleType.Actor) ? 3 : 0);
+		return playerCount + (roles.Contains(MainRoleType.Thief) ? 2 : 0);
 	}
 
 	/// <summary>
@@ -111,6 +126,19 @@ public class GameSessionConfig
 	/// <returns></returns>
 	public static bool TryGetConfigIssues(List<string> players, List<MainRoleType> roles, out List<GameConfigValidationError> issues)
 	{
+		return TryGetConfigIssues(
+			players,
+			roles,
+			global::Werewolves.Core.StateModels.Models.ActorSetupCards.None,
+			out issues);
+	}
+
+	public static bool TryGetConfigIssues(
+		List<string> players,
+		List<MainRoleType> roles,
+		ActorSetupCards actorSetupCards,
+		out List<GameConfigValidationError> issues)
+	{
 		issues = new List<GameConfigValidationError>();
 
 		var actualPlayerRoleCountDiff = roles.Count - players.Count;
@@ -119,6 +147,55 @@ public class GameSessionConfig
 		if (TryGetPlayerConfigIssues(players, out var playerIssues))
 		{
 			issues.AddRange(playerIssues);
+		}
+
+		if (!roles.Any(role => role.IsHardAlignedWerewolf()))
+		{
+			issues.Add(new GameConfigValidationError(
+				GameConfigValidationErrorType.MissingHardAlignedWerewolf,
+				"Role Composition requires at least one hard-aligned Werewolf Role."));
+		}
+
+		if (!roles.Any(role => role.IsHardAlignedVillager()))
+		{
+			issues.Add(new GameConfigValidationError(
+				GameConfigValidationErrorType.MissingHardAlignedVillager,
+				"Role Composition requires at least one hard-aligned Villager Role."));
+		}
+
+		if (roles.Contains(MainRoleType.Actor)
+			&& actorSetupCards.Cards.Count != global::Werewolves.Core.StateModels.Models.ActorSetupCards.RequiredCount)
+		{
+			issues.Add(new GameConfigValidationError(
+				GameConfigValidationErrorType.ActorSetupCardCountMismatch,
+				"Actor requires exactly three separate setup cards."));
+		}
+
+		if (roles.Contains(MainRoleType.Actor))
+		{
+			var overlappingActorSetupCards = actorSetupCards.Cards
+				.Intersect(roles)
+				.Distinct()
+				.ToArray();
+
+			if (overlappingActorSetupCards.Length > 0)
+			{
+				issues.Add(new GameConfigValidationError(
+					GameConfigValidationErrorType.ActorSetupCardInRoleComposition,
+					$"Actor setup cards must stay outside the Role Composition: {string.Join(", ", overlappingActorSetupCards)}."));
+			}
+
+			var ineligibleActorSetupCards = actorSetupCards.Cards
+				.Where(role => !role.IsEligibleActorSetupCard())
+				.Distinct()
+				.ToArray();
+
+			if (ineligibleActorSetupCards.Length > 0)
+			{
+				issues.Add(new GameConfigValidationError(
+					GameConfigValidationErrorType.IneligibleActorSetupCard,
+					$"Actor setup cards must be hard-aligned Villager Roles with actionable individual powers: {string.Join(", ", ineligibleActorSetupCards)}."));
+			}
 		}
 
 		// Role count checks
@@ -130,18 +207,9 @@ public class GameSessionConfig
 		{
 			var delta = expectedPlayerRoleCountDiff - actualPlayerRoleCountDiff;
 
-			// Missing extras for Thief/Actor
-			if (roles.Contains(MainRoleType.Thief) && roles.Contains(MainRoleType.Actor))
-			{
-				issues.Add(new GameConfigValidationError(GameConfigValidationErrorType.MissingExtraThiefActorRoles, $"Missing extra roles required by Thief and Actor: {delta}"));
-			}
-			else if (roles.Contains(MainRoleType.Thief))
+			if (roles.Contains(MainRoleType.Thief))
 			{
 				issues.Add(new GameConfigValidationError(GameConfigValidationErrorType.MissingExtraThiefRoles, $"Missing extra roles required by Thief (needs two extra roles): {delta}"));
-			}
-			else if (roles.Contains(MainRoleType.Actor))
-			{
-				issues.Add(new GameConfigValidationError(GameConfigValidationErrorType.MissingExtraActorRoles, $"Missing 3 extra roles required by Actor: {delta}"));
 			}
 			else
 			{
@@ -189,25 +257,35 @@ public class GameSessionConfig
 	/// </summary>
 	/// <param name="playerNames"></param>
 	/// <param name="roles"></param>
-	public GameSessionConfig(List<string> playerNames, List<MainRoleType> roles)
+	public GameSessionConfig(
+		List<string> playerNames,
+		List<MainRoleType> roles,
+		ActorSetupCards? actorSetupCards = null)
 	{
-		EnforceValidity(playerNames, roles);
+		var normalizedActorSetupCards = actorSetupCards
+			?? global::Werewolves.Core.StateModels.Models.ActorSetupCards.None;
+		EnforceValidity(playerNames, roles, normalizedActorSetupCards);
 
 		Players = playerNames;
 		Roles = roles;
+		ActorSetupCards = normalizedActorSetupCards;
 	}
 }
 
 public enum GameConfigValidationErrorType
 {
 	TooFewPlayers,
+	TooManyPlayers,
 	NonUniquePlayerNames,
 	TooFewRoles,
 	TooManyRoles,
 	RoleCountMismatch,
-	MissingExtraActorRoles,
 	MissingExtraThiefRoles,
-	MissingExtraThiefActorRoles
+	ActorSetupCardCountMismatch,
+	ActorSetupCardInRoleComposition,
+	IneligibleActorSetupCard,
+	MissingHardAlignedWerewolf,
+	MissingHardAlignedVillager
 }
 
 public class GameConfigValidationError

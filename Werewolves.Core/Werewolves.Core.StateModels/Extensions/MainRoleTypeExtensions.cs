@@ -26,6 +26,38 @@ public static class MainRoleTypeExtensions
     public static string GetDisplayName(this RoleGroup group) =>
         GameStrings.ResourceManager.GetString($"{group}GroupName") ?? group.ToString();
 
+	public static bool IsHardAlignedWerewolf(this MainRoleType role) => role is
+		MainRoleType.SimpleWerewolf
+		or MainRoleType.BigBadWolf
+		or MainRoleType.AccursedWolfFather;
+
+	public static bool IsHardAlignedVillager(this MainRoleType role) => role is
+		MainRoleType.SimpleVillager
+		or MainRoleType.VillagerVillager
+		or MainRoleType.Seer
+		or MainRoleType.Cupid
+		or MainRoleType.Witch
+		or MainRoleType.Hunter
+		or MainRoleType.LittleGirl
+		or MainRoleType.Defender
+		or MainRoleType.Elder
+		or MainRoleType.Scapegoat
+		or MainRoleType.VillageIdiot
+		or MainRoleType.TwoSisters
+		or MainRoleType.ThreeBrothers
+		or MainRoleType.Fox
+		or MainRoleType.BearTamer
+		or MainRoleType.StutteringJudge
+		or MainRoleType.KnightWithRustySword
+		or MainRoleType.Actor;
+
+	public static bool IsEligibleActorSetupCard(this MainRoleType role) =>
+		role.IsHardAlignedVillager()
+		&& role is not MainRoleType.SimpleVillager
+			and not MainRoleType.VillagerVillager
+			and not MainRoleType.TwoSisters
+			and not MainRoleType.ThreeBrothers;
+
     /// <summary>
     /// Gets the role group that the specified role belongs to.
     /// </summary>
@@ -57,11 +89,11 @@ public static class MainRoleTypeExtensions
         MainRoleType.BearTamer => RoleGroup.Villagers,
         MainRoleType.StutteringJudge => RoleGroup.Villagers,
         MainRoleType.KnightWithRustySword => RoleGroup.Villagers,
+		MainRoleType.Actor => RoleGroup.Villagers,
 
         // Ambiguous
         MainRoleType.Thief => RoleGroup.Ambiguous,
         MainRoleType.DevotedServant => RoleGroup.Ambiguous,
-        MainRoleType.Actor => RoleGroup.Ambiguous,
         MainRoleType.WildChild => RoleGroup.Ambiguous,
         MainRoleType.WolfHound => RoleGroup.Ambiguous,
 

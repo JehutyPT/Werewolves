@@ -349,6 +349,10 @@
     <value>São necessários pelo menos 5 jogadores.</value>
     <comment/>
   </data>
+  <data name="TooManyPlayersValidationError" xml:space="preserve">
+    <value>São suportados no máximo 30 jogadores.</value>
+    <comment/>
+  </data>
   <data name="NonUniquePlayerNamesValidationError" xml:space="preserve">
     <value>Existem nomes repetidos na lista.</value>
     <comment/>
@@ -365,12 +369,24 @@
     <value>O Ladrão requer 2 papéis extra.</value>
     <comment/>
   </data>
-  <data name="MissingExtraActorRolesValidationError" xml:space="preserve">
-    <value>O Actor requer 3 papéis extra.</value>
+  <data name="ActorSetupCardCountMismatchValidationError" xml:space="preserve">
+    <value>O Actor requer exatamente 3 cartas de preparação separadas da composição de papéis.</value>
     <comment/>
   </data>
-  <data name="MissingExtraThiefActorRolesValidationError" xml:space="preserve">
-    <value>O Ladrão e o Actor requerem 5 papéis extra no total.</value>
+  <data name="ActorSetupCardInRoleCompositionValidationError" xml:space="preserve">
+    <value>As cartas de preparação do Actor não podem repetir papéis selecionados na composição.</value>
+    <comment/>
+  </data>
+  <data name="IneligibleActorSetupCardValidationError" xml:space="preserve">
+    <value>As cartas de preparação do Actor têm de ser papéis de Aldeão com alinhamento fixo e poderes individuais utilizáveis.</value>
+    <comment/>
+  </data>
+  <data name="MissingHardAlignedWerewolfValidationError" xml:space="preserve">
+    <value>A composição de papéis requer pelo menos um papel com alinhamento fixo aos Lobisomens.</value>
+    <comment/>
+  </data>
+  <data name="MissingHardAlignedVillagerValidationError" xml:space="preserve">
+    <value>A composição de papéis requer pelo menos um papel com alinhamento fixo aos Aldeões.</value>
     <comment/>
   </data>
   <data name="VillagersGroupName" xml:space="preserve">

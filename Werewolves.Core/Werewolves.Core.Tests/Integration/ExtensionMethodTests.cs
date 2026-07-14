@@ -56,6 +56,7 @@ public class ExtensionMethodTests
     [InlineData(MainRoleType.BearTamer)]
     [InlineData(MainRoleType.StutteringJudge)]
     [InlineData(MainRoleType.KnightWithRustySword)]
+	[InlineData(MainRoleType.Actor)]
     public void GetRoleGroup_Villagers_ReturnsVillagersGroup(MainRoleType role)
     {
         // Act
@@ -75,7 +76,6 @@ public class ExtensionMethodTests
     [Theory]
     [InlineData(MainRoleType.Thief)]
     [InlineData(MainRoleType.DevotedServant)]
-    [InlineData(MainRoleType.Actor)]
     [InlineData(MainRoleType.WildChild)]
     [InlineData(MainRoleType.WolfHound)]
     public void GetRoleGroup_Ambiguous_ReturnsAmbiguousGroup(MainRoleType role)
