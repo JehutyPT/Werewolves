@@ -8,7 +8,11 @@ trap 'rm -rf "$TMP"' EXIT
 LOG_FILE=$TMP/gh.log
 OUT_FILE=$TMP/out.txt
 ERR_FILE=$TMP/err.txt
+EDITED_BODY_FILE=$TMP/edited-body.md
+BODY_PATH_FILE=$TMP/body-path.txt
 export GH_LOG_FILE=$LOG_FILE
+export GH_EDITED_BODY_FILE=$EDITED_BODY_FILE
+export GH_BODY_PATH_FILE=$BODY_PATH_FILE
 
 cat > "$TMP/gh" <<'GH'
 #!/usr/bin/env bash
@@ -80,6 +84,21 @@ if [ "$1" = "api" ] && [ "$2" = "graphql" ]; then
       exit 2
     fi
     printf '%s\n' "$FAKE_BLOCKED_BY_PAGES"
+    exit 0
+  fi
+
+  if { [ -n "${FAKE_CHILD_PAGE_ONE:-}" ] \
+    || [ -n "${FAKE_CHILD_PAGE_TWO:-}" ]; } && contains_arg --jq "$@"; then
+    if ! contains_arg --paginate "$@"; then
+      echo "child traversal must use gh GraphQL pagination" >&2
+      exit 2
+    fi
+    if [[ "$*" != *'subIssues(first: 100, after: $endCursor)'* ]] \
+      || [[ "$*" != *'pageInfo { hasNextPage endCursor }'* ]]; then
+      echo "child traversal query is missing cursor pagination" >&2
+      exit 2
+    fi
+    printf '%s\n' "$FAKE_CHILD_PAGE_ONE" "$FAKE_CHILD_PAGE_TWO"
     exit 0
   fi
 
@@ -163,6 +182,21 @@ if [ "$1" = "issue" ] && [ "$2" = "edit" ]; then
     echo "edit-body:$issue_number:$body" >> "$GH_LOG_FILE"
   fi
 
+  if contains_arg --body-file "$@"; then
+    body_file=$(arg_after --body-file "$@")
+    if [ ! -f "$body_file" ]; then
+      echo "body file does not exist" >&2
+      exit 2
+    fi
+    printf '%s' "$body_file" > "$GH_BODY_PATH_FILE"
+    cp "$body_file" "$GH_EDITED_BODY_FILE"
+    echo "edit-body-file:$issue_number" >> "$GH_LOG_FILE"
+  fi
+
+  if [ "${FAKE_ISSUE_EDIT_FAILURE:-false}" = "true" ]; then
+    exit 9
+  fi
+
   exit 0
 fi
 
@@ -172,8 +206,9 @@ GH
 chmod +x "$TMP/gh"
 
 reset_case() {
-  rm -f "$LOG_FILE" "$OUT_FILE" "$ERR_FILE"
+  rm -f "$LOG_FILE" "$OUT_FILE" "$ERR_FILE" "$EDITED_BODY_FILE" "$BODY_PATH_FILE"
   unset FAKE_BLOCKERS FAKE_BLOCKED_BY_PAGES FAKE_BLOCKING_PAGES FAKE_HAS_READY \
+    FAKE_CHILD_PAGE_ONE FAKE_CHILD_PAGE_TWO FAKE_ISSUE_EDIT_FAILURE \
     FAKE_ISSUE_STATE FAKE_NODE_NUMBER FAKE_READY_ISSUES FAKE_READY_NUMBERS
 }
 
@@ -275,12 +310,49 @@ assert_log_exact $'add-blocked-by\nremove-label:123:ready-for-agent\n' \
 echo "PASS blocker relationship is added before readiness is removed"
 
 reset_case
+replacement_body=$'Replacement body\n\n- First line\n- Second line'
 PATH="$TMP:$PATH" "$SCRIPT_ROOT/edit-issue-body.sh" \
-  123 "Replacement body" > "$OUT_FILE" 2> "$ERR_FILE" \
+  123 "$replacement_body" > "$OUT_FILE" 2> "$ERR_FILE" \
   || fail "body edit invalidates readiness: command failed"
-assert_log_exact $'remove-label:123:ready-for-agent\nedit-body:123:Replacement body\n' \
+assert_log_exact $'remove-label:123:ready-for-agent\nedit-body-file:123\n' \
   "body edit invalidates readiness"
-echo "PASS generic body edits invalidate readiness"
+if ! cmp -s "$EDITED_BODY_FILE" <(printf '%s' "$replacement_body"); then
+  fail "body edit invalidates readiness: multiline body was not preserved"
+fi
+if [ ! -s "$BODY_PATH_FILE" ]; then
+  fail "body edit invalidates readiness: gh did not receive a body file"
+fi
+body_path=$(cat "$BODY_PATH_FILE")
+if [ -e "$body_path" ]; then
+  fail "body edit invalidates readiness: temporary body file was not removed"
+fi
+echo "PASS generic multiline body edits use a cleaned-up body file and invalidate readiness"
+
+reset_case
+export FAKE_ISSUE_EDIT_FAILURE=true
+if PATH="$TMP:$PATH" "$SCRIPT_ROOT/edit-issue-body.sh" \
+  123 $'Replacement body\nwith another line' > "$OUT_FILE" 2> "$ERR_FILE"; then
+  fail "failed body edit cleans up: command succeeded"
+fi
+if [ ! -s "$BODY_PATH_FILE" ]; then
+  fail "failed body edit cleans up: gh did not receive a body file"
+fi
+body_path=$(cat "$BODY_PATH_FILE")
+if [ -e "$body_path" ]; then
+  fail "failed body edit cleans up: temporary body file was not removed"
+fi
+echo "PASS generic body edits clean up the temporary body file after gh failure"
+
+reset_case
+export FAKE_CHILD_PAGE_ONE=201
+export FAKE_CHILD_PAGE_TWO=202
+PATH="$TMP:$PATH" "$SCRIPT_ROOT/query-children.sh" \
+  123 > "$OUT_FILE" 2> "$ERR_FILE" \
+  || fail "child traversal paginates: command failed"
+if ! cmp -s "$OUT_FILE" <(printf '201\n202\n'); then
+  fail "child traversal paginates: children from every page were not printed"
+fi
+echo "PASS child traversal returns children from every native subIssues page"
 
 reset_case
 PATH="$TMP:$PATH" "$SCRIPT_ROOT/remove-blocked-by.sh" \

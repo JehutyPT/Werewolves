@@ -42,9 +42,10 @@ Out of scope:
 
 ### Dependency assumptions
 
-- Landed interface, product decision, or predecessor behavior this contract
-  assumes. Cite an ADR when one governs the assumption.
-- State explicitly when there are no additional dependency assumptions.
+- #<upstream-issue>: the specific landed interface, product decision, or
+  predecessor behavior this contract relies on. Repeat for every upstream
+  dependency and cite an ADR when one governs the assumption.
+- None. Use this exact entry when the ticket has no upstream dependency.
 
 ### Verification
 
@@ -60,6 +61,11 @@ Out of scope:
 Repeat the four Verification fields for each distinct evidence surface. The
 repository's claim-first QA gate remains authoritative; a contract must not
 replace those fields with a generic "tests pass" criterion.
+
+Completion means every Acceptance criterion is satisfied and evidence has been
+produced for every Verification Claim using its Preferred evidence or a
+documented allowed substitute that explains why it proves the same claim.
+Silence or a generic test-suite result is not a substitute.
 
 Describe stable behavior, interfaces, and decisions. Omit file paths and line
 numbers unless the location itself is part of the contract.
@@ -91,7 +97,9 @@ Apply `ready-for-agent` only after all of the following are true:
 - The issue is open and has no open native `blockedBy` relationships.
 - The body follows this contract and has been validated against landed code.
 - Acceptance criteria are behavioral and testable.
-- Dependency assumptions match the landed predecessors and current ADRs.
+- Every upstream dependency appears under Dependency assumptions as its
+  `#<issue>` plus the expected landed behavior, or the section explicitly says
+  `None`; those assumptions match the landed predecessors and current ADRs.
 - No product decision required for implementation remains unresolved.
 - Verification records Claim, Preferred evidence, Forbidden evidence, and
   Source-test allowlist needed for every test surface.
@@ -122,9 +130,16 @@ unblocked. Closing or removing the last blocker never adds it.
 
 Parent and blocker relationships are native tracker state, not body-text lists.
 Manage them with the relationship wrappers in `docs/agents/issue-tracker.md`.
-Dependency assumptions explain what the contract relies on and should cite the
-upstream issue or merged PR when that provenance helps preparation. They do not
-replace formal edges or mirror whether an edge is currently open or closed.
+Keep the formal parent relationship for the life of the child issue. Remove it
+only to correct a relationship that was recorded incorrectly, establishing the
+correct parent when one still applies.
+
+Dependency assumptions explain what the contract relies on. Repeat every
+upstream dependency as `#<issue>: <expected landed behavior>` or write `None`
+when there are none. These entries do not replace formal edges or mirror
+whether an edge is currently open or closed. A closed blocker edge proves only
+that its issue closed, not that the expected behavior landed; preparation must
+validate that behavior against the default branch.
 
 Open blockers gate readiness. Closed blocker relationships remain attached as
 durable provenance: closing a blocker must not delete the edge. Remove a native

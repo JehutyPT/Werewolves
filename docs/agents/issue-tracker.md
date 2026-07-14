@@ -80,6 +80,11 @@ or blocker lists in the issue body.
 `ready-for-agent`, if present. `remove-blocked-by.sh` never adds readiness and
 directs the operator back through preparation.
 
+Keep each parent relationship for the life of the child issue, including after
+either issue closes. Call `remove-parent.sh` only to correct a parent that was
+recorded incorrectly; when the child still belongs under a different parent,
+establish the corrected relationship with `set-parent.sh`.
+
 Closed blocker relationships are durable provenance. Do not call
 `remove-blocked-by.sh` merely because the blocker closed. Remove an edge only
 when the dependency was recorded incorrectly or is no longer a real dependency.
@@ -133,6 +138,65 @@ blockers that reopen.
 Closing or removing the last blocker never adds readiness. Run preparation
 against the landed predecessor result and add the label last only when the
 contract still passes every gate.
+
+## External Issues As A Triage Surface
+
+**External issues as a request surface: no.** External issues do not enter
+`triage` in this repository.
+
+If this flag is deliberately changed to `yes`, triage only issues whose
+`authorAssociation` is `CONTRIBUTOR`, `FIRST_TIME_CONTRIBUTOR`, or `NONE`.
+Issues from `OWNER`, `MEMBER`, or `COLLABORATOR` are internal work and never
+enter external triage.
+
+## Pull Requests As A Triage Surface
+
+**PRs as a request surface: no.** Pull requests do not enter `triage` in this
+repository.
+
+If this flag is deliberately changed to `yes`, external pull requests use the
+same external-triage states and labels as external issues and the corresponding
+`gh pr` operations:
+
+- Read with `gh pr view <number> --comments` and inspect the patch with
+  `gh pr diff <number>`.
+- List with `gh pr list --state open --json
+  number,title,body,labels,author,authorAssociation,comments`, retaining only
+  `CONTRIBUTOR`, `FIRST_TIME_CONTRIBUTOR`, or `NONE` and excluding `OWNER`,
+  `MEMBER`, and `COLLABORATOR`.
+- Comment, label, and close with `gh pr comment`, `gh pr edit --add-label` or
+  `--remove-label`, and `gh pr close`.
+
+GitHub shares one number space across issues and pull requests. Resolve an
+ambiguous bare `#<number>` with `gh pr view <number>` and fall back to
+`docs/agents/scripts/read-issue.sh <number>`.
+
+## Wayfinding Operations
+
+`wayfinder` represents an investigation as one map issue with child tickets:
+
+- **Map:** Create one issue labelled `wayfinder:map` with Notes,
+  Decisions-so-far, and Fog sections using `create-issue.sh`. This issue owns
+  the ordered investigation map.
+- **Child ticket:** Create each ticket with exactly one type label:
+  `wayfinder:research`, `wayfinder:prototype`, `wayfinder:grilling`, or
+  `wayfinder:task`. Attach it to the map with
+  `set-parent.sh <child> <map>` and retain that parent for the ticket's life.
+  Enumerate the map with `query-children.sh <map>`.
+- **Blocking:** Establish dependencies with
+  `add-blocked-by.sh <child> <blocker>`. Inspect all retained dependencies with
+  `query-blockers.sh <child>`; only rows whose state is `OPEN` block the
+  ticket.
+- **Frontier:** In map order, inspect its open children and select the first
+  ticket with no `OPEN` result from `query-blockers.sh` and no assignee. Closed
+  children, blocked children, and already assigned children are not on the
+  frontier.
+- **Claim:** Run `gh issue edit <number> --add-assignee @me`. Claiming is the
+  session's first write.
+- **Resolve:** Record the answer with `add-comment.sh`, close the child with
+  `close-issue.sh`, then update the map's Decisions-so-far with a durable
+  context pointer (a gist plus its link) using `edit-issue-body.sh`. Preserve
+  the map's complete body when replacing it.
 
 ## When A Skill Says
 

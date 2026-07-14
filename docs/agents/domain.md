@@ -11,7 +11,11 @@ How the engineering skills should consume this repo's domain documentation when 
 - **`docs/domain/game-rules-clarifications.md`** — read when role interactions, win timing, or rule disambiguation matter.
 - **`docs/agents/qa-strategy.md`** — read before writing or evaluating tests.
 
-If any of these files don't exist, **proceed silently**. Don't flag their absence; don't suggest creating them upfront. The producer skill (`/grill-with-docs`) creates them lazily when terms or decisions actually get resolved.
+If any of these files don't exist, **proceed silently**. Don't flag their
+absence or suggest creating them upfront. `/domain-modeling` creates them
+lazily when terms or decisions actually get resolved; its entry paths include
+direct invocation, `/grill-with-docs`, `/grill-with-docs-batched`, and
+`/improve-codebase-architecture`.
 
 ## File structure
 
@@ -43,7 +47,11 @@ Single-context repo:
 
 When your output names a domain concept (in an issue title, a refactor proposal, a hypothesis, a test name), use the term as defined in `CONTEXT.md`. Don't drift to synonyms the glossary explicitly avoids.
 
-If the concept you need isn't in the glossary yet, that's a signal — either you're inventing language the project doesn't use (reconsider) or there's a real gap (note it for `/grill-with-docs-batched`).
+If the concept you need isn't in the glossary yet, that's a signal — either
+you're inventing language the project doesn't use (reconsider) or there's a
+real gap. Route a real gap to `/domain-modeling`, directly or through
+`/grill-with-docs`, `/grill-with-docs-batched`, or
+`/improve-codebase-architecture`.
 
 ## Flag ADR conflicts
 

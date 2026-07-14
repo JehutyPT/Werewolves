@@ -12,7 +12,12 @@ fi
 ISSUE_NUMBER=$1
 BODY=$2
 
-gh issue edit "$ISSUE_NUMBER" --body "$BODY" --remove-label ready-for-agent
+BODY_FILE=$(mktemp)
+trap 'rm -f "$BODY_FILE"' EXIT
+
+printf '%s' "$BODY" > "$BODY_FILE"
+
+gh issue edit "$ISSUE_NUMBER" --body-file "$BODY_FILE" --remove-label ready-for-agent
 
 echo "Issue #$ISSUE_NUMBER body updated; ready-for-agent was invalidated if present."
 echo "Prepare and validate the current implementation contract before adding ready-for-agent again."
