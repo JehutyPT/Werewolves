@@ -91,15 +91,7 @@ public class GameSessionConfig
 			}
 		}
 
-		// Player count sanity
-		if (players.Count < MinimumPlayerCount)
-		{
-			issues.Add(new GameConfigValidationError(GameConfigValidationErrorType.TooFewPlayers, "At least five players are required."));
-		}
-		else if (players.Count > MaximumPlayerCount)
-		{
-			issues.Add(new GameConfigValidationError(GameConfigValidationErrorType.TooManyPlayers, "At most thirty players are supported."));
-		}
+		AddPlayerCountIssues(players.Count, issues);
 
 		return issues.Count > 0;
 	}
@@ -112,10 +104,8 @@ public class GameSessionConfig
 	/// <param name="playerCount">The number of players in the game.</param>
 	/// <param name="roles">The list of roles selected for the game.</param>
 	/// <returns>The expected total role count.</returns>
-	public static int GetExpectedRoleCount(int playerCount, List<MainRoleType> roles)
-	{
-		return playerCount + (roles.Contains(MainRoleType.Thief) ? 2 : 0);
-	}
+	public static int GetExpectedRoleCount(int playerCount, List<MainRoleType> roles) =>
+		GetExpectedPhysicalRoleCount(playerCount, roles);
 
 	/// <summary>
 	/// The main helper method to validate a game configuration. Use this before trying to create a GameSessionConfig.
@@ -141,14 +131,70 @@ public class GameSessionConfig
 	{
 		issues = new List<GameConfigValidationError>();
 
-		var actualPlayerRoleCountDiff = roles.Count - players.Count;
-		var expectedPlayerRoleCountDiff = GetExpectedRoleCount(players.Count, roles) - players.Count;
-
 		if (TryGetPlayerConfigIssues(players, out var playerIssues))
 		{
 			issues.AddRange(playerIssues);
 		}
 
+		AddRoleCompositionIssues(
+			players.Count,
+			roles,
+			actorSetupCards,
+			issues);
+
+		return issues.Count > 0;
+	}
+
+	/// <summary>
+	/// Validates the physical setup when player identities are not part of the input.
+	/// This is the rules boundary used by pre-game scenario classification.
+	/// </summary>
+	/// <param name="playerCount">The number of Players in the physical game.</param>
+	/// <param name="roles">Every physical Role Composition card.</param>
+	/// <param name="actorSetupCards">Actor Setup Cards kept outside the Role Composition.</param>
+	/// <param name="issues">Structured physical-setup validation failures.</param>
+	/// <returns>Whether the physical setup has one or more validation failures.</returns>
+	public static bool TryGetPhysicalSetupIssues(
+		int playerCount,
+		IReadOnlyList<MainRoleType> roles,
+		ActorSetupCards actorSetupCards,
+		out List<GameConfigValidationError> issues)
+	{
+		ArgumentNullException.ThrowIfNull(roles);
+		ArgumentNullException.ThrowIfNull(actorSetupCards);
+
+		issues = new List<GameConfigValidationError>();
+		AddPlayerCountIssues(playerCount, issues);
+		AddRoleCompositionIssues(playerCount, roles, actorSetupCards, issues);
+		return issues.Count > 0;
+	}
+
+	private static void AddPlayerCountIssues(
+		int playerCount,
+		List<GameConfigValidationError> issues)
+	{
+		if (playerCount < MinimumPlayerCount)
+		{
+			issues.Add(new GameConfigValidationError(
+				GameConfigValidationErrorType.TooFewPlayers,
+				"At least five players are required."));
+		}
+		else if (playerCount > MaximumPlayerCount)
+		{
+			issues.Add(new GameConfigValidationError(
+				GameConfigValidationErrorType.TooManyPlayers,
+				"At most thirty players are supported."));
+		}
+	}
+
+	private static void AddRoleCompositionIssues(
+		int playerCount,
+		IReadOnlyList<MainRoleType> roles,
+		ActorSetupCards actorSetupCards,
+		List<GameConfigValidationError> issues)
+	{
+		var actualPlayerRoleCountDiff = roles.Count - playerCount;
+		var expectedPlayerRoleCountDiff = GetExpectedPhysicalRoleCount(playerCount, roles) - playerCount;
 		if (!roles.Any(role => role.IsHardAlignedWerewolf()))
 		{
 			issues.Add(new GameConfigValidationError(
@@ -248,10 +294,12 @@ public class GameSessionConfig
 				}
 			}
 		}
-
-		return issues.Count > 0;
 	}
 
+	private static int GetExpectedPhysicalRoleCount(
+		int playerCount,
+		IReadOnlyCollection<MainRoleType> roles) =>
+		playerCount + (roles.Contains(MainRoleType.Thief) ? 2 : 0);
 	/// <summary>
 	/// Should only try to build this after validating the inputs with TryGetConfigIssues.
 	/// </summary>
