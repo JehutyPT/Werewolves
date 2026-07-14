@@ -31,6 +31,7 @@ Use this QA Evidence Matrix before adding or accepting tests.
 | Client orchestration | Service and adapter tests with fakes for audio, haptics, persistence, wake lock, and app lifecycle seams. | CI | `GameClientManager`, display flow, save/recovery, audio reconciliation, mute state, roster projection, stats, and wake-lock policy. |
 | Browser-rendered UI | Browser QA host fixtures, viewport presets, screenshots, DOM/CSS inspection, and agent-assisted visual review. | Local | Layout, safe-area-like spacing, scroll behavior, animation feel, focus order, and visual hierarchy. |
 | Native platform behavior | Manual device checklist with captured observations. | Local/manual | Native audio, haptics, wake lock, resume/background behavior, platform storage, packaging, WebView quirks, and touch feel. |
+| Simulator/cache contracts | Deterministic unit tests, Core integration tests, semantic cache artifact tests, replay tests from fixed Run Seed Material, and generation diagnostics when artifacts are produced. | CI for deterministic contracts; local/build artifact for diagnostics. | Canonical identities, simulation evidence, screening/probability interpretation, cache round trips, invalidation, and fallback orchestration. |
 | Static policy/source contracts | Structured parsing or narrow source scans over manifest, plist, XAML, project, resource, CSS token, or documentation files. | CI when stable. | The source shape itself: permissions, metadata, no inline colors, token contrast, resource-backed copy, architecture boundaries, or QA policy sections. |
 
 ## Source-Test Rules
@@ -60,8 +61,45 @@ Use CI for deterministic evidence:
 - Core behavior through public Core APIs.
 - Client services and adapters with fakes at external seams.
 - Rendered component tests through the shared RCL and bUnit fixture.
+- Simulator/cache contracts through deterministic units, Core integrations, semantic cache artifact checks, and narrow replay tests from fixed Run Seed Material.
 - Narrow source-policy tests listed in the Source-Test Allowlist.
 - Documentation contract tests that guard this guide.
+
+## Simulator And Cache QA
+
+Simulator/cache tests must stay deterministic. Do not make CI pass/fail depend on live random distributions, probabilistic thresholds, wall-clock performance, artifact size comfort ranges, timing, memory use, or implementation diagnostics.
+
+Use these evidence surfaces:
+
+- Deterministic unit tests for pure value contracts: Canonical Role Composition, Canonical Simulation Scenario, Run Seed Material, identity/invalidation comparison, Completed versus Incomplete Simulation Run classification, Possible Game Result inventory, probability aggregation, and rounded display projections.
+- Core integration tests through public Core APIs for layered lobby gates, already-decided classification, degenerate screening interpretation, probability batch interpretation, narrow replay coverage from Run Seed Material, and simulator-supported versus simulator-unsupported behavior.
+- Cache artifact tests for semantic round trips, stale-version rejection, bundled and local terminal evaluation equivalence, and the rule that app-facing cache records do not carry per-run simulation evidence.
+- Client service and adapter tests with fakes for cache lookup, local fallback persistence, fallback timeout, generation failure, retry after failure, setup changes during evaluation, and simulator-unsupported unavailable state.
+- Generation diagnostics for implementation work that produces or validates cache artifacts. Diagnostics are evidence for the build/generation claim; they are not Moderator-facing output and are not app-facing cache payload.
+
+Canonical identity tests should prefer structural assertions and round-trip or parse checks over broad exact string assertions. Assert role counts by enum value, sort order by enum identifiers, zero-count omission, Thief extras, Actor Setup Card exclusion, `players=N`, and non-default assumptions as structured fields. Use shared constants or value objects for separators, labels, profile ids, and version ids where they exist. Exact literal string assertions are allowed only at the narrow serializer/cache-key boundary when the literal format itself is intentionally the public or cache contract.
+
+Generation diagnostics must be machine-readable when an issue produces or validates cache artifacts. Include generator, simulator, and profile identity; scenario counts by terminal result type; omitted scenario counts grouped by reason; incomplete run counts with Run Seed Material references; artifact identity, version, hash, and size; and representative replay seeds for failures or suspicious outcomes. Timing, memory, and instruction counts may appear as diagnostics, but they are not CI pass/fail gates unless the issue explicitly claims performance or artifact-size behavior.
+
+Replay tests are not primary simulator correctness tests. Do not create a replay test by running an arbitrary stochastic scenario once, copying its outcome, and treating that as an oracle. Use replay tests only to prove determinism plumbing, known-oracle scenarios, or regression seeds from a diagnosed bug. For determinism plumbing, assert that the same Run Seed Material under the same simulator/profile version reproduces the same stable source record. For known-oracle scenarios, assert the independently derivable completion state, Game Session Outcome, ending Turn, and Victory Check Window. For regression seeds, assert the smallest fixed property that prevents the bug from returning.
+
+Already-decided classification should be covered by deterministic classifier tests with rule-derived scenarios. Degenerate classification should mostly be covered with synthetic batch evidence: all 1,000 completed runs ending by Turn 1 means degenerate; one Turn 2 completed run means not degenerate; one Incomplete Simulation Run means could not evaluate. Do not try to maintain tests for every possible degenerate setup. A small number of known-oracle integration tests is enough to prove the simulator path, including one prevalidated degenerate setup.
+
+Probability aggregation should be tested with handcrafted Simulation Result Evidence, not live 10,000-run batches. Cover Completed-only denominators, Incomplete Simulation Run exclusion, zero-frequency Possible Game Results, Shared Victory Outcomes and No-Winner Outcomes as Game Results, Game Result Frequency by Turn summing to Game Result Frequency, Ended-By-Turn Frequency derivation, and display rounding/grouping behavior.
+
+Fallback runtime behavior belongs in deterministic service and adapter tests. Cover bundled cache hits, local fallback cache hits, stale or missing evaluation starting fallback, successful fallback persisting a compact Local Fallback Cache Record, failure, timeout, and incomplete fallback collapsing to "could not evaluate", setup changes discarding stale in-flight work, retry being available only after failure, simulator-unsupported unavailable state without a fallback attempt, Lobby Exit gate behavior while pending versus after failure, and the absence of an in-progress skip or dismiss action.
+
+Do not add simulator/cache source-level tests for this work. Prove simulator/cache claims through behavior, semantic artifact checks, parser or serializer round trips, Core integration tests, service/adapter tests, and generation diagnostic artifacts.
+
+Golden fixtures are small checked-in input/expected-output artifacts that protect stable contracts. They are appropriate for canonical strings, minimal simulation evidence records, Possible Game Result inventories, and terminal cache records. They are not snapshots of full transcripts, raw engine traces, exception details, timing, memory, UI screenshots, or random win-rate expectations. Updating a golden fixture is a contract change and should be reviewed with the claim it protects.
+
+For the first simulator/cache implementation slice, keep golden fixtures small: canonical identity examples, minimal Simulation Result Evidence examples, probability aggregation input/output, and terminal cache records for already-decided, degenerate, and probability entries. Do not add full-run replay fixtures except for known-oracle scenarios or regression seeds.
+
+Do not normally check generated diagnostics reports into the repo. Commit diagnostic schemas/contracts and small golden fixtures. Keep actual generation reports as CI/build artifacts or issue evidence unless a generated cache artifact is intentionally part of the app/package source.
+
+Keep this guide at the stable QA policy and simulator/cache evidence-contract level. Concrete test class names, fixture file paths, diagnostic schema field names, and implementation sequencing belong in issues unless a contract must be shared across issues.
+
+Before claiming a simulator/cache implementation issue done, record the Agent QA Gate fields for each test surface used. The issue needs deterministic CI evidence for the behavior being claimed, plus generation diagnostic artifacts when the issue generates or validates cache artifacts.
 
 ## bUnit RCL Fixture
 

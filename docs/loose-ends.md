@@ -30,11 +30,11 @@ Follow-up:
 
 ## Bundled Simulator Cache Implementation
 
-Settled domain rule: Bundled Simulator Cache entries are app-facing compressed lobby evaluations, not per-run simulation evidence. They are identified by Canonical Simulation Scenario plus simulator profile/version, and cache misses are nonblocking unless a usable already-decided or degenerate evaluation exists.
+Settled domain rule: Bundled Simulator Cache entries and Local Fallback Cache Records are app-facing compressed lobby evaluations, not per-run simulation evidence. They are identified by Canonical Simulation Scenario plus simulator profile/version. Missing or stale terminal lobby evaluations block Lobby Exit while evaluation is pending; failed, incomplete, 10-second-timed-out, runtime-cancelled, or instruction-limited evaluation becomes a visible "could not evaluate" state that lets the Moderator decide whether to proceed. Failed fallback state is session-only for the current unchanged setup, is not persisted, and can be explicitly retried. Setup changes discard the stale attempt and start evaluation for the new stable Simulation Scenario. App-supported but simulator-unsupported setups do not attempt fallback and do not block Lobby Exit solely because evaluation is unavailable.
 
 Follow-up:
 
 - Add cache artifact read/write tests that prove a terminal lobby evaluation round-trips without changing its meaning.
 - Implement cache invalidation around rules, role behavior, simulator profile behavior, supported scenario scope, Canonical Simulation Scenario construction, classification semantics, Game Result Frequency semantics, and Turn cutoff semantics.
-- Implement on-device fallback only for simulator-supported Simulation Scenarios, with failed fallback producing a nonblocking "could not evaluate" state.
+- Implement on-device fallback only for simulator-supported Simulation Scenarios with no usable bundled or local terminal lobby evaluation. Successful fallback should materialize only bounded compact Local Fallback Cache Records, while failed, incomplete, 10-second-timed-out, runtime-cancelled, or instruction-limited fallback produces a visible "could not evaluate" state. Do not add a Moderator-facing skip or dismiss action for in-progress fallback. Add an explicit retry action after failure only; retry closes the Lobby Exit safety gate while the 10-second bounded evaluation runs again.
 - Decide serialized schema, file format, compression, storage, and lookup layout in implementation issues rather than in domain docs.

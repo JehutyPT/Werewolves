@@ -86,12 +86,16 @@ _Avoid_: Role Composition, simulator-supported
 The app-facing collection of precomputed lobby evaluations shipped with the app for cache-first pre-game UX.
 _Avoid_: Offline cache (ambiguous with on-device fallback), simulator log
 
+**Local Fallback Cache Record**:
+A compact terminal lobby evaluation materialized on the Moderator's device after successful On-Device Fallback Generation. It is keyed and invalidated like the equivalent Bundled Simulator Cache entry and stores no per-run Simulation Result Evidence.
+_Avoid_: Local simulation evidence, replay cache, transcript cache
+
 **Build-Time Cache Generation**:
 The production of Bundled Simulator Cache artifacts outside the Moderator's phone, such as on a development machine, CI worker, or backend job.
 _Avoid_: Offline generation (ambiguous), on-device generation
 
 **On-Device Fallback Generation**:
-A local simulator evaluation attempted on the Moderator's device only when the Bundled Simulator Cache has no usable lobby evaluation.
+A local simulator evaluation attempted on the Moderator's device when no usable bundled or local terminal lobby evaluation is available for a Simulator-Supported Simulation Scenario. Successful fallback generation may produce a usable already-decided, degenerate, or probability terminal lobby evaluation, but it materializes only a compact Local Fallback Cache Record, not full per-run Simulation Result Evidence. It has two hard failure boundaries: any generation failure, or a 10-second timeout.
 _Avoid_: Normal pre-game simulation, build-time cache generation
 
 **Minimum Viable Role Composition**:
@@ -332,7 +336,15 @@ _Avoid_: Load game, restore
 - Cache and simulation inputs use a **Simulation Scenario** when setup artifacts or profile assumptions matter beyond the **Role Composition**
 - The **Bundled Simulator Cache** is produced by **Build-Time Cache Generation**, not by trying to enumerate every possible scenario on the Moderator's device
 - **Bundled Simulator Cache** lookup identity is the **Canonical Simulation Scenario** plus the simulator profile/version; batch sizes are generation policy rather than cache identity
-- **On-Device Fallback Generation** is allowed only after a **Bundled Simulator Cache** miss for a **Simulator-Supported Simulation Scenario** and must follow the same classification pipeline before producing a usable lobby evaluation
+- A **Local Fallback Cache Record** uses the same lookup and invalidation identity as the equivalent bundled terminal lobby evaluation and is reused across app restarts while it remains current
+- **On-Device Fallback Generation** is allowed only when no usable bundled or local terminal lobby evaluation exists for a **Simulator-Supported Simulation Scenario** and must follow the same classification pipeline before producing a usable lobby evaluation
+- **On-Device Fallback Generation** is skipped when the selected setup is rules-invalid, app-unsupported, simulator-unsupported, already has a usable terminal lobby evaluation, or changes before the fallback attempt finishes
+- A successful **On-Device Fallback Generation** result has the same product meaning as the equivalent bundled terminal lobby evaluation, but it stores only the compact terminal evaluation rather than detailed simulation evidence
+- **Lobby Exit** waits when a **Simulator-Supported Simulation Scenario** has no usable terminal lobby evaluation or only a stale one. If fallback evaluation fails, the safety gate releases with a visible "could not evaluate" state and the Moderator decides whether to proceed.
+- **Lobby Exit** does not offer a manual skip or dismiss action while fallback evaluation is running; proceeding without a terminal lobby evaluation is allowed only after fallback fails or reaches its 10-second timeout
+- A failed **On-Device Fallback Generation** attempt is remembered only for the current unchanged lobby setup and current app session; it is not persisted like a **Local Fallback Cache Record**
+- After fallback failure, the Moderator may retry evaluation. Retrying closes the **Lobby Exit** safety gate again while the same 10-second bounded fallback evaluation runs
+- App-supported but simulator-unsupported setups do not attempt **On-Device Fallback Generation** and do not block **Lobby Exit** only because evaluation is unavailable
 - The simulator runs from a **Simulation Start State**; pre-game cache generation derives that state from a **Simulation Scenario**, while mid-game projection can use the same simulation mechanism from a later fully defined Game Session state
 - **Degenerate Simulation Scenario** classification applies to the **Simulation Scenario**; each screening run derives its own seeded pre-game **Simulation Start State** from that scenario, including random assignment and profile/default setup choices
 - **Canonical Role Composition** omits zero-count Roles, uses exact enum identifiers rather than localized names, and sorts Role entries alphabetically by enum identifier
@@ -478,4 +490,15 @@ _Avoid_: Load game, restore
 - "Could not evaluate" vs blocked — resolved: incomplete screening is an error state and does not block **Lobby Exit** as already-decided or degenerate.
 - "Could not evaluate as outcome" — resolved: "could not evaluate" is a product evaluation state, not a **Game Session Outcome** or probability bucket.
 - "Current runtime limits" — resolved: the full Faction model remains the domain contract, but the active **Simulator Profile Role Set** controls which scenarios can be evaluated now; unsupported or unevaluable scenarios are not mislabeled as already-decided or degenerate.
+- "Cache miss vs Lobby Exit" — resolved: no usable or current terminal lobby evaluation blocks **Lobby Exit** while evaluation is pending; a failed evaluation releases the gate as visible "could not evaluate."
+- "Local fallback reuse" — resolved: successful fallback materializes a compact **Local Fallback Cache Record** that can be reused across app restarts while its cache identity remains current.
+- "Cache/fallback UX distinction" — resolved: Moderator-facing lobby evaluation status does not distinguish bundled lookup from fallback generation; cache hits simply complete the same evaluation flow faster.
+- "Fallback result storage" — resolved: **On-Device Fallback Generation** may compute enough to classify a scenario locally, but the materialized result is only a compact terminal lobby evaluation, not full per-run simulation evidence.
+- "Fallback failure" — resolved: incomplete fallback, timeout, instruction-limit exhaustion, runtime cancellation, start-state generation failure, and incomplete screening or probability batches collapse to visible "could not evaluate" rather than partial probability, already-decided, or degenerate claims; once visible, that state releases the Lobby Exit safety gate.
+- "Setup changes during fallback" — resolved: changing the selected setup discards any in-progress fallback for the stale **Simulation Scenario** and starts evaluation for the new stable scenario instead of releasing the safety gate.
+- "Fallback timeout" — resolved: the only product hard boundaries for **On-Device Fallback Generation** are any generation failure and a 10-second timeout.
+- "Manual fallback skip" — resolved: the Moderator cannot dismiss or skip an in-progress fallback evaluation; proceeding without an evaluation requires fallback failure or timeout.
+- "Fallback failure memory" — resolved: failed fallback state is session-only for the current unchanged setup, is not persisted across app restarts, and prevents automatic retry loops.
+- "Fallback retry" — resolved: after failure, the Moderator may explicitly retry; retrying runs the same 10-second bounded evaluation and closes the **Lobby Exit** safety gate while it is in progress.
+- "Simulator-unsupported setup" — resolved: app-supported setups outside the active **Simulator Profile Role Set** show evaluation unavailable and do not block **Lobby Exit** solely because simulation is unavailable.
 - "Seed" — resolved: store **Run Seed Material** as a canonical string for replay evidence; hash it into a numeric seed only when constructing a random generator.
