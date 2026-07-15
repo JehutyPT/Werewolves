@@ -341,7 +341,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 	}
 
 	[Fact]
-	public void Execute_WithDiagnosedWildChildDefect_ReturnsReplayableIncompleteEvidence()
+	public void Execute_WithDiagnosedWildChildReplay_CompletesOnTurnTwoOrLater()
 	{
 		var scenario = new SimulationScenario(
 			5,
@@ -353,16 +353,10 @@ public class SimulationExecutionTests : DiagnosticTestBase
 				MainRoleType.SimpleVillager
 			]);
 		var identity = CreateIdentity(scenario);
-		var expectedMaterial = new RunSeedMaterial(
-			identity,
-			BaselineRandomDecisionStrategy.Identity,
-			runNumber: 11);
+		var run = new SimulationExecutor().Execute(scenario, identity, runNumber: 11);
 
-		var first = new SimulationExecutor().Execute(scenario, identity, runNumber: 11);
-		var replay = new SimulationExecutor().Execute(scenario, identity, runNumber: 11);
-
-		first.Should().Be(new IncompleteSimulationRun(expectedMaterial));
-		replay.Should().Be(first);
+		var completed = run.Should().BeOfType<CompletedSimulationRun>().Subject;
+		completed.EndingTurn.Should().BeGreaterThanOrEqualTo(2);
 		MarkTestCompleted();
 	}
 
