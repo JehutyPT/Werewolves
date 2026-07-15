@@ -107,15 +107,18 @@ public class LobbyEvaluationPanelTests
 		disclosure.GetAttribute("aria-expanded").Should().Be("false");
 		var detailId = disclosure.GetAttribute("aria-controls");
 		detailId.Should().NotBeNullOrWhiteSpace();
-		cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationDetail)).Should().BeEmpty();
+		var detail = cut.Find($"#{detailId}");
+		detail.GetAttribute("data-testid").Should().Be(ModeratorUiTestIds.LobbyEvaluationDetail);
+		detail.HasAttribute("hidden").Should().BeTrue();
 
 		disclosure.Click();
 
 		disclosure = cut.Find(TestId(ModeratorUiTestIds.LobbyEvaluationDisclosure));
 		disclosure.GetAttribute("aria-label").Should().Be(ClientStrings.LobbyEvaluation_DetailToggle);
 		disclosure.GetAttribute("aria-expanded").Should().Be("true");
-		var detail = cut.Find(TestId(ModeratorUiTestIds.LobbyEvaluationDetail));
+		detail = cut.Find(TestId(ModeratorUiTestIds.LobbyEvaluationDetail));
 		detail.Id.Should().Be(detailId);
+		detail.HasAttribute("hidden").Should().BeFalse();
 		detail.QuerySelector("table").Should().BeNull();
 		cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationTurnEntry)).Should().HaveCount(2);
 		detail.TextContent.Should().Contain(Format(ClientStrings.LobbyEvaluation_TurnFormat, 1));
@@ -158,7 +161,8 @@ public class LobbyEvaluationPanelTests
 
 		cut.Find(TestId(ModeratorUiTestIds.LobbyEvaluationDisclosure))
 			.GetAttribute("aria-expanded").Should().Be("false");
-		cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationDetail)).Should().BeEmpty();
+		cut.Find(TestId(ModeratorUiTestIds.LobbyEvaluationDetail))
+			.HasAttribute("hidden").Should().BeTrue();
 	}
 
 	[Fact]

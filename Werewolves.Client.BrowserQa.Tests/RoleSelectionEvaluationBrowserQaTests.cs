@@ -48,6 +48,11 @@ public sealed class RoleSelectionEvaluationBrowserQaTests : PlaywrightTest, ICla
 		await Expect(disclosure).ToHaveAttributeAsync(
 			BrowserQaAttributes.AriaExpanded,
 			BrowserQaAttributes.AriaFalse);
+		var detailId = await disclosure.GetAttributeAsync(BrowserQaAttributes.AriaControls);
+		detailId.Should().NotBeNullOrWhiteSpace();
+		var detail = page.Locator($"#{detailId}");
+		await Expect(detail).ToHaveCountAsync(1);
+		await Expect(detail).ToBeHiddenAsync();
 
 		var frameLayout = await BrowserQaPage.ReadLayoutAsync(frame);
 		var panelLayout = await BrowserQaPage.ReadLayoutAsync(panel);
@@ -85,7 +90,6 @@ public sealed class RoleSelectionEvaluationBrowserQaTests : PlaywrightTest, ICla
 			BrowserQaAttributes.AriaExpanded,
 			BrowserQaAttributes.AriaTrue);
 		(await IsFocusedAsync(disclosure)).Should().BeTrue();
-		var detail = page.GetByTestId(ModeratorUiTestIds.LobbyEvaluationDetail);
 		await Expect(detail).ToBeVisibleAsync();
 		var expandedOverflow = await ReadOverflowAsync(shell);
 		expandedOverflow.ScrollWidth.Should().BeLessThanOrEqualTo(expandedOverflow.ClientWidth + 1);
@@ -106,6 +110,7 @@ public sealed class RoleSelectionEvaluationBrowserQaTests : PlaywrightTest, ICla
 		await Expect(disclosure).ToHaveAttributeAsync(
 			BrowserQaAttributes.AriaExpanded,
 			BrowserQaAttributes.AriaFalse);
+		await Expect(detail).ToBeHiddenAsync();
 		(await IsFocusedAsync(disclosure)).Should().BeTrue();
 	}
 

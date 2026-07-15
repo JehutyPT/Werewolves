@@ -47,32 +47,30 @@
 						@onclick="ToggleDetail">
 					@ClientStrings.LobbyEvaluation_DetailToggle
 				</button>
-				@if (_detailExpanded)
-				{
-					<div id="lobby-evaluation-detail"
-						 class="ww-lobby-evaluation__detail"
-						 data-testid="@ModeratorUiTestIds.LobbyEvaluationDetail"
-						 role="region"
-						 aria-labelledby="lobby-evaluation-detail-title">
-						<h3 id="lobby-evaluation-detail-title">@ClientStrings.LobbyEvaluation_DetailTitle</h3>
-						@foreach (var outcome in probability.Outcomes.Where(outcome => outcome.Turns.Count > 0))
-						{
-							<section class="ww-lobby-evaluation__turns" aria-label="@outcome.Name">
-								<h4>@outcome.Name</h4>
-								<ul>
-									@foreach (var turn in outcome.Turns)
-									{
-										<li data-testid="@ModeratorUiTestIds.LobbyEvaluationTurnEntry">
-											<span>@Format(ClientStrings.LobbyEvaluation_TurnFormat, turn.EndingTurn)</span>
-											<strong>@LobbyEvaluationPresentation.FrequencyText(turn.Frequency)</strong>
-										</li>
-									}
-								</ul>
-							</section>
-						}
-						<p class="ww-lobby-evaluation__caveat">@ClientStrings.LobbyEvaluation_FiniteBaselineCaveat</p>
-					</div>
-				}
+				<div id="lobby-evaluation-detail"
+					 class="ww-lobby-evaluation__detail"
+					 data-testid="@ModeratorUiTestIds.LobbyEvaluationDetail"
+					 role="region"
+					 aria-labelledby="lobby-evaluation-detail-title"
+					 hidden="@(!_detailExpanded)">
+					<h3 id="lobby-evaluation-detail-title">@ClientStrings.LobbyEvaluation_DetailTitle</h3>
+					@foreach (var outcome in probability.Outcomes.Where(outcome => outcome.Turns.Count > 0))
+					{
+						<section class="ww-lobby-evaluation__turns" aria-label="@outcome.Name">
+							<h4>@outcome.Name</h4>
+							<ul>
+								@foreach (var turn in outcome.Turns)
+								{
+									<li data-testid="@ModeratorUiTestIds.LobbyEvaluationTurnEntry">
+										<span>@Format(ClientStrings.LobbyEvaluation_TurnFormat, turn.EndingTurn)</span>
+										<strong>@LobbyEvaluationPresentation.FrequencyText(turn.Frequency)</strong>
+									</li>
+								}
+							</ul>
+						</section>
+					}
+					<p class="ww-lobby-evaluation__caveat">@ClientStrings.LobbyEvaluation_FiniteBaselineCaveat</p>
+				</div>
 			}
 			else if (State.Kind == LobbyEvaluationStateKind.CouldNotEvaluate)
 			{
