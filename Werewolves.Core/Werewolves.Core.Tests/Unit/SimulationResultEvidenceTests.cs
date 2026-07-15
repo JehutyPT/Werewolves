@@ -108,7 +108,7 @@ public class SimulationResultEvidenceTests
 	}
 
 	[Fact]
-	public void Evidence_WithMixedAttempts_PreservesEveryRecordAndUsesCompletedOnlyDenominator()
+	public void Evidence_WithMixedAttempts_PreservesSourceButRejectsEveryDistributionProjection()
 	{
 		var identity = CreateIdentity();
 		var source = new SimulationBatchSourceEvidence(
@@ -136,10 +136,43 @@ public class SimulationResultEvidenceTests
 		evidence.AttemptedRunCount.Should().Be(2);
 		evidence.CompletedRunCount.Should().Be(1);
 		evidence.IncompleteRunCount.Should().Be(1);
-		evidence.GameResultFrequencies.Should().HaveCount(3)
-			.And.OnlyContain(row => row.Denominator == 1);
-		evidence.GameResultFrequencies.Sum(row => row.Numerator).Should().Be(1);
+		evidence.CanonicalScenario.Should().Be(identity.Scenario);
+		evidence.SimulatorProfile.Should().Be(identity.Profile);
+		evidence.DecisionStrategy.Should().Be(new DecisionStrategyIdentity("baseline-random", "1-splitmix64"));
+		evidence.PossibleFactions.Should().Equal(Faction.Villager, Faction.Werewolf);
+		evidence.PossibleGameResults.Should().HaveCount(3);
+		Action frequencies = () => _ = evidence.GameResultFrequencies;
+		Action timing = () => _ = evidence.GameResultFrequencyByTurn;
+		Action endedByTurn = () => evidence.GetEndedByTurnFrequency(1);
+		frequencies.Should().Throw<InvalidOperationException>();
+		timing.Should().Throw<InvalidOperationException>();
+		endedByTurn.Should().Throw<InvalidOperationException>();
 	}
+
+	[Fact]
+	public void Evidence_WithUndefinedGameResultType_RejectsInventoryBeforeAggregation()
+	{
+		var identity = CreateIdentity();
+		var source = new SimulationBatchSourceEvidence(
+			identity.Scenario,
+			identity.Profile,
+			new DecisionStrategyIdentity("baseline-random", "1-splitmix64"),
+			[]);
+
+		Action construct = () => new SimulationResultEvidence(
+			source,
+			[Faction.Villager, Faction.Werewolf],
+			[
+				new SingleFactionGameResult(Faction.Villager),
+				new SingleFactionGameResult(Faction.Werewolf),
+				new UndefinedGameResult(),
+				new NoWinnerGameResult()
+			]);
+
+		construct.Should().Throw<ArgumentException>();
+	}
+
+	private sealed class UndefinedGameResult : GameResult;
 
 	private static SimulationCompatibilityIdentity CreateIdentity()
 	{

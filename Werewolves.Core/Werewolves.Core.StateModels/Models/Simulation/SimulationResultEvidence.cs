@@ -59,6 +59,8 @@ public sealed class SimulationResultEvidence
 {
 	private readonly GameResult[] _possibleGameResults;
 	private readonly CompletedSimulationRun[] _completedRuns;
+	private readonly IReadOnlyList<GameResultFrequency> _gameResultFrequencies;
+	private readonly IReadOnlyList<GameResultTurnWindowFrequency> _gameResultFrequencyByTurn;
 
 	public CanonicalSimulationScenario CanonicalScenario { get; }
 	public SimulatorProfileIdentity SimulatorProfile { get; }
@@ -69,8 +71,22 @@ public sealed class SimulationResultEvidence
 	public int IncompleteRunCount { get; }
 	public IReadOnlyList<Faction> PossibleFactions { get; }
 	public IReadOnlyList<GameResult> PossibleGameResults { get; }
-	public IReadOnlyList<GameResultFrequency> GameResultFrequencies { get; }
-	public IReadOnlyList<GameResultTurnWindowFrequency> GameResultFrequencyByTurn { get; }
+	public IReadOnlyList<GameResultFrequency> GameResultFrequencies
+	{
+		get
+		{
+			EnsureDistributionAvailable();
+			return _gameResultFrequencies;
+		}
+	}
+	public IReadOnlyList<GameResultTurnWindowFrequency> GameResultFrequencyByTurn
+	{
+		get
+		{
+			EnsureDistributionAvailable();
+			return _gameResultFrequencyByTurn;
+		}
+	}
 
 	public SimulationResultEvidence(
 		SimulationBatchSourceEvidence source,
@@ -92,6 +108,9 @@ public sealed class SimulationResultEvidence
 
 		_possibleGameResults = possibleGameResults.ToArray();
 		if (_possibleGameResults.Any(result => result is null)
+			|| _possibleGameResults.Any(result => result.GetType() != typeof(SingleFactionGameResult)
+				&& result.GetType() != typeof(SharedVictoryGameResult)
+				&& result.GetType() != typeof(NoWinnerGameResult))
 			|| _possibleGameResults.Distinct().Count() != _possibleGameResults.Length)
 		{
 			throw new ArgumentException("Possible Game Results must be non-null and duplicate-free.", nameof(possibleGameResults));
@@ -123,7 +142,7 @@ public sealed class SimulationResultEvidence
 		IncompleteRunCount = source.IncompleteRunCount;
 		PossibleFactions = Array.AsReadOnly(factions);
 		PossibleGameResults = Array.AsReadOnly(_possibleGameResults);
-		GameResultFrequencies = CompletedRunCount == 0
+		_gameResultFrequencies = CompletedRunCount == 0 || IncompleteRunCount > 0
 			? Array.Empty<GameResultFrequency>()
 			: Array.AsReadOnly(_possibleGameResults
 				.Select(result => new GameResultFrequency(
@@ -131,7 +150,7 @@ public sealed class SimulationResultEvidence
 					_completedRuns.Count(run => run.GameResult.Equals(result)),
 					CompletedRunCount))
 				.ToArray());
-		GameResultFrequencyByTurn = CompletedRunCount == 0
+		_gameResultFrequencyByTurn = CompletedRunCount == 0 || IncompleteRunCount > 0
 			? Array.Empty<GameResultTurnWindowFrequency>()
 			: Array.AsReadOnly(_completedRuns
 			.GroupBy(run => new { run.GameResult, run.EndingTurn, run.VictoryCheckWindow })
@@ -149,6 +168,7 @@ public sealed class SimulationResultEvidence
 	public ExactFrequency GetEndedByTurnFrequency(int endingTurn, GameResult? gameResult = null)
 	{
 		ArgumentOutOfRangeException.ThrowIfNegativeOrZero(endingTurn);
+		EnsureDistributionAvailable();
 		if (CompletedRunCount == 0)
 		{
 			throw new InvalidOperationException(
@@ -162,5 +182,14 @@ public sealed class SimulationResultEvidence
 			_completedRuns.Count(run => run.EndingTurn <= endingTurn
 				&& (gameResult is null || run.GameResult.Equals(gameResult))),
 			CompletedRunCount);
+	}
+
+	private void EnsureDistributionAvailable()
+	{
+		if (IncompleteRunCount > 0)
+		{
+			throw new InvalidOperationException(
+				"Incomplete Simulation Runs cannot be interpreted as a partial distribution.");
+		}
 	}
 }
