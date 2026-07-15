@@ -202,3 +202,51 @@ This log records decisions made while executing PRD #29 autonomously with the
   The canonical issue #84 contract remained byte-for-byte unchanged with
   SHA-256
   `92c45132b647f66017cb03d005bea6af1125dd7cd4bf4233f1197b5d571e3569`.
+
+### 2026-07-15 — issue #81
+
+- Integrated explicit Build-Time Bundled Simulator Cache generation and its
+  review repairs through commits `c3926c84`, `bf6a5a3e`, `cf07ce46`, and
+  `f7cd749d`.
+- The current-profile catalog contains exactly 1,664 canonical identities in
+  ordinal order: 832 Already-Decided scenarios and 832 screening scenarios.
+  The reviewed production artifact contains 832 already-decided, 52
+  degenerate, and 780 probability records with zero omissions, structural
+  suspicions, or incomplete Run Seed Material entries.
+- The canonical checked-in and packaged artifact is 2,337,001 bytes with
+  SHA-256
+  `95797d40dfb3ac0b389c6f004956cdf19faeefb77c1f32f35d8071405d9a9253`.
+  Evaluated project items contain one root `MauiAsset` with logical name
+  `terminal-lobby-cache.json`, no `Content` item for that file, and the Release
+  Mac app contains exactly one byte-identical root resource with no nested
+  duplicate. Ordinary restore, build, test, and package operations left the
+  source artifact hash and timestamp unchanged.
+- The original SDK duplicate-item contradiction was repaired in the prepared
+  contract by permitting exactly the file-specific
+  `<Content Remove="Resources\Raw\terminal-lobby-cache.json" />` exclusion
+  while retaining the existing `Resources/Raw/**` `MauiAsset` wildcard.
+- Generation now publishes through durable same-directory staging and one
+  cancellation-linearized commit decision. Success, cancellation, failure,
+  serializer rejection, boundary failure, cleanup, symlink/case aliases, and
+  macOS Unicode-normalization aliases have deterministic rollback evidence.
+  Observed omissions, suspicions, and incomplete seeds survive terminal
+  cancellation/failure diagnostics instead of being discarded.
+- Diagnostics use typed internal status, phase, omission, and suspicion
+  values, serialize every required stable ordinal code, and strict-round-trip
+  only when catalog identities, phase/run bounds, per-kind artifact records,
+  count equations, artifact document, hash, and byte length agree. Public
+  `Generate`, `GenerateToFile`, and `GenerateToFiles` always bind the complete
+  1,664-scenario catalog; bounded scenario selection and prebuilt publication
+  remain Tests-only internal seams and cannot produce a public partial
+  Completed artifact or report.
+- Enumeration evidence uses an independently derived `4N - 6` per-player
+  cardinality, exact 1,664/832 splits, structural and classifier gates,
+  ordering/uniqueness, boundary membership, and representative exclusions. It
+  does not mirror the production enumeration loop.
+- Central verification at the final integrated repair passed: Core tests with
+  451 passed and one known skip; Client tests with 263 passed; Browser QA with
+  6 passed; generator and Release Mac Catalyst x64 builds with zero warnings
+  and errors. Fresh final Standards and Spec reviews both reported no
+  findings. The repaired canonical issue #81 contract remained byte-for-byte
+  unchanged with SHA-256
+  `3d6b4d67a33788e6f6cd5ae54e56d7f87aa60d51e7870da4c67257bf83f5c2b9`.
