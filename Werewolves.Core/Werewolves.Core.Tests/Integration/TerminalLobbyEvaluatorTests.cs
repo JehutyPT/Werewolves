@@ -1,28 +1,99 @@
 using FluentAssertions;
 using Werewolves.Core.GameLogic.Simulation;
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Simulation;
+using Werewolves.Core.Tests.Helpers;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace Werewolves.Core.Tests.Integration;
 
-public class TerminalLobbyEvaluatorTests
+public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 {
-	[Fact]
-	public void Evaluate_AlreadyDecided_ReturnsStructuredResultWithoutExecuting()
+	public TerminalLobbyEvaluatorTests(ITestOutputHelper output) : base(output)
 	{
-		var scenario = Scenario(
-			MainRoleType.SimpleWerewolf,
-			MainRoleType.SimpleWerewolf,
-			MainRoleType.SimpleWerewolf,
-			MainRoleType.SimpleVillager,
-			MainRoleType.SimpleVillager);
+	}
+
+	[Fact]
+	public void Evaluate_RulesInvalid_ReturnsRulesGateResultWithoutExecuting()
+	{
 		var calls = 0;
 		var evaluator = new TerminalLobbyEvaluator((_, _, _, _) =>
 		{
 			calls++;
 			throw new InvalidOperationException();
 		});
+		var scenario = Scenario(MainRoleType.Seer, MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager, MainRoleType.SimpleVillager, MainRoleType.SimpleVillager);
+
+		var result = evaluator.Evaluate(scenario);
+
+		var stopped = result.Should().BeOfType<RulesInvalidLobbyEvaluation>().Subject.RulesValidity;
+		stopped.Scenario.Should().BeSameAs(scenario);
+		stopped.IsValid.Should().BeFalse();
+		calls.Should().Be(0);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void Evaluate_AppUnsupported_ReturnsAppGateResultWithoutExecuting()
+	{
+		var calls = 0;
+		var evaluator = new TerminalLobbyEvaluator((_, _, _, _) =>
+		{
+			calls++;
+			throw new InvalidOperationException();
+		});
+		var scenario = Scenario(MainRoleType.BigBadWolf, MainRoleType.Seer,
+			MainRoleType.SimpleVillager, MainRoleType.SimpleVillager, MainRoleType.SimpleVillager);
+
+		var result = evaluator.Evaluate(scenario);
+
+		var stopped = result.Should().BeOfType<AppUnsupportedLobbyEvaluation>().Subject.AppSupport;
+		stopped.Scenario.Should().BeSameAs(scenario);
+		stopped.IsSupported.Should().BeFalse();
+		stopped.UnsupportedRoles.Should().Contain(MainRoleType.BigBadWolf);
+		calls.Should().Be(0);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void Evaluate_SimulatorUnsupported_ReturnsSimulatorGateResultWithoutExecuting()
+	{
+		var calls = 0;
+		var evaluator = new TerminalLobbyEvaluator((_, _, _, _) =>
+		{
+			calls++;
+			throw new InvalidOperationException();
+		});
+		var scenario = new SimulationScenario(
+			5,
+			[MainRoleType.SimpleWerewolf, MainRoleType.Seer, MainRoleType.WildChild,
+				MainRoleType.SimpleVillager, MainRoleType.SimpleVillager],
+			new ActorSetupCards([MainRoleType.Cupid, MainRoleType.Defender, MainRoleType.Elder]));
+
+		var result = evaluator.Evaluate(scenario);
+
+		var stopped = result.Should().BeOfType<SimulatorUnsupportedLobbyEvaluation>().Subject.SimulatorSupport;
+		stopped.Scenario.Should().BeSameAs(scenario);
+		stopped.IsSupported.Should().BeFalse();
+		stopped.HasUnsupportedActorSetupCards.Should().BeTrue();
+		calls.Should().Be(0);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void Evaluate_AlreadyDecided_ReturnsStructuredResultWithoutExecuting()
+	{
+		var calls = 0;
+		var evaluator = new TerminalLobbyEvaluator((_, _, _, _) =>
+		{
+			calls++;
+			throw new InvalidOperationException();
+		});
+		var scenario = Scenario(MainRoleType.SimpleWerewolf, MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleWerewolf, MainRoleType.SimpleVillager, MainRoleType.SimpleVillager);
 
 		var result = evaluator.Evaluate(scenario);
 
@@ -30,200 +101,159 @@ public class TerminalLobbyEvaluatorTests
 		decided.GameResult.Should().Be(new SingleFactionGameResult(Faction.Werewolf));
 		decided.Reason.Should().Be(AlreadyDecidedReason.WerewolfControlShortcut);
 		calls.Should().Be(0);
-	}
-
-	[Fact]
-	public void Evaluate_UnsupportedInput_ReturnsNoTerminalEvaluationWithoutExecuting()
-	{
-		var scenario = Scenario(
-			MainRoleType.Seer,
-			MainRoleType.SimpleVillager,
-			MainRoleType.SimpleVillager,
-			MainRoleType.SimpleVillager,
-			MainRoleType.SimpleVillager);
-		var calls = 0;
-		var evaluator = new TerminalLobbyEvaluator((_, _, _, _) =>
-		{
-			calls++;
-			throw new InvalidOperationException();
-		});
-
-		evaluator.Evaluate(scenario).Should().BeNull();
-		calls.Should().Be(0);
+		MarkTestCompleted();
 	}
 
 	[Fact]
 	public void Evaluate_AllTurnOneScreening_ReturnsDegenerateAndStops()
 	{
-		var scenario = SupportedScenario();
 		var calls = new List<int>();
-		var evaluator = new TerminalLobbyEvaluator((input, identity, count, _) =>
+		var evaluator = new TerminalLobbyEvaluator((scenario, identity, count, _) =>
 		{
 			calls.Add(count);
-			return Batch(input, identity, count, _ => (1, VictoryCheckWindow.Dawn));
+			return Batch(scenario, identity, count, _ => (1, VictoryCheckWindow.Dawn));
 		});
 
-		var result = evaluator.Evaluate(scenario);
+		var result = evaluator.Evaluate(SupportedScenario());
 
-		var degenerate = result.Should().BeOfType<DegenerateTerminalEvaluation>().Subject;
-		degenerate.ScreeningEvidence.AttemptedRunCount.Should().Be(1_000);
+		result.Should().BeOfType<DegenerateTerminalEvaluation>().Subject
+			.ScreeningEvidence.AttemptedRunCount.Should().Be(1_000);
 		calls.Should().Equal(1_000);
+		MarkTestCompleted();
 	}
 
 	[Fact]
-	public void Evaluate_OneLaterScreeningRun_UsesSharedIdentityAndPublishesOnlyCompleteProbability()
+	public void Evaluate_OneLaterScreeningRun_UsesSharedIdentityAndPublishesCompleteProbability()
 	{
-		var scenario = SupportedScenario();
 		var calls = new List<(int Count, SimulationCompatibilityIdentity Identity)>();
-		var evaluator = new TerminalLobbyEvaluator((input, identity, count, _) =>
+		var evaluator = new TerminalLobbyEvaluator((scenario, identity, count, _) =>
 		{
 			calls.Add((count, identity));
-			return count == 1_000
-				? Batch(input, identity, count, run => run == 999
-					? (2, VictoryCheckWindow.PreNight)
-					: (1, VictoryCheckWindow.Dawn))
-				: Batch(input, identity, count, run => run % 2 == 0
-					? (2, VictoryCheckWindow.Dawn)
-					: (3, VictoryCheckWindow.PreNight));
+			return Batch(scenario, identity, count, run => count == 1_000 && run == 999
+				? (2, VictoryCheckWindow.PreNight)
+				: (1, VictoryCheckWindow.Dawn));
 		});
 
-		var result = evaluator.Evaluate(scenario);
+		var result = evaluator.Evaluate(SupportedScenario());
 
 		var probability = result.Should().BeOfType<ProbabilityTerminalEvaluation>().Subject;
 		calls.Select(call => call.Count).Should().Equal(1_000, 10_000);
 		calls[0].Identity.Should().Be(calls[1].Identity);
 		probability.Evidence.CompletedRunCount.Should().Be(10_000);
-		probability.Evidence.IncompleteRunCount.Should().Be(0);
-		probability.Evidence.PossibleFactions.Should().Equal(Faction.Villager, Faction.Werewolf);
 		probability.Evidence.PossibleGameResults.Should().Equal(
-			new GameResult[]
-			{
-				new SingleFactionGameResult(Faction.Villager),
-				new SingleFactionGameResult(Faction.Werewolf),
-				new NoWinnerGameResult()
-			});
+			new SingleFactionGameResult(Faction.Villager),
+			new SingleFactionGameResult(Faction.Werewolf),
+			new NoWinnerGameResult());
+		MarkTestCompleted();
 	}
 
-	[Fact]
-	public void Evaluate_IncompleteOrFailedScreening_ReturnsNothingAndDoesNotStartProbability()
+	[Theory]
+	[InlineData(true)]
+	[InlineData(false)]
+	public void Evaluate_IncompleteRequiredBatch_ReturnsCouldNotEvaluate(bool screening)
 	{
-		var scenario = SupportedScenario();
-		var identity = Identity(scenario);
-		var incompleteCalls = 0;
-		var incomplete = new TerminalLobbyEvaluator((input, supplied, count, _) =>
+		var evaluator = new TerminalLobbyEvaluator((scenario, identity, count, _) =>
 		{
-			incompleteCalls++;
-			var records = Batch(input, supplied, count, _ => (1, VictoryCheckWindow.Dawn)).Records.ToArray();
-			records[^1] = new IncompleteSimulationRun(records[^1].RunSeedMaterial);
-			return new SimulationBatchSourceEvidence(
-				input.ToCanonical(), supplied.Profile, BaselineRandomDecisionStrategy.Identity, records);
-		});
-		var failedCalls = 0;
-		var failed = new TerminalLobbyEvaluator((_, _, _, _) =>
-		{
-			failedCalls++;
-			throw new InvalidOperationException();
-		});
-
-		incomplete.Evaluate(scenario).Should().BeNull();
-		failed.Evaluate(scenario).Should().BeNull();
-		incompleteCalls.Should().Be(1);
-		failedCalls.Should().Be(1);
-		identity.Should().Be(Identity(scenario));
-	}
-
-	[Fact]
-	public void Evaluate_CancellationAtEveryGate_PropagatesWithoutPublishing()
-	{
-		var scenario = SupportedScenario();
-		using var preCancelled = new CancellationTokenSource();
-		preCancelled.Cancel();
-		var evaluator = new TerminalLobbyEvaluator((input, identity, count, token) =>
-		{
-			token.ThrowIfCancellationRequested();
-			return Batch(input, identity, count, _ => (1, VictoryCheckWindow.Dawn));
-		});
-		Action pre = () => evaluator.Evaluate(scenario, preCancelled.Token);
-
-		using var between = new CancellationTokenSource();
-		var betweenEvaluator = new TerminalLobbyEvaluator((input, identity, count, _) =>
-		{
-			var batch = Batch(input, identity, count, run => run == 999
-				? (2, VictoryCheckWindow.Dawn)
-				: (1, VictoryCheckWindow.Dawn));
-			between.Cancel();
-			return batch;
-		});
-		Action betweenGates = () => betweenEvaluator.Evaluate(scenario, between.Token);
-
-		pre.Should().Throw<OperationCanceledException>();
-		betweenGates.Should().Throw<OperationCanceledException>();
-	}
-
-	[Fact]
-	public void Evaluate_IncompleteProbabilityOrIdentityInconsistentEvidence_PublishesNothing()
-	{
-		var scenario = SupportedScenario();
-		var probabilityCalls = 0;
-		var incompleteProbability = new TerminalLobbyEvaluator((input, identity, count, _) =>
-		{
-			probabilityCalls++;
-			var batch = Batch(input, identity, count, run => run == count - 1
+			var batch = Batch(scenario, identity, count, run => count == 1_000 && run == count - 1
 				? (2, VictoryCheckWindow.PreNight)
 				: (1, VictoryCheckWindow.Dawn));
-			if (count == 10_000)
+			if ((screening && count == 1_000) || (!screening && count == 10_000))
 			{
 				var records = batch.Records.ToArray();
 				records[^1] = new IncompleteSimulationRun(records[^1].RunSeedMaterial);
 				return new SimulationBatchSourceEvidence(
-					input.ToCanonical(), identity.Profile, BaselineRandomDecisionStrategy.Identity, records);
+					scenario.ToCanonical(), identity.Profile, BaselineRandomDecisionStrategy.Identity, records);
 			}
 			return batch;
 		});
-		var inconsistent = new TerminalLobbyEvaluator((input, identity, count, _) =>
-			new SimulationBatchSourceEvidence(
-				input.ToCanonical(),
-				new SimulatorProfileIdentity("other", "1"),
-				BaselineRandomDecisionStrategy.Identity,
-				[]));
 
-		incompleteProbability.Evaluate(scenario).Should().BeNull();
-		inconsistent.Evaluate(scenario).Should().BeNull();
-		probabilityCalls.Should().Be(2);
+		evaluator.Evaluate(SupportedScenario()).Should().BeOfType<CouldNotEvaluateLobbyEvaluation>();
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void Evaluate_ExecutionFailure_ReturnsCouldNotEvaluateWithoutDiagnostics()
+	{
+		var evaluator = new TerminalLobbyEvaluator((_, _, _, _) => throw new InvalidOperationException("secret"));
+
+		var result = evaluator.Evaluate(SupportedScenario());
+
+		result.Should().Be(new CouldNotEvaluateLobbyEvaluation());
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void Evaluate_IdentityInconsistentEvidence_ReturnsCouldNotEvaluate()
+	{
+		var evaluator = new TerminalLobbyEvaluator((scenario, _, _, _) =>
+			new SimulationBatchSourceEvidence(
+				scenario.ToCanonical(), new SimulatorProfileIdentity("other", "1"),
+				BaselineRandomDecisionStrategy.Identity, []));
+
+		evaluator.Evaluate(SupportedScenario()).Should().BeOfType<CouldNotEvaluateLobbyEvaluation>();
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void Evaluate_PreCancellationAndBetweenGates_PropagateWithoutResult()
+	{
+		using var preCancelled = new CancellationTokenSource();
+		preCancelled.Cancel();
+		var evaluator = new TerminalLobbyEvaluator((scenario, identity, count, token) =>
+		{
+			token.ThrowIfCancellationRequested();
+			return Batch(scenario, identity, count, _ => (1, VictoryCheckWindow.Dawn));
+		});
+		LobbyEvaluationResult? result = null;
+		Action pre = () => result = evaluator.Evaluate(SupportedScenario(), preCancelled.Token);
+
+		using var between = new CancellationTokenSource();
+		var betweenEvaluator = new TerminalLobbyEvaluator((scenario, identity, count, token) =>
+		{
+			var batch = Batch(scenario, identity, count, run => run == count - 1
+				? (2, VictoryCheckWindow.Dawn) : (1, VictoryCheckWindow.Dawn));
+			between.Cancel();
+			return batch;
+		});
+		Action betweenGates = () => result = betweenEvaluator.Evaluate(SupportedScenario(), between.Token);
+
+		pre.Should().Throw<OperationCanceledException>();
+		betweenGates.Should().Throw<OperationCanceledException>();
+		result.Should().BeNull();
+		MarkTestCompleted();
 	}
 
 	[Theory]
 	[InlineData(1_000)]
 	[InlineData(10_000)]
-	public void Evaluate_CancellationThrownDuringEitherBatch_Propagates(int cancellingBatch)
+	public void Evaluate_CallerCancellationDuringEitherBatch_PropagatesSameTokenWithoutResult(int cancellingBatch)
 	{
-		var evaluator = new TerminalLobbyEvaluator((input, identity, count, token) =>
+		using var cancellation = new CancellationTokenSource();
+		var evaluator = new TerminalLobbyEvaluator((scenario, identity, count, token) =>
 		{
+			token.Should().Be(cancellation.Token);
 			if (count == cancellingBatch)
 			{
-				throw new OperationCanceledException(token);
+				cancellation.Cancel();
+				token.ThrowIfCancellationRequested();
 			}
-			return Batch(input, identity, count, run => run == count - 1
-				? (2, VictoryCheckWindow.PreNight)
-				: (1, VictoryCheckWindow.Dawn));
+			return Batch(scenario, identity, count, run => count == 1_000 && run == count - 1
+				? (2, VictoryCheckWindow.PreNight) : (1, VictoryCheckWindow.Dawn));
 		});
+		LobbyEvaluationResult? result = null;
 
-		Action evaluate = () => evaluator.Evaluate(SupportedScenario());
+		Action evaluate = () => result = evaluator.Evaluate(SupportedScenario(), cancellation.Token);
 
 		evaluate.Should().Throw<OperationCanceledException>();
+		result.Should().BeNull();
+		MarkTestCompleted();
 	}
 
 	private static SimulationScenario SupportedScenario() => Scenario(
-		MainRoleType.SimpleWerewolf,
-		MainRoleType.Seer,
-		MainRoleType.SimpleVillager,
-		MainRoleType.SimpleVillager,
-		MainRoleType.SimpleVillager);
+		MainRoleType.SimpleWerewolf, MainRoleType.Seer, MainRoleType.SimpleVillager,
+		MainRoleType.SimpleVillager, MainRoleType.SimpleVillager);
 
 	private static SimulationScenario Scenario(params MainRoleType[] roles) => new(5, roles);
-
-	private static SimulationCompatibilityIdentity Identity(SimulationScenario scenario) =>
-		new(scenario.ToCanonical(), SimulatorProfile.Active.Identity);
 
 	private static SimulationBatchSourceEvidence Batch(
 		SimulationScenario scenario,

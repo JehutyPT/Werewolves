@@ -10,7 +10,7 @@ public record ExactFrequency
 	public ExactFrequency(int numerator, int denominator)
 	{
 		ArgumentOutOfRangeException.ThrowIfNegative(numerator);
-		ArgumentOutOfRangeException.ThrowIfNegative(denominator);
+		ArgumentOutOfRangeException.ThrowIfNegativeOrZero(denominator);
 		if (numerator > denominator)
 		{
 			throw new ArgumentOutOfRangeException(nameof(numerator));
@@ -80,12 +80,6 @@ public sealed class SimulationResultEvidence
 		ArgumentNullException.ThrowIfNull(source);
 		ArgumentNullException.ThrowIfNull(possibleFactions);
 		ArgumentNullException.ThrowIfNull(possibleGameResults);
-		if (source.IncompleteRunCount != 0)
-		{
-			throw new ArgumentException(
-				"Incomplete attempts cannot be interpreted as complete Simulation Result Evidence.",
-				nameof(source));
-		}
 		var factions = possibleFactions.ToArray();
 		if (factions.Any(faction => !Enum.IsDefined(faction)))
 		{
@@ -129,13 +123,17 @@ public sealed class SimulationResultEvidence
 		IncompleteRunCount = source.IncompleteRunCount;
 		PossibleFactions = Array.AsReadOnly(factions);
 		PossibleGameResults = Array.AsReadOnly(_possibleGameResults);
-		GameResultFrequencies = Array.AsReadOnly(_possibleGameResults
-			.Select(result => new GameResultFrequency(
-				result,
-				_completedRuns.Count(run => run.GameResult.Equals(result)),
-				CompletedRunCount))
-			.ToArray());
-		GameResultFrequencyByTurn = Array.AsReadOnly(_completedRuns
+		GameResultFrequencies = CompletedRunCount == 0
+			? Array.Empty<GameResultFrequency>()
+			: Array.AsReadOnly(_possibleGameResults
+				.Select(result => new GameResultFrequency(
+					result,
+					_completedRuns.Count(run => run.GameResult.Equals(result)),
+					CompletedRunCount))
+				.ToArray());
+		GameResultFrequencyByTurn = CompletedRunCount == 0
+			? Array.Empty<GameResultTurnWindowFrequency>()
+			: Array.AsReadOnly(_completedRuns
 			.GroupBy(run => new { run.GameResult, run.EndingTurn, run.VictoryCheckWindow })
 			.Select(group => new GameResultTurnWindowFrequency(
 				group.Key.GameResult,
@@ -151,6 +149,11 @@ public sealed class SimulationResultEvidence
 	public ExactFrequency GetEndedByTurnFrequency(int endingTurn, GameResult? gameResult = null)
 	{
 		ArgumentOutOfRangeException.ThrowIfNegativeOrZero(endingTurn);
+		if (CompletedRunCount == 0)
+		{
+			throw new InvalidOperationException(
+				"Ended-By-Turn Frequency requires at least one Completed Simulation Run.");
+		}
 		if (gameResult is not null && !_possibleGameResults.Contains(gameResult))
 		{
 			throw new ArgumentException("The filter is outside the declared inventory.", nameof(gameResult));

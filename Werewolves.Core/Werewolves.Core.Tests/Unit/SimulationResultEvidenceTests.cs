@@ -81,7 +81,7 @@ public class SimulationResultEvidenceTests
 	}
 
 	[Fact]
-	public void Evidence_WithNoCompletedRuns_RetainsAllExactZeroRows()
+	public void Evidence_WithNoCompletedRuns_RetainsEvidenceWithoutUndefinedFrequencyRows()
 	{
 		var identity = CreateIdentity();
 		var source = new SimulationBatchSourceEvidence(
@@ -99,26 +99,31 @@ public class SimulationResultEvidenceTests
 				new NoWinnerGameResult()
 			]);
 
-		evidence.GameResultFrequencies.Should().HaveCount(3)
-			.And.OnlyContain(row => row.Numerator == 0 && row.Denominator == 0);
+		evidence.GameResultFrequencies.Should().BeEmpty();
 		evidence.GameResultFrequencyByTurn.Should().BeEmpty();
-		evidence.GetEndedByTurnFrequency(1).Should().Be(new ExactFrequency(0, 0));
+		Action endedByTurn = () => evidence.GetEndedByTurnFrequency(1);
+		endedByTurn.Should().Throw<InvalidOperationException>();
+		Action zeroDenominator = () => new ExactFrequency(0, 0);
+		zeroDenominator.Should().Throw<ArgumentOutOfRangeException>();
 	}
 
 	[Fact]
-	public void Evidence_WithAnIncompleteAttempt_RejectsPartialAggregation()
+	public void Evidence_WithMixedAttempts_PreservesEveryRecordAndUsesCompletedOnlyDenominator()
 	{
 		var identity = CreateIdentity();
 		var source = new SimulationBatchSourceEvidence(
 			identity.Scenario,
 			identity.Profile,
 			new DecisionStrategyIdentity("baseline-random", "1-splitmix64"),
-			[new IncompleteSimulationRun(new RunSeedMaterial(
-				identity,
-				new DecisionStrategyIdentity("baseline-random", "1-splitmix64"),
-				0))]);
+			[
+				Completed(identity, 0, new SingleFactionGameResult(Faction.Villager), 1, VictoryCheckWindow.Dawn),
+				new IncompleteSimulationRun(new RunSeedMaterial(
+					identity,
+					new DecisionStrategyIdentity("baseline-random", "1-splitmix64"),
+					1))
+			]);
 
-		Action construct = () => new SimulationResultEvidence(
+		var evidence = new SimulationResultEvidence(
 			source,
 			[Faction.Villager, Faction.Werewolf],
 			[
@@ -127,7 +132,13 @@ public class SimulationResultEvidenceTests
 				new NoWinnerGameResult()
 			]);
 
-		construct.Should().Throw<ArgumentException>();
+		evidence.Records.Should().Equal(source.Records);
+		evidence.AttemptedRunCount.Should().Be(2);
+		evidence.CompletedRunCount.Should().Be(1);
+		evidence.IncompleteRunCount.Should().Be(1);
+		evidence.GameResultFrequencies.Should().HaveCount(3)
+			.And.OnlyContain(row => row.Denominator == 1);
+		evidence.GameResultFrequencies.Sum(row => row.Numerator).Should().Be(1);
 	}
 
 	private static SimulationCompatibilityIdentity CreateIdentity()

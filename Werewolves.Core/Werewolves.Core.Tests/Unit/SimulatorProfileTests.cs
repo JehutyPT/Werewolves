@@ -56,4 +56,27 @@ public class SimulatorProfileTests
 		differentProfile.Should().NotBe(current);
 		differentVersion.Should().NotBe(current);
 	}
+
+	[Fact]
+	public void PossibleGameResults_UsesOnlyDeclaredApplicableSharedVictoryCapabilities()
+	{
+		var shared = new SharedVictoryGameResult([Faction.Villager, Faction.Werewolf]);
+		var profile = new SimulatorProfile(
+			new SimulatorProfileIdentity("shared-capable", "1"),
+			[
+				new(MainRoleType.SimpleWerewolf, Faction.Werewolf),
+				new(MainRoleType.SimpleVillager, Faction.Villager)
+			],
+			[shared]);
+
+		profile.CreatePossibleGameResults([Faction.Villager, Faction.Werewolf]).Should().Equal(
+			new SingleFactionGameResult(Faction.Villager),
+			new SingleFactionGameResult(Faction.Werewolf),
+			shared,
+			new NoWinnerGameResult());
+		profile.CreatePossibleGameResults([Faction.Villager]).Should().Equal(
+			new SingleFactionGameResult(Faction.Villager),
+			new NoWinnerGameResult());
+		SimulatorProfile.Active.SharedVictoryCapabilities.Should().BeEmpty();
+	}
 }

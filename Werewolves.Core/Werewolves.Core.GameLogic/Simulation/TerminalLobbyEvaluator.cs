@@ -3,7 +3,20 @@ using Werewolves.Core.StateModels.Models.Simulation;
 
 namespace Werewolves.Core.GameLogic.Simulation;
 
-public abstract record TerminalLobbyEvaluation;
+public abstract record LobbyEvaluationResult;
+
+public sealed record RulesInvalidLobbyEvaluation(
+	RulesValidityResult RulesValidity) : LobbyEvaluationResult;
+
+public sealed record AppUnsupportedLobbyEvaluation(
+	AppSupportResult AppSupport) : LobbyEvaluationResult;
+
+public sealed record SimulatorUnsupportedLobbyEvaluation(
+	SimulatorSupportResult SimulatorSupport) : LobbyEvaluationResult;
+
+public sealed record CouldNotEvaluateLobbyEvaluation : LobbyEvaluationResult;
+
+public abstract record TerminalLobbyEvaluation : LobbyEvaluationResult;
 
 public sealed record AlreadyDecidedTerminalEvaluation(
 	GameResult GameResult,
@@ -44,7 +57,7 @@ public sealed class TerminalLobbyEvaluator
 		_executeBatch = executeBatch ?? throw new ArgumentNullException(nameof(executeBatch));
 	}
 
-	public TerminalLobbyEvaluation? Evaluate(
+	public LobbyEvaluationResult Evaluate(
 		SimulationScenario scenario,
 		CancellationToken cancellationToken = default)
 	{
@@ -52,10 +65,25 @@ public sealed class TerminalLobbyEvaluator
 		cancellationToken.ThrowIfCancellationRequested();
 		var classification = SimulationScenarioClassifier.Classify(scenario);
 		cancellationToken.ThrowIfCancellationRequested();
-		if (classification.SimulatorSupport is not { IsSupported: true } simulatorSupport
-			|| classification.AlreadyDecided is null)
+		if (!classification.RulesValidity.IsValid)
 		{
-			return null;
+			return new RulesInvalidLobbyEvaluation(classification.RulesValidity);
+		}
+		if (classification.AppSupport is not { IsSupported: true })
+		{
+			return classification.AppSupport is null
+				? new CouldNotEvaluateLobbyEvaluation()
+				: new AppUnsupportedLobbyEvaluation(classification.AppSupport);
+		}
+		if (classification.SimulatorSupport is not { IsSupported: true } simulatorSupport)
+		{
+			return classification.SimulatorSupport is null
+				? new CouldNotEvaluateLobbyEvaluation()
+				: new SimulatorUnsupportedLobbyEvaluation(classification.SimulatorSupport);
+		}
+		if (classification.AlreadyDecided is null)
+		{
+			return new CouldNotEvaluateLobbyEvaluation();
 		}
 
 		if (classification.AlreadyDecided is { IsAlreadyDecided: true, GameResult: not null } decided)
@@ -66,36 +94,24 @@ public sealed class TerminalLobbyEvaluator
 		var identity = classification.Cacheability?.CompatibilityIdentity;
 		if (identity is null)
 		{
-			return null;
+			return new CouldNotEvaluateLobbyEvaluation();
 		}
 		var inventory = CreateInventory(scenario, simulatorSupport.Profile);
 		if (inventory is null)
 		{
-			return null;
+			return new CouldNotEvaluateLobbyEvaluation();
 		}
 
-		SimulationBatchSourceEvidence screening;
-		try
+		if (!TryExecuteBatch(
+			scenario, identity, ScreeningAttemptCount, cancellationToken, out var screening))
 		{
-			screening = _executeBatch(
-				scenario,
-				identity,
-				ScreeningAttemptCount,
-				cancellationToken);
-		}
-		catch (OperationCanceledException)
-		{
-			throw;
-		}
-		catch
-		{
-			return null;
+			return new CouldNotEvaluateLobbyEvaluation();
 		}
 
 		cancellationToken.ThrowIfCancellationRequested();
 		if (!IsConsistentCompleteBatch(screening, identity, ScreeningAttemptCount))
 		{
-			return null;
+			return new CouldNotEvaluateLobbyEvaluation();
 		}
 		SimulationResultEvidence screeningEvidence;
 		try
@@ -107,7 +123,7 @@ public sealed class TerminalLobbyEvaluator
 		}
 		catch (ArgumentException)
 		{
-			return null;
+			return new CouldNotEvaluateLobbyEvaluation();
 		}
 		if (screening.Records.Cast<CompletedSimulationRun>()
 			.All(run => run.EndingTurn == 1))
@@ -116,28 +132,16 @@ public sealed class TerminalLobbyEvaluator
 		}
 
 		cancellationToken.ThrowIfCancellationRequested();
-		SimulationBatchSourceEvidence probability;
-		try
+		if (!TryExecuteBatch(
+			scenario, identity, ProbabilityAttemptCount, cancellationToken, out var probability))
 		{
-			probability = _executeBatch(
-				scenario,
-				identity,
-				ProbabilityAttemptCount,
-				cancellationToken);
-		}
-		catch (OperationCanceledException)
-		{
-			throw;
-		}
-		catch
-		{
-			return null;
+			return new CouldNotEvaluateLobbyEvaluation();
 		}
 
 		cancellationToken.ThrowIfCancellationRequested();
 		if (!IsConsistentCompleteBatch(probability, identity, ProbabilityAttemptCount))
 		{
-			return null;
+			return new CouldNotEvaluateLobbyEvaluation();
 		}
 		try
 		{
@@ -148,7 +152,31 @@ public sealed class TerminalLobbyEvaluator
 		}
 		catch (ArgumentException)
 		{
-			return null;
+			return new CouldNotEvaluateLobbyEvaluation();
+		}
+	}
+
+	private bool TryExecuteBatch(
+		SimulationScenario scenario,
+		SimulationCompatibilityIdentity identity,
+		int attemptCount,
+		CancellationToken cancellationToken,
+		out SimulationBatchSourceEvidence evidence)
+	{
+		try
+		{
+			evidence = _executeBatch(scenario, identity, attemptCount, cancellationToken);
+			cancellationToken.ThrowIfCancellationRequested();
+			return true;
+		}
+		catch (OperationCanceledException)
+		{
+			throw;
+		}
+		catch
+		{
+			evidence = null!;
+			return false;
 		}
 	}
 
@@ -179,10 +207,7 @@ public sealed class TerminalLobbyEvaluator
 			factions.Add(faction);
 		}
 		var orderedFactions = factions.Order().ToArray();
-		var results = orderedFactions
-			.Select(faction => (GameResult)new SingleFactionGameResult(faction))
-			.Append(new NoWinnerGameResult())
-			.ToArray();
+		var results = profile.CreatePossibleGameResults(orderedFactions);
 		return (orderedFactions, results);
 	}
 }
