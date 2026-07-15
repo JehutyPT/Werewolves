@@ -1,6 +1,4 @@
-using Werewolves.Core.StateModels.Models.Simulation;
-
-namespace Werewolves.Core.GameLogic.Simulation;
+namespace Werewolves.Core.StateModels.Models.Simulation;
 
 public sealed class SimulationCompatibilityIdentity : IEquatable<SimulationCompatibilityIdentity>
 {

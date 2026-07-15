@@ -1,4 +1,4 @@
-namespace Werewolves.Core.GameLogic.Simulation;
+namespace Werewolves.Core.StateModels.Models.Simulation;
 
 public sealed class SimulatorProfileIdentity : IEquatable<SimulatorProfileIdentity>
 {

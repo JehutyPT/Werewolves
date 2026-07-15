@@ -19,6 +19,12 @@ public record SelectPlayersInstruction : ModeratorInstruction
     /// </summary>
     public NumberRangeConstraint CountConstraint { get; }
 
+	/// <summary>
+	/// Machine-stable context for first-night Role identification.
+	/// Null for ordinary target and vote selections.
+	/// </summary>
+	public MainRoleType? RoleIdentification { get; }
+
     /// <summary>
     /// Optional label for an explicit empty-selection choice when the constraint allows no players.
     /// </summary>
@@ -38,11 +44,18 @@ public record SelectPlayersInstruction : ModeratorInstruction
         NumberRangeConstraint countConstraint,
         string? publicAnnouncement = null,
         string? privateInstruction = null,
-        IReadOnlyList<Guid>? affectedPlayerIds = null)
+        IReadOnlyList<Guid>? affectedPlayerIds = null,
+		MainRoleType? roleIdentification = null)
         : base(publicAnnouncement, privateInstruction, affectedPlayerIds)
     {
         SelectablePlayerIds = selectablePlayerIds ?? throw new ArgumentNullException(nameof(selectablePlayerIds));
         CountConstraint = countConstraint;
+		if (roleIdentification.HasValue && !Enum.IsDefined(roleIdentification.Value))
+		{
+			throw new ArgumentOutOfRangeException(nameof(roleIdentification));
+		}
+
+		RoleIdentification = roleIdentification;
 
         if (selectablePlayerIds.Count == 0)
         {

@@ -1,5 +1,6 @@
 using Werewolves.Core.GameLogic.Interfaces;
 using Werewolves.Core.GameLogic.Models;
+using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 
@@ -18,6 +19,23 @@ public sealed class HeadlessGameDriver
 
 	public HeadlessGameResult CompleteGame(GameSessionConfig config)
 	{
+		var execution = CompleteGameSession(config, CancellationToken.None);
+		var finishedInstruction = (FinishedGameConfirmationInstruction)execution.FinalInstruction;
+
+		return new HeadlessGameResult(
+			IsFinished: true,
+			TurnCount: execution.Session.TurnNumber,
+			ProcessedInstructionCount: execution.ProcessedInstructionCount,
+			VictoryDescription: finishedInstruction.VictoryDescription);
+	}
+
+	internal HeadlessGameExecution CompleteGameSession(
+		GameSessionConfig config,
+		CancellationToken cancellationToken,
+		Action? betweenInstructions = null)
+	{
+		ArgumentNullException.ThrowIfNull(config);
+		cancellationToken.ThrowIfCancellationRequested();
 		var gameService = new GameService();
 		var startInstruction = gameService.StartNewGame(config);
 		ModeratorInstruction instruction = startInstruction;
@@ -26,6 +44,7 @@ public sealed class HeadlessGameDriver
 
 		while (instruction is not FinishedGameConfirmationInstruction)
 		{
+			cancellationToken.ThrowIfCancellationRequested();
 			if (processedInstructionCount >= _maxProcessedInstructionCount)
 			{
 				throw new InvalidOperationException(
@@ -44,16 +63,24 @@ public sealed class HeadlessGameDriver
 
 			instruction = result.ModeratorInstruction;
 			processedInstructionCount++;
+			if (instruction is not FinishedGameConfirmationInstruction)
+			{
+				betweenInstructions?.Invoke();
+				cancellationToken.ThrowIfCancellationRequested();
+			}
 		}
 
 		var finishedSession = gameService.GetGameStateView(gameId)
 			?? throw new InvalidOperationException($"Finished game session {gameId} is no longer available.");
-		var finishedInstruction = (FinishedGameConfirmationInstruction)instruction;
 
-		return new HeadlessGameResult(
-			IsFinished: true,
-			TurnCount: finishedSession.TurnNumber,
-			ProcessedInstructionCount: processedInstructionCount,
-			VictoryDescription: finishedInstruction.VictoryDescription);
+		return new HeadlessGameExecution(
+			finishedSession,
+			instruction,
+			processedInstructionCount);
 	}
 }
+
+internal sealed record HeadlessGameExecution(
+	IGameSession Session,
+	ModeratorInstruction FinalInstruction,
+	int ProcessedInstructionCount);
