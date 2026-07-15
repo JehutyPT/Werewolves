@@ -91,14 +91,72 @@ public sealed class BuildTimeTerminalLobbyCacheGeneratorTests
 	}
 
 	[Fact]
-	public void FilePublicationPublicSurface_DoesNotAcceptScenarioSelections()
+	public void PublicGenerationSurface_DoesNotAcceptScenarioSelections()
 	{
 		var methods = typeof(BuildTimeTerminalLobbyCacheGenerator).GetMethods()
-			.Where(method => method.Name is nameof(BuildTimeTerminalLobbyCacheGenerator.GenerateToFile)
-				or nameof(BuildTimeTerminalLobbyCacheGenerator.GenerateToFiles));
+			.Where(method => method.Name.StartsWith("Generate", StringComparison.Ordinal))
+			.ToArray();
 
+		methods.Select(method => method.Name).Should().Contain(
+		[
+			nameof(BuildTimeTerminalLobbyCacheGenerator.Generate),
+			nameof(BuildTimeTerminalLobbyCacheGenerator.GenerateToFile),
+			nameof(BuildTimeTerminalLobbyCacheGenerator.GenerateToFiles)
+		]);
 		methods.Should().OnlyContain(method => method.GetParameters().All(parameter =>
 			parameter.ParameterType != typeof(IEnumerable<TerminalLobbyGenerationScenario>)));
+	}
+
+	[Fact]
+	public void Generate_WhenFirstProgressCancels_ReportsTheWholeCatalogAndStops()
+	{
+		using var cancellation = new CancellationTokenSource();
+		BuildTimeCacheGenerationProgress? observedProgress = null;
+		var generator = new BuildTimeTerminalLobbyCacheGenerator(
+			(scenario, identity, count, _) => Batch(
+				scenario,
+				identity,
+				count,
+				incompleteLastRun: true),
+			progress: value =>
+			{
+				observedProgress = value;
+				cancellation.Cancel();
+			});
+
+		var act = () => generator.Generate(cancellation.Token);
+
+		act.Should().Throw<OperationCanceledException>();
+		observedProgress.Should().NotBeNull();
+		observedProgress!.CompletedScenarioCount.Should().Be(1);
+		observedProgress.TotalScenarioCount.Should().Be(1_664);
+	}
+
+	[Fact]
+	public void Generate_WithUnavailableSyntheticBatches_ReturnsCodecValidWholeCatalogCompletion()
+	{
+		var generator = new BuildTimeTerminalLobbyCacheGenerator(
+			(scenario, identity, _, _) => new SimulationBatchSourceEvidence(
+				scenario.ToCanonical(),
+				identity.Profile,
+				BaselineRandomDecisionStrategy.Identity,
+				records: []));
+
+		var result = generator.Generate();
+		var diagnosticsBytes = BuildTimeCacheDiagnosticsJson.Write(
+			result.Diagnostics,
+			result.ArtifactBytes);
+		var read = BuildTimeCacheDiagnosticsJson.Read(
+			diagnosticsBytes,
+			result.ArtifactBytes);
+
+		result.Status.Should().Be(BuildTimeCacheGenerationStatus.Completed);
+		result.Diagnostics.TotalScenarioCount.Should().Be(1_664);
+		result.Diagnostics.EnumeratedScenarioCount.Should().Be(1_664);
+		result.Diagnostics.AlreadyDecidedCount.Should().Be(832);
+		result.Diagnostics.OmittedCount.Should().Be(832);
+		read.Rejection.Should().BeNull();
+		read.Diagnostics.Should().BeEquivalentTo(result.Diagnostics);
 	}
 
 	[Fact]

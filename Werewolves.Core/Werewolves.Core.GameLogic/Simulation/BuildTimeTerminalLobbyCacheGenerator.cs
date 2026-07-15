@@ -157,7 +157,12 @@ public sealed class BuildTimeTerminalLobbyCacheGenerator
 	}
 
 	public BuildTimeCacheGenerationResult Generate(
-		IEnumerable<TerminalLobbyGenerationScenario>? scenarios = null,
+		CancellationToken cancellationToken = default) => Generate(
+			TerminalLobbyScenarioCatalog.EnumerateCurrentProfile(),
+			cancellationToken);
+
+	internal BuildTimeCacheGenerationResult Generate(
+		IEnumerable<TerminalLobbyGenerationScenario> scenarios,
 		CancellationToken cancellationToken = default)
 	{
 		var selected = SelectScenarios(scenarios);
