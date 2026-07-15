@@ -165,3 +165,40 @@ This log records decisions made while executing PRD #29 autonomously with the
   canonical issue #78 contract remained byte-for-byte unchanged during
   implementation and review with SHA-256
   `a052bc697b1215239487010d87273e9efc5ea2b0435a0c2407bbe799f67616f5`.
+
+### 2026-07-15 — issue #84
+
+- Integrated the pre-game lobby-evaluation presentation and live Lobby Exit
+  gate through commits `5a72bc6f` and `b7d7a311`.
+- Role Selection renders one inline, resource-backed Portuguese evaluation
+  panel after the role groups and before the fixed action bar. It subscribes
+  to the live coordinator, rechecks the current role setup on every otherwise
+  valid Start Game attempt, and calls the coordinator's atomic
+  `TryRequestLobbyExit()` operation before the start callback can run. Retry is
+  available only for the current Could Not Evaluate identity and delegates to
+  `RetryCurrent()`.
+- Probability presentation preserves every Possible Game Result row, detects
+  exact zero and positive sub-one-percent numerators before independent whole
+  percentage rounding, performs no compensating normalization, and collapses
+  Victory Check Windows into non-cumulative `(Game Result, Ending Turn)` rows.
+  Single-Faction, Shared Victory, No-Winner, Faction, and all valid
+  Already-Decided reason names use production resources.
+- The detail disclosure has a stable accessible name and relationship. Its
+  controlled region remains mounted with native hidden semantics while
+  collapsed, focus is retained across toggles, and the disclosure and Retry
+  share 44-by-44 minimum pointer-target styling. The exact localized Faction
+  separator remains protected by the test localization policy while being
+  excluded only from noisy substring matching.
+- Automated Browser QA passed at 360-by-800 and 900-by-900 with no horizontal
+  overflow, retained visible focus, seven reachable Turn rows, and the final
+  Turn/caveat clear of the fixed action bar. Root in-app-browser inspection at
+  both frozen sizes confirmed the same layout: a 279-by-44 disclosure with a
+  3-pixel outline and 3-pixel offset, and more than 97 pixels between the
+  caveat and action bar after scrolling.
+- Central verification at the integrated repair passed: Client tests with 263
+  passed; Browser QA with 6 passed; Core tests with 449 passed and one known
+  skip; generator and Release Mac Catalyst x64 builds with zero warnings and
+  errors. Fresh final Standards and Spec reviews both reported no findings.
+  The canonical issue #84 contract remained byte-for-byte unchanged with
+  SHA-256
+  `92c45132b647f66017cb03d005bea6af1125dd7cd4bf4233f1197b5d571e3569`.
