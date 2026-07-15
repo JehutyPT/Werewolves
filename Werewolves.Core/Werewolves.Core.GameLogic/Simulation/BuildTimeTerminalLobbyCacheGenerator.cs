@@ -1,8 +1,35 @@
 using System.Security.Cryptography;
-using System.Text.Json;
+using System.Text;
 using Werewolves.Core.StateModels.Models.Simulation;
 
 namespace Werewolves.Core.GameLogic.Simulation;
+
+public enum BuildTimeCacheGenerationStatus
+{
+	Completed,
+	Cancelled,
+	Failed
+}
+
+public enum BuildTimeBatchPhase
+{
+	Screening,
+	Probability
+}
+
+public enum BuildTimeCacheOmissionCode
+{
+	ScreeningIncomplete,
+	ProbabilityIncomplete,
+	CouldNotEvaluate,
+	TerminalRecordRejected
+}
+
+public enum BuildTimeCacheSuspicionCode
+{
+	IncompleteRun,
+	TerminalKindMismatch
+}
 
 public sealed record BuildTimeCacheArtifactDiagnostics(
 	string LogicalName,
@@ -15,26 +42,26 @@ public sealed record BuildTimeCacheArtifactDiagnostics(
 	int ByteLength);
 
 public sealed record BuildTimeIncompleteRunDiagnostic(
-	string BatchPhase,
+	BuildTimeBatchPhase BatchPhase,
 	RunSeedMaterial RunSeedMaterial);
 
 public sealed record BuildTimeCacheGenerationDiagnostics(
 	string GeneratorIdentifier,
 	string GeneratorVersion,
-	string StatusCode,
+	BuildTimeCacheGenerationStatus Status,
 	int TotalScenarioCount,
 	int EnumeratedScenarioCount,
 	int AlreadyDecidedCount,
 	int DegenerateCount,
 	int ProbabilityCount,
 	int OmittedCount,
-	IReadOnlyDictionary<string, int> OmissionsByCode,
-	IReadOnlyDictionary<string, int> SuspicionsByCode,
+	IReadOnlyDictionary<BuildTimeCacheOmissionCode, int> OmissionsByCode,
+	IReadOnlyDictionary<BuildTimeCacheSuspicionCode, int> SuspicionsByCode,
 	IReadOnlyList<BuildTimeIncompleteRunDiagnostic> IncompleteRunSeedMaterial,
 	BuildTimeCacheArtifactDiagnostics? Artifact);
 
 public sealed record BuildTimeCacheGenerationResult(
-	string StatusCode,
+	BuildTimeCacheGenerationStatus Status,
 	byte[]? ArtifactBytes,
 	TerminalLobbyCacheDocument? Document,
 	BuildTimeCacheGenerationDiagnostics Diagnostics);
@@ -43,6 +70,32 @@ public sealed record BuildTimeCacheGenerationProgress(
 	int CompletedScenarioCount,
 	int TotalScenarioCount,
 	string CanonicalIdentity);
+
+internal enum BuildTimeCachePublicationBoundary
+{
+	ArtifactStaged,
+	DiagnosticsStaged,
+	BeforeCommitDecision,
+	DiagnosticsCommitted,
+	BeforeArtifactCommit,
+	ArtifactCommitted,
+	CleanupCompleted
+}
+
+internal interface IBuildTimeCachePublicationFileSystem
+{
+	void CreateDirectory(string path);
+
+	void WriteDurable(string path, byte[] bytes);
+
+	void MoveReplace(string sourcePath, string destinationPath);
+
+	bool FileExists(string path);
+
+	void DeleteFile(string path);
+
+	void ReachBoundary(BuildTimeCachePublicationBoundary boundary);
+}
 
 public sealed class BuildTimeTerminalLobbyCacheGenerator
 {
@@ -57,6 +110,8 @@ public sealed class BuildTimeTerminalLobbyCacheGenerator
 		CancellationToken,
 		SimulationBatchSourceEvidence> _executeBatch;
 	private readonly Action<BuildTimeCacheGenerationProgress>? _progress;
+	private readonly IBuildTimeCachePublicationFileSystem _fileSystem;
+	private readonly Func<BuildTimeCacheGenerationDiagnostics, byte[]?, byte[]> _diagnosticsSerializer;
 
 	public BuildTimeTerminalLobbyCacheGenerator(
 		int degreeOfParallelism = 1,
@@ -71,106 +126,162 @@ public sealed class BuildTimeTerminalLobbyCacheGenerator
 			degreeOfParallelism,
 			token);
 		_progress = progress;
+		_fileSystem = PhysicalBuildTimeCachePublicationFileSystem.Instance;
+		_diagnosticsSerializer = BuildTimeCacheDiagnosticsJson.Write;
 	}
 
 	public BuildTimeTerminalLobbyCacheGenerator(
 		Func<SimulationScenario, SimulationCompatibilityIdentity, int, CancellationToken,
 			SimulationBatchSourceEvidence> executeBatch,
 		Action<BuildTimeCacheGenerationProgress>? progress = null)
+		: this(
+			executeBatch,
+			progress,
+			PhysicalBuildTimeCachePublicationFileSystem.Instance,
+			BuildTimeCacheDiagnosticsJson.Write)
+	{
+	}
+
+	internal BuildTimeTerminalLobbyCacheGenerator(
+		Func<SimulationScenario, SimulationCompatibilityIdentity, int, CancellationToken,
+			SimulationBatchSourceEvidence> executeBatch,
+		Action<BuildTimeCacheGenerationProgress>? progress,
+		IBuildTimeCachePublicationFileSystem fileSystem,
+		Func<BuildTimeCacheGenerationDiagnostics, byte[]?, byte[]> diagnosticsSerializer)
 	{
 		_executeBatch = executeBatch ?? throw new ArgumentNullException(nameof(executeBatch));
 		_progress = progress;
+		_fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
+		_diagnosticsSerializer = diagnosticsSerializer
+			?? throw new ArgumentNullException(nameof(diagnosticsSerializer));
 	}
 
 	public BuildTimeCacheGenerationResult Generate(
 		IEnumerable<TerminalLobbyGenerationScenario>? scenarios = null,
 		CancellationToken cancellationToken = default)
 	{
-		var completeCatalog = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile();
-		var selected = (scenarios ?? completeCatalog).ToArray();
-		var records = new List<TerminalLobbyCacheRecord>();
-		var omitted = new Dictionary<string, int>(StringComparer.Ordinal);
-		var suspicions = new Dictionary<string, int>(StringComparer.Ordinal);
-		var incompleteSeeds = new List<BuildTimeIncompleteRunDiagnostic>();
-		var already = 0;
-		var degenerate = 0;
-		var probability = 0;
+		var selected = SelectScenarios(scenarios);
+		var observation = new GenerationObservation(selected.Length);
+		return Generate(selected, observation, cancellationToken);
+	}
 
+	public BuildTimeCacheGenerationResult GenerateToFile(
+		string destinationPath,
+		IEnumerable<TerminalLobbyGenerationScenario>? scenarios = null,
+		CancellationToken cancellationToken = default)
+	{
+		var fullDestinationPath = NormalizePath(destinationPath, nameof(destinationPath));
+		return GenerateAndPublish(
+			fullDestinationPath,
+			fullDiagnosticsPath: null,
+			scenarios,
+			cancellationToken);
+	}
+
+	public BuildTimeCacheGenerationResult GenerateToFiles(
+		string destinationPath,
+		string diagnosticsPath,
+		IEnumerable<TerminalLobbyGenerationScenario>? scenarios = null,
+		CancellationToken cancellationToken = default)
+	{
+		var fullDestinationPath = NormalizePath(destinationPath, nameof(destinationPath));
+		var fullDiagnosticsPath = NormalizePath(diagnosticsPath, nameof(diagnosticsPath));
+		var pathComparer = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
+			? StringComparer.OrdinalIgnoreCase
+			: StringComparer.Ordinal;
+		if (pathComparer.Equals(
+			PhysicalPathIdentity(fullDestinationPath),
+			PhysicalPathIdentity(fullDiagnosticsPath)))
+		{
+			throw new ArgumentException(
+				"The artifact and diagnostics destinations must be different files.",
+				nameof(diagnosticsPath));
+		}
+
+		return GenerateAndPublish(
+			fullDestinationPath,
+			fullDiagnosticsPath,
+			scenarios,
+			cancellationToken);
+	}
+
+	private BuildTimeCacheGenerationResult Generate(
+		TerminalLobbyGenerationScenario[] selected,
+		GenerationObservation observation,
+		CancellationToken cancellationToken)
+	{
+		var records = new List<TerminalLobbyCacheRecord>();
 		for (var scenarioIndex = 0; scenarioIndex < selected.Length; scenarioIndex++)
 		{
 			var entry = selected[scenarioIndex];
 			cancellationToken.ThrowIfCancellationRequested();
-			var observedBatches = new List<(int AttemptCount, SimulationBatchSourceEvidence Evidence)>();
+			BuildTimeBatchPhase? lastIncompletePhase = null;
 			var evaluator = new TerminalLobbyEvaluator((scenario, identity, count, token) =>
 			{
+				var phase = count switch
+				{
+					TerminalLobbyEvaluator.ScreeningAttemptCount => BuildTimeBatchPhase.Screening,
+					TerminalLobbyEvaluator.ProbabilityAttemptCount => BuildTimeBatchPhase.Probability,
+					_ => throw new InvalidOperationException("Unknown generator batch phase.")
+				};
 				var batch = _executeBatch(scenario, identity, count, token);
-				observedBatches.Add((count, batch));
+				observation.ObserveBatch(phase, batch);
+				if (batch.IncompleteRunCount > 0)
+				{
+					lastIncompletePhase = phase;
+				}
+
 				return batch;
 			});
 			var evaluation = evaluator.Evaluate(entry.Scenario, cancellationToken);
-			foreach (var observed in observedBatches)
-			{
-				var batchPhase = observed.AttemptCount == TerminalLobbyEvaluator.ScreeningAttemptCount
-					? "screening"
-					: "probability";
-				foreach (var run in observed.Evidence.Records.OfType<IncompleteSimulationRun>())
-				{
-					incompleteSeeds.Add(new BuildTimeIncompleteRunDiagnostic(
-						batchPhase,
-						run.RunSeedMaterial));
-					suspicions["incomplete-run"] = suspicions.GetValueOrDefault("incomplete-run") + 1;
-				}
-			}
 
 			if (evaluation is CouldNotEvaluateLobbyEvaluation)
 			{
-				var code = observedBatches.LastOrDefault(batch => batch.Evidence.IncompleteRunCount > 0)
-					.AttemptCount switch
+				observation.Omit(lastIncompletePhase switch
 				{
-					TerminalLobbyEvaluator.ScreeningAttemptCount => "screening-incomplete",
-					TerminalLobbyEvaluator.ProbabilityAttemptCount => "probability-incomplete",
-					_ => "could-not-evaluate"
-				};
-				omitted[code] = omitted.GetValueOrDefault(code) + 1;
+					BuildTimeBatchPhase.Screening => BuildTimeCacheOmissionCode.ScreeningIncomplete,
+					BuildTimeBatchPhase.Probability => BuildTimeCacheOmissionCode.ProbabilityIncomplete,
+					_ => BuildTimeCacheOmissionCode.CouldNotEvaluate
+				});
 				ReportProgress();
 				continue;
 			}
 
 			if (evaluation is not TerminalLobbyEvaluation terminal)
 			{
-				omitted["could-not-evaluate"] = omitted.GetValueOrDefault("could-not-evaluate") + 1;
+				observation.Omit(BuildTimeCacheOmissionCode.CouldNotEvaluate);
 				ReportProgress();
 				continue;
 			}
 
 			if (entry.IsAlreadyDecided != (terminal is AlreadyDecidedTerminalEvaluation))
 			{
-				suspicions["terminal-kind-mismatch"] = suspicions.GetValueOrDefault("terminal-kind-mismatch") + 1;
+				observation.Suspect(BuildTimeCacheSuspicionCode.TerminalKindMismatch);
 			}
 
 			try
 			{
 				records.Add(TerminalLobbyCache.Capture(entry.Identity, terminal));
-				switch (terminal)
-				{
-					case AlreadyDecidedTerminalEvaluation: already++; break;
-					case DegenerateTerminalEvaluation: degenerate++; break;
-					case ProbabilityTerminalEvaluation: probability++; break;
-				}
+				observation.Record(terminal);
 			}
 			catch (ArgumentException)
 			{
-				omitted["terminal-record-rejected"] = omitted.GetValueOrDefault("terminal-record-rejected") + 1;
+				observation.Omit(BuildTimeCacheOmissionCode.TerminalRecordRejected);
 			}
 
 			ReportProgress();
 
-			void ReportProgress() => _progress?.Invoke(new BuildTimeCacheGenerationProgress(
-				scenarioIndex + 1,
-				selected.Length,
-				entry.Identity.ToString()));
+			void ReportProgress()
+			{
+				_progress?.Invoke(new BuildTimeCacheGenerationProgress(
+					scenarioIndex + 1,
+					selected.Length,
+					entry.Identity.ToString()));
+				cancellationToken.ThrowIfCancellationRequested();
+			}
 		}
 
+		cancellationToken.ThrowIfCancellationRequested();
 		var document = TerminalLobbyCache.CreateDocument(records);
 		var bytes = TerminalLobbyCache.Write(document);
 		var read = TerminalLobbyCache.ReadDocument(bytes);
@@ -189,184 +300,399 @@ public sealed class BuildTimeTerminalLobbyCacheGenerator
 			records.Count,
 			hash,
 			bytes.Length);
-		var diagnostics = new BuildTimeCacheGenerationDiagnostics(
-			GeneratorIdentifier,
-			GeneratorVersion,
-			"completed",
-			completeCatalog.Count,
-			selected.Length,
-			already,
-			degenerate,
-			probability,
-			omitted.Values.Sum(),
-			new SortedDictionary<string, int>(omitted, StringComparer.Ordinal),
-			new SortedDictionary<string, int>(suspicions, StringComparer.Ordinal),
-			incompleteSeeds
-				.OrderBy(value => value.RunSeedMaterial.CompatibilityIdentity.ToString(), StringComparer.Ordinal)
-				.ThenBy(value => value.BatchPhase == "screening" ? 0 : 1)
-				.ThenBy(value => value.RunSeedMaterial.RunNumber)
-				.ToArray(),
+		var diagnostics = observation.CreateDiagnostics(
+			BuildTimeCacheGenerationStatus.Completed,
 			artifact);
-		return new BuildTimeCacheGenerationResult("completed", bytes, document, diagnostics);
+		return new BuildTimeCacheGenerationResult(
+			BuildTimeCacheGenerationStatus.Completed,
+			bytes,
+			document,
+			diagnostics);
 	}
 
-	public BuildTimeCacheGenerationResult GenerateToFile(
-		string destinationPath,
-		IEnumerable<TerminalLobbyGenerationScenario>? scenarios = null,
-		CancellationToken cancellationToken = default)
+	private BuildTimeCacheGenerationResult GenerateAndPublish(
+		string fullDestinationPath,
+		string? fullDiagnosticsPath,
+		IEnumerable<TerminalLobbyGenerationScenario>? scenarios,
+		CancellationToken cancellationToken)
 	{
-		ArgumentException.ThrowIfNullOrWhiteSpace(destinationPath);
-		var fullPath = Path.GetFullPath(destinationPath);
-		var directory = Path.GetDirectoryName(fullPath)
-			?? throw new ArgumentException("Destination must have a parent directory.", nameof(destinationPath));
-		Directory.CreateDirectory(directory);
-		var selected = scenarios?.ToArray();
-		var enumeratedCount = selected?.Length
-			?? TerminalLobbyScenarioCatalog.EnumerateCurrentProfile().Count;
-		var temporaryPath = Path.Combine(
-			directory,
-			$".{Path.GetFileName(fullPath)}.{Guid.NewGuid():N}.tmp");
+		var selected = SelectScenarios(scenarios);
+		var observation = new GenerationObservation(selected.Length);
+		var destinationDirectory = ParentDirectory(fullDestinationPath, nameof(fullDestinationPath));
+		var diagnosticsDirectory = fullDiagnosticsPath is null
+			? null
+			: ParentDirectory(fullDiagnosticsPath, nameof(fullDiagnosticsPath));
+		var artifactTemporaryPath = TemporaryPath(destinationDirectory, fullDestinationPath);
+		var diagnosticsTemporaryPath = fullDiagnosticsPath is null
+			? null
+			: TemporaryPath(diagnosticsDirectory!, fullDiagnosticsPath);
+		var diagnosticsCommitted = false;
+		var artifactCommitted = false;
+		BuildTimeCacheGenerationResult? completedResult = null;
+		using var commitDecision = new PublicationCommitDecision(cancellationToken);
 		try
 		{
-			var result = Generate(selected, cancellationToken);
+			completedResult = Generate(selected, observation, cancellationToken);
+			var diagnosticsBytes = SerializeAndValidateDiagnostics(
+				completedResult.Diagnostics,
+				completedResult.ArtifactBytes);
 			cancellationToken.ThrowIfCancellationRequested();
-			var diagnosticsBytes = BuildTimeCacheDiagnosticsJson.Write(result.Diagnostics);
-			using var _ = JsonDocument.Parse(diagnosticsBytes);
-			WriteDurable(temporaryPath, result.ArtifactBytes!);
+
+			_fileSystem.CreateDirectory(destinationDirectory);
+			if (diagnosticsDirectory is not null)
+			{
+				_fileSystem.CreateDirectory(diagnosticsDirectory);
+			}
 
 			cancellationToken.ThrowIfCancellationRequested();
-			File.Move(temporaryPath, fullPath, overwrite: true);
-			return result;
+			_fileSystem.WriteDurable(artifactTemporaryPath, completedResult.ArtifactBytes!);
+			_fileSystem.ReachBoundary(BuildTimeCachePublicationBoundary.ArtifactStaged);
+			cancellationToken.ThrowIfCancellationRequested();
+
+			if (diagnosticsTemporaryPath is not null)
+			{
+				_fileSystem.WriteDurable(diagnosticsTemporaryPath, diagnosticsBytes);
+				_fileSystem.ReachBoundary(BuildTimeCachePublicationBoundary.DiagnosticsStaged);
+				cancellationToken.ThrowIfCancellationRequested();
+			}
+
+			_fileSystem.ReachBoundary(BuildTimeCachePublicationBoundary.BeforeCommitDecision);
+			commitDecision.CommitOrThrow();
+
+			if (diagnosticsTemporaryPath is not null)
+			{
+				_fileSystem.MoveReplace(diagnosticsTemporaryPath, fullDiagnosticsPath!);
+				diagnosticsCommitted = true;
+				_fileSystem.ReachBoundary(BuildTimeCachePublicationBoundary.DiagnosticsCommitted);
+			}
+
+			_fileSystem.ReachBoundary(BuildTimeCachePublicationBoundary.BeforeArtifactCommit);
+			_fileSystem.MoveReplace(artifactTemporaryPath, fullDestinationPath);
+			artifactCommitted = true;
+			_fileSystem.ReachBoundary(BuildTimeCachePublicationBoundary.ArtifactCommitted);
+			return completedResult;
 		}
 		catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
 		{
-			return CreateTerminalResult("cancelled", enumeratedCount);
+			if (artifactCommitted)
+			{
+				return completedResult!;
+			}
+
+			RollbackCompletedDiagnostics(fullDiagnosticsPath, diagnosticsCommitted);
+			var result = observation.CreateTerminalResult(BuildTimeCacheGenerationStatus.Cancelled);
+			PublishTerminalDiagnostics(fullDiagnosticsPath, result.Diagnostics);
+			return result;
 		}
 		catch
 		{
-			return CreateTerminalResult("failed", enumeratedCount);
+			if (artifactCommitted)
+			{
+				return completedResult!;
+			}
+
+			RollbackCompletedDiagnostics(fullDiagnosticsPath, diagnosticsCommitted);
+			var result = observation.CreateTerminalResult(BuildTimeCacheGenerationStatus.Failed);
+			PublishTerminalDiagnostics(fullDiagnosticsPath, result.Diagnostics);
+			return result;
 		}
 		finally
 		{
-			if (File.Exists(temporaryPath))
+			TryDelete(artifactTemporaryPath);
+			if (diagnosticsTemporaryPath is not null)
 			{
-				File.Delete(temporaryPath);
+				TryDelete(diagnosticsTemporaryPath);
+			}
+
+			try
+			{
+				_fileSystem.ReachBoundary(BuildTimeCachePublicationBoundary.CleanupCompleted);
+			}
+			catch
+			{
+				// Publication is already terminal; cleanup instrumentation cannot change it.
 			}
 		}
 	}
 
-	public BuildTimeCacheGenerationResult GenerateToFiles(
-		string destinationPath,
-		string diagnosticsPath,
-		IEnumerable<TerminalLobbyGenerationScenario>? scenarios = null,
-		CancellationToken cancellationToken = default)
+	private byte[] SerializeAndValidateDiagnostics(
+		BuildTimeCacheGenerationDiagnostics diagnostics,
+		byte[]? artifactBytes)
 	{
-		ArgumentException.ThrowIfNullOrWhiteSpace(destinationPath);
-		ArgumentException.ThrowIfNullOrWhiteSpace(diagnosticsPath);
-		var fullDestinationPath = Path.GetFullPath(destinationPath);
-		var fullDiagnosticsPath = Path.GetFullPath(diagnosticsPath);
-		var destinationDirectory = Path.GetDirectoryName(fullDestinationPath)!;
-		var diagnosticsDirectory = Path.GetDirectoryName(fullDiagnosticsPath)!;
-		Directory.CreateDirectory(destinationDirectory);
-		Directory.CreateDirectory(diagnosticsDirectory);
-		var selected = scenarios?.ToArray();
-		var enumeratedCount = selected?.Length
-			?? TerminalLobbyScenarioCatalog.EnumerateCurrentProfile().Count;
-		var artifactTemporaryPath = Path.Combine(
-			destinationDirectory,
-			$".{Path.GetFileName(fullDestinationPath)}.{Guid.NewGuid():N}.tmp");
-		var diagnosticsTemporaryPath = Path.Combine(
-			diagnosticsDirectory,
-			$".{Path.GetFileName(fullDiagnosticsPath)}.{Guid.NewGuid():N}.tmp");
+		var diagnosticsBytes = _diagnosticsSerializer(diagnostics, artifactBytes);
+		var read = BuildTimeCacheDiagnosticsJson.Read(diagnosticsBytes, artifactBytes);
+		if (read.Diagnostics is null)
+		{
+			throw new InvalidOperationException(
+				$"Generated diagnostics failed semantic validation: {read.Rejection}");
+		}
+
+		return diagnosticsBytes;
+	}
+
+	private void PublishTerminalDiagnostics(
+		string? fullDiagnosticsPath,
+		BuildTimeCacheGenerationDiagnostics diagnostics)
+	{
+		if (fullDiagnosticsPath is null)
+		{
+			return;
+		}
+
+		var directory = ParentDirectory(fullDiagnosticsPath, nameof(fullDiagnosticsPath));
+		var temporaryPath = TemporaryPath(directory, fullDiagnosticsPath);
 		try
 		{
-			var result = Generate(selected, cancellationToken);
-			var diagnosticsBytes = BuildTimeCacheDiagnosticsJson.Write(result.Diagnostics);
-			using var _ = JsonDocument.Parse(diagnosticsBytes);
-			WriteDurable(artifactTemporaryPath, result.ArtifactBytes!);
-			WriteDurable(diagnosticsTemporaryPath, diagnosticsBytes);
-			cancellationToken.ThrowIfCancellationRequested();
-			File.Move(diagnosticsTemporaryPath, fullDiagnosticsPath, overwrite: true);
-			File.Move(artifactTemporaryPath, fullDestinationPath, overwrite: true);
-			return result;
+			_fileSystem.CreateDirectory(directory);
+			_fileSystem.WriteDurable(
+				temporaryPath,
+				SerializeAndValidateDiagnostics(diagnostics, artifactBytes: null));
+			_fileSystem.MoveReplace(temporaryPath, fullDiagnosticsPath);
 		}
-		catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+		finally
 		{
-			var result = CreateTerminalResult("cancelled", enumeratedCount);
-			WriteTerminalDiagnostics(fullDiagnosticsPath, result.Diagnostics);
-			return result;
+			TryDelete(temporaryPath);
+		}
+	}
+
+	private void RollbackCompletedDiagnostics(string? path, bool diagnosticsCommitted)
+	{
+		if (diagnosticsCommitted && path is not null)
+		{
+			TryDelete(path);
+		}
+	}
+
+	private void TryDelete(string path)
+	{
+		try
+		{
+			if (_fileSystem.FileExists(path))
+			{
+				_fileSystem.DeleteFile(path);
+			}
 		}
 		catch
 		{
-			var result = CreateTerminalResult("failed", enumeratedCount);
-			WriteTerminalDiagnostics(fullDiagnosticsPath, result.Diagnostics);
-			return result;
-		}
-		finally
-		{
-			DeleteIfPresent(artifactTemporaryPath);
-			DeleteIfPresent(diagnosticsTemporaryPath);
+			// Best-effort cleanup must not reverse an already decided publication outcome.
 		}
 	}
 
-	private static void WriteTerminalDiagnostics(
-		string path,
-		BuildTimeCacheGenerationDiagnostics diagnostics)
+	private static TerminalLobbyGenerationScenario[] SelectScenarios(
+		IEnumerable<TerminalLobbyGenerationScenario>? scenarios) =>
+		(scenarios ?? TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()).ToArray();
+
+	private static string NormalizePath(string path, string parameterName)
 	{
-		var directory = Path.GetDirectoryName(path)!;
-		var temporaryPath = Path.Combine(
-			directory,
-			$".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
-		try
-		{
-			WriteDurable(temporaryPath, BuildTimeCacheDiagnosticsJson.Write(diagnostics));
-			File.Move(temporaryPath, path, overwrite: true);
-		}
-		finally
-		{
-			DeleteIfPresent(temporaryPath);
-		}
+		ArgumentException.ThrowIfNullOrWhiteSpace(path, parameterName);
+		return Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
 	}
 
-	private static void WriteDurable(string path, ReadOnlySpan<byte> bytes)
+	internal static string ResolvePhysicalPath(string fullPath) =>
+		ResolvePhysicalPath(fullPath, resolutionDepth: 0);
+
+	private static string PhysicalPathIdentity(string fullPath)
 	{
-		using var stream = new FileStream(
-			path,
-			FileMode.CreateNew,
-			FileAccess.Write,
-			FileShare.None,
-			bufferSize: 4096,
-			FileOptions.WriteThrough);
-		stream.Write(bytes);
-		stream.Flush(flushToDisk: true);
+		var resolved = ResolvePhysicalPath(fullPath);
+		return OperatingSystem.IsMacOS()
+			? resolved.Normalize(NormalizationForm.FormC)
+			: resolved;
 	}
 
-	private static void DeleteIfPresent(string path)
+	private static string ResolvePhysicalPath(string fullPath, int resolutionDepth)
 	{
-		if (File.Exists(path))
+		if (resolutionDepth > 40)
 		{
-			File.Delete(path);
+			throw new IOException("Too many symbolic-link resolutions in destination path.");
 		}
+
+		var root = Path.GetPathRoot(fullPath)
+			?? throw new ArgumentException("Destination must have a rooted path.", nameof(fullPath));
+		var current = root;
+		var relative = fullPath[root.Length..];
+		foreach (var component in relative.Split(
+			Path.DirectorySeparatorChar,
+			Path.AltDirectorySeparatorChar,
+			StringSplitOptions.RemoveEmptyEntries))
+		{
+			var candidate = Path.Combine(current, component);
+			FileSystemInfo information = Directory.Exists(candidate)
+				? new DirectoryInfo(candidate)
+				: new FileInfo(candidate);
+			if (information.LinkTarget is null)
+			{
+				current = candidate;
+				continue;
+			}
+
+			var resolved = information.ResolveLinkTarget(returnFinalTarget: true);
+			if (resolved is not null)
+			{
+				current = ResolvePhysicalPath(resolved.FullName, resolutionDepth + 1);
+				continue;
+			}
+
+			current = ResolvePhysicalPath(Path.GetFullPath(
+				Path.IsPathRooted(information.LinkTarget)
+					? information.LinkTarget
+					: Path.Combine(Path.GetDirectoryName(candidate)!, information.LinkTarget)),
+				resolutionDepth + 1);
+		}
+
+		return Path.TrimEndingDirectorySeparator(Path.GetFullPath(current));
 	}
 
-	private static BuildTimeCacheGenerationResult CreateTerminalResult(
-		string statusCode,
-		int enumeratedScenarioCount) => new(
-		statusCode,
-		ArtifactBytes: null,
-		Document: null,
-		new BuildTimeCacheGenerationDiagnostics(
+	private static string ParentDirectory(string path, string parameterName) =>
+		Path.GetDirectoryName(path)
+		?? throw new ArgumentException("Destination must have a parent directory.", parameterName);
+
+	private static string TemporaryPath(string directory, string destinationPath) => Path.Combine(
+		directory,
+		$".{Path.GetFileName(destinationPath)}.{Guid.NewGuid():N}.tmp");
+
+	private sealed class GenerationObservation
+	{
+		private readonly Dictionary<BuildTimeCacheOmissionCode, int> _omissions = [];
+		private readonly Dictionary<BuildTimeCacheSuspicionCode, int> _suspicions = [];
+		private readonly List<BuildTimeIncompleteRunDiagnostic> _incompleteSeeds = [];
+
+		public int EnumeratedScenarioCount { get; }
+
+		public int AlreadyDecidedCount { get; private set; }
+
+		public int DegenerateCount { get; private set; }
+
+		public int ProbabilityCount { get; private set; }
+
+		public GenerationObservation(int enumeratedScenarioCount) =>
+			EnumeratedScenarioCount = enumeratedScenarioCount;
+
+		public void ObserveBatch(
+			BuildTimeBatchPhase phase,
+			SimulationBatchSourceEvidence evidence)
+		{
+			foreach (var run in evidence.Records.OfType<IncompleteSimulationRun>())
+			{
+				_incompleteSeeds.Add(new BuildTimeIncompleteRunDiagnostic(
+					phase,
+					run.RunSeedMaterial));
+				Suspect(BuildTimeCacheSuspicionCode.IncompleteRun);
+			}
+		}
+
+		public void Record(TerminalLobbyEvaluation terminal)
+		{
+			switch (terminal)
+			{
+				case AlreadyDecidedTerminalEvaluation: AlreadyDecidedCount++; break;
+				case DegenerateTerminalEvaluation: DegenerateCount++; break;
+				case ProbabilityTerminalEvaluation: ProbabilityCount++; break;
+			}
+		}
+
+		public void Omit(BuildTimeCacheOmissionCode code) =>
+			_omissions[code] = _omissions.GetValueOrDefault(code) + 1;
+
+		public void Suspect(BuildTimeCacheSuspicionCode code) =>
+			_suspicions[code] = _suspicions.GetValueOrDefault(code) + 1;
+
+		public BuildTimeCacheGenerationDiagnostics CreateDiagnostics(
+			BuildTimeCacheGenerationStatus status,
+			BuildTimeCacheArtifactDiagnostics? artifact) => new(
 			GeneratorIdentifier,
 			GeneratorVersion,
-			statusCode,
+			status,
 			TerminalLobbyScenarioCatalog.EnumerateCurrentProfile().Count,
-			enumeratedScenarioCount,
-			AlreadyDecidedCount: 0,
-			DegenerateCount: 0,
-			ProbabilityCount: 0,
-			OmittedCount: 0,
-			new SortedDictionary<string, int>(StringComparer.Ordinal),
-			new SortedDictionary<string, int>(StringComparer.Ordinal),
-			[],
-			Artifact: null));
+			EnumeratedScenarioCount,
+			AlreadyDecidedCount,
+			DegenerateCount,
+			ProbabilityCount,
+			_omissions.Values.Sum(),
+			new Dictionary<BuildTimeCacheOmissionCode, int>(_omissions),
+			new Dictionary<BuildTimeCacheSuspicionCode, int>(_suspicions),
+			_incompleteSeeds
+				.OrderBy(value => value.RunSeedMaterial.CompatibilityIdentity.ToString(), StringComparer.Ordinal)
+				.ThenBy(value => value.BatchPhase)
+				.ThenBy(value => value.RunSeedMaterial.RunNumber)
+				.ToArray(),
+			artifact);
+
+		public BuildTimeCacheGenerationResult CreateTerminalResult(
+			BuildTimeCacheGenerationStatus status) => new(
+			status,
+			ArtifactBytes: null,
+			Document: null,
+			CreateDiagnostics(status, artifact: null));
+	}
+
+	private sealed class PublicationCommitDecision : IDisposable
+	{
+		private readonly object _gate = new();
+		private readonly CancellationToken _cancellationToken;
+		private readonly CancellationTokenRegistration _registration;
+		private bool _cancellationWon;
+		private bool _commitWon;
+
+		public PublicationCommitDecision(CancellationToken cancellationToken)
+		{
+			_cancellationToken = cancellationToken;
+			_registration = cancellationToken.Register(() =>
+			{
+				lock (_gate)
+				{
+					if (!_commitWon)
+					{
+						_cancellationWon = true;
+					}
+				}
+			});
+		}
+
+		public void CommitOrThrow()
+		{
+			lock (_gate)
+			{
+				if (_cancellationWon || _cancellationToken.IsCancellationRequested)
+				{
+					throw new OperationCanceledException(_cancellationToken);
+				}
+
+				_commitWon = true;
+			}
+		}
+
+		public void Dispose() => _registration.Dispose();
+	}
+
+	private sealed class PhysicalBuildTimeCachePublicationFileSystem
+		: IBuildTimeCachePublicationFileSystem
+	{
+		public static PhysicalBuildTimeCachePublicationFileSystem Instance { get; } = new();
+
+		public void CreateDirectory(string path) => Directory.CreateDirectory(path);
+
+		public void WriteDurable(string path, byte[] bytes)
+		{
+			using var stream = new FileStream(
+				path,
+				FileMode.CreateNew,
+				FileAccess.Write,
+				FileShare.None,
+				bufferSize: 4096,
+				FileOptions.WriteThrough);
+			stream.Write(bytes);
+			stream.Flush(flushToDisk: true);
+		}
+
+		public void MoveReplace(string sourcePath, string destinationPath) =>
+			File.Move(sourcePath, destinationPath, overwrite: true);
+
+		public bool FileExists(string path) => File.Exists(path);
+
+		public void DeleteFile(string path) => File.Delete(path);
+
+		public void ReachBoundary(BuildTimeCachePublicationBoundary boundary)
+		{
+		}
+	}
 }

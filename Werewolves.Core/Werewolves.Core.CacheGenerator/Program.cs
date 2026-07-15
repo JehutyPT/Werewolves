@@ -35,14 +35,21 @@ static int Run(string[] args)
 			outputPath,
 			diagnosticsPath,
 			cancellationToken: cancellation.Token);
+		var statusCode = result.Status switch
+		{
+			BuildTimeCacheGenerationStatus.Completed => "completed",
+			BuildTimeCacheGenerationStatus.Cancelled => "cancelled",
+			BuildTimeCacheGenerationStatus.Failed => "failed",
+			_ => throw new InvalidOperationException("Unknown generation status.")
+		};
 		Console.Error.WriteLine(
-			$"status={result.StatusCode} records={result.Diagnostics.Artifact?.RecordCount ?? 0} "
+			$"status={statusCode} records={result.Diagnostics.Artifact?.RecordCount ?? 0} "
 			+ $"sha256={result.Diagnostics.Artifact?.Sha256 ?? "none"} "
 			+ $"bytes={result.Diagnostics.Artifact?.ByteLength ?? 0}");
-		return result.StatusCode switch
+		return result.Status switch
 		{
-			"completed" => 0,
-			"cancelled" => 2,
+			BuildTimeCacheGenerationStatus.Completed => 0,
+			BuildTimeCacheGenerationStatus.Cancelled => 2,
 			_ => 1
 		};
 	}

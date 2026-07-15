@@ -26,6 +26,9 @@ public sealed class BuildTimeTerminalLobbyCacheGeneratorTests
 		read.Document.Records.OfType<AlreadyDecidedTerminalCacheRecord>().Should().HaveCount(832);
 		read.Document.Records.OfType<DegenerateTerminalCacheRecord>().Should().HaveCount(52);
 		read.Document.Records.OfType<ProbabilityTerminalCacheRecord>().Should().HaveCount(780);
+		read.Document.Records.Select(record => record.CompatibilityIdentity.ToString())
+			.Should().Equal(TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()
+				.Select(entry => entry.Identity.ToString()));
 	}
 
 	[Fact]
@@ -42,7 +45,7 @@ public sealed class BuildTimeTerminalLobbyCacheGeneratorTests
 		{
 			var result = generator.GenerateToFile(path, [entry]);
 
-			result.StatusCode.Should().Be("completed");
+			result.Status.Should().Be(BuildTimeCacheGenerationStatus.Completed);
 			File.ReadAllBytes(path).Should().Equal(result.ArtifactBytes!);
 			Directory.EnumerateFiles(directory.FullName, "*.tmp").Should().BeEmpty();
 		}
@@ -75,9 +78,9 @@ public sealed class BuildTimeTerminalLobbyCacheGeneratorTests
 				[entry],
 				cancellation.Token);
 
-			result.StatusCode.Should().Be("cancelled");
+			result.Status.Should().Be(BuildTimeCacheGenerationStatus.Cancelled);
 			result.ArtifactBytes.Should().BeNull();
-			result.Diagnostics.StatusCode.Should().Be("cancelled");
+			result.Diagnostics.Status.Should().Be(BuildTimeCacheGenerationStatus.Cancelled);
 			File.ReadAllText(path).Should().Be("previous");
 			using (var diagnostics = JsonDocument.Parse(File.ReadAllBytes(diagnosticsPath)))
 			{
@@ -110,9 +113,9 @@ public sealed class BuildTimeTerminalLobbyCacheGeneratorTests
 		{
 			var result = generator.GenerateToFiles(path, diagnosticsPath, [entry, entry]);
 
-			result.StatusCode.Should().Be("failed");
+			result.Status.Should().Be(BuildTimeCacheGenerationStatus.Failed);
 			result.ArtifactBytes.Should().BeNull();
-			result.Diagnostics.StatusCode.Should().Be("failed");
+			result.Diagnostics.Status.Should().Be(BuildTimeCacheGenerationStatus.Failed);
 			File.ReadAllText(path).Should().Be("previous");
 			using (var diagnostics = JsonDocument.Parse(File.ReadAllBytes(diagnosticsPath)))
 			{
@@ -170,10 +173,12 @@ public sealed class BuildTimeTerminalLobbyCacheGeneratorTests
 		var result = generator.Generate([entry]);
 
 		callCount.Should().Be(1);
-		result.StatusCode.Should().Be("completed");
+		result.Status.Should().Be(BuildTimeCacheGenerationStatus.Completed);
 		result.Document!.Records.Should().BeEmpty();
 		result.Diagnostics.OmissionsByCode.Should().ContainSingle()
-			.Which.Should().Be(new KeyValuePair<string, int>("could-not-evaluate", 1));
+			.Which.Should().Be(new KeyValuePair<BuildTimeCacheOmissionCode, int>(
+				BuildTimeCacheOmissionCode.CouldNotEvaluate,
+				1));
 		result.Diagnostics.IncompleteRunSeedMaterial.Should().BeEmpty();
 	}
 
@@ -193,7 +198,9 @@ public sealed class BuildTimeTerminalLobbyCacheGeneratorTests
 		result.Document!.Records.Should().BeEmpty();
 		result.Diagnostics.DegenerateCount.Should().Be(0);
 		result.Diagnostics.OmissionsByCode.Should().ContainSingle()
-			.Which.Should().Be(new KeyValuePair<string, int>("terminal-record-rejected", 1));
+			.Which.Should().Be(new KeyValuePair<BuildTimeCacheOmissionCode, int>(
+				BuildTimeCacheOmissionCode.TerminalRecordRejected,
+				1));
 	}
 
 	[Fact]
@@ -216,12 +223,19 @@ public sealed class BuildTimeTerminalLobbyCacheGeneratorTests
 		var expected = entries
 			.OrderBy(value => value.Identity.ToString(), StringComparer.Ordinal)
 			.SelectMany(value => new[] { 2, 10 }
-				.Select(run => $"{value.Identity}|screening|{run}"));
+				.Select(run => (value.Identity.ToString(), BuildTimeBatchPhase.Screening, (long)run)));
 		result.Diagnostics.IncompleteRunSeedMaterial
-			.Select(value => $"{value.RunSeedMaterial.CompatibilityIdentity}|{value.BatchPhase}|{value.RunSeedMaterial.RunNumber}")
+			.Select(value => (
+				value.RunSeedMaterial.CompatibilityIdentity.ToString(),
+				value.BatchPhase,
+				value.RunSeedMaterial.RunNumber))
 			.Should().Equal(expected);
-		result.Diagnostics.OmissionsByCode.Should().Contain("screening-incomplete", 2);
-		result.Diagnostics.SuspicionsByCode.Should().Contain("incomplete-run", 4);
+		result.Diagnostics.OmissionsByCode.Should().Contain(
+			BuildTimeCacheOmissionCode.ScreeningIncomplete,
+			2);
+		result.Diagnostics.SuspicionsByCode.Should().Contain(
+			BuildTimeCacheSuspicionCode.IncompleteRun,
+			4);
 	}
 
 	[Fact]
@@ -239,9 +253,11 @@ public sealed class BuildTimeTerminalLobbyCacheGeneratorTests
 		var result = generator.Generate([entry]);
 
 		result.Diagnostics.OmissionsByCode.Should().ContainSingle()
-			.Which.Should().Be(new KeyValuePair<string, int>("screening-incomplete", 1));
+			.Which.Should().Be(new KeyValuePair<BuildTimeCacheOmissionCode, int>(
+				BuildTimeCacheOmissionCode.ScreeningIncomplete,
+				1));
 		result.Diagnostics.IncompleteRunSeedMaterial.Should().ContainSingle()
-			.Which.BatchPhase.Should().Be("screening");
+			.Which.BatchPhase.Should().Be(BuildTimeBatchPhase.Screening);
 	}
 
 	[Fact]
@@ -259,7 +275,7 @@ public sealed class BuildTimeTerminalLobbyCacheGeneratorTests
 		var result = generator.Generate(scenarios);
 		var repeated = generator.Generate(scenarios);
 
-		result.StatusCode.Should().Be("completed");
+		result.Status.Should().Be(BuildTimeCacheGenerationStatus.Completed);
 		result.ArtifactBytes.Should().NotBeNull();
 		var read = TerminalLobbyCache.ReadDocument(result.ArtifactBytes!);
 		read.Rejection.Should().BeNull();
@@ -273,8 +289,10 @@ public sealed class BuildTimeTerminalLobbyCacheGeneratorTests
 		result.Diagnostics.Artifact!.ByteLength.Should().Be(result.ArtifactBytes!.Length);
 		result.Diagnostics.Artifact.Sha256.Should().MatchRegex("^[0-9a-f]{64}$");
 		repeated.ArtifactBytes.Should().Equal(result.ArtifactBytes!);
-		BuildTimeCacheDiagnosticsJson.Write(repeated.Diagnostics)
-			.Should().Equal(BuildTimeCacheDiagnosticsJson.Write(result.Diagnostics));
+		BuildTimeCacheDiagnosticsJson.Write(repeated.Diagnostics, repeated.ArtifactBytes)
+			.Should().Equal(BuildTimeCacheDiagnosticsJson.Write(
+				result.Diagnostics,
+				result.ArtifactBytes));
 	}
 
 	[Fact]
@@ -286,8 +304,8 @@ public sealed class BuildTimeTerminalLobbyCacheGeneratorTests
 			(_, _, _, _) => throw new InvalidOperationException())
 			.Generate([entry]);
 
-		var first = BuildTimeCacheDiagnosticsJson.Write(result.Diagnostics);
-		var second = BuildTimeCacheDiagnosticsJson.Write(result.Diagnostics);
+		var first = BuildTimeCacheDiagnosticsJson.Write(result.Diagnostics, result.ArtifactBytes);
+		var second = BuildTimeCacheDiagnosticsJson.Write(result.Diagnostics, result.ArtifactBytes);
 
 		first.Should().Equal(second);
 		using var json = JsonDocument.Parse(first);
@@ -301,11 +319,11 @@ public sealed class BuildTimeTerminalLobbyCacheGeneratorTests
 	}
 
 	[Theory]
-	[InlineData(false, "screening-incomplete", 1_000)]
-	[InlineData(true, "probability-incomplete", 10_000)]
+	[InlineData(false, BuildTimeCacheOmissionCode.ScreeningIncomplete, 1_000)]
+	[InlineData(true, BuildTimeCacheOmissionCode.ProbabilityIncomplete, 10_000)]
 	public void Generate_WithIncompleteRequiredBatch_OmitsRecordAndReportsReplayMaterial(
 		bool completeScreening,
-		string expectedCode,
+		BuildTimeCacheOmissionCode expectedCode,
 		int expectedIncompleteRunNumber)
 	{
 		var entry = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()
@@ -323,12 +341,14 @@ public sealed class BuildTimeTerminalLobbyCacheGeneratorTests
 		result.Document!.Records.Should().BeEmpty();
 		result.Diagnostics.OmittedCount.Should().Be(1);
 		result.Diagnostics.OmissionsByCode.Should().ContainSingle()
-			.Which.Should().Be(new KeyValuePair<string, int>(expectedCode, 1));
+			.Which.Should().Be(new KeyValuePair<BuildTimeCacheOmissionCode, int>(expectedCode, 1));
 		result.Diagnostics.SuspicionsByCode.Should().Contain(
-			"incomplete-run", 1);
+			BuildTimeCacheSuspicionCode.IncompleteRun, 1);
 		result.Diagnostics.IncompleteRunSeedMaterial.Should().ContainSingle()
 			.Which.Should().Match<BuildTimeIncompleteRunDiagnostic>(value =>
-				value.BatchPhase == (completeScreening ? "probability" : "screening")
+				value.BatchPhase == (completeScreening
+					? BuildTimeBatchPhase.Probability
+					: BuildTimeBatchPhase.Screening)
 				&& value.RunSeedMaterial.RunNumber == expectedIncompleteRunNumber - 1);
 	}
 
