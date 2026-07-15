@@ -8,12 +8,18 @@ using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Models.Simulation;
 using Werewolves.Core.StateModels.Resources;
+using Werewolves.Core.Tests.Helpers;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace Werewolves.Core.Tests.Integration;
 
-public class HeadlessSimulationTests
+public class HeadlessSimulationTests : DiagnosticTestBase
 {
+	public HeadlessSimulationTests(ITestOutputHelper output) : base(output)
+	{
+	}
+
 	[Fact]
 	public void BaselineRandomDecisionStrategy_WithRoleIdentification_UsesSeededAssignmentAndAcknowledgesConfirmation()
 	{
@@ -33,9 +39,12 @@ public class HeadlessSimulationTests
 			BaselineRandomDecisionStrategy.Identity,
 			runNumber: 3);
 		var startState = SimulationStartStateDeriver.Derive(material);
-		var gameService = new GameService();
-		var startInstruction = gameService.StartNewGame(startState.CreateGameSessionConfig());
-		var session = gameService.GetGameStateView(startInstruction.GameGuid)!;
+		var config = startState.CreateGameSessionConfig();
+		var builder = CreateBuilder()
+			.WithPlayers(config.Players.ToArray())
+			.WithRoles(config.Roles.ToArray());
+		var startInstruction = builder.StartGame();
+		var session = builder.GetGameState()!;
 		var strategy = new BaselineRandomDecisionStrategy(material, startState);
 		var players = session.GetPlayers().ToList();
 		var seerSeat = startState.RoleAssignments.Single(assignment => assignment.Role == MainRoleType.Seer).SeatNumber;
@@ -52,6 +61,7 @@ public class HeadlessSimulationTests
 
 		confirmation.Confirmation.Should().BeTrue();
 		identification.SelectedPlayerIds.Should().Equal(players[seerSeat - 1].Id);
+		MarkTestCompleted();
 	}
 
 	[Fact]
@@ -59,31 +69,30 @@ public class HeadlessSimulationTests
 	{
 		var material = CreateRunSeedMaterial(runNumber: 11);
 		var startState = SimulationStartStateDeriver.Derive(material);
-		var firstService = new GameService();
-		var firstStart = firstService.StartNewGame(startState.CreateGameSessionConfig());
-		var firstSession = firstService.GetGameStateView(firstStart.GameGuid)!;
-		var replayService = new GameService();
-		var replayStart = replayService.StartNewGame(startState.CreateGameSessionConfig());
-		var replaySession = replayService.GetGameStateView(replayStart.GameGuid)!;
+		var config = startState.CreateGameSessionConfig();
+		var builder = CreateBuilder()
+			.WithPlayers(config.Players.ToArray())
+			.WithRoles(config.Roles.ToArray());
+		builder.StartGame();
+		var session = builder.GetGameState()!;
 		var firstStrategy = new BaselineRandomDecisionStrategy(material, startState);
 		var replayStrategy = new BaselineRandomDecisionStrategy(material, startState);
-		var firstPlayers = firstSession.GetPlayers().ToList();
-		var replayPlayers = replaySession.GetPlayers().ToList();
+		var players = session.GetPlayers().ToList();
 
 		var firstPlayerSelection = new SelectPlayersInstruction(
-			firstPlayers.Select(player => player.Id).ToHashSet(),
+			players.Select(player => player.Id).ToHashSet(),
 			NumberRangeConstraint.Exact(2),
 			privateInstruction: GameStrings.RevealRolePromptSpecify);
 		var replayPlayerSelection = new SelectPlayersInstruction(
-			replayPlayers.Select(player => player.Id).ToHashSet(),
+			players.Select(player => player.Id).ToHashSet(),
 			NumberRangeConstraint.Exact(2),
 			privateInstruction: GameStrings.RevealRolePromptSpecify);
 		var firstAssignment = new AssignRolesInstruction(
-			ImmutableHashSet.Create(firstPlayers[1].Id, firstPlayers[3].Id),
+			ImmutableHashSet.Create(players[1].Id, players[3].Id),
 			[MainRoleType.Seer, MainRoleType.SimpleVillager],
 			privateInstruction: GameStrings.RevealRolePromptSpecify);
 		var replayAssignment = new AssignRolesInstruction(
-			ImmutableHashSet.Create(replayPlayers[1].Id, replayPlayers[3].Id),
+			ImmutableHashSet.Create(players[1].Id, players[3].Id),
 			[MainRoleType.Seer, MainRoleType.SimpleVillager],
 			privateInstruction: GameStrings.RevealRolePromptSpecify);
 		var firstOptions = new SelectOptionsInstruction(
@@ -95,27 +104,28 @@ public class HeadlessSimulationTests
 			NumberRangeConstraint.SingleOptional,
 			privateInstruction: GameStrings.RevealRolePromptSpecify);
 
-		var selected = firstStrategy.CreateResponse(firstPlayerSelection, firstSession);
-		var replaySelected = replayStrategy.CreateResponse(replayPlayerSelection, replaySession);
-		var assigned = firstStrategy.CreateResponse(firstAssignment, firstSession);
-		var replayAssigned = replayStrategy.CreateResponse(replayAssignment, replaySession);
-		var options = firstStrategy.CreateResponse(firstOptions, firstSession);
-		var replayOptionResponse = replayStrategy.CreateResponse(replayOptions, replaySession);
+		var selected = firstStrategy.CreateResponse(firstPlayerSelection, session);
+		var replaySelected = replayStrategy.CreateResponse(replayPlayerSelection, session);
+		var assigned = firstStrategy.CreateResponse(firstAssignment, session);
+		var replayAssigned = replayStrategy.CreateResponse(replayAssignment, session);
+		var options = firstStrategy.CreateResponse(firstOptions, session);
+		var replayOptionResponse = replayStrategy.CreateResponse(replayOptions, session);
 
 		selected.SelectedPlayerIds.Should().HaveCount(2)
 			.And.BeSubsetOf(firstPlayerSelection.SelectablePlayerIds);
-		selected.SelectedPlayerIds!.Select(id => firstPlayers.FindIndex(player => player.Id == id))
+		selected.SelectedPlayerIds!.Select(id => players.FindIndex(player => player.Id == id))
 			.Should().BeEquivalentTo(
-				replaySelected.SelectedPlayerIds!.Select(id => replayPlayers.FindIndex(player => player.Id == id)));
+				replaySelected.SelectedPlayerIds!.Select(id => players.FindIndex(player => player.Id == id)));
 		assigned.AssignedPlayerRoles.Should().HaveCount(2);
 		assigned.AssignedPlayerRoles!.Keys.Should().BeEquivalentTo(firstAssignment.PlayersForAssignment);
 		assigned.AssignedPlayerRoles.Values.Should().BeEquivalentTo(firstAssignment.RolesForAssignment);
-		assigned.AssignedPlayerRoles.OrderBy(pair => firstPlayers.FindIndex(player => player.Id == pair.Key)).Select(pair => pair.Value)
+		assigned.AssignedPlayerRoles.OrderBy(pair => players.FindIndex(player => player.Id == pair.Key)).Select(pair => pair.Value)
 			.Should().Equal(
-				replayAssigned.AssignedPlayerRoles!.OrderBy(pair => replayPlayers.FindIndex(player => player.Id == pair.Key)).Select(pair => pair.Value));
+				replayAssigned.AssignedPlayerRoles!.OrderBy(pair => players.FindIndex(player => player.Id == pair.Key)).Select(pair => pair.Value));
 		options.SelectedOption.Should().BeSubsetOf(firstOptions.SelectableOptions);
 		firstOptions.SelectionRange.IsValid(options.SelectedOption!.ToList()).Should().BeTrue();
 		options.SelectedOption.Should().BeEquivalentTo(replayOptionResponse.SelectedOption);
+		MarkTestCompleted();
 	}
 
 	[Fact]
@@ -123,9 +133,12 @@ public class HeadlessSimulationTests
 	{
 		var material = CreateRunSeedMaterial(runNumber: 0);
 		var startState = SimulationStartStateDeriver.Derive(material);
-		var gameService = new GameService();
-		var start = gameService.StartNewGame(startState.CreateGameSessionConfig());
-		var session = gameService.GetGameStateView(start.GameGuid)!;
+		var config = startState.CreateGameSessionConfig();
+		var builder = CreateBuilder()
+			.WithPlayers(config.Players.ToArray())
+			.WithRoles(config.Roles.ToArray());
+		builder.StartGame();
+		var session = builder.GetGameState()!;
 		var instruction = new SelectOptionsInstruction(
 			["alpha"],
 			NumberRangeConstraint.SingleOptional,
@@ -135,22 +148,22 @@ public class HeadlessSimulationTests
 		var response = strategy.CreateResponse(instruction, session);
 
 		response.SelectedOption.Should().BeEmpty();
+		MarkTestCompleted();
 	}
 
 	[Fact]
 	public void FirstValidOptionStrategy_SelectsPlayersInSeatingOrder()
 	{
-		var gameService = new GameService();
-		var startInstruction = gameService.StartNewGame(new GameSessionConfig(
-			["Alice", "Bruno", "Clara", "Dinis", "Eva"],
-			[
+		var builder = CreateBuilder()
+			.WithPlayers("Alice", "Bruno", "Clara", "Dinis", "Eva")
+			.WithRoles(
 				MainRoleType.SimpleWerewolf,
 				MainRoleType.Seer,
 				MainRoleType.SimpleVillager,
 				MainRoleType.SimpleVillager,
-				MainRoleType.SimpleVillager
-			]));
-		var session = gameService.GetGameStateView(startInstruction.GameGuid)!;
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		var session = builder.GetGameState()!;
 		var players = session.GetPlayers().ToList();
 		var instruction = new SelectPlayersInstruction(
 			[players[3].Id, players[1].Id, players[2].Id],
@@ -161,22 +174,22 @@ public class HeadlessSimulationTests
 		var response = strategy.CreateResponse(instruction, session);
 
 		response.SelectedPlayerIds.Should().BeEquivalentTo([players[1].Id, players[2].Id]);
+		MarkTestCompleted();
 	}
 
 	[Fact]
 	public void FirstValidOptionStrategy_AssignsRolesToPlayersInSeatingOrder()
 	{
-		var gameService = new GameService();
-		var startInstruction = gameService.StartNewGame(new GameSessionConfig(
-			["Alice", "Bruno", "Clara", "Dinis", "Eva"],
-			[
+		var builder = CreateBuilder()
+			.WithPlayers("Alice", "Bruno", "Clara", "Dinis", "Eva")
+			.WithRoles(
 				MainRoleType.SimpleWerewolf,
 				MainRoleType.Seer,
 				MainRoleType.SimpleVillager,
 				MainRoleType.SimpleVillager,
-				MainRoleType.SimpleVillager
-			]));
-		var session = gameService.GetGameStateView(startInstruction.GameGuid)!;
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		var session = builder.GetGameState()!;
 		var players = session.GetPlayers().ToList();
 		var instruction = new AssignRolesInstruction(
 			ImmutableHashSet.Create(players[4].Id, players[2].Id),
@@ -190,6 +203,7 @@ public class HeadlessSimulationTests
 			.WhoseValue.Should().Be(MainRoleType.SimpleVillager);
 		response.AssignedPlayerRoles.Should().ContainKey(players[4].Id)
 			.WhoseValue.Should().Be(MainRoleType.Seer);
+		MarkTestCompleted();
 	}
 
 	[Fact]
@@ -204,6 +218,7 @@ public class HeadlessSimulationTests
 		result.TurnCount.Should().BeGreaterThan(0);
 		result.ProcessedInstructionCount.Should().BeGreaterThan(0);
 		result.VictoryDescription.Should().NotBeNullOrWhiteSpace();
+		MarkTestCompleted();
 	}
 
 	[Fact]
@@ -217,6 +232,7 @@ public class HeadlessSimulationTests
 		config.Roles.Count(role => role == MainRoleType.Seer).Should().Be(1);
 		config.Roles.Count(role => role == MainRoleType.WildChild).Should().Be(1);
 		config.Roles.Count(role => role == MainRoleType.SimpleVillager).Should().Be(10);
+		MarkTestCompleted();
 	}
 
 	[Fact]
@@ -237,6 +253,7 @@ public class HeadlessSimulationTests
 		result.GcCollections.Gen0.Should().BeGreaterThanOrEqualTo(0);
 		result.GcCollections.Gen1.Should().BeGreaterThanOrEqualTo(0);
 		result.GcCollections.Gen2.Should().BeGreaterThanOrEqualTo(0);
+		MarkTestCompleted();
 	}
 
 	[Fact]
@@ -244,6 +261,7 @@ public class HeadlessSimulationTests
 	{
 		GameBenchmarkHarness.DefaultGameCount.Should().Be(1_000);
 		GameBenchmarkHarness.DefaultDegreeOfParallelism.Should().Be(2);
+		MarkTestCompleted();
 	}
 
 	private static RunSeedMaterial CreateRunSeedMaterial(long runNumber)

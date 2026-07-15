@@ -1,6 +1,11 @@
 namespace Werewolves.Core.StateModels.Models.Simulation;
 
-public sealed class SimulationBatchResult
+/// <summary>
+/// Minimal per-attempt source-record batch returned by simulation execution.
+/// This is a precursor to, not the complete inventory-bearing Simulation Result Evidence
+/// assembled by downstream terminal evaluation.
+/// </summary>
+public sealed class SimulationBatchSourceEvidence
 {
 	private readonly SimulationRun[] _records;
 
@@ -16,7 +21,7 @@ public sealed class SimulationBatchResult
 
 	public int IncompleteRunCount { get; }
 
-	internal SimulationBatchResult(
+	internal SimulationBatchSourceEvidence(
 		CanonicalSimulationScenario canonicalScenario,
 		SimulatorProfileIdentity simulatorProfile,
 		DecisionStrategyIdentity decisionStrategy,

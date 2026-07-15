@@ -214,6 +214,10 @@ _Avoid_: Successful run (ambiguous with desirable outcome), valid game
 A simulation run that does not reach a Game Session Outcome because the simulator could not generate, drive, or finish the run. Incomplete Simulation Runs are not Game Session Outcomes, are not No-Winner Outcomes, and do not contribute to Game Result Frequency.
 _Avoid_: Draw, degenerate run, early ending
 
+**Simulation Batch Source Evidence**:
+The execution-layer batch contract containing the Simulation Scenario, simulator profile, and decision-strategy identity; one minimal source record per attempted run in ascending run order; and Completed versus Incomplete Simulation Run counts. Simulation Batch Source Evidence is a precursor to, not the complete inventory-bearing Simulation Result Evidence assembled by downstream terminal evaluation, and it does not construct Possible Faction or Possible Game Result inventories.
+_Avoid_: Simulation Result Evidence, probability output, result inventory
+
 **Simulation Result Evidence**:
 The stable domain evidence reported by a simulation run or batch: the Simulation Scenario/profile identity, run count evidence, one minimal source record per attempted run, Completed versus Incomplete Simulation Run counts, completed Game Session Outcomes, ending Turns and Victory Check Windows, Run Seed Material needed for replay evidence, the Simulation Scenario's Possible Faction and Possible Game Result inventories, and source data sufficient to derive aggregate Game Result views. Final Player/Faction state snapshots, full transcripts, instruction counts, exception details, timing, memory, raw engine traces, and driver limits are diagnostics rather than Simulation Result Evidence.
 _Avoid_: Debug log, transcript

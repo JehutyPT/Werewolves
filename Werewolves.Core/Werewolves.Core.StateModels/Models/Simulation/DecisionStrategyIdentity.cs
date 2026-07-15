@@ -2,29 +2,24 @@ namespace Werewolves.Core.StateModels.Models.Simulation;
 
 public sealed class DecisionStrategyIdentity : IEquatable<DecisionStrategyIdentity>
 {
-	public string StrategyId { get; }
+	private readonly VersionedIdentityParts _parts;
 
-	public string Version { get; }
+	public string StrategyId => _parts.Identifier;
+
+	public string Version => _parts.Version;
 
 	public DecisionStrategyIdentity(string strategyId, string version)
 	{
-		if (!IsValidPart(strategyId))
-		{
-			throw new ArgumentException(
-				"Strategy identifiers may contain only ordinal letters, digits, '.', '_' and '-'.",
-				nameof(strategyId));
-		}
-
-		if (!IsValidPart(version))
-		{
-			throw new ArgumentException(
-				"Strategy versions may contain only ordinal letters, digits, '.', '_' and '-'.",
-				nameof(version));
-		}
-
-		StrategyId = strategyId;
-		Version = version;
+		_parts = VersionedIdentityParts.Create(
+			strategyId,
+			version,
+			nameof(strategyId),
+			nameof(version),
+			"Strategy identifiers may contain only ordinal letters, digits, '.', '_' and '-'.",
+			"Strategy versions may contain only ordinal letters, digits, '.', '_' and '-'.");
 	}
+
+	private DecisionStrategyIdentity(VersionedIdentityParts parts) => _parts = parts;
 
 	public static DecisionStrategyIdentity Parse(string value)
 	{
@@ -39,50 +34,22 @@ public sealed class DecisionStrategyIdentity : IEquatable<DecisionStrategyIdenti
 	public static bool TryParse(string? value, out DecisionStrategyIdentity identity)
 	{
 		identity = null!;
-		if (value is null)
+		if (!VersionedIdentityParts.TryParse(value, out var parts))
 		{
 			return false;
 		}
 
-		var separatorIndex = value.IndexOf('@');
-		if (separatorIndex <= 0 || separatorIndex != value.LastIndexOf('@'))
-		{
-			return false;
-		}
-
-		try
-		{
-			identity = new DecisionStrategyIdentity(
-				value[..separatorIndex],
-				value[(separatorIndex + 1)..]);
-			return true;
-		}
-		catch (ArgumentException)
-		{
-			return false;
-		}
+		identity = new DecisionStrategyIdentity(parts);
+		return true;
 	}
 
-	public override string ToString() => $"{StrategyId}@{Version}";
+	public override string ToString() => _parts.ToString();
 
 	public bool Equals(DecisionStrategyIdentity? other) =>
-		other is not null
-		&& string.Equals(StrategyId, other.StrategyId, StringComparison.Ordinal)
-		&& string.Equals(Version, other.Version, StringComparison.Ordinal);
+		other is not null && _parts.Equals(other._parts);
 
 	public override bool Equals(object? obj) =>
 		obj is DecisionStrategyIdentity other && Equals(other);
 
-	public override int GetHashCode() =>
-		HashCode.Combine(
-			StringComparer.Ordinal.GetHashCode(StrategyId),
-			StringComparer.Ordinal.GetHashCode(Version));
-
-	private static bool IsValidPart(string? value) =>
-		!string.IsNullOrEmpty(value)
-		&& value.All(character =>
-			character is >= 'A' and <= 'Z'
-			or >= 'a' and <= 'z'
-			or >= '0' and <= '9'
-			or '.' or '_' or '-');
+	public override int GetHashCode() => _parts.GetHashCode();
 }

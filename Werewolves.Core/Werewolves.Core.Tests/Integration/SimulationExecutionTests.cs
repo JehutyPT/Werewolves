@@ -1,17 +1,22 @@
 using FluentAssertions;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.GameLogic.Simulation;
-using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Simulation;
+using Werewolves.Core.Tests.Helpers;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace Werewolves.Core.Tests.Integration;
 
-public class SimulationExecutionTests
+public class SimulationExecutionTests : DiagnosticTestBase
 {
+	public SimulationExecutionTests(ITestOutputHelper output) : base(output)
+	{
+	}
+
 	[Fact]
 	public void Execute_WithKnownDawnOracle_ReturnsCompletedSemanticEvidence()
 	{
@@ -37,6 +42,7 @@ public class SimulationExecutionTests
 		completed.GameResult.Should().Be(new SingleFactionGameResult(Faction.Werewolf));
 		completed.EndingTurn.Should().Be(1);
 		completed.VictoryCheckWindow.Should().Be(VictoryCheckWindow.Dawn);
+		MarkTestCompleted();
 	}
 
 	[Fact]
@@ -58,21 +64,22 @@ public class SimulationExecutionTests
 
 		first.Should().BeOfType<CompletedSimulationRun>();
 		replay.Should().Be(first);
+		MarkTestCompleted();
 	}
 
 	[Fact]
-	public void ExecuteBatch_WithDifferentScheduling_PreservesAscendingStableRecordsAndCounts()
+	public void ExecuteBatch_WithDifferentScheduling_ReturnsAscendingStableSourceEvidenceAndCounts()
 	{
 		var scenario = CreateKnownDawnOracle();
 		var identity = CreateIdentity(scenario);
 		var executor = new SimulationExecutor();
 
-		var sequential = executor.ExecuteBatch(
+		SimulationBatchSourceEvidence sequential = executor.ExecuteBatch(
 			scenario,
 			identity,
 			runCount: 8,
 			degreeOfParallelism: 1);
-		var parallel = executor.ExecuteBatch(
+		SimulationBatchSourceEvidence parallel = executor.ExecuteBatch(
 			scenario,
 			identity,
 			runCount: 8,
@@ -88,6 +95,7 @@ public class SimulationExecutionTests
 		sequential.IncompleteRunCount.Should().Be(0);
 		(sequential.CompletedRunCount + sequential.IncompleteRunCount)
 			.Should().Be(sequential.Records.Count);
+		MarkTestCompleted();
 	}
 
 	[Fact]
@@ -98,8 +106,8 @@ public class SimulationExecutionTests
 		var executor = new SimulationExecutor(
 			SimulationStartStateDeriver.Derive,
 			strategy => new HeadlessGameDriver(strategy),
-			(material, session) => material.RunNumber % 2 == 0
-				? SimulationExecutor.AdaptTerminalEvidence(material, session)
+			(material, history) => material.RunNumber % 2 == 0
+				? SimulationExecutor.AdaptTerminalEvidence(material, history)
 				: new IncompleteSimulationRun(material));
 
 		var batch = executor.ExecuteBatch(scenario, identity, runCount: 4);
@@ -112,10 +120,11 @@ public class SimulationExecutionTests
 			record => record.Should().BeOfType<IncompleteSimulationRun>());
 		batch.CompletedRunCount.Should().Be(2);
 		batch.IncompleteRunCount.Should().Be(2);
+		MarkTestCompleted();
 	}
 
 	[Fact]
-	public void ExecuteAndBatch_WithPreCancelledToken_PropagateBeforeDerivationWithoutEvidence()
+	public void Execute_WithPreCancelledToken_PropagatesBeforeDerivationWithoutEvidence()
 	{
 		var scenario = CreateKnownDawnOracle();
 		var identity = CreateIdentity(scenario);
@@ -131,24 +140,47 @@ public class SimulationExecutionTests
 			strategy => new HeadlessGameDriver(strategy),
 			SimulationExecutor.AdaptTerminalEvidence);
 		SimulationRun? runEvidence = null;
-		SimulationBatchResult? batchEvidence = null;
 
 		Action executeRun = () => runEvidence = executor.Execute(
 			scenario,
 			identity,
 			runNumber: 0,
 			cancellation.Token);
+
+		executeRun.Should().Throw<OperationCanceledException>();
+		derivationCount.Should().Be(0);
+		runEvidence.Should().BeNull();
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void ExecuteBatch_WithPreCancelledToken_PropagatesBeforeDerivationWithoutEvidence()
+	{
+		var scenario = CreateKnownDawnOracle();
+		var identity = CreateIdentity(scenario);
+		using var cancellation = new CancellationTokenSource();
+		cancellation.Cancel();
+		var derivationCount = 0;
+		var executor = new SimulationExecutor(
+			(material, _) =>
+			{
+				derivationCount++;
+				return SimulationStartStateDeriver.Derive(material);
+			},
+			strategy => new HeadlessGameDriver(strategy),
+			SimulationExecutor.AdaptTerminalEvidence);
+		SimulationBatchSourceEvidence? batchEvidence = null;
+
 		Action executeBatch = () => batchEvidence = executor.ExecuteBatch(
 			scenario,
 			identity,
 			runCount: 2,
 			cancellation.Token);
 
-		executeRun.Should().Throw<OperationCanceledException>();
 		executeBatch.Should().Throw<OperationCanceledException>();
 		derivationCount.Should().Be(0);
-		runEvidence.Should().BeNull();
 		batchEvidence.Should().BeNull();
+		MarkTestCompleted();
 	}
 
 	[Fact]
@@ -174,6 +206,7 @@ public class SimulationExecutionTests
 
 		execute.Should().Throw<OperationCanceledException>();
 		evidence.Should().BeNull();
+		MarkTestCompleted();
 	}
 
 	[Fact]
@@ -191,7 +224,7 @@ public class SimulationExecutionTests
 				cancellation.Cancel();
 			}
 		});
-		SimulationBatchResult? evidence = null;
+		SimulationBatchSourceEvidence? evidence = null;
 
 		Action execute = () => evidence = executor.ExecuteBatch(
 			scenario,
@@ -203,6 +236,7 @@ public class SimulationExecutionTests
 		execute.Should().Throw<OperationCanceledException>();
 		completedAttemptBoundaryReached.Should().BeTrue();
 		evidence.Should().BeNull();
+		MarkTestCompleted();
 	}
 
 	[Fact]
@@ -264,6 +298,7 @@ public class SimulationExecutionTests
 		}
 
 		derivationCount.Should().Be(0);
+		MarkTestCompleted();
 	}
 
 	[Fact]
@@ -301,6 +336,8 @@ public class SimulationExecutionTests
 
 			run.Should().Be(new IncompleteSimulationRun(expectedMaterial));
 		}
+
+		MarkTestCompleted();
 	}
 
 	[Fact]
@@ -326,6 +363,7 @@ public class SimulationExecutionTests
 
 		first.Should().Be(new IncompleteSimulationRun(expectedMaterial));
 		replay.Should().Be(first);
+		MarkTestCompleted();
 	}
 
 	[Fact]
@@ -335,16 +373,19 @@ public class SimulationExecutionTests
 			CreateIdentity(CreateKnownDawnOracle()),
 			BaselineRandomDecisionStrategy.Identity,
 			runNumber: 31);
-		var session = new TerminalEvidenceSession(
+		GameLogEntryBase[] history =
+		[
 			CreateTransition(GamePhase.Day, GamePhase.Night, turnNumber: 2),
-			CreateVictory(Team.Villagers, GamePhase.Night, turnNumber: 2));
+			CreateVictory(Team.Villagers, GamePhase.Night, turnNumber: 2)
+		];
 
-		var run = SimulationExecutor.AdaptTerminalEvidence(material, session);
+		var run = SimulationExecutor.AdaptTerminalEvidence(material, history);
 
 		var completed = run.Should().BeOfType<CompletedSimulationRun>().Subject;
 		completed.GameResult.Should().Be(new SingleFactionGameResult(Faction.Villager));
 		completed.EndingTurn.Should().Be(1);
 		completed.VictoryCheckWindow.Should().Be(VictoryCheckWindow.PreNight);
+		MarkTestCompleted();
 	}
 
 	[Fact]
@@ -356,27 +397,32 @@ public class SimulationExecutionTests
 			runNumber: 37);
 		var validTransition = CreateTransition(GamePhase.Night, GamePhase.Day, turnNumber: 1);
 		var validVictory = CreateVictory(Team.Werewolves, GamePhase.Day, turnNumber: 1);
-		var sessions = new IGameSession[]
-		{
-			new TerminalEvidenceSession(),
-			new TerminalEvidenceSession(validTransition, validVictory, validVictory),
-			new TerminalEvidenceSession(
+		GameLogEntryBase[][] histories =
+		[
+			[],
+			[validTransition, validVictory, validVictory],
+			[
 				validTransition,
-				CreateVictory((Team)42, GamePhase.Day, turnNumber: 1)),
-			new TerminalEvidenceSession(validVictory),
-			new TerminalEvidenceSession(
+				CreateVictory((Team)42, GamePhase.Day, turnNumber: 1)
+			],
+			[validVictory],
+			[
 				validTransition,
-				CreateVictory(Team.Werewolves, GamePhase.Night, turnNumber: 1)),
-			new TerminalEvidenceSession(
+				CreateVictory(Team.Werewolves, GamePhase.Night, turnNumber: 1)
+			],
+			[
 				CreateTransition(GamePhase.Day, GamePhase.Night, turnNumber: 1),
-				CreateVictory(Team.Villagers, GamePhase.Night, turnNumber: 1))
-		};
+				CreateVictory(Team.Villagers, GamePhase.Night, turnNumber: 1)
+			]
+		];
 
-		foreach (var session in sessions)
+		foreach (var history in histories)
 		{
-			SimulationExecutor.AdaptTerminalEvidence(material, session)
+			SimulationExecutor.AdaptTerminalEvidence(material, history)
 				.Should().Be(new IncompleteSimulationRun(material));
 		}
+
+		MarkTestCompleted();
 	}
 
 	private static SimulationScenario CreateKnownDawnOracle() =>
@@ -424,25 +470,4 @@ public class SimulationExecutionTests
 			CurrentPhase = currentPhase,
 			WinningTeam = team
 		};
-
-	private sealed class TerminalEvidenceSession(params GameLogEntryBase[] history) : IGameSession
-	{
-		public IEnumerable<GameLogEntryBase> GameHistoryLog => history;
-
-		public Guid Id => Guid.Empty;
-
-		public int TurnNumber => throw new NotSupportedException();
-
-		public GamePhase GetCurrentPhase() => throw new NotSupportedException();
-
-		public IPlayer GetPlayer(Guid playerId) => throw new NotSupportedException();
-
-		public IPlayerState GetPlayerState(Guid playerId) => throw new NotSupportedException();
-
-		public IEnumerable<IPlayer> GetPlayers() => throw new NotSupportedException();
-
-		public int RoleInPlayCount(MainRoleType type) => throw new NotSupportedException();
-
-		public string Serialize() => throw new NotSupportedException();
-	}
 }

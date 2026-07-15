@@ -1,6 +1,5 @@
 using Werewolves.Core.GameLogic.Interfaces;
 using Werewolves.Core.GameLogic.Services;
-using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models.Simulation;
@@ -18,7 +17,7 @@ public sealed class SimulationExecutor
 {
 	private readonly Func<RunSeedMaterial, DeterministicRandomSource, SimulationStartState> _startStateDeriver;
 	private readonly Func<IModeratorDecisionStrategy, HeadlessGameDriver> _driverFactory;
-	private readonly Func<RunSeedMaterial, IGameSession, SimulationRun> _terminalAdapter;
+	private readonly Func<RunSeedMaterial, IReadOnlyList<GameLogEntryBase>, SimulationRun> _terminalAdapter;
 	private readonly Action<SimulationExecutionCheckpoint, long>? _checkpoint;
 
 	public SimulationExecutor()
@@ -33,7 +32,7 @@ public sealed class SimulationExecutor
 	internal SimulationExecutor(
 		Func<RunSeedMaterial, DeterministicRandomSource, SimulationStartState> startStateDeriver,
 		Func<IModeratorDecisionStrategy, HeadlessGameDriver> driverFactory,
-		Func<RunSeedMaterial, IGameSession, SimulationRun> terminalAdapter,
+		Func<RunSeedMaterial, IReadOnlyList<GameLogEntryBase>, SimulationRun> terminalAdapter,
 		Action<SimulationExecutionCheckpoint, long>? checkpoint = null)
 	{
 		_startStateDeriver = startStateDeriver
@@ -58,7 +57,7 @@ public sealed class SimulationExecutor
 		return ExecuteValidated(compatibilityIdentity, runNumber, cancellationToken);
 	}
 
-	public SimulationBatchResult ExecuteBatch(
+	public SimulationBatchSourceEvidence ExecuteBatch(
 		SimulationScenario scenario,
 		SimulationCompatibilityIdentity compatibilityIdentity,
 		int runCount,
@@ -70,7 +69,7 @@ public sealed class SimulationExecutor
 			degreeOfParallelism: 1,
 			cancellationToken);
 
-	internal SimulationBatchResult ExecuteBatch(
+	internal SimulationBatchSourceEvidence ExecuteBatch(
 		SimulationScenario scenario,
 		SimulationCompatibilityIdentity compatibilityIdentity,
 		int runCount,
@@ -104,7 +103,7 @@ public sealed class SimulationExecutor
 				cancellationToken);
 		});
 
-		return new SimulationBatchResult(
+		return new SimulationBatchSourceEvidence(
 			scenario.ToCanonical(),
 			compatibilityIdentity.Profile,
 			BaselineRandomDecisionStrategy.Identity,
@@ -138,7 +137,8 @@ public sealed class SimulationExecutor
 						SimulationExecutionCheckpoint.BetweenModeratorInstructions,
 						runNumber);
 				});
-			return _terminalAdapter(material, execution.Session);
+			var history = execution.Session.GameHistoryLog.ToArray();
+			return _terminalAdapter(material, history);
 		}
 		catch (OperationCanceledException)
 		{
@@ -175,11 +175,10 @@ public sealed class SimulationExecutor
 
 	internal static SimulationRun AdaptTerminalEvidence(
 		RunSeedMaterial material,
-		IGameSession session)
+		IReadOnlyList<GameLogEntryBase> history)
 	{
 		ArgumentNullException.ThrowIfNull(material);
-		ArgumentNullException.ThrowIfNull(session);
-		var history = session.GameHistoryLog.ToArray();
+		ArgumentNullException.ThrowIfNull(history);
 		var victoryIndexes = history
 			.Select((entry, index) => (entry, index))
 			.Where(item => item.entry is VictoryConditionMetLogEntry)

@@ -2,29 +2,24 @@ namespace Werewolves.Core.StateModels.Models.Simulation;
 
 public sealed class SimulatorProfileIdentity : IEquatable<SimulatorProfileIdentity>
 {
-	public string ProfileId { get; }
+	private readonly VersionedIdentityParts _parts;
 
-	public string Version { get; }
+	public string ProfileId => _parts.Identifier;
+
+	public string Version => _parts.Version;
 
 	public SimulatorProfileIdentity(string profileId, string version)
 	{
-		if (!IsValidPart(profileId))
-		{
-			throw new ArgumentException(
-				"Profile identifiers may contain only ordinal letters, digits, '.', '_' and '-'.",
-				nameof(profileId));
-		}
-
-		if (!IsValidPart(version))
-		{
-			throw new ArgumentException(
-				"Profile versions may contain only ordinal letters, digits, '.', '_' and '-'.",
-				nameof(version));
-		}
-
-		ProfileId = profileId;
-		Version = version;
+		_parts = VersionedIdentityParts.Create(
+			profileId,
+			version,
+			nameof(profileId),
+			nameof(version),
+			"Profile identifiers may contain only ordinal letters, digits, '.', '_' and '-'.",
+			"Profile versions may contain only ordinal letters, digits, '.', '_' and '-'.");
 	}
+
+	private SimulatorProfileIdentity(VersionedIdentityParts parts) => _parts = parts;
 
 	public static SimulatorProfileIdentity Parse(string value)
 	{
@@ -39,44 +34,24 @@ public sealed class SimulatorProfileIdentity : IEquatable<SimulatorProfileIdenti
 	public static bool TryParse(string? value, out SimulatorProfileIdentity identity)
 	{
 		identity = null!;
-		if (value is null)
+		if (!VersionedIdentityParts.TryParse(value, out var parts))
 		{
 			return false;
 		}
 
-		var separatorIndex = value.IndexOf('@');
-		if (separatorIndex <= 0 || separatorIndex != value.LastIndexOf('@'))
-		{
-			return false;
-		}
-
-		try
-		{
-			identity = new SimulatorProfileIdentity(
-				value[..separatorIndex],
-				value[(separatorIndex + 1)..]);
-			return true;
-		}
-		catch (ArgumentException)
-		{
-			return false;
-		}
+		identity = new SimulatorProfileIdentity(parts);
+		return true;
 	}
 
-	public override string ToString() => $"{ProfileId}@{Version}";
+	public override string ToString() => _parts.ToString();
 
 	public bool Equals(SimulatorProfileIdentity? other) =>
-		other is not null
-		&& string.Equals(ProfileId, other.ProfileId, StringComparison.Ordinal)
-		&& string.Equals(Version, other.Version, StringComparison.Ordinal);
+		other is not null && _parts.Equals(other._parts);
 
 	public override bool Equals(object? obj) =>
 		obj is SimulatorProfileIdentity other && Equals(other);
 
-	public override int GetHashCode() =>
-		HashCode.Combine(
-			StringComparer.Ordinal.GetHashCode(ProfileId),
-			StringComparer.Ordinal.GetHashCode(Version));
+	public override int GetHashCode() => _parts.GetHashCode();
 
 	public static bool operator ==(
 		SimulatorProfileIdentity? left,
@@ -85,12 +60,4 @@ public sealed class SimulatorProfileIdentity : IEquatable<SimulatorProfileIdenti
 	public static bool operator !=(
 		SimulatorProfileIdentity? left,
 		SimulatorProfileIdentity? right) => !Equals(left, right);
-
-	private static bool IsValidPart(string? value) =>
-		!string.IsNullOrEmpty(value)
-		&& value.All(character =>
-			character is >= 'A' and <= 'Z'
-			or >= 'a' and <= 'z'
-			or >= '0' and <= '9'
-			or '.' or '_' or '-');
 }
