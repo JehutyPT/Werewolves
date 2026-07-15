@@ -42,7 +42,9 @@ public class HeadlessSimulationTests
 		var identifySeer = new SelectPlayersInstruction(
 			players.Select(player => player.Id).ToHashSet(),
 			NumberRangeConstraint.Single,
+			publicAnnouncement: null,
 			privateInstruction: GameStrings.RevealRolePromptSpecify,
+			affectedPlayerIds: null,
 			roleIdentification: MainRoleType.Seer);
 
 		var confirmation = strategy.CreateResponse(startInstruction, session);

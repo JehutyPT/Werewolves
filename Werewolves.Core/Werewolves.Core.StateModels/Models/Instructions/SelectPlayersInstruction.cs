@@ -38,14 +38,34 @@ public record SelectPlayersInstruction : ModeratorInstruction
     /// <param name="publicAnnouncement">The text to be read aloud to players.</param>
     /// <param name="privateInstruction">Private guidance for the moderator.</param>
     /// <param name="affectedPlayerIds">Optional list of affected player IDs for context.</param>
-    [JsonConstructor]
     internal SelectPlayersInstruction(
         HashSet<Guid> selectablePlayerIds,
         NumberRangeConstraint countConstraint,
         string? publicAnnouncement = null,
         string? privateInstruction = null,
-        IReadOnlyList<Guid>? affectedPlayerIds = null,
-		MainRoleType? roleIdentification = null)
+        IReadOnlyList<Guid>? affectedPlayerIds = null)
+		: this(
+			selectablePlayerIds,
+			countConstraint,
+			publicAnnouncement,
+			privateInstruction,
+			affectedPlayerIds,
+			roleIdentification: null)
+	{
+	}
+
+	/// <summary>
+	/// Initializes a new instance of SelectPlayersInstruction with machine-stable
+	/// first-night Role identification context.
+	/// </summary>
+	[JsonConstructor]
+	internal SelectPlayersInstruction(
+		HashSet<Guid> selectablePlayerIds,
+		NumberRangeConstraint countConstraint,
+		string? publicAnnouncement,
+		string? privateInstruction,
+		IReadOnlyList<Guid>? affectedPlayerIds,
+		MainRoleType? roleIdentification)
         : base(publicAnnouncement, privateInstruction, affectedPlayerIds)
     {
         SelectablePlayerIds = selectablePlayerIds ?? throw new ArgumentNullException(nameof(selectablePlayerIds));

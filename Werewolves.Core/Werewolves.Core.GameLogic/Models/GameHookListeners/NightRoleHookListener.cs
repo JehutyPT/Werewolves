@@ -114,6 +114,7 @@ internal abstract class NightRoleHookListener<T> : RoleHookListener<T> where T :
 				countConstraint: NumberRangeConstraint.Exact(roleCount),
 				publicAnnouncement: publicText,
 				privateInstruction: privateInstruction,
+				affectedPlayerIds: null,
 				roleIdentification: (MainRoleType)Id
 			),
 			WokenUpStateEnum);
