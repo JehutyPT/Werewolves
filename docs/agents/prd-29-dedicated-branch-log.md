@@ -82,3 +82,27 @@ This log records decisions made while executing PRD #29 autonomously with the
 - Fresh final Standards and Spec reviews both reported no findings. The
   prepared issue #46 contract used SHA-256
   `05e4c0136e41b77f90fba8ad552f80069e96b7b230f988e944e1b81a03554c37`.
+
+### 2026-07-15 — issue #83
+
+- Integrated the terminal lobby-evaluation boundary through commit
+  `1db8aeec155647e20dfffdc226168a514242aa6c`.
+- The public evaluator preserves distinct rules-invalid, app-unsupported,
+  simulator-unsupported, could-not-evaluate, already-decided, degenerate, and
+  probability meanings while enforcing the fixed already-decided, 1,000-run
+  screening, and 10,000-run probability order.
+- Simulator profiles declare the Shared Victory capabilities they can produce;
+  the active profile declares none. Possible Game Results therefore remain
+  the canonical single-Faction rows plus No-Winner unless a profile explicitly
+  supplies an in-inventory Shared Victory capability.
+- Simulation Result Evidence preserves every attempted source record,
+  compatibility identity, inventory, and Completed/Incomplete count. Any
+  Incomplete run makes all frequency projections reject the evidence, so a
+  completed-only partial distribution cannot escape. Undefined Game Result
+  subclasses are rejected before aggregation.
+- Central verification at the integrated commit passed: Release Mac Catalyst
+  x64 build with zero warnings and errors; Core tests with 295 passed and one
+  known skip; Client tests with 195 passed.
+- Fresh final Standards and Spec reviews both reported no findings. The
+  canonical issue #83 contract remained byte-for-byte unchanged with SHA-256
+  `b4b1d9cb00b22d641d6dda74041a4dbd396507020e77dd676b3b466ed904ff2c`.
