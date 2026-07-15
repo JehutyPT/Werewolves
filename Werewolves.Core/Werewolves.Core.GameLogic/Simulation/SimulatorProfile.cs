@@ -25,7 +25,7 @@ public sealed class SimulatorProfile
 
 	public bool SupportsActorSetupCards => false;
 
-	public SimulatorProfile(
+	internal SimulatorProfile(
 		SimulatorProfileIdentity identity,
 		IEnumerable<SimulatorProfileRoleDescriptor> roleDescriptors)
 	{
@@ -41,13 +41,13 @@ public sealed class SimulatorProfile
 
 	public bool SupportsRole(MainRoleType role) => _beneficiaryFactions.ContainsKey(role);
 
-	public bool TryGetBeneficiaryFaction(MainRoleType role, out Faction faction) =>
+	internal bool TryGetBeneficiaryFaction(MainRoleType role, out Faction faction) =>
 		_beneficiaryFactions.TryGetValue(role, out faction);
 
 	public bool SupportsRuleState(SimulationRuleState ruleState) =>
 		ruleState == SimulationRuleState.Default;
 }
 
-public sealed record SimulatorProfileRoleDescriptor(
+internal sealed record SimulatorProfileRoleDescriptor(
 	MainRoleType Role,
 	Faction BeneficiaryFaction);

@@ -97,24 +97,16 @@ public class AlreadyDecidedRoleCompositionClassifierTests
 	}
 
 	[Fact]
-	public void Resolve_WithMultipleSatisfiedPredicatesForOneFaction_ReturnsSingleFactionResult()
+	public void Resolve_WithMultipleSatisfiedPredicatesForOneFaction_RejectsInvalidInput()
 	{
-		var forward = AlreadyDecidedRoleCompositionClassifier.Resolve(
-		[
-			new(Faction.Werewolf, true, AlreadyDecidedReason.WerewolfControlShortcut),
-			new(Faction.Werewolf, true, AlreadyDecidedReason.NoWerewolfFactionBeneficiariesAtLobbyExit)
-		]);
-		var reverse = AlreadyDecidedRoleCompositionClassifier.Resolve(
-		[
-			new(Faction.Werewolf, true, AlreadyDecidedReason.NoWerewolfFactionBeneficiariesAtLobbyExit),
-			new(Faction.Werewolf, true, AlreadyDecidedReason.WerewolfControlShortcut)
-		]);
+		var action = () => AlreadyDecidedRoleCompositionClassifier.Resolve(
+			[
+				new(Faction.Werewolf, true, AlreadyDecidedReason.WerewolfControlShortcut),
+				new(Faction.Werewolf, true, AlreadyDecidedReason.NoWerewolfFactionBeneficiariesAtLobbyExit)
+			]);
 
-		forward.Should().Be(reverse);
-		forward.Should().Be(
-			new AlreadyDecidedRoleCompositionResult(
-				new SingleFactionGameResult(Faction.Werewolf),
-				AlreadyDecidedReason.NoWerewolfFactionBeneficiariesAtLobbyExit));
+		action.Should().Throw<ArgumentException>()
+			.Where(exception => exception.ParamName == "predicateResults");
 	}
 
 	[Fact]

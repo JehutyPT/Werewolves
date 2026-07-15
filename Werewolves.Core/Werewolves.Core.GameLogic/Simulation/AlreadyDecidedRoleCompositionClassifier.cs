@@ -8,7 +8,7 @@ public static class CurrentProfileFactionBridge
 	public static FactionBeneficiaryComposition Map(CanonicalRoleComposition composition)
 		=> Map(composition, SimulatorProfile.Active);
 
-	public static FactionBeneficiaryComposition Map(
+	internal static FactionBeneficiaryComposition Map(
 		CanonicalRoleComposition composition,
 		SimulatorProfile profile)
 	{
@@ -37,7 +37,7 @@ public static class AlreadyDecidedRoleCompositionClassifier
 		CanonicalRoleComposition composition)
 		=> Classify(composition, SimulatorProfile.Active);
 
-	public static AlreadyDecidedRoleCompositionResult Classify(
+	internal static AlreadyDecidedRoleCompositionResult Classify(
 		CanonicalRoleComposition composition,
 		SimulatorProfile profile)
 	{
@@ -69,11 +69,15 @@ public static class AlreadyDecidedRoleCompositionClassifier
 		{
 			throw new ArgumentOutOfRangeException(nameof(predicateResults));
 		}
+		if (snapshot.GroupBy(result => result.Faction).Any(group => group.Count() > 1))
+		{
+			throw new ArgumentException(
+				"Each Faction can have only one lobby-exit victory predicate result.",
+				nameof(predicateResults));
+		}
 
 		var satisfied = snapshot
 			.Where(result => result.IsSatisfied)
-			.GroupBy(result => result.Faction)
-			.Select(group => group.OrderBy(result => result.Reason).First())
 			.OrderBy(result => result.Faction)
 			.ToArray();
 		if (satisfied.Length == 0)

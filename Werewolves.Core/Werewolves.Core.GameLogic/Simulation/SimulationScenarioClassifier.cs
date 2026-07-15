@@ -10,7 +10,7 @@ public static class SimulationScenarioClassifier
 	public static SimulationScenarioClassification Classify(SimulationScenario scenario)
 		=> Classify(scenario, SimulatorProfile.Active);
 
-	public static SimulationScenarioClassification Classify(
+	internal static SimulationScenarioClassification Classify(
 		SimulationScenario scenario,
 		SimulatorProfile profile)
 	{
