@@ -367,6 +367,28 @@ public class SimulationExecutionTests : DiagnosticTestBase
 	}
 
 	[Fact]
+	public void AdaptTerminalEvidence_WithDawnOracle_UsesCurrentTurn()
+	{
+		var material = new RunSeedMaterial(
+			CreateIdentity(CreateKnownDawnOracle()),
+			BaselineRandomDecisionStrategy.Identity,
+			runNumber: 29);
+		GameLogEntryBase[] history =
+		[
+			CreateTransition(GamePhase.Dawn, GamePhase.Day, turnNumber: 2),
+			CreateVictory(Team.Werewolves, GamePhase.Day, turnNumber: 2)
+		];
+
+		var run = SimulationExecutor.AdaptTerminalEvidence(material, history);
+
+		var completed = run.Should().BeOfType<CompletedSimulationRun>().Subject;
+		completed.GameResult.Should().Be(new SingleFactionGameResult(Faction.Werewolf));
+		completed.EndingTurn.Should().Be(2);
+		completed.VictoryCheckWindow.Should().Be(VictoryCheckWindow.Dawn);
+		MarkTestCompleted();
+	}
+
+	[Fact]
 	public void AdaptTerminalEvidence_WithPreNightOracle_UsesResolvedPriorTurn()
 	{
 		var material = new RunSeedMaterial(
@@ -395,7 +417,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 			CreateIdentity(CreateKnownDawnOracle()),
 			BaselineRandomDecisionStrategy.Identity,
 			runNumber: 37);
-		var validTransition = CreateTransition(GamePhase.Night, GamePhase.Day, turnNumber: 1);
+		var validTransition = CreateTransition(GamePhase.Dawn, GamePhase.Day, turnNumber: 1);
 		var validVictory = CreateVictory(Team.Werewolves, GamePhase.Day, turnNumber: 1);
 		GameLogEntryBase[][] histories =
 		[
@@ -409,6 +431,22 @@ public class SimulationExecutionTests : DiagnosticTestBase
 			[
 				validTransition,
 				CreateVictory(Team.Werewolves, GamePhase.Night, turnNumber: 1)
+			],
+			[
+				CreateTransition(GamePhase.Day, GamePhase.Day, turnNumber: 1),
+				validVictory
+			],
+			[
+				CreateTransition(GamePhase.Night, GamePhase.Day, turnNumber: 1),
+				validVictory
+			],
+			[
+				CreateTransition(GamePhase.Night, GamePhase.Night, turnNumber: 2),
+				CreateVictory(Team.Villagers, GamePhase.Night, turnNumber: 2)
+			],
+			[
+				CreateTransition(GamePhase.Dawn, GamePhase.Night, turnNumber: 2),
+				CreateVictory(Team.Villagers, GamePhase.Night, turnNumber: 2)
 			],
 			[
 				CreateTransition(GamePhase.Day, GamePhase.Night, turnNumber: 1),

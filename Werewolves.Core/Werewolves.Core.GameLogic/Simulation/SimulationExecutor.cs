@@ -209,10 +209,12 @@ public sealed class SimulationExecutor
 			return new IncompleteSimulationRun(material);
 		}
 
-		var (window, endingTurn) = transition.CurrentPhase switch
+		var (window, endingTurn) = (transition.PreviousPhase, transition.CurrentPhase) switch
 		{
-			GamePhase.Day => (VictoryCheckWindow.Dawn, transition.TurnNumber),
-			GamePhase.Night => (VictoryCheckWindow.PreNight, transition.TurnNumber - 1),
+			(GamePhase.Dawn, GamePhase.Day) =>
+				(VictoryCheckWindow.Dawn, transition.TurnNumber),
+			(GamePhase.Day, GamePhase.Night) =>
+				(VictoryCheckWindow.PreNight, transition.TurnNumber - 1),
 			_ => (default(VictoryCheckWindow), 0)
 		};
 		if (endingTurn <= 0)
