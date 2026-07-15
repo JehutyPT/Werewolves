@@ -6,16 +6,6 @@ namespace Werewolves.Core.GameLogic.Simulation;
 
 public static partial class TerminalLobbyCache
 {
-	internal static byte[] WriteGameResultValue(GameResult gameResult)
-	{
-		ValidateGameResult(gameResult);
-		using var stream = new MemoryStream();
-		using var writer = new Utf8JsonWriter(stream);
-		WriteResult(writer, gameResult);
-		writer.Flush();
-		return stream.ToArray();
-	}
-
 	public static byte[] Write(TerminalLobbyCacheRecord record)
 	{
 		ArgumentNullException.ThrowIfNull(record);

@@ -96,8 +96,10 @@ public sealed class TerminalLobbyEvaluator
 		{
 			return new CouldNotEvaluateLobbyEvaluation();
 		}
-		var inventory = CreateInventory(scenario, simulatorSupport.Profile);
-		if (inventory is null)
+		if (!PossibleGameResultInventory.TryCreate(
+			scenario,
+			simulatorSupport.Profile,
+			out var inventory))
 		{
 			return new CouldNotEvaluateLobbyEvaluation();
 		}
@@ -118,8 +120,8 @@ public sealed class TerminalLobbyEvaluator
 		{
 			screeningEvidence = new SimulationResultEvidence(
 				screening,
-				inventory.Value.Factions,
-				inventory.Value.GameResults);
+				inventory.Factions,
+				inventory.GameResults);
 		}
 		catch (ArgumentException)
 		{
@@ -147,8 +149,8 @@ public sealed class TerminalLobbyEvaluator
 		{
 			return new ProbabilityTerminalEvaluation(new SimulationResultEvidence(
 				probability,
-				inventory.Value.Factions,
-				inventory.Value.GameResults));
+				inventory.Factions,
+				inventory.GameResults));
 		}
 		catch (ArgumentException)
 		{
@@ -192,22 +194,4 @@ public sealed class TerminalLobbyEvaluator
 		&& evidence.CompletedRunCount == expectedCount
 		&& evidence.IncompleteRunCount == 0;
 
-	private static (Faction[] Factions, GameResult[] GameResults)? CreateInventory(
-		SimulationScenario scenario,
-		SimulatorProfile profile)
-	{
-		var factions = new HashSet<Faction>();
-		foreach (var role in scenario.ToCanonical().RoleComposition.Entries.Select(entry => entry.Role))
-		{
-			if (!profile.TryGetBeneficiaryFaction(role, out var faction)
-				|| !Enum.IsDefined(faction))
-			{
-				return null;
-			}
-			factions.Add(faction);
-		}
-		var orderedFactions = factions.Order().ToArray();
-		var results = profile.CreatePossibleGameResults(orderedFactions);
-		return (orderedFactions, results);
-	}
 }

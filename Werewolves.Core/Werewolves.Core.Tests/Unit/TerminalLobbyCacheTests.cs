@@ -22,8 +22,7 @@ public class TerminalLobbyCacheTests
 	[Fact]
 	public void Capture_AlreadyDecided_RequiresExactActiveProfileClassifierMeaning()
 	{
-		var identity = AlreadyDecidedIdentity();
-		var classification = SimulationScenarioClassifier.Classify(new SimulationScenario(
+		var scenario = new SimulationScenario(
 			5,
 			[
 				MainRoleType.SimpleVillager,
@@ -31,10 +30,14 @@ public class TerminalLobbyCacheTests
 				MainRoleType.SimpleWerewolf,
 				MainRoleType.SimpleWerewolf,
 				MainRoleType.SimpleWerewolf
-			]));
-		var evaluation = new AlreadyDecidedTerminalEvaluation(
-			new SingleFactionGameResult(Faction.Werewolf),
-			AlreadyDecidedReason.WerewolfControlShortcut);
+			]);
+		var identity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorProfile.Active.Identity);
+		var classification = SimulationScenarioClassifier.Classify(scenario);
+		var evaluation = new TerminalLobbyEvaluator()
+			.Evaluate(scenario)
+			.Should().BeOfType<AlreadyDecidedTerminalEvaluation>().Subject;
 
 		var record = TerminalLobbyCache.Capture(identity, evaluation);
 
@@ -70,6 +73,10 @@ public class TerminalLobbyCacheTests
 			AlreadyDecidedIdentity(),
 			new SharedVictoryGameResult([Faction.Villager, Faction.Werewolf]),
 			AlreadyDecidedReason.MultipleLobbyExitVictoryPredicatesSatisfied);
+		Action notAlreadyDecided = () => new AlreadyDecidedTerminalCacheRecord(
+			AggregateIdentity(),
+			new SingleFactionGameResult(Faction.Werewolf),
+			AlreadyDecidedReason.WerewolfControlShortcut);
 		var staleAggregateIdentity = new SimulationCompatibilityIdentity(
 			AggregateIdentity().Scenario,
 			new SimulatorProfileIdentity("other-simulator", "1"));
@@ -81,21 +88,59 @@ public class TerminalLobbyCacheTests
 		staleProfile.Should().Throw<ArgumentException>();
 		noWinner.Should().Throw<ArgumentException>();
 		impossibleShared.Should().Throw<ArgumentException>();
+		notAlreadyDecided.Should().Throw<ArgumentException>();
 		staleAggregate.Should().Throw<ArgumentException>();
 	}
 
-	[Fact]
-	public void GameResultCodec_PreservesCanonicalSharedVictoryValue_WhileCurrentProfileRecordRejectsIt()
+	[Theory]
+	[InlineData("{\"kind\":1,\"factions\":[0,1]}", 3)]
+	[InlineData("{\"kind\":2,\"factions\":[]}", 3)]
+	public void Read_RejectsCurrentProfileSharedAndNoWinnerAlreadyDecidedPayloads(
+		string resultJson,
+		int reason)
 	{
-		var shared = new SharedVictoryGameResult([Faction.Werewolf, Faction.Villager]);
-		const string golden = "{\"kind\":1,\"factions\":[0,1]}";
-
-		TerminalLobbyCache.WriteGameResultValue(shared).Should().Equal(Utf8(golden));
-		shared.Factions.Should().Equal(Faction.Villager, Faction.Werewolf);
 		var impossibleRecord = AlreadyGolden
-			.Replace("{\"kind\":0,\"factions\":[1]}", golden, StringComparison.Ordinal)
-			.Replace("\"reason\":2", "\"reason\":3", StringComparison.Ordinal);
+			.Replace(
+				"{\"kind\":0,\"factions\":[1]}",
+				resultJson,
+				StringComparison.Ordinal)
+			.Replace("\"reason\":2", $"\"reason\":{reason}", StringComparison.Ordinal);
+
 		TerminalLobbyCache.Read(Utf8(impossibleRecord), AlreadyDecidedIdentity()).IsUsable.Should().BeFalse();
+	}
+
+	[Theory]
+	[InlineData("players=4|roles=[SimpleVillager=3,SimpleWerewolf=1]|actor=[]|rules=[]")]
+	[InlineData("players=31|roles=[SimpleVillager=30,SimpleWerewolf=1]|actor=[]|rules=[]")]
+	[InlineData("players=30|roles=[SimpleVillager=30,SimpleWerewolf=3]|actor=[]|rules=[]")]
+	[InlineData("players=30|roles=[SimpleVillager=2147483646,SimpleWerewolf=1]|actor=[]|rules=[]")]
+	public void Read_RejectsUnboundedCanonicalIdentityBeforeRoleCardMaterialization(
+		string canonicalScenario)
+	{
+		var payload = DegenerateGolden.Replace(
+			AggregateIdentity().Scenario.ToString(),
+			canonicalScenario,
+			StringComparison.Ordinal);
+		var action = () => TerminalLobbyCache.Read(Utf8(payload), AggregateIdentity());
+
+		action.Should().NotThrow();
+		action().IsUsable.Should().BeFalse();
+	}
+
+	[Theory]
+	[InlineData("players=5|roles=[SimpleVillager=5]|actor=[]|rules=[]")]
+	[InlineData("players=5|roles=[BigBadWolf=1,SimpleVillager=4]|actor=[]|rules=[]")]
+	[InlineData("players=5|roles=[SimpleVillager=3,SimpleWerewolf=1,WildChild=1]|actor=[Cupid,Defender,Elder]|rules=[]")]
+	public void Read_RejectsRulesAppOrSimulatorUnsupportedCanonicalIdentity(
+		string canonicalScenario)
+	{
+		var payload = DegenerateGolden.Replace(
+			AggregateIdentity().Scenario.ToString(),
+			canonicalScenario,
+			StringComparison.Ordinal);
+
+		TerminalLobbyCache.Read(Utf8(payload), AggregateIdentity())
+			.IsUsable.Should().BeFalse();
 	}
 
 	[Fact]
@@ -299,6 +344,36 @@ public class TerminalLobbyCacheTests
 		yield return [ProbabilityGolden.Replace(",{\"result\":{\"kind\":2,\"factions\":[]},\"numerator\":0,\"denominator\":10000}", "", StringComparison.Ordinal)];
 		yield return [ReplaceFirst(ProbabilityGolden, "\"denominator\":10000", "\"denominator\":9999")];
 		yield return [ProbabilityGolden.Replace("\"numerator\":7000", "\"numerator\":6999", StringComparison.Ordinal)];
+	}
+
+	[Theory]
+	[InlineData(true)]
+	[InlineData(false)]
+	public void Read_RejectsCellOnlyNumeratorMutationWithIntactResultRows(bool degenerate)
+	{
+		var canonical = degenerate ? DegenerateGolden : ProbabilityGolden;
+		var payload = degenerate
+			? canonical.Replace(
+				"\"window\":0,\"numerator\":750",
+				"\"window\":0,\"numerator\":749",
+				StringComparison.Ordinal)
+			: canonical.Replace(
+				"\"window\":0,\"numerator\":7000",
+				"\"window\":0,\"numerator\":6999",
+				StringComparison.Ordinal);
+		using var json = JsonDocument.Parse(payload);
+		var rows = json.RootElement
+			.GetProperty("record")
+			.GetProperty("results")
+			.EnumerateArray()
+			.ToArray();
+		var denominator = degenerate ? 1_000 : 10_000;
+
+		rows.Sum(row => row.GetProperty("numerator").GetInt32()).Should().Be(denominator);
+		TerminalLobbyCache.Read(
+			Utf8(payload),
+			degenerate ? AggregateIdentity() : ProbabilityIdentity())
+			.IsUsable.Should().BeFalse();
 	}
 
 	[Theory]

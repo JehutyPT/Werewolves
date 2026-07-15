@@ -5,6 +5,9 @@ namespace Werewolves.Core.GameLogic.Simulation;
 
 public static partial class TerminalLobbyCache
 {
+	private const int MaximumPhysicalRoleCardCount =
+		GameSessionConfig.MaximumPlayerCount + 2;
+
 	internal static GameResult ValidateGameResult(GameResult gameResult)
 	{
 		ArgumentNullException.ThrowIfNull(gameResult);
@@ -77,9 +80,16 @@ public static partial class TerminalLobbyCache
 				"Aggregate records require a current-profile cacheable Simulation Scenario.");
 		}
 
-		var expectedInventory = CreateExpectedInventory(
+		if (!PossibleGameResultInventory.TryCreate(
 			classification.Scenario,
-			SimulatorProfile.Active)
+			SimulatorProfile.Active,
+			out var derivedInventory))
+		{
+			throw new ArgumentException(
+				"The Simulation Scenario does not have a current-profile Game Result inventory.");
+		}
+
+		var expectedInventory = derivedInventory.GameResults
 			.OrderBy(ResultKey, StringComparer.Ordinal)
 			.ToArray();
 		if (!rows
@@ -135,6 +145,7 @@ public static partial class TerminalLobbyCache
 		}
 
 		var canonical = identity.Scenario;
+		ValidateMaterializationBounds(canonical);
 		var scenario = new SimulationScenario(
 			canonical.PlayerCount,
 			canonical.RoleComposition.Entries.SelectMany(entry =>
@@ -164,21 +175,38 @@ public static partial class TerminalLobbyCache
 		return classification;
 	}
 
-	private static GameResult[] CreateExpectedInventory(
-		SimulationScenario scenario,
-		SimulatorProfile profile)
+	private static void ValidateMaterializationBounds(
+		CanonicalSimulationScenario scenario)
 	{
-		var factions = scenario
-			.ToCanonical()
-			.RoleComposition
-			.Entries
-			.Select(entry => profile.TryGetBeneficiaryFaction(entry.Role, out var faction)
-				? faction
-				: throw new ArgumentException(
-					"The Simulation Scenario contains an unsupported Role."))
-			.Distinct()
-			.Order()
-			.ToArray();
-		return profile.CreatePossibleGameResults(factions);
+		if (scenario.PlayerCount < GameSessionConfig.MinimumPlayerCount
+			|| scenario.PlayerCount > GameSessionConfig.MaximumPlayerCount)
+		{
+			throw new ArgumentException(
+				"The canonical Simulation Scenario has an unsupported Player Count.",
+				nameof(scenario));
+		}
+
+		var cardCount = 0;
+		foreach (var entry in scenario.RoleComposition.Entries)
+		{
+			try
+			{
+				cardCount = checked(cardCount + entry.Count);
+			}
+			catch (OverflowException exception)
+			{
+				throw new ArgumentException(
+					"The canonical Role Composition card count is unbounded.",
+					nameof(scenario),
+					exception);
+			}
+
+			if (cardCount > MaximumPhysicalRoleCardCount)
+			{
+				throw new ArgumentException(
+					"The canonical Role Composition exceeds the physical card maximum.",
+					nameof(scenario));
+			}
+		}
 	}
 }
