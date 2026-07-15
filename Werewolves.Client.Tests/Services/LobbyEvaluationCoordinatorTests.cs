@@ -11,6 +11,59 @@ namespace Werewolves.Client.Tests.Services;
 public class LobbyEvaluationCoordinatorTests
 {
 	[Fact]
+	public async Task ThrowingReentrantCancellationCallback_CannotBlockReplacementProgress()
+	{
+		var pump = new ControlledContinuationPump();
+		var lobby = CreateLobby(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager);
+		LobbyEvaluationCoordinator coordinator = null!;
+		var evaluator = new ReentrantCancellationEvaluator(() =>
+			coordinator.TryRequestLobbyExit());
+		pump.Run(() =>
+		{
+			coordinator = new LobbyEvaluationCoordinator(
+				lobby,
+				new RecordingByteSource(bytes: null),
+				new RecordingLocalStore(bytes: null),
+				evaluator,
+				TimeProvider.System,
+				_ => new LobbyScenarioSupport(
+					RulesValid: true,
+					AppSupported: true,
+					SimulatorProfile.Active));
+			coordinator.TryRequestLobbyExit().Should().BeFalse();
+			pump.Drain();
+		});
+		await evaluator.FirstCallStarted.WaitAsync(TimeSpan.FromSeconds(5));
+
+		var mutation = Task.Run(() =>
+			lobby.DecrementRole(MainRoleType.SimpleWerewolf));
+		await evaluator.CallbackEntered.WaitAsync(TimeSpan.FromSeconds(5));
+		evaluator.CompleteFirstCall();
+		var staleDrain = Task.Run(pump.Drain);
+		try
+		{
+			await staleDrain.WaitAsync(TimeSpan.FromSeconds(5));
+		}
+		finally
+		{
+			evaluator.ReleaseCancellationCallback();
+		}
+		await mutation.WaitAsync(TimeSpan.FromSeconds(5));
+		await WaitForStateAsync(coordinator, LobbyEvaluationStateKind.CouldNotEvaluate);
+
+		evaluator.ReentrantExitResult.Should().BeFalse();
+		evaluator.CallCount.Should().Be(2);
+		coordinator.State.Identity.Should().NotBeNull();
+		coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.CouldNotEvaluate);
+		coordinator.Dispose();
+	}
+
+	[Fact]
 	public void SimulatorUnavailableProjection_ReleasesGateWithoutCacheOrFallback()
 	{
 		var bundled = new RecordingByteSource(bytes: null);
@@ -62,13 +115,11 @@ public class LobbyEvaluationCoordinatorTests
 		var failedIdentity = coordinator.State.Identity;
 
 		ChangeToFourWerewolves(lobby);
-		var currentPipeline = coordinator.CurrentPipelineCompletion;
 
 		coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.Pending);
 		coordinator.State.Identity.Should().NotBe(failedIdentity);
 		coordinator.RetryCurrent().Should().BeFalse();
 		coordinator.Dispose();
-		await currentPipeline.WaitAsync(TimeSpan.FromSeconds(5));
 	}
 
 	[Fact]
@@ -91,7 +142,6 @@ public class LobbyEvaluationCoordinatorTests
 		coordinator.TryRequestLobbyExit().Should().BeFalse();
 		coordinator.TryRequestLobbyExit().Should().BeFalse();
 		var call = await evaluator.NextCallAsync();
-		var pipeline = coordinator.CurrentPipelineCompletion;
 		lobby.MovePlayerDown(0).Should().BeTrue();
 		coordinator.TryRequestLobbyExit().Should().BeFalse();
 		evaluator.CallCount.Should().Be(1);
@@ -99,7 +149,7 @@ public class LobbyEvaluationCoordinatorTests
 		call.Complete(new AlreadyDecidedTerminalEvaluation(
 			new SingleFactionGameResult(Faction.Werewolf),
 			AlreadyDecidedReason.WerewolfControlShortcut));
-		await pipeline.WaitAsync(TimeSpan.FromSeconds(5));
+		await WaitForStateAsync(coordinator, LobbyEvaluationStateKind.AlreadyDecided);
 		evaluator.CallCount.Should().Be(1);
 	}
 
@@ -151,67 +201,78 @@ public class LobbyEvaluationCoordinatorTests
 	}
 
 	[Fact]
-	public async Task ScenarioChange_DuringBundledReadStopsStalePipelineBeforeLocalProgression()
+	public void ScenarioChange_DuringBundledReadStopsStalePipelineBeforeLocalProgression()
 	{
-		var lobby = CreateLobby(
-			MainRoleType.SimpleWerewolf,
-			MainRoleType.SimpleWerewolf,
-			MainRoleType.SimpleWerewolf,
-			MainRoleType.SimpleVillager,
-			MainRoleType.SimpleVillager);
-		var bundled = new ControlledByteSource();
-		var local = new RecordingLocalStore(bytes: null);
-		var evaluator = new RecordingEvaluator(new CouldNotEvaluateLobbyEvaluation());
-		var coordinator = new LobbyEvaluationCoordinator(
-			lobby, bundled, local, evaluator, TimeProvider.System);
-		var staleRead = await bundled.NextReadAsync();
-		var stalePipeline = coordinator.CurrentPipelineCompletion;
+		var pump = new ControlledContinuationPump();
+		pump.Run(() =>
+		{
+			var lobby = CreateLobby(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+			var bundled = new ControlledByteSource();
+			var local = new RecordingLocalStore(bytes: null);
+			var evaluator = new RecordingEvaluator(new CouldNotEvaluateLobbyEvaluation());
+			var coordinator = new LobbyEvaluationCoordinator(
+				lobby, bundled, local, evaluator, TimeProvider.System);
+			pump.Drain();
+			var staleRead = bundled.NextReadAsync().GetAwaiter().GetResult();
 
-		ChangeToVillagerMajority(lobby);
-		var currentRead = await bundled.NextReadAsync();
-		var currentPipeline = coordinator.CurrentPipelineCompletion;
-		staleRead.Complete(bytes: null);
-		await stalePipeline.WaitAsync(TimeSpan.FromSeconds(5));
+			ChangeToVillagerMajority(lobby);
+			pump.Drain();
+			var currentRead = bundled.NextReadAsync().GetAwaiter().GetResult();
+			staleRead.Complete(bytes: null);
+			pump.Drain();
 
-		local.ReadCount.Should().Be(0);
-		evaluator.CallCount.Should().Be(0);
-		coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.Pending);
-		coordinator.Dispose();
-		currentRead.Complete(bytes: null);
-		await currentPipeline.WaitAsync(TimeSpan.FromSeconds(5));
+			local.ReadCount.Should().Be(0);
+			evaluator.CallCount.Should().Be(0);
+			coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.Pending);
+			coordinator.Dispose();
+			currentRead.Complete(bytes: null);
+			pump.Drain();
+		});
 	}
 
 	[Fact]
-	public async Task ScenarioChange_DuringLocalReadStopsStalePipelineBeforeFallback()
+	public void ScenarioChange_DuringLocalReadStopsStalePipelineBeforeFallback()
 	{
-		var lobby = CreateLobby(
-			MainRoleType.SimpleWerewolf,
-			MainRoleType.SimpleWerewolf,
-			MainRoleType.SimpleWerewolf,
-			MainRoleType.SimpleVillager,
-			MainRoleType.SimpleVillager);
-		var local = new ControlledReadLocalStore();
-		var evaluator = new RecordingEvaluator(new CouldNotEvaluateLobbyEvaluation());
-		var coordinator = new LobbyEvaluationCoordinator(
-			lobby,
-			new RecordingByteSource(bytes: null),
-			local,
-			evaluator,
-			TimeProvider.System);
-		var staleRead = await local.NextReadAsync();
-		var stalePipeline = coordinator.CurrentPipelineCompletion;
+		var pump = new ControlledContinuationPump();
+		pump.Run(() =>
+		{
+			var clock = new ManualTimeProvider();
+			var lobby = CreateLobby(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+			var local = new ControlledReadLocalStore();
+			var evaluator = new RecordingEvaluator(new CouldNotEvaluateLobbyEvaluation());
+			var coordinator = new LobbyEvaluationCoordinator(
+				lobby,
+				new RecordingByteSource(bytes: null),
+				local,
+				evaluator,
+				clock);
+			pump.Drain();
+			var staleRead = local.NextReadAsync().GetAwaiter().GetResult();
 
-		ChangeToVillagerMajority(lobby);
-		var currentRead = await local.NextReadAsync();
-		var currentPipeline = coordinator.CurrentPipelineCompletion;
-		staleRead.Complete(bytes: null);
-		await stalePipeline.WaitAsync(TimeSpan.FromSeconds(5));
+			ChangeToVillagerMajority(lobby);
+			pump.Drain();
+			var currentRead = local.NextReadAsync().GetAwaiter().GetResult();
+			staleRead.Complete(bytes: null);
+			pump.Drain();
+			clock.Advance(TimeSpan.FromMilliseconds(500));
+			pump.Drain();
 
-		evaluator.CallCount.Should().Be(0);
-		coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.Pending);
-		coordinator.Dispose();
-		currentRead.Complete(bytes: null);
-		await currentPipeline.WaitAsync(TimeSpan.FromSeconds(5));
+			evaluator.CallCount.Should().Be(0);
+			coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.Pending);
+			coordinator.Dispose();
+			currentRead.Complete(bytes: null);
+			pump.Drain();
+		});
 	}
 
 	[Fact]
@@ -235,13 +296,12 @@ public class LobbyEvaluationCoordinatorTests
 		coordinator.TryRequestLobbyExit().Should().BeFalse();
 		var staleWrite = await local.NextWriteAsync();
 		await staleWrite.CommitBoundary.WaitAsync(TimeSpan.FromSeconds(5));
-		var stalePipeline = coordinator.CurrentPipelineCompletion;
 
 		ChangeToFourWerewolves(lobby);
 		var currentIdentity = coordinator.State.Identity;
 		coordinator.TryRequestLobbyExit().Should().BeFalse();
 		staleWrite.ReleaseCommitBoundary();
-		await stalePipeline.WaitAsync(TimeSpan.FromSeconds(5));
+		await staleWrite.Disposed.WaitAsync(TimeSpan.FromSeconds(5));
 		var currentWrite = await local.NextWriteAsync();
 		await currentWrite.CommitBoundary.WaitAsync(TimeSpan.FromSeconds(5));
 
@@ -276,17 +336,14 @@ public class LobbyEvaluationCoordinatorTests
 			clock);
 		coordinator.TryRequestLobbyExit().Should().BeFalse();
 		await local.StageStarted.WaitAsync(TimeSpan.FromSeconds(5));
-		var stalePipeline = coordinator.CurrentPipelineCompletion;
 
 		ChangeToFourWerewolves(lobby);
-		var currentPipeline = coordinator.CurrentPipelineCompletion;
 		local.ReleaseStage();
-		await stalePipeline.WaitAsync(TimeSpan.FromSeconds(5));
+		await local.StagedWriteDisposed.WaitAsync(TimeSpan.FromSeconds(5));
 
 		local.CommitAttemptCount.Should().Be(0);
 		coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.Pending);
 		coordinator.Dispose();
-		await currentPipeline.WaitAsync(TimeSpan.FromSeconds(5));
 	}
 
 	[Fact]
@@ -421,38 +478,42 @@ public class LobbyEvaluationCoordinatorTests
 	}
 
 	[Fact]
-	public async Task Dispose_CancelsOutstandingWorkAndPreventsLatePublicationAndPersistence()
+	public void Dispose_CancelsOutstandingWorkAndPreventsLatePublicationAndPersistence()
 	{
-		var evaluator = new ControlledEvaluator();
-		var local = new RecordingLocalStore(bytes: null);
-		var coordinator = new LobbyEvaluationCoordinator(
-			CreateLobby(
-				MainRoleType.SimpleWerewolf,
-				MainRoleType.SimpleWerewolf,
-				MainRoleType.SimpleWerewolf,
-				MainRoleType.SimpleVillager,
-				MainRoleType.SimpleVillager),
-			new RecordingByteSource(bytes: null),
-			local,
-			evaluator,
-			TimeProvider.System);
-		var transitions = 0;
-		coordinator.StateChanged += (_, _) => transitions++;
-		coordinator.TryRequestLobbyExit().Should().BeFalse();
-		var call = await evaluator.NextCallAsync();
-		var disposedPipeline = coordinator.CurrentPipelineCompletion;
+		var pump = new ControlledContinuationPump();
+		pump.Run(() =>
+		{
+			var evaluator = new ControlledEvaluator();
+			var local = new RecordingLocalStore(bytes: null);
+			var coordinator = new LobbyEvaluationCoordinator(
+				CreateLobby(
+					MainRoleType.SimpleWerewolf,
+					MainRoleType.SimpleWerewolf,
+					MainRoleType.SimpleWerewolf,
+					MainRoleType.SimpleVillager,
+					MainRoleType.SimpleVillager),
+				new RecordingByteSource(bytes: null),
+				local,
+				evaluator,
+				TimeProvider.System);
+			var transitions = 0;
+			coordinator.StateChanged += (_, _) => transitions++;
+			coordinator.TryRequestLobbyExit().Should().BeFalse();
+			pump.Drain();
+			var call = evaluator.NextCallAsync().GetAwaiter().GetResult();
 
-		coordinator.Dispose();
-		call.CancellationToken.IsCancellationRequested.Should().BeTrue();
-		call.Complete(new AlreadyDecidedTerminalEvaluation(
-			new SingleFactionGameResult(Faction.Werewolf),
-			AlreadyDecidedReason.WerewolfControlShortcut));
-		await disposedPipeline.WaitAsync(TimeSpan.FromSeconds(5));
+			coordinator.Dispose();
+			call.CancellationToken.IsCancellationRequested.Should().BeTrue();
+			call.Complete(new AlreadyDecidedTerminalEvaluation(
+				new SingleFactionGameResult(Faction.Werewolf),
+				AlreadyDecidedReason.WerewolfControlShortcut));
+			pump.Drain();
 
-		transitions.Should().Be(0);
-		coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.Pending);
-		local.Writes.Should().BeEmpty();
-		coordinator.TryRequestLobbyExit().Should().BeFalse();
+			transitions.Should().Be(0);
+			coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.Pending);
+			local.Writes.Should().BeEmpty();
+			coordinator.TryRequestLobbyExit().Should().BeFalse();
+		});
 	}
 
 	[Fact]
@@ -510,43 +571,52 @@ public class LobbyEvaluationCoordinatorTests
 	}
 
 	[Fact]
-	public async Task ScenarioChange_PreventsLateResultFromPublishingOrPersisting()
+	public void ScenarioChange_PreventsLateResultFromPublishingOrPersisting()
 	{
-		var lobby = CreateLobby(
-			MainRoleType.SimpleWerewolf,
-			MainRoleType.SimpleWerewolf,
-			MainRoleType.SimpleWerewolf,
-			MainRoleType.SimpleVillager,
-			MainRoleType.SimpleVillager);
-		var evaluator = new ControlledEvaluator();
-		var local = new RecordingLocalStore(bytes: null);
-		using var coordinator = new LobbyEvaluationCoordinator(
-			lobby,
-			new RecordingByteSource(bytes: null),
-			local,
-			evaluator,
-			TimeProvider.System);
-		coordinator.TryRequestLobbyExit().Should().BeFalse();
-		var first = await evaluator.NextCallAsync();
-		var stalePipeline = coordinator.CurrentPipelineCompletion;
+		var pump = new ControlledContinuationPump();
+		pump.Run(() =>
+		{
+			var lobby = CreateLobby(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+			var evaluator = new ControlledEvaluator();
+			var local = new RecordingLocalStore(bytes: null);
+			using var coordinator = new LobbyEvaluationCoordinator(
+				lobby,
+				new RecordingByteSource(bytes: null),
+				local,
+				evaluator,
+				TimeProvider.System);
+			coordinator.TryRequestLobbyExit().Should().BeFalse();
+			pump.Drain();
+			var first = evaluator.NextCallAsync().GetAwaiter().GetResult();
 
-		lobby.DecrementRole(MainRoleType.SimpleWerewolf);
-		lobby.IncrementRole(MainRoleType.SimpleVillager);
-		var currentIdentity = coordinator.State.Identity;
-		coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.Pending);
-		currentIdentity.Should().NotBe(first.Identity);
-		first.CancellationToken.IsCancellationRequested.Should().BeTrue();
-		coordinator.TryRequestLobbyExit().Should().BeFalse(
-			"the atomic exit decision must apply to the new pending snapshot");
+			lobby.DecrementRole(MainRoleType.SimpleWerewolf);
+			lobby.IncrementRole(MainRoleType.SimpleVillager);
+			var currentIdentity = coordinator.State.Identity;
+			coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.Pending);
+			currentIdentity.Should().NotBe(first.Identity);
+			first.CancellationToken.IsCancellationRequested.Should().BeTrue();
+			coordinator.TryRequestLobbyExit().Should().BeFalse(
+				"the atomic exit decision must apply to the new pending snapshot");
+			pump.Drain();
+			var current = evaluator.NextCallAsync().GetAwaiter().GetResult();
 
-		first.Complete(new AlreadyDecidedTerminalEvaluation(
-			new SingleFactionGameResult(Faction.Werewolf),
-			AlreadyDecidedReason.WerewolfControlShortcut));
-		await stalePipeline.WaitAsync(TimeSpan.FromSeconds(5));
+			first.Complete(new AlreadyDecidedTerminalEvaluation(
+				new SingleFactionGameResult(Faction.Werewolf),
+				AlreadyDecidedReason.WerewolfControlShortcut));
+			pump.Drain();
 
-		coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.Pending);
-		coordinator.State.Identity.Should().Be(currentIdentity);
-		local.Writes.Should().BeEmpty();
+			coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.Pending);
+			coordinator.State.Identity.Should().Be(currentIdentity);
+			local.Writes.Should().BeEmpty();
+			current.Complete(new CouldNotEvaluateLobbyEvaluation());
+			pump.Drain();
+			coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.CouldNotEvaluate);
+		});
 	}
 
 	[Fact]
@@ -795,6 +865,53 @@ public class LobbyEvaluationCoordinatorTests
 		condition().Should().BeTrue();
 	}
 
+	private sealed class ControlledContinuationPump : SynchronizationContext
+	{
+		private readonly object _sync = new();
+		private readonly Queue<(SendOrPostCallback Callback, object? State)> _callbacks = new();
+
+		public override SynchronizationContext CreateCopy() => this;
+
+		public override void Post(SendOrPostCallback callback, object? state)
+		{
+			lock (_sync)
+			{
+				_callbacks.Enqueue((callback, state));
+			}
+		}
+
+		public void Run(Action action)
+		{
+			var previous = Current;
+			SetSynchronizationContext(this);
+			try
+			{
+				action();
+			}
+			finally
+			{
+				SetSynchronizationContext(previous);
+			}
+		}
+
+		public void Drain() => Run(() =>
+		{
+			while (true)
+			{
+				(SendOrPostCallback Callback, object? State) next;
+				lock (_sync)
+				{
+					if (_callbacks.Count == 0)
+					{
+						return;
+					}
+					next = _callbacks.Dequeue();
+				}
+				next.Callback(next.State);
+			}
+		});
+	}
+
 	private sealed class RecordingByteSource(ReadOnlyMemory<byte>? bytes)
 		: ITerminalLobbyCacheByteSource
 	{
@@ -850,7 +967,7 @@ public class LobbyEvaluationCoordinatorTests
 	private sealed class ControlledRead
 	{
 		public TaskCompletionSource<ReadOnlyMemory<byte>?> Result { get; } =
-			new(TaskCreationOptions.RunContinuationsAsynchronously);
+			new();
 
 		public void Complete(ReadOnlyMemory<byte>? bytes) => Result.TrySetResult(bytes);
 	}
@@ -929,8 +1046,11 @@ public class LobbyEvaluationCoordinatorTests
 			new(TaskCreationOptions.RunContinuationsAsynchronously);
 		private readonly TaskCompletionSource _releaseStage =
 			new(TaskCreationOptions.RunContinuationsAsynchronously);
+		private readonly TaskCompletionSource _stagedWriteDisposed =
+			new(TaskCreationOptions.RunContinuationsAsynchronously);
 
 		public Task StageStarted => _stageStarted.Task;
+		public Task StagedWriteDisposed => _stagedWriteDisposed.Task;
 		public int CommitAttemptCount { get; private set; }
 
 		public ValueTask<ReadOnlyMemory<byte>?> ReadAsync(
@@ -943,7 +1063,9 @@ public class LobbyEvaluationCoordinatorTests
 		{
 			_stageStarted.TrySetResult();
 			await _releaseStage.Task;
-			return new RecordingWrite(() => CommitAttemptCount++);
+			return new RecordingWrite(
+				() => CommitAttemptCount++,
+				() => _stagedWriteDisposed.TrySetResult());
 		}
 
 		public void ReleaseStage() => _releaseStage.TrySetResult();
@@ -956,8 +1078,11 @@ public class LobbyEvaluationCoordinatorTests
 		private readonly ManualResetEventSlim _release = new();
 		private readonly TaskCompletionSource _boundary =
 			new(TaskCreationOptions.RunContinuationsAsynchronously);
+		private readonly TaskCompletionSource _disposed =
+			new(TaskCreationOptions.RunContinuationsAsynchronously);
 
 		public Task CommitBoundary => _boundary.Task;
+		public Task Disposed => _disposed.Task;
 
 		public bool TryCommit(Func<Action, bool> commitIfAuthorized)
 		{
@@ -971,6 +1096,7 @@ public class LobbyEvaluationCoordinatorTests
 		public ValueTask DisposeAsync()
 		{
 			_release.Dispose();
+			_disposed.TrySetResult();
 			return ValueTask.CompletedTask;
 		}
 	}
@@ -1029,7 +1155,9 @@ public class LobbyEvaluationCoordinatorTests
 				new RecordingWrite(() => Writes.Add(bytes.ToArray())));
 	}
 
-	private sealed class RecordingWrite(Action commit) : ILocalTerminalLobbyCacheWrite
+	private sealed class RecordingWrite(
+		Action commit,
+		Action? dispose = null) : ILocalTerminalLobbyCacheWrite
 	{
 		private bool _completed;
 
@@ -1050,6 +1178,7 @@ public class LobbyEvaluationCoordinatorTests
 		public ValueTask DisposeAsync()
 		{
 			_completed = true;
+			dispose?.Invoke();
 			return ValueTask.CompletedTask;
 		}
 	}
@@ -1091,7 +1220,7 @@ public class LobbyEvaluationCoordinatorTests
 		private readonly SemaphoreSlim _available = new(0);
 		public int CallCount { get; private set; }
 
-		public Task<LobbyEvaluationResult> EvaluateAsync(
+		public async Task<LobbyEvaluationResult> EvaluateAsync(
 			SimulationScenario scenario,
 			CancellationToken cancellationToken = default)
 		{
@@ -1106,7 +1235,7 @@ public class LobbyEvaluationCoordinatorTests
 				_calls.Enqueue(call);
 			}
 			_available.Release();
-			return call.Result.Task;
+			return await call.Result.Task;
 		}
 
 		public async Task<ControlledCall> NextCallAsync()
@@ -1121,6 +1250,58 @@ public class LobbyEvaluationCoordinatorTests
 
 	private sealed record UnexpectedTerminalEvaluation : TerminalLobbyEvaluation;
 
+	private sealed class ReentrantCancellationEvaluator(Func<bool> reenter)
+		: ILobbyTerminalEvaluator
+	{
+		private readonly TaskCompletionSource<LobbyEvaluationResult> _firstResult =
+			new();
+		private readonly TaskCompletionSource _firstCallStarted =
+			new(TaskCreationOptions.RunContinuationsAsynchronously);
+		private readonly TaskCompletionSource _callbackEntered =
+			new(TaskCreationOptions.RunContinuationsAsynchronously);
+		private readonly TaskCompletionSource _callbackRelease =
+			new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+		public Task FirstCallStarted => _firstCallStarted.Task;
+		public Task CallbackEntered => _callbackEntered.Task;
+		public bool? ReentrantExitResult { get; private set; }
+		public int CallCount { get; private set; }
+
+		public async Task<LobbyEvaluationResult> EvaluateAsync(
+			SimulationScenario scenario,
+			CancellationToken cancellationToken = default)
+		{
+			CallCount++;
+			if (CallCount > 1)
+			{
+				return new CouldNotEvaluateLobbyEvaluation();
+			}
+
+			var registration = cancellationToken.Register(() =>
+			{
+				_callbackEntered.TrySetResult();
+				ReentrantExitResult = reenter();
+				_callbackRelease.Task.GetAwaiter().GetResult();
+				throw new InvalidOperationException("injected cancellation callback failure");
+			});
+			_firstCallStarted.TrySetResult();
+			try
+			{
+				return await _firstResult.Task;
+			}
+			finally
+			{
+				registration.Unregister();
+			}
+		}
+
+		public void CompleteFirstCall() =>
+			_firstResult.TrySetResult(new CouldNotEvaluateLobbyEvaluation());
+
+		public void ReleaseCancellationCallback() =>
+			_callbackRelease.TrySetResult();
+	}
+
 	private sealed class ControlledCall(
 		SimulationCompatibilityIdentity identity,
 		CancellationToken cancellationToken)
@@ -1128,7 +1309,7 @@ public class LobbyEvaluationCoordinatorTests
 		public SimulationCompatibilityIdentity Identity { get; } = identity;
 		public CancellationToken CancellationToken { get; } = cancellationToken;
 		public TaskCompletionSource<LobbyEvaluationResult> Result { get; } =
-			new(TaskCreationOptions.RunContinuationsAsynchronously);
+			new();
 
 		public void Complete(LobbyEvaluationResult result) => Result.TrySetResult(result);
 	}

@@ -101,14 +101,20 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 			changed = StateChanged;
 		}
 
-		previous.Cancel();
 		try
 		{
-			changed?.Invoke(this, EventArgs.Empty);
+			previous.Cancel();
 		}
 		finally
 		{
-			StartPipeline(retry);
+			try
+			{
+				changed?.Invoke(this, EventArgs.Empty);
+			}
+			finally
+			{
+				StartPipeline(retry);
+			}
 		}
 		return true;
 	}
@@ -162,16 +168,22 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 				changed = StateChanged;
 			}
 		}
-		previous?.Cancel();
 		try
 		{
-			changed?.Invoke(this, EventArgs.Empty);
+			previous?.Cancel();
 		}
 		finally
 		{
-			if (replacement is not null)
+			try
 			{
-				StartPipeline(replacement);
+				changed?.Invoke(this, EventArgs.Empty);
+			}
+			finally
+			{
+				if (replacement is not null)
+				{
+					StartPipeline(replacement);
+				}
 			}
 		}
 	}
@@ -199,7 +211,6 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 		finally
 		{
 			request.DisposeAfterDrain();
-			request.MarkDrained();
 		}
 	}
 
@@ -418,17 +429,6 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 		&& !request.IsCancellationRequested
 		&& ReferenceEquals(_currentRequest, request);
 
-	internal Task CurrentPipelineCompletion
-	{
-		get
-		{
-			lock (_sync)
-			{
-				return _currentRequest?.Drained ?? Task.CompletedTask;
-			}
-		}
-	}
-
 	public void Dispose()
 	{
 		EvaluationRequest? request;
@@ -453,9 +453,9 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 	{
 		private readonly object _sync = new();
 		private readonly CancellationTokenSource _cancellation = new();
-		private readonly TaskCompletionSource _drained =
-			new(TaskCreationOptions.RunContinuationsAsynchronously);
-		private bool _cancellationRequested;
+		private int _cancellationRequested;
+		private bool _cancellationInProgress;
+		private bool _disposeRequested;
 		private bool _disposed;
 
 		public SimulationScenario Scenario { get; } = scenario;
@@ -463,45 +463,70 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 		public TaskCompletionSource AccelerateFallback { get; } =
 			new(TaskCreationOptions.RunContinuationsAsynchronously);
 		public CancellationToken Token => _cancellation.Token;
-		public bool IsCancellationRequested
-		{
-			get
-			{
-				lock (_sync)
-				{
-					return _cancellationRequested;
-				}
-			}
-		}
-		public Task Drained => _drained.Task;
+		public bool IsCancellationRequested =>
+			Volatile.Read(ref _cancellationRequested) != 0;
 
 		public void Cancel()
 		{
 			lock (_sync)
 			{
-				if (_disposed || _cancellationRequested)
+				if (_disposed || IsCancellationRequested)
 				{
 					return;
 				}
-				_cancellationRequested = true;
+				Volatile.Write(ref _cancellationRequested, 1);
+				_cancellationInProgress = true;
+			}
+
+			try
+			{
 				_cancellation.Cancel();
+			}
+			catch (AggregateException)
+			{
+				// Cancellation callback failures cannot prevent installing the latest request.
+			}
+			finally
+			{
+				var dispose = false;
+				lock (_sync)
+				{
+					_cancellationInProgress = false;
+					if (_disposeRequested && !_disposed)
+					{
+						_disposed = true;
+						dispose = true;
+					}
+				}
+				if (dispose)
+				{
+					_cancellation.Dispose();
+				}
 			}
 		}
 
 		public void DisposeAfterDrain()
 		{
+			var dispose = false;
 			lock (_sync)
 			{
 				if (_disposed)
 				{
 					return;
 				}
+				if (_cancellationInProgress)
+				{
+					_disposeRequested = true;
+					return;
+				}
 				_disposed = true;
+				dispose = true;
+			}
+			if (dispose)
+			{
 				_cancellation.Dispose();
 			}
 		}
-
-		public void MarkDrained() => _drained.TrySetResult();
 	}
 }
 

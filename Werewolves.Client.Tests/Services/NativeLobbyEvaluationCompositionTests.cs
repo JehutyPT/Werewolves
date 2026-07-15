@@ -25,11 +25,10 @@ public class NativeLobbyEvaluationCompositionTests
 		provider.GetRequiredService<ILobbyTerminalEvaluator>()
 			.Should().BeOfType<AsyncTerminalLobbyEvaluator>();
 		var coordinator = provider.GetRequiredService<LobbyEvaluationCoordinator>();
-		var pipeline = coordinator.CurrentPipelineCompletion;
 		coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.Pending);
 
 		coordinator.Dispose();
-		await pipeline.WaitAsync(TimeSpan.FromSeconds(5));
+		coordinator.TryRequestLobbyExit().Should().BeFalse();
 	}
 
 	private static LobbySetupState CreateSupportedLobby()

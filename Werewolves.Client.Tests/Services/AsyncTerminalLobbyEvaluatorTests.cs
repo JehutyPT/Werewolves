@@ -48,6 +48,8 @@ public class AsyncTerminalLobbyEvaluatorTests
 		var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 		var cancelled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 		var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+		var observed = new TaskCompletionSource<Task>(
+			TaskCreationOptions.RunContinuationsAsynchronously);
 		var adapter = new AsyncTerminalLobbyEvaluator(
 			(_, token) =>
 			{
@@ -58,7 +60,8 @@ public class AsyncTerminalLobbyEvaluatorTests
 					new SingleFactionGameResult(Faction.Werewolf),
 					AlreadyDecidedReason.WerewolfControlShortcut);
 			},
-			clock);
+			clock,
+			late => observed.TrySetResult(late));
 
 		var evaluation = adapter.EvaluateAsync(SupportedScenario());
 		await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
@@ -68,9 +71,10 @@ public class AsyncTerminalLobbyEvaluatorTests
 		clock.Advance(TimeSpan.FromMilliseconds(1));
 		(await evaluation).Should().BeOfType<CouldNotEvaluateLobbyEvaluation>();
 		await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(5));
+		var lateTask = await observed.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
 		release.TrySetResult();
-		await Task.Yield();
+		await lateTask.WaitAsync(TimeSpan.FromSeconds(5));
 	}
 
 	[Fact]
