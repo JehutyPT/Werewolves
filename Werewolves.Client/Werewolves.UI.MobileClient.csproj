@@ -58,6 +58,7 @@
 
         <!-- Raw Assets (also remove the "Resources\Raw" prefix) -->
         <MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
+        <Content Remove="Resources\Raw\terminal-lobby-cache.json" />
     </ItemGroup>
 
     <ItemGroup>
