@@ -106,3 +106,31 @@ This log records decisions made while executing PRD #29 autonomously with the
 - Fresh final Standards and Spec reviews both reported no findings. The
   canonical issue #83 contract remained byte-for-byte unchanged with SHA-256
   `b4b1d9cb00b22d641d6dda74041a4dbd396507020e77dd676b3b466ed904ff2c`.
+
+### 2026-07-15 — issue #80
+
+- Integrated the versioned terminal lobby cache-record boundary through commit
+  `3f5bc397b2afe9a40b3a367a63aac4560e31ab7e`.
+- Preparation repaired an authority contradiction in the earlier contract:
+  the current `core-simulator@1` public evaluator cannot produce a Shared or
+  No-Winner already-decided result. Current-profile cache records therefore
+  accept only the exact evaluator-derived Werewolf single-Faction result with
+  `WerewolfControlShortcut` and reject fabricated Shared, No-Winner, or
+  mismatched result/reason pairs. A future genuinely producing profile must
+  carry the required profile/schema versioning and public-path fixture.
+- Canonical identity decoding checks Player Count 5–30 and at most 32 physical
+  Role cards before expanding Role counts. Syntactically valid oversized
+  identities are rejected without attacker-controlled materialization.
+- The single-record and collection codecs share one strict canonical JSON
+  schema, preserve complete exact aggregate inventories and Turn/window cells,
+  and reject an invalid member or aggregate as a whole. Terminal records retain
+  no per-run evidence or storage provenance.
+- Possible Game Result inventory derivation is shared by the evaluator and
+  cache validation, avoiding a second profile-semantics implementation.
+- Central verification at the integrated commit passed: Release Mac Catalyst
+  x64 build with zero warnings and errors; Core tests with 378 passed and one
+  known skip; Client tests with 195 passed.
+- Fresh final Standards and Spec reviews both reported no findings. The repaired
+  canonical issue #80 contract remained byte-for-byte unchanged during
+  implementation and review with SHA-256
+  `5a48855511591c4ea0f0d30a7ec47757c7546898fcb7f8ba514d4acd6b287900`.
