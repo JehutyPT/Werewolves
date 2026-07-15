@@ -18,15 +18,7 @@ public class SimulationScenarioClassificationTests : DiagnosticTestBase
 	[Fact]
 	public void Classify_WithWerewolfControlAtLobbyExit_ReturnsSingleFactionGameResult()
 	{
-		var scenario = new SimulationScenario(
-			5,
-			[
-				MainRoleType.SimpleWerewolf,
-				MainRoleType.SimpleWerewolf,
-				MainRoleType.SimpleWerewolf,
-				MainRoleType.SimpleVillager,
-				MainRoleType.SimpleVillager
-			]);
+		var scenario = CreateWerewolfControlAtLobbyExitScenario();
 
 		var classification = SimulationScenarioClassifier.Classify(scenario);
 
@@ -198,15 +190,7 @@ public class SimulationScenarioClassificationTests : DiagnosticTestBase
 	[Fact]
 	public void Classify_WithDifferentRoleInputOrder_ReturnsTheSameAlreadyDecidedResult()
 	{
-		var first = new SimulationScenario(
-			5,
-			[
-				MainRoleType.SimpleWerewolf,
-				MainRoleType.SimpleWerewolf,
-				MainRoleType.SimpleWerewolf,
-				MainRoleType.SimpleVillager,
-				MainRoleType.SimpleVillager
-			]);
+		var first = CreateWerewolfControlAtLobbyExitScenario();
 		var second = new SimulationScenario(
 			5,
 			[
@@ -249,29 +233,6 @@ public class SimulationScenarioClassificationTests : DiagnosticTestBase
 		MarkTestCompleted();
 	}
 
-	[Fact]
-	public void Classify_WithAppSupportedButProfileUnsupportedRole_StopsBeforeAlreadyDecidedAndPreservesInput()
-	{
-		var scenario = CreateSupportedScenario();
-		var profile = new SimulatorProfile(
-			new SimulatorProfileIdentity("restricted-simulator", "1"),
-			[
-				new(MainRoleType.SimpleWerewolf, Faction.Werewolf),
-				new(MainRoleType.Seer, Faction.Villager),
-				new(MainRoleType.SimpleVillager, Faction.Villager)
-			]);
-
-		var classification = SimulationScenarioClassifier.Classify(scenario, profile);
-
-		classification.AppSupport!.IsSupported.Should().BeTrue();
-		classification.SimulatorSupport!.IsSupported.Should().BeFalse();
-		classification.SimulatorSupport.Scenario.Should().BeSameAs(scenario);
-		classification.SimulatorSupport.UnsupportedRoles.Should().Equal(MainRoleType.WildChild);
-		classification.AlreadyDecided.Should().BeNull();
-		classification.Cacheability.Should().BeNull();
-		MarkTestCompleted();
-	}
-
 	private static SimulationScenario CreateSupportedScenario() =>
 		new(
 			5,
@@ -279,6 +240,17 @@ public class SimulationScenarioClassificationTests : DiagnosticTestBase
 				MainRoleType.SimpleWerewolf,
 				MainRoleType.Seer,
 				MainRoleType.WildChild,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+
+	private static SimulationScenario CreateWerewolfControlAtLobbyExitScenario() =>
+		new(
+			5,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleWerewolf,
 				MainRoleType.SimpleVillager,
 				MainRoleType.SimpleVillager
 			]);

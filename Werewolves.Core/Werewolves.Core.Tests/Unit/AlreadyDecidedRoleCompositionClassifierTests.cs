@@ -9,7 +9,7 @@ namespace Werewolves.Core.Tests.Unit;
 public class AlreadyDecidedRoleCompositionClassifierTests
 {
 	[Fact]
-	public void CurrentProfileBridge_MapsEachSupportedRoleToFactionBeneficiaryEvidence()
+	public void Map_WithSupportedCurrentProfileRoles_ReturnsFactionBeneficiaryEvidence()
 	{
 		var composition = CanonicalRoleComposition.Create(
 		[
@@ -26,7 +26,7 @@ public class AlreadyDecidedRoleCompositionClassifierTests
 	}
 
 	[Fact]
-	public void CurrentProfileBridge_WithUnsupportedRole_RejectsInsteadOfInferringLegacyTeam()
+	public void Map_WithUnsupportedRole_RejectsInsteadOfInferringLegacyTeam()
 	{
 		var composition = CanonicalRoleComposition.Create([MainRoleType.BigBadWolf]);
 
@@ -36,7 +36,7 @@ public class AlreadyDecidedRoleCompositionClassifierTests
 	}
 
 	[Fact]
-	public void CurrentProfileBridge_UsesProfileOwnedBeneficiaryDescriptor()
+	public void Map_WithProfileOwnedBeneficiaryDescriptor_ReturnsFactionBeneficiaryEvidence()
 	{
 		var profile = new SimulatorProfile(
 			new SimulatorProfileIdentity("descriptor-test", "1"),
@@ -81,11 +81,11 @@ public class AlreadyDecidedRoleCompositionClassifierTests
 		var forward = AlreadyDecidedRoleCompositionClassifier.Resolve(
 		[
 			new(Faction.Werewolf, true, AlreadyDecidedReason.WerewolfControlShortcut),
-			new(Faction.Villager, true, AlreadyDecidedReason.WerewolfControlShortcut)
+			new(Faction.Villager, true, AlreadyDecidedReason.NoWerewolfFactionBeneficiariesAtLobbyExit)
 		]);
 		var reverse = AlreadyDecidedRoleCompositionClassifier.Resolve(
 		[
-			new(Faction.Villager, true, AlreadyDecidedReason.WerewolfControlShortcut),
+			new(Faction.Villager, true, AlreadyDecidedReason.NoWerewolfFactionBeneficiariesAtLobbyExit),
 			new(Faction.Werewolf, true, AlreadyDecidedReason.WerewolfControlShortcut)
 		]);
 
@@ -102,7 +102,7 @@ public class AlreadyDecidedRoleCompositionClassifierTests
 		var action = () => AlreadyDecidedRoleCompositionClassifier.Resolve(
 			[
 				new(Faction.Werewolf, true, AlreadyDecidedReason.WerewolfControlShortcut),
-				new(Faction.Werewolf, true, AlreadyDecidedReason.NoWerewolfFactionBeneficiariesAtLobbyExit)
+				new(Faction.Werewolf, true, AlreadyDecidedReason.WerewolfControlShortcut)
 			]);
 
 		action.Should().Throw<ArgumentException>()
