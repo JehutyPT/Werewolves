@@ -32,6 +32,13 @@ public class BrowserQaHostCompositionTests
 		context.Services.GetRequiredService<IScreenWakeLock>().KeepScreenOn.Should().BeTrue();
 		context.Services.GetRequiredService<IHapticFeedbackService>().Invoking(haptic => haptic.Click()).Should().NotThrow();
 		context.Services.GetRequiredService<IGameSessionSaveStore>().Load().Should().BeNull();
+		context.Services.GetRequiredService<LobbyEvaluationCoordinator>().Should().NotBeNull();
+		context.Services.GetRequiredService<ITerminalLobbyCacheByteSource>()
+			.Should().BeSameAs(EmptyTerminalLobbyCacheByteSource.Instance);
+		context.Services.GetRequiredService<ILocalTerminalLobbyCacheStore>()
+			.Should().BeOfType<InMemoryTerminalLobbyCacheStore>();
+		context.Services.GetRequiredService<ILobbyTerminalEvaluator>()
+			.Should().BeSameAs(DisabledLobbyTerminalEvaluator.Instance);
 
 		var audio = context.Services.GetRequiredService<IInstructionAudioPlayback>();
 		await audio.SetMutedAsync(true, instruction: null);
@@ -122,6 +129,7 @@ public class BrowserQaHostCompositionTests
 
 		using var scope = app.Services.CreateScope();
 		scope.ServiceProvider.GetRequiredService<GameClientManager>().Should().NotBeNull();
+		scope.ServiceProvider.GetRequiredService<LobbyEvaluationCoordinator>().Should().NotBeNull();
 	}
 
 	private static BunitContext CreateBrowserQaHostContext(BrowserQaScenario scenario = BrowserQaScenario.Lobby)

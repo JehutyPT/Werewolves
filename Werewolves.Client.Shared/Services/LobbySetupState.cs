@@ -2,6 +2,7 @@ using Werewolves.Core.GameLogic.Models;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Models;
+using Werewolves.Core.StateModels.Models.Simulation;
 
 namespace Werewolves.Client.Services;
 
@@ -42,6 +43,8 @@ public class LobbySetupState
 		_availableRoles = setupMetadata.AvailableRoles.Select(role => role.Role).ToArray();
 		_availableRoleMetadata = setupMetadata.AvailableRoles.ToDictionary(role => role.Role);
 	}
+
+	public event EventHandler? SimulationScenarioChanged;
 
 	public int MinimumPlayerCount => _setupMetadata.MinimumPlayerCount;
 	public IReadOnlyList<MainRoleType> AvailableRoles => _availableRoles;
@@ -84,6 +87,7 @@ public class LobbySetupState
 		}
 
 		_playerNames.Add(normalizedName);
+		OnSimulationScenarioChanged();
 		return AddPlayerResult.Success;
 	}
 
@@ -95,6 +99,7 @@ public class LobbySetupState
 		}
 
 		_playerNames.RemoveAt(index);
+		OnSimulationScenarioChanged();
 		return true;
 	}
 
@@ -134,12 +139,18 @@ public class LobbySetupState
 		if (affordance == RoleAffordance.Toggle)
 		{
 			if (current == 0)
+			{
 				_roleCounts[role] = batchSize;
+				OnSimulationScenarioChanged();
+			}
 		}
 		else
 		{
 			if (current < constraint.Maximum)
+			{
 				_roleCounts[role] = current + 1;
+				OnSimulationScenarioChanged();
+			}
 		}
 	}
 
@@ -156,6 +167,8 @@ public class LobbySetupState
 			_roleCounts[role] = 0;
 		else
 			_roleCounts[role] = current - 1;
+
+		OnSimulationScenarioChanged();
 	}
 
 	public List<MainRoleType> GetSelectedRoles()
@@ -169,10 +182,19 @@ public class LobbySetupState
 		return roles;
 	}
 
+	public SimulationScenario CreateSimulationScenario() =>
+		new(_playerNames.Count, GetSelectedRoles());
+
 	public void Reset()
 	{
+		if (_playerNames.Count == 0 && _roleCounts.Values.All(count => count == 0))
+		{
+			return;
+		}
+
 		_playerNames.Clear();
 		_roleCounts.Clear();
+		OnSimulationScenarioChanged();
 	}
 
 	public int TotalSelectedRoleCount => _roleCounts.Values.Sum();
@@ -242,4 +264,7 @@ public class LobbySetupState
 		// Developer-facing guard, not rendered UI copy.
 		throw new InvalidOperationException($"Role {role} is not available in lobby setup metadata.");
 	}
+
+	private void OnSimulationScenarioChanged() =>
+		SimulationScenarioChanged?.Invoke(this, EventArgs.Empty);
 }
