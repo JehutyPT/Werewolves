@@ -185,7 +185,8 @@ public class LocalizationPolicyTests
 			.SelectMany(LoadResourceValues)
 			.Where(resource => !string.IsNullOrWhiteSpace(resource.Value)
 				&& resource.Value.Length >= 3
-				&& resource.Key != "App_Title")
+				&& resource.Key != "App_Title"
+				&& resource.Key != nameof(ClientStrings.LobbyEvaluation_FactionSeparator))
 			.DistinctBy(resource => (resource.Key, resource.Value))
 			.ToArray();
 	}

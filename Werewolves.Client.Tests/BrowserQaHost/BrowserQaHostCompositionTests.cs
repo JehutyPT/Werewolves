@@ -12,6 +12,7 @@ using Werewolves.Client.BrowserQaHost.Components;
 using Werewolves.Client.Components;
 using Werewolves.Client.Resources;
 using Werewolves.Client.Services;
+using Werewolves.Client.Testing;
 using Werewolves.Client.Tests.Helpers;
 using Werewolves.Core.GameLogic.Simulation;
 using Werewolves.Core.StateModels.Enums;
@@ -55,7 +56,7 @@ public class BrowserQaHostCompositionTests
 		context.Services.GetRequiredService<IGameSessionSaveStore>().Load().Should().BeNull();
 		context.Services.GetRequiredService<LobbyEvaluationCoordinator>().Should().NotBeNull();
 		context.Services.GetRequiredService<ITerminalLobbyCacheByteSource>()
-			.Should().BeSameAs(EmptyTerminalLobbyCacheByteSource.Instance);
+			.Should().BeOfType<BrowserQaScenarioTerminalLobbyCacheByteSource>();
 		context.Services.GetRequiredService<ILocalTerminalLobbyCacheStore>()
 			.Should().BeOfType<InMemoryTerminalLobbyCacheStore>();
 		context.Services.GetRequiredService<ILobbyTerminalEvaluator>()
@@ -72,6 +73,25 @@ public class BrowserQaHostCompositionTests
 			.HasAttribute(Html.Attributes.Disabled)
 			.Should()
 			.BeFalse();
+	}
+
+	[Fact]
+	public void BrowserQaRoot_WhenProbabilityScenarioIsRequested_RendersDeterministicSharedEvaluation()
+	{
+		using var context = CreateBrowserQaHostContext(BrowserQaScenario.Probability);
+		var rendered = context.Render<BrowserQaRoot>();
+
+		FindButtonByText(rendered, ClientStrings.LobbyRoster_ContinueToRolesButton).Click();
+
+		rendered.WaitForAssertion(() =>
+		{
+			context.Services.GetRequiredService<LobbyEvaluationCoordinator>()
+				.State.Kind.Should().Be(LobbyEvaluationStateKind.Probability);
+			rendered.Find($"[data-testid='{ModeratorUiTestIds.LobbyEvaluationSummary}']")
+				.TextContent.Should().Contain(ClientStrings.LobbyEvaluation_Probability);
+			rendered.FindAll($"[data-testid='{ModeratorUiTestIds.LobbyEvaluationDisclosure}']")
+				.Should().ContainSingle();
+		});
 	}
 
 	[Fact]

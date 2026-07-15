@@ -23,8 +23,7 @@ public static class BrowserQaHostServiceCollectionExtensions
 		services.TryAddScoped<IScreenWakeLock, BrowserSafeScreenWakeLock>();
 		services.TryAddScoped<IGameSessionSaveStore, BrowserQaInMemoryGameSessionSaveStore>();
 		services.TryAddSingleton<TimeProvider>(_ => TimeProvider.System);
-		services.TryAddScoped<ITerminalLobbyCacheByteSource>(
-			_ => EmptyTerminalLobbyCacheByteSource.Instance);
+		services.TryAddScoped<ITerminalLobbyCacheByteSource, BrowserQaScenarioTerminalLobbyCacheByteSource>();
 		services.TryAddScoped<ILocalTerminalLobbyCacheStore, InMemoryTerminalLobbyCacheStore>();
 		services.TryAddScoped<ILobbyTerminalEvaluator>(
 			_ => DisabledLobbyTerminalEvaluator.Instance);

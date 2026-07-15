@@ -1,4 +1,6 @@
+@implements IDisposable
 @inject LobbySetupState Lobby
+@inject LobbyEvaluationCoordinator Evaluation
 
 <main class="ww-app-shell" aria-labelledby="role-selection-title">
 	<section class="ww-lobby-header">
@@ -66,7 +68,9 @@
 		</section>
 	}
 
-	<footer class="ww-action-bar">
+	<LobbyEvaluationPanel State="@_evaluationState" OnRetry="RetryEvaluation" />
+
+	<footer class="ww-action-bar" data-testid="@ModeratorUiTestIds.RoleSelectionActionBar">
 		@if (_validationErrors.Count > 0)
 		{
 			<ul class="ww-validation ww-validation--role" role="alert">
@@ -76,15 +80,27 @@
 				}
 			</ul>
 		}
+		@if (!string.IsNullOrEmpty(_blockAnnouncement))
+		{
+			<p class="ww-lobby-evaluation__status"
+			   data-testid="@ModeratorUiTestIds.LobbyEvaluationStatus"
+			   role="status"
+			   aria-live="polite">@_blockAnnouncement</p>
+		}
 		<div class="ww-action-pair">
 			<button type="button" class="ww-secondary-button" @onclick="Back">@ClientStrings.Common_Back</button>
-			<button type="button" class="ww-btn-primary" disabled="@(!CanStartGame)" @onclick="StartGame">@ClientStrings.RoleSelection_StartGameButton</button>
+			<button type="button"
+					class="ww-btn-primary"
+					data-testid="@ModeratorUiTestIds.RoleSelectionStartGame"
+					disabled="@(!CanStartGame)"
+					@onclick="StartGame">@ClientStrings.RoleSelection_StartGameButton</button>
 		</div>
 	</footer>
 </main>
 
 @using Werewolves.Core.StateModels.Enums
 @using Werewolves.Core.StateModels.Extensions
+@using Werewolves.Client.Testing
 
 @code {
 	[Parameter]
@@ -94,8 +110,15 @@
 	public EventCallback OnStartGame { get; set; }
 
 	private List<string> _validationErrors = new();
+	private LobbyEvaluationState _evaluationState = LobbyEvaluationState.NotApplicable();
+	private string _blockAnnouncement = string.Empty;
 
-	protected override void OnInitialized() => RefreshValidation();
+	protected override void OnInitialized()
+	{
+		Evaluation.StateChanged += HandleEvaluationStateChanged;
+		_evaluationState = Evaluation.State;
+		RefreshValidation();
+	}
 
 	private bool IsCountMatching => Lobby.TotalSelectedRoleCount == Lobby.ExpectedRoleCount;
 	private bool CanStartGame => !Lobby.HasRoleConfigIssues(out _);
@@ -149,8 +172,38 @@
 		}
 
 		_validationErrors.Clear();
+		if (!Evaluation.TryRequestLobbyExit())
+		{
+			_evaluationState = Evaluation.State;
+			_blockAnnouncement = BlockAnnouncement(_evaluationState.Kind);
+			return Task.CompletedTask;
+		}
+
+		_blockAnnouncement = string.Empty;
 		return OnStartGame.InvokeAsync();
 	}
+
+	private void RetryEvaluation() => Evaluation.RetryCurrent();
+
+	private void HandleEvaluationStateChanged(object? sender, EventArgs args)
+	{
+		_ = InvokeAsync(() =>
+		{
+			_evaluationState = Evaluation.State;
+			_blockAnnouncement = string.Empty;
+			StateHasChanged();
+		});
+	}
+
+	private static string BlockAnnouncement(LobbyEvaluationStateKind kind) => kind switch
+	{
+		LobbyEvaluationStateKind.Pending => ClientStrings.LobbyEvaluation_PendingBlock,
+		LobbyEvaluationStateKind.AlreadyDecided => ClientStrings.LobbyEvaluation_AlreadyDecidedBlock,
+		LobbyEvaluationStateKind.Degenerate => ClientStrings.LobbyEvaluation_DegenerateBlock,
+		_ => ClientStrings.LobbyEvaluation_Blocked
+	};
+
+	public void Dispose() => Evaluation.StateChanged -= HandleEvaluationStateChanged;
 
 	private static string GroupCssVar(RoleGroup group) => group switch
 	{
