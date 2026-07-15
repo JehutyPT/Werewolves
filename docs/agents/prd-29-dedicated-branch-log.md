@@ -62,3 +62,23 @@ This log records decisions made while executing PRD #29 autonomously with the
 - Fresh final Standards and Spec reviews both reported no findings. The
   canonical issue #85 contract remained byte-for-byte unchanged with SHA-256
   `e08da083d3c3ccb0e3bcf34188193c865eeb49e2c4a68e732506464b50b69659`.
+
+### 2026-07-15 — issue #46
+
+- Integrated the Wild Child later-night progression repair through commit
+  `db23f48cb3d10de091d1673d66be27bc8d1eed50`.
+- A standard later-night Role pass may now end in either Woken Up or Asleep;
+  this preserves the Wild Child's Night 1 model selection and later
+  model-elimination transformation while allowing its no-action Night 2+
+  path to complete.
+- The diagnosed `core-simulator@1` / `baseline-random@1-splitmix64` run 11
+  replay now returns a Completed Simulation Run with ending Turn 2 or later.
+  Its regression assertion intentionally does not freeze a winning Faction,
+  exact Game Result, exception, localized copy, transcript, or private state.
+- Central verification at the integrated commit passed: solution and Mac
+  Catalyst runtime restore; Release Mac Catalyst x64 build with zero warnings
+  and errors; Core tests with 275 passed and one known skip; Client tests with
+  195 passed.
+- Fresh final Standards and Spec reviews both reported no findings. The
+  prepared issue #46 contract used SHA-256
+  `05e4c0136e41b77f90fba8ad552f80069e96b7b230f988e944e1b81a03554c37`.
