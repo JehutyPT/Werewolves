@@ -17,6 +17,38 @@ namespace Werewolves.Client.Tests.Components;
 public class LobbyEvaluationPanelTests
 {
 	[Fact]
+	public void AsyncStateTransitions_ExposeOneConcisePoliteAtomicStatusAnnouncement()
+	{
+		using var context = new ModeratorComponentTestContext();
+		var identity = CreateIdentity();
+		var cut = context.RenderModeratorComponent<LobbyEvaluationPanel>(parameters => parameters
+			.Add(component => component.State, LobbyEvaluationState.Pending(identity)));
+
+		var status = cut.Find(TestId(ModeratorUiTestIds.LobbyEvaluationAsyncStatus));
+		status.GetAttribute("role").Should().Be("status");
+		status.GetAttribute("aria-live").Should().Be("polite");
+		status.GetAttribute("aria-atomic").Should().Be("true");
+		status.TextContent.Should().Be(ClientStrings.LobbyEvaluation_Pending);
+
+		cut.Render(parameters => parameters
+			.Add(component => component.State, CreateProbabilityState(identity)));
+
+		status = cut.Find(TestId(ModeratorUiTestIds.LobbyEvaluationAsyncStatus));
+		status.TextContent.Should().Be(ClientStrings.LobbyEvaluation_Probability);
+		status.TextContent.Should().NotContain(ClientStrings.LobbyEvaluation_DetailToggle);
+		cut.FindAll("[aria-live]").Should().ContainSingle()
+			.Which.GetAttribute("data-testid")
+			.Should().Be(ModeratorUiTestIds.LobbyEvaluationAsyncStatus);
+
+		cut.Render(parameters => parameters
+			.Add(component => component.State, LobbyEvaluationState.CouldNotEvaluate(identity)));
+
+		status = cut.Find(TestId(ModeratorUiTestIds.LobbyEvaluationAsyncStatus));
+		status.TextContent.Should().Be(ClientStrings.LobbyEvaluation_CouldNotEvaluate);
+		cut.FindAll("[aria-live]").Should().ContainSingle();
+	}
+
+	[Fact]
 	public void Pending_RendersCompactLocalizedProgressWithoutBypassActions()
 	{
 		using var context = new ModeratorComponentTestContext();
@@ -33,12 +65,13 @@ public class LobbyEvaluationPanelTests
 	public void AlreadyDecided_NamesAndExplainsTheTerminalGameResultWithoutBypass()
 	{
 		using var context = new ModeratorComponentTestContext();
-		var record = new AlreadyDecidedTerminalCacheRecord(
-			CreateIdentity(villagers: 2, werewolves: 3),
-			new SingleFactionGameResult(Faction.Werewolf),
-			AlreadyDecidedReason.WerewolfControlShortcut);
+		var identity = CreateIdentity(villagers: 2, werewolves: 3);
+		var gameResult = new SingleFactionGameResult(Faction.Werewolf);
 		var cut = context.RenderModeratorComponent<LobbyEvaluationPanel>(parameters => parameters
-			.Add(component => component.State, LobbyEvaluationState.Terminal(record)));
+			.Add(component => component.State, LobbyEvaluationState.AlreadyDecided(
+				identity,
+				gameResult,
+				AlreadyDecidedReason.WerewolfControlShortcut)));
 
 		var summary = cut.Find(TestId(ModeratorUiTestIds.LobbyEvaluationSummary));
 		summary.TextContent.Should().Contain(ClientStrings.LobbyEvaluation_AlreadyDecided);
@@ -52,22 +85,9 @@ public class LobbyEvaluationPanelTests
 	public void Degenerate_ExplainsThatEveryBaselineGameEndedDuringTurnOne()
 	{
 		using var context = new ModeratorComponentTestContext();
-		var villager = new SingleFactionGameResult(Faction.Villager);
-		var werewolf = new SingleFactionGameResult(Faction.Werewolf);
-		var noWinner = new NoWinnerGameResult();
-		var record = new DegenerateTerminalCacheRecord(
-			CreateIdentity(),
-			[
-				new(villager, 750, 1_000),
-				new(werewolf, 250, 1_000),
-				new(noWinner, 0, 1_000)
-			],
-			[
-				new(villager, 1, VictoryCheckWindow.Dawn, 750, 1_000),
-				new(werewolf, 1, VictoryCheckWindow.PreNight, 250, 1_000)
-			]);
 		var cut = context.RenderModeratorComponent<LobbyEvaluationPanel>(parameters => parameters
-			.Add(component => component.State, LobbyEvaluationState.Terminal(record)));
+			.Add(component => component.State, LobbyEvaluationState.Degenerate(
+				CreateIdentity())));
 
 		cut.Find(TestId(ModeratorUiTestIds.LobbyEvaluationSummary))
 			.TextContent.Should().Contain(ClientStrings.LobbyEvaluation_Degenerate);
@@ -82,19 +102,25 @@ public class LobbyEvaluationPanelTests
 		var villager = new SingleFactionGameResult(Faction.Villager);
 		var werewolf = new SingleFactionGameResult(Faction.Werewolf);
 		var noWinner = new NoWinnerGameResult();
-		var record = new ProbabilityTerminalCacheRecord(
-			CreateIdentity(),
+		var identity = CreateIdentity();
+		var state = LobbyEvaluationState.ProbabilityResult(
+			identity,
+			new LobbyProbabilityData(
 			[
-				new(villager, 0, 10_000),
-				new(werewolf, 1, 10_000),
-				new(noWinner, 9_999, 10_000)
-			],
-			[
-				new(werewolf, 3, VictoryCheckWindow.Dawn, 1, 10_000),
-				new(noWinner, 1, VictoryCheckWindow.PreNight, 9_999, 10_000)
-			]);
+				new LobbyProbabilityOutcomeData(villager, 0, 10_000, []),
+				new LobbyProbabilityOutcomeData(
+					werewolf,
+					1,
+					10_000,
+					[new LobbyProbabilityTurnData(3, 1, 10_000)]),
+				new LobbyProbabilityOutcomeData(
+					noWinner,
+					9_999,
+					10_000,
+					[new LobbyProbabilityTurnData(1, 9_999, 10_000)])
+			]));
 		var cut = context.RenderModeratorComponent<LobbyEvaluationPanel>(parameters => parameters
-			.Add(component => component.State, LobbyEvaluationState.Terminal(record)));
+			.Add(component => component.State, state));
 
 		var summary = cut.Find(TestId(ModeratorUiTestIds.LobbyEvaluationSummary));
 		summary.TextContent.Should().Contain(ClientStrings.LobbyEvaluation_FactionVillager);
@@ -130,22 +156,19 @@ public class LobbyEvaluationPanelTests
 		renderedEvaluation.Should().NotContain("PMF");
 		renderedEvaluation.Should().NotContain("CDF");
 		renderedEvaluation.Should().NotContain("Reference Turn Horizon");
-		renderedEvaluation.Should().NotContain(nameof(ProbabilityTerminalCacheRecord.AttemptedRunCount));
-		renderedEvaluation.Should().NotContain(nameof(ProbabilityTerminalCacheRecord.CompletedRunCount));
-		renderedEvaluation.Should().NotContain(nameof(ProbabilityTerminalCacheRecord.IncompleteRunCount));
-		renderedEvaluation.Should().NotContain(record.CompatibilityIdentity.ToString());
-		renderedEvaluation.Should().NotContain(record.AttemptedRunCount.ToString(CultureInfo.InvariantCulture));
+		renderedEvaluation.Should().NotContain(identity.ToString());
+		renderedEvaluation.Should().NotContain(10_000.ToString(CultureInfo.InvariantCulture));
 	}
 
 	[Fact]
 	public void ProbabilityDetail_LeavesWithItsIdentityAndEachNewIdentityStartsCollapsed()
 	{
 		using var context = new ModeratorComponentTestContext();
-		var firstRecord = CreateProbabilityRecord(CreateIdentity());
+		var firstState = CreateProbabilityState(CreateIdentity());
 		var secondIdentity = CreateIdentity(villagers: 4, werewolves: 2);
-		var secondRecord = CreateProbabilityRecord(secondIdentity);
+		var secondState = CreateProbabilityState(secondIdentity);
 		var cut = context.RenderModeratorComponent<LobbyEvaluationPanel>(parameters => parameters
-			.Add(component => component.State, LobbyEvaluationState.Terminal(firstRecord)));
+			.Add(component => component.State, firstState));
 
 		cut.Find(TestId(ModeratorUiTestIds.LobbyEvaluationDisclosure)).Click();
 		cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationDetail)).Should().ContainSingle();
@@ -157,7 +180,7 @@ public class LobbyEvaluationPanelTests
 		cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationDisclosure)).Should().BeEmpty();
 
 		cut.Render(parameters => parameters
-			.Add(component => component.State, LobbyEvaluationState.Terminal(secondRecord)));
+			.Add(component => component.State, secondState));
 
 		cut.Find(TestId(ModeratorUiTestIds.LobbyEvaluationDisclosure))
 			.GetAttribute("aria-expanded").Should().Be("false");
@@ -220,23 +243,28 @@ public class LobbyEvaluationPanelTests
 		return new(scenario.ToCanonical(), SimulatorProfile.Active.Identity);
 	}
 
-	private static ProbabilityTerminalCacheRecord CreateProbabilityRecord(
+	private static LobbyEvaluationState CreateProbabilityState(
 		SimulationCompatibilityIdentity identity)
 	{
 		var villager = new SingleFactionGameResult(Faction.Villager);
 		var werewolf = new SingleFactionGameResult(Faction.Werewolf);
 		var noWinner = new NoWinnerGameResult();
-		return new(
+		return LobbyEvaluationState.ProbabilityResult(
 			identity,
+			new LobbyProbabilityData(
 			[
-				new(villager, 7_000, 10_000),
-				new(werewolf, 3_000, 10_000),
-				new(noWinner, 0, 10_000)
-			],
-			[
-				new(villager, 1, VictoryCheckWindow.Dawn, 7_000, 10_000),
-				new(werewolf, 2, VictoryCheckWindow.PreNight, 3_000, 10_000)
-			]);
+				new LobbyProbabilityOutcomeData(
+					villager,
+					7_000,
+					10_000,
+					[new LobbyProbabilityTurnData(1, 7_000, 10_000)]),
+				new LobbyProbabilityOutcomeData(
+					werewolf,
+					3_000,
+					10_000,
+					[new LobbyProbabilityTurnData(2, 3_000, 10_000)]),
+				new LobbyProbabilityOutcomeData(noWinner, 0, 10_000, [])
+			]));
 	}
 
 	private static string TestId(string value) => $"[data-testid='{value}']";

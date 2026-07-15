@@ -6,7 +6,7 @@ Stable per-run evidence is intentionally minimal: run identity, Run Seed Materia
 
 Bundled Simulator Cache entries are compressed lobby evaluations derived from stable evidence. They do not carry per-run source records or replay material. Run Seed Material remains in evidence and replay/audit workflows; cache entries carry only the derived lobby result needed by the app.
 
-This ADR does not decide the distribution mechanism for cache artifacts. Whether cache entries ship inside the app package or are fetched from a static remote source remains deferred until full-role cache size is measured.
+This ADR originally deferred the distribution mechanism for cache artifacts. ADR-0012 now decides that the measured `core-simulator@1` current-profile artifact ships inside the app package; distribution for a future expanded or full-role profile remains a separate decision after its realistic artifact size and operating constraints are known.
 
 ## Considered options
 

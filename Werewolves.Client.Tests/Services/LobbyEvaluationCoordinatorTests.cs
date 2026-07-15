@@ -11,6 +11,74 @@ namespace Werewolves.Client.Tests.Services;
 public class LobbyEvaluationCoordinatorTests
 {
 	[Fact]
+	public async Task Dispose_CancelsTheSingleBundledLoadBeforeAnyDownstreamWork()
+	{
+		var bundled = new ControlledByteSource();
+		var local = new RecordingLocalStore(bytes: null);
+		var evaluator = new RecordingEvaluator(new CouldNotEvaluateLobbyEvaluation());
+		var coordinator = new LobbyEvaluationCoordinator(
+			CreateLobby(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager),
+			bundled,
+			local,
+			evaluator,
+			TimeProvider.System);
+		var read = await bundled.NextReadAsync();
+
+		coordinator.Dispose();
+		read.Complete(bytes: null);
+		await Task.Yield();
+
+		bundled.LastCancellationToken.IsCancellationRequested.Should().BeTrue();
+		local.ReadCount.Should().Be(0);
+		evaluator.CallCount.Should().Be(0);
+		coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.Pending);
+	}
+
+	[Fact]
+	public async Task EffectiveSetupChanges_LoadBundledCacheOnceButReadMutableLocalCacheEachTime()
+	{
+		var lobby = CreateLobby(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager);
+		var firstRecord = AlreadyDecidedRecord(lobby.CreateSimulationScenario());
+		var secondScenario = new SimulationScenario(
+			5,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager
+			]);
+		var secondRecord = AlreadyDecidedRecord(secondScenario);
+		var bundled = new RecordingByteSource(DocumentBytes());
+		var local = new RecordingLocalStore(DocumentBytes(firstRecord, secondRecord));
+		using var coordinator = new LobbyEvaluationCoordinator(
+			lobby,
+			bundled,
+			local,
+			new RecordingEvaluator(new CouldNotEvaluateLobbyEvaluation()),
+			TimeProvider.System);
+		await WaitForStateAsync(coordinator, LobbyEvaluationStateKind.AlreadyDecided);
+
+		ChangeToFourWerewolves(lobby);
+		coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.Pending);
+		await WaitForStateAsync(coordinator, LobbyEvaluationStateKind.AlreadyDecided);
+
+		coordinator.State.Identity.Should().Be(secondRecord.CompatibilityIdentity);
+		bundled.LogicalNames.Should().Equal(LobbyEvaluationCoordinator.BundledCacheLogicalName);
+		local.ReadCount.Should().Be(2);
+	}
+
+	[Fact]
 	public async Task ThrowingReentrantCancellationCallback_CannotBlockReplacementProgress()
 	{
 		var pump = new ControlledContinuationPump();
@@ -201,38 +269,32 @@ public class LobbyEvaluationCoordinatorTests
 	}
 
 	[Fact]
-	public void ScenarioChange_DuringBundledReadStopsStalePipelineBeforeLocalProgression()
+	public async Task ScenarioChange_DuringBundledReadSharesOneLoadAndPublishesOnlyTheCurrentIdentity()
 	{
-		var pump = new ControlledContinuationPump();
-		pump.Run(() =>
-		{
-			var lobby = CreateLobby(
-				MainRoleType.SimpleWerewolf,
-				MainRoleType.SimpleWerewolf,
-				MainRoleType.SimpleWerewolf,
-				MainRoleType.SimpleVillager,
-				MainRoleType.SimpleVillager);
-			var bundled = new ControlledByteSource();
-			var local = new RecordingLocalStore(bytes: null);
-			var evaluator = new RecordingEvaluator(new CouldNotEvaluateLobbyEvaluation());
-			var coordinator = new LobbyEvaluationCoordinator(
-				lobby, bundled, local, evaluator, TimeProvider.System);
-			pump.Drain();
-			var staleRead = bundled.NextReadAsync().GetAwaiter().GetResult();
+		var lobby = CreateLobby(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager);
+		var bundled = new ControlledByteSource();
+		var local = new RecordingLocalStore(bytes: null);
+		var evaluator = new RecordingEvaluator(new CouldNotEvaluateLobbyEvaluation());
+		using var coordinator = new LobbyEvaluationCoordinator(
+			lobby, bundled, local, evaluator, TimeProvider.System);
+		var sharedRead = await bundled.NextReadAsync();
+		var staleRecord = AlreadyDecidedRecord(lobby.CreateSimulationScenario());
 
-			ChangeToVillagerMajority(lobby);
-			pump.Drain();
-			var currentRead = bundled.NextReadAsync().GetAwaiter().GetResult();
-			staleRead.Complete(bytes: null);
-			pump.Drain();
+		ChangeToFourWerewolves(lobby);
+		var currentIdentity = coordinator.State.Identity;
+		var currentRecord = AlreadyDecidedRecord(lobby.CreateSimulationScenario());
+		bundled.ReadCount.Should().Be(1);
+		sharedRead.Complete(DocumentBytes(staleRecord, currentRecord));
+		await WaitForStateAsync(coordinator, LobbyEvaluationStateKind.AlreadyDecided);
 
-			local.ReadCount.Should().Be(0);
-			evaluator.CallCount.Should().Be(0);
-			coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.Pending);
-			coordinator.Dispose();
-			currentRead.Complete(bytes: null);
-			pump.Drain();
-		});
+		local.ReadCount.Should().Be(0);
+		evaluator.CallCount.Should().Be(0);
+		coordinator.State.Identity.Should().Be(currentIdentity);
 	}
 
 	[Fact]
@@ -361,7 +423,14 @@ public class LobbyEvaluationCoordinatorTests
 		var rows1000 = AggregateRows(1_000, 750, 250);
 		var cells1000 = AggregateCells(1_000, 750, 250, turnOneOnly: true);
 		var rows10000 = AggregateRows(10_000, 7_000, 3_000);
-		var cells10000 = AggregateCells(10_000, 7_000, 3_000, turnOneOnly: false);
+		var villager = new SingleFactionGameResult(Faction.Villager);
+		var werewolf = new SingleFactionGameResult(Faction.Werewolf);
+		var cells10000 = new TerminalCacheTurnWindowFrequency[]
+		{
+			new(villager, 1, VictoryCheckWindow.Dawn, 3_000, 10_000),
+			new(villager, 1, VictoryCheckWindow.PreNight, 4_000, 10_000),
+			new(werewolf, 2, VictoryCheckWindow.PreNight, 3_000, 10_000)
+		};
 		var cases = new (TerminalLobbyCacheRecord Record, LobbyEvaluationStateKind Kind, bool Blocks)[]
 		{
 			(new DegenerateTerminalCacheRecord(identity, rows1000, cells1000),
@@ -380,7 +449,17 @@ public class LobbyEvaluationCoordinatorTests
 				TimeProvider.System);
 			await WaitForStateAsync(coordinator, @case.Kind);
 
-			coordinator.State.TerminalRecord.Should().BeEquivalentTo(@case.Record);
+			if (@case.Kind == LobbyEvaluationStateKind.Probability)
+			{
+				var projectedVillager = coordinator.State.Probability!.Outcomes
+					.Single(outcome => outcome.GameResult.Equals(villager));
+				projectedVillager.Turns.Should().ContainSingle().Which.Should().Be(
+					new LobbyProbabilityTurnData(1, 7_000, 10_000));
+			}
+			else
+			{
+				coordinator.State.Probability.Should().BeNull();
+			}
 			coordinator.EvaluationBlocksLobbyExit.Should().Be(@case.Blocks);
 			coordinator.TryRequestLobbyExit().Should().Be(!@case.Blocks);
 		}
@@ -473,7 +552,8 @@ public class LobbyEvaluationCoordinatorTests
 		coordinator.TryRequestLobbyExit().Should().BeFalse();
 		await WaitForStateAsync(coordinator, LobbyEvaluationStateKind.AlreadyDecided);
 
-		coordinator.State.TerminalRecord.Should().BeOfType<AlreadyDecidedTerminalCacheRecord>();
+		coordinator.State.DecidedGameResult.Should().Be(new SingleFactionGameResult(Faction.Werewolf));
+		coordinator.State.DecidedReason.Should().Be(AlreadyDecidedReason.WerewolfControlShortcut);
 		coordinator.EvaluationBlocksLobbyExit.Should().BeTrue();
 	}
 
@@ -537,7 +617,9 @@ public class LobbyEvaluationCoordinatorTests
 
 		await WaitForStateAsync(coordinator, LobbyEvaluationStateKind.AlreadyDecided);
 
-		coordinator.State.TerminalRecord.Should().BeEquivalentTo(record);
+		coordinator.State.Identity.Should().Be(record.CompatibilityIdentity);
+		coordinator.State.DecidedGameResult.Should().Be(record.GameResult);
+		coordinator.State.DecidedReason.Should().Be(record.Reason);
 		coordinator.State.Should().NotBeNull();
 		local.ReadCount.Should().Be(1);
 		evaluator.CallCount.Should().Be(0);
@@ -713,7 +795,9 @@ public class LobbyEvaluationCoordinatorTests
 			TimeProvider.System);
 		await WaitForStateAsync(coordinator, LobbyEvaluationStateKind.AlreadyDecided);
 
-		coordinator.State.TerminalRecord.Should().BeEquivalentTo(record);
+		coordinator.State.Identity.Should().Be(record.CompatibilityIdentity);
+		coordinator.State.DecidedGameResult.Should().Be(record.GameResult);
+		coordinator.State.DecidedReason.Should().Be(record.Reason);
 		coordinator.State.BlocksLobbyExit.Should().BeTrue();
 		bundled.LogicalNames.Should().Equal(LobbyEvaluationCoordinator.BundledCacheLogicalName);
 		local.ReadCount.Should().Be(0);
@@ -940,18 +1024,24 @@ public class LobbyEvaluationCoordinatorTests
 	{
 		private readonly Queue<ControlledRead> _reads = new();
 		private readonly SemaphoreSlim _available = new(0);
+		private int _readCount;
+
+		public int ReadCount => Volatile.Read(ref _readCount);
+		public CancellationToken LastCancellationToken { get; private set; }
 
 		public async ValueTask<ReadOnlyMemory<byte>?> ReadAsync(
 			string logicalName,
 			CancellationToken cancellationToken = default)
 		{
+			Interlocked.Increment(ref _readCount);
+			LastCancellationToken = cancellationToken;
 			var read = new ControlledRead();
 			lock (_reads)
 			{
 				_reads.Enqueue(read);
 			}
 			_available.Release();
-			return await read.Result.Task;
+			return await read.Result.Task.WaitAsync(cancellationToken);
 		}
 
 		public async Task<ControlledRead> NextReadAsync()

@@ -1,6 +1,6 @@
 using System.Globalization;
 using Werewolves.Client.Resources;
-using Werewolves.Core.GameLogic.Simulation;
+using Werewolves.Client.Services;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Models.Simulation;
 
@@ -52,15 +52,17 @@ public static class LobbyEvaluationPresentation
 	}
 
 	public static LobbyProbabilityPresentation Probability(
-		ProbabilityTerminalCacheRecord record)
+		LobbyProbabilityData probability)
 	{
-		ArgumentNullException.ThrowIfNull(record);
-		return new(record.GameResultFrequencies
+		ArgumentNullException.ThrowIfNull(probability);
+		return new(probability.Outcomes
 			.Select(row => new LobbyEvaluationOutcome(
 				row.GameResult,
 				GameResultName(row.GameResult),
 				Frequency(row.Numerator, row.Denominator),
-				TurnsFor(row.GameResult, record.GameResultFrequencyByTurn)))
+				row.Turns.Select(turn => new LobbyEvaluationTurnFrequency(
+					turn.EndingTurn,
+					Frequency(turn.Numerator, turn.Denominator))).ToArray()))
 			.ToArray());
 	}
 
@@ -105,18 +107,6 @@ public static class LobbyEvaluationPresentation
 			MidpointRounding.AwayFromZero);
 		return new(LobbyEvaluationFrequencyKind.WholePercent, percentage);
 	}
-
-	private static IReadOnlyList<LobbyEvaluationTurnFrequency> TurnsFor(
-		GameResult gameResult,
-		IReadOnlyList<TerminalCacheTurnWindowFrequency> cells) =>
-		cells
-			.Where(cell => cell.GameResult.Equals(gameResult))
-			.GroupBy(cell => cell.EndingTurn)
-			.OrderBy(group => group.Key)
-			.Select(group => new LobbyEvaluationTurnFrequency(
-				group.Key,
-				Frequency(group.Sum(cell => cell.Numerator), group.First().Denominator)))
-			.ToArray();
 
 	private static string FactionName(Faction faction) => faction switch
 	{

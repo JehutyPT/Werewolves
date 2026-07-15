@@ -250,3 +250,34 @@ This log records decisions made while executing PRD #29 autonomously with the
   findings. The repaired canonical issue #81 contract remained byte-for-byte
   unchanged with SHA-256
   `3d6b4d67a33788e6f6cd5ae54e56d7f87aa60d51e7870da4c67257bf83f5c2b9`.
+
+### 2026-07-15 — final PRD audit
+
+- The branch-wide Standards audit found that ADR-0009 still described cache
+  distribution as deferred even though this PRD measured and packaged the
+  current-profile artifact. ADR-0012 now records the scoped decision: the
+  1,664-record, 2,337,001-byte `core-simulator@1` cache ships as one app-bundled
+  MAUI asset with no remote distribution surface. A future expanded or
+  full-role profile may revisit distribution only after its own realistic
+  size and operating constraints are measured.
+- The same audit found repeated parsing of the immutable bundled artifact, a
+  raw cache-record seam from Core GameLogic into Razor, an unannounced
+  asynchronous evaluation transition, and simulator-unavailable copy that
+  named the device instead of the selected setup. The final integration repair
+  now loads, validates, and indexes the bundled document once per coordinator
+  lifetime while continuing to reread mutable local storage. Request
+  cancellation stops only the request's wait; disposal cancels the shared
+  load, and stale requests still cannot publish.
+- Terminal cache records remain private to the coordinator. The public
+  `LobbyEvaluationState` projects only StateModels values and client-owned
+  probability rows, including explicit collapse of Victory Check Windows into
+  one ending-frequency row per Game Result and Turn. The panel exposes one
+  concise visually hidden polite, atomic status announcement without making
+  the probability table live. English and Portuguese unavailable copy now
+  identifies the selected Role Composition.
+- Final central verification after these repairs passed: Core tests with 451
+  passed and one known skip; Client tests with 266 passed; Browser QA with 6
+  passed; generator and Release Mac Catalyst x64 builds with zero warnings and
+  errors. The packaged app still contains exactly one 2,337,001-byte root
+  cache resource with SHA-256
+  `95797d40dfb3ac0b389c6f004956cdf19faeefb77c1f32f35d8071405d9a9253`.

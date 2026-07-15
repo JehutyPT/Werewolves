@@ -13,6 +13,7 @@ public static class ModeratorUiTestIds
 	public const string LobbyEvaluationDisclosure = "lobby-evaluation-disclosure";
 	public const string LobbyEvaluationDetail = "lobby-evaluation-detail";
 	public const string LobbyEvaluationRetry = "lobby-evaluation-retry";
+	public const string LobbyEvaluationAsyncStatus = "lobby-evaluation-async-status";
 	public const string LobbyEvaluationStatus = "lobby-evaluation-status";
 	public const string LobbyEvaluationTurnEntry = "lobby-evaluation-turn-entry";
 	public const string RoleSelectionStartGame = "role-selection-start-game";

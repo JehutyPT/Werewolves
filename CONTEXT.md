@@ -407,7 +407,7 @@ _Avoid_: Load game, restore
 - **Game Result Frequency by Turn** is the source timing view for deriving **Game Result Frequency** and **Ended-By-Turn Frequency**
 - **Simulation Result Evidence** defines stable replayable evidence; diagnostics and cache artifact boundaries are architectural concerns covered by ADR-0009
 - Product presentation rules for probability output live in PRD #29 and the relevant canonical issue-body Implementation Contracts
-- Cache distribution remains deferred under ADR-0009 until realistic full-role artifact size is measured; **Build-Time Cache Generation**, **Bundled Simulator Cache**, and **On-Device Fallback Generation** remain glossary terms
+- The measured current-profile **Bundled Simulator Cache** ships inside the app package under ADR-0012; distribution for a future expanded or full-role profile may be reconsidered after its realistic artifact size and operating constraints are known
 - "Could not evaluate" is a product evaluation state, not a **Game Session Outcome**, **Game Result**, **No-Winner Outcome**, or probability bucket
 - A simulation run ending during Turn 1 is a **Completed Simulation Run** when it reaches a **Game Session Outcome**; **Incomplete Simulation Runs** do not contribute to **Game Result Frequency**
 - A **Balanced Role Composition** is considered from **Game Result Frequency**, not by comparing winning Turn to the **Reference Turn Horizon**

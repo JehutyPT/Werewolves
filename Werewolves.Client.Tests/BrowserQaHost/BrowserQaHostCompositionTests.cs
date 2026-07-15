@@ -40,7 +40,7 @@ public class BrowserQaHostCompositionTests
 
 		source.LogicalNames.Should().Equal("terminal-lobby-cache.json");
 		evaluator.CallCount.Should().Be(0);
-		coordinator.State.TerminalRecord.Should().BeOfType<ProbabilityTerminalCacheRecord>();
+		coordinator.State.Probability.Should().NotBeNull();
 	}
 
 	[Fact]

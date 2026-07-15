@@ -2,8 +2,8 @@ using System.Globalization;
 using FluentAssertions;
 using Werewolves.Client.Components.Pages;
 using Werewolves.Client.Resources;
+using Werewolves.Client.Services;
 using Werewolves.Client.Tests.Helpers;
-using Werewolves.Core.GameLogic.Simulation;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Models.Simulation;
 using Xunit;
@@ -58,18 +58,14 @@ public class LobbyEvaluationPresentationTests
 		var villager = new SingleFactionGameResult(Faction.Villager);
 		var werewolf = new SingleFactionGameResult(Faction.Werewolf);
 		var noWinner = new NoWinnerGameResult();
-		var record = CreateProbabilityRecord(
+		var probability = new LobbyProbabilityData(
 			[
-				new(villager, 0, 10_000),
-				new(werewolf, 1, 10_000),
-				new(noWinner, 9_999, 10_000)
-			],
-			[
-				new(werewolf, 3, VictoryCheckWindow.Dawn, 1, 10_000),
-				new(noWinner, 1, VictoryCheckWindow.PreNight, 9_999, 10_000)
+				Outcome(villager, 0, 10_000),
+				Outcome(werewolf, 1, 10_000, new LobbyProbabilityTurnData(3, 1, 10_000)),
+				Outcome(noWinner, 9_999, 10_000, new LobbyProbabilityTurnData(1, 9_999, 10_000))
 			]);
 
-		var presentation = LobbyEvaluationPresentation.Probability(record);
+		var presentation = LobbyEvaluationPresentation.Probability(probability);
 
 		presentation.Outcomes.Single(outcome => outcome.Name == ClientStrings.LobbyEvaluation_FactionVillager)
 			.Frequency.Kind.Should().Be(LobbyEvaluationFrequencyKind.NotObserved);
@@ -86,19 +82,14 @@ public class LobbyEvaluationPresentationTests
 		var villager = new SingleFactionGameResult(Faction.Villager);
 		var werewolf = new SingleFactionGameResult(Faction.Werewolf);
 		var noWinner = new NoWinnerGameResult();
-		var record = CreateProbabilityRecord(
+		var probability = new LobbyProbabilityData(
 			[
-				new(villager, 3_333, 10_000),
-				new(werewolf, 3_333, 10_000),
-				new(noWinner, 3_334, 10_000)
-			],
-			[
-				new(villager, 1, VictoryCheckWindow.Dawn, 3_333, 10_000),
-				new(werewolf, 1, VictoryCheckWindow.Dawn, 3_333, 10_000),
-				new(noWinner, 1, VictoryCheckWindow.Dawn, 3_334, 10_000)
+				Outcome(villager, 3_333, 10_000, new LobbyProbabilityTurnData(1, 3_333, 10_000)),
+				Outcome(werewolf, 3_333, 10_000, new LobbyProbabilityTurnData(1, 3_333, 10_000)),
+				Outcome(noWinner, 3_334, 10_000, new LobbyProbabilityTurnData(1, 3_334, 10_000))
 			]);
 
-		var presentation = LobbyEvaluationPresentation.Probability(record);
+		var presentation = LobbyEvaluationPresentation.Probability(probability);
 		var wholePercents = presentation.Outcomes
 			.Select(outcome => outcome.Frequency.WholePercent!.Value)
 			.ToArray();
@@ -113,27 +104,25 @@ public class LobbyEvaluationPresentationTests
 	}
 
 	[Fact]
-	public void Probability_AggregatesWindowsIntoNonCumulativeEndingFrequencyByTurn()
+	public void Probability_RendersNonCumulativeEndingFrequencyByTurnFromClientProjection()
 	{
 		using var context = new ModeratorComponentTestContext();
 		var villager = new SingleFactionGameResult(Faction.Villager);
 		var werewolf = new SingleFactionGameResult(Faction.Werewolf);
 		var noWinner = new NoWinnerGameResult();
-		var record = CreateProbabilityRecord(
+		var probability = new LobbyProbabilityData(
 			[
-				new(villager, 6_000, 10_000),
-				new(werewolf, 4_000, 10_000),
-				new(noWinner, 0, 10_000)
-			],
-			[
-				new(villager, 1, VictoryCheckWindow.Dawn, 1_000, 10_000),
-				new(villager, 1, VictoryCheckWindow.PreNight, 2_000, 10_000),
-				new(villager, 2, VictoryCheckWindow.Dawn, 3_000, 10_000),
-				new(werewolf, 2, VictoryCheckWindow.Dawn, 1_000, 10_000),
-				new(werewolf, 2, VictoryCheckWindow.PreNight, 3_000, 10_000)
+				Outcome(
+					villager,
+					6_000,
+					10_000,
+					new LobbyProbabilityTurnData(1, 3_000, 10_000),
+					new LobbyProbabilityTurnData(2, 3_000, 10_000)),
+				Outcome(werewolf, 4_000, 10_000, new LobbyProbabilityTurnData(2, 4_000, 10_000)),
+				Outcome(noWinner, 0, 10_000)
 			]);
 
-		var presentation = LobbyEvaluationPresentation.Probability(record);
+		var presentation = LobbyEvaluationPresentation.Probability(probability);
 
 		presentation.Outcomes.Single(outcome => outcome.GameResult.Equals(villager)).Turns.Should().Equal(
 			new LobbyEvaluationTurnFrequency(
@@ -171,22 +160,10 @@ public class LobbyEvaluationPresentationTests
 		LobbyEvaluationPresentation.AlreadyDecidedReasonText(reason).Should().Be(expected);
 	}
 
-	private static ProbabilityTerminalCacheRecord CreateProbabilityRecord(
-		IEnumerable<TerminalCacheGameResultFrequency> frequencies,
-		IEnumerable<TerminalCacheTurnWindowFrequency> cells)
-	{
-		var scenario = new SimulationScenario(
-			5,
-			[
-				MainRoleType.SimpleWerewolf,
-				MainRoleType.SimpleWerewolf,
-				MainRoleType.SimpleVillager,
-				MainRoleType.SimpleVillager,
-				MainRoleType.SimpleVillager
-			]);
-		var identity = new SimulationCompatibilityIdentity(
-			scenario.ToCanonical(),
-			SimulatorProfile.Active.Identity);
-		return new(identity, frequencies, cells);
-	}
+	private static LobbyProbabilityOutcomeData Outcome(
+		GameResult gameResult,
+		int numerator,
+		int denominator,
+		params LobbyProbabilityTurnData[] turns) =>
+		new(gameResult, numerator, denominator, turns);
 }

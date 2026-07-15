@@ -233,7 +233,7 @@
     <value>Tentar novamente</value>
   </data>
   <data name="LobbyEvaluation_SimulatorUnavailable" xml:space="preserve">
-    <value>A avaliação não está disponível neste dispositivo.</value>
+    <value>A avaliação não está disponível para esta seleção de papéis.</value>
   </data>
   <data name="LobbyEvaluation_PendingBlock" xml:space="preserve">
     <value>A avaliação ainda está em curso. Aguarda pela conclusão antes de iniciar.</value>

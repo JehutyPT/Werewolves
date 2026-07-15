@@ -3,65 +3,6 @@ using Werewolves.Core.StateModels.Models.Simulation;
 
 namespace Werewolves.Client.Services;
 
-public enum LobbyEvaluationStateKind
-{
-	NotApplicable,
-	Pending,
-	AlreadyDecided,
-	Degenerate,
-	Probability,
-	SimulatorUnavailable,
-	CouldNotEvaluate
-}
-
-public sealed record LobbyEvaluationState
-{
-	public LobbyEvaluationStateKind Kind { get; }
-
-	public SimulationCompatibilityIdentity? Identity { get; }
-
-	public TerminalLobbyCacheRecord? TerminalRecord { get; }
-
-	public bool BlocksLobbyExit => Kind is
-		LobbyEvaluationStateKind.Pending or
-		LobbyEvaluationStateKind.AlreadyDecided or
-		LobbyEvaluationStateKind.Degenerate;
-
-	private LobbyEvaluationState(
-		LobbyEvaluationStateKind kind,
-		SimulationCompatibilityIdentity? identity = null,
-		TerminalLobbyCacheRecord? terminalRecord = null)
-	{
-		Kind = kind;
-		Identity = identity;
-		TerminalRecord = terminalRecord;
-	}
-
-	internal static LobbyEvaluationState NotApplicable() =>
-		new(LobbyEvaluationStateKind.NotApplicable);
-
-	internal static LobbyEvaluationState Pending(SimulationCompatibilityIdentity identity) =>
-		new(LobbyEvaluationStateKind.Pending, identity);
-
-	internal static LobbyEvaluationState SimulatorUnavailable() =>
-		new(LobbyEvaluationStateKind.SimulatorUnavailable);
-
-	internal static LobbyEvaluationState CouldNotEvaluate(SimulationCompatibilityIdentity identity) =>
-		new(LobbyEvaluationStateKind.CouldNotEvaluate, identity);
-
-	internal static LobbyEvaluationState Terminal(TerminalLobbyCacheRecord record) =>
-		new(
-			record switch
-			{
-				AlreadyDecidedTerminalCacheRecord => LobbyEvaluationStateKind.AlreadyDecided,
-				DegenerateTerminalCacheRecord => LobbyEvaluationStateKind.Degenerate,
-				ProbabilityTerminalCacheRecord => LobbyEvaluationStateKind.Probability,
-				_ => throw new ArgumentException("Unknown terminal cache record.", nameof(record))
-			},
-			record.CompatibilityIdentity,
-			record);
-}
-
 public interface ITerminalLobbyCacheByteSource
 {
 	ValueTask<ReadOnlyMemory<byte>?> ReadAsync(

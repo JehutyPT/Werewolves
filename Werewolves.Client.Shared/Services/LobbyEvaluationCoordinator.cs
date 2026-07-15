@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using Werewolves.Core.GameLogic.Simulation;
 using Werewolves.Core.StateModels.Models.Simulation;
 
@@ -14,6 +15,8 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 	private readonly ILobbyTerminalEvaluator _evaluator;
 	private readonly TimeProvider _timeProvider;
 	private readonly Func<SimulationScenario, LobbyScenarioSupport> _classify;
+	private readonly CancellationTokenSource _lifetimeCancellation = new();
+	private readonly Lazy<Task<BundledCacheIndex?>> _bundledCacheIndex;
 	private readonly object _sync = new();
 	private EvaluationRequest? _currentRequest;
 	private bool _disposed;
@@ -42,6 +45,9 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 		_evaluator = evaluator ?? throw new ArgumentNullException(nameof(evaluator));
 		_timeProvider = timeProvider ?? TimeProvider.System;
 		_classify = classify ?? throw new ArgumentNullException(nameof(classify));
+		_bundledCacheIndex = new(
+			LoadBundledCacheIndexAsync,
+			LazyThreadSafetyMode.ExecutionAndPublication);
 		State = LobbyEvaluationState.NotApplicable();
 		_lobby.SimulationScenarioChanged += HandleSimulationScenarioChanged;
 		RestartForCurrentScenario();
@@ -220,14 +226,15 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 		{
 			await Task.Yield();
 			request.Token.ThrowIfCancellationRequested();
-			var bundledBytes = await ReadBundledAsync(request.Token);
+			var bundledIndex = await _bundledCacheIndex.Value.WaitAsync(request.Token);
 			if (!IsCurrent(request))
 			{
 				return;
 			}
-			if (TrySelectRecord(bundledBytes, request.Identity, out var bundledRecord))
+			if (bundledIndex is not null
+				&& bundledIndex.TryGet(request.Identity, out var bundledRecord))
 			{
-				PublishIfCurrent(request, LobbyEvaluationState.Terminal(bundledRecord));
+				PublishIfCurrent(request, ProjectTerminalRecord(bundledRecord));
 				return;
 			}
 
@@ -241,7 +248,7 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 			if (localDocument is not null
 				&& TerminalLobbyCache.TryGet(localDocument, request.Identity, out var localRecord))
 			{
-				PublishIfCurrent(request, LobbyEvaluationState.Terminal(localRecord));
+				PublishIfCurrent(request, ProjectTerminalRecord(localRecord));
 				return;
 			}
 
@@ -308,7 +315,7 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 				// The terminal meaning remains valid for this app session even if persistence fails.
 			}
 
-			PublishIfCurrent(request, LobbyEvaluationState.Terminal(record));
+			PublishIfCurrent(request, ProjectTerminalRecord(record));
 		}
 		catch (OperationCanceledException) when (request.IsCancellationRequested)
 		{
@@ -332,16 +339,19 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 		request.Token.ThrowIfCancellationRequested();
 	}
 
-	private async ValueTask<ReadOnlyMemory<byte>?> ReadBundledAsync(
-		CancellationToken cancellationToken)
+	private async Task<BundledCacheIndex?> LoadBundledCacheIndexAsync()
 	{
 		try
 		{
-			return await _bundledCache.ReadAsync(BundledCacheLogicalName, cancellationToken);
+			var bytes = await _bundledCache.ReadAsync(
+				BundledCacheLogicalName,
+				_lifetimeCancellation.Token).ConfigureAwait(false);
+			var document = ReadUsableDocument(bytes);
+			return document is null ? null : new BundledCacheIndex(document.Records);
 		}
-		catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+		catch (OperationCanceledException) when (_lifetimeCancellation.IsCancellationRequested)
 		{
-			throw;
+			return null;
 		}
 		catch
 		{
@@ -366,22 +376,6 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 		}
 	}
 
-	private static bool TrySelectRecord(
-		ReadOnlyMemory<byte>? bytes,
-		SimulationCompatibilityIdentity identity,
-		out TerminalLobbyCacheRecord record)
-	{
-		record = null!;
-		if (bytes is not { } value)
-		{
-			return false;
-		}
-
-		var document = ReadUsableDocument(value);
-		return document is not null
-			&& TerminalLobbyCache.TryGet(document, identity, out record);
-	}
-
 	private static TerminalLobbyCacheDocument? ReadUsableDocument(
 		ReadOnlyMemory<byte>? bytes)
 	{
@@ -393,6 +387,34 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 		var read = TerminalLobbyCache.ReadDocument(value.Span);
 		return read.IsUsable ? read.Document : null;
 	}
+
+	private static LobbyEvaluationState ProjectTerminalRecord(
+		TerminalLobbyCacheRecord record) =>
+		record switch
+		{
+			AlreadyDecidedTerminalCacheRecord decided => LobbyEvaluationState.AlreadyDecided(
+				decided.CompatibilityIdentity,
+				decided.GameResult,
+				decided.Reason),
+			DegenerateTerminalCacheRecord degenerate => LobbyEvaluationState.Degenerate(
+				degenerate.CompatibilityIdentity),
+			ProbabilityTerminalCacheRecord probability => LobbyEvaluationState.ProbabilityResult(
+				probability.CompatibilityIdentity,
+				new LobbyProbabilityData(probability.GameResultFrequencies.Select(row =>
+					new LobbyProbabilityOutcomeData(
+						row.GameResult,
+						row.Numerator,
+						row.Denominator,
+						probability.GameResultFrequencyByTurn
+							.Where(cell => cell.GameResult.Equals(row.GameResult))
+							.GroupBy(cell => cell.EndingTurn)
+							.OrderBy(group => group.Key)
+							.Select(group => new LobbyProbabilityTurnData(
+								group.Key,
+								group.Sum(cell => cell.Numerator),
+								group.First().Denominator)))))),
+			_ => throw new ArgumentException("Unknown terminal cache record.", nameof(record))
+		};
 
 	private void PublishIfCurrent(
 		EvaluationRequest request,
@@ -444,7 +466,41 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 			_currentRequest = null;
 		}
 		_lobby.SimulationScenarioChanged -= HandleSimulationScenarioChanged;
-		request?.Cancel();
+		try
+		{
+			request?.Cancel();
+		}
+		finally
+		{
+			try
+			{
+				_lifetimeCancellation.Cancel();
+			}
+			catch (AggregateException)
+			{
+				// A bundled-source cancellation callback cannot prevent disposal.
+			}
+			finally
+			{
+				_lifetimeCancellation.Dispose();
+			}
+		}
+	}
+
+	private sealed class BundledCacheIndex
+	{
+		private readonly FrozenDictionary<SimulationCompatibilityIdentity, TerminalLobbyCacheRecord>
+			_records;
+
+		public BundledCacheIndex(IEnumerable<TerminalLobbyCacheRecord> records)
+		{
+			_records = records.ToFrozenDictionary(record => record.CompatibilityIdentity);
+		}
+
+		public bool TryGet(
+			SimulationCompatibilityIdentity identity,
+			out TerminalLobbyCacheRecord record) =>
+			_records.TryGetValue(identity, out record!);
 	}
 
 	private sealed class EvaluationRequest(
