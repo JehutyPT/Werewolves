@@ -134,3 +134,34 @@ This log records decisions made while executing PRD #29 autonomously with the
   canonical issue #80 contract remained byte-for-byte unchanged during
   implementation and review with SHA-256
   `5a48855511591c4ea0f0d30a7ec47757c7546898fcb7f8ba514d4acd6b287900`.
+
+### 2026-07-15 — issue #78
+
+- Integrated Client lobby-evaluation lookup and fallback orchestration through
+  commit `498e936528e1e512a8d90eb15643e2c6cd1630c0`.
+- `LobbySetupState` now emits one scenario-identity notification only for
+  effective Player-count or Role-composition changes. Player names and Seating
+  Order remain outside Simulation Scenario and cache identity.
+- The Client coordinator applies strict bundled-then-local semantic lookup,
+  preserves the 500 millisecond quiet period, accelerates fallback through one
+  atomic Lobby Exit-attempt operation, bounds synchronous Core evaluation at
+  10 seconds with injected time, and publishes only the latest unchanged
+  scenario. Late reads, evaluator completion, timeout, failure, and persistence
+  cannot overwrite or release a newer scenario's state.
+- Local persistence stages bytes asynchronously and authorizes the actual
+  atomic replace under the current request generation. Native writes are
+  serialized, each writer owns its temporary file, and stale work cannot
+  commit or damage the current write. Runtime cancellation observes late
+  evaluator faults, invokes callbacks outside request locks, and disposes each
+  request cancellation source after its pipeline drains.
+- Native and Browser QA hosts resolve the same host-agnostic coordinator
+  boundary with production adapters versus bounded semantic fakes. Public
+  tests use state/events and controlled adapter continuations rather than
+  private task hooks or wall-clock sleeps.
+- Central verification at the integrated commit passed: Release Mac Catalyst
+  x64 build with zero warnings and errors; Core tests with 378 passed and one
+  known skip; Client tests with 230 passed.
+- Fresh final Standards and Spec reviews both reported no findings. The
+  canonical issue #78 contract remained byte-for-byte unchanged during
+  implementation and review with SHA-256
+  `a052bc697b1215239487010d87273e9efc5ea2b0435a0c2407bbe799f67616f5`.
