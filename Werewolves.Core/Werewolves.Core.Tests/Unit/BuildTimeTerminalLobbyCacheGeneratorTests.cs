@@ -32,7 +32,102 @@ public sealed class BuildTimeTerminalLobbyCacheGeneratorTests
 	}
 
 	[Fact]
-	public void GenerateToFile_WithCompleteResult_AtomicallyPublishesCanonicalBytes()
+	public void GenerateToFile_WhenAlreadyCancelled_ReportsTheWholeCatalogWithoutPublishing()
+	{
+		using var cancellation = new CancellationTokenSource();
+		cancellation.Cancel();
+		var generator = new BuildTimeTerminalLobbyCacheGenerator(
+			(_, _, _, _) => throw new InvalidOperationException());
+		var directory = Directory.CreateTempSubdirectory("werewolves-cache-generator-");
+		var path = Path.Combine(directory.FullName, "terminal-lobby-cache.json");
+		File.WriteAllText(path, "previous");
+		try
+		{
+			var result = generator.GenerateToFile(path, cancellation.Token);
+
+			result.Status.Should().Be(BuildTimeCacheGenerationStatus.Cancelled);
+			result.Diagnostics.TotalScenarioCount.Should().Be(1_664);
+			result.Diagnostics.EnumeratedScenarioCount.Should().Be(1_664);
+			File.ReadAllText(path).Should().Be("previous");
+		}
+		finally
+		{
+			directory.Delete(recursive: true);
+		}
+	}
+
+	[Fact]
+	public void GenerateToFiles_WhenAlreadyCancelled_PublishesWholeCatalogDiagnostics()
+	{
+		using var cancellation = new CancellationTokenSource();
+		cancellation.Cancel();
+		var generator = new BuildTimeTerminalLobbyCacheGenerator(
+			(_, _, _, _) => throw new InvalidOperationException());
+		var directory = Directory.CreateTempSubdirectory("werewolves-cache-generator-");
+		var artifactPath = Path.Combine(directory.FullName, "terminal-lobby-cache.json");
+		var diagnosticsPath = Path.Combine(directory.FullName, "diagnostics.json");
+		File.WriteAllText(artifactPath, "previous");
+		try
+		{
+			var result = generator.GenerateToFiles(
+				artifactPath,
+				diagnosticsPath,
+				cancellation.Token);
+
+			result.Status.Should().Be(BuildTimeCacheGenerationStatus.Cancelled);
+			result.Diagnostics.TotalScenarioCount.Should().Be(1_664);
+			result.Diagnostics.EnumeratedScenarioCount.Should().Be(1_664);
+			File.ReadAllText(artifactPath).Should().Be("previous");
+			var read = BuildTimeCacheDiagnosticsJson.Read(
+				File.ReadAllBytes(diagnosticsPath),
+				artifactBytes: null);
+			read.Rejection.Should().BeNull();
+			read.Diagnostics.Should().BeEquivalentTo(result.Diagnostics);
+		}
+		finally
+		{
+			directory.Delete(recursive: true);
+		}
+	}
+
+	[Fact]
+	public void FilePublicationPublicSurface_DoesNotAcceptScenarioSelections()
+	{
+		var methods = typeof(BuildTimeTerminalLobbyCacheGenerator).GetMethods()
+			.Where(method => method.Name is nameof(BuildTimeTerminalLobbyCacheGenerator.GenerateToFile)
+				or nameof(BuildTimeTerminalLobbyCacheGenerator.GenerateToFiles));
+
+		methods.Should().OnlyContain(method => method.GetParameters().All(parameter =>
+			parameter.ParameterType != typeof(IEnumerable<TerminalLobbyGenerationScenario>)));
+	}
+
+	[Fact]
+	public void PublishCompletedResult_AtomicallyPublishesCanonicalBytes()
+	{
+		var generator = new BuildTimeTerminalLobbyCacheGenerator(
+			(_, _, _, _) => throw new InvalidOperationException());
+		var directory = Directory.CreateTempSubdirectory("werewolves-cache-generator-");
+		var path = Path.Combine(directory.FullName, "terminal-lobby-cache.json");
+		File.WriteAllText(path, "previous");
+		try
+		{
+			var result = generator.PublishCompletedResult(
+				path,
+				diagnosticsPath: null,
+				BuildTimeCacheTestFixtures.Complete);
+
+			result.Status.Should().Be(BuildTimeCacheGenerationStatus.Completed);
+			File.ReadAllBytes(path).Should().Equal(result.ArtifactBytes!);
+			Directory.EnumerateFiles(directory.FullName, "*.tmp").Should().BeEmpty();
+		}
+		finally
+		{
+			directory.Delete(recursive: true);
+		}
+	}
+
+	[Fact]
+	public void GenerateToFile_WithSelectedSubset_DoesNotPublishPartialCompletion()
 	{
 		var entry = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()
 			.First(value => value.IsAlreadyDecided);
@@ -45,9 +140,10 @@ public sealed class BuildTimeTerminalLobbyCacheGeneratorTests
 		{
 			var result = generator.GenerateToFile(path, [entry]);
 
-			result.Status.Should().Be(BuildTimeCacheGenerationStatus.Completed);
-			File.ReadAllBytes(path).Should().Equal(result.ArtifactBytes!);
-			Directory.EnumerateFiles(directory.FullName, "*.tmp").Should().BeEmpty();
+			result.Status.Should().Be(BuildTimeCacheGenerationStatus.Failed);
+			result.ArtifactBytes.Should().BeNull();
+			result.Diagnostics.EnumeratedScenarioCount.Should().Be(1);
+			File.ReadAllText(path).Should().Be("previous");
 		}
 		finally
 		{
@@ -204,6 +300,37 @@ public sealed class BuildTimeTerminalLobbyCacheGeneratorTests
 	}
 
 	[Fact]
+	public void Generate_WhenExpectedTerminalKindDiffers_ReportsExactMismatchCode()
+	{
+		var entry = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()
+			.First(value => value.IsAlreadyDecided) with
+		{
+				IsAlreadyDecided = false
+			};
+		var generator = new BuildTimeTerminalLobbyCacheGenerator(
+			(_, _, _, _) => throw new InvalidOperationException());
+
+		var result = generator.Generate([entry]);
+		var serializableDiagnostics = result.Diagnostics with
+		{
+			Status = BuildTimeCacheGenerationStatus.Failed,
+			Artifact = null
+		};
+		var diagnosticsBytes = BuildTimeCacheDiagnosticsJson.Write(
+			serializableDiagnostics,
+			artifactBytes: null);
+
+		result.Diagnostics.SuspicionsByCode.Should().ContainSingle()
+			.Which.Should().Be(new KeyValuePair<BuildTimeCacheSuspicionCode, int>(
+				BuildTimeCacheSuspicionCode.TerminalKindMismatch,
+				1));
+		using var json = JsonDocument.Parse(diagnosticsBytes);
+		json.RootElement.GetProperty("suspicions").EnumerateArray()
+			.Select(value => value.GetProperty("code").GetString())
+			.Should().Equal("terminal-kind-mismatch");
+	}
+
+	[Fact]
 	public void Generate_WithMultipleIncompleteRuns_OrdersReplayMaterialByIdentityThenRunNumber()
 	{
 		var entries = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()
@@ -289,20 +416,13 @@ public sealed class BuildTimeTerminalLobbyCacheGeneratorTests
 		result.Diagnostics.Artifact!.ByteLength.Should().Be(result.ArtifactBytes!.Length);
 		result.Diagnostics.Artifact.Sha256.Should().MatchRegex("^[0-9a-f]{64}$");
 		repeated.ArtifactBytes.Should().Equal(result.ArtifactBytes!);
-		BuildTimeCacheDiagnosticsJson.Write(repeated.Diagnostics, repeated.ArtifactBytes)
-			.Should().Equal(BuildTimeCacheDiagnosticsJson.Write(
-				result.Diagnostics,
-				result.ArtifactBytes));
+		repeated.Diagnostics.Should().BeEquivalentTo(result.Diagnostics);
 	}
 
 	[Fact]
 	public void DiagnosticsJson_Write_IsDeterministicMachineReadableAndSeparateFromArtifact()
 	{
-		var entry = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()
-			.First(value => value.IsAlreadyDecided);
-		var result = new BuildTimeTerminalLobbyCacheGenerator(
-			(_, _, _, _) => throw new InvalidOperationException())
-			.Generate([entry]);
+		var result = BuildTimeCacheTestFixtures.Complete;
 
 		var first = BuildTimeCacheDiagnosticsJson.Write(result.Diagnostics, result.ArtifactBytes);
 		var second = BuildTimeCacheDiagnosticsJson.Write(result.Diagnostics, result.ArtifactBytes);

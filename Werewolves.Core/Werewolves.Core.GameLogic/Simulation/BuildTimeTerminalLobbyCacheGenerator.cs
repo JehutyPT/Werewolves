@@ -167,7 +167,14 @@ public sealed class BuildTimeTerminalLobbyCacheGenerator
 
 	public BuildTimeCacheGenerationResult GenerateToFile(
 		string destinationPath,
-		IEnumerable<TerminalLobbyGenerationScenario>? scenarios = null,
+		CancellationToken cancellationToken = default) => GenerateToFile(
+			destinationPath,
+			TerminalLobbyScenarioCatalog.EnumerateCurrentProfile(),
+			cancellationToken);
+
+	internal BuildTimeCacheGenerationResult GenerateToFile(
+		string destinationPath,
+		IEnumerable<TerminalLobbyGenerationScenario> scenarios,
 		CancellationToken cancellationToken = default)
 	{
 		var fullDestinationPath = NormalizePath(destinationPath, nameof(destinationPath));
@@ -181,11 +188,33 @@ public sealed class BuildTimeTerminalLobbyCacheGenerator
 	public BuildTimeCacheGenerationResult GenerateToFiles(
 		string destinationPath,
 		string diagnosticsPath,
-		IEnumerable<TerminalLobbyGenerationScenario>? scenarios = null,
+		CancellationToken cancellationToken = default) => GenerateToFiles(
+			destinationPath,
+			diagnosticsPath,
+			TerminalLobbyScenarioCatalog.EnumerateCurrentProfile(),
+			cancellationToken);
+
+	internal BuildTimeCacheGenerationResult GenerateToFiles(
+		string destinationPath,
+		string diagnosticsPath,
+		IEnumerable<TerminalLobbyGenerationScenario> scenarios,
 		CancellationToken cancellationToken = default)
 	{
 		var fullDestinationPath = NormalizePath(destinationPath, nameof(destinationPath));
 		var fullDiagnosticsPath = NormalizePath(diagnosticsPath, nameof(diagnosticsPath));
+		ValidateDistinctPublicationPaths(fullDestinationPath, fullDiagnosticsPath);
+
+		return GenerateAndPublish(
+			fullDestinationPath,
+			fullDiagnosticsPath,
+			scenarios,
+			cancellationToken);
+	}
+
+	private static void ValidateDistinctPublicationPaths(
+		string fullDestinationPath,
+		string fullDiagnosticsPath)
+	{
 		var pathComparer = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
 			? StringComparer.OrdinalIgnoreCase
 			: StringComparer.Ordinal;
@@ -195,13 +224,38 @@ public sealed class BuildTimeTerminalLobbyCacheGenerator
 		{
 			throw new ArgumentException(
 				"The artifact and diagnostics destinations must be different files.",
-				nameof(diagnosticsPath));
+				"diagnosticsPath");
+		}
+	}
+
+	internal BuildTimeCacheGenerationResult PublishCompletedResult(
+		string destinationPath,
+		string? diagnosticsPath,
+		BuildTimeCacheGenerationResult completedResult,
+		CancellationToken cancellationToken = default)
+	{
+		ArgumentNullException.ThrowIfNull(completedResult);
+		if (completedResult.Status != BuildTimeCacheGenerationStatus.Completed)
+		{
+			throw new ArgumentException(
+				"Only a completed generation result can enter publication.",
+				nameof(completedResult));
 		}
 
-		return GenerateAndPublish(
+		var fullDestinationPath = NormalizePath(destinationPath, nameof(destinationPath));
+		var fullDiagnosticsPath = diagnosticsPath is null
+			? null
+			: NormalizePath(diagnosticsPath, nameof(diagnosticsPath));
+		if (fullDiagnosticsPath is not null)
+		{
+			ValidateDistinctPublicationPaths(fullDestinationPath, fullDiagnosticsPath);
+		}
+
+		return Publish(
 			fullDestinationPath,
 			fullDiagnosticsPath,
-			scenarios,
+			() => completedResult,
+			status => CreateTerminalResult(completedResult, status),
 			cancellationToken);
 	}
 
@@ -318,6 +372,21 @@ public sealed class BuildTimeTerminalLobbyCacheGenerator
 	{
 		var selected = SelectScenarios(scenarios);
 		var observation = new GenerationObservation(selected.Length);
+		return Publish(
+			fullDestinationPath,
+			fullDiagnosticsPath,
+			() => Generate(selected, observation, cancellationToken),
+			observation.CreateTerminalResult,
+			cancellationToken);
+	}
+
+	private BuildTimeCacheGenerationResult Publish(
+		string fullDestinationPath,
+		string? fullDiagnosticsPath,
+		Func<BuildTimeCacheGenerationResult> createCompletedResult,
+		Func<BuildTimeCacheGenerationStatus, BuildTimeCacheGenerationResult> createTerminalResult,
+		CancellationToken cancellationToken)
+	{
 		var destinationDirectory = ParentDirectory(fullDestinationPath, nameof(fullDestinationPath));
 		var diagnosticsDirectory = fullDiagnosticsPath is null
 			? null
@@ -332,7 +401,7 @@ public sealed class BuildTimeTerminalLobbyCacheGenerator
 		using var commitDecision = new PublicationCommitDecision(cancellationToken);
 		try
 		{
-			completedResult = Generate(selected, observation, cancellationToken);
+			completedResult = createCompletedResult();
 			var diagnosticsBytes = SerializeAndValidateDiagnostics(
 				completedResult.Diagnostics,
 				completedResult.ArtifactBytes);
@@ -380,7 +449,7 @@ public sealed class BuildTimeTerminalLobbyCacheGenerator
 			}
 
 			RollbackCompletedDiagnostics(fullDiagnosticsPath, diagnosticsCommitted);
-			var result = observation.CreateTerminalResult(BuildTimeCacheGenerationStatus.Cancelled);
+			var result = createTerminalResult(BuildTimeCacheGenerationStatus.Cancelled);
 			PublishTerminalDiagnostics(fullDiagnosticsPath, result.Diagnostics);
 			return result;
 		}
@@ -392,7 +461,7 @@ public sealed class BuildTimeTerminalLobbyCacheGenerator
 			}
 
 			RollbackCompletedDiagnostics(fullDiagnosticsPath, diagnosticsCommitted);
-			var result = observation.CreateTerminalResult(BuildTimeCacheGenerationStatus.Failed);
+			var result = createTerminalResult(BuildTimeCacheGenerationStatus.Failed);
 			PublishTerminalDiagnostics(fullDiagnosticsPath, result.Diagnostics);
 			return result;
 		}
@@ -414,6 +483,18 @@ public sealed class BuildTimeTerminalLobbyCacheGenerator
 			}
 		}
 	}
+
+	private static BuildTimeCacheGenerationResult CreateTerminalResult(
+		BuildTimeCacheGenerationResult completedResult,
+		BuildTimeCacheGenerationStatus status) => new(
+		status,
+		ArtifactBytes: null,
+		Document: null,
+		completedResult.Diagnostics with
+		{
+			Status = status,
+			Artifact = null
+		});
 
 	private byte[] SerializeAndValidateDiagnostics(
 		BuildTimeCacheGenerationDiagnostics diagnostics,

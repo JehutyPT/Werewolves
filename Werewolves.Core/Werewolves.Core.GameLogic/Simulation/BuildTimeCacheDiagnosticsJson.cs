@@ -131,6 +131,13 @@ public static class BuildTimeCacheDiagnosticsJson
 		_ => throw new ArgumentOutOfRangeException(nameof(status))
 	};
 
+	internal static byte[] WriteCanonicalFixture(
+		BuildTimeCacheGenerationDiagnostics diagnostics)
+	{
+		ArgumentNullException.ThrowIfNull(diagnostics);
+		return WriteCanonical(diagnostics);
+	}
+
 	private static byte[] WriteCanonical(BuildTimeCacheGenerationDiagnostics diagnostics)
 	{
 		using var stream = new MemoryStream();
@@ -233,12 +240,20 @@ public static class BuildTimeCacheDiagnosticsJson
 			diagnostics.ProbabilityCount,
 			diagnostics.OmittedCount
 		};
+		var catalogScenarioCount = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile().Count;
 		if (counts.Any(value => value < 0)
-			|| diagnostics.TotalScenarioCount
-				!= TerminalLobbyScenarioCatalog.EnumerateCurrentProfile().Count
+			|| diagnostics.TotalScenarioCount != catalogScenarioCount
 			|| diagnostics.EnumeratedScenarioCount > diagnostics.TotalScenarioCount)
 		{
 			throw new FormatException("Invalid scenario counts.");
+		}
+
+		if (diagnostics.Status == BuildTimeCacheGenerationStatus.Completed
+			&& (diagnostics.TotalScenarioCount != catalogScenarioCount
+				|| diagnostics.EnumeratedScenarioCount != catalogScenarioCount))
+		{
+			throw new FormatException(
+				"Completed diagnostics require the complete current scenario catalog.");
 		}
 
 		ValidateCounts(diagnostics.OmissionsByCode, nameof(diagnostics.OmissionsByCode));

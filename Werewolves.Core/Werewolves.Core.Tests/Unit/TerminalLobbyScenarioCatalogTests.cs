@@ -12,13 +12,11 @@ public sealed class TerminalLobbyScenarioCatalogTests
 	public void EnumerateCurrentProfile_ReturnsCompleteSupportedIdentitySet()
 	{
 		var entries = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile();
-		var expectedIdentities = IndependentlyEnumerateStructuralIdentities();
 
-		entries.Should().HaveCount(expectedIdentities.Count);
+		entries.Should().HaveCount(1_664);
 		entries.Select(entry => entry.Identity).Should().OnlyHaveUniqueItems();
 		entries.Select(entry => entry.Identity.ToString()).Should().BeInAscendingOrder(
 			StringComparer.Ordinal);
-		entries.Select(entry => entry.Identity.ToString()).Should().Equal(expectedIdentities);
 		entries.Count(entry => entry.IsAlreadyDecided).Should().Be(832);
 		entries.Count(entry => !entry.IsAlreadyDecided).Should().Be(832);
 		entries.GroupBy(entry => entry.Scenario.PlayerCount)
@@ -29,6 +27,25 @@ public sealed class TerminalLobbyScenarioCatalogTests
 
 		foreach (var entry in entries)
 		{
+			entry.Scenario.PlayerCount.Should().BeInRange(5, 30);
+			entry.Scenario.RoleCompositionCards.Should().HaveCount(entry.Scenario.PlayerCount);
+			entry.Scenario.RoleCompositionCards.Should().OnlyContain(role =>
+				role == MainRoleType.SimpleWerewolf
+				|| role == MainRoleType.Seer
+				|| role == MainRoleType.WildChild
+				|| role == MainRoleType.SimpleVillager);
+			entry.Scenario.RoleCompositionCards.Count(role => role == MainRoleType.SimpleWerewolf)
+				.Should().BeGreaterThanOrEqualTo(1);
+			entry.Scenario.RoleCompositionCards.Count(role => role == MainRoleType.Seer)
+				.Should().BeInRange(0, 1);
+			entry.Scenario.RoleCompositionCards.Count(role => role == MainRoleType.WildChild)
+				.Should().BeInRange(0, 1);
+			entry.Scenario.RoleCompositionCards.Count(role =>
+				role == MainRoleType.SimpleVillager || role == MainRoleType.Seer)
+				.Should().BeGreaterThanOrEqualTo(1);
+			entry.Scenario.ActorSetupCards.Cards.Should().BeEmpty();
+			entry.Scenario.RuleState.Should().Be(SimulationRuleState.Default);
+
 			var classification = SimulationScenarioClassifier.Classify(entry.Scenario);
 			classification.RulesValidity.IsValid.Should().BeTrue();
 			classification.AppSupport.Should().Match<AppSupportResult>(value => value.IsSupported);
@@ -51,42 +68,24 @@ public sealed class TerminalLobbyScenarioCatalogTests
 
 		var actualIdentities = entries.Select(entry => entry.Identity.ToString()).ToHashSet(
 			StringComparer.Ordinal);
+		IncludedStructuralScenarios()
+			.Select(IdentityFor)
+			.Should().OnlyContain(identity => actualIdentities.Contains(identity));
 		ExcludedStructuralScenarios()
 			.Select(IdentityFor)
 			.Should().OnlyContain(identity => !actualIdentities.Contains(identity));
 	}
 
-	private static IReadOnlyList<string> IndependentlyEnumerateStructuralIdentities()
+	private static IEnumerable<SimulationScenario> IncludedStructuralScenarios()
 	{
-		var identities = new List<string>();
-		for (var playerCount = 5; playerCount <= 30; playerCount++)
-		{
-			foreach (var seerCount in new[] { 0, 1 })
-			{
-				foreach (var wildChildCount in new[] { 0, 1 })
-				{
-					var maximumWerewolves = playerCount
-						- seerCount
-						- wildChildCount
-						- (seerCount == 0 ? 1 : 0);
-					for (var werewolfCount = 1; werewolfCount <= maximumWerewolves; werewolfCount++)
-					{
-						var villagerCount = playerCount
-							- werewolfCount
-							- seerCount
-							- wildChildCount;
-						identities.Add(IdentityFor(Scenario(
-							playerCount,
-							werewolfCount,
-							seerCount,
-							wildChildCount,
-							villagerCount)));
-					}
-				}
-			}
-		}
-
-		return identities.OrderBy(value => value, StringComparer.Ordinal).ToArray();
+		yield return Scenario(5, werewolves: 1, seers: 0, wildChildren: 0, villagers: 4);
+		yield return Scenario(5, werewolves: 1, seers: 1, wildChildren: 0, villagers: 3);
+		yield return Scenario(5, werewolves: 1, seers: 0, wildChildren: 1, villagers: 3);
+		yield return Scenario(5, werewolves: 1, seers: 1, wildChildren: 1, villagers: 2);
+		yield return Scenario(5, werewolves: 4, seers: 0, wildChildren: 0, villagers: 1);
+		yield return Scenario(5, werewolves: 4, seers: 1, wildChildren: 0, villagers: 0);
+		yield return Scenario(30, werewolves: 1, seers: 0, wildChildren: 0, villagers: 29);
+		yield return Scenario(30, werewolves: 28, seers: 1, wildChildren: 1, villagers: 0);
 	}
 
 	private static IEnumerable<SimulationScenario> ExcludedStructuralScenarios()

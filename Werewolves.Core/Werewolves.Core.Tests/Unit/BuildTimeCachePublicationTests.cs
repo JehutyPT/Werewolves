@@ -11,18 +11,19 @@ namespace Werewolves.Core.Tests.Unit;
 public sealed class BuildTimeCachePublicationTests
 {
 	[Fact]
-	public void GenerateToFiles_SuccessfullyStagesValidatesAndCommitsBothFiles()
+	public void PublishCompletedResult_SuccessfullyStagesValidatesAndCommitsBothFiles()
 	{
 		var fileSystem = new RecordingPublicationFileSystem();
 		var generator = CreateGenerator(fileSystem: fileSystem);
-		var entry = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()
-			.First(value => value.IsAlreadyDecided);
 		var directory = Directory.CreateTempSubdirectory("werewolves-cache-success-");
 		var artifactPath = Path.Combine(directory.FullName, "cache.json");
 		var diagnosticsPath = Path.Combine(directory.FullName, "diagnostics.json");
 		try
 		{
-			var result = generator.GenerateToFiles(artifactPath, diagnosticsPath, [entry]);
+			var result = generator.PublishCompletedResult(
+				artifactPath,
+				diagnosticsPath,
+				BuildTimeCacheTestFixtures.Complete);
 
 			result.Status.Should().Be(BuildTimeCacheGenerationStatus.Completed);
 			File.ReadAllBytes(artifactPath).Should().Equal(result.ArtifactBytes!);
@@ -340,10 +341,8 @@ public sealed class BuildTimeCachePublicationTests
 	}
 
 	[Fact]
-	public void GenerateToFiles_WhenPublicationFails_RetainsAllPreviouslyObservedEvidence()
+	public void PublishCompletedResult_WhenPublicationFails_RetainsGenerationEvidence()
 	{
-		var entry = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()
-			.First(value => !value.IsAlreadyDecided);
 		var fileSystem = new RecordingPublicationFileSystem
 		{
 			BoundaryAction = boundary =>
@@ -354,17 +353,17 @@ public sealed class BuildTimeCachePublicationTests
 				}
 			}
 		};
-		var generator = CreateGenerator(
-			(scenario, identity, count, _) =>
-				Batch(scenario, identity, count, incompleteLastRun: true),
-			fileSystem: fileSystem);
+		var generator = CreateGenerator(fileSystem: fileSystem);
 		var directory = Directory.CreateTempSubdirectory("werewolves-cache-failed-evidence-");
 		var artifactPath = Path.Combine(directory.FullName, "cache.json");
 		var diagnosticsPath = Path.Combine(directory.FullName, "diagnostics.json");
 		File.WriteAllText(artifactPath, "previous");
 		try
 		{
-			var result = generator.GenerateToFiles(artifactPath, diagnosticsPath, [entry]);
+			var result = generator.PublishCompletedResult(
+				artifactPath,
+				diagnosticsPath,
+				BuildTimeCacheTestFixtures.WithIncompleteEvidence);
 
 			result.Status.Should().Be(BuildTimeCacheGenerationStatus.Failed);
 			result.Diagnostics.OmissionsByCode.Should().Contain(
@@ -392,7 +391,7 @@ public sealed class BuildTimeCachePublicationTests
 	[InlineData((int)BuildTimeCachePublicationBoundary.BeforeArtifactCommit, true)]
 	[InlineData((int)BuildTimeCachePublicationBoundary.ArtifactCommitted, true)]
 	[InlineData((int)BuildTimeCachePublicationBoundary.CleanupCompleted, true)]
-	public void GenerateToFiles_CancellationIsLinearizedAtCommitDecision(
+	public void Publication_CancellationIsLinearizedAtCommitDecision(
 		int cancellationBoundaryValue,
 		bool expectCommitted)
 	{
@@ -425,7 +424,7 @@ public sealed class BuildTimeCachePublicationTests
 	[InlineData((int)BuildTimeCachePublicationBoundary.BeforeArtifactCommit, false)]
 	[InlineData((int)BuildTimeCachePublicationBoundary.ArtifactCommitted, true)]
 	[InlineData((int)BuildTimeCachePublicationBoundary.CleanupCompleted, true)]
-	public void GenerateToFiles_FailureAtEveryPublicationBoundaryHasTruthfulOutcome(
+	public void Publication_FailureAtEveryBoundaryHasTruthfulOutcome(
 		int failureBoundaryValue,
 		bool expectCommitted)
 	{
@@ -452,19 +451,18 @@ public sealed class BuildTimeCachePublicationTests
 	[Theory]
 	[InlineData("unknown-status")]
 	[InlineData("broken-count")]
+	[InlineData("broken-equation")]
 	[InlineData("generator-identity")]
 	[InlineData("artifact-profile")]
 	[InlineData("artifact-hash")]
 	[InlineData("artifact-length")]
 	[InlineData("artifact-kind-counts")]
 	[InlineData("status-artifact-combination")]
-	public void GenerateToFiles_WhenCompletedDiagnosticsAreMutated_RejectsBeforePublication(
+	public void PublishCompletedResult_WhenDiagnosticsAreMutated_RejectsBeforePublication(
 		string mutation)
 	{
 		var fileSystem = new RecordingPublicationFileSystem();
 		var generator = CreateGenerator(
-			(scenario, identity, count, _) =>
-				Batch(scenario, identity, count, incompleteLastRun: false),
 			fileSystem: fileSystem,
 			diagnosticsSerializer: (diagnostics, artifactBytes) =>
 			{
@@ -473,21 +471,16 @@ public sealed class BuildTimeCachePublicationTests
 					? Mutate(bytes, mutation)
 					: bytes;
 			});
-		var catalog = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile();
-		var entries = mutation == "artifact-kind-counts"
-			? new[]
-			{
-				catalog.First(value => value.IsAlreadyDecided),
-				catalog.First(value => !value.IsAlreadyDecided)
-			}
-			: [catalog.First(value => value.IsAlreadyDecided)];
 		var directory = Directory.CreateTempSubdirectory("werewolves-cache-mutated-diagnostics-");
 		var artifactPath = Path.Combine(directory.FullName, "cache.json");
 		var diagnosticsPath = Path.Combine(directory.FullName, "diagnostics.json");
 		File.WriteAllText(artifactPath, "previous");
 		try
 		{
-			var result = generator.GenerateToFiles(artifactPath, diagnosticsPath, entries);
+			var result = generator.PublishCompletedResult(
+				artifactPath,
+				diagnosticsPath,
+				BuildTimeCacheTestFixtures.Complete);
 
 			result.Status.Should().Be(BuildTimeCacheGenerationStatus.Failed);
 			File.ReadAllText(artifactPath).Should().Be("previous");
@@ -508,32 +501,88 @@ public sealed class BuildTimeCachePublicationTests
 	[Fact]
 	public void DiagnosticsJson_Read_RejectsUnknownTypedCodesAndNonCanonicalSeedOrder()
 	{
-		var entry = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()
-			.First(value => !value.IsAlreadyDecided);
-		var result = CreateGenerator((scenario, identity, count, _) =>
-			Batch(scenario, identity, count, incompleteLastRun: true))
-			.Generate([entry]);
+		var completed = BuildTimeCacheTestFixtures.WithIncompleteEvidence;
+		var diagnostics = completed.Diagnostics with
+		{
+			Status = BuildTimeCacheGenerationStatus.Failed,
+			Artifact = null
+		};
 		var canonical = Encoding.UTF8.GetString(
-			BuildTimeCacheDiagnosticsJson.Write(result.Diagnostics, result.ArtifactBytes));
+			BuildTimeCacheDiagnosticsJson.Write(diagnostics, artifactBytes: null));
 
 		BuildTimeCacheDiagnosticsJson.Read(
 			Encoding.UTF8.GetBytes(canonical.Replace(
 				"screening-incomplete",
 				"unknown-omission-x",
 				StringComparison.Ordinal)),
-			result.ArtifactBytes).Rejection.Should().NotBeNull();
+			artifactBytes: null).Rejection.Should().NotBeNull();
 		BuildTimeCacheDiagnosticsJson.Read(
 			Encoding.UTF8.GetBytes(canonical.Replace(
 				"incomplete-run",
 				"unknown-suspicion",
 				StringComparison.Ordinal)),
-			result.ArtifactBytes).Rejection.Should().NotBeNull();
+			artifactBytes: null).Rejection.Should().NotBeNull();
 		BuildTimeCacheDiagnosticsJson.Read(
 			Encoding.UTF8.GetBytes(canonical.Replace(
 				"\"batchPhase\":\"screening\"",
 				"\"batchPhase\":\"unknownxx\"",
 				StringComparison.Ordinal)),
-			result.ArtifactBytes).Rejection.Should().NotBeNull();
+			artifactBytes: null).Rejection.Should().NotBeNull();
+	}
+
+	[Fact]
+	public void DiagnosticsJson_WriteAndRead_UseTheExactDiagnosticCodeVocabulary()
+	{
+		var entry = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()
+			.First(value => !value.IsAlreadyDecided);
+		var seed = new BuildTimeIncompleteRunDiagnostic(
+			BuildTimeBatchPhase.Screening,
+			new RunSeedMaterial(
+				entry.Identity,
+				BaselineRandomDecisionStrategy.Identity,
+				runNumber: 0));
+		var diagnostics = new BuildTimeCacheGenerationDiagnostics(
+			BuildTimeTerminalLobbyCacheGenerator.GeneratorIdentifier,
+			BuildTimeTerminalLobbyCacheGenerator.GeneratorVersion,
+			BuildTimeCacheGenerationStatus.Failed,
+			TotalScenarioCount: 1_664,
+			EnumeratedScenarioCount: 4,
+			AlreadyDecidedCount: 0,
+			DegenerateCount: 0,
+			ProbabilityCount: 0,
+			OmittedCount: 4,
+			new Dictionary<BuildTimeCacheOmissionCode, int>
+			{
+				[BuildTimeCacheOmissionCode.ScreeningIncomplete] = 1,
+				[BuildTimeCacheOmissionCode.ProbabilityIncomplete] = 1,
+				[BuildTimeCacheOmissionCode.CouldNotEvaluate] = 1,
+				[BuildTimeCacheOmissionCode.TerminalRecordRejected] = 1
+			},
+			new Dictionary<BuildTimeCacheSuspicionCode, int>
+			{
+				[BuildTimeCacheSuspicionCode.IncompleteRun] = 1,
+				[BuildTimeCacheSuspicionCode.TerminalKindMismatch] = 1
+			},
+			[seed],
+			Artifact: null);
+
+		var bytes = BuildTimeCacheDiagnosticsJson.Write(diagnostics, artifactBytes: null);
+
+		using var json = JsonDocument.Parse(bytes);
+		json.RootElement.GetProperty("omissions").EnumerateArray()
+			.Select(value => value.GetProperty("code").GetString())
+			.Should().Equal(
+				"could-not-evaluate",
+				"probability-incomplete",
+				"screening-incomplete",
+				"terminal-record-rejected");
+		json.RootElement.GetProperty("suspicions").EnumerateArray()
+			.Select(value => value.GetProperty("code").GetString())
+			.Should().Equal("incomplete-run", "terminal-kind-mismatch");
+		var read = BuildTimeCacheDiagnosticsJson.Read(bytes, artifactBytes: null);
+		read.Rejection.Should().BeNull();
+		read.Diagnostics!.OmissionsByCode.Should().BeEquivalentTo(diagnostics.OmissionsByCode);
+		read.Diagnostics.SuspicionsByCode.Should().BeEquivalentTo(diagnostics.SuspicionsByCode);
 	}
 
 	[Theory]
@@ -543,9 +592,7 @@ public sealed class BuildTimeCachePublicationTests
 	[InlineData("decision-strategy")]
 	public void DiagnosticsJson_Read_RejectsMismatchedBoundaryIdentities(string mutation)
 	{
-		var entry = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()
-			.First(value => value.IsAlreadyDecided);
-		var result = CreateGenerator().Generate([entry]);
+		var result = BuildTimeCacheTestFixtures.Complete;
 		var canonical = Encoding.UTF8.GetString(
 			BuildTimeCacheDiagnosticsJson.Write(result.Diagnostics, result.ArtifactBytes));
 		var mutated = mutation switch
@@ -585,8 +632,13 @@ public sealed class BuildTimeCachePublicationTests
 		var result = CreateGenerator((scenario, identity, count, _) =>
 			Batch(scenario, identity, count, incompleteLastRun: true))
 			.Generate(entries);
+		var diagnostics = result.Diagnostics with
+		{
+			Status = BuildTimeCacheGenerationStatus.Failed,
+			Artifact = null
+		};
 		var canonical = Encoding.UTF8.GetString(
-			BuildTimeCacheDiagnosticsJson.Write(result.Diagnostics, result.ArtifactBytes));
+			BuildTimeCacheDiagnosticsJson.Write(diagnostics, artifactBytes: null));
 		var seedArray = ExtractArray(canonical, "incompleteRunSeedMaterial");
 		var separator = seedArray.IndexOf("},{", StringComparison.Ordinal);
 		separator.Should().BePositive();
@@ -604,10 +656,10 @@ public sealed class BuildTimeCachePublicationTests
 
 		BuildTimeCacheDiagnosticsJson.Read(
 			Encoding.UTF8.GetBytes(outOfOrder),
-			result.ArtifactBytes).Rejection.Should().NotBeNull();
+			artifactBytes: null).Rejection.Should().NotBeNull();
 		BuildTimeCacheDiagnosticsJson.Read(
 			Encoding.UTF8.GetBytes(duplicated),
-			result.ArtifactBytes).Rejection.Should().NotBeNull();
+			artifactBytes: null).Rejection.Should().NotBeNull();
 	}
 
 	[Fact]
@@ -618,8 +670,13 @@ public sealed class BuildTimeCachePublicationTests
 		var result = CreateGenerator((scenario, identity, count, _) =>
 			Batch(scenario, identity, count, incompleteLastRun: true))
 			.Generate([entry]);
+		var diagnostics = result.Diagnostics with
+		{
+			Status = BuildTimeCacheGenerationStatus.Failed,
+			Artifact = null
+		};
 		var canonical = Encoding.UTF8.GetString(
-			BuildTimeCacheDiagnosticsJson.Write(result.Diagnostics, result.ArtifactBytes));
+			BuildTimeCacheDiagnosticsJson.Write(diagnostics, artifactBytes: null));
 		var omissionArray = ExtractArray(canonical, "omissions");
 		var duplicateCode = ReplaceArray(
 			canonical,
@@ -632,10 +689,10 @@ public sealed class BuildTimeCachePublicationTests
 
 		BuildTimeCacheDiagnosticsJson.Read(
 			Encoding.UTF8.GetBytes(duplicateCode),
-			result.ArtifactBytes).Rejection.Should().NotBeNull();
+			artifactBytes: null).Rejection.Should().NotBeNull();
 		BuildTimeCacheDiagnosticsJson.Read(
 			Encoding.UTF8.GetBytes(outOfOrderFields),
-			result.ArtifactBytes).Rejection.Should().NotBeNull();
+			artifactBytes: null).Rejection.Should().NotBeNull();
 	}
 
 	[Fact]
@@ -658,6 +715,43 @@ public sealed class BuildTimeCachePublicationTests
 		var act = () => BuildTimeCacheDiagnosticsJson.Write(invalid, result.ArtifactBytes);
 
 		act.Should().Throw<FormatException>();
+	}
+
+	[Fact]
+	public void DiagnosticsJson_Write_RejectsCompletedPartialCatalog()
+	{
+		var entry = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()
+			.First(value => value.IsAlreadyDecided);
+		var result = CreateGenerator().Generate([entry]);
+
+		var act = () => BuildTimeCacheDiagnosticsJson.Write(
+			result.Diagnostics,
+			result.ArtifactBytes);
+		var read = BuildTimeCacheDiagnosticsJson.Read(
+			BuildTimeCacheDiagnosticsJson.WriteCanonicalFixture(result.Diagnostics),
+			result.ArtifactBytes);
+
+		act.Should().Throw<FormatException>()
+			.WithMessage("*complete current scenario catalog*");
+		read.Diagnostics.Should().BeNull();
+		read.Rejection.Should().Contain("complete current scenario catalog");
+	}
+
+	[Fact]
+	public void DiagnosticsJson_WriteAndRead_RejectCompletedOneOfOneCatalogClaim()
+	{
+		var entry = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()
+			.First(value => value.IsAlreadyDecided);
+		var partial = CreateGenerator().Generate([entry]);
+		var oneOfOne = partial.Diagnostics with { TotalScenarioCount = 1 };
+		var canonicalFixture = BuildTimeCacheDiagnosticsJson.WriteCanonicalFixture(oneOfOne);
+
+		var write = () => BuildTimeCacheDiagnosticsJson.Write(oneOfOne, partial.ArtifactBytes);
+		var read = BuildTimeCacheDiagnosticsJson.Read(canonicalFixture, partial.ArtifactBytes);
+
+		write.Should().Throw<FormatException>();
+		read.Diagnostics.Should().BeNull();
+		read.Rejection.Should().NotBeNull();
 	}
 
 	[Fact]
@@ -723,18 +817,16 @@ public sealed class BuildTimeCachePublicationTests
 		BuildTimeCachePublicationBoundary expectedBoundary)
 	{
 		var generator = CreateGenerator(fileSystem: fileSystem);
-		var entry = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()
-			.First(value => value.IsAlreadyDecided);
 		var directory = Directory.CreateTempSubdirectory("werewolves-cache-boundary-");
 		var artifactPath = Path.Combine(directory.FullName, "cache.json");
 		var diagnosticsPath = Path.Combine(directory.FullName, "diagnostics.json");
 		File.WriteAllText(artifactPath, "previous");
 		try
 		{
-			var result = generator.GenerateToFiles(
+			var result = generator.PublishCompletedResult(
 				artifactPath,
 				diagnosticsPath,
-				[entry],
+				BuildTimeCacheTestFixtures.Complete,
 				cancellationToken);
 
 			fileSystem.Boundaries.Should().Contain(expectedBoundary);
@@ -775,8 +867,12 @@ public sealed class BuildTimeCachePublicationTests
 				"\"status\":\"mysteryxx\"",
 				StringComparison.Ordinal),
 			"broken-count" => json.Replace(
-				"\"enumerated\":1",
-				"\"enumerated\":2",
+				"\"enumerated\":1664",
+				"\"enumerated\":1663",
+				StringComparison.Ordinal),
+			"broken-equation" => json.Replace(
+				"\"alreadyDecided\":832",
+				"\"alreadyDecided\":831",
 				StringComparison.Ordinal),
 			"generator-identity" => json.Replace(
 				BuildTimeTerminalLobbyCacheGenerator.GeneratorIdentifier,
@@ -789,8 +885,8 @@ public sealed class BuildTimeCachePublicationTests
 			"artifact-hash" => ReplaceArtifactHash(json),
 			"artifact-length" => ReplaceArtifactLength(json),
 			"artifact-kind-counts" => json.Replace(
-				"\"alreadyDecided\":1,\"degenerate\":1",
-				"\"alreadyDecided\":0,\"degenerate\":2",
+				"\"alreadyDecided\":832,\"degenerate\":52",
+				"\"alreadyDecided\":831,\"degenerate\":53",
 				StringComparison.Ordinal),
 			"status-artifact-combination" => json.Replace(
 				"\"status\":\"completed\"",
