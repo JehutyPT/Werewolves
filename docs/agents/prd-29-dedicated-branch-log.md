@@ -38,3 +38,27 @@ This log records decisions made while executing PRD #29 autonomously with the
   recorded before advancing the frontier; it does not change behavior after
   #79 closes, but preserves the dependency provenance.
 
+### 2026-07-15 — issue #85
+
+- Integrated deterministic headless simulation evidence through commit
+  `dc61756be191d73d732c610c25ca9401333b6892`.
+- One deterministic random source is shared by pre-game start-state derivation
+  and baseline-random Moderator decisions for each Run Seed Material value.
+- Terminal evidence accepts only the engine's bounded victory-transition pairs:
+  `Dawn -> Day` records the current turn and Dawn Victory Check Window, while
+  `Day -> Night` records the prior resolved turn and pre-Night Victory Check
+  Window. Missing, duplicate, mismatched, unsupported, same-phase, and
+  wrong-origin terminal signals remain Incomplete Simulation Runs.
+- The execution layer returns `SimulationBatchSourceEvidence`, the minimal
+  ordered run-record precursor owned by #85. Complete inventory-bearing
+  Simulation Result Evidence remains assigned to #83, so #85 does not pull
+  Possible Game Result inventory construction or aggregation forward.
+- The public five-parameter `SelectPlayersInstruction` construction seam is
+  preserved for existing Client callers while the explicit serialization
+  overload carries machine-stable Role-identification metadata.
+- Central verification at the integrated commit passed: solution restore;
+  Release Mac Catalyst x64 build with zero warnings and errors; Core tests with
+  275 passed and one known skip; Client tests with 195 passed.
+- Fresh final Standards and Spec reviews both reported no findings. The
+  canonical issue #85 contract remained byte-for-byte unchanged with SHA-256
+  `e08da083d3c3ccb0e3bcf34188193c865eeb49e2c4a68e732506464b50b69659`.
