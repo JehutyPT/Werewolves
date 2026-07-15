@@ -4,6 +4,15 @@ namespace Werewolves.Core.StateModels.Models.Simulation;
 
 public abstract class GameResult;
 
+public sealed class NoWinnerGameResult : GameResult, IEquatable<NoWinnerGameResult>
+{
+	public bool Equals(NoWinnerGameResult? other) => other is not null;
+
+	public override bool Equals(object? obj) => obj is NoWinnerGameResult;
+
+	public override int GetHashCode() => typeof(NoWinnerGameResult).GetHashCode();
+}
+
 public sealed class SingleFactionGameResult : GameResult, IEquatable<SingleFactionGameResult>
 {
 	public Faction Faction { get; }
