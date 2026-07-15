@@ -11,6 +11,37 @@ namespace Werewolves.Client.Tests.Services;
 public class AsyncTerminalLobbyEvaluatorTests
 {
 	[Fact]
+	public async Task EvaluateAsync_RuntimeCancellationObservesLateFaultBeforeReturningCancellation()
+	{
+		var clock = new ManualTimeProvider();
+		var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+		var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+		var observed = new TaskCompletionSource<Task>(
+			TaskCreationOptions.RunContinuationsAsynchronously);
+		var adapter = new AsyncTerminalLobbyEvaluator(
+			(_, token) =>
+			{
+				started.TrySetResult();
+				release.Task.GetAwaiter().GetResult();
+				throw new InvalidOperationException("injected late failure");
+			},
+			clock,
+			late => observed.TrySetResult(late));
+		using var cancellation = new CancellationTokenSource();
+		var evaluation = adapter.EvaluateAsync(SupportedScenario(), cancellation.Token);
+		await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+		cancellation.Cancel();
+		await evaluation.Invoking(task => task)
+			.Should().ThrowAsync<OperationCanceledException>();
+		var lateTask = await observed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+		release.TrySetResult();
+		await lateTask.Invoking(task => task)
+			.Should().ThrowAsync<InvalidOperationException>();
+	}
+
+	[Fact]
 	public async Task EvaluateAsync_AtExactlyTenSecondsRequestsCancellationAndReturnsWithoutWaiting()
 	{
 		var clock = new ManualTimeProvider();

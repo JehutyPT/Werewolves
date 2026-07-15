@@ -13,6 +13,7 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 	private readonly ILocalTerminalLobbyCacheStore _localCache;
 	private readonly ILobbyTerminalEvaluator _evaluator;
 	private readonly TimeProvider _timeProvider;
+	private readonly Func<SimulationScenario, LobbyScenarioSupport> _classify;
 	private readonly object _sync = new();
 	private EvaluationRequest? _currentRequest;
 	private bool _disposed;
@@ -23,12 +24,24 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 		ILocalTerminalLobbyCacheStore localCache,
 		ILobbyTerminalEvaluator evaluator,
 		TimeProvider? timeProvider = null)
+		: this(lobby, bundledCache, localCache, evaluator, timeProvider, ClassifyScenario)
+	{
+	}
+
+	internal LobbyEvaluationCoordinator(
+		LobbySetupState lobby,
+		ITerminalLobbyCacheByteSource bundledCache,
+		ILocalTerminalLobbyCacheStore localCache,
+		ILobbyTerminalEvaluator evaluator,
+		TimeProvider? timeProvider,
+		Func<SimulationScenario, LobbyScenarioSupport> classify)
 	{
 		_lobby = lobby ?? throw new ArgumentNullException(nameof(lobby));
 		_bundledCache = bundledCache ?? throw new ArgumentNullException(nameof(bundledCache));
 		_localCache = localCache ?? throw new ArgumentNullException(nameof(localCache));
 		_evaluator = evaluator ?? throw new ArgumentNullException(nameof(evaluator));
 		_timeProvider = timeProvider ?? TimeProvider.System;
+		_classify = classify ?? throw new ArgumentNullException(nameof(classify));
 		State = LobbyEvaluationState.NotApplicable();
 		_lobby.SimulationScenarioChanged += HandleSimulationScenarioChanged;
 		RestartForCurrentScenario();
@@ -89,8 +102,14 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 		}
 
 		previous.Cancel();
-		changed?.Invoke(this, EventArgs.Empty);
-		_ = ResolveAsync(retry);
+		try
+		{
+			changed?.Invoke(this, EventArgs.Empty);
+		}
+		finally
+		{
+			StartPipeline(retry);
+		}
 		return true;
 	}
 
@@ -111,14 +130,13 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 			}
 
 			var scenario = _lobby.CreateSimulationScenario();
-			var classification = SimulationScenarioClassifier.Classify(scenario);
-			if (!classification.RulesValidity.IsValid
-				|| classification.AppSupport is not { IsSupported: true })
+			var support = _classify(scenario);
+			if (!support.RulesValid || !support.AppSupported)
 			{
 				replacement = null;
 				nextState = LobbyEvaluationState.NotApplicable();
 			}
-			else if (classification.SimulatorSupport is not { IsSupported: true } simulatorSupport)
+			else if (support.SimulatorProfile is not { } simulatorProfile)
 			{
 				replacement = null;
 				nextState = LobbyEvaluationState.SimulatorUnavailable();
@@ -127,7 +145,7 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 			{
 				var identity = new SimulationCompatibilityIdentity(
 					scenario.ToCanonical(),
-					simulatorSupport.Profile.Identity);
+					simulatorProfile.Identity);
 				replacement = new EvaluationRequest(scenario, identity);
 				nextState = LobbyEvaluationState.Pending(identity);
 			}
@@ -145,10 +163,43 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 			}
 		}
 		previous?.Cancel();
-		changed?.Invoke(this, EventArgs.Empty);
-		if (replacement is not null)
+		try
 		{
-			_ = ResolveAsync(replacement);
+			changed?.Invoke(this, EventArgs.Empty);
+		}
+		finally
+		{
+			if (replacement is not null)
+			{
+				StartPipeline(replacement);
+			}
+		}
+	}
+
+	private static LobbyScenarioSupport ClassifyScenario(SimulationScenario scenario)
+	{
+		var classification = SimulationScenarioClassifier.Classify(scenario);
+		return new LobbyScenarioSupport(
+			classification.RulesValidity.IsValid,
+			classification.AppSupport is { IsSupported: true },
+			classification.SimulatorSupport is { IsSupported: true } simulatorSupport
+				? simulatorSupport.Profile
+				: null);
+	}
+
+	private void StartPipeline(EvaluationRequest request) =>
+		_ = RunPipelineAsync(request);
+
+	private async Task RunPipelineAsync(EvaluationRequest request)
+	{
+		try
+		{
+			await ResolveAsync(request);
+		}
+		finally
+		{
+			request.DisposeAfterDrain();
+			request.MarkDrained();
 		}
 	}
 
@@ -159,6 +210,10 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 			await Task.Yield();
 			request.Token.ThrowIfCancellationRequested();
 			var bundledBytes = await ReadBundledAsync(request.Token);
+			if (!IsCurrent(request))
+			{
+				return;
+			}
 			if (TrySelectRecord(bundledBytes, request.Identity, out var bundledRecord))
 			{
 				PublishIfCurrent(request, LobbyEvaluationState.Terminal(bundledRecord));
@@ -167,6 +222,10 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 
 			request.Token.ThrowIfCancellationRequested();
 			var localBytes = await ReadLocalAsync(request.Token);
+			if (!IsCurrent(request))
+			{
+				return;
+			}
 			var localDocument = ReadUsableDocument(localBytes);
 			if (localDocument is not null
 				&& TerminalLobbyCache.TryGet(localDocument, request.Identity, out var localRecord))
@@ -178,7 +237,10 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 			await WaitForFallbackAsync(request);
 			request.Token.ThrowIfCancellationRequested();
 			var evaluation = await _evaluator.EvaluateAsync(request.Scenario, request.Token);
-			request.Token.ThrowIfCancellationRequested();
+			if (!IsCurrent(request))
+			{
+				return;
+			}
 			if (evaluation is not TerminalLobbyEvaluation terminal)
 			{
 				PublishIfCurrent(request, LobbyEvaluationState.CouldNotEvaluate(request.Identity));
@@ -207,7 +269,24 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 			var bytes = TerminalLobbyCache.Write(TerminalLobbyCache.CreateDocument(records));
 			try
 			{
-				await _localCache.WriteAsync(bytes, request.Token);
+				await using var staged = await _localCache.StageWriteAsync(bytes, request.Token);
+				if (!IsCurrent(request))
+				{
+					return;
+				}
+
+				staged.TryCommit(commit =>
+				{
+					lock (_sync)
+					{
+						if (!IsCurrentUnsafe(request))
+						{
+							return false;
+						}
+						commit();
+						return true;
+					}
+				});
 			}
 			catch (OperationCanceledException) when (request.IsCancellationRequested)
 			{
@@ -231,8 +310,14 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 
 	private async Task WaitForFallbackAsync(EvaluationRequest request)
 	{
-		var delay = Task.Delay(FallbackQuietPeriod, _timeProvider, request.Token);
-		await Task.WhenAny(delay, request.AccelerateFallback.Task);
+		using var delayCancellation =
+			CancellationTokenSource.CreateLinkedTokenSource(request.Token);
+		var delay = Task.Delay(FallbackQuietPeriod, _timeProvider, delayCancellation.Token);
+		var completed = await Task.WhenAny(delay, request.AccelerateFallback.Task);
+		if (completed != delay)
+		{
+			delayCancellation.Cancel();
+		}
 		request.Token.ThrowIfCancellationRequested();
 	}
 
@@ -324,9 +409,23 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 	{
 		lock (_sync)
 		{
-			return !_disposed
-				&& !request.IsCancellationRequested
-				&& ReferenceEquals(_currentRequest, request);
+			return IsCurrentUnsafe(request);
+		}
+	}
+
+	private bool IsCurrentUnsafe(EvaluationRequest request) =>
+		!_disposed
+		&& !request.IsCancellationRequested
+		&& ReferenceEquals(_currentRequest, request);
+
+	internal Task CurrentPipelineCompletion
+	{
+		get
+		{
+			lock (_sync)
+			{
+				return _currentRequest?.Drained ?? Task.CompletedTask;
+			}
 		}
 	}
 
@@ -352,18 +451,61 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 		SimulationScenario scenario,
 		SimulationCompatibilityIdentity identity)
 	{
+		private readonly object _sync = new();
 		private readonly CancellationTokenSource _cancellation = new();
+		private readonly TaskCompletionSource _drained =
+			new(TaskCreationOptions.RunContinuationsAsynchronously);
+		private bool _cancellationRequested;
+		private bool _disposed;
 
 		public SimulationScenario Scenario { get; } = scenario;
 		public SimulationCompatibilityIdentity Identity { get; } = identity;
 		public TaskCompletionSource AccelerateFallback { get; } =
 			new(TaskCreationOptions.RunContinuationsAsynchronously);
 		public CancellationToken Token => _cancellation.Token;
-		public bool IsCancellationRequested => _cancellation.IsCancellationRequested;
+		public bool IsCancellationRequested
+		{
+			get
+			{
+				lock (_sync)
+				{
+					return _cancellationRequested;
+				}
+			}
+		}
+		public Task Drained => _drained.Task;
 
 		public void Cancel()
 		{
-			_cancellation.Cancel();
+			lock (_sync)
+			{
+				if (_disposed || _cancellationRequested)
+				{
+					return;
+				}
+				_cancellationRequested = true;
+				_cancellation.Cancel();
+			}
 		}
+
+		public void DisposeAfterDrain()
+		{
+			lock (_sync)
+			{
+				if (_disposed)
+				{
+					return;
+				}
+				_disposed = true;
+				_cancellation.Dispose();
+			}
+		}
+
+		public void MarkDrained() => _drained.TrySetResult();
 	}
 }
+
+internal readonly record struct LobbyScenarioSupport(
+	bool RulesValid,
+	bool AppSupported,
+	SimulatorProfile? SimulatorProfile);

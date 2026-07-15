@@ -40,7 +40,7 @@ namespace Werewolves.Client
             builder.AddAudio();
 
             builder.Services.AddMauiBlazorWebView();
-			builder.Services.AddSingleton<TimeProvider>(_ => TimeProvider.System);
+			builder.Services.AddNativeLobbyEvaluationServices();
             builder.Services.AddSingleton<GameService>();
             builder.Services.AddSingleton<LobbySetupMetadata>(sp =>
                 sp.GetRequiredService<GameService>().GetLobbySetupMetadata());
@@ -63,11 +63,6 @@ namespace Werewolves.Client
             builder.Services.AddSingleton<IScreenWakeLock, DeviceDisplayScreenWakeLock>();
             builder.Services.AddSingleton<GameplayWakeLockController>();
             builder.Services.AddSingleton<IHapticFeedbackService, MauiHapticFeedbackService>();
-			builder.Services.AddSingleton<ITerminalLobbyCacheByteSource, MauiTerminalLobbyCacheByteSource>();
-			builder.Services.AddSingleton<ILocalTerminalLobbyCacheStore>(
-				FileTerminalLobbyCacheStore.CreateDefault());
-			builder.Services.AddSingleton<ILobbyTerminalEvaluator, AsyncTerminalLobbyEvaluator>();
-			builder.Services.AddSingleton<LobbyEvaluationCoordinator>();
 
 #if DEBUG
             builder.Services.AddSingleton<BenchmarkClientManager>();

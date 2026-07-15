@@ -7,6 +7,46 @@ namespace Werewolves.Client.Tests.Services;
 public class TerminalLobbyCacheAdapterTests
 {
 	[Fact]
+	public async Task FileStore_CommitAuthorizationSerializesOverlappingWritersAndKeepsCurrentBytes()
+	{
+		var directory = NewTemporaryDirectory();
+		try
+		{
+			var store = new FileTerminalLobbyCacheStore(directory);
+			await using var stale = await store.StageWriteAsync("stale"u8.ToArray());
+			await using var current = await store.StageWriteAsync("current"u8.ToArray());
+			var staleAtBoundary = new TaskCompletionSource(
+				TaskCreationOptions.RunContinuationsAsynchronously);
+			var releaseStale = new ManualResetEventSlim();
+			var staleCommit = Task.Run(() => stale.TryCommit(commit =>
+			{
+				staleAtBoundary.TrySetResult();
+				releaseStale.Wait();
+				return false;
+			}));
+			await staleAtBoundary.Task.WaitAsync(TimeSpan.FromSeconds(5));
+			var currentCommit = Task.Run(() => current.TryCommit(commit =>
+			{
+				commit();
+				return true;
+			}));
+
+			currentCommit.IsCompleted.Should().BeFalse(
+				"the actual commit boundary is serialized across staged writers");
+			releaseStale.Set();
+			(await staleCommit).Should().BeFalse();
+			(await currentCommit).Should().BeTrue();
+
+			var committed = await store.ReadAsync();
+			committed!.Value.ToArray().Should().Equal("current"u8.ToArray());
+		}
+		finally
+		{
+			Directory.Delete(directory, recursive: true);
+		}
+	}
+
+	[Fact]
 	public async Task MauiByteSource_ForwardsExactLogicalNameAndPreservesBytes()
 	{
 		string? opened = null;

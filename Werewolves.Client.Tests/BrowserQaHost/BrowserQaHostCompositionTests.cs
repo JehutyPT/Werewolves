@@ -13,7 +13,10 @@ using Werewolves.Client.Components;
 using Werewolves.Client.Resources;
 using Werewolves.Client.Services;
 using Werewolves.Client.Tests.Helpers;
+using Werewolves.Core.GameLogic.Simulation;
+using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Models.Instructions;
+using Werewolves.Core.StateModels.Models.Simulation;
 using Xunit;
 using Html = Werewolves.Client.Tests.Helpers.ClientTestReferences.Html;
 
@@ -21,6 +24,24 @@ namespace Werewolves.Client.Tests.BrowserQaHost;
 
 public class BrowserQaHostCompositionTests
 {
+	[Fact]
+	public async Task BrowserComposition_UsesBoundedSemanticCacheFixtureWithoutLiveFallback()
+	{
+		using var context = new BunitContext();
+		var evaluator = new CountingEvaluator();
+		var source = new SemanticFixtureByteSource();
+		context.Services.AddScoped<ITerminalLobbyCacheByteSource>(_ => source);
+		context.Services.AddScoped<ILobbyTerminalEvaluator>(_ => evaluator);
+		context.Services.AddBrowserQaHostModeratorServices();
+
+		var coordinator = context.Services.GetRequiredService<LobbyEvaluationCoordinator>();
+		await WaitForStateAsync(coordinator, LobbyEvaluationStateKind.Probability);
+
+		source.LogicalNames.Should().Equal("terminal-lobby-cache.json");
+		evaluator.CallCount.Should().Be(0);
+		coordinator.State.TerminalRecord.Should().BeOfType<ProbabilityTerminalCacheRecord>();
+	}
+
 	[Fact]
 	public async Task Services_RenderSharedRoutesWithBrowserSafeAdapters()
 	{
@@ -147,6 +168,75 @@ public class BrowserQaHostCompositionTests
 
 	private static IElement FindButtonByText<TComponent>(IRenderedComponent<TComponent> rendered, string text)
 		where TComponent : IComponent =>
-		rendered.FindAll(Html.Selectors.Button)
+			rendered.FindAll(Html.Selectors.Button)
 			.Single(button => button.TextContent.Contains(text, StringComparison.CurrentCulture));
+
+	private static Task WaitForStateAsync(
+		LobbyEvaluationCoordinator coordinator,
+		LobbyEvaluationStateKind expected)
+	{
+		if (coordinator.State.Kind == expected)
+		{
+			return Task.CompletedTask;
+		}
+		var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+		EventHandler? changed = null;
+		changed = (_, _) =>
+		{
+			if (coordinator.State.Kind != expected)
+			{
+				return;
+			}
+			coordinator.StateChanged -= changed;
+			completion.TrySetResult();
+		};
+		coordinator.StateChanged += changed;
+		return completion.Task.WaitAsync(TimeSpan.FromSeconds(5));
+	}
+
+	private sealed class SemanticFixtureByteSource : ITerminalLobbyCacheByteSource
+	{
+		public List<string> LogicalNames { get; } = [];
+
+		public ValueTask<ReadOnlyMemory<byte>?> ReadAsync(
+			string logicalName,
+			CancellationToken cancellationToken = default)
+		{
+			LogicalNames.Add(logicalName);
+			var scenario = new SimulationScenario(
+				BrowserQaFixtures.DefaultPlayerNames.Count,
+				BrowserQaFixtures.DefaultRoles);
+			var identity = new SimulationCompatibilityIdentity(
+				scenario.ToCanonical(),
+				SimulatorProfile.Active.Identity);
+			var record = new ProbabilityTerminalCacheRecord(
+				identity,
+				[
+					new(new SingleFactionGameResult(Faction.Villager), 7_000, 10_000),
+					new(new SingleFactionGameResult(Faction.Werewolf), 3_000, 10_000),
+					new(new NoWinnerGameResult(), 0, 10_000)
+				],
+				[
+					new(new SingleFactionGameResult(Faction.Villager), 1,
+						VictoryCheckWindow.Dawn, 7_000, 10_000),
+					new(new SingleFactionGameResult(Faction.Werewolf), 2,
+						VictoryCheckWindow.PreNight, 3_000, 10_000)
+				]);
+			return ValueTask.FromResult<ReadOnlyMemory<byte>?>(
+				TerminalLobbyCache.Write(TerminalLobbyCache.CreateDocument([record])));
+		}
+	}
+
+	private sealed class CountingEvaluator : ILobbyTerminalEvaluator
+	{
+		public int CallCount { get; private set; }
+
+		public Task<LobbyEvaluationResult> EvaluateAsync(
+			SimulationScenario scenario,
+			CancellationToken cancellationToken = default)
+		{
+			CallCount++;
+			return Task.FromResult<LobbyEvaluationResult>(new CouldNotEvaluateLobbyEvaluation());
+		}
+	}
 }

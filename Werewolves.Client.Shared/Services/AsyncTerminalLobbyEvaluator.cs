@@ -9,6 +9,7 @@ public sealed class AsyncTerminalLobbyEvaluator : ILobbyTerminalEvaluator
 
 	private readonly Func<SimulationScenario, CancellationToken, LobbyEvaluationResult> _evaluate;
 	private readonly TimeProvider _timeProvider;
+	private readonly Action<Task> _observeLate;
 
 	public AsyncTerminalLobbyEvaluator(TimeProvider timeProvider)
 		: this(new TerminalLobbyEvaluator().Evaluate, timeProvider)
@@ -18,9 +19,18 @@ public sealed class AsyncTerminalLobbyEvaluator : ILobbyTerminalEvaluator
 	internal AsyncTerminalLobbyEvaluator(
 		Func<SimulationScenario, CancellationToken, LobbyEvaluationResult> evaluate,
 		TimeProvider timeProvider)
+		: this(evaluate, timeProvider, ObserveLateCompletion)
+	{
+	}
+
+	internal AsyncTerminalLobbyEvaluator(
+		Func<SimulationScenario, CancellationToken, LobbyEvaluationResult> evaluate,
+		TimeProvider timeProvider,
+		Action<Task> observeLate)
 	{
 		_evaluate = evaluate ?? throw new ArgumentNullException(nameof(evaluate));
 		_timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
+		_observeLate = observeLate ?? throw new ArgumentNullException(nameof(observeLate));
 	}
 
 	public async Task<LobbyEvaluationResult> EvaluateAsync(
@@ -45,15 +55,17 @@ public sealed class AsyncTerminalLobbyEvaluator : ILobbyTerminalEvaluator
 		if (completed == timeout)
 		{
 			evaluationCancellation.Cancel();
+			_observeLate(evaluation);
 			cancellationToken.ThrowIfCancellationRequested();
-			ObserveLateCompletion(evaluation);
 			return new CouldNotEvaluateLobbyEvaluation();
 		}
 
 		try
 		{
 			timeoutCancellation.Cancel();
-			return await evaluation;
+			var result = await evaluation;
+			cancellationToken.ThrowIfCancellationRequested();
+			return result;
 		}
 		catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
 		{

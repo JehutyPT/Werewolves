@@ -7,6 +7,8 @@ public sealed class FileTerminalLobbyCacheStore : ILocalTerminalLobbyCacheStore
 
 	private readonly string _cacheFilePath;
 	private readonly Func<string, ReadOnlyMemory<byte>, CancellationToken, Task> _writeTemporary;
+	private readonly object _commitSync = new();
+	private readonly HashSet<string> _activeTemporaryPaths = new(StringComparer.Ordinal);
 
 	public FileTerminalLobbyCacheStore(string appDataDirectory)
 		: this(appDataDirectory, WriteTemporaryAsync)
@@ -45,32 +47,44 @@ public sealed class FileTerminalLobbyCacheStore : ILocalTerminalLobbyCacheStore
 		return await File.ReadAllBytesAsync(_cacheFilePath, cancellationToken);
 	}
 
-	public async ValueTask WriteAsync(
+	public async ValueTask<ILocalTerminalLobbyCacheWrite> StageWriteAsync(
 		ReadOnlyMemory<byte> bytes,
 		CancellationToken cancellationToken = default)
 	{
 		cancellationToken.ThrowIfCancellationRequested();
 		Directory.CreateDirectory(AppDataDirectory);
-		DeleteTemporaryArtifacts();
 		var temporaryPath = Path.Combine(
 			AppDataDirectory,
 			$"{CacheFileName}.{Guid.NewGuid():N}.tmp");
-		var committed = false;
+		lock (_commitSync)
+		{
+			DeleteAbandonedTemporaryArtifacts();
+			_activeTemporaryPaths.Add(temporaryPath);
+		}
 		try
 		{
 			await _writeTemporary(temporaryPath, bytes, cancellationToken);
-			cancellationToken.ThrowIfCancellationRequested();
-			Commit(temporaryPath);
-			committed = true;
+			return new StagedWrite(this, temporaryPath);
 		}
-		finally
+		catch
 		{
-			if (!committed)
-			{
-				TryDelete(temporaryPath);
-			}
-			DeleteTemporaryArtifacts();
+			Abandon(temporaryPath);
+			throw;
 		}
+	}
+
+	public async ValueTask WriteAsync(
+		ReadOnlyMemory<byte> bytes,
+		CancellationToken cancellationToken = default)
+	{
+		await using var staged = await StageWriteAsync(bytes, cancellationToken);
+		cancellationToken.ThrowIfCancellationRequested();
+		staged.TryCommit(commit =>
+		{
+			cancellationToken.ThrowIfCancellationRequested();
+			commit();
+			return true;
+		});
 	}
 
 	private static Task WriteTemporaryAsync(
@@ -105,7 +119,56 @@ public sealed class FileTerminalLobbyCacheStore : ILocalTerminalLobbyCacheStore
 		}
 	}
 
-	private void DeleteTemporaryArtifacts()
+	private bool TryCommit(
+		StagedWrite staged,
+		Func<Action, bool> commitIfAuthorized)
+	{
+		ArgumentNullException.ThrowIfNull(commitIfAuthorized);
+		lock (_commitSync)
+		{
+			staged.ThrowIfCompleted();
+			var committed = false;
+			try
+			{
+				var authorized = commitIfAuthorized(() =>
+				{
+					if (committed)
+					{
+						throw new InvalidOperationException(
+							"A staged write can be committed only once.");
+					}
+					Commit(staged.TemporaryPath);
+					committed = true;
+				});
+				if (authorized != committed)
+				{
+					throw new InvalidOperationException(
+						"Commit authorization must return whether it invoked the commit action.");
+				}
+				return committed;
+			}
+			finally
+			{
+				staged.MarkCompleted();
+				_activeTemporaryPaths.Remove(staged.TemporaryPath);
+				if (!committed)
+				{
+					TryDelete(staged.TemporaryPath);
+				}
+			}
+		}
+	}
+
+	private void Abandon(string temporaryPath)
+	{
+		lock (_commitSync)
+		{
+			_activeTemporaryPaths.Remove(temporaryPath);
+			TryDelete(temporaryPath);
+		}
+	}
+
+	private void DeleteAbandonedTemporaryArtifacts()
 	{
 		if (!Directory.Exists(AppDataDirectory))
 		{
@@ -114,7 +177,10 @@ public sealed class FileTerminalLobbyCacheStore : ILocalTerminalLobbyCacheStore
 
 		foreach (var path in Directory.GetFiles(AppDataDirectory, TemporaryFileSearchPattern))
 		{
-			TryDelete(path);
+			if (!_activeTemporaryPaths.Contains(path))
+			{
+				TryDelete(path);
+			}
 		}
 	}
 
@@ -133,5 +199,37 @@ public sealed class FileTerminalLobbyCacheStore : ILocalTerminalLobbyCacheStore
 		catch (UnauthorizedAccessException)
 		{
 		}
+	}
+
+	private sealed class StagedWrite(
+		FileTerminalLobbyCacheStore owner,
+		string temporaryPath) : ILocalTerminalLobbyCacheWrite
+	{
+		private bool _completed;
+
+		public string TemporaryPath { get; } = temporaryPath;
+
+		public bool TryCommit(Func<Action, bool> commitIfAuthorized) =>
+			owner.TryCommit(this, commitIfAuthorized);
+
+		public ValueTask DisposeAsync()
+		{
+			lock (owner._commitSync)
+			{
+				if (_completed)
+				{
+					return ValueTask.CompletedTask;
+				}
+				_completed = true;
+				owner._activeTemporaryPaths.Remove(TemporaryPath);
+				TryDelete(TemporaryPath);
+				return ValueTask.CompletedTask;
+			}
+		}
+
+		public void ThrowIfCompleted() =>
+			ObjectDisposedException.ThrowIf(_completed, this);
+
+		public void MarkCompleted() => _completed = true;
 	}
 }

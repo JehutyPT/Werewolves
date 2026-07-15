@@ -74,9 +74,14 @@ public interface ILocalTerminalLobbyCacheStore
 	ValueTask<ReadOnlyMemory<byte>?> ReadAsync(
 		CancellationToken cancellationToken = default);
 
-	ValueTask WriteAsync(
+	ValueTask<ILocalTerminalLobbyCacheWrite> StageWriteAsync(
 		ReadOnlyMemory<byte> bytes,
 		CancellationToken cancellationToken = default);
+}
+
+public interface ILocalTerminalLobbyCacheWrite : IAsyncDisposable
+{
+	bool TryCommit(Func<Action, bool> commitIfAuthorized);
 }
 
 public interface ILobbyTerminalEvaluator
@@ -118,16 +123,55 @@ public sealed class InMemoryTerminalLobbyCacheStore : ILocalTerminalLobbyCacheSt
 		}
 	}
 
-	public ValueTask WriteAsync(
+	public ValueTask<ILocalTerminalLobbyCacheWrite> StageWriteAsync(
 		ReadOnlyMemory<byte> bytes,
 		CancellationToken cancellationToken = default)
 	{
 		cancellationToken.ThrowIfCancellationRequested();
-		lock (_sync)
+		return ValueTask.FromResult<ILocalTerminalLobbyCacheWrite>(
+			new InMemoryWrite(this, bytes.ToArray()));
+	}
+
+	private sealed class InMemoryWrite(
+		InMemoryTerminalLobbyCacheStore owner,
+		byte[] bytes) : ILocalTerminalLobbyCacheWrite
+	{
+		private bool _completed;
+
+		public bool TryCommit(Func<Action, bool> commitIfAuthorized)
 		{
-			_bytes = bytes.ToArray();
+			ArgumentNullException.ThrowIfNull(commitIfAuthorized);
+			lock (owner._sync)
+			{
+				ObjectDisposedException.ThrowIf(_completed, this);
+				var committed = false;
+				var authorized = commitIfAuthorized(() =>
+				{
+					if (committed)
+					{
+						throw new InvalidOperationException("A staged write can be committed only once.");
+					}
+					owner._bytes = bytes.ToArray();
+					committed = true;
+				});
+				if (authorized != committed)
+				{
+					throw new InvalidOperationException(
+						"Commit authorization must return whether it invoked the commit action.");
+				}
+				_completed = true;
+				return committed;
+			}
 		}
-		return ValueTask.CompletedTask;
+
+		public ValueTask DisposeAsync()
+		{
+			lock (owner._sync)
+			{
+				_completed = true;
+			}
+			return ValueTask.CompletedTask;
+		}
 	}
 }
 
