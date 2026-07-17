@@ -10,18 +10,26 @@ public sealed class BrowserQaScenarioTerminalLobbyCacheByteSource(
 	NavigationManager navigation) : ITerminalLobbyCacheByteSource
 {
 	private static readonly ReadOnlyMemory<byte> ProbabilityFixture = CreateProbabilityFixture();
+	private static readonly ReadOnlyMemory<byte> DegenerateFixture = CreateDegenerateFixture();
 
 	public ValueTask<ReadOnlyMemory<byte>?> ReadAsync(
 		string logicalName,
 		CancellationToken cancellationToken = default)
 	{
 		cancellationToken.ThrowIfCancellationRequested();
-		var isProbabilityScenario =
-			BrowserQaScenarioSelection.FromUri(navigation.Uri) == BrowserQaScenario.Probability;
+		if (logicalName != LobbyEvaluationCoordinator.BundledCacheLogicalName)
+		{
+			return ValueTask.FromResult<ReadOnlyMemory<byte>?>(null);
+		}
+
+		var fixture = BrowserQaScenarioSelection.FromUri(navigation.Uri) switch
+		{
+			BrowserQaScenario.Probability => ProbabilityFixture,
+			BrowserQaScenario.Degenerate => DegenerateFixture,
+			_ => (ReadOnlyMemory<byte>?)null
+		};
 		return ValueTask.FromResult<ReadOnlyMemory<byte>?>(
-			isProbabilityScenario && logicalName == LobbyEvaluationCoordinator.BundledCacheLogicalName
-				? ProbabilityFixture
-				: null);
+			fixture);
 	}
 
 	private static ReadOnlyMemory<byte> CreateProbabilityFixture()
@@ -53,6 +61,30 @@ public sealed class BrowserQaScenarioTerminalLobbyCacheByteSource(
 				new(werewolf, 2, VictoryCheckWindow.PreNight, 1_000, 10_000),
 				new(werewolf, 3, VictoryCheckWindow.Dawn, 500, 10_000),
 				new(werewolf, 4, VictoryCheckWindow.PreNight, 500, 10_000)
+			]);
+		return TerminalLobbyCache.Write(TerminalLobbyCache.CreateDocument([record]));
+	}
+
+	private static ReadOnlyMemory<byte> CreateDegenerateFixture()
+	{
+		var scenario = new SimulationScenario(
+			BrowserQaFixtures.DefaultPlayerNames.Count,
+			BrowserQaFixtures.DefaultRoles);
+		var identity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorProfile.Active.Identity);
+		var villager = new SingleFactionGameResult(Faction.Villager);
+		var werewolf = new SingleFactionGameResult(Faction.Werewolf);
+		var record = new DegenerateTerminalCacheRecord(
+			identity,
+			[
+				new(villager, 750, 1_000),
+				new(werewolf, 250, 1_000),
+				new(new NoWinnerGameResult(), 0, 1_000)
+			],
+			[
+				new(villager, 1, VictoryCheckWindow.Dawn, 750, 1_000),
+				new(werewolf, 1, VictoryCheckWindow.PreNight, 250, 1_000)
 			]);
 		return TerminalLobbyCache.Write(TerminalLobbyCache.CreateDocument([record]));
 	}

@@ -232,6 +232,16 @@ public class LobbyEvaluationPanelTests
 		cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationPanel)).Should().BeEmpty();
 	}
 
+	[Fact]
+	public void ScreeningPassed_RendersNoEvaluationPanel()
+	{
+		using var context = new ModeratorComponentTestContext();
+		var cut = context.RenderModeratorComponent<LobbyEvaluationPanel>(parameters => parameters
+			.Add(component => component.State, LobbyEvaluationState.ScreeningPassed(CreateIdentity())));
+
+		cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationPanel)).Should().BeEmpty();
+	}
+
 	private static SimulationCompatibilityIdentity CreateIdentity(
 		int villagers = 3,
 		int werewolves = 2)

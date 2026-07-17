@@ -1,9 +1,15 @@
 @using Werewolves.Client.Components
+@implements IDisposable
 @inject NavigationManager Navigation
 @inject LobbySetupState Lobby
 @inject GameClientManager Game
+@inject LobbyEvaluationCoordinator Evaluation
 
 <Routes />
+<output data-testid="browser-qa-evaluation-state"
+		data-state="@Evaluation.State.Kind"
+		hidden
+		aria-hidden="true">@Evaluation.State.Kind</output>
 
 @code {
 	protected override void OnInitialized()
@@ -12,5 +18,11 @@
 			BrowserQaScenarioSelection.FromUri(Navigation.Uri),
 			Lobby,
 			Game);
+		Evaluation.StateChanged += HandleEvaluationStateChanged;
 	}
+
+	private void HandleEvaluationStateChanged(object? sender, EventArgs args) =>
+		_ = InvokeAsync(StateHasChanged);
+
+	public void Dispose() => Evaluation.StateChanged -= HandleEvaluationStateChanged;
 }

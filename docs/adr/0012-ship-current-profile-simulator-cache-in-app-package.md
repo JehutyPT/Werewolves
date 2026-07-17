@@ -12,3 +12,5 @@ This resolves ADR-0009's distribution deferral only for the current simulator pr
 ## Consequences
 
 The app package carries the reviewed 2,337,001-byte artifact and ordinary builds package it without regenerating it. Changing those bytes requires explicit Build-Time Cache Generation and integrity review. On-device generation remains a bounded fallback for a missing or unusable compatible record, not a replacement distribution channel.
+
+The artifact remains packaged while production lobby evaluation operates in safety-only mode under ADR-0013. Already-decided and degenerate records continue to serve the safety gates. An existing probability record may establish that a scenario already passed screening, but its probability payload and supporting presentation remain dormant and are not exposed as Game Result Frequency or Ended-By-Turn Frequency. This disablement does not require regenerating or deleting the reviewed artifact. Any richer simulator product is parked as future work in PRD #94.

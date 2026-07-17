@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Werewolves.Core.GameLogic.Simulation;
 
 namespace Werewolves.Client.Services;
 
@@ -9,12 +10,22 @@ public static class NativeLobbyEvaluationServiceCollectionExtensions
 		this IServiceCollection services)
 	{
 		ArgumentNullException.ThrowIfNull(services);
+		services.TryAddSingleton(
+			new LobbyEvaluationSettings(LobbyEvaluationDepth.DegenerateScreeningOnly));
 		services.TryAddSingleton<TimeProvider>(_ => TimeProvider.System);
 		services.TryAddSingleton<ITerminalLobbyCacheByteSource, MauiTerminalLobbyCacheByteSource>();
 		services.TryAddSingleton<ILocalTerminalLobbyCacheStore>(
 			FileTerminalLobbyCacheStore.CreateDefault());
-		services.TryAddSingleton<ILobbyTerminalEvaluator, AsyncTerminalLobbyEvaluator>();
-		services.TryAddSingleton<LobbyEvaluationCoordinator>();
+		services.TryAddSingleton<ILobbyTerminalEvaluator>(provider =>
+			new AsyncTerminalLobbyEvaluator(provider.GetRequiredService<TimeProvider>()));
+		services.TryAddSingleton(provider =>
+			new LobbyEvaluationCoordinator(
+				provider.GetRequiredService<LobbySetupState>(),
+				provider.GetRequiredService<ITerminalLobbyCacheByteSource>(),
+				provider.GetRequiredService<ILocalTerminalLobbyCacheStore>(),
+				provider.GetRequiredService<ILobbyTerminalEvaluator>(),
+				provider.GetRequiredService<LobbyEvaluationSettings>().Depth,
+				provider.GetRequiredService<TimeProvider>()));
 		return services;
 	}
 }

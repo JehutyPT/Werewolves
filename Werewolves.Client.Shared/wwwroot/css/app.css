@@ -379,6 +379,12 @@ button {
   min-height: 54px;
 }
 
+.ww-secondary-button:focus-visible,
+.ww-btn-primary:focus-visible {
+  outline: 3px solid var(--ww-accent-bright);
+  outline-offset: 3px;
+}
+
 .ww-btn-primary:disabled {
   opacity: 0.34;
   cursor: default;

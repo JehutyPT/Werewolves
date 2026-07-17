@@ -9,6 +9,7 @@ public enum LobbyEvaluationStateKind
 	Pending,
 	AlreadyDecided,
 	Degenerate,
+	ScreeningPassed,
 	Probability,
 	SimulatorUnavailable,
 	CouldNotEvaluate
@@ -107,6 +108,10 @@ public sealed record LobbyEvaluationState
 	internal static LobbyEvaluationState Degenerate(
 		SimulationCompatibilityIdentity identity) =>
 		new(LobbyEvaluationStateKind.Degenerate, identity);
+
+	internal static LobbyEvaluationState ScreeningPassed(
+		SimulationCompatibilityIdentity identity) =>
+		new(LobbyEvaluationStateKind.ScreeningPassed, identity);
 
 	internal static LobbyEvaluationState ProbabilityResult(
 		SimulationCompatibilityIdentity identity,

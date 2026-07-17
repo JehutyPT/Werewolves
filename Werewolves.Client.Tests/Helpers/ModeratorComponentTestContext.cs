@@ -6,6 +6,7 @@ using Werewolves.Client.Resources;
 using Werewolves.Client.Services;
 using Werewolves.Core.GameLogic.Models;
 using Werewolves.Core.GameLogic.Services;
+using Werewolves.Core.GameLogic.Simulation;
 using Werewolves.Core.StateModels.Models;
 
 namespace Werewolves.Client.Tests.Helpers;
@@ -33,7 +34,13 @@ public sealed class ModeratorComponentTestContext : BunitContext
 		Services.AddSingleton<ILocalTerminalLobbyCacheStore, InMemoryTerminalLobbyCacheStore>();
 		Services.AddSingleton<ILobbyTerminalEvaluator>(_ => DisabledLobbyTerminalEvaluator.Instance);
 		Services.AddSingleton(TimeProvider.System);
-		Services.AddSingleton<LobbyEvaluationCoordinator>();
+		Services.AddSingleton(sp => new LobbyEvaluationCoordinator(
+			sp.GetRequiredService<LobbySetupState>(),
+			sp.GetRequiredService<ITerminalLobbyCacheByteSource>(),
+			sp.GetRequiredService<ILocalTerminalLobbyCacheStore>(),
+			sp.GetRequiredService<ILobbyTerminalEvaluator>(),
+			LobbyEvaluationDepth.FullProbability,
+			sp.GetRequiredService<TimeProvider>()));
 		Services.AddSingleton<GameClientManager>();
 	}
 
