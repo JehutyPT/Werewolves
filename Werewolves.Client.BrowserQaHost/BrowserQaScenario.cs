@@ -9,6 +9,7 @@ public enum BrowserQaScenario
 {
 	Lobby,
 	Probability,
+	Degenerate,
 	Dashboard,
 	Victory
 }

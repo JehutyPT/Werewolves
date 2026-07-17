@@ -238,6 +238,9 @@
   <data name="LobbyEvaluation_PendingBlock" xml:space="preserve">
     <value>The evaluation is still in progress. Wait for it to finish before starting.</value>
   </data>
+  <data name="LobbyEvaluation_CheckComplete" xml:space="preserve">
+    <value>Check complete. You can start the game now.</value>
+  </data>
   <data name="LobbyEvaluation_AlreadyDecidedBlock" xml:space="preserve">
     <value>This role setup already has a decided result and cannot start.</value>
   </data>

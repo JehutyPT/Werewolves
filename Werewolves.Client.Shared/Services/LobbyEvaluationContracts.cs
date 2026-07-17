@@ -3,6 +3,20 @@ using Werewolves.Core.StateModels.Models.Simulation;
 
 namespace Werewolves.Client.Services;
 
+public sealed record LobbyEvaluationSettings
+{
+	public LobbyEvaluationDepth Depth { get; }
+
+	public LobbyEvaluationSettings(LobbyEvaluationDepth depth)
+	{
+		if (!Enum.IsDefined(depth))
+		{
+			throw new ArgumentOutOfRangeException(nameof(depth));
+		}
+		Depth = depth;
+	}
+}
+
 public interface ITerminalLobbyCacheByteSource
 {
 	ValueTask<ReadOnlyMemory<byte>?> ReadAsync(
@@ -29,6 +43,7 @@ public interface ILobbyTerminalEvaluator
 {
 	Task<LobbyEvaluationResult> EvaluateAsync(
 		SimulationScenario scenario,
+		LobbyEvaluationDepth depth,
 		CancellationToken cancellationToken = default);
 }
 
@@ -126,9 +141,14 @@ public sealed class DisabledLobbyTerminalEvaluator : ILobbyTerminalEvaluator
 
 	public Task<LobbyEvaluationResult> EvaluateAsync(
 		SimulationScenario scenario,
+		LobbyEvaluationDepth depth,
 		CancellationToken cancellationToken = default)
 	{
 		ArgumentNullException.ThrowIfNull(scenario);
+		if (!Enum.IsDefined(depth))
+		{
+			throw new ArgumentOutOfRangeException(nameof(depth));
+		}
 		cancellationToken.ThrowIfCancellationRequested();
 		return Task.FromResult<LobbyEvaluationResult>(new CouldNotEvaluateLobbyEvaluation());
 	}

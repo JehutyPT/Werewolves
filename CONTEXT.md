@@ -2,7 +2,7 @@
 
 A mobile app that assists a human **Moderator** running a physical game of "The Werewolves of Miller's Hollow." The app tracks game state, guides the Moderator through phases, and prompts for input — it never replaces the Moderator or makes decisions for them.
 
-This file is the shared glossary for domain language and avoided synonyms. Stable invariants live in `docs/domain/invariants.md`; rule interaction disambiguations live in `docs/domain/game-rules-clarifications.md`; architectural tradeoffs live in `docs/adr/`; product behavior lives in PRD #29; and implementation scope lives in canonical GitHub issue-body Implementation Contracts.
+This file is the shared glossary for domain language and avoided synonyms. Stable invariants live in `docs/domain/invariants.md`; rule interaction disambiguations live in `docs/domain/game-rules-clarifications.md`; architectural tradeoffs live in `docs/adr/`; and implementation scope lives in canonical GitHub issue-body Implementation Contracts.
 
 ## Language
 
@@ -83,11 +83,11 @@ A Simulator-Supported Simulation Scenario that is eligible for build-time cache 
 _Avoid_: Role Composition, simulator-supported
 
 **Bundled Simulator Cache**:
-The app-facing collection of precomputed lobby evaluations shipped with the app for cache-first pre-game UX.
+The app-facing collection of precomputed lobby evaluations shipped with the app for cache-first pre-game safety screening. Retained probability payloads belong to the dormant full-evaluation capability, not the current Moderator-facing product.
 _Avoid_: Offline cache (ambiguous with on-device fallback), simulator log
 
 **Local Fallback Cache Record**:
-A compact terminal lobby evaluation materialized on the Moderator's device after successful On-Device Fallback Generation. It is keyed and invalidated like the equivalent Bundled Simulator Cache entry and stores no per-run Simulation Result Evidence.
+A compact terminal lobby evaluation materialized on the Moderator's device after a terminal On-Device Fallback Generation classification. It is keyed and invalidated like the equivalent Bundled Simulator Cache entry and stores no per-run Simulation Result Evidence.
 _Avoid_: Local simulation evidence, replay cache, transcript cache
 
 **Build-Time Cache Generation**:
@@ -95,7 +95,7 @@ The production of Bundled Simulator Cache artifacts outside the Moderator's phon
 _Avoid_: Offline generation (ambiguous), on-device generation
 
 **On-Device Fallback Generation**:
-A local simulator evaluation attempted on the Moderator's device when no usable bundled or local terminal lobby evaluation is available for a Simulator-Supported Simulation Scenario. Successful fallback generation may produce a usable already-decided, degenerate, or probability terminal lobby evaluation, but it materializes only a compact Local Fallback Cache Record, not full per-run Simulation Result Evidence. It has two hard failure boundaries: any generation failure, or a 10-second timeout.
+A local simulator evaluation attempted on the Moderator's device when no usable bundled or local terminal lobby evaluation is available for a Simulator-Supported Simulation Scenario. The production path stops after already-decided and 1,000-run degenerate screening; the dormant full-evaluation capability may continue to probability evaluation. When fallback materializes a result, it stores only a compact Local Fallback Cache Record, not full per-run Simulation Result Evidence. Fallback has two hard failure boundaries: any generation failure or a 10-second timeout.
 _Avoid_: Normal pre-game simulation, build-time cache generation
 
 **Minimum Viable Role Composition**:
@@ -111,7 +111,7 @@ A legal, supported Simulation Scenario whose 1,000-run baseline screening simula
 _Avoid_: Degenerate Role Composition, invalid (ambiguous with rules-invalid), failed simulation, mathematically proven early ending
 
 **Balanced Role Composition**:
-A Role Composition whose Game Result Frequency is not obviously concentrated in one Starting Faction's single-Faction Game Result. This is a descriptive concept for Moderator judgment, not an app verdict.
+A Role Composition whose Game Result Frequency is not obviously concentrated in one Starting Faction's single-Faction Game Result. This term belongs to the dormant probability vocabulary and is not a current app verdict.
 _Avoid_: Fair game (too vague), duration-balanced
 
 **Faction**:
@@ -155,7 +155,7 @@ The mutually exclusive final result category for a completed simulated Game Sess
 _Avoid_: Outcome bucket, winner key
 
 **Possible Game Result**:
-A scenario-specific Game Result that probability output should be able to show even when the completed simulation batch observes it zero times. Possible Game Results include one single-Faction result for each Possible Faction, No-Winner, and each scenario-specific Shared Victory Outcome combination the rules/profile can produce. Factions and shared combinations outside the Simulation Scenario's Possible Game Result inventory are not shown as global catalog rows.
+A scenario-specific Game Result retained by full probability evaluation even when the completed simulation batch observes it zero times. Possible Game Results include one single-Faction result for each Possible Faction, No-Winner, and each scenario-specific Shared Victory Outcome combination the rules/profile can produce. Factions and shared combinations outside the Simulation Scenario's Possible Game Result inventory are not global catalog rows.
 _Avoid_: Global result catalog, observed result
 
 **Game Result Frequency**:
@@ -163,7 +163,7 @@ The share of completed simulation runs ending in each Game Result; Game Result F
 _Avoid_: win rate
 
 **Game Result Frequency by Turn**:
-The share of completed simulation runs ending with each Game Result on each ending Turn and Victory Check Window; all cells sum to 100%, and summing a Game Result across Turns and Victory Check Windows gives its Game Result Frequency. Moderator-facing timing output collapses across Victory Check Windows and shows ending Turn only; the Victory Check Window stays in evidence/cache semantics.
+The share of completed simulation runs ending with each Game Result on each ending Turn and Victory Check Window; all cells sum to 100%, and summing a Game Result across Turns and Victory Check Windows gives its Game Result Frequency. Full probability presentation, when enabled, collapses across Victory Check Windows and shows ending Turn only; the Victory Check Window stays in evidence/cache semantics.
 _Avoid_: PMF, timing table (too vague)
 
 **Ended-By-Turn Frequency**:
@@ -171,7 +171,7 @@ A derived probability view showing the share of completed simulation runs that h
 _Avoid_: CDF, duration metric
 
 **Unlikely Possible Result**:
-A Possible Game Result whose exact frequency is below 1% of completed runs, including zero-frequency results. Unlikely Possible Results can be grouped into a named "possible but unlikely outcomes" list to keep the main probability view readable; grouping is presentation only and the underlying Game Result Frequency remains complete.
+A Possible Game Result whose exact frequency is below 1% of completed runs, including zero-frequency results. Unlikely Possible Results can be grouped into a named "possible but unlikely outcomes" list to keep a full probability view readable; grouping is presentation only and the underlying Game Result Frequency remains complete.
 _Avoid_: Impossible result, error bucket
 
 **Starting Faction**:
@@ -179,7 +179,7 @@ A Faction represented in the Role Composition before Turn 1 as a stable win-cond
 _Avoid_: Initial Faction (ambiguous with Initial Faction Count), default side
 
 **Possible Faction**:
-A Faction implied by the Roles present in the Moderator-selected Role Composition, regardless of whether that Faction appears as a beneficiary in a particular Game Session or simulation batch. Possible Factions can produce zero-frequency Game Results in probability output because never winning is useful balance feedback.
+A Faction implied by the Roles present in the Moderator-selected Role Composition, regardless of whether that Faction appears as a beneficiary in a particular Game Session or simulation batch. Possible Factions can produce zero-frequency Game Results in dormant full probability evidence when no completed run ends with that Faction winning.
 _Avoid_: Observed Faction, winning Faction
 
 **Hard-Aligned Role**:
@@ -343,11 +343,11 @@ _Avoid_: Load game, restore
 - A **Local Fallback Cache Record** uses the same lookup and invalidation identity as the equivalent bundled terminal lobby evaluation and is reused across app restarts while it remains current
 - **On-Device Fallback Generation** is allowed only when no usable bundled or local terminal lobby evaluation exists for a **Simulator-Supported Simulation Scenario** and must follow the same classification pipeline before producing a usable lobby evaluation
 - **On-Device Fallback Generation** is skipped when the selected setup is rules-invalid, app-unsupported, simulator-unsupported, already has a usable terminal lobby evaluation, or changes before the fallback attempt finishes
-- A successful **On-Device Fallback Generation** result has the same product meaning as the equivalent bundled terminal lobby evaluation, but it stores only the compact terminal evaluation rather than detailed simulation evidence
-- **Lobby Exit** waits when a **Simulator-Supported Simulation Scenario** has no usable terminal lobby evaluation or only a stale one. If fallback evaluation fails, the safety gate releases with a visible "could not evaluate" state and the Moderator decides whether to proceed.
-- **Lobby Exit** does not offer a manual skip or dismiss action while fallback evaluation is running; proceeding without a terminal lobby evaluation is allowed only after fallback fails or reaches its 10-second timeout
+- A successful **On-Device Fallback Generation** classification has the same safety meaning as equivalent bundled evidence. Only terminal classifications materialize a compact terminal evaluation; a screening pass need not be persisted
+- **Lobby Exit** waits while a **Simulator-Supported Simulation Scenario** has no resolved safety determination. If fallback evaluation fails, the safety gate releases; safety-only production does not surface the dormant "could not evaluate" panel.
+- **Lobby Exit** does not offer a manual skip or dismiss action while fallback evaluation is running; it proceeds only after a safety classification passes, or after fallback fails or reaches its 10-second timeout
 - A failed **On-Device Fallback Generation** attempt is remembered only for the current unchanged lobby setup and current app session; it is not persisted like a **Local Fallback Cache Record**
-- After fallback failure, the Moderator may retry evaluation. Retrying closes the **Lobby Exit** safety gate again while the same 10-second bounded fallback evaluation runs
+- Explicit fallback retry belongs to the dormant full-evaluation presentation. Safety-only production exposes no retry action after failure
 - App-supported but simulator-unsupported setups do not attempt **On-Device Fallback Generation** and do not block **Lobby Exit** only because evaluation is unavailable
 - The simulator runs from a **Simulation Start State**; pre-game cache generation derives that state from a **Simulation Scenario**, while mid-game projection can use the same simulation mechanism from a later fully defined Game Session state
 - **Degenerate Simulation Scenario** classification applies to the **Simulation Scenario**; each screening run derives its own seeded pre-game **Simulation Start State** from that scenario, including random assignment and profile/default setup choices
@@ -362,7 +362,7 @@ _Avoid_: Load game, restore
 - Role-count constraints such as single-copy special Roles, exactly two Sisters, and exactly three Brothers are domain rules; Supported Player Count, currently implemented Roles, New Moon exclusion, and simulator profile support are app/product constraints
 - The **Minimum Viable Role Composition** is one hard-aligned Werewolf **Role** and four hard-aligned Villager **Roles**
 - A supported **Role Composition** must include at least one Villager hard-aligned **Role** and at least one Werewolf hard-aligned **Role**
-- Classification order is: **Rules-Valid Role Composition**, **App-Supported Role Composition**, **Simulator-Supported Simulation Scenario**, **Already-Decided Role Composition**, **Degenerate Simulation Scenario**, then probability simulation
+- Classification order is: **Rules-Valid Role Composition**, **App-Supported Role Composition**, **Simulator-Supported Simulation Scenario**, **Already-Decided Role Composition**, then **Degenerate Simulation Scenario**. Under ADR-0013 the production path stops there; dormant full evaluation may continue to probability simulation
 - **Already-Decided Role Composition** classification runs every Faction victory trigger that can be evaluated from the Role Composition alone at **Lobby Exit**; possible Player assignments, setup branches, and Night 1 choices are not evidence for this classification
 - **Already-Decided Role Composition** classification does not derive or simulate a **Simulation Start State**
 - If multiple Faction victory triggers are true at **Lobby Exit** from Role Composition evidence alone, the **Already-Decided Role Composition** record uses **Shared Victory Outcome** semantics rather than a priority order
@@ -406,8 +406,8 @@ _Avoid_: Load game, restore
 - **Game Result Frequency** includes mutually exclusive **Game Results** only: single-Faction wins, specific **Shared Victory Outcomes**, and **No-Winner Outcome**
 - **Game Result Frequency by Turn** is the source timing view for deriving **Game Result Frequency** and **Ended-By-Turn Frequency**
 - **Simulation Result Evidence** defines stable replayable evidence; diagnostics and cache artifact boundaries are architectural concerns covered by ADR-0009
-- Product presentation rules for probability output live in PRD #29 and the relevant canonical issue-body Implementation Contracts
-- The measured current-profile **Bundled Simulator Cache** ships inside the app package under ADR-0012; distribution for a future expanded or full-role profile may be reconsidered after its realistic artifact size and operating constraints are known
+- Moderator-facing **Game Result Frequency** and **Ended-By-Turn Frequency** presentation is disabled under ADR-0013; the underlying full-evaluation capability is dormant
+- The measured current-profile **Bundled Simulator Cache** ships inside the app package under ADR-0012; its probability payloads remain dormant, and distribution for a future expanded or full-role profile may be reconsidered after its realistic artifact size and operating constraints are known
 - "Could not evaluate" is a product evaluation state, not a **Game Session Outcome**, **Game Result**, **No-Winner Outcome**, or probability bucket
 - A simulation run ending during Turn 1 is a **Completed Simulation Run** when it reaches a **Game Session Outcome**; **Incomplete Simulation Runs** do not contribute to **Game Result Frequency**
 - A **Balanced Role Composition** is considered from **Game Result Frequency**, not by comparing winning Turn to the **Reference Turn Horizon**
@@ -486,7 +486,7 @@ _Avoid_: Load game, restore
 - "Tie" as final result — resolved: use **Shared Victory Outcome** for multiple Factions winning in the same **Victory Check Window**; keep "tie" for Vote ties.
 - "Everybody dies" — resolved: use **No-Winner Outcome** for completed Game Sessions where no Faction wins.
 - "Balanced" vs "long enough" — resolved: **Balanced Role Composition** is interpreted from **Game Result Frequency**; **Reference Turn Horizon** is not used to block Role Compositions.
-- "Balance judgment" — resolved: the app surfaces **Game Result Frequency** for the Moderator to interpret, and only blocks **Already-Decided Role Compositions** and **Degenerate Simulation Scenarios**.
+- "Balance judgment" — resolved: the production app does not currently present **Game Result Frequency** or **Ended-By-Turn Frequency** as balance guidance; it blocks **Already-Decided Role Compositions** and **Degenerate Simulation Scenarios** only.
 - "Already-decided evidence" — resolved: **Already-Decided Role Composition** means a Role Composition would already trigger a Faction victory at **Lobby Exit** from Role Composition evidence alone.
 - "Already-decided shared outcomes" — resolved: if multiple Faction victory predicates are already true at **Lobby Exit**, preserve them as a **Shared Victory Outcome** without priority ordering.
 - "Already-decided as simulation result" — resolved: **Already-Decided Role Composition** records share outcome language but are not simulation runs and do not have **Run Seed Material** or per-run simulation evidence.
@@ -494,15 +494,15 @@ _Avoid_: Load game, restore
 - "Could not evaluate" vs blocked — resolved: incomplete screening is an error state and does not block **Lobby Exit** as already-decided or degenerate.
 - "Could not evaluate as outcome" — resolved: "could not evaluate" is a product evaluation state, not a **Game Session Outcome** or probability bucket.
 - "Current runtime limits" — resolved: the full Faction model remains the domain contract, but the active **Simulator Profile Role Set** controls which scenarios can be evaluated now; unsupported or unevaluable scenarios are not mislabeled as already-decided or degenerate.
-- "Cache miss vs Lobby Exit" — resolved: no usable or current terminal lobby evaluation blocks **Lobby Exit** while evaluation is pending; a failed evaluation releases the gate as visible "could not evaluate."
-- "Local fallback reuse" — resolved: successful fallback materializes a compact **Local Fallback Cache Record** that can be reused across app restarts while its cache identity remains current.
+- "Cache miss vs Lobby Exit" — resolved: no usable or current terminal lobby evaluation blocks **Lobby Exit** while evaluation is pending; a failed evaluation releases the gate, and safety-only production does not surface the dormant "could not evaluate" panel.
+- "Local fallback reuse" — resolved: a successful terminal fallback classification materializes a compact **Local Fallback Cache Record** that can be reused across app restarts while its cache identity remains current; a screening pass need not be persisted.
 - "Cache/fallback UX distinction" — resolved: Moderator-facing lobby evaluation status does not distinguish bundled lookup from fallback generation; cache hits simply complete the same evaluation flow faster.
 - "Fallback result storage" — resolved: **On-Device Fallback Generation** may compute enough to classify a scenario locally, but the materialized result is only a compact terminal lobby evaluation, not full per-run simulation evidence.
-- "Fallback failure" — resolved: incomplete fallback, timeout, instruction-limit exhaustion, runtime cancellation, start-state generation failure, and incomplete screening or probability batches collapse to visible "could not evaluate" rather than partial probability, already-decided, or degenerate claims; once visible, that state releases the Lobby Exit safety gate.
+- "Fallback failure" — resolved: incomplete fallback, timeout, instruction-limit exhaustion, runtime cancellation, start-state generation failure, and incomplete screening collapse to "could not evaluate" rather than already-decided or degenerate claims; dormant full evaluation likewise never publishes partial probability, and failure releases the Lobby Exit safety gate.
 - "Setup changes during fallback" — resolved: changing the selected setup discards any in-progress fallback for the stale **Simulation Scenario** and starts evaluation for the new stable scenario instead of releasing the safety gate.
 - "Fallback timeout" — resolved: the only product hard boundaries for **On-Device Fallback Generation** are any generation failure and a 10-second timeout.
 - "Manual fallback skip" — resolved: the Moderator cannot dismiss or skip an in-progress fallback evaluation; proceeding without an evaluation requires fallback failure or timeout.
 - "Fallback failure memory" — resolved: failed fallback state is session-only for the current unchanged setup, is not persisted across app restarts, and prevents automatic retry loops.
-- "Fallback retry" — resolved: after failure, the Moderator may explicitly retry; retrying runs the same 10-second bounded evaluation and closes the **Lobby Exit** safety gate while it is in progress.
-- "Simulator-unsupported setup" — resolved: app-supported setups outside the active **Simulator Profile Role Set** show evaluation unavailable and do not block **Lobby Exit** solely because simulation is unavailable.
+- "Fallback retry" — resolved: explicit retry remains part of dormant full-evaluation presentation; safety-only production exposes no retry action after failure.
+- "Simulator-unsupported setup" — resolved: app-supported setups outside the active **Simulator Profile Role Set** do not show an evaluation panel and do not block **Lobby Exit** solely because simulation is unavailable.
 - "Seed" — resolved: store **Run Seed Material** as a canonical string for replay evidence; hash it into a numeric seed only when constructing a random generator.

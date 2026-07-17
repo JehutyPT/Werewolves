@@ -12,3 +12,7 @@ This separation is especially important while the implemented role catalog, app 
 - **Simulate first and classify from outcomes**: run the simulator for any plausible setup and infer lobby result from observed outcomes. Rejected because Already-Decided Role Compositions are Lobby Exit facts derived from Role Composition evidence alone, not simulation results.
 - **Treat app support and simulator support as the same boundary**: expose only Roles the simulator can evaluate. Rejected because app feature support and simulator profile support should be able to advance independently.
 - **Layered gates with explicit evidence boundaries**: preserve separate domain terms and ordered evaluation responsibilities. Accepted.
+
+## Amendment
+
+ADR-0013 retains these ordered evidence boundaries but changes production capability selection to stop after safety screening. Full probability evaluation remains a dormant later stage.

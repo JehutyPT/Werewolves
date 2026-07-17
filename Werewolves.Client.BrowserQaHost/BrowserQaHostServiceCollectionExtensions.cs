@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Werewolves.Client.Services;
 using Werewolves.Core.GameLogic.Models;
 using Werewolves.Core.GameLogic.Services;
+using Werewolves.Core.GameLogic.Simulation;
 using Werewolves.Core.StateModels.Enums;
 
 namespace Werewolves.Client.BrowserQaHost;
@@ -22,12 +23,20 @@ public static class BrowserQaHostServiceCollectionExtensions
 		services.TryAddScoped<IHapticFeedbackService, BrowserSafeHapticFeedbackService>();
 		services.TryAddScoped<IScreenWakeLock, BrowserSafeScreenWakeLock>();
 		services.TryAddScoped<IGameSessionSaveStore, BrowserQaInMemoryGameSessionSaveStore>();
+		services.TryAddSingleton(
+			new LobbyEvaluationSettings(LobbyEvaluationDepth.DegenerateScreeningOnly));
 		services.TryAddSingleton<TimeProvider>(_ => TimeProvider.System);
 		services.TryAddScoped<ITerminalLobbyCacheByteSource, BrowserQaScenarioTerminalLobbyCacheByteSource>();
 		services.TryAddScoped<ILocalTerminalLobbyCacheStore, InMemoryTerminalLobbyCacheStore>();
 		services.TryAddScoped<ILobbyTerminalEvaluator>(
 			_ => DisabledLobbyTerminalEvaluator.Instance);
-		services.TryAddScoped<LobbyEvaluationCoordinator>();
+		services.TryAddScoped<LobbyEvaluationCoordinator>(sp => new LobbyEvaluationCoordinator(
+			sp.GetRequiredService<LobbySetupState>(),
+			sp.GetRequiredService<ITerminalLobbyCacheByteSource>(),
+			sp.GetRequiredService<ILocalTerminalLobbyCacheStore>(),
+			sp.GetRequiredService<ILobbyTerminalEvaluator>(),
+			sp.GetRequiredService<LobbyEvaluationSettings>().Depth,
+			sp.GetRequiredService<TimeProvider>()));
 		services.TryAddScoped<GameClientManager>();
 		services.TryAddScoped<GameplayWakeLockController>();
 		services.TryAddScoped<BenchmarkClientManager>();

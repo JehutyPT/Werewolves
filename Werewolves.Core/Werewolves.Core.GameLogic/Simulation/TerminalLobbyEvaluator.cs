@@ -5,6 +5,12 @@ namespace Werewolves.Core.GameLogic.Simulation;
 
 public abstract record LobbyEvaluationResult;
 
+public enum LobbyEvaluationDepth
+{
+	DegenerateScreeningOnly,
+	FullProbability
+}
+
 public sealed record RulesInvalidLobbyEvaluation(
 	RulesValidityResult RulesValidity) : LobbyEvaluationResult;
 
@@ -24,6 +30,8 @@ public sealed record AlreadyDecidedTerminalEvaluation(
 
 public sealed record DegenerateTerminalEvaluation(
 	SimulationResultEvidence ScreeningEvidence) : TerminalLobbyEvaluation;
+
+public sealed record ScreeningPassedLobbyEvaluation : LobbyEvaluationResult;
 
 public sealed record ProbabilityTerminalEvaluation(
 	SimulationResultEvidence Evidence) : TerminalLobbyEvaluation;
@@ -60,8 +68,18 @@ public sealed class TerminalLobbyEvaluator
 	public LobbyEvaluationResult Evaluate(
 		SimulationScenario scenario,
 		CancellationToken cancellationToken = default)
+		=> Evaluate(scenario, LobbyEvaluationDepth.FullProbability, cancellationToken);
+
+	public LobbyEvaluationResult Evaluate(
+		SimulationScenario scenario,
+		LobbyEvaluationDepth depth,
+		CancellationToken cancellationToken = default)
 	{
 		ArgumentNullException.ThrowIfNull(scenario);
+		if (!Enum.IsDefined(depth))
+		{
+			throw new ArgumentOutOfRangeException(nameof(depth));
+		}
 		cancellationToken.ThrowIfCancellationRequested();
 		var classification = SimulationScenarioClassifier.Classify(scenario);
 		cancellationToken.ThrowIfCancellationRequested();
@@ -131,6 +149,10 @@ public sealed class TerminalLobbyEvaluator
 			.All(run => run.EndingTurn == 1))
 		{
 			return new DegenerateTerminalEvaluation(screeningEvidence);
+		}
+		if (depth == LobbyEvaluationDepth.DegenerateScreeningOnly)
+		{
+			return new ScreeningPassedLobbyEvaluation();
 		}
 
 		cancellationToken.ThrowIfCancellationRequested();

@@ -16,6 +16,7 @@ public sealed class BrowserQaHostFixture : IAsyncLifetime
 
 	public Uri DashboardScenarioUri => new($"{BaseAddress}/?qa=dashboard");
 	public Uri ProbabilityScenarioUri => new($"{BaseAddress}/?qa=probability");
+	public Uri DegenerateScenarioUri => new($"{BaseAddress}/?qa=degenerate");
 
 	public async Task InitializeAsync()
 	{

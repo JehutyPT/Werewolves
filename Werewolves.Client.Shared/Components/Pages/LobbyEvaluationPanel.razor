@@ -2,7 +2,8 @@
 @using Werewolves.Client.Testing
 @using Werewolves.Core.StateModels.Models.Simulation
 
-@if (State.Kind != LobbyEvaluationStateKind.NotApplicable)
+@if (State.Kind is not LobbyEvaluationStateKind.NotApplicable
+	and not LobbyEvaluationStateKind.ScreeningPassed)
 {
 	<section class="ww-lobby-evaluation"
 			 data-testid="@ModeratorUiTestIds.LobbyEvaluationPanel"

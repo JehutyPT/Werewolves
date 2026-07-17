@@ -68,7 +68,10 @@
 		</section>
 	}
 
-	<LobbyEvaluationPanel State="@_evaluationState" OnRetry="RetryEvaluation" />
+	@if (ShouldRenderEvaluationPanel)
+	{
+		<LobbyEvaluationPanel State="@_evaluationState" OnRetry="RetryEvaluation" />
+	}
 
 	<footer class="ww-action-bar" data-testid="@ModeratorUiTestIds.RoleSelectionActionBar">
 		@if (_validationErrors.Count > 0)
@@ -100,6 +103,8 @@
 
 @using Werewolves.Core.StateModels.Enums
 @using Werewolves.Core.StateModels.Extensions
+@using Werewolves.Core.StateModels.Models.Simulation
+@using Werewolves.Core.GameLogic.Simulation
 @using Werewolves.Client.Testing
 
 @code {
@@ -111,6 +116,7 @@
 
 	private List<string> _validationErrors = new();
 	private LobbyEvaluationState _evaluationState = LobbyEvaluationState.NotApplicable();
+	private SimulationCompatibilityIdentity? _pendingBlockIdentity;
 	private string _blockAnnouncement = string.Empty;
 
 	protected override void OnInitialized()
@@ -122,6 +128,11 @@
 
 	private bool IsCountMatching => Lobby.TotalSelectedRoleCount == Lobby.ExpectedRoleCount;
 	private bool CanStartGame => !Lobby.HasRoleConfigIssues(out _);
+	private bool ShouldRenderEvaluationPanel =>
+		Evaluation.Depth == LobbyEvaluationDepth.FullProbability
+		|| _evaluationState.Kind is
+			LobbyEvaluationStateKind.AlreadyDecided or
+			LobbyEvaluationStateKind.Degenerate;
 
 	private string CountLabel => Format(
 		ClientStrings.RoleSelection_SelectedCountFormat,
@@ -172,13 +183,26 @@
 		}
 
 		_validationErrors.Clear();
+		var attemptedState = Evaluation.State;
 		if (!Evaluation.TryRequestLobbyExit())
 		{
 			_evaluationState = Evaluation.State;
-			_blockAnnouncement = BlockAnnouncement(_evaluationState.Kind);
+			if (attemptedState.Kind == LobbyEvaluationStateKind.Pending
+				&& attemptedState.Identity is { } attemptedIdentity
+				&& attemptedIdentity.Equals(_evaluationState.Identity))
+			{
+				_pendingBlockIdentity = attemptedIdentity;
+				_blockAnnouncement = AnnouncementAfterPendingAttempt(_evaluationState.Kind);
+			}
+			else
+			{
+				_pendingBlockIdentity = null;
+				_blockAnnouncement = BlockAnnouncement(_evaluationState.Kind);
+			}
 			return Task.CompletedTask;
 		}
 
+		_pendingBlockIdentity = null;
 		_blockAnnouncement = string.Empty;
 		return OnStartGame.InvokeAsync();
 	}
@@ -189,11 +213,33 @@
 	{
 		_ = InvokeAsync(() =>
 		{
-			_evaluationState = Evaluation.State;
-			_blockAnnouncement = string.Empty;
+			var nextState = Evaluation.State;
+			if (_pendingBlockIdentity is { } pendingIdentity
+				&& nextState.Identity is { } nextIdentity
+				&& pendingIdentity.Equals(nextIdentity))
+			{
+				_blockAnnouncement = AnnouncementAfterPendingAttempt(nextState.Kind);
+			}
+			else
+			{
+				_pendingBlockIdentity = null;
+				_blockAnnouncement = string.Empty;
+			}
+			_evaluationState = nextState;
 			StateHasChanged();
 		});
 	}
+
+	private static string AnnouncementAfterPendingAttempt(LobbyEvaluationStateKind kind) => kind switch
+	{
+		LobbyEvaluationStateKind.Pending => ClientStrings.LobbyEvaluation_PendingBlock,
+		LobbyEvaluationStateKind.AlreadyDecided => ClientStrings.LobbyEvaluation_AlreadyDecidedBlock,
+		LobbyEvaluationStateKind.Degenerate => ClientStrings.LobbyEvaluation_DegenerateBlock,
+		LobbyEvaluationStateKind.ScreeningPassed or
+		LobbyEvaluationStateKind.CouldNotEvaluate or
+		LobbyEvaluationStateKind.Probability => ClientStrings.LobbyEvaluation_CheckComplete,
+		_ => string.Empty
+	};
 
 	private static string BlockAnnouncement(LobbyEvaluationStateKind kind) => kind switch
 	{

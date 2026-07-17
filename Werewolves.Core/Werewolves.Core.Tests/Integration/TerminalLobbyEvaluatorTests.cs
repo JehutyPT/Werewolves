@@ -84,7 +84,7 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 	}
 
 	[Fact]
-	public void Evaluate_AlreadyDecided_ReturnsStructuredResultWithoutExecuting()
+	public void Evaluate_DegenerateScreeningOnly_AlreadyDecided_ReturnsStructuredResultWithoutExecuting()
 	{
 		var calls = 0;
 		var evaluator = new TerminalLobbyEvaluator((_, _, _, _) =>
@@ -95,7 +95,7 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 		var scenario = Scenario(MainRoleType.SimpleWerewolf, MainRoleType.SimpleWerewolf,
 			MainRoleType.SimpleWerewolf, MainRoleType.SimpleVillager, MainRoleType.SimpleVillager);
 
-		var result = evaluator.Evaluate(scenario);
+		var result = evaluator.Evaluate(scenario, LobbyEvaluationDepth.DegenerateScreeningOnly);
 
 		var decided = result.Should().BeOfType<AlreadyDecidedTerminalEvaluation>().Subject;
 		decided.GameResult.Should().Be(new SingleFactionGameResult(Faction.Werewolf));
@@ -105,7 +105,7 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 	}
 
 	[Fact]
-	public void Evaluate_AllTurnOneScreening_ReturnsDegenerateAndStops()
+	public void Evaluate_DegenerateScreeningOnly_AllTurnOneScreening_ReturnsDegenerateAndStops()
 	{
 		var calls = new List<int>();
 		var evaluator = new TerminalLobbyEvaluator((scenario, identity, count, _) =>
@@ -114,10 +114,33 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 			return Batch(scenario, identity, count, _ => (1, VictoryCheckWindow.Dawn));
 		});
 
-		var result = evaluator.Evaluate(SupportedScenario());
+		var result = evaluator.Evaluate(
+			SupportedScenario(),
+			LobbyEvaluationDepth.DegenerateScreeningOnly);
 
 		result.Should().BeOfType<DegenerateTerminalEvaluation>().Subject
 			.ScreeningEvidence.AttemptedRunCount.Should().Be(1_000);
+		calls.Should().Equal(1_000);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void Evaluate_DegenerateScreeningOnly_WhenOneRunEndsLater_ReturnsScreeningPassedAndStops()
+	{
+		var calls = new List<int>();
+		var evaluator = new TerminalLobbyEvaluator((scenario, identity, count, _) =>
+		{
+			calls.Add(count);
+			return Batch(scenario, identity, count, run => run == count - 1
+				? (2, VictoryCheckWindow.PreNight)
+				: (1, VictoryCheckWindow.Dawn));
+		});
+
+		var result = evaluator.Evaluate(
+			SupportedScenario(),
+			LobbyEvaluationDepth.DegenerateScreeningOnly);
+
+		result.Should().BeOfType<ScreeningPassedLobbyEvaluation>();
 		calls.Should().Equal(1_000);
 		MarkTestCompleted();
 	}

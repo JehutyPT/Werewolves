@@ -7,7 +7,11 @@ public sealed class AsyncTerminalLobbyEvaluator : ILobbyTerminalEvaluator
 {
 	public static readonly TimeSpan EvaluationTimeout = TimeSpan.FromSeconds(10);
 
-	private readonly Func<SimulationScenario, CancellationToken, LobbyEvaluationResult> _evaluate;
+	private readonly Func<
+		SimulationScenario,
+		LobbyEvaluationDepth,
+		CancellationToken,
+		LobbyEvaluationResult> _evaluate;
 	private readonly TimeProvider _timeProvider;
 	private readonly Action<Task> _observeLate;
 
@@ -17,14 +21,22 @@ public sealed class AsyncTerminalLobbyEvaluator : ILobbyTerminalEvaluator
 	}
 
 	internal AsyncTerminalLobbyEvaluator(
-		Func<SimulationScenario, CancellationToken, LobbyEvaluationResult> evaluate,
+		Func<
+			SimulationScenario,
+			LobbyEvaluationDepth,
+			CancellationToken,
+			LobbyEvaluationResult> evaluate,
 		TimeProvider timeProvider)
 		: this(evaluate, timeProvider, ObserveLateCompletion)
 	{
 	}
 
 	internal AsyncTerminalLobbyEvaluator(
-		Func<SimulationScenario, CancellationToken, LobbyEvaluationResult> evaluate,
+		Func<
+			SimulationScenario,
+			LobbyEvaluationDepth,
+			CancellationToken,
+			LobbyEvaluationResult> evaluate,
 		TimeProvider timeProvider,
 		Action<Task> observeLate)
 	{
@@ -35,16 +47,21 @@ public sealed class AsyncTerminalLobbyEvaluator : ILobbyTerminalEvaluator
 
 	public async Task<LobbyEvaluationResult> EvaluateAsync(
 		SimulationScenario scenario,
+		LobbyEvaluationDepth depth,
 		CancellationToken cancellationToken = default)
 	{
 		ArgumentNullException.ThrowIfNull(scenario);
+		if (!Enum.IsDefined(depth))
+		{
+			throw new ArgumentOutOfRangeException(nameof(depth));
+		}
 		cancellationToken.ThrowIfCancellationRequested();
 		using var evaluationCancellation =
 			CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 		using var timeoutCancellation =
 			CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 		var evaluation = Task.Run(
-			() => _evaluate(scenario, evaluationCancellation.Token),
+			() => _evaluate(scenario, depth, evaluationCancellation.Token),
 			CancellationToken.None);
 		var timeout = Task.Delay(
 			EvaluationTimeout,

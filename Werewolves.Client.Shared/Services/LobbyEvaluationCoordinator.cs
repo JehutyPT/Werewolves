@@ -13,6 +13,7 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 	private readonly ITerminalLobbyCacheByteSource _bundledCache;
 	private readonly ILocalTerminalLobbyCacheStore _localCache;
 	private readonly ILobbyTerminalEvaluator _evaluator;
+	private readonly LobbyEvaluationDepth _depth;
 	private readonly TimeProvider _timeProvider;
 	private readonly Func<SimulationScenario, LobbyScenarioSupport> _classify;
 	private readonly CancellationTokenSource _lifetimeCancellation = new();
@@ -21,13 +22,31 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 	private EvaluationRequest? _currentRequest;
 	private bool _disposed;
 
-	public LobbyEvaluationCoordinator(
+	internal LobbyEvaluationCoordinator(
 		LobbySetupState lobby,
 		ITerminalLobbyCacheByteSource bundledCache,
 		ILocalTerminalLobbyCacheStore localCache,
 		ILobbyTerminalEvaluator evaluator,
 		TimeProvider? timeProvider = null)
-		: this(lobby, bundledCache, localCache, evaluator, timeProvider, ClassifyScenario)
+		: this(
+			lobby,
+			bundledCache,
+			localCache,
+			evaluator,
+			LobbyEvaluationDepth.FullProbability,
+			timeProvider,
+			ClassifyScenario)
+	{
+	}
+
+	public LobbyEvaluationCoordinator(
+		LobbySetupState lobby,
+		ITerminalLobbyCacheByteSource bundledCache,
+		ILocalTerminalLobbyCacheStore localCache,
+		ILobbyTerminalEvaluator evaluator,
+		LobbyEvaluationDepth depth,
+		TimeProvider? timeProvider = null)
+		: this(lobby, bundledCache, localCache, evaluator, depth, timeProvider, ClassifyScenario)
 	{
 	}
 
@@ -38,11 +57,35 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 		ILobbyTerminalEvaluator evaluator,
 		TimeProvider? timeProvider,
 		Func<SimulationScenario, LobbyScenarioSupport> classify)
+		: this(
+			lobby,
+			bundledCache,
+			localCache,
+			evaluator,
+			LobbyEvaluationDepth.FullProbability,
+			timeProvider,
+			classify)
+	{
+	}
+
+	internal LobbyEvaluationCoordinator(
+		LobbySetupState lobby,
+		ITerminalLobbyCacheByteSource bundledCache,
+		ILocalTerminalLobbyCacheStore localCache,
+		ILobbyTerminalEvaluator evaluator,
+		LobbyEvaluationDepth depth,
+		TimeProvider? timeProvider,
+		Func<SimulationScenario, LobbyScenarioSupport> classify)
 	{
 		_lobby = lobby ?? throw new ArgumentNullException(nameof(lobby));
 		_bundledCache = bundledCache ?? throw new ArgumentNullException(nameof(bundledCache));
 		_localCache = localCache ?? throw new ArgumentNullException(nameof(localCache));
 		_evaluator = evaluator ?? throw new ArgumentNullException(nameof(evaluator));
+		if (!Enum.IsDefined(depth))
+		{
+			throw new ArgumentOutOfRangeException(nameof(depth));
+		}
+		_depth = depth;
 		_timeProvider = timeProvider ?? TimeProvider.System;
 		_classify = classify ?? throw new ArgumentNullException(nameof(classify));
 		_bundledCacheIndex = new(
@@ -56,6 +99,7 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 	public event EventHandler? StateChanged;
 
 	public LobbyEvaluationState State { get; private set; }
+	public LobbyEvaluationDepth Depth => _depth;
 	public bool EvaluationBlocksLobbyExit => State.BlocksLobbyExit;
 
 	public bool TryRequestLobbyExit()
@@ -254,9 +298,18 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 
 			await WaitForFallbackAsync(request);
 			request.Token.ThrowIfCancellationRequested();
-			var evaluation = await _evaluator.EvaluateAsync(request.Scenario, request.Token);
+			var evaluation = await _evaluator.EvaluateAsync(
+				request.Scenario,
+				_depth,
+				request.Token);
 			if (!IsCurrent(request))
 			{
+				return;
+			}
+			if (_depth == LobbyEvaluationDepth.DegenerateScreeningOnly
+				&& evaluation is ScreeningPassedLobbyEvaluation or ProbabilityTerminalEvaluation)
+			{
+				PublishIfCurrent(request, LobbyEvaluationState.ScreeningPassed(request.Identity));
 				return;
 			}
 			if (evaluation is not TerminalLobbyEvaluation terminal)
@@ -388,7 +441,7 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 		return read.IsUsable ? read.Document : null;
 	}
 
-	private static LobbyEvaluationState ProjectTerminalRecord(
+	private LobbyEvaluationState ProjectTerminalRecord(
 		TerminalLobbyCacheRecord record) =>
 		record switch
 		{
@@ -398,6 +451,9 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 				decided.Reason),
 			DegenerateTerminalCacheRecord degenerate => LobbyEvaluationState.Degenerate(
 				degenerate.CompatibilityIdentity),
+			ProbabilityTerminalCacheRecord probability
+				when _depth == LobbyEvaluationDepth.DegenerateScreeningOnly =>
+				LobbyEvaluationState.ScreeningPassed(probability.CompatibilityIdentity),
 			ProbabilityTerminalCacheRecord probability => LobbyEvaluationState.ProbabilityResult(
 				probability.CompatibilityIdentity,
 				new LobbyProbabilityData(probability.GameResultFrequencies.Select(row =>

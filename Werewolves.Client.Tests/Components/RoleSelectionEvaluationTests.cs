@@ -44,11 +44,15 @@ public class RoleSelectionEvaluationTests
 	public async Task PendingStartAttempt_AtomicallyAcceleratesFallbackButNeverStartsOrNavigates()
 	{
 		var evaluator = new ControlledEvaluator();
-		using var context = CreateContext(EmptyTerminalLobbyCacheByteSource.Instance, evaluator);
+		using var context = CreateContext(
+			EmptyTerminalLobbyCacheByteSource.Instance,
+			evaluator,
+			depth: LobbyEvaluationDepth.DegenerateScreeningOnly);
 		SeedValidLobby(context.Services.GetRequiredService<LobbySetupState>());
 		var starts = 0;
 		var cut = context.RenderModeratorComponent<RoleSelectionPage>(parameters => parameters
 			.Add(component => component.OnStartGame, EventCallback.Factory.Create(this, () => starts++)));
+		cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationPanel)).Should().BeEmpty();
 
 		cut.Find(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Click();
 		await evaluator.Started.WaitAsync(TimeSpan.FromSeconds(5));
@@ -62,6 +66,47 @@ public class RoleSelectionEvaluationTests
 		status.GetAttribute("aria-live").Should().Be("polite");
 		cut.Find(TestId(ModeratorUiTestIds.RoleSelectionStartGame))
 			.HasAttribute("disabled").Should().BeFalse();
+		cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationPanel)).Should().BeEmpty();
+	}
+
+	[Fact]
+	public async Task PendingStartAttempt_WhenSameCheckCompletes_AnnouncesThatStartIsAvailable()
+	{
+		var evaluator = new CompletingEvaluator();
+		using var context = CreateContext(
+			EmptyTerminalLobbyCacheByteSource.Instance,
+			evaluator,
+			depth: LobbyEvaluationDepth.DegenerateScreeningOnly);
+		SeedValidLobby(context.Services.GetRequiredService<LobbySetupState>());
+		var starts = 0;
+		var cut = context.RenderModeratorComponent<RoleSelectionPage>(parameters => parameters
+			.Add(component => component.OnStartGame, EventCallback.Factory.Create(this, () => starts++)));
+
+		cut.Find(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Click();
+		await evaluator.Started.WaitAsync(TimeSpan.FromSeconds(5));
+		cut.Find(TestId(ModeratorUiTestIds.LobbyEvaluationStatus))
+			.TextContent.Should().Contain(ClientStrings.LobbyEvaluation_PendingBlock);
+
+		evaluator.Complete(new ScreeningPassedLobbyEvaluation());
+
+		cut.WaitForAssertion(() =>
+		{
+			context.Services.GetRequiredService<LobbyEvaluationCoordinator>()
+				.State.Kind.Should().Be(LobbyEvaluationStateKind.ScreeningPassed);
+			var status = cut.Find(TestId(ModeratorUiTestIds.LobbyEvaluationStatus));
+			status.TextContent.Should().Contain(ClientStrings.LobbyEvaluation_CheckComplete);
+			status.GetAttribute("role").Should().Be("status");
+			status.GetAttribute("aria-live").Should().Be("polite");
+		});
+		starts.Should().Be(0);
+
+		cut.Find(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Click();
+
+		cut.WaitForAssertion(() =>
+		{
+			starts.Should().Be(1);
+			cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationStatus)).Should().BeEmpty();
+		});
 	}
 
 	[Fact]
@@ -93,7 +138,9 @@ public class RoleSelectionEvaluationTests
 			CreateIdentity(villagers: 2, werewolves: 3),
 			new SingleFactionGameResult(Faction.Werewolf),
 			AlreadyDecidedReason.WerewolfControlShortcut);
-		using var context = CreateContext(new ImmediateByteSource(record));
+		using var context = CreateContext(
+			new ImmediateByteSource(record),
+			depth: LobbyEvaluationDepth.DegenerateScreeningOnly);
 		SeedValidLobby(context.Services.GetRequiredService<LobbySetupState>(), villagers: 2, werewolves: 3);
 		var starts = 0;
 		var cut = context.RenderModeratorComponent<RoleSelectionPage>(parameters => parameters
@@ -101,6 +148,8 @@ public class RoleSelectionEvaluationTests
 		cut.WaitForAssertion(() =>
 			context.Services.GetRequiredService<LobbyEvaluationCoordinator>()
 				.State.Kind.Should().Be(LobbyEvaluationStateKind.AlreadyDecided));
+		cut.Find(TestId(ModeratorUiTestIds.LobbyEvaluationSummary))
+			.TextContent.Should().Contain(ClientStrings.LobbyEvaluation_AlreadyDecided);
 
 		cut.Find(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Click();
 
@@ -126,7 +175,9 @@ public class RoleSelectionEvaluationTests
 				new(villager, 1, VictoryCheckWindow.Dawn, 750, 1_000),
 				new(werewolf, 1, VictoryCheckWindow.PreNight, 250, 1_000)
 			]);
-		using var context = CreateContext(new ImmediateByteSource(record));
+		using var context = CreateContext(
+			new ImmediateByteSource(record),
+			depth: LobbyEvaluationDepth.DegenerateScreeningOnly);
 		SeedValidLobby(context.Services.GetRequiredService<LobbySetupState>());
 		var starts = 0;
 		var cut = context.RenderModeratorComponent<RoleSelectionPage>(parameters => parameters
@@ -134,12 +185,56 @@ public class RoleSelectionEvaluationTests
 		cut.WaitForAssertion(() =>
 			context.Services.GetRequiredService<LobbyEvaluationCoordinator>()
 				.State.Kind.Should().Be(LobbyEvaluationStateKind.Degenerate));
+		cut.Find(TestId(ModeratorUiTestIds.LobbyEvaluationSummary))
+			.TextContent.Should().Contain(ClientStrings.LobbyEvaluation_Degenerate);
 
 		cut.Find(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Click();
 
 		starts.Should().Be(0);
 		cut.Find(TestId(ModeratorUiTestIds.LobbyEvaluationStatus))
 			.TextContent.Should().Contain(ClientStrings.LobbyEvaluation_DegenerateBlock);
+	}
+
+	[Fact]
+	public void DegenerateScreeningOnly_CachedProbabilityRendersNoInsightsAndPermitsOneRealStart()
+	{
+		var villager = new SingleFactionGameResult(Faction.Villager);
+		var werewolf = new SingleFactionGameResult(Faction.Werewolf);
+		var record = new ProbabilityTerminalCacheRecord(
+			CreateIdentity(),
+			[
+				new(villager, 7_000, 10_000),
+				new(werewolf, 3_000, 10_000),
+				new(new NoWinnerGameResult(), 0, 10_000)
+			],
+			[
+				new(villager, 1, VictoryCheckWindow.Dawn, 7_000, 10_000),
+				new(werewolf, 2, VictoryCheckWindow.PreNight, 3_000, 10_000)
+			]);
+		using var context = CreateContext(
+			new ImmediateByteSource(record),
+			depth: LobbyEvaluationDepth.DegenerateScreeningOnly);
+		SeedValidLobby(context.Services.GetRequiredService<LobbySetupState>());
+		var cut = context.RenderModeratorComponent<Routes>();
+		cut.FindAll("button")
+			.Single(button => button.TextContent.Contains(ClientStrings.LobbyRoster_ContinueToRolesButton))
+			.Click();
+		cut.WaitForAssertion(() => context.Services.GetRequiredService<LobbyEvaluationCoordinator>()
+			.State.Kind.Should().Be(LobbyEvaluationStateKind.ScreeningPassed));
+
+		cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationPanel)).Should().BeEmpty();
+		cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationDisclosure)).Should().BeEmpty();
+		cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationRetry)).Should().BeEmpty();
+		cut.Markup.Should().NotContain(ClientStrings.LobbyEvaluation_Probability);
+
+		cut.Find(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Click();
+
+		cut.WaitForAssertion(() =>
+		{
+			context.Services.GetRequiredService<GameClientManager>().HasActiveSession.Should().BeTrue();
+			cut.FindAll(TestId(ModeratorUiTestIds.DashboardShell)).Should().ContainSingle();
+			cut.FindAll(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Should().BeEmpty();
+		});
 	}
 
 	[Fact]
@@ -215,6 +310,54 @@ public class RoleSelectionEvaluationTests
 			cut.Find(TestId(ModeratorUiTestIds.LobbyEvaluationSummary))
 				.TextContent.Should().Contain(ClientStrings.LobbyEvaluation_SimulatorUnavailable);
 		}
+	}
+
+	[Fact]
+	public void DegenerateScreeningOnly_SimulatorUnavailableStaysRenderlessAndAllowsStart()
+	{
+		using var context = CreateContext(
+			EmptyTerminalLobbyCacheByteSource.Instance,
+			classify: _ => new(
+				RulesValid: true,
+				AppSupported: true,
+				SimulatorProfile: null),
+			depth: LobbyEvaluationDepth.DegenerateScreeningOnly);
+		SeedValidLobby(context.Services.GetRequiredService<LobbySetupState>());
+		var starts = 0;
+		var cut = context.RenderModeratorComponent<RoleSelectionPage>(parameters => parameters
+			.Add(component => component.OnStartGame, EventCallback.Factory.Create(this, () => starts++)));
+
+		context.Services.GetRequiredService<LobbyEvaluationCoordinator>()
+			.State.Kind.Should().Be(LobbyEvaluationStateKind.SimulatorUnavailable);
+		cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationPanel)).Should().BeEmpty();
+
+		cut.Find(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Click();
+
+		starts.Should().Be(1);
+	}
+
+	[Fact]
+	public void DegenerateScreeningOnly_EvaluationFailureStaysRenderlessAndAllowsNextStartAttempt()
+	{
+		using var context = CreateContext(
+			EmptyTerminalLobbyCacheByteSource.Instance,
+			depth: LobbyEvaluationDepth.DegenerateScreeningOnly);
+		SeedValidLobby(context.Services.GetRequiredService<LobbySetupState>());
+		var starts = 0;
+		var cut = context.RenderModeratorComponent<RoleSelectionPage>(parameters => parameters
+			.Add(component => component.OnStartGame, EventCallback.Factory.Create(this, () => starts++)));
+
+		cut.Find(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Click();
+		cut.WaitForAssertion(() => context.Services.GetRequiredService<LobbyEvaluationCoordinator>()
+			.State.Kind.Should().Be(LobbyEvaluationStateKind.CouldNotEvaluate));
+
+		starts.Should().Be(0);
+		cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationPanel)).Should().BeEmpty();
+		cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationRetry)).Should().BeEmpty();
+
+		cut.Find(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Click();
+
+		starts.Should().Be(1);
 	}
 
 	[Fact]
@@ -343,6 +486,7 @@ public class RoleSelectionEvaluationTests
 			cut.Find(TestId(ModeratorUiTestIds.LobbyEvaluationSummary))
 				.TextContent.Should().Contain(ClientStrings.LobbyEvaluation_Pending);
 			cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationRetry)).Should().BeEmpty();
+			cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationStatus)).Should().BeEmpty();
 			cut.Markup.Should().NotContain(ClientStrings.LobbyEvaluation_CouldNotEvaluate);
 		});
 	}
@@ -370,7 +514,8 @@ public class RoleSelectionEvaluationTests
 		ITerminalLobbyCacheByteSource bundled,
 		ILobbyTerminalEvaluator? evaluator = null,
 		Func<SimulationScenario, LobbyScenarioSupport>? classify = null,
-		TimeProvider? timeProvider = null)
+		TimeProvider? timeProvider = null,
+		LobbyEvaluationDepth depth = LobbyEvaluationDepth.FullProbability)
 	{
 		var context = new ModeratorComponentTestContext();
 		context.Services.AddSingleton(bundled);
@@ -380,7 +525,13 @@ public class RoleSelectionEvaluationTests
 		context.Services.AddSingleton(timeProvider ?? TimeProvider.System);
 		if (classify is null)
 		{
-			context.Services.AddSingleton<LobbyEvaluationCoordinator>();
+			context.Services.AddSingleton(sp => new LobbyEvaluationCoordinator(
+				sp.GetRequiredService<LobbySetupState>(),
+				sp.GetRequiredService<ITerminalLobbyCacheByteSource>(),
+				sp.GetRequiredService<ILocalTerminalLobbyCacheStore>(),
+				sp.GetRequiredService<ILobbyTerminalEvaluator>(),
+				depth,
+				sp.GetRequiredService<TimeProvider>()));
 		}
 		else
 		{
@@ -389,6 +540,7 @@ public class RoleSelectionEvaluationTests
 				sp.GetRequiredService<ITerminalLobbyCacheByteSource>(),
 				sp.GetRequiredService<ILocalTerminalLobbyCacheStore>(),
 				sp.GetRequiredService<ILobbyTerminalEvaluator>(),
+				depth,
 				sp.GetRequiredService<TimeProvider>(),
 				classify));
 		}
@@ -460,11 +612,34 @@ public class RoleSelectionEvaluationTests
 
 		public async Task<LobbyEvaluationResult> EvaluateAsync(
 			SimulationScenario scenario,
+			LobbyEvaluationDepth depth,
 			CancellationToken cancellationToken = default)
 		{
 			_started.TrySetResult();
 			await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
 			return new CouldNotEvaluateLobbyEvaluation();
+		}
+	}
+
+	private sealed class CompletingEvaluator : ILobbyTerminalEvaluator
+	{
+		private readonly TaskCompletionSource _started =
+			new(TaskCreationOptions.RunContinuationsAsynchronously);
+		private readonly TaskCompletionSource<LobbyEvaluationResult> _completion =
+			new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+		public Task Started => _started.Task;
+
+		public void Complete(LobbyEvaluationResult result) =>
+			_completion.TrySetResult(result);
+
+		public async Task<LobbyEvaluationResult> EvaluateAsync(
+			SimulationScenario scenario,
+			LobbyEvaluationDepth depth,
+			CancellationToken cancellationToken = default)
+		{
+			_started.TrySetResult();
+			return await _completion.Task.WaitAsync(cancellationToken);
 		}
 	}
 
@@ -479,6 +654,7 @@ public class RoleSelectionEvaluationTests
 
 		public async Task<LobbyEvaluationResult> EvaluateAsync(
 			SimulationScenario scenario,
+			LobbyEvaluationDepth depth,
 			CancellationToken cancellationToken = default)
 		{
 			var call = Interlocked.Increment(ref _callCount);
@@ -508,6 +684,7 @@ public class RoleSelectionEvaluationTests
 
 		public async Task<LobbyEvaluationResult> EvaluateAsync(
 			SimulationScenario scenario,
+			LobbyEvaluationDepth depth,
 			CancellationToken cancellationToken = default)
 		{
 			if (Interlocked.Increment(ref _callCount) == 1)

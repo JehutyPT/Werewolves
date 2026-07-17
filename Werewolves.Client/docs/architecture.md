@@ -120,7 +120,7 @@
 ### 7.3. Stats Tab
 *   Roles remaining per faction (list/table).
 *   Elimination log (chronological).
-*   Win probability calculator: deferred, near-term future feature.
+*   Win probability guidance is not a current product surface. Richer simulator work is parked in PRD #94 without a near-term delivery commitment.
 
 ## 8. Lobby
 
@@ -135,6 +135,12 @@
 *   Persistent summary bar: `Selected: X/Y` (current vs. target based on player count).
 *   Submit disabled until count matches. Structural validation errors (e.g., Thief +2 rule) shown as inline messages.
 *   Back-navigation preserves selections.
+
+### 8.3. Production Lobby Safety Evaluation
+*   The production client retains two pre-game safety gates: deterministic Already-Decided Role Composition detection and 1,000-run Degenerate Simulation Scenario screening.
+*   Either safety classification blocks lobby exit and explains the actionable setup problem to the Moderator.
+*   Under ADR-0013, production stops after the 1,000-run degenerate-screening gate. It neither requests the 10,000-run probability batch nor presents Game Result Frequency or Ended-By-Turn Frequency.
+*   The full probability path and cached probability payloads remain dormant for possible future work; they are not deleted or interpreted as current balance guidance. A compatible cached probability record may still establish that safety screening already passed.
 
 ## 9. Lifecycle
 

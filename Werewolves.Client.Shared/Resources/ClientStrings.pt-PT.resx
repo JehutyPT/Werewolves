@@ -238,6 +238,9 @@
   <data name="LobbyEvaluation_PendingBlock" xml:space="preserve">
     <value>A avaliação ainda está em curso. Aguarda pela conclusão antes de iniciar.</value>
   </data>
+  <data name="LobbyEvaluation_CheckComplete" xml:space="preserve">
+    <value>Verificação concluída. Já podes iniciar o jogo.</value>
+  </data>
   <data name="LobbyEvaluation_AlreadyDecidedBlock" xml:space="preserve">
     <value>Esta seleção de papéis já tem um resultado decidido e não pode iniciar.</value>
   </data>

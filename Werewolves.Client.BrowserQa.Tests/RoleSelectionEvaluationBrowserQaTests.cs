@@ -3,6 +3,7 @@ using Microsoft.Playwright;
 using Microsoft.Playwright.Xunit;
 using Werewolves.Client.BrowserQaHost;
 using Werewolves.Client.Resources;
+using Werewolves.Client.Services;
 using Werewolves.Client.Testing;
 using Xunit;
 
@@ -11,7 +12,6 @@ namespace Werewolves.Client.BrowserQa.Tests;
 public sealed class RoleSelectionEvaluationBrowserQaTests : PlaywrightTest, IClassFixture<BrowserQaHostFixture>
 {
 	private const double FixedActionGap = 8;
-	private const double MinimumPointerTarget = 44;
 	private readonly BrowserQaHostFixture _host;
 
 	public RoleSelectionEvaluationBrowserQaTests(BrowserQaHostFixture host)
@@ -23,7 +23,7 @@ public sealed class RoleSelectionEvaluationBrowserQaTests : PlaywrightTest, ICla
 	[Theory]
 	[InlineData(BrowserQaPage.PhoneFrameWidth, BrowserQaPage.PhoneFrameHeight)]
 	[InlineData(BrowserQaPage.WideViewportWidth, BrowserQaPage.WideViewportHeight)]
-	public async Task ProbabilityScenario_IsReachableFocusRetainingAndUnobscured(
+	public async Task ProbabilityScenario_ShowsNoInsightsAndStartRemainsUsable(
 		int viewportWidth,
 		int viewportHeight)
 	{
@@ -38,84 +38,108 @@ public sealed class RoleSelectionEvaluationBrowserQaTests : PlaywrightTest, ICla
 		await page.GetByRole(AriaRole.Button, new() { Name = ClientStrings.LobbyRoster_ContinueToRolesButton })
 			.ClickAsync();
 
+		await Expect(page.GetByTestId("browser-qa-evaluation-state")).ToHaveAttributeAsync(
+			"data-state",
+			nameof(LobbyEvaluationStateKind.ScreeningPassed));
+
+		var back = page.GetByRole(AriaRole.Button, new() { Name = ClientStrings.Common_Back });
+		var start = page.GetByTestId(ModeratorUiTestIds.RoleSelectionStartGame);
+		await Expect(start).ToBeVisibleAsync();
+		await Expect(start).ToBeEnabledAsync();
+		await Expect(page.GetByTestId(ModeratorUiTestIds.LobbyEvaluationPanel)).ToHaveCountAsync(0);
+		await Expect(page.GetByTestId(ModeratorUiTestIds.LobbyEvaluationDisclosure)).ToHaveCountAsync(0);
+		await Expect(page.GetByTestId(ModeratorUiTestIds.LobbyEvaluationRetry)).ToHaveCountAsync(0);
+		(await page.Locator("main").InnerTextAsync()).Should().NotContain("70%");
+		(await page.Locator("main").InnerTextAsync()).Should().NotContain("30%");
+
+		await back.FocusAsync();
+		await page.Keyboard.PressAsync("Tab");
+		(await IsFocusedAsync(start)).Should().BeTrue();
+		await AssertVisibleKeyboardFocusAsync(start);
+		await page.Keyboard.PressAsync("Shift+Tab");
+		(await IsFocusedAsync(back)).Should().BeTrue();
+		await AssertVisibleKeyboardFocusAsync(back);
+
+		await start.ClickAsync();
+
+		await Expect(page.GetByTestId(ModeratorUiTestIds.DashboardShell)).ToBeVisibleAsync();
+		await Expect(page.GetByTestId(ModeratorUiTestIds.RoleSelectionStartGame)).ToHaveCountAsync(0);
+	}
+
+	[Theory]
+	[InlineData(BrowserQaPage.PhoneFrameWidth, BrowserQaPage.PhoneFrameHeight)]
+	[InlineData(BrowserQaPage.WideViewportWidth, BrowserQaPage.WideViewportHeight)]
+	public async Task DegenerateScenario_ShowsUnobscuredWarningAndBlocksStart(
+		int viewportWidth,
+		int viewportHeight)
+	{
+		await using var browser = await Playwright.Chromium.LaunchAsync();
+		var page = await browser.NewPageAsync();
+		await page.SetViewportSizeAsync(viewportWidth, viewportHeight);
+		await page.GotoAsync(_host.DegenerateScenarioUri.ToString(), new()
+		{
+			WaitUntil = BrowserQaPage.ScenarioWaitUntil
+		});
+
+		await page.GetByRole(AriaRole.Button, new() { Name = ClientStrings.LobbyRoster_ContinueToRolesButton })
+			.ClickAsync();
+
 		var frame = page.Locator(BrowserQaCss.PhoneFrameSelector);
 		var shell = page.Locator(".ww-app-shell");
 		var panel = page.GetByTestId(ModeratorUiTestIds.LobbyEvaluationPanel);
-		var disclosure = page.GetByTestId(ModeratorUiTestIds.LobbyEvaluationDisclosure);
+		var summary = page.GetByTestId(ModeratorUiTestIds.LobbyEvaluationSummary);
 		var actionBar = page.GetByTestId(ModeratorUiTestIds.RoleSelectionActionBar);
+		var start = page.GetByTestId(ModeratorUiTestIds.RoleSelectionStartGame);
 		await Expect(panel).ToBeVisibleAsync();
-		await Expect(disclosure).ToBeVisibleAsync();
-		await Expect(disclosure).ToHaveAttributeAsync(
-			BrowserQaAttributes.AriaExpanded,
-			BrowserQaAttributes.AriaFalse);
-		var detailId = await disclosure.GetAttributeAsync(BrowserQaAttributes.AriaControls);
-		detailId.Should().NotBeNullOrWhiteSpace();
-		var detail = page.Locator($"#{detailId}");
-		await Expect(detail).ToHaveCountAsync(1);
-		await Expect(detail).ToBeHiddenAsync();
-
-		var frameLayout = await BrowserQaPage.ReadLayoutAsync(frame);
-		var panelLayout = await BrowserQaPage.ReadLayoutAsync(panel);
-		var disclosureLayout = await BrowserQaPage.ReadLayoutAsync(disclosure);
-		var collapsedOverflow = await ReadOverflowAsync(shell);
-		collapsedOverflow.ScrollWidth.Should().BeLessThanOrEqualTo(collapsedOverflow.ClientWidth + 1);
-		panelLayout.X.Should().BeGreaterThanOrEqualTo(frameLayout.X);
-		panelLayout.Right.Should().BeLessThanOrEqualTo(frameLayout.Right + BrowserQaPage.LayoutPrecision);
-		disclosureLayout.Width.Should().BeGreaterThanOrEqualTo(MinimumPointerTarget);
-		disclosureLayout.Height.Should().BeGreaterThanOrEqualTo(MinimumPointerTarget);
-
-		await disclosure.FocusAsync();
-		await disclosure.PressAsync("Tab");
-		await page.Keyboard.PressAsync("Shift+Tab");
-		(await IsFocusedAsync(disclosure)).Should().BeTrue();
-		var outlineStyle = await BrowserQaPage.ReadComputedStyleAsync(
-			disclosure,
-			BrowserQaCss.OutlineStyleProperty);
-		var outlineWidth = await BrowserQaPage.ReadComputedPixelValueAsync(
-			disclosure,
-			BrowserQaCss.OutlineWidthProperty);
-		var outlineOffset = await BrowserQaPage.ReadComputedPixelValueAsync(
-			disclosure,
-			BrowserQaCss.OutlineOffsetProperty);
-		outlineStyle.Should().NotBe("none");
-		outlineWidth.Should().BeGreaterThanOrEqualTo(2);
-		(disclosureLayout.X - outlineWidth - outlineOffset)
-			.Should().BeGreaterThanOrEqualTo(panelLayout.X);
-		(disclosureLayout.Right + outlineWidth + outlineOffset)
-			.Should().BeLessThanOrEqualTo(panelLayout.Right);
-
-		await disclosure.PressAsync("Enter");
-
-		await Expect(disclosure).ToHaveAttributeAsync(
-			BrowserQaAttributes.AriaExpanded,
-			BrowserQaAttributes.AriaTrue);
-		(await IsFocusedAsync(disclosure)).Should().BeTrue();
-		await Expect(detail).ToBeVisibleAsync();
-		var expandedOverflow = await ReadOverflowAsync(shell);
-		expandedOverflow.ScrollWidth.Should().BeLessThanOrEqualTo(expandedOverflow.ClientWidth + 1);
+		await Expect(summary).ToContainTextAsync(ClientStrings.LobbyEvaluation_Degenerate);
+		await Expect(start).ToBeEnabledAsync();
 
 		await shell.EvaluateAsync("element => { element.scrollTop = element.scrollHeight; }");
-		var lastTurnEntry = page.GetByTestId(ModeratorUiTestIds.LobbyEvaluationTurnEntry).Last;
-		var caveat = detail.Locator(".ww-lobby-evaluation__caveat");
-		await Expect(lastTurnEntry).ToBeVisibleAsync();
-		await Expect(caveat).ToBeVisibleAsync();
+		var frameLayout = await BrowserQaPage.ReadLayoutAsync(frame);
+		var panelLayout = await BrowserQaPage.ReadLayoutAsync(panel);
 		var actionLayout = await BrowserQaPage.ReadLayoutAsync(actionBar);
-		var finalTurnLayout = await BrowserQaPage.ReadLayoutAsync(lastTurnEntry);
-		var caveatLayout = await BrowserQaPage.ReadLayoutAsync(caveat);
-		finalTurnLayout.Bottom.Should().BeLessThan(actionLayout.Y - FixedActionGap);
-		caveatLayout.Bottom.Should().BeLessThan(actionLayout.Y - FixedActionGap);
+		var overflow = await ReadOverflowAsync(shell);
+		overflow.ScrollWidth.Should().BeLessThanOrEqualTo(overflow.ClientWidth + 1);
+		panelLayout.X.Should().BeGreaterThanOrEqualTo(frameLayout.X);
+		panelLayout.Right.Should().BeLessThanOrEqualTo(frameLayout.Right + BrowserQaPage.LayoutPrecision);
+		panelLayout.Bottom.Should().BeLessThan(actionLayout.Y - FixedActionGap);
 
-		await disclosure.FocusAsync();
-		await disclosure.PressAsync("Enter");
-		await Expect(disclosure).ToHaveAttributeAsync(
-			BrowserQaAttributes.AriaExpanded,
-			BrowserQaAttributes.AriaFalse);
-		await Expect(detail).ToBeHiddenAsync();
-		(await IsFocusedAsync(disclosure)).Should().BeTrue();
+		await start.ClickAsync();
+
+		await Expect(page.GetByTestId(ModeratorUiTestIds.LobbyEvaluationStatus))
+			.ToContainTextAsync(ClientStrings.LobbyEvaluation_DegenerateBlock);
+		await Expect(page.GetByTestId(ModeratorUiTestIds.DashboardShell)).ToHaveCountAsync(0);
+		await Expect(start).ToBeVisibleAsync();
+
+		var status = page.GetByTestId(ModeratorUiTestIds.LobbyEvaluationStatus);
+		var panelLayoutAfterAttempt = await BrowserQaPage.ReadLayoutAsync(panel);
+		var actionLayoutAfterAttempt = await BrowserQaPage.ReadLayoutAsync(actionBar);
+		var statusLayout = await BrowserQaPage.ReadLayoutAsync(status);
+		panelLayoutAfterAttempt.Bottom.Should().BeLessThan(
+			actionLayoutAfterAttempt.Y - FixedActionGap);
+		statusLayout.X.Should().BeGreaterThanOrEqualTo(actionLayoutAfterAttempt.X);
+		statusLayout.Right.Should().BeLessThanOrEqualTo(
+			actionLayoutAfterAttempt.Right + BrowserQaPage.LayoutPrecision);
+		statusLayout.Bottom.Should().BeLessThanOrEqualTo(
+			actionLayoutAfterAttempt.Bottom + BrowserQaPage.LayoutPrecision);
+		actionLayoutAfterAttempt.Bottom.Should().BeLessThanOrEqualTo(
+			frameLayout.Bottom + BrowserQaPage.LayoutPrecision);
 	}
 
 	private static Task<bool> IsFocusedAsync(ILocator locator) =>
 		locator.EvaluateAsync<bool>("element => document.activeElement === element");
+
+	private static async Task AssertVisibleKeyboardFocusAsync(ILocator locator)
+	{
+		var outlineStyle = await BrowserQaPage.ReadComputedStyleAsync(
+			locator,
+			BrowserQaCss.OutlineStyleProperty);
+		var outlineWidth = await BrowserQaPage.ReadComputedPixelValueAsync(
+			locator,
+			BrowserQaCss.OutlineWidthProperty);
+		outlineStyle.Should().NotBe("none");
+		outlineWidth.Should().BeGreaterThanOrEqualTo(2);
+	}
 
 	private static Task<OverflowMetrics> ReadOverflowAsync(ILocator locator) =>
 		locator.EvaluateAsync<OverflowMetrics>(

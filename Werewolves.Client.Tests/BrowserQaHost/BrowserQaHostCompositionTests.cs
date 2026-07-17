@@ -36,11 +36,12 @@ public class BrowserQaHostCompositionTests
 		context.Services.AddBrowserQaHostModeratorServices();
 
 		var coordinator = context.Services.GetRequiredService<LobbyEvaluationCoordinator>();
-		await WaitForStateAsync(coordinator, LobbyEvaluationStateKind.Probability);
+		await WaitForStateAsync(coordinator, LobbyEvaluationStateKind.ScreeningPassed);
 
 		source.LogicalNames.Should().Equal("terminal-lobby-cache.json");
 		evaluator.CallCount.Should().Be(0);
-		coordinator.State.Probability.Should().NotBeNull();
+		coordinator.Depth.Should().Be(LobbyEvaluationDepth.DegenerateScreeningOnly);
+		coordinator.State.Probability.Should().BeNull();
 	}
 
 	[Fact]
@@ -54,7 +55,10 @@ public class BrowserQaHostCompositionTests
 		context.Services.GetRequiredService<IScreenWakeLock>().KeepScreenOn.Should().BeTrue();
 		context.Services.GetRequiredService<IHapticFeedbackService>().Invoking(haptic => haptic.Click()).Should().NotThrow();
 		context.Services.GetRequiredService<IGameSessionSaveStore>().Load().Should().BeNull();
-		context.Services.GetRequiredService<LobbyEvaluationCoordinator>().Should().NotBeNull();
+		context.Services.GetRequiredService<LobbyEvaluationCoordinator>().Depth
+			.Should().Be(LobbyEvaluationDepth.DegenerateScreeningOnly);
+		context.Services.GetRequiredService<LobbyEvaluationSettings>().Depth
+			.Should().Be(LobbyEvaluationDepth.DegenerateScreeningOnly);
 		context.Services.GetRequiredService<ITerminalLobbyCacheByteSource>()
 			.Should().BeOfType<BrowserQaScenarioTerminalLobbyCacheByteSource>();
 		context.Services.GetRequiredService<ILocalTerminalLobbyCacheStore>()
@@ -76,7 +80,7 @@ public class BrowserQaHostCompositionTests
 	}
 
 	[Fact]
-	public void BrowserQaRoot_WhenProbabilityScenarioIsRequested_RendersDeterministicSharedEvaluation()
+	public void BrowserQaRoot_WhenProbabilityScenarioIsRequested_HidesInsightsAndAllowsStart()
 	{
 		using var context = CreateBrowserQaHostContext(BrowserQaScenario.Probability);
 		var rendered = context.Render<BrowserQaRoot>();
@@ -86,11 +90,52 @@ public class BrowserQaHostCompositionTests
 		rendered.WaitForAssertion(() =>
 		{
 			context.Services.GetRequiredService<LobbyEvaluationCoordinator>()
-				.State.Kind.Should().Be(LobbyEvaluationStateKind.Probability);
-			rendered.Find($"[data-testid='{ModeratorUiTestIds.LobbyEvaluationSummary}']")
-				.TextContent.Should().Contain(ClientStrings.LobbyEvaluation_Probability);
+				.State.Kind.Should().Be(LobbyEvaluationStateKind.ScreeningPassed);
+			rendered.Find("[data-testid='browser-qa-evaluation-state']")
+				.GetAttribute("data-state").Should().Be(nameof(LobbyEvaluationStateKind.ScreeningPassed));
+			rendered.FindAll($"[data-testid='{ModeratorUiTestIds.LobbyEvaluationPanel}']")
+				.Should().BeEmpty();
 			rendered.FindAll($"[data-testid='{ModeratorUiTestIds.LobbyEvaluationDisclosure}']")
+				.Should().BeEmpty();
+			rendered.FindAll($"[data-testid='{ModeratorUiTestIds.LobbyEvaluationRetry}']")
+				.Should().BeEmpty();
+		});
+
+		rendered.Find($"[data-testid='{ModeratorUiTestIds.RoleSelectionStartGame}']").Click();
+
+		rendered.WaitForAssertion(() =>
+		{
+			context.Services.GetRequiredService<GameClientManager>().HasActiveSession.Should().BeTrue();
+			rendered.FindAll($"[data-testid='{ModeratorUiTestIds.DashboardShell}']")
 				.Should().ContainSingle();
+			rendered.FindAll($"[data-testid='{ModeratorUiTestIds.RoleSelectionStartGame}']")
+				.Should().BeEmpty();
+		});
+	}
+
+	[Fact]
+	public void BrowserQaRoot_WhenDegenerateScenarioIsRequested_ShowsWarningAndBlocksStart()
+	{
+		using var context = CreateBrowserQaHostContext(BrowserQaScenario.Degenerate);
+		var rendered = context.Render<BrowserQaRoot>();
+
+		FindButtonByText(rendered, ClientStrings.LobbyRoster_ContinueToRolesButton).Click();
+
+		rendered.WaitForAssertion(() =>
+		{
+			context.Services.GetRequiredService<LobbyEvaluationCoordinator>()
+				.State.Kind.Should().Be(LobbyEvaluationStateKind.Degenerate);
+			rendered.Find($"[data-testid='{ModeratorUiTestIds.LobbyEvaluationSummary}']")
+				.TextContent.Should().Contain(ClientStrings.LobbyEvaluation_Degenerate);
+		});
+
+		rendered.Find($"[data-testid='{ModeratorUiTestIds.RoleSelectionStartGame}']").Click();
+
+		rendered.WaitForAssertion(() =>
+		{
+			context.Services.GetRequiredService<GameClientManager>().HasActiveSession.Should().BeFalse();
+			rendered.Find($"[data-testid='{ModeratorUiTestIds.LobbyEvaluationStatus}']")
+				.TextContent.Should().Contain(ClientStrings.LobbyEvaluation_DegenerateBlock);
 		});
 	}
 
@@ -253,6 +298,7 @@ public class BrowserQaHostCompositionTests
 
 		public Task<LobbyEvaluationResult> EvaluateAsync(
 			SimulationScenario scenario,
+			LobbyEvaluationDepth depth,
 			CancellationToken cancellationToken = default)
 		{
 			CallCount++;

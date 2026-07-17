@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Werewolves.Client.Services;
 using Werewolves.Client.Tests.Helpers;
+using Werewolves.Core.GameLogic.Simulation;
 using Werewolves.Core.StateModels.Enums;
 using Xunit;
 
@@ -22,9 +23,12 @@ public class NativeLobbyEvaluationCompositionTests
 			.Should().BeOfType<MauiTerminalLobbyCacheByteSource>();
 		provider.GetRequiredService<ILocalTerminalLobbyCacheStore>()
 			.Should().BeOfType<FileTerminalLobbyCacheStore>();
+		var settings = provider.GetRequiredService<LobbyEvaluationSettings>();
+		settings.Depth.Should().Be(LobbyEvaluationDepth.DegenerateScreeningOnly);
 		provider.GetRequiredService<ILobbyTerminalEvaluator>()
 			.Should().BeOfType<AsyncTerminalLobbyEvaluator>();
 		var coordinator = provider.GetRequiredService<LobbyEvaluationCoordinator>();
+		coordinator.Depth.Should().Be(settings.Depth);
 		coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.Pending);
 
 		coordinator.Dispose();
