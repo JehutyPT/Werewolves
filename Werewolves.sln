@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Werewolves.Core.GameLogic",
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Werewolves.Core.Tests", "Werewolves.Core\Werewolves.Core.Tests\Werewolves.Core.Tests.csproj", "{A222C465-ED62-4248-9F43-5096CC8D9EF9}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Werewolves.Core.CacheGenerator", "Werewolves.Core\Werewolves.Core.CacheGenerator\Werewolves.Core.CacheGenerator.csproj", "{3B3C7400-5614-456D-9F16-F8AF67763EE9}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Werewolves.Client", "Werewolves.Client\Werewolves.UI.MobileClient.csproj", "{D1F2E3A4-B5C6-47D8-9E0F-1A2B3C4D5E6F}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Werewolves.Client.Tests", "Werewolves.Client.Tests\Werewolves.Client.Tests.csproj", "{BF7D0C66-248A-46C2-A628-D3BFEFDDA332}"
@@ -125,6 +127,18 @@ Global
 		{EDE97A87-0462-476C-98FA-A602E2E22B5B}.Release|x64.Build.0 = Release|Any CPU
 		{EDE97A87-0462-476C-98FA-A602E2E22B5B}.Release|x86.ActiveCfg = Release|Any CPU
 		{EDE97A87-0462-476C-98FA-A602E2E22B5B}.Release|x86.Build.0 = Release|Any CPU
+		{3B3C7400-5614-456D-9F16-F8AF67763EE9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3B3C7400-5614-456D-9F16-F8AF67763EE9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3B3C7400-5614-456D-9F16-F8AF67763EE9}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{3B3C7400-5614-456D-9F16-F8AF67763EE9}.Debug|x64.Build.0 = Debug|Any CPU
+		{3B3C7400-5614-456D-9F16-F8AF67763EE9}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{3B3C7400-5614-456D-9F16-F8AF67763EE9}.Debug|x86.Build.0 = Debug|Any CPU
+		{3B3C7400-5614-456D-9F16-F8AF67763EE9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3B3C7400-5614-456D-9F16-F8AF67763EE9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3B3C7400-5614-456D-9F16-F8AF67763EE9}.Release|x64.ActiveCfg = Release|Any CPU
+		{3B3C7400-5614-456D-9F16-F8AF67763EE9}.Release|x64.Build.0 = Release|Any CPU
+		{3B3C7400-5614-456D-9F16-F8AF67763EE9}.Release|x86.ActiveCfg = Release|Any CPU
+		{3B3C7400-5614-456D-9F16-F8AF67763EE9}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

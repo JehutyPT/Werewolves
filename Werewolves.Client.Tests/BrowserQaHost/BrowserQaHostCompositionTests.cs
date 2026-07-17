@@ -12,8 +12,12 @@ using Werewolves.Client.BrowserQaHost.Components;
 using Werewolves.Client.Components;
 using Werewolves.Client.Resources;
 using Werewolves.Client.Services;
+using Werewolves.Client.Testing;
 using Werewolves.Client.Tests.Helpers;
+using Werewolves.Core.GameLogic.Simulation;
+using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Models.Instructions;
+using Werewolves.Core.StateModels.Models.Simulation;
 using Xunit;
 using Html = Werewolves.Client.Tests.Helpers.ClientTestReferences.Html;
 
@@ -21,6 +25,25 @@ namespace Werewolves.Client.Tests.BrowserQaHost;
 
 public class BrowserQaHostCompositionTests
 {
+	[Fact]
+	public async Task BrowserComposition_UsesBoundedSemanticCacheFixtureWithoutLiveFallback()
+	{
+		using var context = new BunitContext();
+		var evaluator = new CountingEvaluator();
+		var source = new SemanticFixtureByteSource();
+		context.Services.AddScoped<ITerminalLobbyCacheByteSource>(_ => source);
+		context.Services.AddScoped<ILobbyTerminalEvaluator>(_ => evaluator);
+		context.Services.AddBrowserQaHostModeratorServices();
+
+		var coordinator = context.Services.GetRequiredService<LobbyEvaluationCoordinator>();
+		await WaitForStateAsync(coordinator, LobbyEvaluationStateKind.ScreeningPassed);
+
+		source.LogicalNames.Should().Equal("terminal-lobby-cache.json");
+		evaluator.CallCount.Should().Be(0);
+		coordinator.Depth.Should().Be(LobbyEvaluationDepth.DegenerateScreeningOnly);
+		coordinator.State.Probability.Should().BeNull();
+	}
+
 	[Fact]
 	public async Task Services_RenderSharedRoutesWithBrowserSafeAdapters()
 	{
@@ -32,6 +55,16 @@ public class BrowserQaHostCompositionTests
 		context.Services.GetRequiredService<IScreenWakeLock>().KeepScreenOn.Should().BeTrue();
 		context.Services.GetRequiredService<IHapticFeedbackService>().Invoking(haptic => haptic.Click()).Should().NotThrow();
 		context.Services.GetRequiredService<IGameSessionSaveStore>().Load().Should().BeNull();
+		context.Services.GetRequiredService<LobbyEvaluationCoordinator>().Depth
+			.Should().Be(LobbyEvaluationDepth.DegenerateScreeningOnly);
+		context.Services.GetRequiredService<LobbyEvaluationSettings>().Depth
+			.Should().Be(LobbyEvaluationDepth.DegenerateScreeningOnly);
+		context.Services.GetRequiredService<ITerminalLobbyCacheByteSource>()
+			.Should().BeOfType<BrowserQaScenarioTerminalLobbyCacheByteSource>();
+		context.Services.GetRequiredService<ILocalTerminalLobbyCacheStore>()
+			.Should().BeOfType<InMemoryTerminalLobbyCacheStore>();
+		context.Services.GetRequiredService<ILobbyTerminalEvaluator>()
+			.Should().BeSameAs(DisabledLobbyTerminalEvaluator.Instance);
 
 		var audio = context.Services.GetRequiredService<IInstructionAudioPlayback>();
 		await audio.SetMutedAsync(true, instruction: null);
@@ -44,6 +77,66 @@ public class BrowserQaHostCompositionTests
 			.HasAttribute(Html.Attributes.Disabled)
 			.Should()
 			.BeFalse();
+	}
+
+	[Fact]
+	public void BrowserQaRoot_WhenProbabilityScenarioIsRequested_HidesInsightsAndAllowsStart()
+	{
+		using var context = CreateBrowserQaHostContext(BrowserQaScenario.Probability);
+		var rendered = context.Render<BrowserQaRoot>();
+
+		FindButtonByText(rendered, ClientStrings.LobbyRoster_ContinueToRolesButton).Click();
+
+		rendered.WaitForAssertion(() =>
+		{
+			context.Services.GetRequiredService<LobbyEvaluationCoordinator>()
+				.State.Kind.Should().Be(LobbyEvaluationStateKind.ScreeningPassed);
+			rendered.Find("[data-testid='browser-qa-evaluation-state']")
+				.GetAttribute("data-state").Should().Be(nameof(LobbyEvaluationStateKind.ScreeningPassed));
+			rendered.FindAll($"[data-testid='{ModeratorUiTestIds.LobbyEvaluationPanel}']")
+				.Should().BeEmpty();
+			rendered.FindAll($"[data-testid='{ModeratorUiTestIds.LobbyEvaluationDisclosure}']")
+				.Should().BeEmpty();
+			rendered.FindAll($"[data-testid='{ModeratorUiTestIds.LobbyEvaluationRetry}']")
+				.Should().BeEmpty();
+		});
+
+		rendered.Find($"[data-testid='{ModeratorUiTestIds.RoleSelectionStartGame}']").Click();
+
+		rendered.WaitForAssertion(() =>
+		{
+			context.Services.GetRequiredService<GameClientManager>().HasActiveSession.Should().BeTrue();
+			rendered.FindAll($"[data-testid='{ModeratorUiTestIds.DashboardShell}']")
+				.Should().ContainSingle();
+			rendered.FindAll($"[data-testid='{ModeratorUiTestIds.RoleSelectionStartGame}']")
+				.Should().BeEmpty();
+		});
+	}
+
+	[Fact]
+	public void BrowserQaRoot_WhenDegenerateScenarioIsRequested_ShowsWarningAndBlocksStart()
+	{
+		using var context = CreateBrowserQaHostContext(BrowserQaScenario.Degenerate);
+		var rendered = context.Render<BrowserQaRoot>();
+
+		FindButtonByText(rendered, ClientStrings.LobbyRoster_ContinueToRolesButton).Click();
+
+		rendered.WaitForAssertion(() =>
+		{
+			context.Services.GetRequiredService<LobbyEvaluationCoordinator>()
+				.State.Kind.Should().Be(LobbyEvaluationStateKind.Degenerate);
+			rendered.Find($"[data-testid='{ModeratorUiTestIds.LobbyEvaluationSummary}']")
+				.TextContent.Should().Contain(ClientStrings.LobbyEvaluation_Degenerate);
+		});
+
+		rendered.Find($"[data-testid='{ModeratorUiTestIds.RoleSelectionStartGame}']").Click();
+
+		rendered.WaitForAssertion(() =>
+		{
+			context.Services.GetRequiredService<GameClientManager>().HasActiveSession.Should().BeFalse();
+			rendered.Find($"[data-testid='{ModeratorUiTestIds.LobbyEvaluationStatus}']")
+				.TextContent.Should().Contain(ClientStrings.LobbyEvaluation_DegenerateBlock);
+		});
 	}
 
 	[Fact]
@@ -122,6 +215,7 @@ public class BrowserQaHostCompositionTests
 
 		using var scope = app.Services.CreateScope();
 		scope.ServiceProvider.GetRequiredService<GameClientManager>().Should().NotBeNull();
+		scope.ServiceProvider.GetRequiredService<LobbyEvaluationCoordinator>().Should().NotBeNull();
 	}
 
 	private static BunitContext CreateBrowserQaHostContext(BrowserQaScenario scenario = BrowserQaScenario.Lobby)
@@ -139,6 +233,76 @@ public class BrowserQaHostCompositionTests
 
 	private static IElement FindButtonByText<TComponent>(IRenderedComponent<TComponent> rendered, string text)
 		where TComponent : IComponent =>
-		rendered.FindAll(Html.Selectors.Button)
+			rendered.FindAll(Html.Selectors.Button)
 			.Single(button => button.TextContent.Contains(text, StringComparison.CurrentCulture));
+
+	private static Task WaitForStateAsync(
+		LobbyEvaluationCoordinator coordinator,
+		LobbyEvaluationStateKind expected)
+	{
+		if (coordinator.State.Kind == expected)
+		{
+			return Task.CompletedTask;
+		}
+		var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+		EventHandler? changed = null;
+		changed = (_, _) =>
+		{
+			if (coordinator.State.Kind != expected)
+			{
+				return;
+			}
+			coordinator.StateChanged -= changed;
+			completion.TrySetResult();
+		};
+		coordinator.StateChanged += changed;
+		return completion.Task.WaitAsync(TimeSpan.FromSeconds(5));
+	}
+
+	private sealed class SemanticFixtureByteSource : ITerminalLobbyCacheByteSource
+	{
+		public List<string> LogicalNames { get; } = [];
+
+		public ValueTask<ReadOnlyMemory<byte>?> ReadAsync(
+			string logicalName,
+			CancellationToken cancellationToken = default)
+		{
+			LogicalNames.Add(logicalName);
+			var scenario = new SimulationScenario(
+				BrowserQaFixtures.DefaultPlayerNames.Count,
+				BrowserQaFixtures.DefaultRoles);
+			var identity = new SimulationCompatibilityIdentity(
+				scenario.ToCanonical(),
+				SimulatorProfile.Active.Identity);
+			var record = new ProbabilityTerminalCacheRecord(
+				identity,
+				[
+					new(new SingleFactionGameResult(Faction.Villager), 7_000, 10_000),
+					new(new SingleFactionGameResult(Faction.Werewolf), 3_000, 10_000),
+					new(new NoWinnerGameResult(), 0, 10_000)
+				],
+				[
+					new(new SingleFactionGameResult(Faction.Villager), 1,
+						VictoryCheckWindow.Dawn, 7_000, 10_000),
+					new(new SingleFactionGameResult(Faction.Werewolf), 2,
+						VictoryCheckWindow.PreNight, 3_000, 10_000)
+				]);
+			return ValueTask.FromResult<ReadOnlyMemory<byte>?>(
+				TerminalLobbyCache.Write(TerminalLobbyCache.CreateDocument([record])));
+		}
+	}
+
+	private sealed class CountingEvaluator : ILobbyTerminalEvaluator
+	{
+		public int CallCount { get; private set; }
+
+		public Task<LobbyEvaluationResult> EvaluateAsync(
+			SimulationScenario scenario,
+			LobbyEvaluationDepth depth,
+			CancellationToken cancellationToken = default)
+		{
+			CallCount++;
+			return Task.FromResult<LobbyEvaluationResult>(new CouldNotEvaluateLobbyEvaluation());
+		}
+	}
 }

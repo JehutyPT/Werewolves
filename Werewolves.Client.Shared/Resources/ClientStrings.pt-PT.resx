@@ -163,6 +163,93 @@
   <data name="RoleSelection_StartGameButton" xml:space="preserve">
     <value>Iniciar jogo</value>
   </data>
+  <data name="LobbyEvaluation_GameResultShared" xml:space="preserve">
+    <value>Vitória partilhada</value>
+  </data>
+  <data name="LobbyEvaluation_GameResultNoWinner" xml:space="preserve">
+    <value>Sem vencedor</value>
+  </data>
+  <data name="LobbyEvaluation_GameResultSharedFormat" xml:space="preserve">
+    <value>{0}: {1}</value>
+  </data>
+  <data name="LobbyEvaluation_FactionVillager" xml:space="preserve">
+    <value>Aldeões</value>
+  </data>
+  <data name="LobbyEvaluation_FactionWerewolf" xml:space="preserve">
+    <value>Lobisomens</value>
+  </data>
+  <data name="LobbyEvaluation_FactionSeparator" xml:space="preserve">
+    <value> e </value>
+  </data>
+  <data name="LobbyEvaluation_NotObserved" xml:space="preserve">
+    <value>Não observado</value>
+  </data>
+  <data name="LobbyEvaluation_LessThanOnePercent" xml:space="preserve">
+    <value>Menos de 1%</value>
+  </data>
+  <data name="LobbyEvaluation_WholePercentFormat" xml:space="preserve">
+    <value>{0}%</value>
+  </data>
+  <data name="LobbyEvaluation_ReasonNoWerewolfBeneficiaries" xml:space="preserve">
+    <value>Nenhum papel pode vencer com a fação dos Lobisomens.</value>
+  </data>
+  <data name="LobbyEvaluation_ReasonWerewolfControl" xml:space="preserve">
+    <value>Os Lobisomens já controlam a aldeia.</value>
+  </data>
+  <data name="LobbyEvaluation_ReasonMultipleVictories" xml:space="preserve">
+    <value>Mais de uma condição de vitória já está satisfeita.</value>
+  </data>
+  <data name="LobbyEvaluation_Title" xml:space="preserve">
+    <value>Avaliação antes do jogo</value>
+  </data>
+  <data name="LobbyEvaluation_Pending" xml:space="preserve">
+    <value>A avaliar esta seleção de papéis...</value>
+  </data>
+  <data name="LobbyEvaluation_AlreadyDecided" xml:space="preserve">
+    <value>O resultado já está decidido</value>
+  </data>
+  <data name="LobbyEvaluation_Degenerate" xml:space="preserve">
+    <value>Todos os jogos de referência terminaram durante o Turno 1.</value>
+  </data>
+  <data name="LobbyEvaluation_Probability" xml:space="preserve">
+    <value>Frequência de resultados de referência</value>
+  </data>
+  <data name="LobbyEvaluation_DetailToggle" xml:space="preserve">
+    <value>Ver frequência de fim por Turno</value>
+  </data>
+  <data name="LobbyEvaluation_DetailTitle" xml:space="preserve">
+    <value>Frequência de fim por Turno</value>
+  </data>
+  <data name="LobbyEvaluation_TurnFormat" xml:space="preserve">
+    <value>Turno {0}</value>
+  </data>
+  <data name="LobbyEvaluation_FiniteBaselineCaveat" xml:space="preserve">
+    <value>Estas frequências resultam de uma referência finita e podem variar.</value>
+  </data>
+  <data name="LobbyEvaluation_CouldNotEvaluate" xml:space="preserve">
+    <value>Não foi possível concluir a avaliação.</value>
+  </data>
+  <data name="LobbyEvaluation_Retry" xml:space="preserve">
+    <value>Tentar novamente</value>
+  </data>
+  <data name="LobbyEvaluation_SimulatorUnavailable" xml:space="preserve">
+    <value>A avaliação não está disponível para esta seleção de papéis.</value>
+  </data>
+  <data name="LobbyEvaluation_PendingBlock" xml:space="preserve">
+    <value>A avaliação ainda está em curso. Aguarda pela conclusão antes de iniciar.</value>
+  </data>
+  <data name="LobbyEvaluation_CheckComplete" xml:space="preserve">
+    <value>Verificação concluída. Já podes iniciar o jogo.</value>
+  </data>
+  <data name="LobbyEvaluation_AlreadyDecidedBlock" xml:space="preserve">
+    <value>Esta seleção de papéis já tem um resultado decidido e não pode iniciar.</value>
+  </data>
+  <data name="LobbyEvaluation_DegenerateBlock" xml:space="preserve">
+    <value>Esta seleção de papéis termina sempre durante o Turno 1 e não pode iniciar.</value>
+  </data>
+  <data name="LobbyEvaluation_Blocked" xml:space="preserve">
+    <value>O jogo não pode iniciar com a avaliação atual.</value>
+  </data>
   <data name="Dashboard_TabsAria" xml:space="preserve">
     <value>Áreas do jogo</value>
   </data>

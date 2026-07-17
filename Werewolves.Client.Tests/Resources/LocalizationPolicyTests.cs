@@ -39,6 +39,29 @@ public class LocalizationPolicyTests
 			ClientTestReferences.AssertionReasons.TestProjectsUseProductionLocalizationContracts);
 	}
 
+	[Fact]
+	public void ExactFactionSeparatorLiteral_IsStillReportedAsLocalizedCopy()
+	{
+		var resources = LoadLocalizedResourceValues();
+		var resourcesByValue = resources
+			.GroupBy(resource => resource.Value)
+			.ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.Ordinal);
+		var resourcesByKey = resources
+			.GroupBy(resource => resource.Key)
+			.ToDictionary(group => group.Key, group => group.First().Value, StringComparer.Ordinal);
+		var separator = string.Concat(" ", "and", " ");
+
+		var violations = FindResourceLiteralViolations(
+			"synthetic-test.cs",
+			new CSharpStringLiteral(separator, 1),
+			resources,
+			resourcesByValue,
+			resourcesByKey);
+
+		violations.Should().ContainSingle(violation =>
+			violation.ResourceKey == nameof(ClientStrings.LobbyEvaluation_FactionSeparator));
+	}
+
 	private static IEnumerable<string> EnumeratePolicyTestFiles()
 	{
 		var testRoots = new[]
@@ -93,7 +116,8 @@ public class LocalizationPolicyTests
 	}
 
 	private static bool ShouldFlagContainedValue(LocalizedResourceValue resource) =>
-		resource.Value.Length >= 5
+		resource.Key != nameof(ClientStrings.LobbyEvaluation_FactionSeparator)
+		&& resource.Value.Length >= 5
 		&& (resource.Value.Any(character => character > 127)
 			|| resource.Value.Contains(' ', StringComparison.Ordinal)
 			|| resource.Key.StartsWith(StatusEffectResourceKeyPrefix, StringComparison.Ordinal)

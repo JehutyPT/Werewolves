@@ -20,6 +20,9 @@ internal static class BrowserQaCss
 	public const string PageHorizontalInset = "--ww-page-px";
 	public const string PaddingBottomProperty = "padding-bottom";
 	public const string PaddingTopProperty = "padding-top";
+	public const string OutlineOffsetProperty = "outline-offset";
+	public const string OutlineStyleProperty = "outline-style";
+	public const string OutlineWidthProperty = "outline-width";
 	public const string PhoneFrameSelector = ".phone-frame";
 	public const string PositionProperty = "position";
 	public const string SecondUnit = "s";

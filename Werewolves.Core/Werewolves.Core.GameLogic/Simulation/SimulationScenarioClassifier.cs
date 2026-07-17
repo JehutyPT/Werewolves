@@ -8,9 +8,14 @@ namespace Werewolves.Core.GameLogic.Simulation;
 public static class SimulationScenarioClassifier
 {
 	public static SimulationScenarioClassification Classify(SimulationScenario scenario)
+		=> Classify(scenario, SimulatorProfile.Active);
+
+	internal static SimulationScenarioClassification Classify(
+		SimulationScenario scenario,
+		SimulatorProfile profile)
 	{
 		ArgumentNullException.ThrowIfNull(scenario);
-		var profile = SimulatorProfile.Active;
+		ArgumentNullException.ThrowIfNull(profile);
 
 		GameSessionConfig.TryGetPhysicalSetupIssues(
 			scenario.PlayerCount,
@@ -30,6 +35,7 @@ public static class SimulationScenarioClassifier
 				rulesValidity,
 				appSupport: null,
 				simulatorSupport: null,
+				alreadyDecided: null,
 				cacheability: null);
 		}
 
@@ -46,6 +52,7 @@ public static class SimulationScenarioClassifier
 				rulesValidity,
 				appSupport,
 				simulatorSupport: null,
+				alreadyDecided: null,
 				cacheability: null);
 		}
 
@@ -70,6 +77,21 @@ public static class SimulationScenarioClassifier
 				rulesValidity,
 				appSupport,
 				simulatorSupport,
+				alreadyDecided: null,
+				cacheability: null);
+		}
+
+		var alreadyDecided = AlreadyDecidedRoleCompositionClassifier.Classify(
+			scenario.ToCanonical().RoleComposition,
+			profile);
+		if (alreadyDecided.IsAlreadyDecided)
+		{
+			return new SimulationScenarioClassification(
+				scenario,
+				rulesValidity,
+				appSupport,
+				simulatorSupport,
+				alreadyDecided,
 				cacheability: null);
 		}
 
@@ -85,6 +107,7 @@ public static class SimulationScenarioClassifier
 			rulesValidity,
 			appSupport,
 			simulatorSupport,
+			alreadyDecided,
 			cacheability);
 	}
 
@@ -103,6 +126,8 @@ public sealed class SimulationScenarioClassification
 
 	public SimulatorSupportResult? SimulatorSupport { get; }
 
+	public AlreadyDecidedRoleCompositionResult? AlreadyDecided { get; }
+
 	public CacheabilityResult? Cacheability { get; }
 
 	internal SimulationScenarioClassification(
@@ -110,12 +135,14 @@ public sealed class SimulationScenarioClassification
 		RulesValidityResult rulesValidity,
 		AppSupportResult? appSupport,
 		SimulatorSupportResult? simulatorSupport,
+		AlreadyDecidedRoleCompositionResult? alreadyDecided,
 		CacheabilityResult? cacheability)
 	{
 		Scenario = scenario;
 		RulesValidity = rulesValidity;
 		AppSupport = appSupport;
 		SimulatorSupport = simulatorSupport;
+		AlreadyDecided = alreadyDecided;
 		Cacheability = cacheability;
 	}
 }

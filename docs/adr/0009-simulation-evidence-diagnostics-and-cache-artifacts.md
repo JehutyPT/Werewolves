@@ -2,11 +2,11 @@
 
 Simulation runs and batches produce stable Simulation Result Evidence. Diagnostic material such as full transcripts, final Player/Faction snapshots, exception details, instruction counts, timing, memory, raw engine traces, and driver limits can be useful during development, but it is not part of the stable evidence contract.
 
-Stable per-run evidence is intentionally minimal: run identity, Run Seed Material, completion state, and, for Completed Simulation Runs, the Game Session Outcome, ending Turn, and ending Victory Check Window. Batch-level evidence includes the information needed to derive screening and probability views, including Completed and Incomplete Simulation Run counts, Possible Faction and Possible Game Result inventories, completed outcomes by Game Result, completed outcomes by ending Victory Check Window, and ending Turn.
+Stable per-run evidence is intentionally minimal: run identity, Run Seed Material, completion state, and, for Completed Simulation Runs, the Game Session Outcome, ending Turn, and ending Victory Check Window. Simulation execution first returns Simulation Batch Source Evidence containing execution identity, ordered per-attempt source records, and Completed and Incomplete Simulation Run counts. This source evidence is a precursor from which downstream terminal evaluation may compose complete batch-level Simulation Result Evidence with the information needed to derive screening and probability views, including Possible Faction and Possible Game Result inventories, completed outcomes by Game Result, completed outcomes by ending Victory Check Window, and ending Turn.
 
 Bundled Simulator Cache entries are compressed lobby evaluations derived from stable evidence. They do not carry per-run source records or replay material. Run Seed Material remains in evidence and replay/audit workflows; cache entries carry only the derived lobby result needed by the app.
 
-This ADR does not decide the distribution mechanism for cache artifacts. Whether cache entries ship inside the app package or are fetched from a static remote source remains deferred until full-role cache size is measured.
+This ADR originally deferred the distribution mechanism for cache artifacts. ADR-0012 now decides that the measured `core-simulator@1` current-profile artifact ships inside the app package; distribution for a future expanded or full-role profile remains a separate decision after its realistic artifact size and operating constraints are known.
 
 ## Considered options
 

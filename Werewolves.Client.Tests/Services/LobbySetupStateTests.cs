@@ -5,6 +5,7 @@ using Werewolves.Core.GameLogic.Models;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Models;
+using Werewolves.Core.StateModels.Models.Simulation;
 using Xunit;
 using PlayerNames = Werewolves.Client.Tests.Helpers.ClientTestReferences.PlayerNames;
 
@@ -12,6 +13,78 @@ namespace Werewolves.Client.Tests.Services;
 
 public class LobbySetupStateTests
 {
+	[Fact]
+	public void SimulationScenarioChanged_RaisesOnlyWhenScenarioIdentityMaterialChanges()
+	{
+		var state = LobbySetupMetadataFixture.DefaultState();
+		var eventCount = 0;
+		state.SimulationScenarioChanged += (_, _) => eventCount++;
+
+		state.AddPlayer(PlayerNames.Ana);
+		eventCount.Should().Be(1);
+
+		state.AddPlayer(PlayerNames.AnaLowercase).Should().Be(AddPlayerResult.DuplicateName);
+		state.MovePlayerUp(0).Should().BeFalse();
+		eventCount.Should().Be(1);
+
+		state.AddPlayer(PlayerNames.Bruno);
+		state.MovePlayerDown(0).Should().BeTrue();
+		eventCount.Should().Be(2, "Seating Order is not Simulation Scenario identity");
+
+		state.IncrementRole(MainRoleType.Seer);
+		eventCount.Should().Be(3);
+
+		state.IncrementRole(MainRoleType.Seer);
+		state.DecrementRole(MainRoleType.SimpleWerewolf);
+		eventCount.Should().Be(3, "Role mutations that leave the selected counts unchanged are identity-neutral");
+
+		state.DecrementRole(MainRoleType.Seer);
+		state.RemovePlayerAt(0).Should().BeTrue();
+		eventCount.Should().Be(5);
+
+		state.Reset();
+		eventCount.Should().Be(6);
+		state.Reset();
+		eventCount.Should().Be(6);
+	}
+
+	[Fact]
+	public void CreateSimulationScenario_UsesPlayerCountAndRoleCompositionWithoutRosterIdentity()
+	{
+		var first = LobbySetupMetadataFixture.DefaultState();
+		var second = LobbySetupMetadataFixture.DefaultState();
+		foreach (var name in PlayerNames.DefaultFive)
+		{
+			first.AddPlayer(name);
+			second.AddPlayer($"{name}-different");
+		}
+
+		foreach (var state in new[] { first, second })
+		{
+			state.IncrementRole(MainRoleType.SimpleWerewolf);
+			state.IncrementRole(MainRoleType.Seer);
+			state.IncrementRole(MainRoleType.SimpleVillager);
+			state.IncrementRole(MainRoleType.SimpleVillager);
+			state.IncrementRole(MainRoleType.SimpleVillager);
+		}
+		first.MovePlayerDown(0).Should().BeTrue();
+
+		var scenario = first.CreateSimulationScenario();
+
+		scenario.Should().Be(new SimulationScenario(
+			5,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Seer,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]));
+		scenario.Should().Be(second.CreateSimulationScenario());
+		scenario.ActorSetupCards.Cards.Should().BeEmpty();
+		scenario.RuleState.Should().Be(SimulationRuleState.Default);
+	}
+
 	[Fact]
 	public void Construction_ProjectsLobbySetupMetadataIntoInitialState()
 	{

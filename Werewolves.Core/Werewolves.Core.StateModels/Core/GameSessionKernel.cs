@@ -111,7 +111,8 @@ namespace Werewolves.Core.StateModels.Core
 
 		internal IPlayer GetIPlayer(Guid playerId) => GetPlayer(playerId);
 
-		internal IEnumerable<IPlayer> GetIPlayers() => _players.Values;
+		internal IEnumerable<IPlayer> GetIPlayers() =>
+			_playerSeatingOrder.Select(playerId => (IPlayer)GetPlayer(playerId));
 
 		private Player GetPlayer(Guid playerId)
 		{

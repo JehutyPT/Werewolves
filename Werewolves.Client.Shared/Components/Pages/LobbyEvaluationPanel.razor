@@ -1,0 +1,143 @@
+@using Werewolves.Client.Services
+@using Werewolves.Client.Testing
+@using Werewolves.Core.StateModels.Models.Simulation
+
+@if (State.Kind is not LobbyEvaluationStateKind.NotApplicable
+	and not LobbyEvaluationStateKind.ScreeningPassed)
+{
+	<section class="ww-lobby-evaluation"
+			 data-testid="@ModeratorUiTestIds.LobbyEvaluationPanel"
+			 aria-labelledby="lobby-evaluation-title">
+		<h2 id="lobby-evaluation-title">@ClientStrings.LobbyEvaluation_Title</h2>
+		<p class="ww-visually-hidden"
+		   data-testid="@ModeratorUiTestIds.LobbyEvaluationAsyncStatus"
+		   role="status"
+		   aria-live="polite"
+		   aria-atomic="true">@StatusAnnouncement(State.Kind)</p>
+		<div data-testid="@ModeratorUiTestIds.LobbyEvaluationSummary">
+			@if (State.Kind == LobbyEvaluationStateKind.Pending)
+			{
+				<p class="ww-lobby-evaluation__copy">@ClientStrings.LobbyEvaluation_Pending</p>
+			}
+			else if (State.Kind == LobbyEvaluationStateKind.AlreadyDecided
+				&& State.DecidedGameResult is { } decidedGameResult
+				&& State.DecidedReason is { } decidedReason)
+			{
+				<h3>@ClientStrings.LobbyEvaluation_AlreadyDecided</h3>
+				<p class="ww-lobby-evaluation__result">@LobbyEvaluationPresentation.GameResultName(decidedGameResult)</p>
+				<p class="ww-lobby-evaluation__copy">@LobbyEvaluationPresentation.AlreadyDecidedReasonText(decidedReason)</p>
+			}
+			else if (State.Kind == LobbyEvaluationStateKind.Degenerate)
+			{
+				<p class="ww-lobby-evaluation__copy">@ClientStrings.LobbyEvaluation_Degenerate</p>
+			}
+			else if (State.Kind == LobbyEvaluationStateKind.Probability
+				&& State.Probability is { } probabilityData)
+			{
+				var probability = LobbyEvaluationPresentation.Probability(probabilityData);
+
+				<h3>@ClientStrings.LobbyEvaluation_Probability</h3>
+				<ul class="ww-lobby-evaluation__outcomes">
+					@foreach (var outcome in probability.Outcomes)
+					{
+						<li>
+							<span>@outcome.Name</span>
+							<strong>@LobbyEvaluationPresentation.FrequencyText(outcome.Frequency)</strong>
+						</li>
+					}
+				</ul>
+				<button type="button"
+						class="ww-lobby-evaluation__disclosure"
+						data-testid="@ModeratorUiTestIds.LobbyEvaluationDisclosure"
+						aria-label="@ClientStrings.LobbyEvaluation_DetailToggle"
+						aria-expanded="@AriaExpanded(_detailExpanded)"
+						aria-controls="lobby-evaluation-detail"
+						@onclick="ToggleDetail">
+					@ClientStrings.LobbyEvaluation_DetailToggle
+				</button>
+				<div id="lobby-evaluation-detail"
+					 class="ww-lobby-evaluation__detail"
+					 data-testid="@ModeratorUiTestIds.LobbyEvaluationDetail"
+					 role="region"
+					 aria-labelledby="lobby-evaluation-detail-title"
+					 hidden="@(!_detailExpanded)">
+					<h3 id="lobby-evaluation-detail-title">@ClientStrings.LobbyEvaluation_DetailTitle</h3>
+					@foreach (var outcome in probability.Outcomes.Where(outcome => outcome.Turns.Count > 0))
+					{
+						<section class="ww-lobby-evaluation__turns" aria-label="@outcome.Name">
+							<h4>@outcome.Name</h4>
+							<ul>
+								@foreach (var turn in outcome.Turns)
+								{
+									<li data-testid="@ModeratorUiTestIds.LobbyEvaluationTurnEntry">
+										<span>@Format(ClientStrings.LobbyEvaluation_TurnFormat, turn.EndingTurn)</span>
+										<strong>@LobbyEvaluationPresentation.FrequencyText(turn.Frequency)</strong>
+									</li>
+								}
+							</ul>
+						</section>
+					}
+					<p class="ww-lobby-evaluation__caveat">@ClientStrings.LobbyEvaluation_FiniteBaselineCaveat</p>
+				</div>
+			}
+			else if (State.Kind == LobbyEvaluationStateKind.CouldNotEvaluate)
+			{
+				<p class="ww-lobby-evaluation__copy">@ClientStrings.LobbyEvaluation_CouldNotEvaluate</p>
+				<button type="button"
+						class="ww-lobby-evaluation__retry"
+						data-testid="@ModeratorUiTestIds.LobbyEvaluationRetry"
+						@onclick="OnRetry">
+					@ClientStrings.LobbyEvaluation_Retry
+				</button>
+			}
+			else if (State.Kind == LobbyEvaluationStateKind.SimulatorUnavailable)
+			{
+				<p class="ww-lobby-evaluation__copy">@ClientStrings.LobbyEvaluation_SimulatorUnavailable</p>
+			}
+		</div>
+	</section>
+}
+
+@code {
+	private bool _detailExpanded;
+	private SimulationCompatibilityIdentity? _detailIdentity;
+
+	[Parameter, EditorRequired]
+	public LobbyEvaluationState State { get; set; } = LobbyEvaluationState.NotApplicable();
+
+	[Parameter]
+	public EventCallback OnRetry { get; set; }
+
+	protected override void OnParametersSet()
+	{
+		if (State.Kind != LobbyEvaluationStateKind.Probability
+			|| State.Identity is null
+			|| !State.Identity.Equals(_detailIdentity))
+		{
+			_detailExpanded = false;
+		}
+
+		_detailIdentity = State.Kind == LobbyEvaluationStateKind.Probability
+			? State.Identity
+			: null;
+	}
+
+	private void ToggleDetail() => _detailExpanded = !_detailExpanded;
+
+	private static string AriaExpanded(bool expanded) => expanded ? "true" : "false";
+
+	private static string StatusAnnouncement(LobbyEvaluationStateKind kind) => kind switch
+	{
+		LobbyEvaluationStateKind.Pending => ClientStrings.LobbyEvaluation_Pending,
+		LobbyEvaluationStateKind.AlreadyDecided => ClientStrings.LobbyEvaluation_AlreadyDecided,
+		LobbyEvaluationStateKind.Degenerate => ClientStrings.LobbyEvaluation_Degenerate,
+		LobbyEvaluationStateKind.Probability => ClientStrings.LobbyEvaluation_Probability,
+		LobbyEvaluationStateKind.SimulatorUnavailable =>
+			ClientStrings.LobbyEvaluation_SimulatorUnavailable,
+		LobbyEvaluationStateKind.CouldNotEvaluate => ClientStrings.LobbyEvaluation_CouldNotEvaluate,
+		_ => string.Empty
+	};
+
+	private static string Format(string format, params object[] args) =>
+		string.Format(CultureInfo.CurrentCulture, format, args);
+}

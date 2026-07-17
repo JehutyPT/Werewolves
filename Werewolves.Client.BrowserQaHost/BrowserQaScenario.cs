@@ -8,6 +8,8 @@ namespace Werewolves.Client.BrowserQaHost;
 public enum BrowserQaScenario
 {
 	Lobby,
+	Probability,
+	Degenerate,
 	Dashboard,
 	Victory
 }

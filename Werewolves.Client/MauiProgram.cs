@@ -40,6 +40,7 @@ namespace Werewolves.Client
             builder.AddAudio();
 
             builder.Services.AddMauiBlazorWebView();
+			builder.Services.AddNativeLobbyEvaluationServices();
             builder.Services.AddSingleton<GameService>();
             builder.Services.AddSingleton<LobbySetupMetadata>(sp =>
                 sp.GetRequiredService<GameService>().GetLobbySetupMetadata());
