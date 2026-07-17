@@ -1,9 +1,13 @@
 @implements IDisposable
 @inject LobbySetupState Lobby
 @inject LobbyEvaluationCoordinator Evaluation
+@inject NavigationManager Navigation
 
-<main class="ww-app-shell" aria-labelledby="role-selection-title">
-	<section class="ww-lobby-header">
+@* PROTOTYPE: Four always-visible balance summaries, switchable via ?variant=A|B|C|D on the existing role-selection route. *@
+<main class="ww-app-shell @(IsPrototypeEnabled ? "ww-app-shell--balance-prototype" : "") @(_prototypeDetailsOpen ? "ww-app-shell--prototype-dialog-open" : "")"
+	  data-balance-prototype="@(IsPrototypeEnabled ? "true" : null)"
+	  aria-labelledby="role-selection-title">
+	<section class="ww-lobby-header @(IsPrototypeEnabled && _prototypeVariant is "B" or "D" ? "ww-lobby-header--balance-prototype-ribbon" : "")">
 		<div>
 			<p class="ww-step-label">@ClientStrings.RoleSelection_StepLabel</p>
 			<h1 id="role-selection-title">@ClientStrings.RoleSelection_Title</h1>
@@ -12,7 +16,26 @@
 		<div class="ww-roster-count @(IsCountMatching ? "" : "ww-roster-count--under")" aria-label="@CountLabel">
 			@Lobby.TotalSelectedRoleCount<span class="ww-roster-count__min">&thinsp;/&thinsp;@Lobby.ExpectedRoleCount</span>
 		</div>
+		@if (IsPrototypeEnabled && _prototypeVariant == "B")
+		{
+			<PrototypeBalanceSummaryVariantB State="@PrototypeEvaluationState" />
+		}
+		else if (IsPrototypeEnabled && _prototypeVariant == "D")
+		{
+			<PrototypeBalanceSummaryVariantD @ref="_prototypeVariantDSummary"
+										 State="@PrototypeEvaluationState"
+										 ShowFiveFactionFixture="@_prototypeFiveFactionPreview"
+										 IsExpanded="@_prototypeDetailsOpen"
+										 OnOpen="OpenPrototypeDetails" />
+		}
 	</section>
+
+	@if (IsPrototypeEnabled && _prototypeVariant == "D" && _prototypeDetailsOpen)
+	{
+		<PrototypeBalanceDetailsDialog State="@PrototypeEvaluationState"
+									 ShowFiveFactionFixture="@_prototypeFiveFactionPreview"
+									 OnClose="ClosePrototypeDetails" />
+	}
 
 	@foreach (var group in Lobby.AvailableRoleGroups)
 	{
@@ -68,34 +91,63 @@
 		</section>
 	}
 
-	<LobbyEvaluationPanel State="@_evaluationState" OnRetry="RetryEvaluation" />
+	@{
+		RenderFragment actionBar = @<footer class="ww-action-bar @(IsPrototypeEnabled ? "ww-action-bar--balance-prototype" : "")"
+									 data-testid="@ModeratorUiTestIds.RoleSelectionActionBar">
+			@if (_validationErrors.Count > 0)
+			{
+				<ul class="ww-validation ww-validation--role" role="alert">
+					@foreach (var error in _validationErrors)
+					{
+						<li>@error</li>
+					}
+				</ul>
+			}
+			@if (!string.IsNullOrEmpty(_blockAnnouncement))
+			{
+				<p class="ww-lobby-evaluation__status"
+				   data-testid="@ModeratorUiTestIds.LobbyEvaluationStatus"
+				   role="status"
+				   aria-live="polite">@_blockAnnouncement</p>
+			}
+			<div class="ww-action-pair">
+				<button type="button" class="ww-secondary-button" @onclick="Back">@ClientStrings.Common_Back</button>
+				<button type="button"
+						class="ww-btn-primary"
+						data-testid="@ModeratorUiTestIds.RoleSelectionStartGame"
+						disabled="@(!CanStartGame)"
+						@onclick="StartGame">@ClientStrings.RoleSelection_StartGameButton</button>
+			</div>
+		</footer>;
+	}
 
-	<footer class="ww-action-bar" data-testid="@ModeratorUiTestIds.RoleSelectionActionBar">
-		@if (_validationErrors.Count > 0)
+	@if (IsPrototypeEnabled)
+	{
+		<div class="ww-prototype-balance-footer-stack">
+		@if (IsPrototypeEnabled && _prototypeVariant == "A")
 		{
-			<ul class="ww-validation ww-validation--role" role="alert">
-				@foreach (var error in _validationErrors)
-				{
-					<li>@error</li>
-				}
-			</ul>
+			<PrototypeBalanceSummaryVariantA State="@PrototypeEvaluationState" />
 		}
-		@if (!string.IsNullOrEmpty(_blockAnnouncement))
+		else if (IsPrototypeEnabled && _prototypeVariant == "C")
 		{
-			<p class="ww-lobby-evaluation__status"
-			   data-testid="@ModeratorUiTestIds.LobbyEvaluationStatus"
-			   role="status"
-			   aria-live="polite">@_blockAnnouncement</p>
+			<PrototypeBalanceSummaryVariantC State="@PrototypeEvaluationState" />
 		}
-		<div class="ww-action-pair">
-			<button type="button" class="ww-secondary-button" @onclick="Back">@ClientStrings.Common_Back</button>
-			<button type="button"
-					class="ww-btn-primary"
-					data-testid="@ModeratorUiTestIds.RoleSelectionStartGame"
-					disabled="@(!CanStartGame)"
-					@onclick="StartGame">@ClientStrings.RoleSelection_StartGameButton</button>
+
+
+		@actionBar
+
+		@if (IsPrototypeEnabled && !_prototypeDetailsOpen)
+		{
+			<PrototypeBalanceVariantSwitcher CurrentVariant="@_prototypeVariant"
+										   VariantSelected="SelectPrototypeVariant" />
+		}
 		</div>
-	</footer>
+	}
+	else
+	{
+		<LobbyEvaluationPanel State="@_evaluationState" OnRetry="RetryEvaluation" />
+		@actionBar
+	}
 </main>
 
 @using Werewolves.Core.StateModels.Enums
@@ -112,16 +164,41 @@
 	private List<string> _validationErrors = new();
 	private LobbyEvaluationState _evaluationState = LobbyEvaluationState.NotApplicable();
 	private string _blockAnnouncement = string.Empty;
+	private bool _prototypeEnabled;
+	private string _prototypeVariant = "A";
+	private bool _prototypePendingPreview;
+	private bool _prototypeFiveFactionPreview;
+	private bool _prototypeDetailsOpen;
+	private bool _restorePrototypeSummaryFocus;
+	private PrototypeBalanceSummaryVariantD? _prototypeVariantDSummary;
+
+#if DEBUG
+	private static bool IsDebugBuild => true;
+#else
+	private static bool IsDebugBuild => false;
+#endif
 
 	protected override void OnInitialized()
 	{
 		Evaluation.StateChanged += HandleEvaluationStateChanged;
 		_evaluationState = Evaluation.State;
+		if (IsDebugBuild && PrototypeVariantFromUri(Navigation.Uri) is { } prototypeVariant)
+		{
+			_prototypeEnabled = true;
+			_prototypeVariant = prototypeVariant;
+			_prototypePendingPreview = IsPendingPreviewFromUri(Navigation.Uri);
+			_prototypeFiveFactionPreview = IsFiveFactionPreviewFromUri(Navigation.Uri);
+		}
 		RefreshValidation();
 	}
 
 	private bool IsCountMatching => Lobby.TotalSelectedRoleCount == Lobby.ExpectedRoleCount;
 	private bool CanStartGame => !Lobby.HasRoleConfigIssues(out _);
+	private bool IsPrototypeEnabled => IsDebugBuild && _prototypeEnabled;
+	private LobbyEvaluationState PrototypeEvaluationState =>
+		IsPrototypeEnabled && _prototypePendingPreview && _evaluationState.Identity is { } identity
+			? LobbyEvaluationState.Pending(identity)
+			: _evaluationState;
 
 	private string CountLabel => Format(
 		ClientStrings.RoleSelection_SelectedCountFormat,
@@ -185,11 +262,44 @@
 
 	private void RetryEvaluation() => Evaluation.RetryCurrent();
 
+	private void SelectPrototypeVariant(string variant) =>
+		_prototypeVariant = NormalizePrototypeVariant(variant);
+
+	private void OpenPrototypeDetails()
+	{
+		if (_prototypeVariant == "D"
+			&& (_prototypeFiveFactionPreview || PrototypeEvaluationState.Probability is not null))
+		{
+			_prototypeDetailsOpen = true;
+		}
+	}
+
+	private void ClosePrototypeDetails()
+	{
+		_prototypeDetailsOpen = false;
+		_restorePrototypeSummaryFocus = true;
+	}
+
+	protected override async Task OnAfterRenderAsync(bool firstRender)
+	{
+		if (_restorePrototypeSummaryFocus && _prototypeVariantDSummary is not null)
+		{
+			_restorePrototypeSummaryFocus = false;
+			await _prototypeVariantDSummary.FocusAsync();
+		}
+	}
+
 	private void HandleEvaluationStateChanged(object? sender, EventArgs args)
 	{
 		_ = InvokeAsync(() =>
 		{
 			_evaluationState = Evaluation.State;
+			if (_prototypeDetailsOpen
+				&& !_prototypeFiveFactionPreview
+				&& _evaluationState.Probability is null)
+			{
+				ClosePrototypeDetails();
+			}
 			_blockAnnouncement = string.Empty;
 			StateHasChanged();
 		});
@@ -204,6 +314,28 @@
 	};
 
 	public void Dispose() => Evaluation.StateChanged -= HandleEvaluationStateChanged;
+
+	private static string? PrototypeVariantFromUri(string uri)
+	{
+		var query = System.Web.HttpUtility.ParseQueryString(new Uri(uri).Query);
+		var variant = query["variant"]?.ToUpperInvariant();
+		return variant is "A" or "B" or "C" or "D" ? variant : null;
+	}
+
+	private static bool IsPendingPreviewFromUri(string uri)
+	{
+		var query = System.Web.HttpUtility.ParseQueryString(new Uri(uri).Query);
+		return string.Equals(query["previewState"], "pending", StringComparison.OrdinalIgnoreCase);
+	}
+
+	private static bool IsFiveFactionPreviewFromUri(string uri)
+	{
+		var query = System.Web.HttpUtility.ParseQueryString(new Uri(uri).Query);
+		return string.Equals(query["previewState"], "five-factions", StringComparison.OrdinalIgnoreCase);
+	}
+
+	private static string NormalizePrototypeVariant(string? variant) =>
+		variant?.ToUpperInvariant() is "B" or "C" or "D" ? variant.ToUpperInvariant() : "A";
 
 	private static string GroupCssVar(RoleGroup group) => group switch
 	{

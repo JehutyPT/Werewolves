@@ -1,0 +1,153 @@
+@using Werewolves.Core.StateModels.Enums
+@using Werewolves.Core.StateModels.Models.Simulation
+
+@* PROTOTYPE Variant D — B's sticky horizontal ribbon inside C's distinct elevated frame. *@
+<button @ref="_summaryButton"
+		type="button"
+		class="ww-prototype-balance ww-prototype-balance--d @(!ShowFiveFactionFixture && State.Kind == LobbyEvaluationStateKind.Pending ? "ww-prototype-balance--d-pending" : "")"
+		disabled="@(!CanOpen)"
+		aria-label="@AccessibleSummary"
+		aria-haspopup="dialog"
+		aria-expanded="@(IsExpanded ? "true" : "false")"
+		@onclick="OpenDetails">
+	<span class="ww-prototype-balance-d__heading">
+		<span class="ww-prototype-balance-d__title">Chances</span>
+		@if (ShowFiveFactionFixture)
+		{
+			<span class="ww-prototype-balance-d__labels">
+				@foreach (var outcome in FiveFactionPrototypeOutcomes)
+				{
+					<span><span class="ww-prototype-balance-d__dot" style="background: @outcome.Color" aria-hidden="true"></span>@outcome.Name <b>@Percent(outcome)</b></span>
+				}
+			</span>
+		}
+		else if (State.Probability is { } probability)
+		{
+			<span class="ww-prototype-balance-d__labels">
+				@foreach (var outcome in VisibleOutcomes(probability))
+				{
+					<span><span class="ww-prototype-balance-d__dot" style="background: @OutcomeColor(outcome.GameResult)" aria-hidden="true"></span>@ShortName(outcome.GameResult) <b>@Percent(outcome)</b></span>
+				}
+			</span>
+		}
+		else
+		{
+			<span class="ww-prototype-balance-d__status">@StateLabel</span>
+		}
+		<span class="ww-prototype-balance-d__chevron" aria-hidden="true">&#x203A;</span>
+	</span>
+	@if (ShowFiveFactionFixture)
+	{
+		<span class="ww-prototype-balance-d__ribbon" aria-hidden="true">
+			@foreach (var outcome in FiveFactionPrototypeOutcomes)
+			{
+				<span style="width: @Width(outcome); background: @outcome.Color"></span>
+			}
+		</span>
+	}
+	else if (State.Probability is { } ribbonProbability)
+	{
+		<span class="ww-prototype-balance-d__ribbon" aria-hidden="true">
+			@foreach (var outcome in VisibleOutcomes(ribbonProbability))
+			{
+				<span style="width: @Width(outcome); background: @OutcomeColor(outcome.GameResult)"></span>
+			}
+		</span>
+	}
+	else if (State.Kind == LobbyEvaluationStateKind.Pending)
+	{
+		<span class="ww-prototype-balance-d__ribbon ww-prototype-balance-d__ribbon--pending" aria-hidden="true">
+			<span></span>
+		</span>
+	}
+</button>
+
+@code {
+	private ElementReference _summaryButton;
+
+	[Parameter, EditorRequired]
+	public LobbyEvaluationState State { get; set; } = LobbyEvaluationState.NotApplicable();
+
+	[Parameter]
+	public bool ShowFiveFactionFixture { get; set; }
+
+	[Parameter]
+	public bool IsExpanded { get; set; }
+
+	[Parameter]
+	public EventCallback OnOpen { get; set; }
+
+	@* PROTOTYPE ONLY: synthetic display data for judging five-result density; this is not simulator output. *@
+	private static readonly PrototypeOutcome[] FiveFactionPrototypeOutcomes =
+	[
+		new("Aldeia", 4_200, "var(--ww-faction-villager)"),
+		new("Lobos", 2_500, "var(--ww-faction-werewolf)"),
+		new("Amantes", 1_400, "var(--ww-faction-ambiguous)"),
+		new("Flautista", 1_100, "var(--ww-faction-loner)"),
+		new("Lobo branco", 800, "var(--ww-prototype-faction-solo-wolf)")
+	];
+
+	private const int PrototypeDenominator = 10_000;
+
+	private bool CanOpen => ShowFiveFactionFixture || State.Probability is not null;
+
+	private string StateLabel => State.Kind switch
+	{
+		LobbyEvaluationStateKind.Pending => "A calcular…",
+		LobbyEvaluationStateKind.AlreadyDecided when State.DecidedGameResult is { } result =>
+			$"Decidido: {ShortName(result)}",
+		LobbyEvaluationStateKind.Degenerate => "Esta combinação não funciona",
+		LobbyEvaluationStateKind.CouldNotEvaluate => "Não foi possível calcular",
+		LobbyEvaluationStateKind.SimulatorUnavailable => "Não foi possível calcular",
+		_ => "Escolhe os papéis"
+	};
+
+	private string AccessibleSummary => ShowFiveFactionFixture
+		? "Chances no fim do jogo. " + string.Join(", ", FiveFactionPrototypeOutcomes.Select(outcome =>
+			$"{outcome.Name} {Percent(outcome)}")) + ". Ver por turno."
+		: State.Probability is { } probability
+		? "Chances no fim do jogo. " + string.Join(", ", VisibleOutcomes(probability).Select(outcome =>
+			$"{LobbyEvaluationPresentation.GameResultName(outcome.GameResult)} {Percent(outcome)}")) + ". Ver por turno."
+		: $"Chances no fim do jogo. {StateLabel}";
+
+	private Task OpenDetails() => CanOpen ? OnOpen.InvokeAsync() : Task.CompletedTask;
+
+	public ValueTask FocusAsync() => _summaryButton.FocusAsync();
+
+	private static IEnumerable<LobbyProbabilityOutcomeData> VisibleOutcomes(LobbyProbabilityData probability) =>
+		probability.Outcomes.Where(outcome => outcome.Numerator > 0);
+
+	private static string Width(LobbyProbabilityOutcomeData outcome) =>
+		outcome.Denominator <= 0
+			? "0%"
+			: $"{((decimal)outcome.Numerator * 100 / outcome.Denominator).ToString("0.####", CultureInfo.InvariantCulture)}%";
+
+	private static string Percent(LobbyProbabilityOutcomeData outcome) =>
+		outcome.Denominator <= 0
+			? "0%"
+			: $"{((decimal)outcome.Numerator * 100 / outcome.Denominator).ToString("0.#", CultureInfo.CurrentCulture)}%";
+
+	private static string Width(PrototypeOutcome outcome) =>
+		$"{((decimal)outcome.Numerator * 100 / PrototypeDenominator).ToString("0.####", CultureInfo.InvariantCulture)}%";
+
+	private static string Percent(PrototypeOutcome outcome) =>
+		$"{((decimal)outcome.Numerator * 100 / PrototypeDenominator).ToString("0.#", CultureInfo.CurrentCulture)}%";
+
+	private static string ShortName(GameResult result) => result switch
+	{
+		SingleFactionGameResult => LobbyEvaluationPresentation.GameResultName(result),
+		SharedVictoryGameResult => "Partilhada",
+		NoWinnerGameResult => "Sem vencedor",
+		_ => LobbyEvaluationPresentation.GameResultName(result)
+	};
+
+	private static string OutcomeColor(GameResult result) => result switch
+	{
+		SingleFactionGameResult { Faction: Faction.Villager } => "var(--ww-faction-villager)",
+		SingleFactionGameResult { Faction: Faction.Werewolf } => "var(--ww-faction-werewolf)",
+		SharedVictoryGameResult => "var(--ww-faction-ambiguous)",
+		_ => "var(--ww-text-muted)"
+	};
+
+	private sealed record PrototypeOutcome(string Name, int Numerator, string Color);
+}

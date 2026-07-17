@@ -1,0 +1,384 @@
+@using Werewolves.Core.StateModels.Enums
+@using Werewolves.Core.StateModels.Models.Simulation
+
+@* PROTOTYPE ONLY — throwaway expanded Ended-By-Turn Frequency view for Variant D. *@
+<div class="ww-prototype-balance-dialog__overlay"
+	 role="presentation"
+	 @onclick="Close"
+	 @onkeydown="HandleOverlayKeyDown">
+	<span class="ww-prototype-balance-dialog__focus-sentinel"
+		  tabindex="0"
+		  @onfocus="FocusLast"></span>
+	<section class="ww-prototype-balance-dialog"
+			 role="dialog"
+			 aria-modal="true"
+			 aria-labelledby="prototype-balance-dialog-title"
+			 aria-describedby="prototype-balance-dialog-description"
+			 @onclick:stopPropagation="true">
+		<header class="ww-prototype-balance-dialog__header">
+			<span>
+				<span class="ww-prototype-balance-dialog__eyebrow">Ao longo do jogo</span>
+				<h2 id="prototype-balance-dialog-title">Chances de vitória</h2>
+			</span>
+			<button @ref="_closeButton"
+					type="button"
+					class="ww-prototype-balance-dialog__close"
+					aria-label="Fechar chances de vitória"
+					@onclick="Close">&#x2715;</button>
+		</header>
+
+		<p id="prototype-balance-dialog-description" class="ww-prototype-balance-dialog__description">
+			Escolhe um turno para veres como o jogo poderia já ter terminado.
+		</p>
+
+		<div class="ww-prototype-balance-dialog__chart-wrap">
+			<svg class="ww-prototype-balance-dialog__chart"
+				 viewBox="0 0 320 218"
+				 role="img"
+				 aria-labelledby="prototype-balance-chart-title prototype-balance-chart-description">
+				<title id="prototype-balance-chart-title">Chances de vitória por turno</title>
+				<desc id="prototype-balance-chart-description">Cada linha mostra uma forma de o jogo terminar, do turno 1 ao turno @MaxTurn. Está selecionado o turno @_selectedTurn.</desc>
+
+				@foreach (var tick in YTicks)
+				{
+					var y = Y(tick);
+					<line class="ww-prototype-balance-dialog__grid" x1="@SvgNumber(PlotLeft)" x2="@SvgNumber(PlotRight)" y1="@SvgNumber(y)" y2="@SvgNumber(y)"></line>
+					@SvgText("ww-prototype-balance-dialog__axis-label", PlotLeft - 5, y + 3, "end", $"{tick}%")
+				}
+
+				@foreach (var turn in XTicks)
+				{
+					var x = X(turn);
+					<line class="ww-prototype-balance-dialog__tick" x1="@SvgNumber(x)" x2="@SvgNumber(x)" y1="@SvgNumber(PlotBottom)" y2="@SvgNumber(PlotBottom + 4)"></line>
+					@SvgText("ww-prototype-balance-dialog__axis-label", x, PlotBottom + 16, "middle", turn.ToString(CultureInfo.InvariantCulture))
+				}
+
+				@foreach (var outcome in _outcomes)
+				{
+					<path class="ww-prototype-balance-dialog__curve"
+						  d="@StepPath(outcome)"
+						  style="stroke: @outcome.Color"></path>
+				}
+
+				<line class="ww-prototype-balance-dialog__selected-guide"
+					  x1="@SvgNumber(X(_selectedTurn))"
+					  x2="@SvgNumber(X(_selectedTurn))"
+					  y1="@SvgNumber(PlotTop)"
+					  y2="@SvgNumber(PlotBottom)"></line>
+
+				@foreach (var outcome in _outcomes)
+				{
+					<circle class="ww-prototype-balance-dialog__selected-point"
+							tabindex="-1"
+							cx="@SvgNumber(X(_selectedTurn))"
+							cy="@SvgNumber(Y(CumulativePercent(outcome, _selectedTurn)))"
+							r="3.4"
+							style="fill: @outcome.Color"></circle>
+				}
+
+				@SvgText("ww-prototype-balance-dialog__axis-title", (PlotLeft + PlotRight) / 2, 215, "middle", "Turno")
+			</svg>
+		</div>
+
+		<div class="ww-prototype-balance-dialog__turn-control">
+			<span>Turno <strong>@_selectedTurn</strong></span>
+			<span class="ww-prototype-balance-dialog__turn-scrubber">
+				<button type="button"
+						aria-label="Turno anterior"
+						aria-disabled="@(_selectedTurn <= 1)"
+						@onclick="PreviousTurn">&#x2212;</button>
+				<input @ref="_turnRange"
+					   type="range"
+					   min="1"
+					   max="@MaxTurn"
+					   step="1"
+					   aria-label="Escolher turno"
+					   @bind="_selectedTurn"
+					   @bind:event="oninput" />
+				<button @ref="_nextTurnButton"
+						type="button"
+						aria-label="Turno seguinte"
+						aria-disabled="@(_selectedTurn >= MaxTurn)"
+						@onclick="NextTurn">&#x2b;</button>
+			</span>
+		</div>
+
+		<ul class="ww-prototype-balance-dialog__legend" aria-label="Chances até ao turno @_selectedTurn">
+			@foreach (var outcome in _outcomes)
+			{
+				<li>
+					<span class="ww-prototype-balance-dialog__legend-name">
+						<i style="background: @outcome.Color" aria-hidden="true"></i>
+						@outcome.Name
+					</span>
+					<strong>@Percent(CumulativePercent(outcome, _selectedTurn))</strong>
+				</li>
+			}
+		</ul>
+
+		<p class="ww-prototype-balance-dialog__caveat">
+			@if (ShowFiveFactionFixture)
+			{
+				<span>Exemplo criado para esta maquete · 10 000 jogos fictícios.</span>
+			}
+			else
+			{
+				<span>Estimativa baseada em @CompletedRunCount.ToString("N0", CultureInfo.CurrentCulture) jogos simulados.</span>
+			}
+		</p>
+	</section>
+	<span class="ww-prototype-balance-dialog__focus-sentinel"
+		  tabindex="0"
+		  @onfocus="FocusFirst"></span>
+</div>
+
+@code {
+	private const decimal PlotLeft = 38;
+	private const decimal PlotRight = 307;
+	private const decimal PlotTop = 10;
+	private const decimal PlotBottom = 184;
+	private ElementReference _closeButton;
+	private ElementReference _turnRange;
+	private ElementReference _nextTurnButton;
+	private IReadOnlyList<ChartOutcome> _outcomes = Array.Empty<ChartOutcome>();
+	private int _selectedTurn = 1;
+
+	[Parameter, EditorRequired]
+	public LobbyEvaluationState State { get; set; } = LobbyEvaluationState.NotApplicable();
+
+	[Parameter]
+	public bool ShowFiveFactionFixture { get; set; }
+
+	[Parameter]
+	public EventCallback OnClose { get; set; }
+
+	private int MaxTurn { get; set; } = 1;
+	private int YCeiling { get; set; } = 10;
+	private int CompletedRunCount => _outcomes.Select(outcome => outcome.Denominator).FirstOrDefault(value => value > 0);
+
+	private IEnumerable<int> YTicks
+	{
+		get
+		{
+			var step = GridStep(YCeiling);
+			for (var tick = 0; tick <= YCeiling; tick += step)
+			{
+				yield return tick;
+			}
+		}
+	}
+
+	private IEnumerable<int> XTicks
+	{
+		get
+		{
+			if (MaxTurn <= 10)
+			{
+				return Enumerable.Range(1, MaxTurn);
+			}
+
+			var interval = (int)Math.Ceiling((MaxTurn - 1) / 5m);
+			return Enumerable.Range(1, MaxTurn)
+				.Where(turn => turn == 1 || turn == MaxTurn || (turn - 1) % interval == 0);
+		}
+	}
+
+	protected override void OnParametersSet()
+	{
+		var isInitialDataSet = _outcomes.Count == 0;
+		_outcomes = ShowFiveFactionFixture
+			? FiveFactionPrototypeOutcomes()
+			: ProbabilityOutcomes(State.Probability);
+		MaxTurn = Math.Max(1, _outcomes.SelectMany(outcome => outcome.ExactByTurn.Keys).DefaultIfEmpty(1).Max());
+		if (isInitialDataSet || _selectedTurn < 1 || _selectedTurn > MaxTurn)
+		{
+			_selectedTurn = MaxTurn;
+		}
+		var maximumFinalPercent = _outcomes.Select(outcome => CumulativePercent(outcome, MaxTurn)).DefaultIfEmpty(0).Max();
+		YCeiling = CeilingFor(maximumFinalPercent);
+	}
+
+	protected override async Task OnAfterRenderAsync(bool firstRender)
+	{
+		if (firstRender)
+		{
+			await _closeButton.FocusAsync();
+		}
+	}
+
+	private Task Close() => OnClose.InvokeAsync();
+
+	private Task HandleOverlayKeyDown(KeyboardEventArgs args) =>
+		string.Equals(args.Key, "Escape", StringComparison.Ordinal)
+			? Close()
+			: Task.CompletedTask;
+
+	private async Task FocusFirst(FocusEventArgs _) => await _closeButton.FocusAsync();
+
+	private async Task FocusLast(FocusEventArgs _)
+	{
+		if (_selectedTurn < MaxTurn)
+		{
+			await _nextTurnButton.FocusAsync();
+			return;
+		}
+
+		await _turnRange.FocusAsync();
+	}
+
+	private void PreviousTurn() => _selectedTurn = Math.Max(1, _selectedTurn - 1);
+
+	private void NextTurn() => _selectedTurn = Math.Min(MaxTurn, _selectedTurn + 1);
+
+	private decimal X(int turn) =>
+		MaxTurn == 1
+			? PlotLeft
+			: PlotLeft + (turn - 1m) * (PlotRight - PlotLeft) / (MaxTurn - 1m);
+
+	private decimal Y(decimal percent) =>
+		PlotBottom - Math.Clamp(percent, 0, YCeiling) * (PlotBottom - PlotTop) / YCeiling;
+
+	private string StepPath(ChartOutcome outcome)
+	{
+		const decimal transitionFraction = 0.55m;
+		const decimal firstControl = 0.65m;
+		const decimal secondControl = 0.35m;
+
+		var path = new System.Text.StringBuilder();
+		var previousX = X(1);
+		var previousY = Y(CumulativePercent(outcome, 1));
+		path.Append("M ")
+			.Append(SvgNumber(previousX))
+			.Append(' ')
+			.Append(SvgNumber(previousY));
+
+		for (var turn = 2; turn <= MaxTurn; turn++)
+		{
+			var x = X(turn);
+			var y = Y(CumulativePercent(outcome, turn));
+			if (y == previousY)
+			{
+				path.Append(" H ").Append(SvgNumber(x));
+			}
+			else
+			{
+				var transitionWidth = (x - previousX) * transitionFraction;
+				var transitionStartX = x - transitionWidth;
+				var controlOneX = transitionStartX + transitionWidth * firstControl;
+				var controlTwoX = transitionStartX + transitionWidth * secondControl;
+
+				path.Append(" H ").Append(SvgNumber(transitionStartX))
+					.Append(" C ")
+					.Append(SvgNumber(controlOneX)).Append(' ').Append(SvgNumber(previousY)).Append(' ')
+					.Append(SvgNumber(controlTwoX)).Append(' ').Append(SvgNumber(y)).Append(' ')
+					.Append(SvgNumber(x)).Append(' ').Append(SvgNumber(y));
+			}
+
+			previousX = x;
+			previousY = y;
+		}
+
+		return path.ToString();
+	}
+
+	private static decimal CumulativePercent(ChartOutcome outcome, int endingTurn)
+	{
+		if (outcome.Denominator <= 0)
+		{
+			return 0;
+		}
+
+		var numerator = outcome.ExactByTurn
+			.Where(cell => cell.Key <= endingTurn)
+			.Sum(cell => cell.Value);
+		return (decimal)numerator * 100 / outcome.Denominator;
+	}
+
+	private static int CeilingFor(decimal maximumPercent)
+	{
+		var step = maximumPercent switch
+		{
+			<= 20 => 5,
+			<= 50 => 10,
+			<= 80 => 20,
+			_ => 25
+		};
+		return Math.Clamp((int)Math.Ceiling(Math.Max(maximumPercent, step) / step) * step, step, 100);
+	}
+
+	private static int GridStep(int ceiling) => ceiling switch
+	{
+		<= 20 => 5,
+		<= 50 => 10,
+		<= 80 => 20,
+		_ => 25
+	};
+
+	private static string Percent(decimal value) =>
+		$"{value.ToString("0.#", CultureInfo.CurrentCulture)}%";
+
+	private static string SvgNumber(decimal value) =>
+		value.ToString("0.###", CultureInfo.InvariantCulture);
+
+	private static MarkupString SvgText(string cssClass, decimal x, decimal y, string anchor, string content) =>
+		new($"<text class=\"{cssClass}\" x=\"{SvgNumber(x)}\" y=\"{SvgNumber(y)}\" text-anchor=\"{anchor}\">{content}</text>");
+
+	private static IReadOnlyList<ChartOutcome> ProbabilityOutcomes(LobbyProbabilityData? probability)
+	{
+		if (probability is null)
+		{
+			return Array.Empty<ChartOutcome>();
+		}
+
+		return probability.Outcomes
+			.Select((outcome, index) => new ChartOutcome(
+				LobbyEvaluationPresentation.GameResultName(outcome.GameResult),
+				OutcomeColor(outcome.GameResult, index),
+				outcome.Denominator,
+				outcome.Turns
+					.GroupBy(turn => turn.EndingTurn)
+					.ToDictionary(group => group.Key, group => group.Sum(turn => turn.Numerator))))
+			.ToArray();
+	}
+
+	@* PROTOTYPE ONLY: exact (not cumulative) per-Turn synthetic counts; this is not simulator output. *@
+	private static IReadOnlyList<ChartOutcome> FiveFactionPrototypeOutcomes() =>
+	[
+		SyntheticOutcome("Aldeia", "var(--ww-faction-villager)", [200, 400, 700, 800, 700, 600, 400, 250, 100, 50]),
+		SyntheticOutcome("Lobos", "var(--ww-faction-werewolf)", [0, 100, 250, 400, 500, 450, 350, 250, 150, 50]),
+		SyntheticOutcome("Amantes", "var(--ww-faction-ambiguous)", [0, 150, 250, 300, 250, 200, 100, 75, 50, 25]),
+		SyntheticOutcome("Flautista", "var(--ww-faction-loner)", [0, 0, 100, 150, 200, 250, 150, 100, 100, 50]),
+		SyntheticOutcome("Lobo branco", "var(--ww-prototype-faction-solo-wolf)", [0, 0, 0, 50, 100, 150, 150, 150, 100, 100])
+	];
+
+	private static ChartOutcome SyntheticOutcome(string name, string color, IReadOnlyList<int> exactCounts) =>
+		new(
+			name,
+			color,
+			10_000,
+			exactCounts.Select((count, index) => new { Turn = index + 1, Count = count })
+				.ToDictionary(value => value.Turn, value => value.Count));
+
+	private static string OutcomeColor(GameResult result, int index) => result switch
+	{
+		SingleFactionGameResult { Faction: Faction.Villager } => "var(--ww-faction-villager)",
+		SingleFactionGameResult { Faction: Faction.Werewolf } => "var(--ww-faction-werewolf)",
+		NoWinnerGameResult => "var(--ww-prototype-result-none)",
+		SharedVictoryGameResult => SharedPalette[index % SharedPalette.Length],
+		_ => "var(--ww-text-muted)"
+	};
+
+	private static readonly string[] SharedPalette =
+	[
+		"var(--ww-prototype-result-shared-1)",
+		"var(--ww-prototype-result-shared-2)",
+		"var(--ww-prototype-result-shared-3)",
+		"var(--ww-prototype-result-shared-4)"
+	];
+
+	private sealed record ChartOutcome(
+		string Name,
+		string Color,
+		int Denominator,
+		IReadOnlyDictionary<int, int> ExactByTurn);
+}

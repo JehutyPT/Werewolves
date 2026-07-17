@@ -26,6 +26,12 @@ body {
 	container: browser-qa-phone / inline-size;
 }
 
+@media (max-height: 840px) {
+	.phone-frame {
+		height: calc(100vh - 24px);
+	}
+}
+
 .phone-frame .ww-app-shell,
 .phone-frame .ww-dashboard-shell {
 	height: 100%;

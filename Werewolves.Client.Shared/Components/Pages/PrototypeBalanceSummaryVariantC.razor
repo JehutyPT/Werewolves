@@ -1,0 +1,110 @@
+@using Werewolves.Core.StateModels.Enums
+@using Werewolves.Core.StateModels.Models.Simulation
+
+@* PROTOTYPE Variant C — floating dial/chip above the action footer. *@
+<section class="ww-prototype-balance ww-prototype-balance--c"
+		 role="img"
+		 aria-label="@AccessibleSummary">
+	<div class="ww-prototype-balance-c__dial" style="background: @ConicGradient">
+		<span>@LeadingPercent</span>
+	</div>
+	<div class="ww-prototype-balance-c__copy">
+		<strong>Resultados de referência</strong>
+		@if (State.Probability is { } probability)
+		{
+			<div class="ww-prototype-balance-c__labels">
+				@foreach (var outcome in VisibleOutcomes(probability))
+				{
+					<span><i style="background: @OutcomeColor(outcome.GameResult)"></i>@ShortName(outcome.GameResult) <b>@Percent(outcome)</b></span>
+				}
+			</div>
+		}
+		else
+		{
+			<span class="ww-prototype-balance-c__status">@StateLabel</span>
+		}
+	</div>
+</section>
+
+@code {
+	[Parameter, EditorRequired]
+	public LobbyEvaluationState State { get; set; } = LobbyEvaluationState.NotApplicable();
+
+	private string StateLabel => State.Kind switch
+	{
+		LobbyEvaluationStateKind.Pending => "A calcular…",
+		LobbyEvaluationStateKind.AlreadyDecided when State.DecidedGameResult is { } result =>
+			$"Decidido: {ShortName(result)}",
+		LobbyEvaluationStateKind.Degenerate => "Sem jogo viável",
+		LobbyEvaluationStateKind.CouldNotEvaluate => "Indisponível",
+		LobbyEvaluationStateKind.SimulatorUnavailable => "Sem simulador",
+		_ => "Complete a configuração"
+	};
+
+	private string AccessibleSummary => State.Probability is { } probability
+		? "Resultados de referência. " + string.Join(", ", VisibleOutcomes(probability).Select(outcome =>
+			$"{LobbyEvaluationPresentation.GameResultName(outcome.GameResult)} {Percent(outcome)}"))
+		: $"Resultados de referência. {StateLabel}";
+
+	private string ConicGradient
+	{
+		get
+		{
+			if (State.Probability is not { } probability)
+			{
+				return "conic-gradient(var(--ww-border-strong) 0 100%)";
+			}
+
+			var cursor = 0m;
+			var stops = new List<string>();
+			foreach (var outcome in VisibleOutcomes(probability))
+			{
+				var next = cursor + Ratio(outcome) * 100;
+				stops.Add($"{OutcomeColor(outcome.GameResult)} {CssNumber(cursor)}% {CssNumber(next)}%");
+				cursor = next;
+			}
+
+			if (cursor < 100)
+			{
+				stops.Add($"var(--ww-surface-hi) {CssNumber(cursor)}% 100%");
+			}
+
+			return $"conic-gradient({string.Join(", ", stops)})";
+		}
+	}
+
+	private string LeadingPercent => State.Probability is { } probability
+		? VisibleOutcomes(probability)
+		.OrderByDescending(outcome => Ratio(outcome))
+		.Select(Percent)
+		.FirstOrDefault() ?? "—"
+		: "—";
+
+	private static IEnumerable<LobbyProbabilityOutcomeData> VisibleOutcomes(LobbyProbabilityData probability) =>
+		probability.Outcomes.Where(outcome => outcome.Numerator > 0);
+
+	private static decimal Ratio(LobbyProbabilityOutcomeData outcome) =>
+		outcome.Denominator <= 0 ? 0 : (decimal)outcome.Numerator / outcome.Denominator;
+
+	private static string CssNumber(decimal value) =>
+		value.ToString("0.####", CultureInfo.InvariantCulture);
+
+	private static string Percent(LobbyProbabilityOutcomeData outcome) =>
+		$"{(Ratio(outcome) * 100).ToString("0.#", CultureInfo.CurrentCulture)}%";
+
+	private static string ShortName(GameResult result) => result switch
+	{
+		SingleFactionGameResult => LobbyEvaluationPresentation.GameResultName(result),
+		SharedVictoryGameResult => "Partilhada",
+		NoWinnerGameResult => "Sem vencedor",
+		_ => LobbyEvaluationPresentation.GameResultName(result)
+	};
+
+	private static string OutcomeColor(GameResult result) => result switch
+	{
+		SingleFactionGameResult { Faction: Faction.Villager } => "var(--ww-faction-villager)",
+		SingleFactionGameResult { Faction: Faction.Werewolf } => "var(--ww-faction-werewolf)",
+		SharedVictoryGameResult => "var(--ww-faction-ambiguous)",
+		_ => "var(--ww-text-muted)"
+	};
+}

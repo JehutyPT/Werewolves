@@ -1,0 +1,80 @@
+@implements IAsyncDisposable
+@inject NavigationManager Navigation
+@inject IJSRuntime JavaScript
+@using Microsoft.JSInterop
+
+@* PROTOTYPE ONLY: fixed variant switcher for ?variant=A|B|C|D. *@
+<nav class="ww-prototype-balance-switcher" aria-label="Alternar protótipo de resultados de referência">
+	<button type="button" aria-label="Variante anterior" @onclick="() => SelectOffset(-1)">←</button>
+	<div>
+		<span>PROTOTYPE</span>
+		<strong>@CurrentVariant — @VariantName</strong>
+	</div>
+	<button type="button" aria-label="Variante seguinte" @onclick="() => SelectOffset(1)">→</button>
+</nav>
+
+@code {
+	private static readonly string[] Variants = ["A", "B", "C", "D"];
+	private IJSObjectReference? _module;
+	private IJSObjectReference? _keyboardListener;
+	private DotNetObjectReference<PrototypeBalanceVariantSwitcher>? _selfReference;
+
+	[Parameter, EditorRequired]
+	public string CurrentVariant { get; set; } = "A";
+
+	[Parameter]
+	public EventCallback<string> VariantSelected { get; set; }
+
+	private string VariantName => CurrentVariant switch
+	{
+		"B" => "Ribbon",
+		"C" => "Dial",
+		"D" => "Framed ribbon",
+		_ => "Footer bar"
+	};
+
+	protected override async Task OnAfterRenderAsync(bool firstRender)
+	{
+		if (!firstRender)
+		{
+			return;
+		}
+
+		_module = await JavaScript.InvokeAsync<IJSObjectReference>(
+			"import",
+			"./_content/Werewolves.Client.Shared/js/prototype-balance-switcher.js");
+		_selfReference = DotNetObjectReference.Create(this);
+		_keyboardListener = await _module.InvokeAsync<IJSObjectReference>("attach", _selfReference);
+	}
+
+	[JSInvokable]
+	public Task CycleFromKeyboard(int offset) => SelectOffset(offset);
+
+	private async Task SelectOffset(int offset)
+	{
+		var currentIndex = Array.IndexOf(Variants, CurrentVariant);
+		if (currentIndex < 0)
+		{
+			currentIndex = 0;
+		}
+
+		var next = Variants[(currentIndex + offset + Variants.Length) % Variants.Length];
+		await VariantSelected.InvokeAsync(next);
+		var nextUri = Navigation.GetUriWithQueryParameter("variant", next);
+		Navigation.NavigateTo(nextUri, forceLoad: false, replace: true);
+	}
+
+	public async ValueTask DisposeAsync()
+	{
+		if (_keyboardListener is not null)
+		{
+			await _keyboardListener.InvokeVoidAsync("dispose");
+			await _keyboardListener.DisposeAsync();
+		}
+		if (_module is not null)
+		{
+			await _module.DisposeAsync();
+		}
+		_selfReference?.Dispose();
+	}
+}
