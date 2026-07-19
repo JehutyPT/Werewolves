@@ -21,14 +21,26 @@ The number of Players the app is expected to validate and support for a Game Ses
 _Avoid_: Sweet spot, recommended size
 
 **Seating Order**:
-The clockwise arrangement of Players around the table. Determines adjacency for abilities like Bear Tamer and Rusty Sword.
+The clockwise arrangement of Players around the table. Determines adjacency for abilities like Bear Tamer, Fox, and Knight with the Rusty Sword.
 _Avoid_: Player order, turn order
+
+**Living Neighbor**:
+The nearest living Player in one direction from a living reference Player around the circular Seating Order, skipping Eliminated Players. When exactly two Players are living, the same other Player is both the clockwise and counterclockwise Living Neighbor.
+_Avoid_: Adjacent seat, physical neighbor
 
 ### Identity & Allegiance
 
 **Role**:
 A Player's secret identity, determining their abilities, wake-up schedule, and default allegiance. Drawn from a physical Character Card.
 _Avoid_: Character, class, card (when referring to the assigned identity)
+
+**Role Power**:
+A gameplay capability granted by a Role beyond its identity, physical Character Card, and default allegiance. A Role Power may be chosen, automatic, reactive, passive, recognition-based, or communication-based; information already learned is not itself a Role Power.
+_Avoid_: Ability (too broad), Role behavior (includes identity and allegiance)
+
+**Role Power Suppression**:
+A continuing rule state that prevents affected Role Powers from beginning or triggering. It does not remove Roles, erase learned information, undo committed or resolved effects, restore spent resources, or cancel durable consequences already scheduled.
+_Avoid_: Role removal, power reset
 
 **Rules Role Set**:
 The Roles described by the physical rules in `docs/domain/game-rules.md`, regardless of whether the app has implemented them.
@@ -59,11 +71,23 @@ A Rules-Valid Role Composition that falls within the app's product support bound
 _Avoid_: Rules-valid, simulator-supported
 
 **Actor Setup Cards**:
-The three face-up Character Cards selected by the Moderator during setup for the Actor to borrow powers from. Actor Setup Cards must be hard-aligned Villager Roles with actionable individual powers that are not already part of the Role Composition. Actor Setup Cards are not part of the Role Composition and do not contribute Starting Factions or Possible Factions. The Actor Role itself is a hard-aligned Villager Role.
+The three face-up Character Cards selected by the Moderator during setup for the Actor to borrow powers from. Actor Setup Cards must be hard-aligned Villager Roles with borrowable individual Role Powers that are not already part of the Role Composition. Actor Setup Cards are not part of the Role Composition and do not contribute Starting Factions or Possible Factions. The Actor Role itself is a hard-aligned Villager Role.
 _Avoid_: Actor Role Composition, Actor deck
 
+**Borrowed Role Power**:
+A fresh, temporary instance of an eligible source Role Power in full, including its benefits, conditions, costs, and consequences, activated when Actor selects and spends its Actor Setup Card and lasting until Actor's call at the start of the next Night. It keeps the source power's relative call or trigger but not a native Role's already-passed one-time setup restriction, and it changes neither the Actor's Role nor Faction Beneficiary; skipping the Actor call creates no instance and spends no card.
+_Avoid_: Temporary Role, copied Role
+
+**Public Group Partition**:
+A pre-game assignment of every Player to exactly one of two publicly known, non-empty groups for the full Game Session. The groups may differ in size, including a one-Player group.
+_Avoid_: Prejudiced Manipulator teams, balanced groups
+
+**Opposing Public Group**:
+The block of the Public Group Partition that does not contain the current Prejudiced Manipulator Faction Beneficiary. It is defined only while that Faction has a living beneficiary.
+_Avoid_: Target group, enemy team, original Manipulator's opposition
+
 **Simulation Scenario**:
-The complete pre-game simulator input used for lobby-level cache lookup or pre-game simulation. A Simulation Scenario always includes a canonical Role Composition and may also include setup artifacts or non-default assumptions, such as Actor Setup Cards, New Moon Event support, or a non-default Prejudiced Manipulator group model. Profile defaults, such as the baseline even split for Prejudiced Manipulator, do not need to be repeated in every Simulation Scenario.
+The complete pre-game simulator input used for lobby-level cache lookup or pre-game simulation. A Simulation Scenario always includes a canonical Role Composition and may also include setup artifacts or non-default assumptions, such as Actor Setup Cards, New Moon Event support, or a non-default Public Group Partition. Profile defaults, such as the baseline even split for Prejudiced Manipulator, do not need to be repeated in every Simulation Scenario.
 _Avoid_: Role Composition (when setup artifacts are also included), setup (too broad)
 
 **Canonical Role Composition**:
@@ -115,7 +139,7 @@ A Role Composition whose Game Result Frequency is not obviously concentrated in 
 _Avoid_: Fair game (too vague), duration-balanced
 
 **Faction**:
-A distinct win condition together with the set of Players who benefit from it being met. A Faction comes into being whenever at least one Player holds a win condition not shared by any existing Faction. Membership can change during the game. Examples: the Villager Faction (all Villagers win when every Werewolf is Eliminated), the Piper Faction (the Piper alone wins when all surviving Players are Charmed).
+A distinct win condition together with the set of Players who benefit from it being met. A Faction comes into being whenever at least one Player holds a win condition not shared by any existing Faction. Membership can change during the game. Examples: the Villager Faction (all Villagers win when every Werewolf is Eliminated), the Piper Faction (a living Piper Faction Beneficiary wins when every other living Player is Charmed).
 _Avoid_: Team (implies cooperation — the Piper's Charmed targets aren't allies), side, alignment
 
 **Werewolf Control Shortcut**:
@@ -139,7 +163,7 @@ A living Player who currently acts for, wakes with, is perceived as, or is count
 _Avoid_: Team member, ally, operative
 
 **Permanent Role Swap**:
-A Role replacement that permanently changes a Player's Role for the rest of the Game Session. By default, a Permanent Role Swap changes the Player's Faction Beneficiary to the new Role's default Faction unless another rule explicitly takes precedence, such as Cross-Faction Lovers.
+A Role replacement that permanently changes a Player's Role for the rest of the Game Session without replacing the Player. By default, a Permanent Role Swap changes the Player's Faction Beneficiary to the new Role's default Faction unless another rule explicitly takes precedence, such as Cross-Faction Lovers.
 _Avoid_: Transformation (too broad), conversion (ambiguous with infection)
 
 **Shared Victory Outcome**:
@@ -269,7 +293,7 @@ A resolution phase between Night and Day. The app resolves conflicting Night Act
 _Avoid_: Morning (ambiguous — Dawn is resolution, Day is when players are awake)
 
 **Day Phase**:
-When Players open their eyes, victims are announced, debate happens, and the village votes to eliminate a suspect.
+When Players open their eyes, victims are announced, debate happens, and the village holds one or more Votes to eliminate suspects.
 _Avoid_: Day round
 
 ### Communication Contract
@@ -288,13 +312,25 @@ _Avoid_: Input, answer, user input
 A specific action performed by a Role during the Night Phase (e.g., Werewolf attack, Seer check, Witch save/kill, Defender protect).
 _Avoid_: Night event, ability use
 
+**One-Use Resource**:
+A limited Role resource that can be committed only once per Game Session, such as either Witch potion or the Accursed Wolf-Father's infection. It is consumed when the Moderator confirms the action, even if later resolution prevents the effect, makes it redundant, or produces no state change.
+_Avoid_: Charge, successful use
+
 **Vote**:
-The village's collective decision during the Day Phase to eliminate a suspected Werewolf. Can be modified by events or roles (e.g., Sheriff's double vote, Stuttering Judge's re-vote).
+The village's collective decision during the Day Phase to eliminate a suspected Werewolf. Can be modified by events or Roles (e.g., Sheriff's double vote or a Stuttering Judge Consecutive Vote).
 _Avoid_: Poll, election
+
+**Consecutive Vote**:
+A second, independent Vote held in the same Day Phase when a rule requires one, such as a valid Stuttering Judge signal. The first Vote and all of its resolved state changes remain in force; the Consecutive Vote does not retry or replace it.
+_Avoid_: Re-vote, runoff, replacement Vote
 
 **Elimination**:
 Removing a Player from the game. Has a specific reason (Werewolf attack, day vote, Hunter shot, Lovers heartbreak, etc.).
 _Avoid_: Death, kill (too informal — Elimination is the domain term for the state change)
+
+**Elimination Cascade**:
+The complete resolution that begins with one or more initially concurrent Eliminations and includes every resulting Lovers heartbreak and Hunter final shot. It ends only when no new Elimination or required reaction remains, before the next Victory Check Window.
+_Avoid_: Death chain, elimination queue (implementation-specific)
 
 ### Special Relationships
 
@@ -309,6 +345,10 @@ _Avoid_: Couple, pair
 **Cross-Faction Lovers**:
 Lovers whose current win-condition beneficiaries differ when Cupid links them. Cross-Faction Lovers create a Latent Faction with the goal of being the last two Players alive.
 _Avoid_: Cross-team Lovers, mixed Lovers
+
+**Charmed**:
+A persistent, non-stacking Status Effect applied by the Piper to another living Player. A Charmed Player keeps their Role, Faction Beneficiary, and powers but cannot be selected by the Piper again.
+_Avoid_: Enchanted, Piper ally
 
 **New Moon Event**:
 An event card drawn daily that temporarily or permanently modifies game rules. Physical cards exist at the table; the app tracks their effects.
@@ -333,7 +373,7 @@ _Avoid_: Load game, restore
 - **Actor Setup Cards** are selected through a separate setup flow and are not part of the **Role Composition**
 - Actor is a hard-aligned Villager **Role**; **Actor Setup Cards** provide borrowed powers only and do not change the Actor's **Faction Beneficiary**
 - Actor counts toward hard-aligned Villager **Role** requirements for supported **Role Compositions**
-- **Actor Setup Cards** must be hard-aligned Villager **Roles** with actionable individual powers that are not already selected in the **Role Composition**; Simple Villager, Villager-Villager, Two Sisters, and Three Brothers are not eligible
+- **Actor Setup Cards** must be hard-aligned Villager **Roles** with borrowable individual **Role Powers** that are not already selected in the **Role Composition**; Simple Villager, Villager-Villager, Two Sisters, and Three Brothers are not eligible
 - If Actor is in the **Role Composition**, the app must require at least three eligible **Actor Setup Cards** to remain outside the **Role Composition** before setup can advance
 - **New Moon Events**, Player names, **Seating Order**, **Status Effects**, Sheriff, Lovers, Charmed, Prejudiced Manipulator groups, and physical traits such as youngest Player are not part of the **Role Composition**
 - New-Moon-dependent Roles and Event effects are outside the v1 simulator scope unless a **Simulation Scenario** explicitly includes New Moon support
@@ -353,7 +393,7 @@ _Avoid_: Load game, restore
 - **Degenerate Simulation Scenario** classification applies to the **Simulation Scenario**; each screening run derives its own seeded pre-game **Simulation Start State** from that scenario, including random assignment and profile/default setup choices
 - **Canonical Role Composition** omits zero-count Roles, uses exact enum identifiers rather than localized names, and sorts Role entries alphabetically by enum identifier
 - **Canonical Simulation Scenario** includes `players=N` separately from **Canonical Role Composition** because Thief can make Role card count differ from Player count
-- Prejudiced Manipulator group splitting is not part of **Role Composition**; an even split is the baseline simulator profile default, and only non-default group models need explicit **Simulation Scenario** material
+- A **Public Group Partition** is not part of **Role Composition**; an even split is the baseline simulator profile default, and only non-default partitions need explicit **Simulation Scenario** material
 - Any **Role** present in the Moderator-selected **Role Composition** can contribute **Starting Factions** and **Possible Factions** even if a particular simulation run never assigns that Role
 - A **Cacheable Simulation Scenario** is limited by the active **Simulator Profile Role Set**, not the full **Rules Role Set**
 - A Role becomes **App-Supported** only when the app can actually guide the Moderator through it; Roles that exist only in the **Rules Role Set** are Rules-Valid but not App-Supported
@@ -377,8 +417,10 @@ _Avoid_: Load game, restore
 - Town Crier is a **New Moon Assignment** like Sheriff, not a **Role** in the Role Composition
 - Elimination-style Faction win conditions are evaluated against **Faction Beneficiaries**
 - In the current ruleset, a Player has exactly one beneficiary Faction at a time; changes such as Cross-Faction Lovers, Wild Child transformation, Wolf Hound choice, Thief swap, Devoted Servant swap, or Double Agent replace the Player's previous beneficiary link
+- Wolf Hound's Night 1 choice preserves the Player's **Role** and physical Character Card. The choice changes **Faction Beneficiary** and Werewolf **Faction Agent** state rather than causing a **Permanent Role Swap**
 - Infection changes a Player's **Faction Agent** status, not their **Faction Beneficiary**
 - A **Permanent Role Swap** changes the Player's **Faction Beneficiary** to the new Role's default Faction unless an explicit precedence rule says otherwise
+- Thief's Night 1 **Permanent Role Swap** takes effect immediately; the acquired Role follows the remaining canonical Night 1 call order without replaying earlier calls
 - Cross-Faction Lovers immediately replace both Lovers' **Faction Beneficiary** links; same-Faction **Lovers** remain only a **Status Effect**
 - Detailed Role interaction rulings, including Cross-Faction Lovers precedence, Devoted Servant, Miracle, Elder, Big Bad Wolf, Full Moon Rising, Double Agent, Angel, and other edge cases, live in `docs/domain/game-rules-clarifications.md`
 - Devoted Servant's successful swap is a **Permanent Role Swap**
@@ -390,8 +432,12 @@ _Avoid_: Load game, restore
 - Generic rules that check, target, count, or react to "Werewolves" use Werewolf **Faction Agents** unless the rule explicitly says Role or Character Card
 - Werewolf group attacks cannot target Werewolf **Faction Agents**
 - White Werewolf's solo attack targets another Werewolf **Faction Agent**
-- The Piper Faction wins when every surviving non-Piper Player is Charmed
-- The Prejudiced Manipulator Faction wins when every living Player in the opposing public group has been Eliminated, regardless of those Players' **Faction Beneficiaries**
+- White Werewolf's solo **Night Action** follows the absolute Game Session Night number: it is unavailable on Night 1, then occurs on Nights 2, 4, 6, and every later even-numbered Night, after the Accursed Wolf-Father and before the Big Bad Wolf. Declining the action, lacking a legal target, or having the attack prevented or made ineffective does not shift that cadence
+- A Fox check inspects the duplicate-free set containing its chosen living Player and that Player's clockwise and counterclockwise **Living Neighbors**. With exactly two living Players, the set contains both Players. Declining performs no check, gives no feedback, and preserves the Fox power; only a performed negative check removes it
+- A Knight with the Rusty Sword actually Eliminated by a physical Werewolf attack snapshots its diseased target after that Dawn's complete **Elimination Cascade**. Starting clockwise from the Knight's fixed seat, select the first surviving Werewolf **Faction Agent** then eligible; successful same-Night infection and same-cascade transformation count, and a triggering-Night temporary Agent remains eligible for this check. The disease attaches to that Player identity, resolves once at the following Dawn if the Player is living, and never retargets
+- An eligible Piper charm target is a living Player other than the Piper who is not already **Charmed**. The Piper must charm two distinct eligible Players when at least two exist, the sole eligible Player when exactly one exists, and no Player when none exist
+- The Piper Faction predicate is true at a **Victory Check Window** only when a living Piper **Faction Beneficiary** exists and every other living Player is **Charmed**
+- The Prejudiced Manipulator Faction predicate is true at a **Victory Check Window** only when a living Prejudiced Manipulator **Faction Beneficiary** exists and no living Player remains in that beneficiary's **Opposing Public Group**, regardless of those Players' **Faction Beneficiaries**
 - A Player can be a **Faction Agent** for one Faction while benefiting from another Faction's win condition, such as White Werewolf waking with Werewolves or Double Agent benefiting from Werewolf victory without waking with Werewolves
 - The Seer detects Werewolf **Faction Agents**, not Werewolf **Faction Beneficiaries**
 - Win conditions are evaluated only during **Victory Check Windows**
@@ -415,7 +461,7 @@ _Avoid_: Load game, restore
 - A **Role** belongs to one **Role Group** and determines a default **Team**, but a Player's actual **Team** can change via **Status Effects** (e.g., infection)
 - A **Turn** consists of one **Night Phase**, one **Dawn Phase**, and one **Day Phase**, in that order
 - During each **Night Phase**, Roles perform **Night Actions** which are resolved during **Dawn Phase**
-- During **Day Phase**, the village holds a **Vote** which may result in an **Elimination**
+- During **Day Phase**, the village holds a **Vote** and, when a rule requires one, a **Consecutive Vote**; each may result in an **Elimination**
 - The app sends **Moderator Instructions** and receives **Moderator Responses** — this is the only communication channel
 - **New Moon Events** can modify the behavior of any phase, vote, or role ability
 
@@ -456,6 +502,7 @@ _Avoid_: Load game, restore
 - "Canonical Role Composition" — resolved: count every physical Role card in the Role Composition, including Thief extras, omit zero-count Roles, sort by exact enum identifier, and never include Actor Setup Cards.
 - "Player count inference" — resolved: **Canonical Simulation Scenario** and **Run Seed Material** include `players=N` separately from Role counts because Thief changes card count.
 - "Prejudiced Manipulator groups in Role Composition" — resolved: group splitting is not part of Role Composition; even split is the baseline simulator profile default, and only non-default group models need explicit **Simulation Scenario** material.
+- "Prejudiced Manipulator groups" — resolved: use **Public Group Partition** for the immutable two-group setup artifact and **Opposing Public Group** for the block not containing the current living Prejudiced Manipulator **Faction Beneficiary**.
 - "Mid-game projection vs pre-game simulation" — resolved: the simulator runs from a **Simulation Start State**. Pre-game cache generation derives that state from a **Simulation Scenario**; mid-game projection uses the same simulation mechanism from a later fully defined Game Session state.
 - "Scenario classification vs start states" — resolved: degenerate screening classifies a **Simulation Scenario**, while each completed screening run starts from its own seeded **Simulation Start State** derived from that scenario.
 - "Actor as Ambiguous Role" — resolved: Actor is a hard-aligned Villager **Role**, counts toward hard-aligned Villager Role Composition requirements, and **Actor Setup Cards** provide powers only without affecting Faction lifecycle.
@@ -473,10 +520,12 @@ _Avoid_: Load game, restore
 - "Dual Faction beneficiaries" — resolved: in the current ruleset, each Player has exactly one beneficiary Faction; beneficiary changes are exclusive replacements even when operational behavior, wake groups, or public identity stay unchanged.
 - "Infection beneficiary" — resolved: infection changes **Faction Agent** status but does not change **Faction Beneficiary**.
 - "Permanent Role Swap beneficiary" — resolved: permanent Role swaps change **Faction Beneficiary** to the new Role's default Faction unless an explicit precedence rule says otherwise.
+- "Wolf Hound choice as Role swap" — resolved: the Player remains the Wolf Hound **Role** with the Wolf Hound Character Card after either choice; the chosen nature is Faction state, not a **Permanent Role Swap**.
+- "Wolf Hound reveal identity" — resolved: revealing the physical Character Card identifies the **Role** as Wolf Hound but does not automatically disclose the private Villager-or-Werewolf choice.
 - "Cross-Faction Lovers precedence" — resolved: Cross-Faction Lovers keep their beneficiary precedence over later effects; Lover status blocks Devoted Servant's swap ability, and Miracle reviving only one eliminated Lover breaks the Cross-Faction Lovers outcome.
 - "Werewolf voting control" — resolved: **Werewolf Control Shortcut** uses **Durable Voting Power** and ignores temporary vote effects.
 - "Generic Werewolf checks" — resolved: use Werewolf **Faction Agent** unless a rule explicitly refers to Role or Character Card.
-- "Elder power loss" — resolved: the Elder's village-vote penalty affects all Villager **Roles**, including Actor, regardless of **Faction Beneficiary**, and continues to suppress later Villager Role powers.
+- "Elder power loss" — resolved: **Role Power Suppression** begins after the Elder's village-vote **Elimination Cascade**, affects all current and future Villager **Roles** including Actor regardless of **Faction Beneficiary**, and blocks only new power effects rather than undoing committed or resolved ones.
 - "Big Bad Wolf disablement" — resolved: the extra attack is disabled once any non-temporary Werewolf **Faction Agent** has been Eliminated; Full Moon Rising's temporary Werewolf Faction Agents do not count.
 - "Temporary Werewolf Faction Agents" — resolved: Full Moon Rising affects operational Werewolf Faction Agent checks while active, but does not change Faction Beneficiaries or Big Bad Wolf disablement.
 - "Double Agent eligibility" — resolved: the target must be a living non-Werewolf **Faction Agent**.
