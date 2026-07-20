@@ -3,6 +3,7 @@
 > - Analyzed code baseline: `506ed86f`
 > - Program authority: [PRD #93](https://github.com/bicheichane/Werewolves/issues/93) and completed [Wayfinder map #95](https://github.com/bicheichane/Werewolves/issues/95)
 > - Roadmap date: 19 July 2026
+> - Thief card-model settlement incorporated: [#148](https://github.com/bicheichane/Werewolves/issues/148), 20 July 2026
 > - Planning rule: implement and integrate one Role at a time. Parallel notes describe a hypothetical multi-team future, not this delivery plan.
 
 ## Decision summary
@@ -30,6 +31,8 @@ The first Role remains **Villager-Villager**. **Actor** remains last because it 
 
 Every one of the 29 in-scope Roles, including the four supported baselines, must be explicitly admitted to the versioned simulator surface used for **Degenerate Simulation Scenario** screening, and its required Moderator Instructions must be executable by the headless driver well enough to complete screening runs. This screening admission is part of Role completion but is not automatic from app/catalog support. Probability estimation and broader simulator usefulness remain out of scope.
 
+Thief adds a setup-wide constraint rather than only a Night 1 listener. For `P` Players, Role Lock-In must partition the `P + 2` Role Composition into a `P`-card Deal Pool containing exactly one Thief and two private, distinct non-Thief offer instances. Every Role reachable from the pool or either offer contributes its conditional setup requirements before safety screening, and the committed partition becomes part of Simulation Scenario identity. Only the Deal Pool is physically dealt.
+
 Order numbers are implementation slots, not estimates or sprints. A foundational slot can contain several internal tracer tickets, but the Role is not admitted to `SupportedRoleCatalog` until its entire vertical slice is complete.
 
 ## Delivery contract for every slot
@@ -43,7 +46,8 @@ A Role is complete only when all applicable parts of the vertical slice are comp
 - public-API Core integration tests cover the full instruction/response cycle, legal targets, consequences, interactions, and recovery;
 - rendered client tests cover any new setup or instruction surface;
 - the Role is admitted to the app catalog only after the behavior is complete;
-- the Role is explicitly admitted to the versioned degenerate-screening Simulator Profile Role Set, with headless instruction/response coverage and any required profile/cache compatibility change; app support alone does not opt it in.
+- the Role is explicitly admitted to the versioned degenerate-screening Simulator Profile Role Set, with headless instruction/response coverage and any required profile/cache compatibility change; app support alone does not opt it in;
+- when a Role is reachable through a Thief offer, its setup and screening evidence covers that path as well as ordinary Deal Pool ownership. Branch aggregation covers `Offer1`, `Offer2`, and legal `Decline`, blocks on any Degenerate result, passes only when every branch completes non-degenerate, and otherwise leaves failures or timeouts nonblocking as Could Not Evaluate.
 
 Recovery does **not** promise exact mid-listener continuation. Under ADR-0002, a process death resumes the latest stable Main Phase boundary and replays uncommitted phase-tail work. Tests must prove that replay is coherent and that state from an earlier committed boundary is not spent twice. A different recovery promise would require an explicit ADR change before Role work relies on it.
 
@@ -129,11 +133,11 @@ Before Slot 13, implement ADR-0011 as a named Game Session Outcome model: explic
 
 ### Stage 7 — current Role, physical card zones, setup artifacts, and power composition
 
-Before Slot 20, separate Role Composition and physical card/deal zones from a Player's current Role. A Permanent Role Swap must atomically change current Role, default Beneficiary when allowed, listener activation, and fresh power state while separately applying explicit physical-card, visibility, relationship, and Status Effect rules.
+Before Slot 20, separate Role Composition, Deal Pool, Thief Offer Cards, set-aside cards, Player-owned physical cards, and current Role. Role Lock-In must commit the Player-count Deal Pool with exactly one Thief plus two private, distinct non-Thief offer instances before any Physical Deal, then derive conditional setup from every Role in the pool or offers. A Permanent Role Swap must atomically change current Role, default Beneficiary when allowed, listener activation, and fresh power state while separately applying explicit physical-card, visibility, relationship, and Status Effect rules.
 
 | Slot | Role | Why it is here | Required result before continuing |
 |---:|---|---|---|
-| 20 | **Thief** (`Thief`) | Canonical first tracer for undealt cards, current Role, and Permanent Role Swap. | The Moderator records the two physical card instances left undealt by the Players' deal and the Thief Player's completed choice; the app never generates either. The selected Role becomes current immediately and follows the remaining Night 1 call order; Role Composition, physical card zones, and current Role remain distinct. |
+| 20 | **Thief** (`Thief`) | Canonical first tracer for Role Lock-In, physical card zones, current Role, and Permanent Role Swap. | For `P` Players, commit a `P + 2` Role Composition as a `P`-card Deal Pool containing exactly one Thief plus private `Offer1` and `Offer2` instances that are distinct and non-Thief; require setup for every Role in the pool or either offer; include the partition in scenario identity; screen each semantically distinct legal `Offer1`, `Offer2`, and `Decline` branch; and deal only the pool. Night 1 accepts one machine-stable legal choice. An exchange makes the selected offer Player-owned and moves the original Thief card plus the unchosen offer to Set-Aside; `Decline` retains Thief and moves both offers to Set-Aside. The resulting current Role activates immediately and follows the remaining Night 1 call order. Successful response processing creates ADR-0017's stable checkpoint before returning, so recovery cannot recommit a choice, decline, or exchange. Any Degenerate branch blocks, while failures and timeouts without one do not. |
 | 21 | **Angel** (`Angel`) | Bounded second swap consumer and a precise timed-outcome lifecycle test. | Eligible early elimination wins at the next named window; eligibility expires after the Dawn window resolving Night 2; otherwise the Role atomically swaps to Simple Villager. |
 | 22 | **Devoted Servant** (`DevotedServant`) | Uses the pre-reveal seam from Stage 2 and the card-zone, infection, charm, and Lover semantics now in place. | On Use, the Servant's printed card becomes public and is discarded while the voted target's card and acquired current Role remain hidden; Decline resumes the target's ordinary reveal with no Servant transition. Lover use is prohibited; Charmed, Sheriff, and Town Crier clear while Player-attached infection and any Scapegoat voting restriction survive; target state is not inherited; the acquired power state is fresh and its first call is the next Night. |
 | 23 | **Elder** (`Elder`) | Establishes one global power-availability decision only after attack, swap, and power execution paths exist. | First qualifying wolf attack/infection resistance is correct; other causes bypass it; after the triggering Vote's Elimination Cascade, every current and future Villager Role Power is suppressed through the shared availability seam without undoing prior commitments or results. |
@@ -180,7 +184,7 @@ Wayfinder map #95 is complete: no rules decision owned by that map remains open.
 | 16 | Fox checks the duplicate-free center-plus-living-neighbors set; a decline gives no result or power loss, while a performed negative check removes the power. | [Fox Checks](../domain/game-rules-clarifications.md#fox-checks); [#101](https://github.com/bicheichane/Werewolves/issues/101) |
 | 17 | Rusty Sword selects after the triggering Dawn cascade by clockwise scan from the Knight's fixed seat, snapshots the eligible Agent, and never retargets. | [Rusty Sword Disease](../domain/game-rules-clarifications.md#rusty-sword-disease); [#104](https://github.com/bicheichane/Werewolves/issues/104) |
 | 18 | Piper must charm two eligible Players, the sole eligible Player, or none when zero are eligible; the resolved state feeds the next Victory Check Window. | [Piper Charm Targets and Outcome](../domain/game-rules-clarifications.md#piper-charm-targets-and-outcome); [#102](https://github.com/bicheichane/Werewolves/issues/102) |
-| 20 | Thief's Night 1 Permanent Role Swap is immediate and continues forward through the remaining call order without replaying setup or earlier calls. | [Thief Acquired-Role Timing](../domain/game-rules-clarifications.md#thief-acquired-role-timing); [#99](https://github.com/bicheichane/Werewolves/issues/99) |
+| 20 | At Role Lock-In, a Thief-enabled Role Composition is partitioned into a Player-count Deal Pool containing exactly one Thief and two private, distinct non-Thief offer instances. Every reachable Role's setup is complete before branchwise screening; only the pool is dealt. `Offer1`, `Offer2`, or legal `Decline` commits once; an exchange sets aside the original Thief card and unchosen offer, changes current Role immediately, and continues forward without replaying setup or earlier calls. Any Degenerate branch blocks, while failures and timeouts without one do not. | [Thief Setup, Choice, and Acquired-Role Timing](../domain/game-rules-clarifications.md#thief-setup-choice-and-acquired-role-timing); [#99](https://github.com/bicheichane/Werewolves/issues/99); [#148](https://github.com/bicheichane/Werewolves/issues/148) |
 | 22 | Devoted Servant acquires a fresh hidden Role for the next Night; old-identity effects clear, while Player-attached infection and an in-force Scapegoat restriction survive. | [Devoted Servant Swap Boundary](../domain/game-rules-clarifications.md#devoted-servant-swap-boundary); [#109](https://github.com/bicheichane/Werewolves/issues/109) |
 | 23 | Villager Role Powers include chosen, automatic, reactive, passive, recognition-based, and communication-based capabilities. Elder suppression starts after its Vote cascade and blocks new effects without rewriting prior results. | [Role Powers and New Moon Assignments](../domain/game-rules-clarifications.md#role-powers-and-new-moon-assignments); [#108](https://github.com/bicheichane/Werewolves/issues/108) |
 | 24 | Prejudiced Manipulator uses one immutable, public, non-empty two-group partition; victory requires a living current beneficiary and no living Player in that holder's opposing group. | [Prejudiced Manipulator Public Groups and Outcome](../domain/game-rules-clarifications.md#prejudiced-manipulator-public-groups-and-outcome); [#107](https://github.com/bicheichane/Werewolves/issues/107) |
@@ -219,12 +223,14 @@ Villager-Villager; Two Sisters; Three Brothers; Witch; Hunter; Stuttering Judge;
 - Added a reusable acting-Player/source-power/availability seam before Witch so Actor can remain last without forcing Witch, Defender, and Fox rewrites.
 - Corrected recovery expectations to whole-phase-tail replay from the last stable boundary.
 - Required explicit degenerate-screening admission for all 29 in-scope Roles, plus profile/cache compatibility changes when Faction and outcome semantics change.
+- Replaced the Thief's chance-determined undealt leftovers with #148's pre-deal Role Lock-In partition, conditional setup across the pool and offers, branchwise screening, and explicit exchange/set-aside zones.
 - Kept central hook order, phase navigation, catalog admission, and schema integration serialized even where Role modules could hypothetically be developed in parallel.
 
 ## Evidence sources
 
 - [Program PRD #93](https://github.com/bicheichane/Werewolves/issues/93)
 - [Completed Wayfinder map #95](https://github.com/bicheichane/Werewolves/issues/95)
+- [Thief physical-deal and Permanent Role Swap decision #148](https://github.com/bicheichane/Werewolves/issues/148)
 - [Role invasiveness assessment](./role-implementation-invasiveness-report.md)
 - [Canonical game rules](../domain/game-rules.md)
 - [Game-rule clarifications](../domain/game-rules-clarifications.md)

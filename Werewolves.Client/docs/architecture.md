@@ -58,7 +58,7 @@
 ## 4. Navigation & Layout
 
 ### 4.1. Pages
-*   **Lobby:** Game setup. Roster definition and Role Composition selection remain the first two steps. Conditional configuration then appears only when required: Actor Setup Cards when Actor is in Role Composition, and the public two-group partition when Prejudiced Manipulator is in Role Composition. These are lobby inputs, not Core Moderator Instructions; the client records the Moderator-created physical setup and never generates cards or balances groups. Back-navigation preserves every completed input. Navigation reaches Dashboard only after the applicable configuration is valid and `GameSessionConfig` is fulfilled.
+*   **Lobby:** Game setup. Roster definition and Role Composition selection remain the first two steps. Conditional configuration then appears only when required: Actor Setup Cards when Actor is reachable from the committed setup, and the public two-group partition when Prejudiced Manipulator is reachable. These are lobby inputs, not Core Moderator Instructions; the client records the Moderator-created physical setup and never generates cards or balances groups. The current client preserves completed inputs on back-navigation; #178 must define the target staged flow's edit, invalidation, and recovery behavior before that flow is implemented. Navigation reaches Dashboard only after the applicable configuration is valid and `GameSessionConfig` is fulfilled. The Thief-specific Role Lock-In, partition, branch-screening, and card-zone flow described below is a required architecture target, not behavior implemented by the current client.
 *   **Dashboard:** Gameplay. Three tabs — Roster, Action, Stats.
 
 ### 4.2. Tab Bar
@@ -98,6 +98,7 @@
 
 ### 6.2. SelectOptionsView
 *   Vertical list of options. Tap to select.
+*   The planned Thief flow renders only Core-provided, machine-stable `Offer1`, `Offer2`, and `Decline` options, with `Decline` absent when illegal. The client neither infers legality nor recreates the locked private offer pair.
 
 ### 6.3. AssignRolesView
 *   Used during gameplay when a role is revealed (elimination, not setup).
@@ -132,11 +133,19 @@
 ### 8.2. Step 2: Role Selection
 *   Roles grouped by Role Group (Villagers, Werewolves, Ambiguous, Loners).
 *   Stepper control (+/-) per role for count.
-*   Persistent summary bar: `Selected: X/Y` (current vs. target based on player count).
-*   Submit disabled until count matches. Structural validation errors (e.g., Thief +2 rule) shown as inline messages.
+*   Persistent summary bar: `Selected: X/Y` (current vs. target based on player count, or player count plus two in the planned Thief flow).
+*   Submit disabled until count matches. The planned Thief validation also requires a Player-count Deal Pool with exactly one Thief, neither offer may print Thief, and two different offer-instance identities even when their printed Roles match; errors appear inline.
 *   Back-navigation preserves selections.
 
-### 8.3. Production Lobby Safety Evaluation
+### 8.3. Planned Thief Role Lock-In And Physical Flow
+*   This subsection is a required target for the Thief implementation slice; it does not describe current client capability.
+*   For `P` Players, a Thief-enabled Role Composition contains `P + 2` physical Character Card instances. At Role Lock-In, the Moderator partitions it into a `P`-card Deal Pool containing exactly one Thief and two named, private Thief Offer Card instances. `Offer1` and `Offer2` must be distinct physical non-Thief instances, even when they print the same Role.
+*   Role Lock-In does not perform the Physical Deal or exit the Lobby. It derives every conditional setup stage required by any Role in the Deal Pool or either offer, so an offered Actor still requires Actor Setup Cards and an offered Prejudiced Manipulator still requires the Public Group Partition. #178 must settle whether and how a locked selection can be edited, what becomes stale, and where recovery resumes.
+*   The committed Deal Pool/offer partition is part of Canonical Simulation Scenario identity, and pre-game Already-Decided classification reads initial coverage from the Deal Pool rather than offer-only Roles. Safety screening evaluates every semantically distinct legal Night 1 branch: `Offer1`, `Offer2`, and `Decline` when legal. Same-printed-Role offers keep distinct physical identities but may share one behaviorally identical screening branch. Any Degenerate branch blocks Lobby Exit. If none is Degenerate, all completed non-degenerate branches pass; failures, timeouts, or other incomplete branches yield Could Not Evaluate without blocking Lobby Exit.
+*   Only the Deal Pool is shuffled and physically dealt, guaranteeing exactly one initial Thief holder while leaving Player-specific ownership unknown to the app. The offers remain in their private Thief Offer zone for the Night 1 instruction.
+*   The private Thief input exposes machine-stable `Offer1`, `Offer2`, and legal `Decline` options. Choosing an offer atomically makes that instance Player-owned, makes its printed Role current with fresh power state, and moves the original Thief card plus the unchosen offer to the private Set-Aside zone. Declining keeps the Thief card and current Role and moves both offers to the private Set-Aside zone. A successful response creates the stable checkpoint containing those results and the pending sleep instruction before Core returns success. The flow then continues through the remaining canonical Night 1 calls without replaying setup or an earlier call.
+
+### 8.4. Production Lobby Safety Evaluation
 *   The production client retains two pre-game safety gates: deterministic Already-Decided Role Composition detection and 1,000-run Degenerate Simulation Scenario screening.
 *   Either safety classification blocks lobby exit and explains the actionable setup problem to the Moderator.
 *   Under ADR-0013, production stops after the 1,000-run degenerate-screening gate. It neither requests the 10,000-run probability batch nor presents Game Result Frequency or Ended-By-Turn Frequency.
@@ -148,6 +157,7 @@
 *   **Persistence:** Attempt to save after each successful `ProcessInput()`. Load on app start / `App.OnResume`. If a save file exists on launch, resume; otherwise show Lobby.
 *   **Stable recovery boundary:** A save attempt does not imply durable game progress advanced. `IGameSession.Serialize()` returns the Core's latest stable Main Phase recovery snapshot, so current-phase tail work remains volatile until Core captures a new boundary.
 *   **Transient state is not serialized** (see ADR-0002). On process kill and Rehydration, active sub-phase stage, active listener, and listener state are discarded; the game resumes from the committed boundary instruction and minimal phase cursor.
+*   **Planned Thief exception:** ADR-0017 requires a successful Thief choice or decline to create a narrow stable checkpoint atomically with its state transition and pending sleep instruction, so an already completed physical exchange is never requested or applied twice.
 *   **Crash-safe write behavior:** `FileGameSessionSaveStore` writes the new payload to a temporary file in the save directory, then replaces or renames it into place. If platform atomic replacement is unavailable, same-directory rename overwrite is the accepted fallback. Stale temporary write artifacts are cleaned up on save and clear where practical.
 
 ## 10. Error Handling

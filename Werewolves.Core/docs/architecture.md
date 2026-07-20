@@ -345,6 +345,8 @@ Orchestrates the game flow based on moderator input and tracked state. **Delegat
 
 Encapsulates and validates all configuration parameters required to start a new game session. This class enforces game configuration constraints at initialization time, preventing invalid game setups.
 
+> **Current implementation versus target contract:** The API described below still uses one undivided `Roles` list and does not yet implement the pre-deal Thief model settled in [ADR-0017](../../docs/adr/0017-thief-offer-is-committed-before-the-physical-deal.md). Issues #135 and #136 must replace that shape with an explicit Role Lock-In partition: a Player-count Deal Pool containing exactly one Thief plus two private, distinct non-Thief Offer instances. Validation will then use Deal Pool coverage, conditional setup for Roles in either zone, and branchwise safety inputs. Until that implementation lands, names such as `MissingExtraThiefRoles` below describe current code, not the accepted target contract.
+
 *   **Purpose:** Consolidates game initialization parameters (player names and roles) into a single validated object. This replaces the previous approach of passing `List<string>` and `List<MainRoleType>` directly to `GameService.StartNewGame`, providing improved type safety, validation, and maintainability.
 
 *   **Properties:**
@@ -778,6 +780,8 @@ The Core persistence boundary is `IGameSession.Serialize()` plus `GameService.Re
 *   **Serialization:** `GameSession.Serialize()` delegates to `GameSessionKernel.Serialize()`, which returns the last captured stable boundary snapshot.
 *   **Boundary advancement:** `GameFlowManager.HandleInput(...)` captures a new boundary only after phase routing, victory override handling, and `PendingInstruction` settlement are complete.
 *   **Rehydration:** `GameService.RehydrateSession(string serializedSession)` restores the stable snapshot into a new active session and returns the session's GUID.
+
+**Planned ADR-0017 exception:** the target Thief flow creates one narrow mid-Night stable checkpoint atomically with a successful `Offer1`, `Offer2`, or `Decline` response. That checkpoint contains the committed outcome, resulting card zones, current Role and fresh power state, and the pending public sleep instruction before Core returns success. It does not serialize arbitrary listener progress. This exception is not implemented by the current persistence path.
 
 ## Durable Payload
 

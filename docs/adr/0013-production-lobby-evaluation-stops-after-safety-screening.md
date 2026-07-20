@@ -21,3 +21,5 @@ The packaged current-profile cache remains unchanged under ADR-0012, so this dec
 ## Amendment
 
 ADR-0016 gives safety screening and dormant probability the separately versioned `safety-screening@<version>` and `full-probability@<version>` capability identities and Role sets. A legacy `core-simulator@1` probability record may project into the current safety consumer only through the restricted compatibility bridge for a scenario in the intersection of that legacy profile and the current Safety-Screening capability; a newly admitted safety-only Role or changed semantic boundary always requires current safety evidence.
+
+ADR-0017 changes the target Thief scenario identity and screening request. Once implemented, one production request screens Offer 1, Offer 2, and every legal Decline branch after the partition and conditional setup are committed. Any Degenerate branch blocks. Otherwise, incomplete/error/timeout branches produce nonblocking Could Not Evaluate and only all-complete non-degenerate branches pass. Legacy Thief records cannot use the compatibility bridge for these changed semantics.

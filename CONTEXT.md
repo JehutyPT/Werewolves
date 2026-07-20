@@ -38,13 +38,21 @@ _Avoid_: Character, class, card (when referring to the assigned identity)
 The specific physical Character Card instance a Player currently holds, including its printed Role and card zone. It initially comes from the Physical Deal. A Permanent Role Swap changes the Player's current Role and separately states whether or how the physical card instance changes.
 _Avoid_: Current Role, app assignment, known Role, revealed Role
 
-**Physical Deal**:
-The face-down random distribution of one physical Character Card to each Player. When Thief is present, exactly two cards remain undealt. The app records a live Game Session but does not perform this deal.
-_Avoid_: App assignment, generated deal
+**Deal Pool**:
+The exact Player-count subset of the Role Composition that the Moderator commits at Role Lock-In for the Physical Deal. When Thief is enabled, the Deal Pool contains exactly one Thief Character Card; the two Thief Offer Cards are outside it. The app knows this card multiset but not which Player will receive each instance.
+_Avoid_: Player assignment, dealt Roles (before the Physical Deal)
 
-**Undealt Character Cards**:
-The two physical cards left by the Physical Deal when Thief is in the Role Composition. Chance determines them; the Moderator records the observed cards during the Thief flow, and the app validates rather than chooses them.
-_Avoid_: Thief options (when referring to the physical cards), preselected cards
+**Thief Offer Cards**:
+The two distinct physical Character Card instances the Moderator places in private offer slots at Role Lock-In for the Thief Player's Night 1 choice. They remain part of the Role Composition but are not shuffled into the Deal Pool. Thief itself cannot be a Thief Offer Card. Both instances may print the same Role; they retain separate physical identities even though safety screening may share one behaviorally identical choice branch. The pair and later choice remain Moderator-and-Thief-private unless another rule explicitly reveals them. On selection, the chosen instance becomes Player-owned while the original Thief card and unchosen offer move to the Set-Aside zone; on decline, both offers move there while the Player keeps the Thief card.
+_Avoid_: Undealt Character Cards, random leftovers, Thief options (when referring to the physical cards)
+
+**Set-Aside Character Cards**:
+Physical Character Card instances kept face-down outside active play without being publicly discarded. After a committed Thief exchange, the original Thief card and unchosen offer move into this zone; after a legal decline, both offers move from the Thief Offer zone into this zone while the Player keeps the Thief card. Set-Aside cards are not current Roles or initial holders.
+_Avoid_: Discarded cards, undealt cards
+
+**Physical Deal**:
+The face-down random distribution of the committed Deal Pool, one physical Character Card to each Player. The app records the Deal Pool but does not shuffle it, distribute it, or know the resulting Player-specific ownership.
+_Avoid_: App assignment, generated deal
 
 **Role Power**:
 A gameplay capability granted by a Role beyond its identity, physical Character Card, and default allegiance. A Role Power may be chosen, automatic, reactive, passive, recognition-based, or communication-based; information already learned is not itself a Role Power.
@@ -83,11 +91,11 @@ The Roles exposed to the Moderator in the current role-selection UI.
 _Avoid_: Rules Role Set, implemented roles
 
 **Role Composition**:
-The multiset of Roles the Moderator selects and the app records for the physical game deck before a Game Session starts, independent of which Player receives each Role. Includes the two extra Character Cards required by Thief; excludes Actor Setup Cards, New Moon Events, Player names, Seating Order, Status Effects, and setup choices.
+The multiset of Roles the Moderator selects and the app records for the physical Game Session before play, independent of which Player receives each Role. Without Thief it is the Deal Pool. With Thief it contains the Player-count Deal Pool plus exactly two Thief Offer Cards, and the committed partition is part of the setup. It excludes Actor Setup Cards, New Moon Events, Player names, Seating Order, Status Effects, and unrelated setup choices.
 _Avoid_: Combination, setup (too broad), assignment (implies Player-specific Role knowledge)
 
 **Rules-Valid Role Composition**:
-A Role Composition that satisfies the physical game rules for card count, role counts, and required hard-aligned Faction coverage, without considering whether the app or active simulator profile implements every included Role.
+A Role Composition whose complete physical inventory and Deal Pool/Thief Offer partition satisfy card-count and Role-count rules, and whose Deal Pool alone satisfies required hard-aligned Faction coverage, without considering whether the app or active simulator profile implements every included Role.
 _Avoid_: Valid (too broad), app-supported
 
 **App-Supported Role Composition**:
@@ -95,7 +103,7 @@ A Rules-Valid Role Composition that falls within the app's product support bound
 _Avoid_: Rules-valid, simulator-supported
 
 **Actor Setup Cards**:
-The three face-up Character Cards selected by the Moderator during physical setup and recorded by the app for the Actor to borrow powers from. The app validates but does not generate the live inventory. Actor Setup Cards must be hard-aligned Villager Roles with borrowable individual Role Powers that are not already part of the Role Composition. Actor Setup Cards are not part of the Role Composition and do not contribute Starting Factions or Possible Factions. The Actor Role itself is a hard-aligned Villager Role.
+The three face-up Character Cards selected by the Moderator on Actor's conditional lobby-setup stage after Role Lock-In and recorded by the app for the Actor to borrow powers from. The app validates but does not generate the live inventory. This stage is required when Actor appears in either the Deal Pool or the Thief Offer Cards, so every reachable acquired-Actor branch is executable. Actor Setup Cards must be hard-aligned Villager Roles with borrowable individual Role Powers that are not already part of the Role Composition. Actor Setup Cards are not part of the Role Composition and do not contribute Starting Factions or Possible Factions. The Actor Role itself is a hard-aligned Villager Role.
 _Avoid_: Actor Role Composition, Actor deck
 
 **Borrowed Role Power**:
@@ -103,7 +111,7 @@ A fresh, temporary instance of an eligible source Role Power in full, including 
 _Avoid_: Temporary Role, copied Role
 
 **Public Group Partition**:
-A pre-game grouping created and publicly announced by the Moderator, then recorded and validated by the app. Every Player belongs to exactly one of two publicly known, non-empty groups for the full Game Session. The groups may differ in size, including a one-Player group; the live app never generates or balances them.
+A pre-game grouping created and publicly announced by the Moderator on Prejudiced Manipulator's conditional lobby-setup stage after Role Lock-In, then recorded and validated by the app. This stage is required when Prejudiced Manipulator appears in either the Deal Pool or the Thief Offer Cards. Every Player belongs to exactly one of two publicly known, non-empty groups for the full Game Session. The groups may differ in size, including a one-Player group; the live app never generates or balances them.
 _Avoid_: Prejudiced Manipulator teams, balanced groups
 
 **Opposing Public Group**:
@@ -111,7 +119,7 @@ The block of the Public Group Partition that does not contain the current Prejud
 _Avoid_: Target group, enemy team, original Manipulator's opposition
 
 **Simulation Scenario**:
-The complete pre-game simulator input used for lobby-level cache lookup or pre-game simulation. A Simulation Scenario always includes a canonical Role Composition and may also include setup artifacts or non-default assumptions, such as Actor Setup Cards, New Moon Event support, or a non-default Public Group Partition. Profile defaults, such as the baseline even split for Prejudiced Manipulator, do not need to be repeated in every Simulation Scenario.
+The complete pre-game simulator input used for lobby-level cache lookup or pre-game simulation. A Simulation Scenario always includes a canonical Role Composition and, when Thief is enabled, its committed Deal Pool/Thief Offer partition. It may also include setup artifacts or non-default assumptions, such as Actor Setup Cards, New Moon Event support, or a non-default Public Group Partition. Profile defaults, such as the baseline even split for Prejudiced Manipulator, do not need to be repeated in every Simulation Scenario.
 _Avoid_: Role Composition (when setup artifacts are also included), setup (too broad)
 
 **Canonical Role Composition**:
@@ -119,7 +127,7 @@ The stable string representation of a Role Composition for cache keys, simulatio
 _Avoid_: Display role list, localized composition
 
 **Canonical Simulation Scenario**:
-The stable string representation of a Simulation Scenario. It includes Player count separately from the Canonical Role Composition because Thief can make card count differ from Player count. It also includes setup artifacts or non-default assumptions that affect simulation, such as Actor Setup Cards, while leaving profile defaults implicit in the profile/version.
+The stable string representation of a Simulation Scenario. It includes Player count separately from the Canonical Role Composition because Thief can make total card count differ from Player count. When Thief is enabled, it also identifies the committed Deal Pool/Thief Offer partition; the same Role Composition with a different partition is a different scenario. It includes other setup artifacts or non-default assumptions that affect simulation, such as Actor Setup Cards, while leaving profile defaults implicit in the profile/version.
 _Avoid_: Canonical Role Composition (when Player count or setup artifacts are included)
 
 **Capability-Supported Simulation Scenario**:
@@ -155,15 +163,15 @@ A local safety-capability evaluation attempted on the Moderator's device when no
 _Avoid_: Normal pre-game simulation, build-time cache generation
 
 **Minimum Viable Role Composition**:
-The smallest Role Composition the app treats as a meaningful Game Session: 5 Players, exactly one hard-aligned Werewolf Role, and four hard-aligned Villager Roles. Ambiguous Roles and Loner Roles are not meaningful at this size.
+The smallest Role Composition the app treats as a meaningful Game Session has a five-card Deal Pool for 5 Players: exactly one hard-aligned Werewolf Role and four hard-aligned Villager Roles. If Thief is enabled, the two Thief Offer Cards are additional Role Composition cards and do not count toward that five-card minimum. Ambiguous Roles and Loner Roles are not meaningful at this size.
 _Avoid_: Starter deck, tutorial setup
 
 **Already-Decided Role Composition**:
-A Role Composition where at least one Faction would already win at Lobby Exit based only on the Role Composition, before random assignment, setup artifacts, simulation, or Turn 1 choices.
+A locked Simulation Scenario whose committed Deal Pool alone would make at least one Faction win at Lobby Exit, before Player assignment, a Thief choice, simulation, or Turn 1. A Role found only among the Thief Offer Cards supplies no initial holder, Starting Faction, or already-decided victory evidence.
 _Avoid_: Simulated loss, failed run
 
 **Degenerate Simulation Scenario**:
-A legal, supported Simulation Scenario whose 1,000-run baseline screening simulation completes every run and only observes Game Sessions ending by the end of Turn 1, before Players get meaningful agency.
+A legal, supported Simulation Scenario for which at least one semantically distinct legal branch completes all 1,000 baseline screening runs and observes only Game Sessions ending by the end of Turn 1, before Players get meaningful agency. For Thief, the legal branches are each distinct offered-Role behavior plus decline when permitted; a Degenerate branch blocks the whole scenario, while an error, timeout, or incomplete branch is not degeneracy evidence.
 _Avoid_: Degenerate Role Composition, invalid (ambiguous with rules-invalid), failed simulation, mathematically proven early ending
 
 **Balanced Role Composition**:
@@ -235,11 +243,11 @@ A Possible Game Result whose exact frequency is below 1% of completed runs, incl
 _Avoid_: Impossible result, error bucket
 
 **Starting Faction**:
-A Faction represented in the Role Composition before Turn 1 as a stable win-condition beneficiary. Starting Factions are counted by Initial Faction Count even when a setup branch means that Faction never appears in a particular Game Session.
+A Faction represented by the committed Deal Pool before Turn 1 as a stable win-condition beneficiary. A Faction represented only by a Thief Offer Card is not a Starting Faction before that card is chosen.
 _Avoid_: Initial Faction (ambiguous with Initial Faction Count), default side
 
 **Possible Faction**:
-A Faction implied by the Roles present in the Moderator-selected Role Composition, regardless of whether that Faction appears as a beneficiary in a particular Game Session or simulation batch. Possible Factions can produce zero-frequency Game Results in dormant full probability evidence when no completed run ends with that Faction winning.
+A Faction implied by the Roles present in the Moderator-selected Role Composition, including a Faction reachable only by choosing a Thief Offer Card, regardless of whether that Faction appears as a beneficiary in a particular Game Session or simulation batch. Possible Factions can produce zero-frequency Game Results in dormant full probability evidence when no completed run ends with that Faction winning.
 _Avoid_: Observed Faction, winning Faction
 
 **Hard-Aligned Role**:
@@ -255,7 +263,7 @@ A Faction that is not present at the beginning of a Game Session but can come in
 _Avoid_: Possible Faction, hidden Team
 
 **Initial Faction Count**:
-The count of Starting Factions in a Role Composition.
+The count of Starting Factions represented by the committed Deal Pool.
 _Avoid_: Possible outcome count, Role Group count
 
 **Reference Turn Horizon**:
@@ -305,11 +313,15 @@ A single game instance from configuration through to victory. Owns all state for
 _Avoid_: Game, match, room
 
 **Lobby Exit**:
-The boundary where the Moderator attempts to leave pre-game configuration and start the physical Game Session with the selected Role Composition.
+The final boundary where the Moderator attempts to leave pre-game configuration and start the physical Game Session after Role Lock-In, every required conditional lobby-setup stage, and the applicable safety gate have completed. Role Lock-In alone never exits the Lobby.
 _Avoid_: Game start (too broad), setup complete
 
+**Role Lock-In**:
+The lobby boundary where the Moderator confirms the complete Role Composition, including the Deal Pool and any Thief Offer Cards. It freezes the selection used to derive the required conditional setup stages, but it neither performs the Physical Deal nor exits the Lobby. Issue #178 decides whether and how the Moderator can edit a locked selection and what that invalidates.
+_Avoid_: Lobby Exit, Game Session start, Player assignment
+
 **Simulation Start State**:
-The fully defined, simulator-internal Game Session state from which a simulation batch begins. A pre-game Simulation Start State may derive seeded synthetic Role assignments, undealt cards, and profile-default setup from a Simulation Scenario; those facts grant no authority to populate live play. A mid-game Simulation Start State can be captured from an in-progress Game Session once that state is representable.
+The fully defined, simulator-internal Game Session state from which a simulation batch begins. A pre-game Simulation Start State may derive seeded synthetic Player assignments from the committed Deal Pool and profile-default setup from a Simulation Scenario while retaining its fixed Thief Offer Cards; those facts grant no authority to populate live play. A mid-game Simulation Start State can be captured from an in-progress Game Session once that state is representable.
 _Avoid_: Role Composition (when current Game Session state matters), snapshot (too implementation-specific)
 
 **Turn**:
@@ -431,14 +443,17 @@ _Avoid_: Load game, restore
 - Each **Player** has exactly one current **Role**, one current physical Character Card instance when the rules require one, and zero or more **Status Effects**; card ownership, current Role, Moderator knowledge, and public reveal are separate state
 - A live **Game Session** starts with unknown Player-specific current Roles and Physical Character Card Ownership and learns them only from observed physical facts or explicit Core-committed rules transitions; simulator runs alone may derive seeded synthetic assignments
 - Every Player has one actual **Faction Beneficiary** under the rules, while the live app's **Known Faction State** may remain unknown until an observation or Core-authored transition establishes it; unknown values never fall back to a guessed Beneficiary or Agent membership
-- A **Role Composition** contains one **Role** per **Player**, plus two extra undealt Character Cards when Thief is present; Actor does not change **Role Composition** size
+- A **Role Composition** contains the Player-count **Deal Pool** plus exactly two **Thief Offer Cards** when Thief is enabled; Actor does not change **Role Composition** size
+- A Thief-enabled **Deal Pool** contains exactly one Thief Character Card, so the Physical Deal always produces one initial Thief holder; Thief cannot be a **Thief Offer Card**
+- A committed Thief selection is a private one-for-one physical exchange: the selected **Thief Offer Card** becomes Player-owned, while the original Thief card and unchosen offer become **Set-Aside Character Cards**; a legal decline preserves the Thief card's Player ownership and current Role while moving both offers to the Set-Aside zone
 - **Actor Setup Cards** are selected through a separate setup flow and are not part of the **Role Composition**
 - Live **Actor Setup Cards** and the **Public Group Partition** are Moderator-created facts; simulator profile defaults never populate live setup
-- **Role Composition**, **Actor Setup Cards**, and **Public Group Partition** are lobby/configuration inputs outside the in-session **Moderator Instruction** and **Moderator Response** cycle
+- **Role Lock-In** commits the **Role Composition**, **Deal Pool**, and any **Thief Offer Cards**, then the Lobby collects every conditional setup artifact required by any reachable selected Role before **Lobby Exit**
+- **Role Composition**, **Actor Setup Cards**, and **Public Group Partition** are staged lobby/configuration inputs outside the in-session **Moderator Instruction** and **Moderator Response** cycle
 - Actor is a hard-aligned Villager **Role**; **Actor Setup Cards** provide borrowed powers only and do not change the Actor's **Faction Beneficiary**
 - Actor counts toward hard-aligned Villager **Role** requirements for supported **Role Compositions**
 - **Actor Setup Cards** must be hard-aligned Villager **Roles** with borrowable individual **Role Powers** that are not already selected in the **Role Composition**; Simple Villager, Villager-Villager, Two Sisters, and Three Brothers are not eligible
-- If Actor is in the **Role Composition**, the app must require at least three eligible **Actor Setup Cards** to remain outside the **Role Composition** before setup can advance
+- If Actor is in the **Deal Pool** or among the **Thief Offer Cards**, the app must require exactly three eligible **Actor Setup Cards** to remain outside the **Role Composition** before setup can advance
 - **New Moon Events**, Player names, **Seating Order**, **Status Effects**, Sheriff, Lovers, Charmed, Prejudiced Manipulator groups, and physical traits such as youngest Player are not part of the **Role Composition**
 - New-Moon-dependent Roles and Event effects are outside the v1 simulator scope unless a **Simulation Scenario** explicitly includes New Moon support
 - Cache and simulation inputs use a **Simulation Scenario** when setup artifacts or profile assumptions matter beyond the **Role Composition**
@@ -456,22 +471,23 @@ _Avoid_: Load game, restore
 - App-supported but safety-screening-unsupported setups do not attempt **On-Device Fallback Generation** and do not block **Lobby Exit** only because evaluation is unavailable
 - The simulator runs from a **Simulation Start State**; pre-game cache generation derives that state from a **Simulation Scenario**, while mid-game projection can use the same simulation mechanism from a later fully defined Game Session state
 - **Degenerate Simulation Scenario** classification applies to the **Simulation Scenario**; each screening run derives its own seeded pre-game **Simulation Start State** from that scenario, including random assignment and profile/default setup choices
+- A Thief-enabled **Simulation Scenario** screens every semantically distinct legal selection or decline branch; any branch classified as **Degenerate** blocks Lobby Exit, while a mix containing only screening passes, failures, or timeouts does not block. If every branch completes without Degenerate classification the aggregate is a screening pass; otherwise it remains **Could Not Evaluate** without becoming blocking evidence
 - **Canonical Role Composition** omits zero-count Roles, uses exact enum identifiers rather than localized names, and sorts Role entries alphabetically by enum identifier
-- **Canonical Simulation Scenario** includes `players=N` separately from **Canonical Role Composition** because Thief can make Role card count differ from Player count
+- **Canonical Simulation Scenario** includes `players=N` separately from **Canonical Role Composition** and records the committed **Deal Pool**/**Thief Offer Cards** partition because Thief can make total Role card count differ from Player count
 - A **Public Group Partition** is not part of **Role Composition**; an even split is the baseline simulator profile default, and only non-default partitions need explicit **Simulation Scenario** material
-- Any **Role** present in the Moderator-selected **Role Composition** can contribute **Starting Factions** and **Possible Factions** even if a particular simulation run never assigns that Role
+- Roles in the committed **Deal Pool** can contribute **Starting Factions**; Roles found only among **Thief Offer Cards** contribute **Possible Factions** and contribute a beneficiary only in the branch where the Thief Player chooses them
 - A **Cacheable Simulation Scenario** is limited by the Role set and record policy of its named **Simulator Capability**, not the full **Rules Role Set**
 - A Role becomes **App-Supported** only when the app can actually guide the Moderator through it; Roles that exist only in the **Rules Role Set** are Rules-Valid but not App-Supported
 - **Supported Player Count** caps Players only, not total physical cards; Thief can make a **Role Composition** larger than the Player count, and **Actor Setup Cards** are additional physical cards outside the **Role Composition**
-- A **Rules-Valid Role Composition** must include at least one hard-aligned Villager **Role** and at least one hard-aligned Werewolf **Role**, but Simple Villager and Simple Werewolf are not mandatory by role name
+- A **Rules-Valid Role Composition** must have a valid partition whose **Deal Pool** includes at least one hard-aligned Villager **Role** and at least one hard-aligned Werewolf **Role**; an offer-only card cannot supply initial coverage, and Simple Villager and Simple Werewolf are not mandatory by role name
 - Role-count constraints such as single-copy special Roles, exactly two Sisters, and exactly three Brothers are domain rules; Supported Player Count, currently implemented Roles, New Moon exclusion, and simulator profile support are app/product constraints
-- The **Minimum Viable Role Composition** is one hard-aligned Werewolf **Role** and four hard-aligned Villager **Roles**
-- A supported **Role Composition** must include at least one Villager hard-aligned **Role** and at least one Werewolf hard-aligned **Role**
+- The **Minimum Viable Role Composition** has a five-card **Deal Pool** containing one hard-aligned Werewolf **Role** and four hard-aligned Villager **Roles**
+- A supported **Role Composition** must have a **Deal Pool** containing at least one hard-aligned Villager **Role** and at least one hard-aligned Werewolf **Role**
 - Production classification order is: **Rules-Valid Role Composition**, **App-Supported Role Composition**, **Safety-Screening-Supported Simulation Scenario**, **Already-Decided Role Composition**, then **Degenerate Simulation Scenario**. A dormant full-probability request must additionally be **Full-Probability-Supported** before continuing to probability simulation
-- **Already-Decided Role Composition** classification runs every Faction victory trigger that can be evaluated from the Role Composition alone at **Lobby Exit**; possible Player assignments, setup branches, and Night 1 choices are not evidence for this classification
+- **Already-Decided Role Composition** classification runs every Faction victory trigger that can be evaluated from the committed **Deal Pool** projection of the locked **Simulation Scenario** at **Lobby Exit**; possible Player assignments, offer-only Roles, setup branches, and Night 1 choices are not evidence for this classification
 - **Already-Decided Role Composition** classification does not derive or simulate a **Simulation Start State**
-- If multiple Faction victory triggers are true at **Lobby Exit** from Role Composition evidence alone, the **Already-Decided Role Composition** record uses **Shared Victory Outcome** semantics rather than a priority order
-- Lobby result lookup can use the **Canonical Simulation Scenario** for uniform cache access, but **Already-Decided Role Composition** classification still relies only on the **Canonical Role Composition**
+- If multiple Faction victory triggers are true at **Lobby Exit** from committed **Deal Pool** evidence alone, the **Already-Decided Role Composition** record uses **Shared Victory Outcome** semantics rather than a priority order
+- Lobby result lookup uses the **Canonical Simulation Scenario** for uniform cache access, and **Already-Decided Role Composition** classification reads only that scenario's committed **Deal Pool** projection
 - Enumeration conceptually starts from **Rules Role Set** plus Player count to generate **Rules-Valid Role Compositions**, then filters to **App-Supported Role Compositions**, the requested **Capability-Supported Simulation Scenarios**, and that capability's **Cacheable Simulation Scenarios**
 - Ambiguous **Roles** do not create **Starting Factions**; their choices or later state changes resolve into existing Factions or later outcomes
 - At the rules level, ambiguous **Roles** use a Villager **Faction Beneficiary** unless their Role definition explicitly says otherwise; this rule does not let the live app assign a Beneficiary to a Player whose current Role is still unknown
@@ -559,9 +575,9 @@ _Avoid_: Load game, restore
 - "Loners" Role Group as Faction — resolved: Loner **Roles** do not share a Faction; White Werewolf, Piper, Prejudiced Manipulator, and Angel each need their own Faction lifecycle.
 - "Cross-team Lovers" — resolved: use **Cross-Faction Lovers**. Only Cross-Faction Lovers create a Latent Faction; same-Faction Lovers remain a Status Effect.
 - "New Moon" as Faction — resolved: New Moon Events and Role Groups are not Factions unless a specific effect defines a distinct win condition.
-- "Extra Character Cards" as Starting Factions — resolved: any Role present in the Moderator-selected Role Composition can contribute Starting Factions and Possible Factions even if a setup branch means that Role is never assigned in a particular Game Session.
+- "Thief Offer Cards" as Starting Factions — resolved: offer-only Roles are not initial holders and do not contribute Starting Factions or Lobby Exit victory evidence; they do contribute Possible Factions and become active only in the branch where the Thief Player chooses them.
 - "Actor cards" as Role Composition — resolved: **Actor Setup Cards** are a separate setup artifact, not part of the Role Composition and not a source of Possible Factions; Actor setup requires three eligible hard-aligned Villager Roles to remain outside the Role Composition.
-- "Thief extra cards" as setup artifact — resolved: Thief's two extra Character Cards are part of the **Role Composition**, but they are not preselected as undealt cards before the random deal.
+- "Thief extra cards" as setup artifact — resolved: the Moderator commits two **Thief Offer Cards** before Lobby Exit. They remain part of the **Role Composition** but are excluded from the **Deal Pool** rather than emerging as chance-determined leftovers.
 - "Role Composition as full simulator input" — resolved: use **Simulation Scenario** when cache or simulation inputs include setup artifacts or profile assumptions beyond the Role Composition.
 - "New Moon Events in Role Composition" — resolved: New Moon Events are outside Role Composition, and New-Moon-dependent simulation is out of v1 scope unless a **Simulation Scenario** explicitly includes New Moon support.
 - "Canonical Role Composition" — resolved: count every physical Role card in the Role Composition, including Thief extras, omit zero-count Roles, sort by exact enum identifier, and never include Actor Setup Cards.
@@ -601,10 +617,10 @@ _Avoid_: Load game, restore
 - "Everybody dies" — resolved: use **No-Winner Outcome** for completed Game Sessions where no Faction wins.
 - "Balanced" vs "long enough" — resolved: **Balanced Role Composition** is interpreted from **Game Result Frequency**; **Reference Turn Horizon** is not used to block Role Compositions.
 - "Balance judgment" — resolved: the production app does not currently present **Game Result Frequency** or **Ended-By-Turn Frequency** as balance guidance; it blocks **Already-Decided Role Compositions** and **Degenerate Simulation Scenarios** only.
-- "Already-decided evidence" — resolved: **Already-Decided Role Composition** means a Role Composition would already trigger a Faction victory at **Lobby Exit** from Role Composition evidence alone.
+- "Already-decided evidence" — resolved: **Already-Decided Role Composition** means the committed **Deal Pool** projection of the locked **Simulation Scenario** would already trigger a Faction victory at **Lobby Exit**; offer-only Roles do not count.
 - "Already-decided shared outcomes" — resolved: if multiple Faction victory predicates are already true at **Lobby Exit**, preserve them as a **Shared Victory Outcome** without priority ordering.
 - "Already-decided as simulation result" — resolved: **Already-Decided Role Composition** records share outcome language but are not simulation runs and do not have **Run Seed Material** or per-run simulation evidence.
-- "Degenerate threshold" — resolved: do not use a percentage threshold; block legal supported **Simulation Scenarios** when a 1,000-run baseline screening simulation completes every run and only observes Turn 1 endings.
+- "Degenerate threshold" — resolved: do not use a percentage threshold; a legal supported branch is **Degenerate** only when its 1,000-run baseline screening completes every run and observes only Turn 1 endings. Screen every semantically distinct legal Thief branch and block the **Simulation Scenario** if any one branch is Degenerate.
 - "Could not evaluate" vs blocked — resolved: incomplete screening is an error state and does not block **Lobby Exit** as already-decided or degenerate.
 - "Could not evaluate as outcome" — resolved: "could not evaluate" is a product evaluation state, not a **Game Session Outcome** or probability bucket.
 - "Current runtime limits" — resolved: the full Faction model remains the domain contract, but each named **Simulator Capability** controls which scenarios it can evaluate; unsupported or unevaluable scenarios are not mislabeled as already-decided or degenerate.

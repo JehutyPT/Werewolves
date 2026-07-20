@@ -3,6 +3,7 @@
 > - Original evidence anchor: `3cb40a64e3d7`
 > - Code-status refresh: `506ed86feaa4`
 > - Assessment completed: 17 July 2026; planning status audited: 19 July 2026
+> - Thief card-model settlement incorporated: [#148](https://github.com/bicheichane/Werewolves/issues/148), 20 July 2026
 > - Categories describe architectural reach against the refreshed code baseline, not hours, points, or lines of code.
 
 ## Executive summary
@@ -103,12 +104,12 @@ The following was the report's invasiveness-derived recommendation. Use PRD #93'
 | **Accursed Wolf-Father** (`AccursedWolfFather`) | Infection changes operational Agent status without changing the victim’s Beneficiary, then joins future collective wolf actions. | Contained / moderate. |
 | **White Werewolf** (`WhiteWerewolf`) | Is both a Werewolf Agent and a distinct solo Beneficiary, acts every other night, targets other Agents, and needs a solo outcome predicate. | Cross-cutting / high. |
 | **Cupid** (`Cupid`) | Lovers need durable symmetric relationship identity, heartbreak cascades, moderator-facing vote guidance, cross-faction Beneficiary precedence, and shared outcome handling. | Cross-cutting / high. |
-| **Actor** (`Actor`) | Actor setup cards are validated but dropped before runtime. The engine also lacks a reusable way to execute another role’s power without transferring role identity. | Cross-cutting / high; client setup work remains material. |
-| **Thief** (`Thief`) | Physical composition, undealt cards, and active role ownership are conflated. The chosen role must become active permanently and serialize correctly. | Contained / moderate. |
+| **Actor** (`Actor`) | Actor Setup Cards are validated but dropped before runtime, and #148 requires that setup even when Actor appears only as a Thief offer. The engine also lacks a reusable way to execute another Role's power without transferring Role identity. | Cross-cutting / high; client setup work remains material. |
+| **Thief** (`Thief`) | Physical composition, deal zones, and active Role ownership are conflated. The app needs a pre-deal Role Lock-In partition for a Player-count Deal Pool containing exactly one Thief plus two private, distinct non-Thief offer instances; conditional setup across the pool and offers; branchwise safety and scenario identity; machine-stable `Offer1`, `Offer2`, and legal `Decline` responses; and durable exchange/set-aside zones with an immediate Permanent Role Swap. | Cross-cutting / high after the shared ownership foundation because lobby, simulator/cache, client instruction, recovery, and Core state must integrate. |
 | **Devoted Servant** (`DevotedServant`) | Needs a pre-reveal interruption, permanent role swap, selective status/relationship clearing, fresh ability state, and faction reset. | Cross-cutting / high. |
 | **Wolf Hound** (`WolfHound`) | The first-night choice is simple, but its durable consequences require separate Agent/Beneficiary state and dynamic participation in the wolf group. | Localized / low. |
 | **Angel** (`Angel`) | Needs a transient faction, exact Victory Check Window eligibility, solo/shared outcome handling, expiry, and permanent transformation to Simple Villager. | Contained / moderate. |
-| **Prejudiced Manipulator** (`PrejudicedManipulator`) | Needs a persisted pregame player partition carried through lobby, session, recovery, dashboard, scenario identity, and a solo outcome predicate. | Contained / moderate. |
+| **Prejudiced Manipulator** (`PrejudicedManipulator`) | Needs a persisted pregame Player partition carried through lobby, session, recovery, dashboard, scenario identity, and a solo outcome predicate; #148 requires it even when the Role appears only as a Thief offer. | Contained / moderate. |
 | **Elder** (`Elder`) | First-hit resistance is partly scaffolded. A village-vote death must disable every current and future Villager power, including swapped roles and Actor-borrowed powers, through one reusable power-availability model. | Contained / moderate. |
 | **Village Idiot** (`VillageIdiot`) | Vote cancellation and survival are largely implemented, but permanent zero Durable Voting Power must affect the Werewolf Control Shortcut and outcome evaluation. The app should guide the moderator rather than model individual ballots. | Localized / low. |
 | **Piper** (`Piper`) | Night selection and `Charmed` storage are scaffolded, but the role needs a durable Charmed lifecycle plus a Piper Faction predicate evaluated alongside simultaneous outcomes. | Contained / moderate. |
@@ -139,7 +140,7 @@ Seating is stored but is not exposed as a canonical query for immediate living n
 
 ### Active role ownership, swaps, and power availability
 
-Physical cards are conflated with active role ownership. Thief, Devoted Servant, Angel, Actor, and Elder need durable swaps, ability freshness, listener activation, and a shared power-availability decision.
+Physical cards are conflated with active role ownership. Thief first needs explicit Role Composition, Deal Pool, Thief Offer Card, Player-owned, and set-aside zones plus a Role Lock-In boundary that precedes the Physical Deal. Thief, Devoted Servant, Angel, Actor, and Elder then need durable swaps, ability freshness, listener activation, and a shared power-availability decision.
 
 ### Relationships and status lifecycle
 
@@ -155,7 +156,7 @@ Accepted recovery semantics do not resume an active listener mid-step. Committed
 
 ### Degenerate-screening simulator admission
 
-Engine or App Support does not automatically admit a Role to the simulator. Under PRD #93, every in-scope Role's completion slice must explicitly admit that Role to the versioned simulator profile/cache surface used by `LobbyEvaluationDepth.DegenerateScreeningOnly` and prove that the headless instruction/response path can complete the 1,000-run Degenerate Simulation Scenario screen. This narrow admission does not imply probability estimation, probability-quality evidence, or broader simulator usefulness.
+Engine or App Support does not automatically admit a Role to the simulator. Under PRD #93, every in-scope Role's completion slice must explicitly admit that Role to the versioned simulator profile/cache surface used by `LobbyEvaluationDepth.DegenerateScreeningOnly` and prove that the headless instruction/response path can complete the 1,000-run Degenerate Simulation Scenario screen. For Thief-enabled scenarios, the committed Deal Pool/offer partition is part of identity and the screen covers each semantically distinct legal `Offer1`, `Offer2`, and `Decline` branch. Any Degenerate branch blocks; if none is Degenerate, screening failures and timeouts remain nonblocking and preserve Could Not Evaluate unless every branch completed non-degenerate. This narrow admission does not imply probability estimation, probability-quality evidence, or broader simulator usefulness.
 
 ## Original dependency-aware sequence (superseded by PRD #93)
 
@@ -166,7 +167,7 @@ This sequence records the investigation's dependency analysis. PRD #93's publish
 - **Vote control:** Stuttering Judge foundations → Scapegoat.
 - **Wolf/faction foundation:** Agent/Beneficiary + collective operation → Little Girl, Big Bad Wolf, Accursed Wolf-Father, Wolf Hound; add topology before Bear Tamer, Fox, and Knight.
 - **Outcome foundation:** Game Session Outcome + Durable Voting Power → Village Idiot, Piper, Angel, White Werewolf, Cupid, and Prejudiced Manipulator.
-- **Ownership and power foundation:** permanent swaps + power availability → Thief, Devoted Servant, Elder; setup persistence and borrowed powers → Actor last.
+- **Ownership and power foundation:** explicit physical-card zones + Role Lock-In + permanent swaps + power availability → Thief, Devoted Servant, Elder; setup persistence and borrowed powers → Actor last.
 
 ## Adversarial review results incorporated
 
@@ -177,6 +178,7 @@ This sequence records the investigation's dependency analysis. PRD #93's publish
 - Corrected recovery wording to match stable-boundary replay rather than exact mid-listener continuation.
 - Removed assumptions that the app validates individual ballots; vote-related roles use moderator-facing guidance plus authoritative domain queries.
 - Refreshed the code baseline after the production `DegenerateScreeningOnly` lobby path landed and narrowed future Role admission to PRD #93's explicit screening-only simulator contract.
+- Incorporated #148's Thief-wide setup consequences: pre-deal pool/offer partitioning, conditional setup for all reachable Roles, partitioned scenario identity, branchwise safety, and durable exchange/set-aside zones.
 
 ## Evidence sources
 
@@ -192,6 +194,7 @@ This sequence records the investigation's dependency analysis. PRD #93's publish
 - [Production screening-depth ADR](../adr/0013-production-lobby-evaluation-stops-after-safety-screening.md)
 - [QA strategy](../agents/qa-strategy.md)
 - [PRD #93](https://github.com/bicheichane/Werewolves/issues/93)
+- [Thief physical-deal and Permanent Role Swap decision #148](https://github.com/bicheichane/Werewolves/issues/148)
 - `Werewolves.Core/Werewolves.Core.StateModels/Enums/MainRoleType.cs`
 - `Werewolves.Core/Werewolves.Core.GameLogic/Roles/SupportedRoleCatalog.cs`
 - `Werewolves.Core/Werewolves.Core.GameLogic/Services/GameFlowManager.cs`

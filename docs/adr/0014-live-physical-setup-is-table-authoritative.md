@@ -7,3 +7,7 @@ Simulator runs are the sole exception. They derive seeded synthetic assignments,
 ## Consequences
 
 Live Physical Character Card Ownership and current Roles begin unknown to the app and are learned progressively. Recorded observations must respect Role Composition multiplicity, one-to-one Player/card ownership, unique card instances, prior identifications, public reveals, and confirmed dealt or undealt zones. Rehydration restores only confirmed facts and never fills gaps from a simulator profile. Actor Setup Cards and the Public Group Partition are committed before Lobby Exit; Thief's undealt cards and choice are recorded during Night 1 when the Role is actually in play. Correction of a bad recorded fact is a separate Moderator-flow decision.
+
+## Amendment: ADR-0017
+
+ADR-0017 supersedes the Thief-specific setup clauses above for the accepted target contract. At Role Lock-In, the Moderator commits a Player-count Deal Pool containing exactly one Thief plus two distinct non-Thief Offer instances. Setup required by any Role in the pool or offers completes before branchwise safety and Lobby Exit; Players deal only the pool. Night 1 records only the guaranteed holder and `Offer1`, `Offer2`, or legal `Decline`. Selection exchanges the chosen offer for the Thief card; decline keeps Thief and moves both offers to private Set-Aside Character Cards. Target simulation assigns only the fixed Deal Pool and retains the offers. The current implementation remains on the older shape until #135/#136 land.

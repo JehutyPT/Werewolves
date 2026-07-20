@@ -4,6 +4,8 @@ Research date: 2026-07-18
 
 Canonical status reviewed: 2026-07-19
 
+Local-policy supersession incorporated: 2026-07-20
+
 ## Question
 
 After the Thief exchanges their Character Card on Night 1, when does the acquired
@@ -86,17 +88,37 @@ absent.
   Gypsy still have later Night calls, whereas group division is already complete.
   [Actor, p. 13](https://cdn.svc.asmodee.net/production-asmodeeca/uploads/2023/07/WerewolvesThePact_EN_Rules.pdf#page=13), [Prejudiced Manipulator, p. 15](https://cdn.svc.asmodee.net/production-asmodeeca/uploads/2023/07/WerewolvesThePact_EN_Rules.pdf#page=15), [Gypsy, p. 23](https://cdn.svc.asmodee.net/production-asmodeeca/uploads/2023/07/WerewolvesThePact_EN_Rules.pdf#page=23), [turn overview, p. 24](https://cdn.svc.asmodee.net/production-asmodeeca/uploads/2023/07/WerewolvesThePact_EN_Rules.pdf#page=24).
 
+## Current local-policy supersession from #148
+
+The settled local decision in [#148](https://github.com/bicheichane/Werewolves/issues/148)
+supersedes this research's chance-determined “two undealt cards” premise for product
+implementation only; it does not rewrite or weaken the historical publisher evidence
+above. For the app, a Thief-enabled Role Composition has `P + 2` instances and is
+partitioned at Role Lock-In into a `P`-card Deal Pool containing exactly one Thief
+plus two private, distinct non-Thief offer instances. Conditional setup covers every
+Role in the pool or offers, the partition is Simulation Scenario identity, and only
+the Deal Pool is physically dealt. Night 1 therefore consumes the already-committed
+`Offer1`, `Offer2`, or legal `Decline` branch: an exchange moves the original Thief
+card and unchosen offer to Set-Aside, while Decline keeps Thief and moves both offers
+from their offer slots to Set-Aside.
+Any Degenerate screening branch blocks; absent one, screening failures and timeouts
+remain nonblocking.
+
+This supersession leaves [#99](https://github.com/bicheichane/Werewolves/issues/99)'s
+same-Night activation ruling intact; it changes the local card-source, setup, and
+screening implementation model, not the adopted activation timing.
+
 ## Consequences by acquired-Role category
 
 | Category | Physical-rule result | Implementation consequence of the adopted timing |
 | --- | --- | --- |
-| Later same-Night active Role | The acquired Role is called once at its normal remaining Night-1 slot. This covers Actor, Cupid, Seer, Fox, Defender, the Werewolf group and its later actions, Witch, Piper, and applicable expansion Roles. This is the strong sequence inference from the [Night-1 order, p. 24](https://cdn.svc.asmodee.net/production-asmodeeca/uploads/2023/07/WerewolvesThePact_EN_Rules.pdf#page=24), not an express timing sentence. | Resolve the swap atomically before advancing the call cursor, then calculate each remaining call from the current active Role. Do not create an additional “Thief-acquired” turn. |
+| Later same-Night active Role | The acquired Role is called once at its normal remaining Night-1 slot. This covers Actor, Cupid, Seer, Fox, Defender, the Werewolf group and its later actions, Witch, Piper, and applicable expansion Roles. This is the strong sequence inference from the [Night-1 order, p. 24](https://cdn.svc.asmodee.net/production-asmodeeca/uploads/2023/07/WerewolvesThePact_EN_Rules.pdf#page=24), not an express timing sentence. | Resolve the selected configured offer as one atomic private exchange before advancing the call cursor: make that instance Player-owned, set aside the original Thief card and unchosen offer, commit the Permanent Role Swap with fresh power state, then calculate each remaining call from the current Role. Do not create an additional “Thief-acquired” turn. |
 | Night-1-only or recognition/setup action | The Night-1 call is still ahead of Thief for Cupid/Lovers, Wandering Judge, Sisters/Brothers, Wild Child, Wolf-Hound, Bear Tamer identification, and the other printed Night-1 calls. An acquired Cupid can therefore choose Lovers and the following Lovers call happens normally; an acquired Wild Child or Wolf-Hound receives its normal Night-1 choice. [Official turn order, p. 24](https://cdn.svc.asmodee.net/production-asmodeeca/uploads/2023/07/WerewolvesThePact_EN_Rules.pdf#page=24). | Grant the one ordinary Night-1 action if its slot is reached. Do not replay an earlier setup or grant a second use. For Sisters/Brothers, wake only the current eligible group; do not invent a solo “recognition” power if the remaining card distribution leaves no partner(s). |
-| Pre-game-only setup | Dealing, Actor-card preparation, Gypsy materials, and Prejudiced Manipulator grouping precede the Thief call and are not rerun by the exchange. [Official turn overview, p. 24](https://cdn.svc.asmodee.net/production-asmodeeca/uploads/2023/07/WerewolvesThePact_EN_Rules.pdf#page=24); [Actor, p. 13](https://cdn.svc.asmodee.net/production-asmodeeca/uploads/2023/07/WerewolvesThePact_EN_Rules.pdf#page=13); [Gypsy, p. 23](https://cdn.svc.asmodee.net/production-asmodeeca/uploads/2023/07/WerewolvesThePact_EN_Rules.pdf#page=23); [Prejudiced Manipulator, p. 15](https://cdn.svc.asmodee.net/production-asmodeeca/uploads/2023/07/WerewolvesThePact_EN_Rules.pdf#page=15). | Persist those artifacts independently of active Role ownership. A later Actor or Gypsy uses the already prepared material; an acquired Prejudiced Manipulator uses the already assigned public group. If the required artifact was not prepared, the setup is invalid rather than a reason to silently improvise it mid-Night. |
+| Pre-game-only setup | Dealing, Actor-card preparation, Gypsy materials, and Prejudiced Manipulator grouping precede the Thief call and are not rerun by the exchange. [Official turn overview, p. 24](https://cdn.svc.asmodee.net/production-asmodeeca/uploads/2023/07/WerewolvesThePact_EN_Rules.pdf#page=24); [Actor, p. 13](https://cdn.svc.asmodee.net/production-asmodeeca/uploads/2023/07/WerewolvesThePact_EN_Rules.pdf#page=13); [Gypsy, p. 23](https://cdn.svc.asmodee.net/production-asmodeeca/uploads/2023/07/WerewolvesThePact_EN_Rules.pdf#page=23); [Prejudiced Manipulator, p. 15](https://cdn.svc.asmodee.net/production-asmodeeca/uploads/2023/07/WerewolvesThePact_EN_Rules.pdf#page=15). | After Role Lock-In, derive and persist every conditional setup artifact required by a Role in the Deal Pool or either offer, independently of active Role ownership. A later Actor or Gypsy uses the already prepared material; an acquired Prejudiced Manipulator uses the already assigned public group. Missing required setup blocks progress before screening and Lobby Exit rather than being improvised mid-Night. |
 | Passive, daytime, or reaction Role | There is no wake-up slot to defer. The player now has the card and its future condition can apply: e.g., Bear Tamer at the coming Dawn, Hunter on a later elimination, Elder protection when attacked, or Vote-triggered abilities at their normal event. [Hunter and Elder, p. 10](https://cdn.svc.asmodee.net/production-asmodeeca/uploads/2023/07/WerewolvesThePact_EN_Rules.pdf#page=10); [Bear Tamer, p. 12](https://cdn.svc.asmodee.net/production-asmodeeca/uploads/2023/07/WerewolvesThePact_EN_Rules.pdf#page=12). | Make the active Role effective at swap completion, while firing its ability only from its ordinary trigger. Do not synthesize a trigger that occurred before acquisition. |
 | Actual Werewolf Role | The acquired player is an actual Werewolf before the later collective group call. The physical rule says all Werewolves wake together; this supports joining that Night's group and receiving any later role-specific Werewolf call in its printed position. The group still cannot target a Werewolf. [Official Werewolf rule, p. 8](https://cdn.svc.asmodee.net/production-asmodeeca/uploads/2023/07/WerewolvesThePact_EN_Rules.pdf#page=8); [Night-1 order, p. 24](https://cdn.svc.asmodee.net/production-asmodeeca/uploads/2023/07/WerewolvesThePact_EN_Rules.pdf#page=24). | Update current Werewolf **Faction Agent** state atomically with the Role/Faction swap, so the player joins Night 1's group and is excluded from its target set. Preserve role-specific cadence: the project's White Werewolf solo action is unavailable on Night 1, even though that Role joins the collective group. See the [canonical glossary](../../CONTEXT.md) and [game rules](../domain/game-rules.md). |
 | Role whose call has passed | Under the official Night-1 sequence, none: Thief is first. Only pre-game setup has elapsed. [Official turn order, p. 24](https://cdn.svc.asmodee.net/production-asmodeeca/uploads/2023/07/WerewolvesThePact_EN_Rules.pdf#page=24). | Generalize safely: never rewind or replay a passed call. If a future event or variant moves Thief later, the acquired Role first acts at its next eligible future call. This general rule is not needed in the normal Night-1 sequence. |
-| Not a swappable Character Card | Lovers and Charmed are Status Effects, Sheriff and Town Crier are assignments, and Actor Setup Cards are outside Role Composition—not spare Character Cards. See the [game rules](../domain/game-rules.md) and [canonical glossary](../../CONTEXT.md). | Keep card-zone validation separate from status effects and assignments; only an actual undealt Character Card is a Thief choice. |
+| Not a swappable Character Card | Lovers and Charmed are Status Effects, Sheriff and Town Crier are assignments, and Actor Setup Cards are outside Role Composition—not spare Character Cards. See the [game rules](../domain/game-rules.md) and [canonical glossary](../../CONTEXT.md). | Keep card-zone validation separate from status effects and assignments; only the two configured, distinct non-Thief offer instances are legal choices, plus `Decline` when the current local rule permits it. |
 
 ## Local canonical rules and code
 

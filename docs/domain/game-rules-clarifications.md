@@ -5,14 +5,15 @@ This document records domain rule rulings for interactions that are too detailed
 ## Physical Setup Authority and Hidden Role Knowledge
 
 - The physical table is authoritative in a live Game Session. The Moderator records the selected **Role Composition** and facts observed during setup or play; the app validates and persists those facts but never shuffles, deals, randomly assigns, or deduces an unknown Player-specific live **Role** from missing information.
-- Players perform the **Physical Deal**. The Moderator and app initially know the Role Composition, not which Player drew each Character Card.
+- At **Role Lock-In**, a Thief-enabled Role Composition is divided into a Player-count **Deal Pool** containing exactly one Thief card and two distinct non-Thief **Thief Offer Cards**. The offers are chosen before the Physical Deal and may print the same Role while remaining separate physical card instances.
+- Players perform the **Physical Deal** using only the Deal Pool. The Moderator and app initially know the Role Composition, Deal Pool, and Thief Offer Cards, not which Player drew each dealt Character Card.
 - **Physical Character Card Ownership**, current **Role**, Moderator knowledge, and public reveal are separate. A **Permanent Role Swap** changes the current Role and separately defines card handling and visibility.
 - **Role Identification** is private. It records which Player physically answered an exact-Role call or otherwise established the current Role to the Moderator; it neither assigns a Character Card nor makes the Role public.
 - **Faction Agent Group Observation** is also private but records only who answered a collective Faction call. It cannot identify or mutate exact Roles.
 - **Role Reveal** is a separate public event and must be committed even when the Role was already Moderator-known. A known Role uses a Continue acknowledgment after the physical reveal; an unknown Role uses a complete valid mapping for exactly the requested Players.
 - An unidentified Role cannot default to Simple Villager, Faction Beneficiary, or Faction Agent state. A rules step that needs the fact must obtain it before resolving.
-- The Moderator chooses and records live Actor Setup Cards and the Public Group Partition. When a Player actually holds Thief, the Moderator records the actual undealt cards and that Player's completed choice. Simulator-generated assignment and setup exist only in Simulation Start State and never populate live play.
-- Every recorded identification, reveal, and card-zone fact respects Role Composition multiplicity, one-to-one Player/card ownership, unique physical card instances, prior observations, and confirmed dealt or undealt zones. Correction of a bad recorded fact follows a separately settled Moderator workflow.
+- After Role Lock-In, the Moderator completes every conditional pre-game setup required by a Role in either the Deal Pool or the Thief Offer Cards. The Moderator chooses and records live Actor Setup Cards and the Public Group Partition; simulator-generated assignment and setup exist only in Simulation Start State and never populate live play.
+- Every recorded identification, reveal, and card-zone fact respects Role Composition multiplicity, the committed partition, one-to-one Player/card ownership, unique physical card instances, prior observations, and confirmed Deal Pool, Thief Offer, Player-owned, or Set-Aside zones. Correction of a bad recorded fact follows a separately settled Moderator workflow.
 
 ## Allegiance and Operational Status
 
@@ -85,10 +86,17 @@ This document records domain rule rulings for interactions that are too detailed
 - Existing beneficiary-precedence rules still apply. In particular, a Cross-Faction Lover keeps the Cross-Faction Lovers **Faction Beneficiary** after either Wolf Hound choice, while the Werewolf branch still grants Werewolf **Faction Agent** status.
 - On Elimination, the physical Character Card reveal identifies the Player's Role as Wolf Hound in either branch. The chosen branch remains private app state and is not automatically announced; the Moderator may disclose it verbally at their discretion.
 
-## Thief Acquired-Role Timing
+## Thief Setup, Choice, and Acquired-Role Timing
 
-- Thief's Night 1 **Permanent Role Swap** takes effect immediately. Continue forward through the canonical Night 1 call order; the acquired Role receives its ordinary call if that call is still ahead, and no earlier call is replayed.
-- Thief is first in the normal Night 1 order, so every Role call is still ahead. Acquired first-Night-only powers therefore act that Night; pre-game setup is already complete and is not repeated.
+- A Thief-enabled **Role Composition** always contains Player count plus two physical Character Cards. At Role Lock-In, the Moderator commits a Player-count **Deal Pool** with exactly one Thief card and two distinct non-Thief **Thief Offer Cards** outside that pool. Only the Deal Pool is shuffled and dealt, so Night 1 always has exactly one Thief holder.
+- Conditional pre-game setup is required for every Role reachable through the Deal Pool or either Thief Offer Card. It is completed after Role Lock-In and before safety screening and **Lobby Exit**; Night 1 never improvises or repeats it.
+- The committed Deal Pool and Thief Offer partition is part of **Simulation Scenario** identity. Safety screening checks every semantically distinct legal branch: choose the first offer, choose the second offer, and decline when decline is legal. Offers with the same printed Role share one behavioral branch for screening while remaining distinct physical cards.
+- Any branch classified as **Degenerate** blocks Lobby Exit. If every branch completes and is non-degenerate, the aggregate result is a screening pass. Otherwise, an incomplete branch, error, or timeout produces a nonblocking **Could Not Evaluate** result as long as no branch is Degenerate.
+- On Night 1, the Moderator privately identifies the one Player who answered the Thief call, shows that Player the two physical offers already committed at Role Lock-In, and records exactly one machine-stable response: `Offer1`, `Offer2`, or `Decline`. The offers are not selected or entered again at this point.
+- Decline is legal unless both offers are hard-aligned Werewolf Roles: Simple Werewolf, Big Bad Wolf, or Accursed Wolf-Father. A legal decline ends the Thief's one opportunity without changing ownership or Role: the Player keeps the Thief Character Card and current Thief Role, remains a Villager **Faction Beneficiary**, and both offers become private **Set-Aside Character Cards**.
+- Selecting an offer commits a private one-for-one physical exchange. The selected offer becomes the Player's owned Character Card and current Role. The original Thief card and unchosen offer become private Set-Aside Character Cards. The resulting **Permanent Role Swap** takes effect immediately with fresh Role state and changes the Player's Faction Beneficiary to the new Role's default Faction unless an explicit precedence rule says otherwise.
+- After a selection, continue forward through the canonical Night 1 call order. The acquired Role receives its ordinary call if that call is still ahead, including a first-Night-only call; no earlier call or pre-game setup is replayed.
+- Successful response processing atomically creates ADR-0017's stable recovery checkpoint with the response, resulting card zones and Role state, and pending sleep instruction before returning. Recovery may restore a pre-commit pending choice or post-commit acknowledgment, but it never asks for an already committed response again, repeats a committed exchange, or reopens a committed decline.
 
 ## Devoted Servant Swap Boundary
 

@@ -15,3 +15,7 @@ The client may attempt to write a save file after each successful `ProcessInput(
 - **Event-log-only serialization**: keeps the payload small and theoretically canonical, but current Rehydration intentionally restores cached state directly and does not replay log entries. Rejected unless the implementation is redesigned around replay.
 - **Serialize transient state**: would allow exact resume from any point, but active stage/listener state is deeply coupled to declarative state-machine internals. Rejected for v1.
 - **Stable recovery snapshot**: stores enough derived state and cursor data to resume from committed Main Phase boundaries while discarding live execution state. Accepted.
+
+## Amendment: ADR-0017
+
+ADR-0017 adds one narrow target exception for a successful Thief `Offer1`, `Offer2`, or `Decline` response. Before Core returns success, that response must atomically create a stable checkpoint containing the committed outcome, resulting card zones, current Role and fresh power state, and the pending public sleep instruction. This does not make arbitrary listener progress durable: it promotes only the complete Thief outcome and its next semantic instruction so recovery cannot repeat an already performed physical exchange or reopen a committed decline. The current implementation remains on Main-Phase-only boundaries until the Thief contract lands.

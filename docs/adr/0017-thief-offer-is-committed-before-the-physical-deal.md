@@ -1,0 +1,17 @@
+# Thief offers are committed before the Physical Deal
+
+When Thief is enabled, Role Lock-In commits the complete Role Composition as a Player-count Deal Pool plus two Thief Offer Card instances. The Deal Pool contains exactly one Thief card; the two offers are distinct physical instances and neither may be Thief, although both may print the same non-Thief Role. Only the Deal Pool is shuffled and assigned in the Physical Deal, so one Player always starts as Thief and the offers are fixed setup rather than random leftovers. Every conditional setup required by a Role reachable from the Deal Pool or either offer is completed after Role Lock-In and before safety screening and Lobby Exit.
+
+The committed Deal Pool/offer partition participates in Simulation Scenario and cache identity. Safety screening covers each semantically distinct legal Night 1 behavior arising from `Offer1` or `Offer2`, plus `Decline` when legal. `Offer1` and `Offer2` remain separate response and physical-card identities, but same-printed-Role offers may share one behavioral screening branch. Decline is legal unless both offers are hard-aligned Werewolf Roles: Simple Werewolf, Big Bad Wolf, or Accursed Wolf-Father. Any Degenerate branch blocks Lobby Exit; otherwise, an incomplete branch, evaluation error, or timeout produces nonblocking Could Not Evaluate, and only all-complete, non-degenerate branches pass.
+
+Selecting an offer commits a private one-for-one physical exchange and Permanent Role Swap: the selected offer becomes the Player's owned Character Card, the original Thief card and unchosen offer move to the private Set-Aside zone, and the Player's current Role, default Faction Beneficiary subject to precedence, and fresh Role Power state change to the selected Role. A legal decline keeps the Thief card Player-owned and preserves current Role and Faction, moves both offers from the Thief Offer zone to the private Set-Aside zone, and ends the opportunity exactly once. The same fixed partition drives seeded headless truth, and seeded assignment still assigns only the Deal Pool.
+
+A successful `Offer1`, `Offer2`, or `Decline` response creates a stable recovery checkpoint atomically with the committed response, resulting card zones, current Role and fresh state, and the pending public sleep instruction before Core returns success. This is the narrow Thief-specific amendment to ADR-0002 required by the accepted recovery contract: a pre-commit pending choice may be shown again after recovery, but a committed response, exchange, or decline may not be replayed.
+
+These decisions define the target live and simulator contract; they do not claim that current UI, Core, simulator, or cache APIs already implement it. The partition, branch policy, and exchange semantics change legacy Thief setup and headless behavior, so legacy Thief cache evidence is incompatible with the existing compatibility bridge rather than silently reused.
+
+## Considered options
+
+- **Determine offers from random undealt cards after dealing**: rejected because it can leave no Player holding Thief, makes required setup unknowable before Lobby Exit, and omits the partition from simulator identity.
+- **Commit offers before dealing but screen one baseline choice**: rejected because each legal choice can produce different Role, Faction, and early-ending behavior.
+- **Commit the partition at Role Lock-In and screen every distinct legal branch**: accepted because live setup, Physical Deal, simulation truth, and safety evidence share one explicit boundary.

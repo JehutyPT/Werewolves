@@ -12,3 +12,7 @@ Each simulation run derives a seeded Simulation Start State from the Simulation 
 - **Full Simulation Start State as cache identity**: cache only concrete assigned player states. Rejected for pre-game probability because random assignment is intentionally generated per run; including it in cache identity explodes the state space and mixes scenario identity with run evidence.
 - **Ad hoc option bag**: pass Role counts plus loose flags into simulator/cache lookup. Rejected because cache identity becomes easy to under-specify and hard to invalidate consistently.
 - **Simulation Scenario boundary**: keep Role Composition as the physical deck concept and define Simulation Scenario as the stable pre-game simulator/cache input. Accepted.
+
+## Amendment: ADR-0017
+
+ADR-0017 adds the committed Deal Pool/Thief Offer partition to target Simulation Scenario and cache identity. The same Role Composition with a different partition is a different scenario. Target seeded derivation assigns only the Deal Pool and retains the two fixed offers; this amendment does not claim that the current simulator API already supports those fields.

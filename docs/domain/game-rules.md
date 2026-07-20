@@ -13,14 +13,14 @@ In the current ruleset, each Player has exactly one Faction Beneficiary at a tim
 
 ## Setup
 
-1.  Select a non-playing Moderator.
-2.  Build the complete physical deck from the selected Role Composition, including both extra Character Cards required when Thief is selected. Shuffle it, then let Players perform the Physical Deal by drawing one Character Card face-down each. Any Thief extras are therefore part of the random deal and exactly two physical cards remain undealt. The Moderator and app do *not* initially know Player Roles unless a later physical action identifies or reveals them; the app never performs or deduces the live deal.
-3.  Players secretly look at their Character Card.
-4.  (If applicable) Perform specific physical Role setup steps that occur outside the deal, such as selecting Actor Setup Cards and creating the Prejudiced Manipulator Public Group Partition. The two Thief cards are already the chance-determined physical remainder of the Players' deal; they are observed only if the Thief flow occurs.
-5.  The Moderator informs the helper app which Roles are included in the Role Composition and records any public setup artifacts. The app validates these facts but does not generate the deal, Actor Setup Cards, or Public Group Partition.
-6.  The Moderator starts the Game Session in the helper app, providing Player names.
-7.  (If applicable) The app may prompt the Moderator for initial known information, such as Sheriff election or private Role Identification for Thief and Cupid during Night 1.
-8.  (If using New Moon Events) Shuffle the physical New Moon Event deck and place it face down.
+1.  Select a non-playing Moderator and provide the helper app with the Player names.
+2.  Select the Role Composition and confirm it at Role Lock-In. Without Thief, the Role Composition contains exactly one physical Character Card per Player. With Thief, it contains exactly two additional cards: a Player-count Deal Pool with exactly one Thief card, plus two distinct non-Thief Thief Offer Card instances chosen by the Moderator. The offers may print the same Role, but remain separate physical cards.
+3.  (If applicable) Complete every conditional pre-game setup required by a Role in either the Deal Pool or the Thief Offer Cards. For example, Actor requires Actor Setup Cards and Prejudiced Manipulator requires a Public Group Partition even when that Role appears only as a Thief offer.
+4.  Before Lobby Exit, the app validates the locked setup and applies the required safety screen. A Thief-enabled screen uses the committed Deal Pool and offers and checks every different legal Night 1 choice or decline branch.
+5.  (If using New Moon Events) Shuffle the physical New Moon Event deck and place it face down.
+6.  After Lobby Exit, shuffle only the Deal Pool. Players perform the Physical Deal by drawing one Character Card face-down each. The Moderator and app do *not* initially know which Player received each Role; the app never performs or deduces the live deal.
+7.  Players secretly look at their Character Card.
+8.  (If applicable) Record other initial public setup facts, such as the Sheriff election. Private Role Identification and Role choices are recorded only when their physical flow occurs.
 
 ## Game Flow
 
@@ -96,7 +96,7 @@ Win conditions are evaluated during Victory Check Windows: after Night eliminati
 
 *Goal: Win with their current Faction Beneficiary; their Faction Beneficiary can change.*
 
-*   **Thief:** On the first night, shown the two Character Cards left undealt after random Role distribution. These Character Cards are not chosen or set aside specifically for the Thief. Must swap their Thief Character Card for one of them. If both available Character Cards are Werewolf Roles, *must* take one. This is a Permanent Role Swap: it takes effect immediately, the Thief plays as the chosen Role for the rest of the Game Session, and their Faction Beneficiary becomes that Role's default Faction unless an explicit precedence rule says otherwise. Continue the canonical Night 1 call order; the acquired Role receives its normal remaining call, including a first-Night-only call, without replaying earlier calls or pre-game setup. (Requires 2 extra Cards added during setup).
+*   **Thief:** The Deal Pool guarantees exactly one Thief holder on Night 1. The Moderator privately shows that Player the two Thief Offer Cards committed at Role Lock-In and records `Offer1`, `Offer2`, or `Decline`. Decline is legal unless both offers are hard-aligned Werewolf Roles: Simple Werewolf, Big Bad Wolf, or Accursed Wolf-Father. A legal decline keeps the Thief Character Card and Role, keeps the Player as a Villager Faction Beneficiary, moves both offers to face-down Set-Aside Character Cards, and ends the one-time opportunity exactly once. Choosing an offer privately exchanges the selected card for the Thief card: the selected card becomes Player-owned, while the original Thief card and unchosen offer become face-down Set-Aside Character Cards. This is an immediate Permanent Role Swap with fresh Role state, and the Player's Faction Beneficiary becomes the chosen Role's default Faction unless an explicit precedence rule says otherwise. Continue forward through the canonical Night 1 call order; the acquired Role receives any ordinary call still ahead, including a first-Night-only call, without replaying an earlier call or pre-game setup.
 *   **Devoted Servant:** Before an eliminated Player's Character Card is revealed (after the Vote), the Servant can reveal and discard their own Character Card, then take the eliminated Player's card without revealing it. This is a Permanent Role Swap: the acquired Role remains hidden, becomes the Servant's current Role and default Faction Beneficiary, and starts fresh when first called on the next Night. The eliminated Player's Status Effects and relationships are not inherited. A Lover cannot use this power. The swap clears Charmed, Sheriff, and Town Crier as explicit parts of the Servant's old identity. Infection remains attached to the Player and continues to make them a Werewolf Faction Agent; an in-force Scapegoat voting restriction likewise continues to apply to that Player.
 *   **Wild Child:** On the first night, chooses another Player as their role model. Remains a Villager Faction Beneficiary as long as the model is alive. If the model is eliminated, the Wild Child immediately becomes a Werewolf Faction Beneficiary and Werewolf Faction Agent, and wakes with the Werewolf Faction Agents on subsequent nights.
 *   **Wolf Hound:** On Night 1, makes a final private choice to play with the Villagers or Werewolves while retaining the Wolf Hound Role and physical Character Card. The Villager choice makes the Player a Villager Faction Beneficiary and not a Werewolf Faction Agent. The Werewolf choice makes the Player a Werewolf Faction Beneficiary and Werewolf Faction Agent; they immediately join the collective Werewolf action later that Night and wake with the Werewolves each Night thereafter. Explicit beneficiary-precedence rules such as Cross-Faction Lovers still apply. Revealing the Character Card identifies the Role as Wolf Hound but does not reveal the private choice; the app does not announce that choice automatically, while the Moderator may disclose it verbally at their discretion.
@@ -152,11 +152,13 @@ Win conditions are evaluated during Victory Check Windows: after Night eliminati
 
 ### Preparation Before Game
 
-*   Deal Character Cards
-*   (If using) Divide Village for Prejudiced Manipulator
-*   (If using) Prepare Gypsy's Spiritualism cards, Town Crier's New Moon Event cards, Thief's extra Character Cards, and Actor Setup Cards with borrowable individual hard-aligned Villager Role Powers
+*   Lock in the Role Composition; with Thief, commit the Player-count Deal Pool and two Thief Offer Cards
+*   Complete conditional pre-game setup: for Roles reachable through the Deal Pool or Thief Offer Cards, this includes artifacts such as the Prejudiced Manipulator Public Group Partition, Actor Setup Cards with borrowable individual hard-aligned Villager Role Powers, and Gypsy Spiritualism materials; when the Town Crier Assignment is enabled, prepare its New Moon Event cards
+*   Complete the applicable safety screen
+*   (If using New Moon Events) Shuffle the physical New Moon Event deck and place it face down
+*   Complete Lobby Exit
+*   Shuffle and deal only the Deal Pool
 *   Sheriff Election (can be later in Day 1)
-*   (If using New Moon Events) Shuffle New Moon Event deck
 
 ### Call Order: 1st Night ONLY
 
