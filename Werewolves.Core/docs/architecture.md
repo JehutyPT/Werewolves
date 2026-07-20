@@ -158,14 +158,14 @@ A static helper class that serves as the "Rule Engine" for the Dawn phase, resol
 *   **Process:**
     1.  **Input:** Accepts the `GameSession` state.
     2.  **Resolution:** Gets the current night action target map from `GameSessionQueries`. Iterates through players to resolve conflicts based on the priority rules below.
-    3.  **Output:** Directly calls `session.EliminatePlayer()` or `session.ApplyStatusEffect()` based on the resolved outcome.
+    3.  **Output:** The current implementation directly calls `session.EliminatePlayer()` or `session.ApplyStatusEffect()` based on the resolved outcome. PRD #93/#112/#113 replaces this eager-Elimination boundary with resolution-scoped pending consequences: any pre-reveal interception runs first, each required generic public reveal commits next, and only then does Core commit the actual Elimination or replacement effect and drain every resulting reaction before navigation.
 
 *   **Resolution Priority & Special Rules:**
     1.  **Witch Save (Absolute Defense):** If the Witch saved a player, they are protected from wolf attacks.
-    2.  **Defender Protection:** Blocks wolf faction actions (attacks and infection).
+    2.  **Defender Protection:** Blocks applicable physical Werewolf attacks for the whole Night, but never blocks Accursed Wolf-Father infection.
         *   **Exception - Little Girl:** Cannot be protected by the Defender. Protection fails silently.
-    3.  **Elder Extra Life:** If an Elder with their extra life remaining is targeted by wolf actions (attacks or infection) and not otherwise protected, the extra life is consumed instead of applying the effect. The Elder survives but loses their extra life for future attacks.
-    4.  **Infection:** If the Accursed Wolf-Father targets a player (and they are not protected), they become infected. Infection takes priority over physical wolf attacks (the player is infected, not killed).
+    3.  **Elder Extra Life:** If an Elder with their extra life remaining is targeted by a qualifying physical Werewolf attack or infection, the extra life is consumed instead of applying that effect. Defender may have already blocked a physical attack; it never blocks infection. The Elder survives and a resisted infection leaves the Elder uninfected, while a confirmed one-use infection remains spent.
+    4.  **Infection:** If the Accursed Wolf-Father targets a Player whose Elder resistance did not prevent the effect, they become infected. Infection replaces the collective physical Elimination rather than being treated as a protected physical attack.
     5.  **Wolf Attacks:** Physical attacks from Werewolves, Big Bad Wolf, or White Werewolf result in elimination if not blocked by the above.
     6.  **Unstoppable Actions:** The following actions **ignore all protection** (Defender, Witch Save) and always result in elimination:
         *   **Witch Kill (Death Potion):** Cannot be blocked or prevented.
@@ -243,6 +243,8 @@ Wrapper class holding all dynamic state information for a `Player`. **Implemente
     *   `IsImmuneToLynching` (bool): Derived from role and status effects (e.g., Village Idiot who hasn't used immunity yet).
     *   `LynchingImmunityAnnouncement` (string?): The text to announce if immunity triggers.
     *   `Team` (Team): The player's current allegiance, derived from MainRole and status effects.
+
+**PRD #93 target-state migration:** The properties above describe the current implementation, not the accepted identity model. #120 and #135 replace the single nullable `MainRole`/derived `Team` view with separate Physical Character Card Ownership and zones, current Role, known-or-unknown Faction Beneficiary and Agent facts, Moderator-known Role, and public-reveal state. Unknown is a valid persisted value and never means Simple Villager or non-Agent. Role Identification, Faction Agent Group Observation, Role Reveal, and Permanent Role Swap each commit only their own typed fact.
 
 *Note on Devoted Servant:* When the Devoted Servant swaps roles, the responsible hook listener must explicitly reset any role-specific status effects on the Servant's `PlayerState` to their default values. 
 
@@ -473,11 +475,13 @@ A hierarchy of records represents the outcome of a `SubPhaseStage`'s execution, 
  
 ## `ModeratorResponse` Class 
 Data structure for communication FROM the moderator. 
+
+The fields below describe the current public shape. PRD #93 deliberately migrates several overloaded cases before new Role flows depend on them: #110 owns instruction correlation, one-way Continue acknowledgments, and semantic option IDs with separately localized labels; #113 owns distinct exact-Role Identification and public Role Reveal responses with complete requested-key validation; #121 owns Faction Agent Group Observation; #111 owns acting-Player/source-power/resource identity; #135/#136 own physical card-instance and zone payloads; and #140 owns Public Group Partition input. Until those contracts land, raw confirmation, option text, and role-assignment fields are not the target architecture for those semantics.
 *   `Type` (enum `ExpectedInputType`): Indicates which optional field below is populated. 
-*   `SelectedPlayerIds` (List<Guid>?): IDs of players chosen. **Used for role identification (`PlayerSelectionMultiple`) and vote outcome (`PlayerSelectionSingle`, allowing 0 for tie).** 
-*   `AssignedPlayerRoles` (Dictionary<Guid, MainRoleType>?): Player IDs mapped to the main role assigned to them. Used during setup/role assignment phases (e.g., Thief, initial role identification). 
-*   `SelectedOption` (string?): Specific text option chosen. 
-*   `Confirmation` (bool?): Boolean confirmation. 
+*   `SelectedPlayerIds` (List<Guid>?): IDs of players chosen. **Currently used for exact-role identification (`PlayerSelectionMultiple`) and vote outcome (`PlayerSelectionSingle`, allowing 0 for tie).**
+*   `AssignedPlayerRoles` (Dictionary<Guid, MainRoleType>?): Player IDs mapped to main roles. This currently conflates assignment, private identification, and public reveal and does not yet enforce the complete requested key set; #113 removes that conflation.
+*   `SelectedOption` (string?): Current rendered-text option value; #110 replaces semantic identity with a stable value separate from localization.
+*   `Confirmation` (bool?): Current Boolean confirmation; #110 separates one-way Continue acknowledgment from any genuine yes/no gameplay choice.
 *   **Construction:** Can only be instantiated via `ModeratorInstruction` subclass `CreateResponse()` methods.
 
 **Design Note on Vote Input:** 
@@ -498,10 +502,10 @@ Polymorphic instruction system for communication TO the moderator. **Assembly Lo
     *   `AffectedPlayerIds` (IReadOnlyList<Guid>?): Optional: Player(s) this instruction primarily relates to.
     *   `SoundEffects` (List<SoundEffectsEnum>): Sound effects to play with this instruction. Only listed effects should play; all others should stop. *(Placeholder for future implementation)* 
 *   **Concrete Implementations:** Each instruction type has its own `CreateResponse` method for validation and response creation:
-*   **`ConfirmationInstruction`:** For yes/no confirmations.
+*   **`ConfirmationInstruction`:** Current Boolean confirmation shape. Under #110, one-way Continue acknowledgment is a distinct semantic contract and cannot accept `false` as a gameplay branch.
 *   **`SelectPlayersInstruction`:** For player selection with `NumberRangeConstraint` (defining min/max counts).
-*   **`AssignRolesInstruction`:** For role assignment, validating that assignments match the available roles and player lists.
-*   **`SelectOptionsInstruction`:** For option selection from a list of choices.
+*   **`AssignRolesInstruction`:** Current overloaded role mapping. #113 replaces assignment/identification/reveal conflation and requires exact requested-key validation.
+*   **`SelectOptionsInstruction`:** Current text-valued option selection. #110 adds stable semantic values with separately localized labels.
 
 ## Enums
 
@@ -581,14 +585,14 @@ Located in `Werewolves.Core.StateModels/Extensions/MainRoleTypeExtensions.cs`. P
 3.  **Dawn Phase (`GamePhase.Dawn`):**
     *   The `PhaseManager` for `Dawn` is activated, starting at `DawnSubPhases.CalculateVictims`.
     *   **Calculate Victims:** The `NightInteractionResolver` is invoked to process all night actions, resolving conflicts (Witch vs Defender vs Infection) and applying eliminations/status effects. Navigates either to `AnnounceVictims` or `Finalize`, depending on whether or not there were any night deaths.
-    *   **Announce Victims:** If victims exist, the `AnnounceVictims` sub-phase announces the deaths. Role assignment is **conditional**: if all victims already have known roles (e.g., from night actions), only a confirmation is requested; otherwise, an `AssignRolesInstruction` is sent for victims with unknown roles. Fires `GameHook.PlayerRoleAssignedOnElimination`. Navigates to `Finalize`.
+    *   **Announce Victims:** If victims exist, the `AnnounceVictims` sub-phase announces the deaths. The current implementation asks for confirmation when all victim Roles are known and otherwise uses `AssignRolesInstruction`. PRD #93/#113 makes both branches one public Role Reveal event: known Roles use a Continue acknowledgment after physical reveal; unknown Roles use a complete valid mapping. Fires `GameHook.PlayerRoleAssignedOnElimination`. Navigates to `Finalize`.
     *   **Finalize:** The `Finalize` sub-phase transitions to `GamePhase.Day`. Victory is checked at this transition.
 
 4.  **Day Phase (`GamePhase.Day`):**
     *   The `PhaseManager` for `Day` starts at `DaySubPhases.Debate`.
     *   **Debate:** Issues an instruction for discussion, then transitions to `DetermineVoteType`.
     *   **Determine Vote Type:** Determines what's the appropriate vote type, checking for active events or modifiers (defaults to `NormalVoting` sub-phase).
-    *   **Normal Voting:** Handles standard village voting to end the debate. Role assignment is **conditional**: if the voted player's role is already known (e.g., werewolves who woke during night), it silently transitions to the next sub-phase; otherwise, an `AssignRolesInstruction` is sent. Transitions to either `HandleNonTieVote` if there was no tie, or `ProcessVoteOutcome` if there was a tie.
+    *   **Normal Voting:** Handles standard village voting to end the debate. The current implementation silently skips a Role response when the voted Player is already Moderator-known and otherwise sends `AssignRolesInstruction`. This is a known PRD #93/#113 migration: public reveal must still be committed when privately known, using acknowledgment for known Roles and a complete mapping for unknown Roles. Transitions to either `HandleNonTieVote` if there was no tie, or `ProcessVoteOutcome` if there was a tie.
     *   **Accusation Voting:** *(Not yet implemented)* Reserved for accusation-based voting mechanics.
     *   **Friend Voting:** *(Not yet implemented)* Reserved for friend-based voting mechanics (e.g., Angel event).
     *   **Handle Non Tie Vote:** Handles checking if the voted for player is susceptible to be actually lynched due to the vote (i.e. Village Idiot), eliminates it if they are, otherwise applies `LynchImmunityUsed` status effect. Transitions to `ProcessVoteOutcome`
@@ -611,7 +615,7 @@ The chosen approach is an abstract base class (`GameLogEntryBase`) providing uni
 
 ## Implemented Log Entries
 
-1.  **`AssignRoleLogEntry`:** Records the batch assignment of a `MainRoleType` to one or more players via a `List<Guid>`. Used for initial identification (assigning the same role to multiple players at once, e.g., all Werewolves) and role reveals.
+1.  **`AssignRoleLogEntry`:** Currently records a batch `MainRoleType` for one or more Players and conflates private identification with public reveal. PRD #93/#113/#121/#135 replaces that use with distinct log-backed facts for exact-Role Identification, Faction Agent Group Observation, public Role Reveal, physical card zones, and current-Role transitions; none may stand in for another.
 2.  **`DayActionLogEntry`:** Records actions taken during the day (e.g., Sheriff appointment, specific day powers).
 3.  **`NightActionLogEntry`:** Records non-deterministic player choices made during the night (e.g., Seer check, Werewolf attack, Witch potion).
 4.  **`PhaseTransitionLogEntry`:** Records the transition between main game phases (`Night` -> `Dawn`, etc.).
@@ -680,7 +684,7 @@ Fluent API for constructing game scenarios and advancing through phases.
     *   `CompleteNightPhase(werewolfIds, victimId, seerId?, seerTargetId?)` → `ProcessResult`: Convenience overload with individual parameters.
 
 *   **Dawn Phase Helpers:**
-    *   `CompleteDawnPhase(roleAssignments?)` → `ProcessResult`: Completes the Dawn Phase — calculates victims, announces Eliminations, handles Role assignment (defaults to Simple Villager if not specified), transitions to Day.
+*   `CompleteDawnPhase(roleAssignments?)` → `ProcessResult`: Current helper that completes Dawn and historically defaults an omitted unknown Role to Simple Villager. That default is forbidden for PRD #93 evidence and is removed by #113; tests must supply physically observed mappings or seeded simulation truth through the production response contract.
 
 *   **Day Phase Helpers:**
     *   `CompleteDayPhaseWithLynch(lynchTargetId)` → `ProcessResult`: Completes the Day Phase with a Vote resulting in Elimination — debate → vote → role assignment → transition to Night.
@@ -780,7 +784,7 @@ The Core persistence boundary is `IGameSession.Serialize()` plus `GameService.Re
 `GameSessionDto` is the durable recovery payload:
 
 *   `Id`, `SeatingOrder`, `RolesInPlay`: Session identity and setup.
-*   `Players`: Derived player cache (`Id`, `Name`, `MainRole`, `ActiveEffects`, `Health`) restored directly so Rehydration does not need to replay log entries.
+*   `Players`: Current derived player cache (`Id`, `Name`, `MainRole`, `ActiveEffects`, `Health`) restored directly so Rehydration does not need to replay log entries. #120/#135 expand this durable state so physical card instance/zone, current Role, known-or-unknown Faction facts, Moderator knowledge, and public reveal rehydrate independently without reconstructing unknown values.
 *   `TurnNumber`: Derived turn cursor as of the stable boundary. It is durable to avoid double-incrementing after Day-to-Night recovery.
 *   `GameHistoryLog`: Event source entries as of the same stable boundary as the derived caches.
 *   `PendingInstruction`: The committed boundary instruction the moderator must consume next after Rehydration. This is stable boundary state, not arbitrary listener progress.

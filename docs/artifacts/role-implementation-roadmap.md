@@ -24,7 +24,7 @@ The recommended critical path is:
 4. replace binary victory checks with named Victory Check Windows, structured outcomes, and Durable Voting Power;
 5. add living topology and durable delayed effects;
 6. add Status Effect and relationship lifecycles;
-7. add active Role ownership, Permanent Role Swaps, global power availability, and borrowed powers.
+7. add current Role state, Physical Character Card zones, Permanent Role Swaps, global power availability, and borrowed powers.
 
 The first Role remains **Villager-Villager**. **Actor** remains last because it composes powers implemented by earlier Roles. **Gypsy** is the only deferred Role: its Spiritualism workflow depends on New Moon-specific Event cards. Expansion provenance alone does not defer Defender, Elder, Scapegoat, Village Idiot, or Piper.
 
@@ -93,7 +93,7 @@ Before Slot 8, implement ADR-0010's separate Faction Beneficiary and Faction Age
 | 9 | **Accursed Wolf-Father** (`AccursedWolfFather`) | Establishes durable infection before Roles query the history of all Werewolf Agents. | Infection replaces the collective elimination, changes Agent but not Beneficiary, preserves the victim's prior powers, joins future collective actions, and is not blocked by Defender protection. |
 | 10 | **Big Bad Wolf** (`BigBadWolf`) | Builds on dynamic Agent history from infection and transformation. | The extra victim is offered only while no qualifying non-temporary Werewolf Agent has been eliminated, uses Agent-based target eligibility, and resolves through the shared night contract. |
 | 11 | **Little Girl** (`LittleGirl`) | Adds the interstitial spying interval only after the collective action has one owner. | Night 1 identification and the silent spying interval occur in canonical order without giving the Little Girl a modeled success/failure choice that the rules do not define. |
-| 12 | **Defender** (`Defender`) | Comes after the real attack, infection, and Little Girl fixtures needed to prove its precedence rules. | Previous-target history is durable; the same target cannot be chosen consecutively; Little Girl is ineligible; protection blocks applicable wolf attacks but not infection, poison, Hunter, charm, or other stated exceptions. |
+| 12 | **Defender** (`Defender`) | Comes after the real attack, infection, and Little Girl fixtures needed to prove its precedence rules. | Only actual protection by the same current Defender power on the immediately preceding Night makes that Player ineligible. A Night without protection or a fresh power instance resets the sequence. Little Girl is ineligible; protection blocks applicable physical wolf attacks but not infection, poison, Hunter, charm, or other stated exceptions. |
 
 **Stage gate:** all operational “Werewolf” queries mean current Faction Agent; the collective group is not owned by an exact Role; same-night dynamic participation works; and the resolver has a tested interaction matrix rather than precedence hidden in branch order.
 
@@ -127,20 +127,20 @@ Before Slot 13, implement ADR-0011 as a named Game Session Outcome model: explic
 
 **Stage gate:** Status Effects and relationships have data-bearing state, application/removal/reset semantics, notification behavior, and outcome integration. They are not encoded as extra Roles.
 
-### Stage 7 — active Role ownership, setup artifacts, and power composition
+### Stage 7 — current Role, physical card zones, setup artifacts, and power composition
 
-Before Slot 20, separate physical Role Composition and card/deal zones from a Player's active Role ownership. A Permanent Role Swap must atomically change active Role, default Beneficiary when allowed, listener activation, and fresh ability state while preserving or clearing named relationships and Status Effects according to explicit rules.
+Before Slot 20, separate Role Composition and physical card/deal zones from a Player's current Role. A Permanent Role Swap must atomically change current Role, default Beneficiary when allowed, listener activation, and fresh power state while separately applying explicit physical-card, visibility, relationship, and Status Effect rules.
 
 | Slot | Role | Why it is here | Required result before continuing |
 |---:|---|---|---|
-| 20 | **Thief** (`Thief`) | Canonical first tracer for undealt cards, active ownership, and Permanent Role Swap. | Two random undealt cards persist; the mandatory Werewolf rule is enforced; the selected Role becomes active immediately and follows the remaining Night 1 call order; physical composition remains distinguishable from runtime ownership. |
+| 20 | **Thief** (`Thief`) | Canonical first tracer for undealt cards, current Role, and Permanent Role Swap. | The Moderator records the two physical card instances left undealt by the Players' deal and the Thief Player's completed choice; the app never generates either. The selected Role becomes current immediately and follows the remaining Night 1 call order; Role Composition, physical card zones, and current Role remain distinct. |
 | 21 | **Angel** (`Angel`) | Bounded second swap consumer and a precise timed-outcome lifecycle test. | Eligible early elimination wins at the next named window; eligibility expires after the Dawn window resolving Night 2; otherwise the Role atomically swaps to Simple Villager. |
-| 22 | **Devoted Servant** (`DevotedServant`) | Uses the pre-reveal seam from Stage 2 and the ownership, infection, charm, and Lover semantics now in place. | The former Role becomes public while the acquired Role stays hidden; Lover use is prohibited; Charmed, Sheriff, and Town Crier clear with the old identity while Player-attached infection and any Scapegoat voting restriction survive; target state is not inherited; the acquired Role starts fresh on the next Night. |
+| 22 | **Devoted Servant** (`DevotedServant`) | Uses the pre-reveal seam from Stage 2 and the card-zone, infection, charm, and Lover semantics now in place. | On Use, the Servant's printed card becomes public and is discarded while the voted target's card and acquired current Role remain hidden; Decline resumes the target's ordinary reveal with no Servant transition. Lover use is prohibited; Charmed, Sheriff, and Town Crier clear while Player-attached infection and any Scapegoat voting restriction survive; target state is not inherited; the acquired power state is fresh and its first call is the next Night. |
 | 23 | **Elder** (`Elder`) | Establishes one global power-availability decision only after attack, swap, and power execution paths exist. | First qualifying wolf attack/infection resistance is correct; other causes bypass it; after the triggering Vote's Elimination Cascade, every current and future Villager Role Power is suppressed through the shared availability seam without undoing prior commitments or results. |
 | 24 | **Prejudiced Manipulator** (`PrejudicedManipulator`) | Dedicated setup-artifact and client slice after session/setup persistence has a stable extension point. | The immutable Public Group Partition is validated, persisted, displayed, and included in scenario identity; the independent outcome predicate requires a living beneficiary and evaluates that Player's Opposing Public Group. |
 | 25 | **Actor** (`Actor`) | Last because it composes the widest already-tested power surface and must honor Elder suppression. | Three eligible Actor Setup Cards persist; Actor may skip or spend one at the opening Actor call each Night, activating the complete source power through the next Actor call while its action or reaction follows the source's relative boundary. Native Night 1 setup powers can begin on any selected Night, durable results survive expiry, and Role Power Suppression blocks new selections and later uses or triggers without refunding the card or undoing prior results. |
 
-**Final gate:** all 29 non-New-Moon-event-dependent Roles are app-supported and explicitly admitted to the versioned Degenerate Simulation Scenario screening profile; all 25 new Roles have public-API behavior, recovery evidence, and headless screening-path evidence. No probability or wider simulator capability is implied.
+**Final gate:** all 29 non-New-Moon-event-dependent Roles are app-supported and explicitly admitted to the versioned Safety-Screening capability; all 25 new Roles have public-API behavior, recovery evidence, and headless screening-path evidence. Full-Probability admission, build-time enumeration, bundled-cache coverage, and probability output remain separate.
 
 ## Hypothetical parallelization map
 
@@ -165,9 +165,9 @@ Roles that should remain serial even with multiple teams:
 - Cupid before Devoted Servant, Thief before Angel and Devoted Servant, and Elder before Actor; Devoted Servant and Elder have different prerequisites even though their shared state/schema integration remains serialized;
 - Knight until the delayed-effect mechanism has one accepted owner.
 
-## Resolved domain decisions
+## Resolved Wayfinder domain decisions
 
-Wayfinder map #95 is complete: no product decision remains open. The canonical rulings below govern implementation; the linked decision tickets preserve the human decision record.
+Wayfinder map #95 is complete: no rules decision owned by that map remains open. The canonical rulings below govern implementation and the linked tickets preserve the human decision record. Role-specific Moderator interaction-shape questions discovered during ticket preparation remain explicitly open in #147.
 
 | Slot(s) | Settled contract | Canonical rule and decision record |
 |---|---|---|

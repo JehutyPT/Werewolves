@@ -6,6 +6,7 @@ How the engineering skills should consume this repo's domain documentation when 
 
 - **`CONTEXT.md`** at the repo root.
 - **`docs/domain/game-rules.md`** — read when physical role rules or event text matter.
+- **`docs/domain/moderator-role-flows.md`** — read when a Role or gameplay ticket creates, changes, or validates a Moderator Instruction or Response.
 - **`docs/adr/`** — read ADRs that touch the area you're about to work in.
 - **`docs/domain/invariants.md`** — read when implementation or tests rely on stable domain facts.
 - **`docs/domain/game-rules-clarifications.md`** — read when role interactions, win timing, or rule disambiguation matter.
@@ -27,7 +28,8 @@ Single-context repo:
 ├── docs/domain/
 │   ├── game-rules.md
 │   ├── invariants.md
-│   └── game-rules-clarifications.md
+│   ├── game-rules-clarifications.md
+│   └── moderator-role-flows.md
 ├── docs/adr/
 │   ├── 0001-*.md
 │   └── 0002-*.md

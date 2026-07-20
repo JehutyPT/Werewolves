@@ -2,6 +2,18 @@
 
 This document records domain rule rulings for interactions that are too detailed for `CONTEXT.md`. It clarifies `docs/domain/game-rules.md`; it is not an architecture note, product requirement, or implementation issue.
 
+## Physical Setup Authority and Hidden Role Knowledge
+
+- The physical table is authoritative in a live Game Session. The Moderator records the selected **Role Composition** and facts observed during setup or play; the app validates and persists those facts but never shuffles, deals, randomly assigns, or deduces an unknown Player-specific live **Role** from missing information.
+- Players perform the **Physical Deal**. The Moderator and app initially know the Role Composition, not which Player drew each Character Card.
+- **Physical Character Card Ownership**, current **Role**, Moderator knowledge, and public reveal are separate. A **Permanent Role Swap** changes the current Role and separately defines card handling and visibility.
+- **Role Identification** is private. It records which Player physically answered an exact-Role call or otherwise established the current Role to the Moderator; it neither assigns a Character Card nor makes the Role public.
+- **Faction Agent Group Observation** is also private but records only who answered a collective Faction call. It cannot identify or mutate exact Roles.
+- **Role Reveal** is a separate public event and must be committed even when the Role was already Moderator-known. A known Role uses a Continue acknowledgment after the physical reveal; an unknown Role uses a complete valid mapping for exactly the requested Players.
+- An unidentified Role cannot default to Simple Villager, Faction Beneficiary, or Faction Agent state. A rules step that needs the fact must obtain it before resolving.
+- The Moderator chooses and records live Actor Setup Cards and the Public Group Partition. When a Player actually holds Thief, the Moderator records the actual undealt cards and that Player's completed choice. Simulator-generated assignment and setup exist only in Simulation Start State and never populate live play.
+- Every recorded identification, reveal, and card-zone fact respects Role Composition multiplicity, one-to-one Player/card ownership, unique physical card instances, prior observations, and confirmed dealt or undealt zones. Correction of a bad recorded fact follows a separately settled Moderator workflow.
+
 ## Allegiance and Operational Status
 
 - A Player has exactly one **Faction Beneficiary** at a time. Elimination-style win conditions evaluate living Players by **Faction Beneficiary**, not by original Role, Character Card, or who they wake with.
@@ -80,7 +92,7 @@ This document records domain rule rulings for interactions that are too detailed
 
 ## Devoted Servant Swap Boundary
 
-- To use the power, Devoted Servant reveals and discards their own Character Card, then takes the eliminated Player's card without revealing it. The former Role is public history; the acquired Role remains hidden and is first called on the next Night with fresh power state.
+- To use the power, Devoted Servant reveals and discards their own Character Card, then immediately takes the eliminated Player's card without revealing it. The Permanent Role Swap commits at that interception point with fresh power state; the former Role is public history, the acquired current Role remains hidden, and only its first call waits until the next Night.
 - The eliminated Player's Status Effects and relationships are not inherited. A Lover cannot use Devoted Servant, so no Lover relationship crosses a successful swap.
 - The swap deliberately clears Charmed, Sheriff, and Town Crier as explicit parts of the Servant's old identity. This is specific to Devoted Servant, not a universal reset of every Status Effect.
 - Infection remains attached to the Player beneath that identity and continues to make them a Werewolf **Faction Agent** after the swap. An in-force Scapegoat voting restriction also follows the continuing Player and therefore remains in force.
@@ -113,6 +125,7 @@ This document records domain rule rulings for interactions that are too detailed
 - A **One-Use Resource** is consumed when the Moderator confirms the action that commits it. Later prevention, redundancy, or failure to change resolved state does not refund it. This general rule applies to both Witch potions, the Accursed Wolf-Father's infection, and any future one-use Role resource unless that resource explicitly defines an exception.
 - The White Werewolf's solo attack is resolved like any other physical Werewolf attack. Its distinct cadence and requirement to target another Werewolf **Faction Agent** remain unchanged, but otherwise the same Defender protection, Elder resistance, Witch disclosure, and Witch healing rules apply.
 - Defender protection applies to the collective Werewolf attack, Big Bad Wolf's extra attack, and White Werewolf's solo attack. It lasts for the entire Night and blocks every applicable physical Werewolf attack against the protected Player rather than being consumed by one hit. Defender protection resolves before the Elder's resistance, so a blocked physical attack does not spend that resistance. Defender protection does not apply to the Accursed Wolf-Father's infection.
+- Defender's consecutive-target restriction compares only two Nights that both contain actual protection by the same current Defender power instance. Any Night without protection—including suppression, unavailability, or a rules-valid no-target path—or acquisition of a fresh Defender power through Permanent Role Swap resets the sequence, so an older target is eligible on the next active call.
 - Big Bad Wolf's extra attack must target a different living non-Werewolf **Faction Agent** from the Player selected by the collective Werewolf attack.
 - The collective Werewolf attack, Big Bad Wolf's extra attack, White Werewolf's solo attack, and Accursed Wolf-Father infection are all qualifying Werewolf-sourced attacks for the Elder's one-time resistance. When that resistance applies, the attack spends it. A physical attack leaves the Elder alive; infection leaves the Elder alive and uninfected, while the already-confirmed infection use remains spent under the general **One-Use Resource** rule. Once the resistance is spent, a later qualifying attack resolves normally.
 - When the Witch acts, the Moderator shows every Player targeted that Night by the collective Werewolf attack, Big Bad Wolf's extra attack, or White Werewolf's solo attack. Targets remain visible even when Defender protection, Elder resistance, or Accursed Wolf-Father infection means they would not be physically eliminated. If the healing potion remains available, the Witch may commit it to at most one shown target; a redundant or ineffective choice still spends it under the general **One-Use Resource** rule.

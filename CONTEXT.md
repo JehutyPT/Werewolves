@@ -2,7 +2,7 @@
 
 A mobile app that assists a human **Moderator** running a physical game of "The Werewolves of Miller's Hollow." The app tracks game state, guides the Moderator through phases, and prompts for input — it never replaces the Moderator or makes decisions for them.
 
-This file is the shared glossary for domain language and avoided synonyms. Stable invariants live in `docs/domain/invariants.md`; rule interaction disambiguations live in `docs/domain/game-rules-clarifications.md`; architectural tradeoffs live in `docs/adr/`; and implementation scope lives in canonical GitHub issue-body Implementation Contracts.
+This file is the shared glossary for domain language and avoided synonyms. Stable invariants live in `docs/domain/invariants.md`; rule interaction disambiguations live in `docs/domain/game-rules-clarifications.md`; the exact per-Role Moderator exchange lives in `docs/domain/moderator-role-flows.md`; architectural tradeoffs live in `docs/adr/`; and implementation scope lives in canonical GitHub issue-body Implementation Contracts.
 
 ## Language
 
@@ -31,8 +31,20 @@ _Avoid_: Adjacent seat, physical neighbor
 ### Identity & Allegiance
 
 **Role**:
-A Player's secret identity, determining their abilities, wake-up schedule, and default allegiance. Drawn from a physical Character Card.
+A Player's current rules identity, determining their abilities, wake-up schedule, and default allegiance. It initially comes from the Character Card received in the Physical Deal and may later change through a Permanent Role Swap.
 _Avoid_: Character, class, card (when referring to the assigned identity)
+
+**Physical Character Card Ownership**:
+The specific physical Character Card instance a Player currently holds, including its printed Role and card zone. It initially comes from the Physical Deal. A Permanent Role Swap changes the Player's current Role and separately states whether or how the physical card instance changes.
+_Avoid_: Current Role, app assignment, known Role, revealed Role
+
+**Physical Deal**:
+The face-down random distribution of one physical Character Card to each Player. When Thief is present, exactly two cards remain undealt. The app records a live Game Session but does not perform this deal.
+_Avoid_: App assignment, generated deal
+
+**Undealt Character Cards**:
+The two physical cards left by the Physical Deal when Thief is in the Role Composition. Chance determines them; the Moderator records the observed cards during the Thief flow, and the app validates rather than chooses them.
+_Avoid_: Thief options (when referring to the physical cards), preselected cards
 
 **Role Power**:
 A gameplay capability granted by a Role beyond its identity, physical Character Card, and default allegiance. A Role Power may be chosen, automatic, reactive, passive, recognition-based, or communication-based; information already learned is not itself a Role Power.
@@ -51,15 +63,27 @@ The Roles with working engine behavior in the app.
 _Avoid_: Rules Role Set, selectable roles
 
 **Simulator Profile Role Set**:
-The Roles the active simulator profile can execute under its configured setup artifacts and baseline decision behavior.
+The Roles one explicitly named simulator capability can execute under its configured setup artifacts and baseline decision behavior. Safety-screening and full-probability capabilities have separate Role sets and compatibility identities.
 _Avoid_: Implemented Role Set, selectable roles
+
+**Simulator Capability**:
+A versioned evaluation boundary that names its Role set, supported setup artifacts, headless-response policy, evidence depth, and compatibility identity. Role support v1 uses `safety-screening@<version>` and `full-probability@<version>` as the canonical capability identities. `DegenerateScreeningOnly` and `FullProbability` are evaluation-depth requests, not capability identities. Scenario support, cache lookup, and stale-record rejection are always evaluated for a named capability.
+_Avoid_: Active profile (when the capability is not named), simulator support (unqualified)
+
+**Safety-Screening Role Set**:
+The Roles explicitly admitted to deterministic Already-Decided classification and the 1,000-run Degenerate Simulation Scenario screen for production lobby safety. Membership does not imply probability evaluation or Bundled Simulator Cache coverage.
+_Avoid_: Simulator Profile Role Set (when capability matters), full simulator support
+
+**Full-Probability Role Set**:
+The Roles explicitly admitted to the dormant probability capability. It is a subset of the Safety-Screening Role Set because full evaluation includes the same earlier safety gates, but it is not required to contain every App-Supported Role in role support v1.
+_Avoid_: Safety-Screening Role Set, app-supported roles
 
 **Selectable Role Set**:
 The Roles exposed to the Moderator in the current role-selection UI.
 _Avoid_: Rules Role Set, implemented roles
 
 **Role Composition**:
-The multiset of Roles selected for the physical game deck before a Game Session starts, independent of which Player receives each Role. Includes the two extra Character Cards required by Thief; excludes Actor Setup Cards, New Moon Events, Player names, Seating Order, Status Effects, and setup choices.
+The multiset of Roles the Moderator selects and the app records for the physical game deck before a Game Session starts, independent of which Player receives each Role. Includes the two extra Character Cards required by Thief; excludes Actor Setup Cards, New Moon Events, Player names, Seating Order, Status Effects, and setup choices.
 _Avoid_: Combination, setup (too broad), assignment (implies Player-specific Role knowledge)
 
 **Rules-Valid Role Composition**:
@@ -71,7 +95,7 @@ A Rules-Valid Role Composition that falls within the app's product support bound
 _Avoid_: Rules-valid, simulator-supported
 
 **Actor Setup Cards**:
-The three face-up Character Cards selected by the Moderator during setup for the Actor to borrow powers from. Actor Setup Cards must be hard-aligned Villager Roles with borrowable individual Role Powers that are not already part of the Role Composition. Actor Setup Cards are not part of the Role Composition and do not contribute Starting Factions or Possible Factions. The Actor Role itself is a hard-aligned Villager Role.
+The three face-up Character Cards selected by the Moderator during physical setup and recorded by the app for the Actor to borrow powers from. The app validates but does not generate the live inventory. Actor Setup Cards must be hard-aligned Villager Roles with borrowable individual Role Powers that are not already part of the Role Composition. Actor Setup Cards are not part of the Role Composition and do not contribute Starting Factions or Possible Factions. The Actor Role itself is a hard-aligned Villager Role.
 _Avoid_: Actor Role Composition, Actor deck
 
 **Borrowed Role Power**:
@@ -79,7 +103,7 @@ A fresh, temporary instance of an eligible source Role Power in full, including 
 _Avoid_: Temporary Role, copied Role
 
 **Public Group Partition**:
-A pre-game assignment of every Player to exactly one of two publicly known, non-empty groups for the full Game Session. The groups may differ in size, including a one-Player group.
+A pre-game grouping created and publicly announced by the Moderator, then recorded and validated by the app. Every Player belongs to exactly one of two publicly known, non-empty groups for the full Game Session. The groups may differ in size, including a one-Player group; the live app never generates or balances them.
 _Avoid_: Prejudiced Manipulator teams, balanced groups
 
 **Opposing Public Group**:
@@ -98,13 +122,21 @@ _Avoid_: Display role list, localized composition
 The stable string representation of a Simulation Scenario. It includes Player count separately from the Canonical Role Composition because Thief can make card count differ from Player count. It also includes setup artifacts or non-default assumptions that affect simulation, such as Actor Setup Cards, while leaving profile defaults implicit in the profile/version.
 _Avoid_: Canonical Role Composition (when Player count or setup artifacts are included)
 
-**Simulator-Supported Simulation Scenario**:
-A Simulation Scenario that the active simulator profile can execute with implemented Roles, setup artifacts, and baseline decision behavior.
-_Avoid_: App-supported Role Composition, cacheable
+**Capability-Supported Simulation Scenario**:
+A Simulation Scenario that one explicitly named Simulator Capability can execute with its admitted Roles, setup artifacts, and headless-response policy. The capability name is mandatory: use Safety-Screening-Supported or Full-Probability-Supported when that distinction matters.
+_Avoid_: Simulator-supported (unqualified), App-supported Role Composition, cacheable
+
+**Safety-Screening-Supported Simulation Scenario**:
+A Capability-Supported Simulation Scenario for the production safety-screening capability. It can reach deterministic Already-Decided classification and, when needed, complete the 1,000-run Degenerate Simulation Scenario screen.
+_Avoid_: Full-Probability-Supported Simulation Scenario, app-supported setup
+
+**Full-Probability-Supported Simulation Scenario**:
+A Capability-Supported Simulation Scenario for the dormant full-probability capability. It must also be Safety-Screening-Supported because its pipeline passes the same earlier gates before probability evaluation.
+_Avoid_: Safety-Screening-Supported Simulation Scenario, current production support
 
 **Cacheable Simulation Scenario**:
-A Simulator-Supported Simulation Scenario that is eligible for build-time cache generation and lookup.
-_Avoid_: Role Composition, simulator-supported
+A Capability-Supported Simulation Scenario eligible for one named record type under that capability's compatibility identity. Safety screening may store only local Already-Decided or Degenerate terminal records; role support v1 does not add new build-time or probability-cache coverage.
+_Avoid_: Role Composition, capability-supported
 
 **Bundled Simulator Cache**:
 The app-facing collection of precomputed lobby evaluations shipped with the app for cache-first pre-game safety screening. Retained probability payloads belong to the dormant full-evaluation capability, not the current Moderator-facing product.
@@ -119,7 +151,7 @@ The production of Bundled Simulator Cache artifacts outside the Moderator's phon
 _Avoid_: Offline generation (ambiguous), on-device generation
 
 **On-Device Fallback Generation**:
-A local simulator evaluation attempted on the Moderator's device when no usable bundled or local terminal lobby evaluation is available for a Simulator-Supported Simulation Scenario. The production path stops after already-decided and 1,000-run degenerate screening; the dormant full-evaluation capability may continue to probability evaluation. When fallback materializes a result, it stores only a compact Local Fallback Cache Record, not full per-run Simulation Result Evidence. Fallback has two hard failure boundaries: any generation failure or a 10-second timeout.
+A local safety-capability evaluation attempted on the Moderator's device when no usable compatible terminal lobby evaluation is available for a Safety-Screening-Supported Simulation Scenario. The production path stops after already-decided and 1,000-run degenerate screening. When fallback materializes a result, it stores only a compact Already-Decided or Degenerate Local Fallback Cache Record, not full per-run Simulation Result Evidence; a successful non-degenerate pass remains session-local. Fallback has two hard failure boundaries: any generation failure or a 10-second timeout.
 _Avoid_: Normal pre-game simulation, build-time cache generation
 
 **Minimum Viable Role Composition**:
@@ -161,6 +193,10 @@ _Avoid_: Team member, ally, Role owner
 **Faction Agent**:
 A living Player who currently acts for, wakes with, is perceived as, or is counted by a Faction for operational mechanics without necessarily benefiting from that Faction's win condition. Examples: White Werewolf is a Werewolf Faction Agent while remaining a White Werewolf Faction Beneficiary; Double Agent is a Werewolf Faction Beneficiary while remaining operationally outside the Werewolf night group.
 _Avoid_: Team member, ally, operative
+
+**Known Faction State**:
+The app's legitimately established knowledge of a Player's current Faction Beneficiary and Faction Agent memberships. The rules give every Player one actual Faction Beneficiary, but a live Game Session represents an unobserved value as unknown until a physical observation or explicit Core transition establishes it. A query that needs an unknown Faction fact must obtain that fact before resolving; it never substitutes a Role Composition default or deduces the value from remaining inventory.
+_Avoid_: Default team, inferred allegiance, assumed Villager
 
 **Permanent Role Swap**:
 A Role replacement that permanently changes a Player's Role for the rest of the Game Session without replacing the Player. By default, a Permanent Role Swap changes the Player's Faction Beneficiary to the new Role's default Faction unless another rule explicitly takes precedence, such as Cross-Faction Lovers.
@@ -273,7 +309,7 @@ The boundary where the Moderator attempts to leave pre-game configuration and st
 _Avoid_: Game start (too broad), setup complete
 
 **Simulation Start State**:
-The fully defined Game Session state from which a simulation batch begins. A pre-game Simulation Start State can be derived from a Simulation Scenario; a mid-game Simulation Start State can be captured from an in-progress Game Session once that state is representable.
+The fully defined, simulator-internal Game Session state from which a simulation batch begins. A pre-game Simulation Start State may derive seeded synthetic Role assignments, undealt cards, and profile-default setup from a Simulation Scenario; those facts grant no authority to populate live play. A mid-game Simulation Start State can be captured from an in-progress Game Session once that state is representable.
 _Avoid_: Role Composition (when current Game Session state matters), snapshot (too implementation-specific)
 
 **Turn**:
@@ -303,8 +339,32 @@ A directive from the app to the Moderator — what to announce publicly, what to
 _Avoid_: Prompt, message, command
 
 **Moderator Response**:
-Input from the Moderator recording what happened in the physical game — selected players, assigned roles, chosen options, or a confirmation.
+Input from the Moderator recording an observed physical fact or a Player's completed choice — selected Players, identified or revealed Roles, chosen options, or a Continue acknowledgment. A Moderator Response does not authorize the app to invent a live deal or Player decision.
 _Avoid_: Input, answer, user input
+
+**Continue Acknowledgment**:
+A one-way Moderator Response confirming that an instruction, announcement, private feedback step, or physical action is complete. It means “continue”; it is not a yes/no gameplay decision and a false value is not a second valid branch.
+_Avoid_: Confirmation choice, yes/no prompt
+
+**Role Identification**:
+A private Moderator Response recording which Player or Players physically answered an exact-Role call or otherwise established their current Role to the Moderator. It records an observed current Role; it does not perform the Physical Deal, change Physical Character Card Ownership, or make the Role public.
+_Avoid_: Role assignment, reveal
+
+**Faction Agent Group Observation**:
+A private Moderator Response recording the complete Player group that physically answered a Faction operation, such as the collective Werewolf wake. It records current operational Faction Agent membership without identifying any exact Role and cannot mutate current Role or Physical Character Card Ownership.
+_Avoid_: Role Identification, Role assignment, Faction Beneficiary
+
+**Moderator-Known Role**:
+A current Role that the Moderator and app legitimately learned through Role Identification, a Role Reveal, or a rules transition explicitly committed by Core, such as a Permanent Role Swap. Unknown live Roles are never deduced merely from remaining inventory or defaulted from missing information. The Role may still be hidden from Players.
+_Avoid_: Revealed Role, assigned Role
+
+**Role Reveal**:
+A public physical event in which a Player shows the applicable Character Card and the Moderator records that the current Role is now public. If Core already knows the Role, the response acknowledges that the public event occurred; if it does not, the response supplies a complete valid mapping. Reveal changes public knowledge, not the current Role.
+_Avoid_: Role assignment, private identification
+
+**Publicly Revealed Role**:
+A current or historical Role identity that Players are entitled to know because a Role Reveal or another explicit rule made it public. Public projections use this state and never infer it merely because the Moderator knows the Role.
+_Avoid_: Known Role, assigned Role
 
 ### Game Actions
 
@@ -368,9 +428,13 @@ _Avoid_: Load game, restore
 
 - A **Game Session** has an ordered list of **Players** in **Seating Order** within the **Supported Player Count**
 - A **Game Session** starts from one **Role Composition**
-- Each **Player** has exactly one **Role** and zero or more **Status Effects**
+- Each **Player** has exactly one current **Role**, one current physical Character Card instance when the rules require one, and zero or more **Status Effects**; card ownership, current Role, Moderator knowledge, and public reveal are separate state
+- A live **Game Session** starts with unknown Player-specific current Roles and Physical Character Card Ownership and learns them only from observed physical facts or explicit Core-committed rules transitions; simulator runs alone may derive seeded synthetic assignments
+- Every Player has one actual **Faction Beneficiary** under the rules, while the live app's **Known Faction State** may remain unknown until an observation or Core-authored transition establishes it; unknown values never fall back to a guessed Beneficiary or Agent membership
 - A **Role Composition** contains one **Role** per **Player**, plus two extra undealt Character Cards when Thief is present; Actor does not change **Role Composition** size
 - **Actor Setup Cards** are selected through a separate setup flow and are not part of the **Role Composition**
+- Live **Actor Setup Cards** and the **Public Group Partition** are Moderator-created facts; simulator profile defaults never populate live setup
+- **Role Composition**, **Actor Setup Cards**, and **Public Group Partition** are lobby/configuration inputs outside the in-session **Moderator Instruction** and **Moderator Response** cycle
 - Actor is a hard-aligned Villager **Role**; **Actor Setup Cards** provide borrowed powers only and do not change the Actor's **Faction Beneficiary**
 - Actor counts toward hard-aligned Villager **Role** requirements for supported **Role Compositions**
 - **Actor Setup Cards** must be hard-aligned Villager **Roles** with borrowable individual **Role Powers** that are not already selected in the **Role Composition**; Simple Villager, Villager-Villager, Two Sisters, and Three Brothers are not eligible
@@ -379,37 +443,38 @@ _Avoid_: Load game, restore
 - New-Moon-dependent Roles and Event effects are outside the v1 simulator scope unless a **Simulation Scenario** explicitly includes New Moon support
 - Cache and simulation inputs use a **Simulation Scenario** when setup artifacts or profile assumptions matter beyond the **Role Composition**
 - The **Bundled Simulator Cache** is produced by **Build-Time Cache Generation**, not by trying to enumerate every possible scenario on the Moderator's device
-- **Bundled Simulator Cache** lookup identity is the **Canonical Simulation Scenario** plus the simulator profile/version; batch sizes are generation policy rather than cache identity
-- A **Local Fallback Cache Record** uses the same lookup and invalidation identity as the equivalent bundled terminal lobby evaluation and is reused across app restarts while it remains current
-- **On-Device Fallback Generation** is allowed only when no usable bundled or local terminal lobby evaluation exists for a **Simulator-Supported Simulation Scenario** and must follow the same classification pipeline before producing a usable lobby evaluation
-- **On-Device Fallback Generation** is skipped when the selected setup is rules-invalid, app-unsupported, simulator-unsupported, already has a usable terminal lobby evaluation, or changes before the fallback attempt finishes
+- **Bundled Simulator Cache** lookup identity is the **Canonical Simulation Scenario** plus the named **Simulator Capability** compatibility identity; batch sizes are generation policy rather than cache identity
+- A legacy `core-simulator@1` probability record may satisfy the current `safety-screening@<version>` gate only through the explicit bridge: the scenario must lie in the intersection of that legacy producer/profile and the current Safety-Screening capability, whose compatibility identity must declare the exact legacy semantics compatible. The bridge never covers a newly admitted safety-only Role or changed setup, Role, outcome, or headless-response semantics
+- A **Local Fallback Cache Record** carries the safety capability and terminal-record identity and is reused across app restarts only while both remain current
+- **On-Device Fallback Generation** is allowed only when no usable compatible terminal lobby evaluation exists for a **Safety-Screening-Supported Simulation Scenario** and must follow the safety capability's classification pipeline
+- **On-Device Fallback Generation** is skipped when the selected setup is rules-invalid, app-unsupported, safety-screening-unsupported, already has usable compatible terminal evidence, or changes before the fallback attempt finishes
 - A successful **On-Device Fallback Generation** classification has the same safety meaning as equivalent bundled evidence. Only terminal classifications materialize a compact terminal evaluation; a screening pass need not be persisted
-- **Lobby Exit** waits while a **Simulator-Supported Simulation Scenario** has no resolved safety determination. If fallback evaluation fails, the safety gate releases; safety-only production does not surface the dormant "could not evaluate" panel.
+- **Lobby Exit** waits while a **Safety-Screening-Supported Simulation Scenario** has no resolved safety determination. If fallback evaluation fails, the safety gate releases; safety-only production does not surface the dormant "could not evaluate" panel.
 - **Lobby Exit** does not offer a manual skip or dismiss action while fallback evaluation is running; it proceeds only after a safety classification passes, or after fallback fails or reaches its 10-second timeout
 - A failed **On-Device Fallback Generation** attempt is remembered only for the current unchanged lobby setup and current app session; it is not persisted like a **Local Fallback Cache Record**
 - Explicit fallback retry belongs to the dormant full-evaluation presentation. Safety-only production exposes no retry action after failure
-- App-supported but simulator-unsupported setups do not attempt **On-Device Fallback Generation** and do not block **Lobby Exit** only because evaluation is unavailable
+- App-supported but safety-screening-unsupported setups do not attempt **On-Device Fallback Generation** and do not block **Lobby Exit** only because evaluation is unavailable
 - The simulator runs from a **Simulation Start State**; pre-game cache generation derives that state from a **Simulation Scenario**, while mid-game projection can use the same simulation mechanism from a later fully defined Game Session state
 - **Degenerate Simulation Scenario** classification applies to the **Simulation Scenario**; each screening run derives its own seeded pre-game **Simulation Start State** from that scenario, including random assignment and profile/default setup choices
 - **Canonical Role Composition** omits zero-count Roles, uses exact enum identifiers rather than localized names, and sorts Role entries alphabetically by enum identifier
 - **Canonical Simulation Scenario** includes `players=N` separately from **Canonical Role Composition** because Thief can make Role card count differ from Player count
 - A **Public Group Partition** is not part of **Role Composition**; an even split is the baseline simulator profile default, and only non-default partitions need explicit **Simulation Scenario** material
 - Any **Role** present in the Moderator-selected **Role Composition** can contribute **Starting Factions** and **Possible Factions** even if a particular simulation run never assigns that Role
-- A **Cacheable Simulation Scenario** is limited by the active **Simulator Profile Role Set**, not the full **Rules Role Set**
+- A **Cacheable Simulation Scenario** is limited by the Role set and record policy of its named **Simulator Capability**, not the full **Rules Role Set**
 - A Role becomes **App-Supported** only when the app can actually guide the Moderator through it; Roles that exist only in the **Rules Role Set** are Rules-Valid but not App-Supported
 - **Supported Player Count** caps Players only, not total physical cards; Thief can make a **Role Composition** larger than the Player count, and **Actor Setup Cards** are additional physical cards outside the **Role Composition**
 - A **Rules-Valid Role Composition** must include at least one hard-aligned Villager **Role** and at least one hard-aligned Werewolf **Role**, but Simple Villager and Simple Werewolf are not mandatory by role name
 - Role-count constraints such as single-copy special Roles, exactly two Sisters, and exactly three Brothers are domain rules; Supported Player Count, currently implemented Roles, New Moon exclusion, and simulator profile support are app/product constraints
 - The **Minimum Viable Role Composition** is one hard-aligned Werewolf **Role** and four hard-aligned Villager **Roles**
 - A supported **Role Composition** must include at least one Villager hard-aligned **Role** and at least one Werewolf hard-aligned **Role**
-- Classification order is: **Rules-Valid Role Composition**, **App-Supported Role Composition**, **Simulator-Supported Simulation Scenario**, **Already-Decided Role Composition**, then **Degenerate Simulation Scenario**. Under ADR-0013 the production path stops there; dormant full evaluation may continue to probability simulation
+- Production classification order is: **Rules-Valid Role Composition**, **App-Supported Role Composition**, **Safety-Screening-Supported Simulation Scenario**, **Already-Decided Role Composition**, then **Degenerate Simulation Scenario**. A dormant full-probability request must additionally be **Full-Probability-Supported** before continuing to probability simulation
 - **Already-Decided Role Composition** classification runs every Faction victory trigger that can be evaluated from the Role Composition alone at **Lobby Exit**; possible Player assignments, setup branches, and Night 1 choices are not evidence for this classification
 - **Already-Decided Role Composition** classification does not derive or simulate a **Simulation Start State**
 - If multiple Faction victory triggers are true at **Lobby Exit** from Role Composition evidence alone, the **Already-Decided Role Composition** record uses **Shared Victory Outcome** semantics rather than a priority order
 - Lobby result lookup can use the **Canonical Simulation Scenario** for uniform cache access, but **Already-Decided Role Composition** classification still relies only on the **Canonical Role Composition**
-- Enumeration conceptually starts from **Rules Role Set** plus Player count to generate **Rules-Valid Role Compositions**, then filters to **App-Supported Role Compositions**, **Simulator-Supported Simulation Scenarios**, and **Cacheable Simulation Scenarios**
+- Enumeration conceptually starts from **Rules Role Set** plus Player count to generate **Rules-Valid Role Compositions**, then filters to **App-Supported Role Compositions**, the requested **Capability-Supported Simulation Scenarios**, and that capability's **Cacheable Simulation Scenarios**
 - Ambiguous **Roles** do not create **Starting Factions**; their choices or later state changes resolve into existing Factions or later outcomes
-- Ambiguous **Roles** default to Villager Faction beneficiaries unless their Role definition explicitly says otherwise
+- At the rules level, ambiguous **Roles** use a Villager **Faction Beneficiary** unless their Role definition explicitly says otherwise; this rule does not let the live app assign a Beneficiary to a Player whose current Role is still unknown
 - Loner **Roles** do not share a Loner **Faction**; each Loner **Role** defines its own Faction lifecycle
 - **Cross-Faction Lovers** are a **Latent Faction**; same-Faction **Lovers** remain only a **Status Effect**
 - A Player changing which Faction they benefit from does not create a new **Faction**
@@ -506,10 +571,10 @@ _Avoid_: Load game, restore
 - "Mid-game projection vs pre-game simulation" — resolved: the simulator runs from a **Simulation Start State**. Pre-game cache generation derives that state from a **Simulation Scenario**; mid-game projection uses the same simulation mechanism from a later fully defined Game Session state.
 - "Scenario classification vs start states" — resolved: degenerate screening classifies a **Simulation Scenario**, while each completed screening run starts from its own seeded **Simulation Start State** derived from that scenario.
 - "Actor as Ambiguous Role" — resolved: Actor is a hard-aligned Villager **Role**, counts toward hard-aligned Villager Role Composition requirements, and **Actor Setup Cards** provide powers only without affecting Faction lifecycle.
-- "Valid Role Composition" — resolved: split into **Rules-Valid Role Composition**, **App-Supported Role Composition**, **Simulator-Supported Simulation Scenario**, and **Cacheable Simulation Scenario** instead of overloading "valid."
+- "Valid Role Composition" — resolved: split into **Rules-Valid Role Composition**, **App-Supported Role Composition**, named **Capability-Supported Simulation Scenario**, and **Cacheable Simulation Scenario** instead of overloading "valid."
 - "Mandatory Simple Werewolf/Simple Villager" — resolved: the domain requires hard-aligned Werewolf and Villager coverage, not Simple Werewolf or Simple Villager by role name.
 - "Already-decided/degenerated on unsupported inputs" — resolved: already-decided and degenerate classification only apply after rules, app, and simulator support checks pass.
-- "Supported roles" — resolved: use **Rules Role Set**, **Implemented Role Set**, **Simulator Profile Role Set**, or **Selectable Role Set** depending on the boundary being discussed.
+- "Supported roles" — resolved: use **Rules Role Set**, **Implemented Role Set**, **Safety-Screening Role Set**, **Full-Probability Role Set**, or **Selectable Role Set** depending on the boundary being discussed.
 - "Town Crier as Role" — resolved: Town Crier is a **New Moon Assignment** like Sheriff, not part of the **Role Composition**.
 - "Player cap vs card count" — resolved: **Supported Player Count** caps Players only; Thief extras and Actor Setup Cards can increase physical card count without increasing Player count.
 - "Zero-frequency results" — resolved: cache-facing probability output includes the Simulation Scenario's **Possible Game Results** as rows, including zero-frequency single-Faction rows for every **Possible Faction**, zero-frequency **No-Winner Outcome**, and zero-frequency scenario-specific **Shared Victory Outcome** combinations.
@@ -542,7 +607,7 @@ _Avoid_: Load game, restore
 - "Degenerate threshold" — resolved: do not use a percentage threshold; block legal supported **Simulation Scenarios** when a 1,000-run baseline screening simulation completes every run and only observes Turn 1 endings.
 - "Could not evaluate" vs blocked — resolved: incomplete screening is an error state and does not block **Lobby Exit** as already-decided or degenerate.
 - "Could not evaluate as outcome" — resolved: "could not evaluate" is a product evaluation state, not a **Game Session Outcome** or probability bucket.
-- "Current runtime limits" — resolved: the full Faction model remains the domain contract, but the active **Simulator Profile Role Set** controls which scenarios can be evaluated now; unsupported or unevaluable scenarios are not mislabeled as already-decided or degenerate.
+- "Current runtime limits" — resolved: the full Faction model remains the domain contract, but each named **Simulator Capability** controls which scenarios it can evaluate; unsupported or unevaluable scenarios are not mislabeled as already-decided or degenerate.
 - "Cache miss vs Lobby Exit" — resolved: no usable or current terminal lobby evaluation blocks **Lobby Exit** while evaluation is pending; a failed evaluation releases the gate, and safety-only production does not surface the dormant "could not evaluate" panel.
 - "Local fallback reuse" — resolved: a successful terminal fallback classification materializes a compact **Local Fallback Cache Record** that can be reused across app restarts while its cache identity remains current; a screening pass need not be persisted.
 - "Cache/fallback UX distinction" — resolved: Moderator-facing lobby evaluation status does not distinguish bundled lookup from fallback generation; cache hits simply complete the same evaluation flow faster.
@@ -553,5 +618,5 @@ _Avoid_: Load game, restore
 - "Manual fallback skip" — resolved: the Moderator cannot dismiss or skip an in-progress fallback evaluation; proceeding without an evaluation requires fallback failure or timeout.
 - "Fallback failure memory" — resolved: failed fallback state is session-only for the current unchanged setup, is not persisted across app restarts, and prevents automatic retry loops.
 - "Fallback retry" — resolved: explicit retry remains part of dormant full-evaluation presentation; safety-only production exposes no retry action after failure.
-- "Simulator-unsupported setup" — resolved: app-supported setups outside the active **Simulator Profile Role Set** do not show an evaluation panel and do not block **Lobby Exit** solely because simulation is unavailable.
+- "Simulator-unsupported setup" — resolved: app-supported setups outside the **Safety-Screening Role Set** do not show an evaluation panel and do not block **Lobby Exit** solely because simulation is unavailable.
 - "Seed" — resolved: store **Run Seed Material** as a canonical string for replay evidence; hash it into a numeric seed only when constructing a random generator.

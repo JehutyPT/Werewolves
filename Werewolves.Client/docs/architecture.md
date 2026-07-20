@@ -58,7 +58,7 @@
 ## 4. Navigation & Layout
 
 ### 4.1. Pages
-*   **Lobby:** Game setup. Two-step wizard — roster definition first, then role selection. Seamless back-navigation preserves role selections when returning to roster. Navigates to Dashboard once `GameSessionConfig` is fulfilled and the game is created.
+*   **Lobby:** Game setup. Roster definition and Role Composition selection remain the first two steps. Conditional configuration then appears only when required: Actor Setup Cards when Actor is in Role Composition, and the public two-group partition when Prejudiced Manipulator is in Role Composition. These are lobby inputs, not Core Moderator Instructions; the client records the Moderator-created physical setup and never generates cards or balances groups. Back-navigation preserves every completed input. Navigation reaches Dashboard only after the applicable configuration is valid and `GameSessionConfig` is fulfilled.
 *   **Dashboard:** Gameplay. Three tabs — Roster, Action, Stats.
 
 ### 4.2. Tab Bar
@@ -110,7 +110,7 @@
 
 ### 7.1. Roster Tab
 *   Player list showing role, health (alive/dead), and status effects.
-*   All information visible — no hidden roles. The moderator assigned the cards and learns roles during play; the app surfaces everything it knows.
+*   This is a Moderator-only surface: it may show legitimately learned private state, but it does not imply that Players publicly know those Roles. PRD #93/#113 separates unknown, Moderator-known, and publicly revealed Role state; public roster/history projections use only public knowledge.
 
 ### 7.2. Action Tab
 *   Renders the current `ModeratorInstruction` via the two-part flow.
@@ -140,7 +140,7 @@
 *   The production client retains two pre-game safety gates: deterministic Already-Decided Role Composition detection and 1,000-run Degenerate Simulation Scenario screening.
 *   Either safety classification blocks lobby exit and explains the actionable setup problem to the Moderator.
 *   Under ADR-0013, production stops after the 1,000-run degenerate-screening gate. It neither requests the 10,000-run probability batch nor presents Game Result Frequency or Ended-By-Turn Frequency.
-*   The full probability path and cached probability payloads remain dormant for possible future work; they are not deleted or interpreted as current balance guidance. A compatible cached probability record may still establish that safety screening already passed.
+*   The full probability path and cached probability payloads remain dormant for possible future work; they are not deleted or interpreted as current balance guidance. Under ADR-0016, a legacy `core-simulator@1` probability record may establish safety only through the explicit bridge when the scenario lies in the intersection of that legacy producer/profile and the current `safety-screening@<version>` capability; new safety-only Roles and changed semantics cannot use it.
 
 ## 9. Lifecycle
 

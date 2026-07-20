@@ -14,12 +14,12 @@ In the current ruleset, each Player has exactly one Faction Beneficiary at a tim
 ## Setup
 
 1.  Select a non-playing Moderator.
-2.  Players draw their Character Card face-down (e.g., from a shuffled deck or bag). The Moderator does *not* initially know Player Roles unless revealed by game actions.
+2.  Build the complete physical deck from the selected Role Composition, including both extra Character Cards required when Thief is selected. Shuffle it, then let Players perform the Physical Deal by drawing one Character Card face-down each. Any Thief extras are therefore part of the random deal and exactly two physical cards remain undealt. The Moderator and app do *not* initially know Player Roles unless a later physical action identifies or reveals them; the app never performs or deduces the live deal.
 3.  Players secretly look at their Character Card.
-4.  (If applicable) Perform specific physical Role setup steps (e.g., dealing extra Character Cards for Thief setup, dividing groups for Prejudiced Manipulator).
-5.  The Moderator informs the helper app which Roles are included in the Role Composition.
+4.  (If applicable) Perform specific physical Role setup steps that occur outside the deal, such as selecting Actor Setup Cards and creating the Prejudiced Manipulator Public Group Partition. The two Thief cards are already the chance-determined physical remainder of the Players' deal; they are observed only if the Thief flow occurs.
+5.  The Moderator informs the helper app which Roles are included in the Role Composition and records any public setup artifacts. The app validates these facts but does not generate the deal, Actor Setup Cards, or Public Group Partition.
 6.  The Moderator starts the Game Session in the helper app, providing Player names.
-7.  (If applicable) The app may prompt the Moderator for initial known information (e.g., Sheriff election, initial Role reveals like Thief/Cupid during Night 1).
+7.  (If applicable) The app may prompt the Moderator for initial known information, such as Sheriff election or private Role Identification for Thief and Cupid during Night 1.
 8.  (If using New Moon Events) Shuffle the physical New Moon Event deck and place it face down.
 
 ## Game Flow
@@ -32,7 +32,7 @@ Win conditions are evaluated during Victory Check Windows: after Night eliminati
 
 1.  **Village Sleeps:** Moderator instructs all Players to close their eyes.
 2.  **Role Actions:** Moderator calls Roles/groups one by one in the specified order (see Turn Order Summary), guided by the helper app.
-3.  **Role Identification:** For Roles called on Night 1 (Thief, Cupid, Seer, etc.), the app will prompt the Moderator to identify which Player performed the action, thereby recording that Player's Role in the app.
+3.  **Role Identification:** For Roles called on Night 1 (Thief, Cupid, Seer, etc.), the app prompts the Moderator to record which Player physically answered the call. This private observation records the Role in the app; it does not assign a card or publicly reveal the Role.
 4.  Called Players open their eyes, silently perform their action (often pointing), and close their eyes again. The Moderator inputs the results of actions (targets, choices) into the helper app when prompted.
 5.  Special effects from active New Moon Events might modify this phase, and the app will reflect these modifications in its prompts.
 
@@ -40,17 +40,16 @@ Win conditions are evaluated during Victory Check Windows: after Night eliminati
 
 1.  **Village Wakes:** Moderator instructs all Players to open their eyes (guided by the app).
 2.  **(If using New Moon Events, after Day 1)** Draw the top physical New Moon Event card. The Player most recently eliminated (or another designated Player) reads it aloud. The Moderator inputs the drawn New Moon Event into the app, which then applies its effects and adjusts subsequent prompts.
-3.  **Victims Revealed:** Based on recorded Night Actions, the app informs the Moderator which Player(s) were eliminated. The Moderator announces this to the Players.
-4.  **Role Reveal on Elimination:** When a Player is eliminated (night or day), they reveal their physical Character Card. The Moderator inputs the revealed Role into the helper app, updating the app's knowledge of the Game Session state.
-5.  Special Role effects triggered by victim reveal occur now (e.g., Bear Tamer). The app may prompt for related actions or information. New Moon Event effects might alter this step (e.g., Burial prevents Role reveal, Miracle saves victim).
+3.  **Pending Victims Announced:** Based on recorded Night Actions, the app tells the Moderator which Player or Players are pending physical Elimination. The Moderator announces them, but Core has not yet committed those Eliminations.
+4.  **Role Reveal before Elimination:** Each pending victim publicly shows the applicable physical Character Card unless an explicit pre-reveal rule intercepts first. If the current Role is already Moderator-known, the Moderator acknowledges the physical reveal; otherwise the Moderator records a complete valid mapping for every requested Player. Either path commits public knowledge without changing current Role.
+5.  Core now commits each actual Elimination or rule-defined replacement and drains all required reveal, heartbreak, Hunter, and other reactions in the same Elimination Cascade before phase navigation. New Moon Event effects may explicitly replace the normal reveal or Elimination boundary.
 6.  **Debate:** Players discuss suspicions. The app tracks the phase but doesn't directly participate. New Moon Event effects might alter this step, and the app may remind the Moderator of active rules (e.g., Eclipse, Good Manners, Not Me - Nor Wolf).
 7.  **Vote:**
     *   Moderator calls for a vote (guided by the app). New Moon Event effects might replace or modify the standard vote; the app will prompt for the appropriate input format (standard votes, accusations, friend votes, etc.).
-    *   Standard Vote: All living Players simultaneously point at one Player they wish to eliminate. Moderator inputs the vote counts into the app.
-    *   The app calculates the result (considering Sheriff's double vote, ties).
+    *   Standard Vote: All eligible living Players vote using the physical procedure in force. The Moderator resolves that physical Vote, including any voting-power modifiers, then records only the final living target or an empty selection for a tie.
+    *   The app validates and records the Moderator-authoritative final result. It does not collect individual ballots or calculate vote counts in this program.
     *   Ties may trigger specific Roles (Scapegoat - app prompts for Scapegoat's decision) or result in no elimination.
-    *   The app indicates the eliminated Player. The Player reveals their Character Card (unless Executioner is active). Moderator inputs the revealed Role into the app.
-    *   Special Role effects triggered by elimination occur now (e.g., Hunter's shot - app prompts for target; passing Sheriff Status Effect - app prompts for successor).
+    *   The app fixes the Vote target. Any pre-reveal interception runs first; otherwise the target completes generic public reveal. Core then commits or cancels the Elimination under the applicable Role rule and drains the complete Elimination Cascade (for example heartbreak, Hunter's shot, or passing Sheriff) before another Vote or Victory Check Window.
     *   Resolve the Vote's result and its complete Elimination Cascade before continuing.
     *   If a valid Stuttering Judge signal requires a Consecutive Vote, hold it immediately after the first Vote's Elimination Cascade, regardless of the first Vote's outcome. Do not hold another Debate or resolve a Victory Check Window between the Votes. The Consecutive Vote uses the living Players and voting rights then in force.
 8.  **Resolve Victory Check Window:** Based on the known Roles and Player Status Effects, the app checks whether a win condition has been met and informs the Moderator. If not, proceed to the next Night Phase (app prompts accordingly).
@@ -81,7 +80,7 @@ Win conditions are evaluated during Victory Check Windows: after Night eliminati
     *   Can use one or both potions in the same night after being informed of the Werewolf Faction Agents' victim.
 *   **Hunter:** Whenever actually Eliminated, regardless of the Elimination reason, the Hunter's available Role Power triggers exactly once and must eliminate another living Player with one final shot. A prevented or cancelled Elimination does not trigger the shot; active Role Power Suppression prevents a later Hunter trigger.
 *   **Little Girl:** Can discreetly try to spy (peek) during the Werewolf Faction Agents' turn at night. Cannot be targeted by the Defender.
-*   **Defender:** Each night, chooses one Player to protect from the Werewolf Faction Agents' attack for that night only. Cannot protect the same Player two nights in a row. Can protect self. Protection does not work against Witch's poison, Hunter's shot, Piper's charm, or Wolf-Father's infection.
+*   **Defender:** Each night when the Role Power is available, chooses one Player to protect from the Werewolf Faction Agents' physical attacks for that night only. Cannot protect the same Player on two consecutive Nights that both contain Defender protection, and can protect self. Any Night without Defender protection breaks that sequence, so the previously protected Player is eligible at the next active call. Protection does not work against Witch's poison, Hunter's shot, Piper's charm, or Wolf-Father's infection.
 *   **Elder:** Survives the first Werewolf Faction Agent attack against them (Moderator doesn't reveal Character Card). Is eliminated by the second Werewolf Faction Agent attack, or the first time by village vote, Hunter's shot, or Witch's poison. If the Elder is eliminated by the village vote, Role Power Suppression begins after that Vote's complete Elimination Cascade and before any Consecutive Vote. It prevents every chosen, automatic, reactive, passive, or communication-based Role Power of all current and future Villager Roles, including Actor, from beginning or triggering, regardless of those Players' Faction Beneficiaries. It does not remove Role identity or undo effects already learned, committed, or resolved. Not affected by Wolf-Father infection on the first attempt.
 *   **Scapegoat:** If a Vote results in a tie, the Scapegoat is eliminated instead of the tied Players. If eliminated, the Scapegoat chooses which Player(s) may or may not vote the following Day; that restriction does not affect a Consecutive Vote during the current Day.
 *   **Village Idiot:** The first time the village votes to eliminate the Idiot, they reveal their Character Card and are proven innocent. That Vote's Elimination is cancelled, they remain in the Game Session, and they immediately lose their voting right. A required Consecutive Vote still occurs: the Village Idiot cannot vote but remains a legal target, and a later Vote eliminates them normally because the pardon has been spent. Still vulnerable to Night Eliminations.
@@ -175,7 +174,7 @@ Win conditions are evaluated during Victory Check Windows: after Night eliminati
 12. Defender
 13. All Werewolf Faction Agents (including Wolf Hound if chosen Werewolf, White Werewolf, Accursed Wolf-Father, Big Bad Wolf) - wake and choose victim; the Little Girl may spy only during this collective wake interval; the White Werewolf has no solo action on Night 1
 14. Accursed Wolf-Father (infection option)
-15. Big Bad Wolf (second victim option)
+15. Big Bad Wolf (mandatory second victim when the power is available and a legal target exists)
 16. Seer
 17. Witch (shown victim, uses potions)
 18. Gypsy (can choose medium)
@@ -190,7 +189,7 @@ Win conditions are evaluated during Victory Check Windows: after Night eliminati
 4.  All Werewolf Faction Agents (including Wolf Hound if Werewolf, Wild Child if turned, infected Player, White Werewolf, Accursed Wolf-Father, Big Bad Wolf, *or* temporary Werewolf Faction Agents from Full Moon Rising) - wake and choose victim; the Little Girl may spy only during this collective wake interval (potential modification by Backfire, Specter)
 5.  Accursed Wolf-Father (infection option, if unused)
 6.  White Werewolf (Nights 2, 4, 6, and every later even-numbered Night - attacks another living Werewolf Faction Agent)
-7.  Big Bad Wolf (second victim option, if condition met)
+7.  Big Bad Wolf (mandatory second victim when the power condition and a legal target are present)
 8.  Seer
 9.  Witch (shown victim, uses potions if available)
 10. Gypsy (can choose Medium)
@@ -211,4 +210,4 @@ Win conditions are evaluated during Victory Check Windows: after Night eliminati
 10. If a rule requires a Consecutive Vote (a valid Stuttering Judge signal or an applicable New Moon Event), resolve it and its complete Elimination Cascade without another Debate or an intervening Victory Check Window.
 11. Resolve the pre-Night Victory Check Window. On Day 1, only Elimination by the first Vote qualifies the Angel; Elimination by a Consecutive Vote does not.
 
-The app will guide the Moderator through this call order, prompting for Player identification for Roles revealed during Night 1.
+The app will guide the Moderator through this call order, prompting for private Role Identification for Roles called during Night 1.

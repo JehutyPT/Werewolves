@@ -4,6 +4,8 @@ The domain model separates who benefits from a win condition from who acts for, 
 
 Each Player has exactly one Faction Beneficiary at a time in the current ruleset. A Player can also be a Faction Agent for a different Faction. This is required for Roles and effects such as White Werewolf, Double Agent, Seer detection, Werewolf targeting, and infection. The legacy `Team` concept remains a codebase artifact, but it is not sufficient as the full win-condition model.
 
+That rules-level truth is separate from what a live app has learned. Persisted live Faction state represents each Beneficiary and Agent fact as known or unknown. Role Identification, Faction Agent Group Observation, and explicit Core-authored transitions establish only the facts they actually prove. A query that requires an unknown fact returns unresolved and cannot use a guessed default or inventory deduction. Issue #147 owns the exact private acquisition-flow decision needed before early Fox, Cupid, or Victory Check Window queries may continue; once settled, #120 owns the shared runtime exchange and its validation, commitment, recovery, privacy, and headless behavior. Simulation Start State may hold the complete seeded truth for headless execution without exposing it to ordinary choices.
+
 This model keeps Game Results mutually exclusive while still allowing operational mechanics to use the rulebook's practical language, such as checking or targeting "Werewolves." Generic Werewolf operational checks use Werewolf Faction Agent unless a rule explicitly refers to Role or Character Card.
 
 ## Considered options
