@@ -2,7 +2,7 @@
 
 This document states what the app tells the Moderator, what the Moderator records, what stays private, and what the headless simulator must be able to answer for every Role in PRD #93. It is a normative domain constraint and shared vocabulary, not a competing implementation spec. Each Role's canonical GitHub issue-body Implementation Contract remains the implementation authority and must copy its owned flow from here.
 
-A flow is settled unless it is marked **Open in #147**. An implementation ticket affected by an open item remains blocked until issue #147's canonical acceptance checklist records one answer and that answer is copied here and into the affected contract.
+A flow is settled unless it is marked **Open in #147**. Issue #147 is the Wayfinder map and its decision-child tickets are the decision inventory. An implementation ticket affected by an open item remains blocked by the specific child that owns it until that child's resolution comment records one answer, the answer is copied here and into the affected contract, and #147's **Decisions so far** links the ruling.
 
 ## Shared contract
 
@@ -237,7 +237,7 @@ The app asks the Moderator to record the final physical Vote result. The Moderat
 
 ## Open decision register
 
-Issue [#147](https://github.com/bicheichane/Werewolves/issues/147) owns the unresolved choices marked above. Its canonical issue-body acceptance checklist is the decision inventory; affected implementation tickets carry a native blocker and repeat their exact open questions. The register includes:
+Issue [#147](https://github.com/bicheichane/Werewolves/issues/147) is the Wayfinder map for the unresolved choices marked above. Its decision-child tickets are the decision inventory, and its **Decisions so far** section indexes each closed ruling. Affected implementation tickets carry native blockers against their specific decision children and repeat the exact open questions they consume. The register includes:
 
 - Villager-Villager proof timing and publicity.
 - Witch step granularity and remaining target rules.
@@ -255,4 +255,4 @@ Issue [#147](https://github.com/bicheichane/Werewolves/issues/147) owns the unre
 - The zero-Agent/empty Faction Agent Group Observation path and its wake, victim, sleep, recovery, and headless behavior.
 - Correction of an incorrectly recorded setup fact, Role Identification, Faction Agent Group Observation, or Role Reveal.
 
-Until #147 records one answer for an item, no affected ticket may replace the open marker with an implementation choice.
+Until the owning decision child records one answer, that answer is copied into this document and every affected implementation contract, and #147 indexes the ruling, no affected ticket may replace the open marker with an implementation choice.
