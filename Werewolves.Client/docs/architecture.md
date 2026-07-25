@@ -83,8 +83,7 @@
 *   Haptic is limited to taps that progress the game — not on general UI interactions (dropdowns, tab switches).
 
 ### 5.3. Submission Behavior
-*   **Game input** (`SelectPlayersInstruction`, `SelectOptionsInstruction`, `AssignRolesInstruction`): Press-and-hold to submit (~0.5-1s). Prevents accidental commitment of game-altering decisions.
-*   **Simple confirmations** (`ConfirmationInstruction`): Standard tap. These are acknowledgments, not decisions.
+*   Irreversible submissions use the press-and-hold control (~0.5-1s).
 
 ### 5.4. Timer
 *   Count-up stopwatch. Resets on new instruction. Runs independently of tab focus (panels stay alive).
@@ -105,7 +104,7 @@
 *   Typically one player at a time — a simple role picker from `RolesForAssignment` (unassigned roles).
 
 ### 6.4. ConfirmationView
-*   Single "Proceed" button. Standard tap.
+*   Single "Proceed" control. Its submission behavior follows Section 5.3.
 
 ## 7. Dashboard Tabs
 

@@ -19,3 +19,7 @@ The client may attempt to write a save file after each successful `ProcessInput(
 ## Amendment: ADR-0017
 
 ADR-0017 adds one narrow target exception for a successful Thief `Offer1`, `Offer2`, or `Decline` response. Before Core returns success, that response must atomically create a stable checkpoint containing the committed outcome, resulting card zones, current Role and fresh power state, and the pending public sleep instruction. This does not make arbitrary listener progress durable: it promotes only the complete Thief outcome and its next semantic instruction so recovery cannot repeat an already performed physical exchange or reopen a committed decline. The current implementation remains on Main-Phase-only boundaries until the Thief contract lands.
+
+## Amendment: accepted observation recovery boundaries
+
+Once accepted, Role Identification, Faction Agent Group Observation, or Role Reveal becomes durable together with the Moderator instruction that follows it. Rehydration resumes at that instruction without asking for or applying the accepted observation again. This preserves the complete observation boundary without making partial work in progress durable.

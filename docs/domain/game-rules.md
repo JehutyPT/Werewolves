@@ -13,46 +13,42 @@ In the current ruleset, each Player has exactly one Faction Beneficiary at a tim
 
 ## Setup
 
-1.  Select a non-playing Moderator and provide the helper app with the Player names.
-2.  Select the Role Composition and confirm it at Role Lock-In. Without Thief, the Role Composition contains exactly one physical Character Card per Player. With Thief, it contains exactly two additional cards: a Player-count Deal Pool with exactly one Thief card, plus two distinct non-Thief Thief Offer Card instances chosen by the Moderator. The offers may print the same Role, but remain separate physical cards.
-3.  (If applicable) Complete every conditional pre-game setup required by a Role in either the Deal Pool or the Thief Offer Cards. For example, Actor requires Actor Setup Cards and Prejudiced Manipulator requires a Public Group Partition even when that Role appears only as a Thief offer.
-4.  Before Lobby Exit, the app validates the locked setup and applies the required safety screen. A Thief-enabled screen uses the committed Deal Pool and offers and checks every different legal Night 1 choice or decline branch.
-5.  (If using New Moon Events) Shuffle the physical New Moon Event deck and place it face down.
-6.  After Lobby Exit, shuffle only the Deal Pool. Players perform the Physical Deal by drawing one Character Card face-down each. The Moderator and app do *not* initially know which Player received each Role; the app never performs or deduces the live deal.
-7.  Players secretly look at their Character Card.
-8.  (If applicable) Record other initial public setup facts, such as the Sheriff election. Private Role Identification and Role choices are recorded only when their physical flow occurs.
+1.  Select a non-playing Moderator and seat the Players.
+2.  Commit the Role Composition. Without Thief, it contains one Character Card per Player. With Thief, it contains a Player-count Deal Pool with exactly one Thief card plus two non-Thief Thief Offer Card instances; the offers may show the same eligible Role. Two Sisters and Three Brothers cannot be offers: Sisters are absent or appear as exactly two cards wholly in the Deal Pool, and Brothers are absent or appear as exactly three cards wholly in the Deal Pool.
+3.  Complete every conditional setup required by a Role in either the Deal Pool or the Thief Offer Cards. Actor requires three face-down Actor Setup Cards, and Prejudiced Manipulator requires a Public Group Partition, even when the Role is only a Thief offer.
+4.  If using New Moon Events, shuffle the physical Event deck and place it face down.
+5.  Shuffle only the Deal Pool and deal one face-down Character Card to each Player.
+6.  Players secretly look at their Character Card.
+7.  Complete any other initial public setup, such as electing the Sheriff.
 
 ## Game Flow
 
-The Game Session alternates between Night Phase and Day Phase. The helper app guides the Moderator through the phases and prompts for input when information needs to be recorded.
+The Game Session alternates between Night Phase and Day Phase.
 
-Win conditions are evaluated during Victory Check Windows: after Night eliminations and related cascades are resolved at Dawn, and after Day vote resolution and related cascades are resolved before the village is sent to sleep. The pre-Night Victory Check Window is not a separate phase.
+Win conditions are evaluated during Victory Check Windows: after Night Eliminations and related cascades resolve at Dawn, and after Day Vote resolution and related cascades resolve before the village returns to sleep. The pre-Night Victory Check Window is not a separate phase.
 
 ### Night Phase
 
 1.  **Village Sleeps:** Moderator instructs all Players to close their eyes.
-2.  **Role Actions:** Moderator calls Roles/groups one by one in the specified order (see Turn Order Summary), guided by the helper app.
-3.  **Role Identification:** For Roles called on Night 1 (Thief, Cupid, Seer, etc.), the app prompts the Moderator to record which Player physically answered the call. This private observation records the Role in the app; it does not assign a card or publicly reveal the Role.
-4.  Called Players open their eyes, silently perform their action (often pointing), and close their eyes again. The Moderator inputs the results of actions (targets, choices) into the helper app when prompted.
-5.  Special effects from active New Moon Events might modify this phase, and the app will reflect these modifications in its prompts.
+2.  **Role Actions:** Moderator calls Roles and groups one by one in the specified order (see Turn Order Summary).
+3.  Active New Moon Events may modify the Night Phase.
 
 ### Day Phase
 
-1.  **Village Wakes:** Moderator instructs all Players to open their eyes (guided by the app).
-2.  **(If using New Moon Events, after Day 1)** Draw the top physical New Moon Event card. The Player most recently eliminated (or another designated Player) reads it aloud. The Moderator inputs the drawn New Moon Event into the app, which then applies its effects and adjusts subsequent prompts.
-3.  **Pending Victims Announced:** Based on recorded Night Actions, the app tells the Moderator which Player or Players are pending physical Elimination. The Moderator announces them, but Core has not yet committed those Eliminations.
-4.  **Role Reveal before Elimination:** Each pending victim publicly shows the applicable physical Character Card unless an explicit pre-reveal rule intercepts first. If the current Role is already Moderator-known, the Moderator acknowledges the physical reveal; otherwise the Moderator records a complete valid mapping for every requested Player. Either path commits public knowledge without changing current Role.
-5.  Core now commits each actual Elimination or rule-defined replacement and drains all required reveal, heartbreak, Hunter, and other reactions in the same Elimination Cascade before phase navigation. New Moon Event effects may explicitly replace the normal reveal or Elimination boundary.
-6.  **Debate:** Players discuss suspicions. The app tracks the phase but doesn't directly participate. New Moon Event effects might alter this step, and the app may remind the Moderator of active rules (e.g., Eclipse, Good Manners, Not Me - Nor Wolf).
+1.  **Village Wakes:** Moderator instructs all Players to open their eyes.
+2.  **If using New Moon Events, after Day 1:** Draw the top physical New Moon Event card. The designated Player reads it aloud and its effects apply.
+3.  **Victims Announced:** The Moderator announces the Night's victims.
+4.  **Role Reveal before Elimination:** Each victim publicly shows the applicable Character Card unless an explicit pre-reveal rule intercepts first.
+5.  Resolve each actual Elimination or replacement and every resulting heartbreak, Hunter shot, or other reaction as one Elimination Cascade.
+6.  **Debate:** Players discuss suspicions, subject to any active New Moon Event.
 7.  **Vote:**
-    *   Moderator calls for a vote (guided by the app). New Moon Event effects might replace or modify the standard vote; the app will prompt for the appropriate input format (standard votes, accusations, friend votes, etc.).
-    *   Standard Vote: All eligible living Players vote using the physical procedure in force. The Moderator resolves that physical Vote, including any voting-power modifiers, then records only the final living target or an empty selection for a tie.
-    *   The app validates and records the Moderator-authoritative final result. It does not collect individual ballots or calculate vote counts in this program.
-    *   Ties may trigger specific Roles (Scapegoat - app prompts for Scapegoat's decision) or result in no elimination.
-    *   The app fixes the Vote target. Any pre-reveal interception runs first; otherwise the target completes generic public reveal. Core then commits or cancels the Elimination under the applicable Role rule and drains the complete Elimination Cascade (for example heartbreak, Hunter's shot, or passing Sheriff) before another Vote or Victory Check Window.
+    *   The Moderator calls for a Vote. New Moon Events may replace or modify the standard procedure.
+    *   All eligible living Players vote using the physical procedure in force, including any voting-power modifiers.
+    *   A tie may trigger Scapegoat or result in no Elimination.
+    *   A non-tied standard or Consecutive Vote fixes one living Vote Target before target-dependent resolution. Run any explicit pre-reveal intervention at that boundary; a tie fixes no Vote Target.
     *   Resolve the Vote's result and its complete Elimination Cascade before continuing.
     *   If a valid Stuttering Judge signal requires a Consecutive Vote, hold it immediately after the first Vote's Elimination Cascade, regardless of the first Vote's outcome. Do not hold another Debate or resolve a Victory Check Window between the Votes. The Consecutive Vote uses the living Players and voting rights then in force.
-8.  **Resolve Victory Check Window:** Based on the known Roles and Player Status Effects, the app checks whether a win condition has been met and informs the Moderator. If not, proceed to the next Night Phase (app prompts accordingly).
+8.  **Resolve Victory Check Window:** If no win condition is met, proceed to the next Night Phase.
 
 ## Character Roles
 
@@ -64,42 +60,42 @@ Win conditions are evaluated during Victory Check Windows: after Night eliminati
 
 *   **Simple Werewolf:** Each night, wakes with other Werewolf Faction Agents to collectively choose one victim to eliminate. Cannot choose a Werewolf Faction Agent.
 *   **Big Bad Wolf:** Each night, wakes and eliminates with other Werewolf Faction Agents. Additionally, wakes again alone and eliminates a second non-Werewolf Faction Agent victim, *unless* any non-temporary Werewolf Faction Agent has already been eliminated. Temporary Werewolf Faction Agents from Full Moon Rising do not count for this condition.
-*   **Accursed Wolf-Father:** Each night, wakes and eliminates with other Werewolf Faction Agents. Once per game, instead of eliminating the chosen victim, may choose to infect them. The infected Player gains the Infected Status Effect, secretly becomes a Werewolf Faction Agent, keeps their Faction Beneficiary, keeps any previous night abilities, and wakes with the Werewolf Faction Agents on subsequent nights.
+*   **Accursed Wolf-Father:** Each night, wakes and eliminates with other Werewolf Faction Agents. Once per game, instead of eliminating the chosen victim, may choose to infect them. The infected Player gains the Infected Status Effect, keeps their Role and Role Powers, secretly becomes a Werewolf Faction Beneficiary unless an explicit beneficiary-precedence rule applies, becomes a Werewolf Faction Agent, and wakes with the Werewolf Faction Agents on subsequent nights.
 
 ### The Villagers
 
 *Goal: Eliminate all non-Villager Faction Beneficiaries.*
 
 *   **Simple Villager:** No special abilities. Relies on deduction and persuasion.
-*   **Villager-Villager:** A Simple Villager Character Card with identical art on both sides, proving the Player's Role if revealed (e.g., by the Seer).
+*   **Villager-Villager:** A Simple Villager Character Card with identical art on both sides. Its owner is public as soon as the cards are dealt; there is no later proof action.
 *   **Seer:** Each night, chooses one Player and is given thumbs up or down if they are currently a Werewolf Faction Agent, meaning they act with, wake with, or are perceived with the Werewolves for operational mechanics. This includes the White Werewolf, any Ambiguous Roles currently acting with the Werewolves, and infected Villagers. It does not include a Double Agent, who is a Werewolf Faction Beneficiary but not a Werewolf Faction Agent. Must be discreet. (Effect modified by Somnambulism and Full Moon Rising events).
-*   **Cupid:** On the first night only, chooses two Players (can be self) to be the Lovers. If one Lover is Eliminated, the other is immediately Eliminated by heartbreak. Lovers cannot vote against each other. **Special Goal:** If the Lovers have different Faction Beneficiaries when linked, both immediately become Cross-Faction Lovers and win only by being the last two Players alive. Same-Faction Lovers remain only a Status Effect. Cross-Faction Lovers keep their Faction Beneficiary even if later effects change their Role, Faction Agent status, or private information. If both Lovers are Eliminated and only one is revived by Miracle, the revived Player is no longer a Cross-Faction Lover.
+*   **Cupid:** On the first night only, chooses two Players (including Cupid if desired) to become Lovers. Lovers with different Faction Beneficiaries become Cross-Faction Lovers and win only by being the last two Players alive; same-Faction Lovers remain a Status Effect. Cross-Faction Lovers keep their Faction Beneficiary if later effects change their Role or Faction Agent status. If both are Eliminated and only one is revived by Miracle, the revived Player is no longer a Cross-Faction Lover.
 *   **Witch:** Has two single-use potions:
     *   **Healing Potion:** Can save the Player targeted by Werewolf Faction Agents that night. Can be used on self.
-    *   **Poison Potion:** Can eliminate one Player during the night.
-    *   Can use one or both potions in the same night after being informed of the Werewolf Faction Agents' victim.
+    *   **Poison Potion:** Can eliminate one other living Player during the Night.
+    *   Can use one or both potions in the same Night after being informed of the Werewolf Faction Agents' victim. When both are used, the healing and poison targets must be different Players.
 *   **Hunter:** Whenever actually Eliminated, regardless of the Elimination reason, the Hunter's available Role Power triggers exactly once and must eliminate another living Player with one final shot. A prevented or cancelled Elimination does not trigger the shot; active Role Power Suppression prevents a later Hunter trigger.
 *   **Little Girl:** Can discreetly try to spy (peek) during the Werewolf Faction Agents' turn at night. Cannot be targeted by the Defender.
 *   **Defender:** Each night when the Role Power is available, chooses one Player to protect from the Werewolf Faction Agents' physical attacks for that night only. Cannot protect the same Player on two consecutive Nights that both contain Defender protection, and can protect self. Any Night without Defender protection breaks that sequence, so the previously protected Player is eligible at the next active call. Protection does not work against Witch's poison, Hunter's shot, Piper's charm, or Wolf-Father's infection.
 *   **Elder:** Survives the first Werewolf Faction Agent attack against them (Moderator doesn't reveal Character Card). Is eliminated by the second Werewolf Faction Agent attack, or the first time by village vote, Hunter's shot, or Witch's poison. If the Elder is eliminated by the village vote, Role Power Suppression begins after that Vote's complete Elimination Cascade and before any Consecutive Vote. It prevents every chosen, automatic, reactive, passive, or communication-based Role Power of all current and future Villager Roles, including Actor, from beginning or triggering, regardless of those Players' Faction Beneficiaries. It does not remove Role identity or undo effects already learned, committed, or resolved. Not affected by Wolf-Father infection on the first attempt.
-*   **Scapegoat:** If a Vote results in a tie, the Scapegoat is eliminated instead of the tied Players. If eliminated, the Scapegoat chooses which Player(s) may or may not vote the following Day; that restriction does not affect a Consecutive Vote during the current Day.
-*   **Village Idiot:** The first time the village votes to eliminate the Idiot, they reveal their Character Card and are proven innocent. That Vote's Elimination is cancelled, they remain in the Game Session, and they immediately lose their voting right. A required Consecutive Vote still occurs: the Village Idiot cannot vote but remains a legal target, and a later Vote eliminates them normally because the pardon has been spent. Still vulnerable to Night Eliminations.
-*   **Two Sisters:** On the first night, wake to recognize each other. May be allowed brief silent communication periods on subsequent nights at Moderator's discretion.
-*   **Three Brothers:** On the first night, wake to recognize each other. May be allowed brief silent communication periods on subsequent nights at Moderator's discretion.
-*   **Fox:** Each night, may decline or choose any living Player, including self. The Moderator checks the duplicate-free set containing that Player and their nearest living Player in each direction around the Seating Order, skipping Eliminated Players. The set normally contains three Players; with exactly two living Players, it contains both. If at least one current Werewolf Faction Agent is present, the Moderator gives an affirmative sign and the Fox keeps the power. If none are present, the Moderator gives a negative sign and the Fox loses the power permanently. Declining gives no sign and preserves the power.
+*   **Scapegoat:** If a Vote results in a tie, the Scapegoat is eliminated instead of the tied Players. The Scapegoat immediately chooses one or more other living Players who may vote the following Day; the announced allow-list remains fixed, although only its surviving members can vote. The restriction does not affect a Consecutive Vote during the current Day.
+*   **Village Idiot:** The first time a village Vote would Eliminate the Village Idiot, they reveal their Character Card and remain alive but permanently lose their voting right. A later Vote Eliminates them normally; Night Eliminations are unaffected.
+*   **Two Sisters:** On the first night, the holders recognize each other. On later Nights, the Moderator may allow brief silent communication at their discretion.
+*   **Three Brothers:** On the first night, the holders recognize each other. On later Nights, the Moderator may allow brief silent communication at their discretion.
+*   **Fox:** Each night, may decline or choose any living Player, including self. The Moderator checks the duplicate-free set containing that Player and their nearest living Player in each direction around the Seating Order, skipping Eliminated Players. With exactly two living Players, the set contains both. If at least one current Werewolf Faction Agent is present, the Moderator gives an affirmative sign and the Fox keeps the power. Otherwise the Moderator gives a negative sign and the Fox loses the power permanently. Declining gives no sign and preserves the power.
 *   **Bear Tamer:** Each morning, after victims are revealed, if a Werewolf Faction Agent is currently sitting immediately next to the Bear Tamer, the Moderator makes a growling sound. (Eliminated Players should move away).
 *   **Stuttering Judge:** Once per Game Session, can signal the Moderator (using a pre-agreed sign shown on Night 1) during the first Vote of a Day. A valid signal commits a Consecutive Vote after the first Vote and its complete Elimination Cascade, regardless of that Vote's outcome. The Consecutive Vote occurs without another Debate or an intervening Victory Check Window.
 *   **Knight with the Rusty Sword:** If actually eliminated at Dawn by a physical Werewolf attack, wait for that Dawn's complete Elimination Cascade, then scan clockwise from the Knight's fixed seat and snapshot the first surviving eligible Werewolf Faction Agent. Eligibility uses Agent state at that snapshot, including a Player successfully infected during the triggering Night; a temporary Agent from that Night remains eligible for this check. If no eligible Player survives, no disease is scheduled. Otherwise, the snapshotted Player is eliminated by disease at the following Dawn if still living, regardless of later Role or Agent changes; the disease never retargets.
-*   **Actor:** A hard-aligned Villager Role. At the Actor call each Night, may decline or select one of three face-up Actor Setup Cards chosen by the Moderator during setup from eligible Roles not already included in the Role Composition. Eligible cards must be hard-aligned Villager Roles with borrowable individual Role Powers, whether chosen, reactive, or passive; Simple Villager, Villager-Villager, Two Sisters, and Three Brothers are excluded. Confirming a selection immediately removes that card from play and activates a fresh Borrowed Role Power until the Actor call at the start of the next Night, even if its action is declined or its trigger never occurs. The complete source power—including benefits, costs, conditions, and consequences—uses its ordinary relative call or trigger; a source Role's native Night 1 setup restriction does not prevent Actor from starting that one-use power on a later Night. Actor remains the Actor Role and keeps the same Faction Beneficiary. While Elder's Role Power Suppression is active, Actor cannot select a new Actor Setup Card or newly use or trigger an already-borrowed power; effects already committed or resolved remain in force.
+*   **Actor:** A hard-aligned Villager Role. At the Actor call each Night, may decline or privately select one of three face-down Actor Setup Cards chosen by the Moderator during setup from eligible Roles not already included in the Role Composition. Eligible cards must be hard-aligned Villager Roles with borrowable individual Role Powers, whether chosen, reactive, or passive; Simple Villager, Villager-Villager, Two Sisters, and Three Brothers are excluded. Confirming a selection permanently removes that card from play and activates a fresh Borrowed Role Power until the Actor call at the start of the next Night, even if its action is declined or its trigger never occurs. The complete source power—including benefits, costs, conditions, and consequences—uses its ordinary relative call or trigger; a source Role's native Night 1 setup restriction does not prevent Actor from starting that one-use power on a later Night. Actor remains the Actor Role and keeps the same Faction Beneficiary. While Elder's Role Power Suppression is active, Actor cannot select a new Actor Setup Card or newly use or trigger an already-borrowed power; effects already committed or resolved remain in force.
 
 ### The Ambiguous
 
 *Goal: Win with their current Faction Beneficiary; their Faction Beneficiary can change.*
 
-*   **Thief:** The Deal Pool guarantees exactly one Thief holder on Night 1. The Moderator privately shows that Player the two Thief Offer Cards committed at Role Lock-In and records `Offer1`, `Offer2`, or `Decline`. Decline is legal unless both offers are hard-aligned Werewolf Roles: Simple Werewolf, Big Bad Wolf, or Accursed Wolf-Father. A legal decline keeps the Thief Character Card and Role, keeps the Player as a Villager Faction Beneficiary, moves both offers to face-down Set-Aside Character Cards, and ends the one-time opportunity exactly once. Choosing an offer privately exchanges the selected card for the Thief card: the selected card becomes Player-owned, while the original Thief card and unchosen offer become face-down Set-Aside Character Cards. This is an immediate Permanent Role Swap with fresh Role state, and the Player's Faction Beneficiary becomes the chosen Role's default Faction unless an explicit precedence rule says otherwise. Continue forward through the canonical Night 1 call order; the acquired Role receives any ordinary call still ahead, including a first-Night-only call, without replaying an earlier call or pre-game setup.
-*   **Devoted Servant:** Before an eliminated Player's Character Card is revealed (after the Vote), the Servant can reveal and discard their own Character Card, then take the eliminated Player's card without revealing it. This is a Permanent Role Swap: the acquired Role remains hidden, becomes the Servant's current Role and default Faction Beneficiary, and starts fresh when first called on the next Night. The eliminated Player's Status Effects and relationships are not inherited. A Lover cannot use this power. The swap clears Charmed, Sheriff, and Town Crier as explicit parts of the Servant's old identity. Infection remains attached to the Player and continues to make them a Werewolf Faction Agent; an in-force Scapegoat voting restriction likewise continues to apply to that Player.
+*   **Thief:** On Night 1, privately chooses one of the two Thief Offer Cards or declines. Decline is legal unless both offers are hard-aligned Werewolf Roles. A legal decline keeps the Thief Character Card and Role and moves both offers face-down to the Set-Aside zone. Choosing an offer exchanges it for the Thief card: the chosen card becomes Player-owned, while the original Thief card and unchosen offer become face-down Set-Aside Character Cards. The Permanent Role Swap takes effect immediately with fresh Role state and the new Role's default Faction Beneficiary unless another rule takes precedence. Continue forward through the Night 1 order without replaying an earlier call or pre-game setup.
+*   **Devoted Servant:** After a non-tied standard or Consecutive Vote chooses a target but before that Vote resolves, an eligible non-Lover Servant may reveal and discard their own Character Card, take the target's card without showing it to the table, and assume that Role. The same Vote still Eliminates the target, and the acquired Role becomes available on the next Night.
 *   **Wild Child:** On the first night, chooses another Player as their role model. Remains a Villager Faction Beneficiary as long as the model is alive. If the model is eliminated, the Wild Child immediately becomes a Werewolf Faction Beneficiary and Werewolf Faction Agent, and wakes with the Werewolf Faction Agents on subsequent nights.
-*   **Wolf Hound:** On Night 1, makes a final private choice to play with the Villagers or Werewolves while retaining the Wolf Hound Role and physical Character Card. The Villager choice makes the Player a Villager Faction Beneficiary and not a Werewolf Faction Agent. The Werewolf choice makes the Player a Werewolf Faction Beneficiary and Werewolf Faction Agent; they immediately join the collective Werewolf action later that Night and wake with the Werewolves each Night thereafter. Explicit beneficiary-precedence rules such as Cross-Faction Lovers still apply. Revealing the Character Card identifies the Role as Wolf Hound but does not reveal the private choice; the app does not announce that choice automatically, while the Moderator may disclose it verbally at their discretion.
+*   **Wolf Hound:** On Night 1, privately chooses to play with the Villagers or Werewolves while retaining the Wolf Hound Role and Character Card. The Villager choice makes the Player a Villager Faction Beneficiary and not a Werewolf Faction Agent. The Werewolf choice makes the Player a Werewolf Faction Beneficiary and Werewolf Faction Agent, so they join the collective Werewolf action later that Night. Explicit beneficiary-precedence rules still apply. Revealing the Character Card identifies Wolf Hound but not the private choice.
 
 ### The Loners
 
@@ -153,10 +149,8 @@ Win conditions are evaluated during Victory Check Windows: after Night eliminati
 ### Preparation Before Game
 
 *   Lock in the Role Composition; with Thief, commit the Player-count Deal Pool and two Thief Offer Cards
-*   Complete conditional pre-game setup: for Roles reachable through the Deal Pool or Thief Offer Cards, this includes artifacts such as the Prejudiced Manipulator Public Group Partition, Actor Setup Cards with borrowable individual hard-aligned Villager Role Powers, and Gypsy Spiritualism materials; when the Town Crier Assignment is enabled, prepare its New Moon Event cards
-*   Complete the applicable safety screen
-*   (If using New Moon Events) Shuffle the physical New Moon Event deck and place it face down
-*   Complete Lobby Exit
+*   Complete every conditional pre-game setup required by a Role reachable through the Deal Pool or Thief Offer Cards
+*   If using New Moon Events, shuffle the physical New Moon Event deck and place it face down
 *   Shuffle and deal only the Deal Pool
 *   Sheriff Election (can be later in Day 1)
 
@@ -164,39 +158,41 @@ Win conditions are evaluated during Victory Check Windows: after Night eliminati
 
 1.  Thief
 2.  Actor
-3.  Little Girl (identification time)
+3.  Little Girl
 4.  Cupid
 5.  Lovers (recognize each other)
-6.  Fox
-7.  Stuttering Judge (shows sign to Moderator)
-8.  Two Sisters / Three Brothers (recognize each other)
+6.  Stuttering Judge (shows sign to Moderator)
+7.  Two Sisters (recognize each other)
+8.  Three Brothers (recognize each other)
 9.  Wild Child (chooses model)
 10. Wolf Hound
 11. Bear Tamer
 12. Defender
-13. All Werewolf Faction Agents (including Wolf Hound if chosen Werewolf, White Werewolf, Accursed Wolf-Father, Big Bad Wolf) - wake and choose victim; the Little Girl may spy only during this collective wake interval; the White Werewolf has no solo action on Night 1
-14. Accursed Wolf-Father (infection option)
-15. Big Bad Wolf (mandatory second victim when the power is available and a legal target exists)
-16. Seer
-17. Witch (shown victim, uses potions)
-18. Gypsy (can choose medium)
-19. Piper (charms Players)
-20. Charmed Players (tapped by Moderator)
+13. All Werewolf Faction Agents (including Wolf Hound if chosen Werewolf, White Werewolf, Accursed Wolf-Father, and Big Bad Wolf) wake and choose a victim. The Little Girl may spy during this collective wake interval; the White Werewolf has no solo action on Night 1
+14. Fox
+15. Accursed Wolf-Father (infection option)
+16. Big Bad Wolf (mandatory second victim when the power is available and a legal target exists)
+17. Seer
+18. Witch (shown victim, uses potions)
+19. Gypsy (can choose medium)
+20. Piper (charms Players)
+21. Charmed Players (tapped by Moderator)
 
 ### Call Order: Each Subsequent Night (Subject to New Moon Event modifications, e.g., Full Moon Rising)
 
 1.  Actor
-2.  Fox
+2.  Two Sisters / Three Brothers (optional brief silent communication at the Moderator's discretion)
 3.  Defender
-4.  All Werewolf Faction Agents (including Wolf Hound if Werewolf, Wild Child if turned, infected Player, White Werewolf, Accursed Wolf-Father, Big Bad Wolf, *or* temporary Werewolf Faction Agents from Full Moon Rising) - wake and choose victim; the Little Girl may spy only during this collective wake interval (potential modification by Backfire, Specter)
-5.  Accursed Wolf-Father (infection option, if unused)
-6.  White Werewolf (Nights 2, 4, 6, and every later even-numbered Night - attacks another living Werewolf Faction Agent)
-7.  Big Bad Wolf (mandatory second victim when the power condition and a legal target are present)
-8.  Seer
-9.  Witch (shown victim, uses potions if available)
-10. Gypsy (can choose Medium)
-11. Piper (charms Players)
-12. Charmed Players (tapped by Moderator)
+4.  All Werewolf Faction Agents (including Wolf Hound if Werewolf, a transformed Wild Child, an infected Player, White Werewolf, Accursed Wolf-Father, Big Bad Wolf, and temporary Werewolf Faction Agents from Full Moon Rising) wake and choose a victim. If no living Werewolf Faction Agent remains, omit this call. The Little Girl may spy only while the call occurs (potential modification by Backfire or Specter)
+5.  Fox
+6.  Accursed Wolf-Father (infection option, if unused)
+7.  White Werewolf (Nights 2, 4, 6, and every later even-numbered Night - attacks another living Werewolf Faction Agent)
+8.  Big Bad Wolf (mandatory second victim when the power condition and a legal target are present)
+9.  Seer
+10. Witch (shown victim, uses potions if available)
+11. Gypsy (can choose Medium)
+12. Piper (charms Players)
+13. Charmed Players (tapped by Moderator)
 
 ### Each Day
 
@@ -208,8 +204,6 @@ Win conditions are evaluated during Victory Check Windows: after Night eliminati
 6.  Medium chosen by Gypsy performs action (if Spiritualism card drawn).
 7.  Town Crier makes announcement (if applicable).
 8.  Debate (subject to Eclipse, Good Manners, Not Me - Nor Wolf).
-9.  Resolve the first Vote (Standard or modified/replaced by Nightmare, Influences, Great Distrust, Enthusiasm, Dissatisfaction, Punishment), any potential call to Devoted Servant, and its complete Elimination Cascade.
-10. If a rule requires a Consecutive Vote (a valid Stuttering Judge signal or an applicable New Moon Event), resolve it and its complete Elimination Cascade without another Debate or an intervening Victory Check Window.
+9.  Resolve the first Vote. If it fixes a Vote Target, run any pre-reveal intervention before target-dependent resolution, then complete the Vote and its Elimination Cascade. Replacement New Moon Vote procedures retain their separately defined behavior.
+10. If a rule requires a Consecutive Vote, resolve it independently through the same sequence using its own result, without another Debate or an intervening Victory Check Window.
 11. Resolve the pre-Night Victory Check Window. On Day 1, only Elimination by the first Vote qualifies the Angel; Elimination by a Consecutive Vote does not.
-
-The app will guide the Moderator through this call order, prompting for private Role Identification for Roles called during Night 1.

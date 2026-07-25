@@ -5,6 +5,7 @@
 > - Roadmap date: 19 July 2026
 > - Thief card-model settlement incorporated: [#148](https://github.com/bicheichane/Werewolves/issues/148), 20 July 2026
 > - Planning rule: implement and integrate one Role at a time. Parallel notes describe a hypothetical multi-team future, not this delivery plan.
+> - Status: historical, non-authoritative planning snapshot through 20 July 2026. Use the [canonical game rules](../domain/game-rules.md) and [ADRs](../adr/) for current decisions.
 
 ## Decision summary
 

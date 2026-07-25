@@ -5,6 +5,7 @@
 > - Assessment completed: 17 July 2026; planning status audited: 19 July 2026
 > - Thief card-model settlement incorporated: [#148](https://github.com/bicheichane/Werewolves/issues/148), 20 July 2026
 > - Categories describe architectural reach against the refreshed code baseline, not hours, points, or lines of code.
+> - Status: historical, non-authoritative planning snapshot through 20 July 2026. Use the [canonical game rules](../domain/game-rules.md) and [ADRs](../adr/) for current decisions.
 
 ## Executive summary
 

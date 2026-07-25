@@ -3,9 +3,6 @@
 ## remove the commented throw in HookSubPhaseStage
 do this after all listener classes are implemented
 
-## village fool and devoted servant interaction
-the village fool should get night identification so we can prevent the devoted servant from triggering its power if the village fool gets lynched for the first time. 
-
 ## preset lists for different player counts
 
 ## role list validation

@@ -6,6 +6,8 @@ Canonical status reviewed: 2026-07-19
 
 Local-policy supersession incorporated: 2026-07-20
 
+Status: historical, non-authoritative research snapshot through 2026-07-20. Current product rules live in the [game rules](../domain/game-rules.md), [game-rule clarifications](../domain/game-rules-clarifications.md), and [Thief setup ADR](../adr/0017-thief-offer-is-committed-before-the-physical-deal.md).
+
 ## Question
 
 After the Thief exchanges their Character Card on Night 1, when does the acquired

@@ -653,7 +653,7 @@ builder.CompleteNightPhase(werewolfIds, victimId, seerId, seerTargetId);
 ```
 
 #### Subsequent Night Helper
-For Night 2 and beyond, werewolves are already identified (identification happens once on Night 1). Use `CompleteWerewolfNightActionSubsequentNight()` to skip the identification step:
+For Night 2 and beyond, the Werewolf Role holders have already been identified on Night 1. Use `CompleteWerewolfNightActionSubsequentNight()` to skip exact Role Identification:
 
 ```csharp
 // Night 1: Full flow with identification
@@ -666,10 +666,10 @@ builder.CompleteWerewolfNightActionSubsequentNight(victimId);
 **When to use each method:**
 | Method | Use Case | Flow |
 |--------|----------|------|
-| `CompleteWerewolfNightAction(werewolfIds, victimId)` | Night 1 | Identify → Wake → Select Victim → Sleep |
+| `CompleteWerewolfNightAction(werewolfIds, victimId)` | Night 1 | Identify exact Role holders and wake → Select Victim → Sleep |
 | `CompleteWerewolfNightActionSubsequentNight(victimId)` | Night 2+ | Wake → Select Victim → Sleep |
 
-The difference is that on Night 1, the moderator must identify which players are werewolves (so they can wake together). On subsequent nights, the werewolves are already known, so only the wakeup confirmation is needed.
+On Night 1, the helper responds to an exact Role Identification instruction. Processing that response assigns the called Werewolf Role to every selected Player. On later Nights, the helper starts with the wake confirmation because those Role assignments are already known.
 
 ### ResponseFactory
 Factory methods for creating `ModeratorResponse` instances:
@@ -728,8 +728,8 @@ When adding support for additional roles, add corresponding test sections:
 ### Night Action Order
 - Roles wake in a defined order during night, determined by `GameFlowManager.HookListeners[NightMainActionLoop]`
 - `CompleteNightPhase` iterates through this order dynamically, ensuring tests stay in sync with game logic
-- **Night 1 vs Night 2+**: On Night 1, werewolves need to be *identified* first (moderator points them out). On subsequent nights, identification is skipped since werewolves are already known.
-  - Use `CompleteWerewolfNightAction()` for Night 1 (includes identification step)
+- **Night 1 vs Night 2+**: On Night 1, the helper identifies the exact Role holders and assigns that Role to the selected Players. On subsequent nights, identification is skipped because those assignments are already known.
+  - Use `CompleteWerewolfNightAction()` for Night 1 (includes exact Role Identification)
   - Use `CompleteWerewolfNightActionSubsequentNight()` for Night 2+ (skips identification)
 - Deaths from night actions resolve at **Dawn**, not during night (targeted player still acts)
 - When adding a new role to `ListenerFactories`, also add its handler to `CompleteNightPhase`'s switch and extend `NightActionInputs`

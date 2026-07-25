@@ -35,8 +35,9 @@ up front:
   revealed;
 - the exact Moderator Response shape and cardinality;
 - legal, illegal, stale, decline, zero-target, and no-input paths;
-- when a choice or One-Use Resource commits;
-- what stable recovery may repeat and what it must not duplicate; and
+- when the exchange commits and which Moderator interaction commits it;
+- how invalid, stale, incomplete, or canceled input behaves before commitment;
+- what stable recovery may repeat and what effects it must not duplicate; and
 - how the headless strategy produces a legal response without claiming broader
   strategy or probability usefulness.
 
@@ -46,8 +47,12 @@ identification, Faction Agent Group Observation, public reveal, physical card
 instance, or setup partition). Do not promise stale-response rejection or a
 typed payload that the issue's dependencies cannot represent.
 
-Use `docs/domain/moderator-role-flows.md` as the shared vocabulary and copy the
-issue-owned behavior into this section rather than relying on a generic link.
+Use `docs/contracts/moderator-interaction.md` as the shared interaction
+contract. A reusable
+shared rule has one normative owner. Cite that owner and state only this issue's
+owned specialization, together with its acceptance and verification evidence;
+do not copy the full shared rule, its rationale, or unrelated consequences. A
+generic link alone remains insufficient for behavior this issue owns.
 Write `Not applicable: <reason>` when the issue creates no Moderator exchange.
 An unresolved flow decision must name its decision ticket and remain blocked;
 do not leave mutually exclusive alternatives for an implementation agent.
@@ -128,7 +133,7 @@ Apply `ready-for-agent` only after all of the following are true:
 - Acceptance criteria are behavioral and testable.
 - Every changed Role or gameplay exchange has a complete Moderator interaction
   contract, or the section explicitly states why it is not applicable.
-- Moderator flow text agrees with `docs/domain/moderator-role-flows.md`, and any
+- Moderator flow text agrees with `docs/contracts/moderator-interaction.md`, and any
   unresolved flow decision has an open native blocker rather than an implicit
   choice left to implementation.
 - Every upstream dependency appears under Dependency assumptions as its
