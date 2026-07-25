@@ -11,7 +11,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Werewolves.Core.Tests", "We
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Werewolves.Core.CacheGenerator", "Werewolves.Core\Werewolves.Core.CacheGenerator\Werewolves.Core.CacheGenerator.csproj", "{3B3C7400-5614-456D-9F16-F8AF67763EE9}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Werewolves.Client", "Werewolves.Client\Werewolves.UI.MobileClient.csproj", "{D1F2E3A4-B5C6-47D8-9E0F-1A2B3C4D5E6F}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Werewolves.UI.MobileClient", "Werewolves.Client\Werewolves.UI.MobileClient.csproj", "{D1F2E3A4-B5C6-47D8-9E0F-1A2B3C4D5E6F}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Werewolves.Client.Tests", "Werewolves.Client.Tests\Werewolves.Client.Tests.csproj", "{BF7D0C66-248A-46C2-A628-D3BFEFDDA332}"
 EndProject
