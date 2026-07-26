@@ -1,8 +1,8 @@
 @using Werewolves.Core.StateModels.Models
 @using Werewolves.Core.StateModels.Models.Instructions
 
-<HoldButton Label="@ClientStrings.SelectPlayers_SubmitButton"
-			OnHoldComplete="Confirm" />
+<HoldButton Label="@ClientStrings.Dashboard_ContinueButton"
+			OnHoldComplete="Continue" />
 
 @code {
 	[Parameter, EditorRequired]
@@ -11,8 +11,8 @@
 	[Parameter]
 	public EventCallback<ModeratorResponse> OnResponse { get; set; }
 
-	private Task Confirm()
+	private Task Continue()
 	{
-		return OnResponse.InvokeAsync(Instruction.CreateResponse(true));
+		return OnResponse.InvokeAsync(Instruction.CreateResponse());
 	}
 }

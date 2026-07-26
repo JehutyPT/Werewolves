@@ -1,84 +1,123 @@
+using System.Collections.Immutable;
 using System.Text.Json.Serialization;
 using Werewolves.Core.StateModels.Enums;
 
 namespace Werewolves.Core.StateModels.Models.Instructions;
 
 /// <summary>
-/// Instruction that requires the moderator to select from a list of text options.
-/// Commonly used for event card selections, alignment choices, or other text-based decisions.
+/// One machine-stable semantic option and its separately rendered label.
+/// </summary>
+public sealed record ModeratorOption
+{
+	public string Id { get; }
+
+	public string Label { get; }
+
+	[JsonConstructor]
+	public ModeratorOption(string id, string label)
+	{
+		if (string.IsNullOrWhiteSpace(id))
+		{
+			throw new ArgumentException("Option ID cannot be empty.", nameof(id));
+		}
+
+		if (string.IsNullOrWhiteSpace(label))
+		{
+			throw new ArgumentException("Option label cannot be empty.", nameof(label));
+		}
+
+		Id = id;
+		Label = label;
+	}
+}
+
+/// <summary>
+/// Instruction that requires the moderator to select from an ordered list of
+/// semantic options.
 /// </summary>
 public record SelectOptionsInstruction : ModeratorInstruction
 {
-    /// <summary>
-    /// The list of selectable options.
-    /// </summary>
-    public HashSet<string> SelectableOptions { get; }
+	/// <summary>
+	/// Ordered semantic options. IDs drive behavior; labels are presentation only.
+	/// </summary>
+	public IReadOnlyList<ModeratorOption> Options { get; }
 
-    public NumberRangeConstraint SelectionRange { get; }
+	public NumberRangeConstraint SelectionRange { get; }
 
+	[JsonConstructor]
+	internal SelectOptionsInstruction(
+		IReadOnlyList<ModeratorOption> options,
+		NumberRangeConstraint selectionRange,
+		string? publicAnnouncement = null,
+		string? privateInstruction = null,
+		IReadOnlyList<Guid>? affectedPlayerIds = null,
+		Guid instructionId = default)
+		: base(
+			publicAnnouncement,
+			privateInstruction,
+			affectedPlayerIds,
+			instructionId: instructionId)
+	{
+		ArgumentNullException.ThrowIfNull(options);
 
-    /// <summary>
-    /// Initializes a new instance of SelectOptionsInstruction.
-    /// </summary>
-    /// <param name="selectableOptions">The list of selectable options.</param>
-    /// <param name="selectionRange"></param>
-    /// <param name="publicAnnouncement">The text to be read aloud to players.</param>
-    /// <param name="privateInstruction">Private guidance for the moderator.</param>
-    /// <param name="affectedPlayerIds">Optional list of affected player IDs for context.</param>
-    [JsonConstructor]
-    internal SelectOptionsInstruction(
-        HashSet<string> selectableOptions,
-        NumberRangeConstraint selectionRange,
-        string? publicAnnouncement = null,
-        string? privateInstruction = null,
-        IReadOnlyList<Guid>? affectedPlayerIds = null)
-        : base(publicAnnouncement, privateInstruction, affectedPlayerIds)
-    {
-        SelectableOptions = selectableOptions ?? throw new ArgumentNullException(nameof(selectableOptions));
-        SelectionRange = selectionRange;
+		if (options.Count == 0)
+		{
+			throw new ArgumentException("Options cannot be empty.", nameof(options));
+		}
 
-        if (selectableOptions.Count == 0)
-        {
-            throw new ArgumentException("SelectableOptions cannot be empty.", nameof(selectableOptions));
-        }
+		if (options.Any(option => option is null))
+		{
+			throw new ArgumentException("Options cannot contain null entries.", nameof(options));
+		}
 
-        // Check for duplicate options
-        if (selectableOptions.Distinct().Count() != selectableOptions.Count)
-        {
-            throw new ArgumentException("SelectableOptions contains duplicate entries.", nameof(selectableOptions));
-        }
-    }
+		var copiedOptions = options.ToImmutableArray();
+		var duplicateId = copiedOptions
+			.GroupBy(option => option.Id, StringComparer.Ordinal)
+			.FirstOrDefault(group => group.Count() > 1);
+		if (duplicateId is not null)
+		{
+			throw new ArgumentException(
+				$"Options contains duplicate ID '{duplicateId.Key}'.",
+				nameof(options));
+		}
 
-    /// <summary>
-    /// Creates a ModeratorResponse with the provided option selection.
-    /// Performs contractual validation to ensure the selection is valid.
-    /// </summary>
-    /// <param name="selectedOptions">The selected option(s).</param>
-    /// <returns>A validated ModeratorResponse.</returns>
-    /// <exception cref="ArgumentException">Thrown when the selection is invalid.</exception>
-    public ModeratorResponse CreateResponse(params string[] selectedOptions) 
-        => CreateResponse(new HashSet<string>(selectedOptions));
+		Options = copiedOptions;
+		SelectionRange = selectionRange;
+	}
 
-    /// <summary>
-    /// Creates a ModeratorResponse with the provided option selection.
-    /// Performs contractual validation to ensure the selection is valid.
-    /// </summary>
-    /// <param name="selectedOptions">The selected option(s).</param>
-    /// <returns>A validated ModeratorResponse.</returns>
-    /// <exception cref="ArgumentException">Thrown when the selection is invalid.</exception>
-    public ModeratorResponse CreateResponse(HashSet<string> selectedOptions)
-    {
-        if (!selectedOptions.IsSubsetOf(SelectableOptions))
-        {
-            throw new ArgumentException("Selected options are not valid.");
-        }
+	public ModeratorResponse CreateResponse(params string[] selectedOptionIds)
+		=> CreateResponse((IReadOnlyCollection<string>)selectedOptionIds);
 
-        SelectionRange.Enforce(selectedOptions.ToList());
+	public ModeratorResponse CreateResponse(IReadOnlyCollection<string> selectedOptionIds)
+	{
+		ArgumentNullException.ThrowIfNull(selectedOptionIds);
 
-        return new ModeratorResponse
-        {
-            Type = ExpectedInputType.OptionSelection,
-            SelectedOption = selectedOptions
-        };
-    }
+		var selectedIdSet = selectedOptionIds.ToImmutableHashSet(StringComparer.Ordinal);
+		if (selectedIdSet.Count != selectedOptionIds.Count)
+		{
+			throw new ArgumentException(
+				"Selected option IDs cannot contain duplicates.",
+				nameof(selectedOptionIds));
+		}
+
+		if (selectedIdSet.Any(selectedId =>
+			Options.All(option => !StringComparer.Ordinal.Equals(option.Id, selectedId))))
+		{
+			throw new ArgumentException("Selected option IDs are not valid.", nameof(selectedOptionIds));
+		}
+
+		SelectionRange.Enforce(selectedIdSet);
+
+		var orderedSelectedIds = Options
+			.Where(option => selectedIdSet.Contains(option.Id))
+			.Select(option => option.Id)
+			.ToImmutableArray();
+
+		return new ModeratorResponse
+		{
+			InstructionId = InstructionId,
+			Type = ExpectedInputType.OptionSelection,
+			SelectedOptionIds = orderedSelectedIds
+		};
+	}
 }

@@ -20,22 +20,27 @@ namespace Werewolves.Client.Tests.Components;
 
 public class SelectOptionsViewBunitTests
 {
-	private const string FirstOption = "Acordar";
-	private const string SecondOption = "Continuar a dormir";
-	private const string ThirdOption = "Alertar a aldeia";
+	private const string FirstOptionId = "first-option";
+	private const string SecondOptionId = "second-option";
+	private const string ThirdOptionId = "third-option";
+	private static string FirstOption => GameStrings.NightStartsPrompt;
+	private static string SecondOption => GameStrings.DebateStartsPrompt;
+	private static string ThirdOption => GameStrings.RevealRolePromptSpecify;
 	private static string SelectedOptionClass => ClientTestReferences.Css.Classes.OptionButtonSelected;
 	private static string HoldButtonSelector =>
 		Html.Selectors.ButtonWithClass(ClientTestReferences.Css.Classes.HoldButton);
 
 	[Fact]
-	public void SingleSelectionOptions_RenderCoreProvidedControlsAndCanSwitchSelection()
+	public void SingleSelectionOptions_KeepIdenticalLabelsDistinct()
 	{
 		using var context = new ModeratorComponentTestContext();
 		var instruction = CreateInstruction(
 			NumberRangeConstraint.Single,
-			FirstOption,
-			SecondOption,
-			ThirdOption);
+			[
+				new ModeratorOption(SecondOptionId, FirstOption),
+				new ModeratorOption(FirstOptionId, FirstOption),
+				new ModeratorOption(ThirdOptionId, ThirdOption)
+			]);
 
 		var cut = context.RenderModeratorComponent<SelectOptionsView>(parameters => parameters
 			.Add(component => component.Instruction, instruction));
@@ -44,34 +49,110 @@ public class SelectOptionsViewBunitTests
 		var optionButtons = FindOptionButtons(optionGroup);
 		optionButtons.Select(button => button.TextContent.Trim())
 			.Should()
-			.BeEquivalentTo([FirstOption, SecondOption, ThirdOption]);
+			.Equal([FirstOption, FirstOption, ThirdOption]);
 		cut.Markup.Should().Contain(SelectionCountLabel(0, 1));
 		optionButtons.Should().OnlyContain(button =>
 			button.GetAttribute(Html.Attributes.Type) == Html.AttributeValues.ButtonType);
 		optionButtons.Should().OnlyContain(button =>
 			button.GetAttribute(Html.Attributes.AriaPressed) == Html.AriaValues.False);
 
-		FindOptionButton(cut, FirstOption).Click();
+		optionButtons[1].Click();
+		optionButtons = FindOptionButtons(FindOptionGroup(cut));
 
-		FindOptionButton(cut, FirstOption).GetAttribute(Html.Attributes.AriaPressed)
+		optionButtons[0].GetAttribute(Html.Attributes.AriaPressed)
+			.Should()
+			.Be(Html.AriaValues.False);
+		optionButtons[1].GetAttribute(Html.Attributes.AriaPressed)
 			.Should()
 			.Be(Html.AriaValues.True);
-		FindOptionButton(cut, FirstOption).ClassList.Should().Contain(SelectedOptionClass);
+		optionButtons[1].ClassList.Should().Contain(SelectedOptionClass);
 		cut.Markup.Should().Contain(SelectionCountLabel(1, 1));
-		FindOptionButton(cut, SecondOption).GetAttribute(Html.Attributes.AriaPressed)
-			.Should()
-			.Be(Html.AriaValues.False);
 
-		FindOptionButton(cut, SecondOption).Click();
+		optionButtons[0].Click();
+		optionButtons = FindOptionButtons(FindOptionGroup(cut));
 
-		FindOptionButton(cut, FirstOption).GetAttribute(Html.Attributes.AriaPressed)
-			.Should()
-			.Be(Html.AriaValues.False);
-		FindOptionButton(cut, FirstOption).ClassList.Should().NotContain(SelectedOptionClass);
-		FindOptionButton(cut, SecondOption).GetAttribute(Html.Attributes.AriaPressed)
+		optionButtons[0].GetAttribute(Html.Attributes.AriaPressed)
 			.Should()
 			.Be(Html.AriaValues.True);
-		FindOptionButton(cut, SecondOption).ClassList.Should().Contain(SelectedOptionClass);
+		optionButtons[0].ClassList.Should().Contain(SelectedOptionClass);
+		optionButtons[1].GetAttribute(Html.Attributes.AriaPressed)
+			.Should()
+			.Be(Html.AriaValues.False);
+		optionButtons[1].ClassList.Should().NotContain(SelectedOptionClass);
+	}
+
+	[Fact]
+	public async Task ValidSelection_EarlyReleaseAndPointerLeaveEmitNoResponse()
+	{
+		var timing = new ControlledHoldButtonTiming();
+		using var context = new ModeratorComponentTestContext();
+		context.Services.AddSingleton<IHoldButtonTiming>(timing);
+		var responses = new List<ModeratorResponse>();
+		var instruction = CreateInstruction(
+			NumberRangeConstraint.Single,
+			[
+				new ModeratorOption(FirstOptionId, FirstOption),
+				new ModeratorOption(SecondOptionId, FirstOption)
+			]);
+
+		var cut = context.RenderModeratorComponent<SelectOptionsView>(parameters => parameters
+			.Add(component => component.Instruction, instruction)
+			.Add(component => component.OnResponse,
+				EventCallback.Factory.Create<ModeratorResponse>(this, responses.Add)));
+
+		FindOptionButtons(FindOptionGroup(cut))[1].Click();
+		var holdButton = FindHoldButton(cut);
+		var earlyHoldTask = RenderedHoldButtonDriver.StartHoldAsync(holdButton);
+		await RenderedHoldButtonDriver.FlushAsync(cut);
+		timing.AdvanceBy(RenderedHoldButtonDriver.HoldDuration - TimeSpan.FromMilliseconds(1));
+		await RenderedHoldButtonDriver.ReleaseHoldAsync(holdButton);
+		await earlyHoldTask;
+
+		responses.Should().BeEmpty();
+
+		holdButton = FindHoldButton(cut);
+		var canceledHoldTask = RenderedHoldButtonDriver.StartHoldAsync(holdButton);
+		await RenderedHoldButtonDriver.FlushAsync(cut);
+		timing.AdvanceBy(TimeSpan.FromMilliseconds(200));
+		await RenderedHoldButtonDriver.LeaveHoldAsync(holdButton);
+		await canceledHoldTask;
+		timing.AdvanceBy(
+			RenderedHoldButtonDriver.HoldDuration +
+			RenderedHoldButtonDriver.SuccessFlashDuration);
+		await RenderedHoldButtonDriver.FlushAsync(cut);
+
+		responses.Should().BeEmpty();
+	}
+
+	[Fact]
+	public async Task IdenticalLabels_CompletedHoldEmitsOneCorrelatedSemanticId()
+	{
+		var timing = new ControlledHoldButtonTiming();
+		using var context = new ModeratorComponentTestContext();
+		context.Services.AddSingleton<IHoldButtonTiming>(timing);
+		var responses = new List<ModeratorResponse>();
+		var instruction = CreateInstruction(
+			NumberRangeConstraint.Single,
+			[
+				new ModeratorOption(FirstOptionId, FirstOption),
+				new ModeratorOption(SecondOptionId, FirstOption)
+			]);
+
+		var cut = context.RenderModeratorComponent<SelectOptionsView>(parameters => parameters
+			.Add(component => component.Instruction, instruction)
+			.Add(component => component.OnResponse,
+				EventCallback.Factory.Create<ModeratorResponse>(this, responses.Add)));
+
+		FindOptionButtons(FindOptionGroup(cut))[1].Click();
+		var holdButton = FindHoldButton(cut);
+		await RenderedHoldButtonDriver.CompleteHoldAsync(cut, holdButton, timing);
+		await RenderedHoldButtonDriver.ReleaseHoldAsync(holdButton);
+
+		responses.Should().ContainSingle();
+		var response = responses.Single();
+		response.Type.Should().Be(ExpectedInputType.OptionSelection);
+		response.InstructionId.Should().Be(instruction.InstructionId);
+		response.SelectedOptionIds.Should().Equal([SecondOptionId]);
 	}
 
 	[Fact]
@@ -137,7 +218,8 @@ public class SelectOptionsViewBunitTests
 		responses.Should().ContainSingle();
 		var response = responses.Single();
 		response.Type.Should().Be(ExpectedInputType.OptionSelection);
-		response.SelectedOption.Should().BeEquivalentTo([FirstOption, SecondOption]);
+		response.InstructionId.Should().Be(instruction.InstructionId);
+		response.SelectedOptionIds.Should().Equal(["option-0", "option-1"]);
 	}
 
 	private static IElement FindOptionGroup(IRenderedComponent<SelectOptionsView> cut) =>
@@ -179,18 +261,28 @@ public class SelectOptionsViewBunitTests
 
 	private static SelectOptionsInstruction CreateInstruction(
 		NumberRangeConstraint selectionRange,
-		params string[] options) =>
+		params string[] optionLabels) =>
+		CreateInstruction(
+			selectionRange,
+			optionLabels
+				.Select((label, index) => new ModeratorOption($"option-{index}", label))
+				.ToArray());
+
+	private static SelectOptionsInstruction CreateInstruction(
+		NumberRangeConstraint selectionRange,
+		IReadOnlyList<ModeratorOption> options) =>
 		(SelectOptionsInstruction)SelectOptionsConstructor.Invoke(
 			[
-				new HashSet<string>(options, StringComparer.CurrentCulture),
+				options,
 				selectionRange,
 				null,
 				GameStrings.ConfirmNightStarted,
-				null
+				null,
+				Guid.Empty
 			]);
 
 	private static readonly ConstructorInfo SelectOptionsConstructor =
 		typeof(SelectOptionsInstruction)
 			.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic)
-			.Single(ctor => ctor.GetParameters().Length == 5);
+			.Single(ctor => ctor.GetParameters().Length == 6);
 }

@@ -44,6 +44,7 @@ Win conditions are evaluated during Victory Check Windows: after Night Eliminati
 7.  **Vote:**
     *   The Moderator calls for a Vote. New Moon Events may replace or modify the standard procedure.
     *   All eligible living Players vote using the physical procedure in force, including any voting-power modifiers.
+    *   The Moderator resolves that physical Vote and records its final result in the app: exactly one living Vote Target, or no Vote Target for a tie. The app neither collects individual ballots nor calculates vote totals.
     *   A tie may trigger Scapegoat or result in no Elimination.
     *   A non-tied standard or Consecutive Vote fixes one living Vote Target before target-dependent resolution. Run any explicit pre-reveal intervention at that boundary; a tie fixes no Vote Target.
     *   Resolve the Vote's result and its complete Elimination Cascade before continuing.

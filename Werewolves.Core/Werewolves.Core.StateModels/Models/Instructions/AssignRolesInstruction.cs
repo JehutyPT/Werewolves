@@ -29,8 +29,13 @@ public record AssignRolesInstruction : ModeratorInstruction
         IReadOnlyList<MainRoleType> rolesForAssignment,
 		string? publicAnnouncement = null,
         string? privateInstruction = null,
-        IReadOnlyList<Guid>? affectedPlayerIds = null)
-        : base(publicAnnouncement, privateInstruction, affectedPlayerIds)
+        IReadOnlyList<Guid>? affectedPlayerIds = null,
+        Guid instructionId = default)
+        : base(
+            publicAnnouncement,
+            privateInstruction,
+            affectedPlayerIds,
+            instructionId: instructionId)
     {
         PlayersForAssignment = playersForAssignment ?? throw new ArgumentNullException(nameof(playersForAssignment));
 
@@ -39,7 +44,8 @@ public record AssignRolesInstruction : ModeratorInstruction
             throw new ArgumentException("PlayersForAssignment cannot be empty.", nameof(playersForAssignment));
         }
 
-        RolesForAssignment = rolesForAssignment ?? throw new ArgumentNullException(nameof(rolesForAssignment));
+        ArgumentNullException.ThrowIfNull(rolesForAssignment);
+        RolesForAssignment = rolesForAssignment.ToImmutableArray();
 
         if (rolesForAssignment.Count == 0)
         {
@@ -65,8 +71,9 @@ public record AssignRolesInstruction : ModeratorInstruction
 
         return new ModeratorResponse
         {
+            InstructionId = InstructionId,
             Type = ExpectedInputType.AssignPlayerRoles,
-            AssignedPlayerRoles = assignments
+            AssignedPlayerRoles = assignments.ToImmutableDictionary()
         };
     }
 
@@ -80,6 +87,14 @@ public record AssignRolesInstruction : ModeratorInstruction
         if (assignments == null)
         {
             throw new ArgumentNullException(nameof(assignments));
+        }
+
+        if (assignments.Count != PlayersForAssignment.Count ||
+            !PlayersForAssignment.SetEquals(assignments.Keys))
+        {
+            throw new ArgumentException(
+                "Assignments must contain exactly every Player requested by the instruction.",
+                nameof(assignments));
         }
 
         var assignedRoles = assignments.Values.ToList();

@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Text.Json.Serialization;
 using Werewolves.Core.StateModels.Enums;
 
@@ -9,6 +10,11 @@ namespace Werewolves.Core.StateModels.Models;
 /// </summary>
 public abstract record ModeratorInstruction
 {
+    /// <summary>
+    /// Stable identity used to correlate this instruction with its response.
+    /// </summary>
+    public Guid InstructionId { get; }
+
     /// <summary>
     /// The text to be read aloud or displayed publicly to all players.
     /// </summary>
@@ -24,14 +30,14 @@ public abstract record ModeratorInstruction
     /// This provides context, for example, indicating which player needs their role revealed
     /// or who is the target of a specific action being prompted.
     /// </summary>
-    public IReadOnlyList<Guid>? AffectedPlayerIds { get; protected set; }
+    public IReadOnlyList<Guid>? AffectedPlayerIds { get; }
 
 	/// <summary>
 	/// Placeholder for future sound effects associated with the instruction.
 	/// Allows for multiple sound effects to be specified.
 	/// Only the sound effects in this list should be played. All others should be stopped if playing.
 	/// </summary>
-	public List<SoundEffectsEnum> SoundEffects { get; protected set; }
+	public IReadOnlyList<SoundEffectsEnum> SoundEffects { get; }
 
     /// <summary>
     /// Initializes a new instance of ModeratorInstruction.
@@ -42,12 +48,14 @@ public abstract record ModeratorInstruction
         string? publicAnnouncement = null,
         string? privateInstruction = null,
         IReadOnlyList<Guid>? affectedPlayerIds = null,
-        List<SoundEffectsEnum>? soundEffects = null)
+        IReadOnlyList<SoundEffectsEnum>? soundEffects = null,
+        Guid instructionId = default)
     {
+        InstructionId = instructionId == Guid.Empty ? Guid.NewGuid() : instructionId;
         PublicAnnouncement = publicAnnouncement;
         PrivateInstruction = privateInstruction;
-        AffectedPlayerIds = affectedPlayerIds;
-        SoundEffects = soundEffects ?? new List<SoundEffectsEnum>();
+        AffectedPlayerIds = affectedPlayerIds?.ToImmutableArray();
+        SoundEffects = soundEffects?.ToImmutableArray() ?? ImmutableArray<SoundEffectsEnum>.Empty;
 
         // Validate that at least one text field is provided
         if (string.IsNullOrWhiteSpace(publicAnnouncement) && string.IsNullOrWhiteSpace(privateInstruction))

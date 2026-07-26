@@ -350,7 +350,8 @@ public class SelectPlayersViewBunitTests
 				countConstraint,
 				null,
 				TestInstructionPrompt,
-				null
+				null,
+				Guid.Empty
 			]);
 
 	private static SelectPlayersInstruction CreateInstruction(
@@ -385,5 +386,5 @@ public class SelectPlayersViewBunitTests
 	private static readonly ConstructorInfo SelectPlayersConstructor =
 		typeof(SelectPlayersInstruction)
 			.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic)
-			.Single(ctor => ctor.GetParameters().Length == 5);
+			.Single(ctor => ctor.GetParameters().Length == 6);
 }

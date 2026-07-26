@@ -79,11 +79,12 @@
 
 ### 5.2. Transitions Between Instructions
 *   In-place transition: quick fade or right-to-left swipe animation.
-*   Haptic feedback fires on the navigation tap itself (not on the transition animation).
-*   Haptic is limited to taps that progress the game — not on general UI interactions (dropdowns, tab switches).
+*   Haptic feedback fires on the game-progressing interaction itself—tap or successful hold—not on the transition animation.
+*   Haptic is limited to interactions that progress the game, not general UI interactions (dropdowns, tab switches).
 
 ### 5.3. Submission Behavior
-*   Irreversible submissions use the press-and-hold control (~0.5-1s).
+*   One-way Continue acknowledgments use a localized Continue control and submit `ExpectedInputType.Continue`, never a Boolean choice.
+*   The current `ConfirmationView` retains press-and-hold because baseline confirmations include irreversible physical/public events. Vote and option submissions use the same commitment gate; a canceled or incomplete hold emits no response.
 
 ### 5.4. Timer
 *   Count-up stopwatch. Resets on new instruction. Runs independently of tab focus (panels stay alive).
@@ -96,7 +97,8 @@
 *   Tap to select/deselect. Submit enabled when selection meets `CountConstraint`.
 
 ### 6.2. SelectOptionsView
-*   Vertical list of options. Tap to select.
+*   Vertical list in the Core-provided semantic order. Render each option's localized label, but track and submit only its machine-stable ID; duplicate labels remain distinct choices.
+*   Tap to select, then press and hold to submit.
 *   The planned Thief flow renders only Core-provided, machine-stable `Offer1`, `Offer2`, and `Decline` options, with `Decline` absent when illegal. The client neither infers legality nor recreates the locked private offer pair.
 
 ### 6.3. AssignRolesView
@@ -104,7 +106,7 @@
 *   Typically one player at a time — a simple role picker from `RolesForAssignment` (unassigned roles).
 
 ### 6.4. ConfirmationView
-*   Single "Proceed" control. Its submission behavior follows Section 5.3.
+*   Single localized "Continue" press-and-hold control that emits the instruction's one-way `ExpectedInputType.Continue` response after the hold completes.
 
 ## 7. Dashboard Tabs
 

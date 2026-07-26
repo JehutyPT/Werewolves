@@ -339,6 +339,7 @@ internal abstract class RoleHookListener<TRoleStateEnum> : RoleHookListener wher
 			this.ActionToPerform = ActionToPerform;
 			this.PossibleEndStages = PossibleEndStages?.Select(s => s.ToString()).ToHashSet();
 			this.ShouldOverwriteStartStage = ShouldOverwriteStartStage;
+			this.ShouldAdvanceState = ShouldAdvanceState;
 		}
 
 		private class HookStateMachineStageKey : IHookSubPhaseKey{}

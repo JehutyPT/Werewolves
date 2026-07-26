@@ -6,7 +6,7 @@ using Werewolves.Core.StateModels.Resources;
 namespace Werewolves.Core.StateModels.Models.Instructions;
 
 /// <summary>
-/// Instruction that requires a simple yes/no confirmation from the moderator.
+/// Instruction that requires a one-way Continue acknowledgment from the moderator.
 /// </summary>
 public record ConfirmationInstruction : ModeratorInstruction
 {
@@ -20,32 +20,67 @@ public record ConfirmationInstruction : ModeratorInstruction
     internal ConfirmationInstruction(
         string? publicAnnouncement = null,
         string? privateInstruction = null,
-        IReadOnlyList<Guid>? affectedPlayerIds = null)
-        : base(publicAnnouncement, privateInstruction, affectedPlayerIds)
+        IReadOnlyList<Guid>? affectedPlayerIds = null,
+        Guid instructionId = default)
+        : base(
+            publicAnnouncement,
+            privateInstruction,
+            affectedPlayerIds,
+            instructionId: instructionId)
     {
     }
 
     /// <summary>
-    /// Creates a ModeratorResponse with the provided confirmation value.
-    /// Performs contractual validation to ensure the response is properly formed.
+    /// Creates a one-way Continue acknowledgment.
     /// </summary>
-    /// <param name="confirmation">The moderator's confirmation response.</param>
     /// <returns>A validated ModeratorResponse.</returns>
-    public virtual ModeratorResponse CreateResponse(bool confirmation)
+    public virtual ModeratorResponse CreateResponse()
     {
         return new ModeratorResponse
         {
-            Type = ExpectedInputType.Confirmation,
-            Confirmation = confirmation
+            InstructionId = InstructionId,
+            Type = ExpectedInputType.Continue
         };
     }
 }
 
-public record StartGameConfirmationInstruction(Guid GameGuid) : ConfirmationInstruction(GameStrings.GameStartPrompt)
+public record StartGameConfirmationInstruction : ConfirmationInstruction
 {
-    public Guid GameGuid { get; } = GameGuid;
+    public Guid GameGuid { get; }
+
+    public StartGameConfirmationInstruction(Guid GameGuid)
+        : this(GameGuid, instructionId: default)
+    {
+    }
+
+    [JsonConstructor]
+    internal StartGameConfirmationInstruction(Guid GameGuid, Guid instructionId)
+        : base(GameStrings.GameStartPrompt, instructionId: instructionId)
+    {
+        this.GameGuid = GameGuid;
+    }
+
+    public void Deconstruct(out Guid GameGuid) => GameGuid = this.GameGuid;
 }
 
-public record FinishedGameConfirmationInstruction(string VictoryDescription) : ConfirmationInstruction(GameStrings.GameOverMessage.Format(VictoryDescription))
+public record FinishedGameConfirmationInstruction : ConfirmationInstruction
 {
+    public string VictoryDescription { get; }
+
+    public FinishedGameConfirmationInstruction(string VictoryDescription)
+        : this(VictoryDescription, instructionId: default)
+    {
+    }
+
+    [JsonConstructor]
+    internal FinishedGameConfirmationInstruction(string VictoryDescription, Guid instructionId)
+        : base(
+            GameStrings.GameOverMessage.Format(VictoryDescription),
+            instructionId: instructionId)
+    {
+        this.VictoryDescription = VictoryDescription;
+    }
+
+    public void Deconstruct(out string VictoryDescription) =>
+        VictoryDescription = this.VictoryDescription;
 }

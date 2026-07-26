@@ -47,7 +47,7 @@ public enum DaySubPhases
     FriendVoting,
     HandleNonTieVote,
     ProcessVoteOutcome,
-    ProcessVoteDeathLoop,
+    ProcessVoteEliminationCascade,
     Finalize
 }
 

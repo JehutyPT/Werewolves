@@ -335,7 +335,8 @@ public class AssignRolesViewBunitTests
 				roles,
 				null,
 				GameStrings.RevealRolePromptSpecify,
-				null
+				null,
+				Guid.Empty
 			]);
 
 	private static DashboardRosterEntry CreateRosterEntry(Guid playerId, int seatNumber, string name) =>
@@ -353,5 +354,5 @@ public class AssignRolesViewBunitTests
 	private static readonly ConstructorInfo AssignRolesConstructor =
 		typeof(AssignRolesInstruction)
 			.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic)
-			.Single(ctor => ctor.GetParameters().Length == 5);
+			.Single(ctor => ctor.GetParameters().Length == 6);
 }

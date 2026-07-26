@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Text.Json.Serialization;
 using Werewolves.Core.StateModels.Enums;
 
@@ -12,7 +13,7 @@ public record SelectPlayersInstruction : ModeratorInstruction
     /// <summary>
     /// The list of player IDs that can be selected from.
     /// </summary>
-    public HashSet<Guid> SelectablePlayerIds { get; }
+    public ImmutableHashSet<Guid> SelectablePlayerIds { get; }
 
     /// <summary>
     /// The constraint defining how many players must be selected.
@@ -43,14 +44,16 @@ public record SelectPlayersInstruction : ModeratorInstruction
         NumberRangeConstraint countConstraint,
         string? publicAnnouncement = null,
         string? privateInstruction = null,
-        IReadOnlyList<Guid>? affectedPlayerIds = null)
+        IReadOnlyList<Guid>? affectedPlayerIds = null,
+        Guid instructionId = default)
 		: this(
-			selectablePlayerIds,
+			selectablePlayerIds.ToImmutableHashSet(),
 			countConstraint,
 			publicAnnouncement,
 			privateInstruction,
 			affectedPlayerIds,
-			roleIdentification: null)
+			roleIdentification: null,
+			instructionId: instructionId)
 	{
 	}
 
@@ -58,17 +61,45 @@ public record SelectPlayersInstruction : ModeratorInstruction
 	/// Initializes a new instance of SelectPlayersInstruction with machine-stable
 	/// first-night Role identification context.
 	/// </summary>
-	[JsonConstructor]
 	internal SelectPlayersInstruction(
 		HashSet<Guid> selectablePlayerIds,
 		NumberRangeConstraint countConstraint,
 		string? publicAnnouncement,
 		string? privateInstruction,
 		IReadOnlyList<Guid>? affectedPlayerIds,
-		MainRoleType? roleIdentification)
-        : base(publicAnnouncement, privateInstruction, affectedPlayerIds)
+		MainRoleType? roleIdentification,
+		Guid instructionId = default)
+		: this(
+			selectablePlayerIds.ToImmutableHashSet(),
+			countConstraint,
+			publicAnnouncement,
+			privateInstruction,
+			affectedPlayerIds,
+			roleIdentification,
+			instructionId)
+	{
+	}
+
+	/// <summary>
+	/// Initializes a new instance from its durable representation.
+	/// </summary>
+    [JsonConstructor]
+	internal SelectPlayersInstruction(
+		ImmutableHashSet<Guid> selectablePlayerIds,
+		NumberRangeConstraint countConstraint,
+		string? publicAnnouncement,
+		string? privateInstruction,
+		IReadOnlyList<Guid>? affectedPlayerIds,
+		MainRoleType? roleIdentification,
+        Guid instructionId = default)
+        : base(
+            publicAnnouncement,
+            privateInstruction,
+            affectedPlayerIds,
+            instructionId: instructionId)
     {
-        SelectablePlayerIds = selectablePlayerIds ?? throw new ArgumentNullException(nameof(selectablePlayerIds));
+        ArgumentNullException.ThrowIfNull(selectablePlayerIds);
+        SelectablePlayerIds = selectablePlayerIds.ToImmutableHashSet();
         CountConstraint = countConstraint;
 		if (roleIdentification.HasValue && !Enum.IsDefined(roleIdentification.Value))
 		{
@@ -96,8 +127,9 @@ public record SelectPlayersInstruction : ModeratorInstruction
 
         return new ModeratorResponse
         {
+            InstructionId = InstructionId,
             Type = ExpectedInputType.PlayerSelection,
-            SelectedPlayerIds = selectedPlayerIds
+            SelectedPlayerIds = selectedPlayerIds.ToImmutableHashSet()
         };
     }
 

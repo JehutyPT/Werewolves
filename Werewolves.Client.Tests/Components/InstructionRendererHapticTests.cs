@@ -23,7 +23,7 @@ public class InstructionRendererHapticTests
 		using var context = new ModeratorComponentTestContext();
 		var game = context.Services.GetRequiredService<GameClientManager>();
 		var firstInstruction = CreateAssignRolesInstruction(game);
-		var secondInstruction = firstInstruction with { };
+		var secondInstruction = CreateInstructionWithNewIdentity(firstInstruction);
 		var roster = game.CurrentRoster;
 
 		var cut = context.RenderModeratorComponent<InstructionRenderer>(parameters => parameters
@@ -64,9 +64,22 @@ public class InstructionRendererHapticTests
 				new[] { MainRoleType.SimpleVillager },
 				null,
 				nameof(InstructionRenderer_RemountsInputStateWhenInstructionChanges),
-				null
+				null,
+				Guid.Empty
 			]);
 	}
+
+	private static AssignRolesInstruction CreateInstructionWithNewIdentity(
+		AssignRolesInstruction instruction) =>
+		(AssignRolesInstruction)AssignRolesConstructor.Invoke(
+			[
+				instruction.PlayersForAssignment,
+				instruction.RolesForAssignment,
+				instruction.PublicAnnouncement,
+				instruction.PrivateInstruction,
+				instruction.AffectedPlayerIds,
+				Guid.NewGuid()
+			]);
 
 	private static IReadOnlyList<IElement> FindRoleButtons(IRenderedComponent<InstructionRenderer> rendered) =>
 		rendered.FindAll(Html.Selectors.ButtonWithClass(ClientTestReferences.Css.Classes.RoleButton));
@@ -79,5 +92,5 @@ public class InstructionRendererHapticTests
 	private static readonly ConstructorInfo AssignRolesConstructor =
 		typeof(AssignRolesInstruction)
 			.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic)
-			.Single(ctor => ctor.GetParameters().Length == 5);
+			.Single(ctor => ctor.GetParameters().Length == 6);
 }

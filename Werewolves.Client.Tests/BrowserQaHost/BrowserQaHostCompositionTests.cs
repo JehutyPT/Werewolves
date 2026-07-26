@@ -169,8 +169,11 @@ public class BrowserQaHostCompositionTests
 
 		FindButtonByText(rendered, ClientStrings.Victory_ReturnToLobbyButton).Click();
 
-		game.HasActiveSession.Should().BeFalse();
-		RenderedText(rendered).Should().Contain(ClientStrings.LobbyRoster_Title);
+		rendered.WaitForAssertion(() =>
+		{
+			game.HasActiveSession.Should().BeFalse();
+			RenderedText(rendered).Should().Contain(ClientStrings.LobbyRoster_Title);
+		});
 	}
 
 	[Fact]

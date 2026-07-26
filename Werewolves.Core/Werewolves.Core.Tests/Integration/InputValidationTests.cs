@@ -2,7 +2,6 @@ using FluentAssertions;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
-using Werewolves.Core.StateModels.Resources;
 using Werewolves.Core.Tests.Helpers;
 using Xunit;
 using Xunit.Abstractions;
@@ -38,7 +37,7 @@ public class InputValidationTests : DiagnosticTestBase
         var nightStartInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
             CoreTestReferences.InstructionContexts.NightStartConfirmation);
-        var nightStartResponse = nightStartInstruction.CreateResponse(true);
+        var nightStartResponse = nightStartInstruction.CreateResponse();
         builder.Process(nightStartResponse);
 
         // Get the SelectPlayersInstruction (werewolf identification)
@@ -50,9 +49,13 @@ public class InputValidationTests : DiagnosticTestBase
         var gameStateBefore = builder.GetGameState()!;
         var logCountBefore = gameStateBefore.GameHistoryLog.Count();
 
-        // Create a wrong response type - ConfirmationResponse instead of SelectPlayersResponse
-        // We need to provide at least one announcement string to create the instruction
-        var wrongResponse = new ConfirmationInstruction(privateInstruction: GameStrings.ConfirmNightStarted).CreateResponse(true);
+        // Correlate the response to the pending instruction so this test reaches
+        // the distinct response-kind gate rather than the earlier identity gate.
+        var wrongResponse = new ModeratorResponse
+        {
+            InstructionId = selectInstruction.InstructionId,
+            Type = ExpectedInputType.Continue
+        };
 
         // Act - Attempt to process with wrong response type
         // The current implementation throws an InvalidOperationException when response type doesn't match
@@ -60,7 +63,7 @@ public class InputValidationTests : DiagnosticTestBase
 
         // Assert - Should throw an exception indicating type mismatch
         act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*Confirmation*");
+            .WithMessage("*type does not match*");
 
         // Verify game state is unchanged
         var gameStateAfter = builder.GetGameState()!;
@@ -279,7 +282,7 @@ public class InputValidationTests : DiagnosticTestBase
         var nightStartInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
             CoreTestReferences.InstructionContexts.NightStartConfirmation);
-        var response = nightStartInstruction.CreateResponse(true);
+        var response = nightStartInstruction.CreateResponse();
         builder.Process(response);
     }
 
@@ -347,7 +350,7 @@ public class InputValidationTests : DiagnosticTestBase
 
         // Assert - Should throw an exception for wrong player
         act.Should().Throw<ArgumentException>()
-            .WithMessage(CoreTestReferences.ExceptionPatterns.PlayerCannotBeAssigned(otherPlayerId));
+            .WithMessage("*exactly every Player*");
 
         MarkTestCompleted();
     }

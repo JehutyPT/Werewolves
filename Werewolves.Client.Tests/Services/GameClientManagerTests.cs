@@ -48,7 +48,7 @@ public class GameClientManagerTests
 		var manager = new GameClientManager();
 		var startInstruction = StartSimpleGame(manager);
 
-		var result = manager.ProcessInput(startInstruction.CreateResponse(true));
+		var result = manager.ProcessInput(startInstruction.CreateResponse());
 
 		result.IsSuccess.Should().BeTrue();
 		result.ModeratorInstruction.Should().NotBeNull();
@@ -66,7 +66,7 @@ public class GameClientManagerTests
 		var manager = new GameClientManager(new GameService(), saveStore: saveStore);
 		var startInstruction = StartSimpleGame(manager);
 
-		manager.ProcessInput(startInstruction.CreateResponse(true));
+		manager.ProcessInput(startInstruction.CreateResponse());
 
 		var saveFiles = Directory.GetFiles(saveDirectory.Path);
 		saveFiles.Should().ContainSingle();
@@ -83,7 +83,7 @@ public class GameClientManagerTests
 		var saveFilePath = Path.Combine(saveDirectory.Path, FileGameSessionSaveStore.SaveFileName);
 		File.WriteAllText(saveFilePath, "stale save data");
 
-		manager.ProcessInput(startInstruction.CreateResponse(true));
+		manager.ProcessInput(startInstruction.CreateResponse());
 
 		Directory.GetFiles(saveDirectory.Path).Should().ContainSingle();
 		File.ReadAllText(saveFilePath).Should().Be(manager.CurrentSession!.Serialize());
@@ -133,7 +133,7 @@ public class GameClientManagerTests
 		var saveStore = new FileGameSessionSaveStore(saveDirectory.Path);
 		var manager = new GameClientManager(new GameService(), saveStore: saveStore);
 		var startInstruction = StartSimpleGame(manager);
-		manager.ProcessInput(startInstruction.CreateResponse(true));
+		manager.ProcessInput(startInstruction.CreateResponse());
 		var savedGameId = manager.ActiveGameId;
 		var savedPhase = manager.CurrentPhase;
 
@@ -152,11 +152,11 @@ public class GameClientManagerTests
 		using var saveDirectory = TemporaryDirectory.Create();
 		var manager = new GameClientManager(new GameService(), saveStore: new FileGameSessionSaveStore(saveDirectory.Path));
 		var startInstruction = StartSimpleGame(manager);
-		manager.ProcessInput(startInstruction.CreateResponse(true));
+		manager.ProcessInput(startInstruction.CreateResponse());
 		var resumed = new GameClientManager(new GameService(), saveStore: new FileGameSessionSaveStore(saveDirectory.Path));
 		var restoredInstruction = resumed.CurrentInstruction.Should().BeOfType<ConfirmationInstruction>().Subject;
 
-		var result = resumed.ProcessInput(restoredInstruction.CreateResponse(true));
+		var result = resumed.ProcessInput(restoredInstruction.CreateResponse());
 
 		result.IsSuccess.Should().BeTrue();
 		resumed.CurrentInstruction.Should().Be(result.ModeratorInstruction);
@@ -185,7 +185,7 @@ public class GameClientManagerTests
 		var saveFilePath = Path.Combine(saveDirectory.Path, FileGameSessionSaveStore.SaveFileName);
 		var manager = new GameClientManager(new GameService(), saveStore: new FileGameSessionSaveStore(saveDirectory.Path));
 		var startInstruction = StartSimpleGame(manager);
-		manager.ProcessInput(startInstruction.CreateResponse(true));
+		manager.ProcessInput(startInstruction.CreateResponse());
 		File.Exists(saveFilePath).Should().BeTrue();
 
 		StartSimpleGame(manager);
@@ -220,7 +220,7 @@ public class GameClientManagerTests
 				MainRoleType.SimpleVillager
 			]);
 
-		manager.ProcessInput(startInstruction.CreateResponse(true));
+		manager.ProcessInput(startInstruction.CreateResponse());
 		var players = manager.CurrentSession!.GetPlayers().ToList();
 		var werewolfIds = players.Take(2).Select(p => p.Id).ToHashSet();
 		var victimId = players[2].Id;
@@ -238,7 +238,7 @@ public class GameClientManagerTests
 		roster.Should().Contain(r => r.PlayerId == victimId,
 			ClientTestReferences.AssertionReasons.RosterContainsEntriesForRoleAssignmentPlayers);
 
-		var result = manager.ProcessInput(announcement.CreateResponse(true));
+		var result = manager.ProcessInput(announcement.CreateResponse());
 
 		result.IsSuccess.Should().BeTrue();
 		manager.CurrentInstruction.Should().NotBe(announcement);
@@ -250,7 +250,7 @@ public class GameClientManagerTests
 		var manager = new GameClientManager(new GameService(), saveStore: new ThrowingSaveStore());
 		var startInstruction = StartSimpleGame(manager);
 
-		var act = () => manager.ProcessInput(startInstruction.CreateResponse(true));
+		var act = () => manager.ProcessInput(startInstruction.CreateResponse());
 
 		act.Should().NotThrow();
 		manager.HasActiveSession.Should().BeTrue();
@@ -263,7 +263,7 @@ public class GameClientManagerTests
 		using var saveDirectory = TemporaryDirectory.Create();
 		var manager = new GameClientManager(new GameService(), saveStore: new FileGameSessionSaveStore(saveDirectory.Path));
 		var startInstruction = StartSimpleGame(manager);
-		manager.ProcessInput(startInstruction.CreateResponse(true));
+		manager.ProcessInput(startInstruction.CreateResponse());
 		ConfirmCurrentInstruction(manager);
 		var players = manager.CurrentSession!.GetPlayers().ToList();
 
@@ -293,7 +293,7 @@ public class GameClientManagerTests
 		using var saveDirectory = TemporaryDirectory.Create();
 		var manager = new GameClientManager(new GameService(), saveStore: new FileGameSessionSaveStore(saveDirectory.Path));
 		var startInstruction = StartTwoWerewolfGame(manager);
-		manager.ProcessInput(startInstruction.CreateResponse(true));
+		manager.ProcessInput(startInstruction.CreateResponse());
 		var players = manager.CurrentSession!.GetPlayers().ToList();
 
 		ConfirmCurrentInstruction(manager);
@@ -393,7 +393,7 @@ public class GameClientManagerTests
 	{
 		var manager = new GameClientManager();
 		var startInstruction = StartSimpleGame(manager);
-		manager.ProcessInput(startInstruction.CreateResponse(true));
+		manager.ProcessInput(startInstruction.CreateResponse());
 		var instruction = manager.CurrentInstruction!;
 
 		instruction.PublicAnnouncement.Should().NotBeNullOrWhiteSpace();
@@ -428,14 +428,14 @@ public class GameClientManagerTests
 		var manager = new GameClientManager();
 		var startInstruction = StartSimpleGame(manager);
 
-		manager.ProcessInput(startInstruction.CreateResponse(true));
+		manager.ProcessInput(startInstruction.CreateResponse());
 		var nightStartInstruction = manager.CurrentInstruction.Should().BeOfType<ConfirmationInstruction>().Subject;
 		nightStartInstruction.PublicAnnouncement.Should().Be(GameStrings.NightStartsPrompt);
 		nightStartInstruction.PrivateInstruction.Should().Be(GameStrings.ConfirmNightStarted);
 		manager.CurrentPhase.Should().Be(GamePhase.Night);
 		manager.TurnNumber.Should().Be(1);
 
-		manager.ProcessInput(nightStartInstruction.CreateResponse(true));
+		manager.ProcessInput(nightStartInstruction.CreateResponse());
 
 		for (var step = 0; step < 20; step++)
 		{
@@ -448,7 +448,7 @@ public class GameClientManagerTests
 			switch (manager.CurrentInstruction)
 			{
 				case ConfirmationInstruction currentConfirmation:
-					manager.ProcessInput(currentConfirmation.CreateResponse(true));
+					manager.ProcessInput(currentConfirmation.CreateResponse());
 					break;
 				case SelectPlayersInstruction selectPlayers:
 					manager.ProcessInput(selectPlayers.CreateResponse(
@@ -488,7 +488,7 @@ public class GameClientManagerTests
 		var eventCount = 0;
 		manager.StateChanged += (_, _) => eventCount++;
 
-		manager.ProcessInput(startInstruction.CreateResponse(true));
+		manager.ProcessInput(startInstruction.CreateResponse());
 
 		eventCount.Should().Be(1);
 	}
@@ -498,9 +498,9 @@ public class GameClientManagerTests
 	{
 		var manager = new GameClientManager();
 		var startInstruction = StartSimpleGame(manager);
-		manager.ProcessInput(startInstruction.CreateResponse(true));
+		manager.ProcessInput(startInstruction.CreateResponse());
 		var nightStartInstruction = manager.CurrentInstruction.Should().BeOfType<ConfirmationInstruction>().Subject;
-		manager.ProcessInput(nightStartInstruction.CreateResponse(true));
+		manager.ProcessInput(nightStartInstruction.CreateResponse());
 		var identifyWerewolfInstruction = manager.CurrentInstruction.Should().BeOfType<SelectPlayersInstruction>().Subject;
 		var werewolf = manager.CurrentSession!.GetPlayers().First();
 		var werewolfRoleLabel = MainRoleType.SimpleWerewolf.GetPublicName();
@@ -519,7 +519,7 @@ public class GameClientManagerTests
 	public void ProcessInput_WithoutActiveSession_ThrowsInvalidOperationException()
 	{
 		var manager = new GameClientManager();
-		var response = StartSimpleGame(new GameClientManager()).CreateResponse(true);
+		var response = StartSimpleGame(new GameClientManager()).CreateResponse();
 
 		var act = () => manager.ProcessInput(response);
 
@@ -548,7 +548,7 @@ public class GameClientManagerTests
 		await manager.PendingAudioReconciliation;
 		audioPlayback.ReconciledInstructions.Clear();
 
-		var result = manager.ProcessInput(startInstruction.CreateResponse(true));
+		var result = manager.ProcessInput(startInstruction.CreateResponse());
 		await manager.PendingAudioReconciliation;
 
 		audioPlayback.ReconciledInstructions.Should().Equal(result.ModeratorInstruction);
@@ -612,7 +612,7 @@ public class GameClientManagerTests
 		var fakeTime = new FakeTimeProvider(DateTimeOffset.UtcNow);
 		var manager = new GameClientManager(new GameService(), timeProvider: fakeTime);
 		var startInstruction = StartSimpleGame(manager);
-		manager.ProcessInput(startInstruction.CreateResponse(true));
+		manager.ProcessInput(startInstruction.CreateResponse());
 
 		manager.CurrentPhase.Should().Be(GamePhase.Night);
 		manager.DebateElapsed.Should().BeNull();
@@ -628,7 +628,7 @@ public class GameClientManagerTests
 
 		// Confirm the debate instruction to advance to voting
 		var debateInstruction = (ConfirmationInstruction)manager.CurrentInstruction!;
-		manager.ProcessInput(debateInstruction.CreateResponse(true));
+		manager.ProcessInput(debateInstruction.CreateResponse());
 
 		manager.CurrentInstruction.Should().BeOfType<SelectPlayersInstruction>();
 		manager.DebateElapsed.Should().BeNull();
@@ -749,7 +749,7 @@ public class GameClientManagerTests
 				MainRoleType.SimpleVillager
 			]);
 
-		manager.ProcessInput(startInstruction.CreateResponse(true));
+		manager.ProcessInput(startInstruction.CreateResponse());
 		var players = manager.CurrentSession!.GetPlayers().ToList();
 		var werewolfIds = players.Take(2).Select(player => player.Id).ToHashSet();
 		var victimId = players[2].Id;
@@ -773,7 +773,7 @@ public class GameClientManagerTests
 					manager.ProcessInput(assignRoles.CreateResponse(assignments));
 					break;
 				case ConfirmationInstruction confirmation:
-					manager.ProcessInput(confirmation.CreateResponse(true));
+					manager.ProcessInput(confirmation.CreateResponse());
 					break;
 				default:
 					throw new InvalidOperationException(
@@ -788,7 +788,7 @@ public class GameClientManagerTests
 	private static void ConfirmCurrentInstruction(GameClientManager manager)
 	{
 		var instruction = manager.CurrentInstruction.Should().BeOfType<ConfirmationInstruction>().Subject;
-		manager.ProcessInput(instruction.CreateResponse(true));
+		manager.ProcessInput(instruction.CreateResponse());
 	}
 
 	private static void SelectCurrentPlayers(GameClientManager manager, HashSet<Guid> playerIds)
@@ -839,7 +839,7 @@ public class GameClientManagerTests
 	{
 		// Confirm debate to move to voting
 		var debateInstruction = (ConfirmationInstruction)manager.CurrentInstruction!;
-		manager.ProcessInput(debateInstruction.CreateResponse(true));
+		manager.ProcessInput(debateInstruction.CreateResponse());
 
 		// Continue through voting, night, dawn until the next debate
 		for (var step = 0; step < 50; step++)
@@ -856,7 +856,7 @@ public class GameClientManagerTests
 				case FinishedGameConfirmationInstruction:
 					throw new InvalidOperationException(ClientTestReferences.ExceptionMessages.GameEndedBeforeNextDebate);
 				case ConfirmationInstruction ci:
-					manager.ProcessInput(ci.CreateResponse(true));
+					manager.ProcessInput(ci.CreateResponse());
 					break;
 				case SelectPlayersInstruction sp:
 					// Vote for nobody (empty set if optional) to avoid eliminations
@@ -889,7 +889,7 @@ public class GameClientManagerTests
 	private static void AdvanceToDebate(GameClientManager manager)
 	{
 		var startInstruction = StartSimpleGame(manager);
-		manager.ProcessInput(startInstruction.CreateResponse(true));
+		manager.ProcessInput(startInstruction.CreateResponse());
 
 		for (var step = 0; step < 50; step++)
 		{
@@ -903,7 +903,7 @@ public class GameClientManagerTests
 			switch (manager.CurrentInstruction)
 			{
 				case ConfirmationInstruction ci:
-					manager.ProcessInput(ci.CreateResponse(true));
+					manager.ProcessInput(ci.CreateResponse());
 					break;
 				case SelectPlayersInstruction sp:
 					var firstId = sp.SelectablePlayerIds.First();
@@ -989,7 +989,7 @@ public class GameClientManagerTests
 		var saveStore = new FileGameSessionSaveStore(saveDirectory.Path);
 		var manager = new GameClientManager(new GameService(), saveStore: saveStore);
 		var startInstruction = StartSimpleGame(manager);
-		manager.ProcessInput(startInstruction.CreateResponse(true));
+		manager.ProcessInput(startInstruction.CreateResponse());
 		var saveFilePath = Path.Combine(saveDirectory.Path, FileGameSessionSaveStore.SaveFileName);
 		File.Exists(saveFilePath).Should().BeTrue();
 
