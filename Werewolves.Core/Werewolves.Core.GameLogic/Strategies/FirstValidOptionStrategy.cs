@@ -12,7 +12,7 @@ public sealed class FirstValidOptionStrategy : IModeratorDecisionStrategy
 	{
 		return instruction switch
 		{
-			ConfirmationInstruction confirmation => confirmation.CreateResponse(true),
+			ConfirmationInstruction confirmation => confirmation.CreateResponse(),
 			SelectPlayersInstruction selectPlayers => CreatePlayerSelectionResponse(selectPlayers, session),
 			AssignRolesInstruction assignRoles => CreateRoleAssignmentResponse(assignRoles, session),
 			SelectOptionsInstruction selectOptions => CreateOptionSelectionResponse(selectOptions),
@@ -52,10 +52,10 @@ public sealed class FirstValidOptionStrategy : IModeratorDecisionStrategy
 	private static ModeratorResponse CreateOptionSelectionResponse(SelectOptionsInstruction instruction)
 	{
 		var selectionCount = Math.Max(1, instruction.SelectionRange.Minimum);
-		var selectedOptions = instruction.SelectableOptions
-			.Order(StringComparer.Ordinal)
+		var selectedOptions = instruction.Options
+			.Select(option => option.Id)
 			.Take(selectionCount)
-			.ToHashSet(StringComparer.Ordinal);
+			.ToArray();
 
 		return instruction.CreateResponse(selectedOptions);
 	}

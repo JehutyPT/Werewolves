@@ -2,12 +2,13 @@
 @using Werewolves.Core.StateModels.Models.Instructions
 
 <div class="ww-option-list" role="group" aria-label="@ClientStrings.SelectOptions_Title">
-	@foreach (var option in Instruction.SelectableOptions)
+	@foreach (var option in Instruction.Options)
 	{
 		<button type="button"
-				class="@OptionClass(option)"
-				aria-pressed="@AriaPressed(option)"
-				@onclick="() => ToggleOption(option)">@option</button>
+				@key="option.Id"
+				class="@OptionClass(option.Id)"
+				aria-pressed="@AriaPressed(option.Id)"
+				@onclick="() => ToggleOption(option.Id)">@option.Label</button>
 	}
 </div>
 
@@ -20,7 +21,7 @@
 </footer>
 
 @code {
-	private readonly HashSet<string> _selectedOptions = new();
+	private readonly HashSet<string> _selectedOptionIds = new(StringComparer.Ordinal);
 
 	[Parameter, EditorRequired]
 	public SelectOptionsInstruction Instruction { get; set; } = default!;
@@ -28,42 +29,42 @@
 	[Parameter]
 	public EventCallback<ModeratorResponse> OnResponse { get; set; }
 
-	private bool IsSelectionValid => Instruction.SelectionRange.IsValid(_selectedOptions);
+	private bool IsSelectionValid => Instruction.SelectionRange.IsValid(_selectedOptionIds);
 
 	private string SelectionCountLabel =>
 		string.Format(
 			System.Globalization.CultureInfo.CurrentCulture,
 			ClientStrings.SelectOptions_SelectionCountFormat,
-			_selectedOptions.Count,
+			_selectedOptionIds.Count,
 			Instruction.SelectionRange.Maximum);
 
-	private void ToggleOption(string option)
+	private void ToggleOption(string optionId)
 	{
-		if (!_selectedOptions.Remove(option))
+		if (!_selectedOptionIds.Remove(optionId))
 		{
 			if (Instruction.SelectionRange.Maximum == 1)
 			{
-				_selectedOptions.Clear();
-				_selectedOptions.Add(option);
+				_selectedOptionIds.Clear();
+				_selectedOptionIds.Add(optionId);
 			}
-			else if (_selectedOptions.Count < Instruction.SelectionRange.Maximum)
+			else if (_selectedOptionIds.Count < Instruction.SelectionRange.Maximum)
 			{
-				_selectedOptions.Add(option);
+				_selectedOptionIds.Add(optionId);
 			}
 		}
 	}
 
 	private Task HandleSubmit()
 	{
-		var response = Instruction.CreateResponse(new HashSet<string>(_selectedOptions));
+		var response = Instruction.CreateResponse(_selectedOptionIds.ToArray());
 		return OnResponse.InvokeAsync(response);
 	}
 
-	private string OptionClass(string option) =>
-		_selectedOptions.Contains(option)
+	private string OptionClass(string optionId) =>
+		_selectedOptionIds.Contains(optionId)
 			? "ww-option-btn ww-option-btn--selected"
 			: "ww-option-btn";
 
-	private string AriaPressed(string option) =>
-		_selectedOptions.Contains(option) ? "true" : "false";
+	private string AriaPressed(string optionId) =>
+		_selectedOptionIds.Contains(optionId) ? "true" : "false";
 }

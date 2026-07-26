@@ -60,7 +60,7 @@ public class DayVotingTests : DiagnosticTestBase
             CoreTestReferences.InstructionContexts.DebateConfirmationInstruction);
 
         // Act: Confirm debate is complete
-        var afterDebate = builder.Process(debateInstruction.CreateResponse(true));
+        var afterDebate = builder.Process(debateInstruction.CreateResponse());
         afterDebate.IsSuccess.Should().BeTrue();
 
         // After DetermineVoteType (silent transition), we should get a voting instruction
@@ -114,7 +114,7 @@ public class DayVotingTests : DiagnosticTestBase
         var debateInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
             CoreTestReferences.InstructionContexts.DebateConfirmation);
-        var afterDebate = builder.Process(debateInstruction.CreateResponse(true));
+        var afterDebate = builder.Process(debateInstruction.CreateResponse());
 
         // Get voting instruction
         var votingInstruction = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
@@ -162,7 +162,7 @@ public class DayVotingTests : DiagnosticTestBase
         var debateInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
             CoreTestReferences.InstructionContexts.DebateConfirmation);
-        var afterDebate = builder.Process(debateInstruction.CreateResponse(true));
+        var afterDebate = builder.Process(debateInstruction.CreateResponse());
 
         var votingInstruction = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
             afterDebate,
@@ -276,7 +276,7 @@ public class DayVotingTests : DiagnosticTestBase
         var debateInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
             CoreTestReferences.InstructionContexts.DebateConfirmation);
-        var afterDebate = builder.Process(debateInstruction.CreateResponse(true));
+        var afterDebate = builder.Process(debateInstruction.CreateResponse());
 
         // Get voting instruction and vote
         var votingInstruction = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
@@ -382,7 +382,7 @@ public class DayVotingTests : DiagnosticTestBase
         var debateInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
             CoreTestReferences.InstructionContexts.DebateConfirmation);
-        var afterDebate = builder.Process(debateInstruction.CreateResponse(true));
+        var afterDebate = builder.Process(debateInstruction.CreateResponse());
 
         // Get voting instruction
         var votingInstruction = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
@@ -443,7 +443,7 @@ public class DayVotingTests : DiagnosticTestBase
         var debateInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
             CoreTestReferences.InstructionContexts.DebateConfirmation);
-        var afterDebate = builder.Process(debateInstruction.CreateResponse(true));
+        var afterDebate = builder.Process(debateInstruction.CreateResponse());
 
         // Get voting instruction
         var votingInstruction = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
@@ -509,7 +509,7 @@ public class DayVotingTests : DiagnosticTestBase
         var debateInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
             CoreTestReferences.InstructionContexts.DebateConfirmation);
-        var afterDebate = builder.Process(debateInstruction.CreateResponse(true));
+        var afterDebate = builder.Process(debateInstruction.CreateResponse());
 
         // Act: Get the vote selection instruction
         var votingInstruction = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(

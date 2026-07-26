@@ -1,4 +1,5 @@
 using Werewolves.Core.GameLogic.Models.InternalMessages;
+using Werewolves.Core.GameLogic.Roles;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
@@ -186,15 +187,6 @@ internal sealed class HookSubPhaseStage : SubPhaseStage
 		// Dispatch to each listener in sequence
         foreach (var listenerId in listeners)
         {
-            // Get or create listener instance for this session (factory pattern for test isolation)
-            if (!GameFlowManager.ListenerFactories.TryGetValue(listenerId, out var factory))
-            {
-				//throw new InvalidOperationException($"Listener factory not found for listener ID: {listenerId}");
-				// TODO: Skip unimplemented listeners for now
-                continue;
-            }
-            var listener = session.GetOrCreateListener(listenerId, factory);
-
             // Check if we have a currently paused listener
             var currentListener = session.GetCurrentListener();
 
@@ -204,8 +196,17 @@ internal sealed class HookSubPhaseStage : SubPhaseStage
                 continue;
             }
 
-			// Call the listener's state machine
-            var hookResult = listener.Execute(session, input);
+			var hookResult = RoleListenerDispatch.Dispatch(
+				listenerId,
+				SupportedRoleCatalog.Admissions,
+				(id, factory) => session.GetOrCreateListener(id, factory),
+				session,
+				input);
+
+			if (hookResult == null)
+			{
+				continue;
+			}
 
             if (hookResult.Outcome != HookListenerOutcome.Skip)
             {

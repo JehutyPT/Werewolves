@@ -288,7 +288,7 @@ public class StatusEffectsTests : DiagnosticTestBase
         var wildChildSleepInstruction = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
             afterModelSelection,
             CoreTestReferences.InstructionContexts.WildChildSleepConfirmation);
-        var afterWildChildSleep = builder.Process(wildChildSleepInstruction.CreateResponse(true));
+        var afterWildChildSleep = builder.Process(wildChildSleepInstruction.CreateResponse());
 
         var werewolfIdentifyInstruction = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
             afterWildChildSleep,
@@ -303,19 +303,19 @@ public class StatusEffectsTests : DiagnosticTestBase
         var werewolfSleepInstruction = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
             afterVictimSelection,
             CoreTestReferences.InstructionContexts.WerewolfSleepConfirmation);
-        var afterWerewolfSleep = builder.Process(werewolfSleepInstruction.CreateResponse(true));
+        var afterWerewolfSleep = builder.Process(werewolfSleepInstruction.CreateResponse());
 
         var nightEndInstruction = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
             afterWerewolfSleep,
             CoreTestReferences.InstructionContexts.NightEndConfirmation);
-        var afterNightEnd = builder.Process(nightEndInstruction.CreateResponse(true));
+        var afterNightEnd = builder.Process(nightEndInstruction.CreateResponse());
 
         var roleRevealInstruction = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
             afterNightEnd,
             CoreTestReferences.InstructionContexts.RoleRevealForEliminatedModel);
 
         // Act
-        builder.Process(roleRevealInstruction.CreateResponse(true));
+        builder.Process(roleRevealInstruction.CreateResponse());
 
         // Assert
         var gameState = builder.GetGameState()!;

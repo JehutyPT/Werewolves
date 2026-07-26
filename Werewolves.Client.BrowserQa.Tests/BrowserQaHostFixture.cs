@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Http;
 using System.Net.Sockets;
+using System.Reflection;
 using Xunit;
 
 namespace Werewolves.Client.BrowserQa.Tests;
@@ -37,6 +38,9 @@ public sealed class BrowserQaHostFixture : IAsyncLifetime
 		};
 
 		startInfo.ArgumentList.Add("run");
+		startInfo.ArgumentList.Add("--no-build");
+		startInfo.ArgumentList.Add("--configuration");
+		startInfo.ArgumentList.Add(BuildConfiguration);
 		startInfo.ArgumentList.Add("--no-launch-profile");
 		startInfo.ArgumentList.Add("--project");
 		startInfo.ArgumentList.Add(hostProjectPath);
@@ -114,6 +118,12 @@ public sealed class BrowserQaHostFixture : IAsyncLifetime
 		listener.Start();
 		return ((IPEndPoint)listener.LocalEndpoint).Port;
 	}
+
+	private static string BuildConfiguration =>
+		typeof(BrowserQaHostFixture).Assembly
+			.GetCustomAttribute<AssemblyConfigurationAttribute>()?
+			.Configuration
+		?? throw new InvalidOperationException("Could not determine the Browser QA test build configuration.");
 
 	private static string RepositoryRoot
 	{

@@ -157,7 +157,7 @@ public class GameTestBuilder
         EnsureGameStarted();
         var instruction = _lastInstruction as StartGameConfirmationInstruction
             ?? throw new InvalidOperationException(CoreTestReferences.ExceptionMessages.LastInstructionNotStartGameConfirmation);
-        var response = instruction.CreateResponse(true);
+        var response = instruction.CreateResponse();
 		return _gameService.ProcessInstruction(_gameId, response);
     }
 
@@ -232,7 +232,7 @@ public class GameTestBuilder
         var nightStartInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             GetCurrentInstruction(),
             CoreTestReferences.InstructionContexts.NightStartConfirmation);
-        var response = nightStartInstruction.CreateResponse(true);
+        var response = nightStartInstruction.CreateResponse();
         return Process(response);
     }
 
@@ -264,7 +264,7 @@ public class GameTestBuilder
         var sleepInstruction = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
             afterVictim,
             CoreTestReferences.InstructionContexts.WerewolfSleepConfirmation);
-        var sleepResponse = sleepInstruction.CreateResponse(true);
+        var sleepResponse = sleepInstruction.CreateResponse();
         return Process(sleepResponse);
     }
 
@@ -282,7 +282,7 @@ public class GameTestBuilder
         var wakeupInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             GetCurrentInstruction(),
             CoreTestReferences.InstructionContexts.WerewolfWakeConfirmation);
-        var afterWakeup = Process(wakeupInstruction.CreateResponse(true));
+        var afterWakeup = Process(wakeupInstruction.CreateResponse());
 
         // Select victim
         var victimInstruction = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
@@ -295,7 +295,7 @@ public class GameTestBuilder
         var sleepInstruction = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
             afterVictim,
             CoreTestReferences.InstructionContexts.WerewolfSleepConfirmation);
-        var sleepResponse = sleepInstruction.CreateResponse(true);
+        var sleepResponse = sleepInstruction.CreateResponse();
         return Process(sleepResponse);
     }
 
@@ -328,14 +328,14 @@ public class GameTestBuilder
         var resultInstruction = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
             afterTarget,
             CoreTestReferences.InstructionContexts.SeerResultConfirmation);
-        var resultResponse = resultInstruction.CreateResponse(true);
+        var resultResponse = resultInstruction.CreateResponse();
         var afterResult = Process(resultResponse);
 
 		// Confirm sleep
 		var sleepInstruction = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
-            afterTarget,
+            afterResult,
             CoreTestReferences.InstructionContexts.SeerSleepConfirmation);
-        var sleepResponse = sleepInstruction.CreateResponse(true);
+        var sleepResponse = sleepInstruction.CreateResponse();
         return Process(sleepResponse);
     }
 
@@ -390,7 +390,7 @@ public class GameTestBuilder
         var nightEndInstruction = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
             result,
             CoreTestReferences.InstructionContexts.NightEndConfirmation);
-        result = Process(nightEndInstruction.CreateResponse(true));
+        result = Process(nightEndInstruction.CreateResponse());
 
         return result;
     }
@@ -475,7 +475,7 @@ public class GameTestBuilder
             result = instruction switch
             {
                 AssignRolesInstruction assignRoles => HandleAssignRolesInstruction(assignRoles, roleAssignments),
-                ConfirmationInstruction confirmation => Process(confirmation.CreateResponse(true)),
+                ConfirmationInstruction confirmation => Process(confirmation.CreateResponse()),
                 SelectPlayersInstruction selectPlayers => throw new InvalidOperationException(
                     CoreTestReferences.ExceptionMessages.UnexpectedSelectPlayersDuringDawnPhase(selectPlayers.PrivateInstruction)),
                 null => throw new InvalidOperationException(CoreTestReferences.ExceptionMessages.NoCurrentInstructionDuringDawnPhase),
@@ -572,7 +572,7 @@ public class GameTestBuilder
             {
                 SelectPlayersInstruction selectPlayers => HandleDayVotingInstruction(selectPlayers, lynchTargetId),
                 AssignRolesInstruction assignRoles => HandleAssignRolesInstruction(assignRoles),
-                ConfirmationInstruction confirmation => Process(confirmation.CreateResponse(true)),
+                ConfirmationInstruction confirmation => Process(confirmation.CreateResponse()),
                 null => throw new InvalidOperationException(CoreTestReferences.ExceptionMessages.NoCurrentInstructionDuringDayPhase),
                 _ => throw new InvalidOperationException(
                     CoreTestReferences.ExceptionMessages.UnexpectedInstructionTypeDuringDayPhase(instruction.GetType().Name))

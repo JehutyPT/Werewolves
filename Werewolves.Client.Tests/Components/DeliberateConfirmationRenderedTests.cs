@@ -4,7 +4,6 @@ using AngleSharp.Dom;
 using Bunit;
 using FluentAssertions;
 using Microsoft.AspNetCore.Components;
-using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 using Werewolves.Client.Components.Game.Views;
 using Werewolves.Client.Resources;
@@ -25,96 +24,6 @@ public class DeliberateConfirmationRenderedTests
 {
 	private static string HoldButtonSelector =>
 		Html.Selectors.ButtonWithClass(ClientTestReferences.Css.Classes.HoldButton);
-
-	[Fact]
-	public async Task ConfirmationInstruction_ShortHold_DoesNotSubmitResponse()
-	{
-		var timing = new ControlledHoldButtonTiming();
-		using var context = CreateContext(timing);
-		var responses = new List<ModeratorResponse>();
-		var instruction = CreateConfirmationInstruction(GameStrings.NightActionsCompletePrompt);
-
-		var cut = RenderInstruction(context, instruction, responses);
-		var holdButton = FindHoldButton(cut);
-
-		var holdTask = RenderedHoldButtonDriver.StartHoldAsync(holdButton);
-		await RenderedHoldButtonDriver.FlushAsync(cut);
-		timing.AdvanceBy(RenderedHoldButtonDriver.HoldDuration - TimeSpan.FromMilliseconds(1));
-		await RenderedHoldButtonDriver.FlushAsync(cut);
-
-		await RenderedHoldButtonDriver.ReleaseHoldAsync(holdButton);
-		await holdTask;
-
-		responses.Should().BeEmpty();
-	}
-
-	[Fact]
-	public async Task ConfirmationInstruction_PointerLeaveCancelsWithoutSubmitting()
-	{
-		var timing = new ControlledHoldButtonTiming();
-		using var context = CreateContext(timing);
-		var responses = new List<ModeratorResponse>();
-		var instruction = CreateConfirmationInstruction(GameStrings.NightActionsCompletePrompt);
-
-		var cut = RenderInstruction(context, instruction, responses);
-		var holdButton = FindHoldButton(cut);
-
-		var holdTask = RenderedHoldButtonDriver.StartHoldAsync(holdButton);
-		await RenderedHoldButtonDriver.FlushAsync(cut);
-		timing.AdvanceBy(TimeSpan.FromMilliseconds(200));
-		await RenderedHoldButtonDriver.FlushAsync(cut);
-
-		await RenderedHoldButtonDriver.LeaveHoldAsync(holdButton);
-		await holdTask;
-		timing.AdvanceBy(RenderedHoldButtonDriver.HoldDuration + RenderedHoldButtonDriver.SuccessFlashDuration);
-		await RenderedHoldButtonDriver.FlushAsync(cut);
-
-		responses.Should().BeEmpty();
-	}
-
-	[Fact]
-	public async Task ConfirmationInstruction_DeliberateHoldSubmitsExactlyOneConfirmationResponse()
-	{
-		var timing = new ControlledHoldButtonTiming();
-		using var context = CreateContext(timing);
-		var responses = new List<ModeratorResponse>();
-		var instruction = CreateConfirmationInstruction(GameStrings.NightActionsCompletePrompt);
-
-		var cut = RenderInstruction(context, instruction, responses);
-		var holdButton = FindHoldButton(cut);
-
-		var holdTask = RenderedHoldButtonDriver.StartHoldAsync(holdButton);
-		await RenderedHoldButtonDriver.FlushAsync(cut);
-		timing.AdvanceBy(RenderedHoldButtonDriver.HoldDuration);
-		var releaseTask = RenderedHoldButtonDriver.ReleaseHoldAsync(holdButton);
-		await RenderedHoldButtonDriver.FlushAsync(cut);
-
-		timing.AdvanceBy(RenderedHoldButtonDriver.SuccessFlashDuration);
-		await Task.WhenAll(holdTask, releaseTask);
-		await RenderedHoldButtonDriver.ReleaseHoldAsync(holdButton);
-
-		responses.Should().ContainSingle();
-		var response = responses.Single();
-		response.Type.Should().Be(ExpectedInputType.Confirmation);
-		response.Confirmation.Should().BeTrue();
-	}
-
-	[Fact]
-	public void ConfirmationInstruction_HoldAffordanceUsesLocalizedAccessibleName()
-	{
-		var timing = new ControlledHoldButtonTiming();
-		using var context = CreateContext(timing);
-		var instruction = CreateConfirmationInstruction(GameStrings.NightActionsCompletePrompt);
-
-		var cut = context.RenderModeratorComponent<InstructionRenderer>(parameters => parameters
-			.Add(component => component.Instruction, instruction));
-
-		var holdButton = FindHoldButton(cut);
-		holdButton.GetAttribute(Html.Attributes.AriaLabel)
-			.Should()
-			.Be(ClientStrings.Common_HoldToConfirm);
-		cut.Markup.Should().Contain(ClientStrings.Common_HoldToConfirm);
-	}
 
 	[Fact]
 	public async Task DisabledInputSubmitStates_CannotSubmitFromRenderedViews()
@@ -155,8 +64,10 @@ public class DeliberateConfirmationRenderedTests
 		var timing = new ControlledHoldButtonTiming();
 		using var context = CreateContext(timing);
 		var responses = new List<ModeratorResponse>();
-		var selectedOption = "Acordar";
-		var instruction = CreateSelectOptionsInstruction(selectedOption, "Continuar a dormir");
+		var selectedOption = GameStrings.NightStartsPrompt;
+		var instruction = CreateSelectOptionsInstruction(
+			selectedOption,
+			GameStrings.DebateStartsPrompt);
 
 		var cut = context.RenderModeratorComponent<SelectOptionsView>(parameters => parameters
 			.Add(component => component.Instruction, instruction)
@@ -169,7 +80,8 @@ public class DeliberateConfirmationRenderedTests
 		responses.Should().ContainSingle();
 		var response = responses.Single();
 		response.Type.Should().Be(ExpectedInputType.OptionSelection);
-		response.SelectedOption.Should().BeEquivalentTo([selectedOption]);
+		response.InstructionId.Should().Be(instruction.InstructionId);
+		response.SelectedOptionIds.Should().Equal(["option-0"]);
 	}
 
 	[Fact]
@@ -224,7 +136,9 @@ public class DeliberateConfirmationRenderedTests
 		var timing = new ControlledHoldButtonTiming();
 		using var context = CreateContext(timing);
 		var responses = new List<ModeratorResponse>();
-		var instruction = CreateSelectOptionsInstruction("Acordar", "Continuar a dormir");
+		var instruction = CreateSelectOptionsInstruction(
+			GameStrings.NightStartsPrompt,
+			GameStrings.DebateStartsPrompt);
 
 		var cut = context.RenderModeratorComponent<SelectOptionsView>(parameters => parameters
 			.Add(component => component.Instruction, instruction)
@@ -270,15 +184,6 @@ public class DeliberateConfirmationRenderedTests
 		await RenderedHoldButtonDriver.FlushAsync(cut);
 	}
 
-	private IRenderedComponent<InstructionRenderer> RenderInstruction(
-		ModeratorComponentTestContext context,
-		ModeratorInstruction instruction,
-		List<ModeratorResponse> responses) =>
-		context.RenderModeratorComponent<InstructionRenderer>(parameters => parameters
-			.Add(component => component.Instruction, instruction)
-			.Add(component => component.OnResponse,
-				EventCallback.Factory.Create<ModeratorResponse>(this, responses.Add)));
-
 	private static ModeratorComponentTestContext CreateContext(ControlledHoldButtonTiming timing)
 	{
 		var context = new ModeratorComponentTestContext();
@@ -302,10 +207,6 @@ public class DeliberateConfirmationRenderedTests
 		cut.FindAll(elementName)
 			.Single(element => element.TextContent.Contains(text, StringComparison.CurrentCulture));
 
-	private static ConfirmationInstruction CreateConfirmationInstruction(string publicAnnouncement) =>
-		(ConfirmationInstruction)ConfirmationConstructor.Invoke(
-			[publicAnnouncement, null, null]);
-
 	private static SelectPlayersInstruction CreateSelectPlayersInstruction(params Guid[] playerIds) =>
 		(SelectPlayersInstruction)SelectPlayersConstructor.Invoke(
 			[
@@ -313,17 +214,21 @@ public class DeliberateConfirmationRenderedTests
 				NumberRangeConstraint.Single,
 				null,
 				GameStrings.WerewolvesChooseVictimPrompt,
-				null
+				null,
+				Guid.Empty
 			]);
 
 	private static SelectOptionsInstruction CreateSelectOptionsInstruction(params string[] options) =>
 		(SelectOptionsInstruction)SelectOptionsConstructor.Invoke(
 			[
-				options.ToHashSet(StringComparer.CurrentCulture),
+				options
+					.Select((label, index) => new ModeratorOption($"option-{index}", label))
+					.ToArray(),
 				NumberRangeConstraint.Single,
 				null,
 				GameStrings.ConfirmNightStarted,
-				null
+				null,
+				Guid.Empty
 			]);
 
 	private static AssignRolesInstruction CreateAssignRolesInstruction(Guid playerId, MainRoleType role) =>
@@ -333,7 +238,8 @@ public class DeliberateConfirmationRenderedTests
 				new[] { role },
 				null,
 				GameStrings.RevealRolePromptSpecify,
-				null
+				null,
+				Guid.Empty
 			]);
 
 	private static DashboardRosterEntry CreateRosterEntry(Guid playerId, int seatNumber, string name) =>
@@ -348,23 +254,18 @@ public class DeliberateConfirmationRenderedTests
 			StatusEffects: [],
 			DashboardRoster.NoStatusEffectsLabel);
 
-	private static readonly ConstructorInfo ConfirmationConstructor =
-		typeof(ConfirmationInstruction)
-			.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic)
-			.Single(ctor => ctor.GetParameters().Length == 3);
-
 	private static readonly ConstructorInfo SelectPlayersConstructor =
 		typeof(SelectPlayersInstruction)
 			.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic)
-			.Single(ctor => ctor.GetParameters().Length == 5);
+			.Single(ctor => ctor.GetParameters().Length == 6);
 
 	private static readonly ConstructorInfo SelectOptionsConstructor =
 		typeof(SelectOptionsInstruction)
 			.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic)
-			.Single(ctor => ctor.GetParameters().Length == 5);
+			.Single(ctor => ctor.GetParameters().Length == 6);
 
 	private static readonly ConstructorInfo AssignRolesConstructor =
 		typeof(AssignRolesInstruction)
 			.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic)
-			.Single(ctor => ctor.GetParameters().Length == 5);
+			.Single(ctor => ctor.GetParameters().Length == 6);
 }

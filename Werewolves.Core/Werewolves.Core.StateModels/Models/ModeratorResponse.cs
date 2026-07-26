@@ -9,14 +9,14 @@ namespace Werewolves.Core.StateModels.Models;
 /// </summary>
 public class ModeratorResponse
 {
+    public Guid InstructionId { get; internal init; }
     public ExpectedInputType Type { get; internal init; }
 
     // Optional fields, presence depends on Type
-    public HashSet<Guid>? SelectedPlayerIds { get; internal init; }
+    public IReadOnlySet<Guid>? SelectedPlayerIds { get; internal init; }
     [JsonConverter(typeof(JsonStringEnumConverter))]
-    public Dictionary<Guid, MainRoleType>? AssignedPlayerRoles { get; internal init; }
-    public HashSet<string>? SelectedOption { get; internal init; }
-    public bool? Confirmation { get; internal init; }
+    public IReadOnlyDictionary<Guid, MainRoleType>? AssignedPlayerRoles { get; internal init; }
+    public IReadOnlyList<string>? SelectedOptionIds { get; internal init; }
 
     //internal so only ModeratorInputs can create instances, not external consumers
     internal ModeratorResponse(){}

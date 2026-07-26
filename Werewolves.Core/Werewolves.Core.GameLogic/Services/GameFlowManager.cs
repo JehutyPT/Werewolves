@@ -42,19 +42,19 @@ internal static class GameFlowManager
             Listener(LittleGirl),           //first night only
             Listener(Cupid),                //first night only
             Listener(Lovers),              //first night only
-            Listener(Fox),
             Listener(StutteringJudge),      //first night only
             Listener(Elder),                //first night only, required to enable disregarding wolf infection
             Listener(TwoSisters),
             Listener(ThreeBrothers),
             Listener(WildChild),            //first night only
+            Listener(WolfHound),            //first night only
             Listener(BearTamer),            //first night only
             Listener(Defender),
-            Listener(WolfHound),            //first night only
-			Listener(SimpleWerewolf),
+            Listener(SimpleWerewolf),
+            Listener(Fox),
             Listener(AccursedWolfFather),
-            Listener(BigBadWolf),
             Listener(WhiteWerewolf),
+            Listener(BigBadWolf),
 			Listener(Seer),
             Listener(Witch),
             Listener(Gypsy),
@@ -177,7 +177,6 @@ internal static class GameFlowManager
                     subPhase: DawnSubPhases.Finalize,
                     subPhaseStages:
                     [
-                        HookStage(DawnMainActionLoop),
                         NavigationEndStageSilent(GamePhase.Day)
                     ],
                     possibleNextMainPhaseTransitions:
@@ -195,6 +194,7 @@ internal static class GameFlowManager
                     subPhase: DaySubPhases.Debate,
                     subPhaseStages:
                     [
+                        HookStage(DawnMainActionLoop),
                         NavigationEndStage(DaySubPhaseStage.Debate, StartDebateAndGoToVoteType)
                     ],
                     possibleNextSubPhases:
@@ -243,19 +243,21 @@ internal static class GameFlowManager
                     ],
                     possibleNextSubPhases:
                     [
-                        DaySubPhases.DetermineVoteType,
-                        DaySubPhases.ProcessVoteDeathLoop,
+                        DaySubPhases.ProcessVoteEliminationCascade,
                         DaySubPhases.Finalize
                     ]),
                 new(
-                    subPhase: DaySubPhases.ProcessVoteDeathLoop,
+                    subPhase: DaySubPhases.ProcessVoteEliminationCascade,
                     subPhaseStages:
                     [
                         HookStage(PlayerRoleAssignedOnElimination),
-                        NavigationEndStageSilent(DaySubPhases.Finalize)
+                        NavigationEndStage(
+                            DaySubPhases.ProcessVoteEliminationCascade,
+                            ChoosePathAfterVoteEliminationCascade)
                     ],
                     possibleNextSubPhases:
                     [
+                        DaySubPhases.DetermineVoteType,
                         DaySubPhases.Finalize
                     ]),
                 new(
@@ -309,15 +311,30 @@ internal static class GameFlowManager
 
     private static SubPhaseHandlerResult ChoosePathAfterVoteConcluded(GameSession session, ModeratorResponse input)
     {
-        if (GameSessionQueries.ShouldVoteRepeat(session))
-        {
-            return TransitionSubPhaseSilent(DaySubPhases.DetermineVoteType);
-        }
+        var nextSubPhase = ChoosePostVoteOutcomeSubPhase(
+            GameSessionQueries.ShouldVoteRepeat(session),
+            GameSessionQueries.GetPlayerEliminatedThisVote(session).Any());
 
-        return GameSessionQueries.GetPlayerEliminatedThisVote(session).Any()
-            ? TransitionSubPhaseSilent(DaySubPhases.ProcessVoteDeathLoop)
-            : TransitionSubPhaseSilent(DaySubPhases.Finalize);
+        return TransitionSubPhaseSilent(nextSubPhase);
     }
+
+    private static SubPhaseHandlerResult ChoosePathAfterVoteEliminationCascade(
+        GameSession session,
+        ModeratorResponse input)
+        => TransitionSubPhaseSilent(ChoosePostVoteEliminationCascadeSubPhase(
+            GameSessionQueries.ShouldVoteRepeat(session)));
+
+    internal static DaySubPhases ChoosePostVoteOutcomeSubPhase(
+        bool shouldVoteRepeat,
+        bool hasPlayerElimination)
+        => shouldVoteRepeat || hasPlayerElimination
+            ? DaySubPhases.ProcessVoteEliminationCascade
+            : DaySubPhases.Finalize;
+
+    internal static DaySubPhases ChoosePostVoteEliminationCascadeSubPhase(bool shouldVoteRepeat)
+        => shouldVoteRepeat
+            ? DaySubPhases.DetermineVoteType
+            : DaySubPhases.Finalize;
 	#endregion
 
 	#region Static Factory Methods
@@ -347,18 +364,24 @@ internal static class GameFlowManager
 
 	internal static ProcessResult HandleInput(GameSession session, ModeratorResponse input)
     {
-        var oldPhase = session.GetCurrentPhase();
+        var startingPhase = session.GetCurrentPhase();
+        ModeratorInstruction? nextInstructionToSend = null;
 
-        // --- Execute Phase Handler ---
-        PhaseHandlerResult handlerResult = RouteInputToPhaseHandler(session, input);
-
-        var newPhase = session.GetCurrentPhase();
-
-		var nextInstructionToSend = handlerResult.ModeratorInstruction;
-
-		if(TryGetVictoryInstructions(session, oldPhase, newPhase, out var victoryInstruction))
+        while (nextInstructionToSend == null)
         {
-            nextInstructionToSend = victoryInstruction;
+            var oldPhase = session.GetCurrentPhase();
+            var handlerResult = RouteInputToPhaseHandler(session, input);
+            var newPhase = session.GetCurrentPhase();
+
+            // A silent main-phase transition is a resolution boundary. Check victory
+            // before routing any work owned by the phase that was just entered.
+            if (TryGetVictoryInstructions(session, oldPhase, newPhase, out var victoryInstruction))
+            {
+                nextInstructionToSend = victoryInstruction;
+                break;
+            }
+
+            nextInstructionToSend = handlerResult.ModeratorInstruction;
 		}
 
         if (nextInstructionToSend == null)
@@ -368,7 +391,8 @@ internal static class GameFlowManager
 
         // --- Update Pending Instruction ---
 		session.SetPendingModeratorInstruction(Key, nextInstructionToSend);
-		if (ShouldAdvanceRecoveryBoundary(session, oldPhase, newPhase, nextInstructionToSend))
+        var endingPhase = session.GetCurrentPhase();
+		if (ShouldAdvanceRecoveryBoundary(session, startingPhase, endingPhase, nextInstructionToSend))
 		{
 			session.CaptureRecoveryBoundary(Key);
 		}
@@ -421,24 +445,19 @@ internal static class GameFlowManager
 
     private static PhaseHandlerResult RouteInputToPhaseHandler(GameSession session, ModeratorResponse input)
     {
-        PhaseHandlerResult result;
-        do
-        {
-            var currentPhase = session.GetCurrentPhase();
-            
-            if (!PhaseDefinitions.TryGetValue(currentPhase, out var phaseDef))
-            {
-                throw new InvalidOperationException($"No phase definition found for phase: {currentPhase}");
-            }
+        var currentPhase = session.GetCurrentPhase();
 
-            result = phaseDef.ProcessInputAndUpdatePhase(session, input);
-        } 
-        while (result is MainPhaseHandlerResult { ModeratorInstruction: null });
+        if (!PhaseDefinitions.TryGetValue(currentPhase, out var phaseDef))
+        {
+            throw new InvalidOperationException($"No phase definition found for phase: {currentPhase}");
+        }
+
+        var result = phaseDef.ProcessInputAndUpdatePhase(session, input);
 
         // Defensive check: null instructions should only bubble up from MainPhaseHandlerResult
-        // during silent phase transitions (handled by the loop above). If we get here with a null
-        // instruction, something has gone wrong at the sub-phase or hook level.
-        if (result.ModeratorInstruction == null)
+        // during silent phase transitions (handled by HandleInput). If we get here with a null
+        // instruction from any other result, something has gone wrong at the sub-phase or hook level.
+        if (result is not MainPhaseHandlerResult && result.ModeratorInstruction == null)
         {
             throw new InvalidOperationException(
                 $"Internal State Machine Error: Received null ModeratorInstruction from non-MainPhaseHandlerResult. " +

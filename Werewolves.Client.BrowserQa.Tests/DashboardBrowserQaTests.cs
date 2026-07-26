@@ -133,6 +133,18 @@ public sealed class DashboardBrowserQaTests : PlaywrightTest, IClassFixture<Brow
 		await using var browser = await Playwright.Chromium.LaunchAsync();
 		var page = await BrowserQaPage.OpenScenarioAsync(browser, _host.DashboardScenarioUri);
 
+		var initialActionZone = page.GetByTestId(ModeratorUiTestIds.DashboardActionZone);
+		var initialContinue = BrowserQaHoldProgress.HoldZoneIn(initialActionZone)
+			.GetByRole(AriaRole.Button, new() { Name = ClientStrings.Common_HoldToConfirm });
+		await Expect(initialContinue).ToContainTextAsync(ClientStrings.Dashboard_ContinueButton);
+		await initialContinue.ClickAsync(new()
+		{
+			Delay = HoldButtonTimingContract.HoldDurationMs + 50
+		});
+		var playerOptions = page.GetByRole(AriaRole.Option);
+		await playerOptions.Nth(0).ClickAsync();
+		await playerOptions.Nth(1).ClickAsync();
+
 		var actionZone = page.GetByTestId(ModeratorUiTestIds.DashboardActionZone);
 		var holdZone = BrowserQaHoldProgress.HoldZoneIn(actionZone);
 		var holdButton = holdZone.GetByRole(AriaRole.Button, new() { Name = ClientStrings.Common_HoldToConfirm });

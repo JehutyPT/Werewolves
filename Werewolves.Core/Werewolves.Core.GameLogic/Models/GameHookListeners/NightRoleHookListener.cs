@@ -122,7 +122,7 @@ internal abstract class NightRoleHookListener<T> : RoleHookListener<T> where T :
 
 	protected virtual void ProcessRoleIdentification(GameSession session, ModeratorResponse input)
 	{
-		session.AssignRole(input.SelectedPlayerIds!, Id);
+		session.AssignRole(input.SelectedPlayerIds!.ToHashSet(), Id);
 	}
 
 

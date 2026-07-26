@@ -59,7 +59,8 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 		var confirmation = strategy.CreateResponse(startInstruction, session);
 		var identification = strategy.CreateResponse(identifySeer, session);
 
-		confirmation.Confirmation.Should().BeTrue();
+		confirmation.Type.Should().Be(ExpectedInputType.Continue);
+		confirmation.InstructionId.Should().Be(startInstruction.InstructionId);
 		identification.SelectedPlayerIds.Should().Equal(players[seerSeat - 1].Id);
 		MarkTestCompleted();
 	}
@@ -96,11 +97,19 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 			[MainRoleType.Seer, MainRoleType.SimpleVillager],
 			privateInstruction: GameStrings.RevealRolePromptSpecify);
 		var firstOptions = new SelectOptionsInstruction(
-			["alpha", "beta", "gamma"],
+			[
+				new ModeratorOption("alpha", "Alpha"),
+				new ModeratorOption("beta", "Beta"),
+				new ModeratorOption("gamma", "Gamma")
+			],
 			NumberRangeConstraint.SingleOptional,
 			privateInstruction: GameStrings.RevealRolePromptSpecify);
 		var replayOptions = new SelectOptionsInstruction(
-			["gamma", "alpha", "beta"],
+			[
+				new ModeratorOption("alpha", "First"),
+				new ModeratorOption("beta", "Second"),
+				new ModeratorOption("gamma", "Third")
+			],
 			NumberRangeConstraint.SingleOptional,
 			privateInstruction: GameStrings.RevealRolePromptSpecify);
 
@@ -122,9 +131,9 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 		assigned.AssignedPlayerRoles.OrderBy(pair => players.FindIndex(player => player.Id == pair.Key)).Select(pair => pair.Value)
 			.Should().Equal(
 				replayAssigned.AssignedPlayerRoles!.OrderBy(pair => players.FindIndex(player => player.Id == pair.Key)).Select(pair => pair.Value));
-		options.SelectedOption.Should().BeSubsetOf(firstOptions.SelectableOptions);
-		firstOptions.SelectionRange.IsValid(options.SelectedOption!.ToList()).Should().BeTrue();
-		options.SelectedOption.Should().BeEquivalentTo(replayOptionResponse.SelectedOption);
+		options.SelectedOptionIds.Should().BeSubsetOf(firstOptions.Options.Select(option => option.Id));
+		firstOptions.SelectionRange.IsValid(options.SelectedOptionIds!.ToList()).Should().BeTrue();
+		options.SelectedOptionIds.Should().Equal(replayOptionResponse.SelectedOptionIds);
 		MarkTestCompleted();
 	}
 
@@ -140,14 +149,14 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 		builder.StartGame();
 		var session = builder.GetGameState()!;
 		var instruction = new SelectOptionsInstruction(
-			["alpha"],
+			[new ModeratorOption("alpha", "Alpha")],
 			NumberRangeConstraint.SingleOptional,
 			privateInstruction: GameStrings.RevealRolePromptSpecify);
 		var strategy = new BaselineRandomDecisionStrategy(material, startState);
 
 		var response = strategy.CreateResponse(instruction, session);
 
-		response.SelectedOption.Should().BeEmpty();
+		response.SelectedOptionIds.Should().BeEmpty();
 		MarkTestCompleted();
 	}
 
@@ -173,7 +182,8 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 
 		var response = strategy.CreateResponse(instruction, session);
 
-		response.SelectedPlayerIds.Should().BeEquivalentTo([players[1].Id, players[2].Id]);
+		response.SelectedPlayerIds.Should().BeEquivalentTo(
+			new[] { players[1].Id, players[2].Id });
 		MarkTestCompleted();
 	}
 

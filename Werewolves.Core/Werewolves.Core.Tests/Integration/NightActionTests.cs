@@ -146,7 +146,7 @@ public class NightActionTests : DiagnosticTestBase
         var sleepInstruction = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
             result2,
             CoreTestReferences.InstructionContexts.WerewolfSleepConfirmation);
-        var sleepResponse = sleepInstruction.CreateResponse(true);
+        var sleepResponse = sleepInstruction.CreateResponse();
         var result3 = builder.Process(sleepResponse);
 
         // Assert - Should have moved to next role (Seer) or completed night
@@ -413,7 +413,7 @@ public class NightActionTests : DiagnosticTestBase
         // Process confirmations until we get to werewolf victim selection
         while (currentInstruction is ConfirmationInstruction confirmInstr)
         {
-            builder.Process(confirmInstr.CreateResponse(true));
+            builder.Process(confirmInstr.CreateResponse());
             currentInstruction = builder.GetCurrentInstruction();
         }
 
@@ -427,14 +427,14 @@ public class NightActionTests : DiagnosticTestBase
         var sleepInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
             CoreTestReferences.InstructionContexts.WerewolfSleepConfirmation);
-        builder.Process(sleepInstruction.CreateResponse(true));
+        builder.Process(sleepInstruction.CreateResponse());
 
         // Now Seer should wake - on Night 2 they're already identified
         // Process any confirmation instructions to get to target selection
         currentInstruction = builder.GetCurrentInstruction();
         while (currentInstruction is ConfirmationInstruction seerConfirmInstr)
         {
-            builder.Process(seerConfirmInstr.CreateResponse(true));
+            builder.Process(seerConfirmInstr.CreateResponse());
             currentInstruction = builder.GetCurrentInstruction();
         }
 
@@ -569,7 +569,7 @@ public class NightActionTests : DiagnosticTestBase
         // Process confirmations until we get to target selection or something else
         while (currentInstruction is ConfirmationInstruction confirmInstr)
         {
-            builder.Process(confirmInstr.CreateResponse(true));
+            builder.Process(confirmInstr.CreateResponse());
             currentInstruction = builder.GetCurrentInstruction();
             
             // Safety check: we should hit target selection within a few iterations
@@ -589,7 +589,7 @@ public class NightActionTests : DiagnosticTestBase
         var sleepInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
             CoreTestReferences.InstructionContexts.WerewolfSleepConfirmation);
-        builder.Process(sleepInstruction.CreateResponse(true));
+        builder.Process(sleepInstruction.CreateResponse());
 
         // After werewolf completes, the next instruction should NOT be Seer
         // It should be night end confirmation or transition to Dawn
@@ -710,7 +710,7 @@ public class NightActionTests : DiagnosticTestBase
 
         while (currentInstruction is ConfirmationInstruction confirmInstr)
         {
-            builder.Process(confirmInstr.CreateResponse(true));
+            builder.Process(confirmInstr.CreateResponse());
             currentInstruction = builder.GetCurrentInstruction();
         }
 
@@ -787,7 +787,7 @@ public class NightActionTests : DiagnosticTestBase
         var nightStartInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
             CoreTestReferences.InstructionContexts.NightStartConfirmation);
-        var response = nightStartInstruction.CreateResponse(true);
+        var response = nightStartInstruction.CreateResponse();
         builder.Process(response);
     }
 
@@ -814,7 +814,7 @@ public class NightActionTests : DiagnosticTestBase
         var sleepInstruction = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
             afterVictim,
             CoreTestReferences.InstructionContexts.WerewolfSleepConfirmation);
-        var sleepResponse = sleepInstruction.CreateResponse(true);
+        var sleepResponse = sleepInstruction.CreateResponse();
         builder.Process(sleepResponse);
     }
 
@@ -841,7 +841,7 @@ public class NightActionTests : DiagnosticTestBase
         var sleepInstruction = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
             afterTarget,
             CoreTestReferences.InstructionContexts.SeerSleepConfirmation);
-        var sleepResponse = sleepInstruction.CreateResponse(true);
+        var sleepResponse = sleepInstruction.CreateResponse();
         builder.Process(sleepResponse);
     }
 

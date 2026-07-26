@@ -58,7 +58,7 @@ public static class BrowserQaScenarioSeeder
 		var startInstruction = game.StartGame(
 			lobby.PlayerNames,
 			lobby.GetSelectedRoles());
-		game.ProcessInput(startInstruction.CreateResponse(true));
+		game.ProcessInput(startInstruction.CreateResponse());
 	}
 
 	private static void StartVictoryScenario(LobbySetupState lobby, GameClientManager game)
@@ -69,7 +69,7 @@ public static class BrowserQaScenarioSeeder
 		var startInstruction = game.StartGame(
 			lobby.PlayerNames,
 			lobby.GetSelectedRoles());
-		game.ProcessInput(startInstruction.CreateResponse(true));
+		game.ProcessInput(startInstruction.CreateResponse());
 
 		var players = game.CurrentSession!.GetPlayers().ToList();
 		var werewolfIds = players.Take(2).Select(player => player.Id).ToHashSet();
@@ -94,7 +94,7 @@ public static class BrowserQaScenarioSeeder
 					game.ProcessInput(assignRoles.CreateResponse(assignments));
 					break;
 				case ConfirmationInstruction confirmation:
-					game.ProcessInput(confirmation.CreateResponse(true));
+					game.ProcessInput(confirmation.CreateResponse());
 					break;
 				default:
 					throw new InvalidOperationException(
@@ -128,7 +128,7 @@ public static class BrowserQaScenarioSeeder
 				$"Expected confirmation instruction while seeding browser QA scenario, but found {game.CurrentInstruction?.GetType().Name}.");
 		}
 
-		game.ProcessInput(confirmation.CreateResponse(true));
+		game.ProcessInput(confirmation.CreateResponse());
 	}
 
 	private static void SelectCurrentPlayers(GameClientManager game, HashSet<Guid> playerIds)

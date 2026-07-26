@@ -50,7 +50,7 @@ public sealed class BaselineRandomDecisionStrategy : IModeratorDecisionStrategy
 
 		return instruction switch
 		{
-			ConfirmationInstruction confirmation => confirmation.CreateResponse(true),
+			ConfirmationInstruction confirmation => confirmation.CreateResponse(),
 			SelectPlayersInstruction { RoleIdentification: not null } selectPlayers =>
 				CreateRoleIdentificationResponse(selectPlayers, session),
 			SelectPlayersInstruction selectPlayers =>
@@ -117,11 +117,11 @@ public sealed class BaselineRandomDecisionStrategy : IModeratorDecisionStrategy
 
 	private ModeratorResponse CreateOptionSelectionResponse(SelectOptionsInstruction instruction)
 	{
-		var candidates = instruction.SelectableOptions
-			.Order(StringComparer.Ordinal)
+		var candidates = instruction.Options
+			.Select(option => option.Id)
 			.ToArray();
 		var selected = ChooseUniformValidSubset(candidates, instruction.SelectionRange);
-		return instruction.CreateResponse(selected.ToHashSet(StringComparer.Ordinal));
+		return instruction.CreateResponse(selected);
 	}
 
 	private IReadOnlyList<T> ChooseUniformValidSubset<T>(

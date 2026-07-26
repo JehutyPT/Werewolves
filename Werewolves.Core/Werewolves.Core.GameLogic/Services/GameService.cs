@@ -116,22 +116,26 @@ public class GameService
     /// <summary>
     /// Processes input provided by the moderator using the state machine.
     /// </summary>
-    public ProcessResult ProcessInstruction(Guid gameId, ModeratorResponse input)
+    public ProcessResult ProcessInstruction(Guid gameId, ModeratorResponse? input)
 	{
+        ArgumentNullException.ThrowIfNull(input);
+
 		if (!_sessions.TryGetValue(gameId, out var session))
 		{
 			return ProcessResult.Failure(new ConfirmationInstruction(privateInstruction: "ERROR: Game not found"));
 		}
 
-        if (session.PendingModeratorInstruction is FinishedGameConfirmationInstruction)
+        var pendingInstruction = session.PendingModeratorInstruction
+            ?? throw new InvalidOperationException("Internal error: No pending instruction available.");
+
+        EnsureResponseMatchesPendingInstruction(pendingInstruction, input);
+
+        if (pendingInstruction is FinishedGameConfirmationInstruction)
 		{
 			_sessions.Remove(gameId, out _);
             return new ProcessResult(true, null); // Game over, no further instructions
 		}
 
-		// --- Input Validation Against Last Instruction ---
-		EnsureInputTypeIsExpected(session, input);
-		
 		var result = GameFlowManager.HandleInput(session, input);
 
 		return result;
@@ -154,28 +158,101 @@ public class GameService
 	}
 	
     /// <summary>
-    /// Validates moderator input against the expected instruction type.
-    /// In the new architecture, each instruction type handles its own validation via CreateResponse methods.
+    /// Revalidates a response against the instruction currently pending at
+    /// consumption time, before any session state can change.
     /// </summary>
-    private static void EnsureInputTypeIsExpected(GameSession session, ModeratorResponse input)
+    private static void EnsureResponseMatchesPendingInstruction(
+        ModeratorInstruction pendingInstruction,
+        ModeratorResponse response)
     {
-	    var lastRequest = session.PendingModeratorInstruction;
-
-		if (lastRequest == null)
+        if (response.InstructionId != pendingInstruction.InstructionId)
         {
-            // Should only happen if StartNewGame didn't set the initial instruction
-            // TODO: Use GameString
-            throw new InvalidOperationException("Internal error: No pending instruction available.");
+            throw new InvalidOperationException(
+                "Moderator Response does not match the pending Moderator Instruction.");
         }
 
-        // In the new architecture, validation is handled by each instruction's CreateResponse method
-        // The instruction type itself determines what kind of response it expects
-        // So we just need to ensure the response type matches the instruction type
-        
-        // For now, we'll do basic type checking - the detailed validation happens in CreateResponse
-        if (DoesResponseTypeMatchInstruction(lastRequest, input) == false)
+        if (!DoesResponseTypeMatchInstruction(pendingInstruction, response))
         {
-            throw new InvalidOperationException("Confirmation instruction requires a boolean confirmation.");
+            throw new InvalidOperationException(
+                "Moderator Response type does not match the pending Moderator Instruction.");
+        }
+
+        try
+        {
+            RevalidateResponsePayload(pendingInstruction, response);
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException or InvalidOperationException)
+        {
+            throw new InvalidOperationException(
+                "Moderator Response payload is not valid for the pending Moderator Instruction.",
+                exception);
+        }
+    }
+
+    private static void RevalidateResponsePayload(
+        ModeratorInstruction instruction,
+        ModeratorResponse response)
+    {
+        switch (instruction)
+        {
+            case ConfirmationInstruction:
+                EnsureNoPayload(response);
+                break;
+
+            case SelectPlayersInstruction selectPlayers:
+                if (response.SelectedPlayerIds is null ||
+                    response.AssignedPlayerRoles is not null ||
+                    response.SelectedOptionIds is not null)
+                {
+                    throw new ArgumentException("Player selection response payload is malformed.");
+                }
+
+                selectPlayers.CreateResponse(response.SelectedPlayerIds.ToHashSet());
+                break;
+
+            case AssignRolesInstruction assignRoles:
+                if (response.AssignedPlayerRoles is null ||
+                    response.SelectedPlayerIds is not null ||
+                    response.SelectedOptionIds is not null)
+                {
+                    throw new ArgumentException("Role assignment response payload is malformed.");
+                }
+
+                assignRoles.CreateResponse(response.AssignedPlayerRoles.ToDictionary());
+                break;
+
+            case SelectOptionsInstruction selectOptions:
+                if (response.SelectedOptionIds is null ||
+                    response.SelectedPlayerIds is not null ||
+                    response.AssignedPlayerRoles is not null)
+                {
+                    throw new ArgumentException("Option response payload is malformed.");
+                }
+
+                var canonicalResponse = selectOptions.CreateResponse(response.SelectedOptionIds);
+                if (!response.SelectedOptionIds.SequenceEqual(
+                    canonicalResponse.SelectedOptionIds!,
+                    StringComparer.Ordinal))
+                {
+                    throw new ArgumentException(
+                        "Selected option IDs must follow the instruction's semantic order.");
+                }
+                break;
+
+            default:
+                throw new ArgumentException(
+                    $"Unsupported Moderator Instruction type: {instruction.GetType().Name}.");
+        }
+    }
+
+    private static void EnsureNoPayload(ModeratorResponse response)
+    {
+        if (response.SelectedPlayerIds is not null ||
+            response.AssignedPlayerRoles is not null ||
+            response.SelectedOptionIds is not null)
+        {
+            throw new ArgumentException("Continue response must not carry a gameplay payload.");
         }
     }
 
@@ -183,9 +260,9 @@ public class GameService
     {
         return instruction switch
         {
-            StartGameConfirmationInstruction => response.Type == Confirmation,
-            FinishedGameConfirmationInstruction => response.Type == Confirmation,
-            ConfirmationInstruction => response.Type == Confirmation,
+            StartGameConfirmationInstruction => response.Type == Continue,
+            FinishedGameConfirmationInstruction => response.Type == Continue,
+            ConfirmationInstruction => response.Type == Continue,
             SelectPlayersInstruction => response.Type == PlayerSelection,
             AssignRolesInstruction => response.Type == AssignPlayerRoles,
             SelectOptionsInstruction => response.Type == OptionSelection,

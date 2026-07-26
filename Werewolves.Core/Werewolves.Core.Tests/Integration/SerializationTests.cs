@@ -296,7 +296,7 @@ public class SerializationTests : DiagnosticTestBase
         var debateInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
             CoreTestReferences.InstructionContexts.DebateConfirmation);
-        var afterDebate = builder.Process(debateInstruction.CreateResponse(true));
+        var afterDebate = builder.Process(debateInstruction.CreateResponse());
         InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
             afterDebate,
             CoreTestReferences.InstructionContexts.VotingInstruction);
@@ -684,7 +684,7 @@ public class SerializationTests : DiagnosticTestBase
         var firstGameId = firstService.RehydrateSession(stableDawnJson);
         var dawnInstruction = (ConfirmationInstruction)firstService.GetCurrentInstruction(firstGameId)!;
 
-        firstService.ProcessInstruction(firstGameId, dawnInstruction.CreateResponse(true));
+        firstService.ProcessInstruction(firstGameId, dawnInstruction.CreateResponse());
         var interruptedPayload = firstService.GetGameStateView(firstGameId)!.Serialize();
         var interruptedDto = JsonSerializer.Deserialize<GameSessionDto>(
             interruptedPayload,
@@ -697,7 +697,7 @@ public class SerializationTests : DiagnosticTestBase
         var replayService = new GameService();
         var replayGameId = replayService.RehydrateSession(interruptedPayload);
         var replayInstruction = (ConfirmationInstruction)replayService.GetCurrentInstruction(replayGameId)!;
-        replayService.ProcessInstruction(replayGameId, replayInstruction.CreateResponse(true));
+        replayService.ProcessInstruction(replayGameId, replayInstruction.CreateResponse());
         var replayedSession = replayService.GetGameStateView(replayGameId)!;
 
         replayedSession.GetPlayerState(elderId).Health.Should().Be(PlayerHealth.Alive);

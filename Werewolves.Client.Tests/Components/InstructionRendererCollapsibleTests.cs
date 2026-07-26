@@ -84,17 +84,18 @@ public class InstructionRendererCollapsibleTests
 		string? privateInstruction) =>
 		(SelectOptionsInstruction)SelectOptionsConstructor.Invoke(
 			[
-				new HashSet<string>(["option-alpha"], StringComparer.CurrentCulture),
+				new[] { new ModeratorOption("option-alpha", GameStrings.ConfirmNightStarted) },
 				NumberRangeConstraint.Single,
 				publicAnnouncement,
 				privateInstruction,
-				null
+				null,
+				Guid.Empty
 			]);
 
 	private static readonly ConstructorInfo SelectOptionsConstructor =
 		typeof(SelectOptionsInstruction)
 			.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic)
-			.Single(ctor => ctor.GetParameters().Length == 5);
+			.Single(ctor => ctor.GetParameters().Length == 6);
 
 	private sealed record TestInstruction : ModeratorInstruction
 	{

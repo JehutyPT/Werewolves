@@ -50,17 +50,19 @@ public class ModeratorInstructionDisplayDefaultsTests
 				NumberRangeConstraint.Single,
 				null,
 				GameStrings.WerewolvesChooseVictimPrompt,
-				null
+				null,
+				Guid.Empty
 			]);
 
 	private static SelectOptionsInstruction CreateSelectOptionsInstruction() =>
 		(SelectOptionsInstruction)SelectOptionsConstructor.Invoke(
 			[
-				new HashSet<string>(["option-alpha"], StringComparer.CurrentCulture),
+				new[] { new ModeratorOption("option-alpha", GameStrings.ConfirmNightStarted) },
 				NumberRangeConstraint.Single,
 				null,
 				GameStrings.ConfirmNightStarted,
-				null
+				null,
+				Guid.Empty
 			]);
 
 	private static AssignRolesInstruction CreateAssignRolesInstruction() =>
@@ -70,23 +72,24 @@ public class ModeratorInstructionDisplayDefaultsTests
 				new[] { MainRoleType.SimpleVillager },
 				null,
 				GameStrings.RevealRolePromptSpecify,
-				null
+				null,
+				Guid.Empty
 			]);
 
 	private static readonly ConstructorInfo SelectPlayersConstructor =
 		typeof(SelectPlayersInstruction)
 			.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic)
-			.Single(ctor => ctor.GetParameters().Length == 5);
+			.Single(ctor => ctor.GetParameters().Length == 6);
 
 	private static readonly ConstructorInfo SelectOptionsConstructor =
 		typeof(SelectOptionsInstruction)
 			.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic)
-			.Single(ctor => ctor.GetParameters().Length == 5);
+			.Single(ctor => ctor.GetParameters().Length == 6);
 
 	private static readonly ConstructorInfo AssignRolesConstructor =
 		typeof(AssignRolesInstruction)
 			.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic)
-			.Single(ctor => ctor.GetParameters().Length == 5);
+			.Single(ctor => ctor.GetParameters().Length == 6);
 
 	private sealed record PassiveInstruction : ModeratorInstruction
 	{

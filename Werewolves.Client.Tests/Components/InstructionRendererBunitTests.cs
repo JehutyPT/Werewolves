@@ -122,7 +122,7 @@ public class InstructionRendererBunitTests
 	}
 
 	[Fact]
-	public async Task ConfirmationInstruction_HoldAction_HasAccessibleNameAndEmitsConfirmationResponse()
+	public async Task ConfirmationInstruction_ContinueAction_IsLocalizedOneWayHoldAndEmitsResponse()
 	{
 		var timing = new ControlledHoldButtonTiming();
 		using var context = new ModeratorComponentTestContext();
@@ -139,15 +139,16 @@ public class InstructionRendererBunitTests
 					this,
 					response => receivedResponse = response)));
 
-		var action = cut.FindButtonByAccessibleName(ClientStrings.Common_HoldToConfirm);
+		var action = cut.FindAll(Html.Selectors.Button)
+			.Single(button => button.TextContent.Trim() == ClientStrings.Dashboard_ContinueButton);
 		action.GetAttribute(Html.Attributes.Type).Should().Be(Html.AttributeValues.ButtonType);
-		action.TextContent.Should().Contain(ClientStrings.SelectPlayers_SubmitButton);
+		cut.FindAll(HoldButtonSelector).Should().ContainSingle();
 
 		await RenderedHoldButtonDriver.CompleteHoldAsync(cut, action, timing);
 
 		receivedResponse.Should().NotBeNull();
-		receivedResponse!.Type.Should().Be(ExpectedInputType.Confirmation);
-		receivedResponse.Confirmation.Should().BeTrue();
+		receivedResponse!.Type.Should().Be(ExpectedInputType.Continue);
+		receivedResponse.InstructionId.Should().Be(instruction.InstructionId);
 	}
 
 	[Fact]
@@ -242,10 +243,32 @@ public class InstructionRendererBunitTests
 		AssertOptionSelected(drawOption, isSelected: true);
 		holdButton = cut.Find(HoldButtonSelector);
 		holdButton.HasAttribute(Html.Attributes.Disabled).Should().BeFalse();
+
+		var earlyHoldTask = RenderedHoldButtonDriver.StartHoldAsync(holdButton);
+		await RenderedHoldButtonDriver.FlushAsync(cut);
+		timing.AdvanceBy(RenderedHoldButtonDriver.HoldDuration - TimeSpan.FromMilliseconds(1));
+		await RenderedHoldButtonDriver.ReleaseHoldAsync(holdButton);
+		await earlyHoldTask;
+		responses.Should().BeEmpty();
+
+		holdButton = cut.Find(HoldButtonSelector);
+		var canceledHoldTask = RenderedHoldButtonDriver.StartHoldAsync(holdButton);
+		await RenderedHoldButtonDriver.FlushAsync(cut);
+		timing.AdvanceBy(TimeSpan.FromMilliseconds(200));
+		await RenderedHoldButtonDriver.LeaveHoldAsync(holdButton);
+		await canceledHoldTask;
+		timing.AdvanceBy(
+			RenderedHoldButtonDriver.HoldDuration +
+			RenderedHoldButtonDriver.SuccessFlashDuration);
+		await RenderedHoldButtonDriver.FlushAsync(cut);
+		responses.Should().BeEmpty();
+
+		holdButton = cut.Find(HoldButtonSelector);
 		await RenderedHoldButtonDriver.CompleteHoldAsync(cut, holdButton, timing);
 
 		responses.Should().ContainSingle();
 		responses.Single().Type.Should().Be(ExpectedInputType.PlayerSelection);
+		responses.Single().InstructionId.Should().Be(instruction.InstructionId);
 		responses.Single().SelectedPlayerIds.Should().BeEmpty();
 	}
 
@@ -253,7 +276,12 @@ public class InstructionRendererBunitTests
 	public void SelectOptionsInstruction_WithPublicAndPrivateGuidance_KeepsPrivateGuidanceCollapsedInitially()
 	{
 		using var context = new ModeratorComponentTestContext();
-		var options = new[] { "Acordar", "Continuar a dormir", "Alertar a aldeia" };
+		var options = new[]
+		{
+			GameStrings.NightStartsPrompt,
+			GameStrings.DebateStartsPrompt,
+			GameStrings.RevealRolePromptSpecify
+		};
 		var instruction = CreateSelectOptionsInstruction(
 			NumberRangeConstraint.Single,
 			options,
@@ -282,7 +310,22 @@ public class InstructionRendererBunitTests
 	public void SelectOptionsInstruction_RendersCoreProvidedOptionControlsAndSingleInputActionZone()
 	{
 		using var context = new ModeratorComponentTestContext();
-		var options = new[] { "Acordar", "Continuar a dormir", "Alertar a aldeia" };
+		var localizedLabels = new[]
+		{
+			GameStrings.NightStartsPrompt,
+			GameStrings.DebateStartsPrompt,
+			GameStrings.RevealRolePromptSpecify
+		};
+		localizedLabels.Should().OnlyHaveUniqueItems();
+		var labelsByLexicalOrder = localizedLabels
+			.Order(StringComparer.Ordinal)
+			.ToArray();
+		var options = new[]
+		{
+			new ModeratorOption("z-option", labelsByLexicalOrder[2]),
+			new ModeratorOption("a-option", labelsByLexicalOrder[0]),
+			new ModeratorOption("m-option", labelsByLexicalOrder[1])
+		};
 		var instruction = CreateSelectOptionsInstruction(NumberRangeConstraint.Single, options);
 
 		var cut = context.RenderModeratorComponent<InstructionRenderer>(parameters => parameters
@@ -293,7 +336,7 @@ public class InstructionRendererBunitTests
 		var optionButtons = optionGroup.QuerySelectorAll(Html.Selectors.Button).ToArray();
 		optionButtons.Select(button => button.TextContent.Trim())
 			.Should()
-			.BeEquivalentTo(options);
+			.Equal(options.Select(option => option.Label));
 		optionButtons.Should().OnlyContain(button =>
 			button.GetAttribute(Html.Attributes.Type) == Html.AttributeValues.ButtonType);
 		optionButtons.Should().OnlyContain(button =>
@@ -309,7 +352,7 @@ public class InstructionRendererBunitTests
 		string? publicAnnouncement = null,
 		string? privateInstruction = null) =>
 		(ConfirmationInstruction)ConfirmationConstructor.Invoke(
-			[publicAnnouncement, privateInstruction, null]);
+			[publicAnnouncement, privateInstruction, null, Guid.Empty]);
 
 	private static AssignRolesInstruction CreateAssignRolesInstruction(
 		IEnumerable<Guid> playerIds,
@@ -320,7 +363,8 @@ public class InstructionRendererBunitTests
 				roles,
 				null,
 				GameStrings.RevealRolePromptSpecify,
-				null
+				null,
+				Guid.Empty
 			]);
 
 	private static SelectPlayersInstruction CreateSelectPlayersInstruction(params Guid[] playerIds) =>
@@ -330,7 +374,8 @@ public class InstructionRendererBunitTests
 				NumberRangeConstraint.Single,
 				null,
 				GameStrings.WerewolvesChooseVictimPrompt,
-				null
+				null,
+				Guid.Empty
 			]);
 
 	private static SelectOptionsInstruction CreateSelectOptionsInstruction(
@@ -344,16 +389,38 @@ public class InstructionRendererBunitTests
 
 	private static SelectOptionsInstruction CreateSelectOptionsInstruction(
 		NumberRangeConstraint selectionRange,
+		IEnumerable<ModeratorOption> options) =>
+		CreateSelectOptionsInstruction(
+			selectionRange,
+			options,
+			publicAnnouncement: null,
+			privateInstruction: GameStrings.ConfirmNightStarted);
+
+	private static SelectOptionsInstruction CreateSelectOptionsInstruction(
+		NumberRangeConstraint selectionRange,
 		IEnumerable<string> options,
+		string? publicAnnouncement,
+		string? privateInstruction) =>
+		CreateSelectOptionsInstruction(
+			selectionRange,
+			options.Select((label, index) => new ModeratorOption($"option-{index}", label)),
+			publicAnnouncement,
+			privateInstruction);
+
+	private static SelectOptionsInstruction CreateSelectOptionsInstruction(
+		NumberRangeConstraint selectionRange,
+		IEnumerable<ModeratorOption> options,
 		string? publicAnnouncement,
 		string? privateInstruction) =>
 		(SelectOptionsInstruction)SelectOptionsConstructor.Invoke(
 			[
-				new HashSet<string>(options, StringComparer.CurrentCulture),
+				options
+					.ToArray(),
 				selectionRange,
 				publicAnnouncement,
 				privateInstruction,
-				null
+				null,
+				Guid.Empty
 			]);
 
 	private static DashboardRosterEntry CreateRosterEntry(Guid playerId, int seatNumber, string name) =>
@@ -400,7 +467,7 @@ public class InstructionRendererBunitTests
 	{
 		var manager = new GameClientManager(new GameService());
 		var startInstruction = StartSimpleGame(manager);
-		manager.ProcessInput(startInstruction.CreateResponse(true));
+		manager.ProcessInput(startInstruction.CreateResponse());
 
 		for (var step = 0; step < 50; step++)
 		{
@@ -408,7 +475,7 @@ public class InstructionRendererBunitTests
 				manager.CurrentInstruction is ConfirmationInstruction debateInstruction &&
 				debateInstruction.PublicAnnouncement == GameStrings.DebateStartsPrompt)
 			{
-				manager.ProcessInput(debateInstruction.CreateResponse(true));
+				manager.ProcessInput(debateInstruction.CreateResponse());
 				manager.CurrentInstruction.Should().BeOfType<SelectPlayersInstruction>();
 				return manager;
 			}
@@ -416,7 +483,7 @@ public class InstructionRendererBunitTests
 			switch (manager.CurrentInstruction)
 			{
 				case ConfirmationInstruction confirmation:
-					manager.ProcessInput(confirmation.CreateResponse(true));
+					manager.ProcessInput(confirmation.CreateResponse());
 					break;
 				case SelectPlayersInstruction selectPlayers:
 					manager.ProcessInput(selectPlayers.CreateResponse([selectPlayers.SelectablePlayerIds.First()]));
@@ -450,22 +517,22 @@ public class InstructionRendererBunitTests
 	private static readonly ConstructorInfo ConfirmationConstructor =
 		typeof(ConfirmationInstruction)
 			.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic)
-			.Single(ctor => ctor.GetParameters().Length == 3);
+			.Single(ctor => ctor.GetParameters().Length == 4);
 
 	private static readonly ConstructorInfo AssignRolesConstructor =
 		typeof(AssignRolesInstruction)
 			.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic)
-			.Single(ctor => ctor.GetParameters().Length == 5);
+			.Single(ctor => ctor.GetParameters().Length == 6);
 
 	private static readonly ConstructorInfo SelectPlayersConstructor =
 		typeof(SelectPlayersInstruction)
 			.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic)
-			.Single(ctor => ctor.GetParameters().Length == 5);
+			.Single(ctor => ctor.GetParameters().Length == 6);
 
 	private static readonly ConstructorInfo SelectOptionsConstructor =
 		typeof(SelectOptionsInstruction)
 			.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic)
-			.Single(ctor => ctor.GetParameters().Length == 5);
+			.Single(ctor => ctor.GetParameters().Length == 6);
 }
 
 internal static class InstructionRendererBunitTestExtensions

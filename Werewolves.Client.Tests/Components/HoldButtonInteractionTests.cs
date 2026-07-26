@@ -8,9 +8,6 @@ using Werewolves.Client.Components.Game.Views;
 using Werewolves.Client.Resources;
 using Werewolves.Client.Services;
 using Werewolves.Client.Tests.Helpers;
-using Werewolves.Core.StateModels.Models;
-using Werewolves.Core.StateModels.Models.Instructions;
-using Werewolves.Core.StateModels.Resources;
 using Xunit;
 using Html = Werewolves.Client.Tests.Helpers.ClientTestReferences.Html;
 
@@ -21,7 +18,7 @@ namespace Werewolves.Client.Tests.Components;
 public class HoldButtonInteractionTests
 {
 	[Fact]
-	public async Task CompletedConfirmationHold_ResetsWhenInstructionChanges()
+	public async Task CompletedHold_ResetsWhenControlRemounts()
 	{
 		using var fixture = new HoldButtonFixture();
 		await fixture.RenderAsync();
@@ -39,7 +36,7 @@ public class HoldButtonInteractionTests
 	}
 
 	[Fact]
-	public async Task CompletedConfirmationHold_EmitsProductionLongPressPreset()
+	public async Task CompletedHold_EmitsProductionLongPressPreset()
 	{
 		using var fixture = new HoldButtonFixture();
 		await fixture.RenderAsync();
@@ -276,21 +273,21 @@ public class HoldButtonInteractionTests
 
 	private sealed class HoldButtonHost : ComponentBase
 	{
-		private ModeratorInstruction _instruction = new StartGameConfirmationInstruction(Guid.NewGuid());
+		private int _holdVersion;
 
 		protected override void BuildRenderTree(RenderTreeBuilder builder)
 		{
-			builder.OpenComponent<InstructionRenderer>(0);
-			builder.AddAttribute(1, nameof(InstructionRenderer.Instruction), _instruction);
-			builder.AddAttribute(2, nameof(InstructionRenderer.Roster), Array.Empty<DashboardRosterEntry>());
-			builder.AddAttribute(3, nameof(InstructionRenderer.OnResponse),
-				EventCallback.Factory.Create<ModeratorResponse>(this, Complete));
+			builder.OpenComponent<HoldButton>(0);
+			builder.SetKey(_holdVersion);
+			builder.AddAttribute(1, nameof(HoldButton.Label), ClientStrings.SelectPlayers_SubmitButton);
+			builder.AddAttribute(2, nameof(HoldButton.OnHoldComplete),
+				EventCallback.Factory.Create(this, Complete));
 			builder.CloseComponent();
 		}
 
-		private void Complete(ModeratorResponse _)
+		private void Complete()
 		{
-			_instruction = new FinishedGameConfirmationInstruction(GameStrings.VictoryConditionAllWerewolvesEliminated);
+			_holdVersion++;
 		}
 	}
 

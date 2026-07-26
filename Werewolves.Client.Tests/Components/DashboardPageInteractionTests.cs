@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Components.RenderTree;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Werewolves.Client.Components.Game.Views;
 using Werewolves.Client.Components.Pages;
 using Werewolves.Client.Resources;
 using Werewolves.Client.Services;
@@ -25,19 +26,21 @@ public class DashboardPageInteractionTests
 	private static string ActiveDashboardTabClasses => $"{CssClasses.DashboardTab} {CssClasses.DashboardTabActive}";
 
 	[Fact]
-	public async Task InitialRender_ShowsHoldConfirmButtonForStartGameInstruction()
+	public async Task InitialRender_ShowsOneWayContinueHoldButtonForStartGameInstruction()
 	{
 		using var fixture = new InteractionFixture();
 		await fixture.RenderAsync();
 
-		var confirmButton = fixture.FindButtonByText(ClientStrings.SelectPlayers_SubmitButton);
-		confirmButton.Should().NotBeNull(ClientTestReferences.AssertionReasons.StartGameConfirmationShownDirectly);
-		confirmButton!.ClickEventHandlerId.Should().Be(0, ClientTestReferences.AssertionReasons.ConfirmationDoesNotSubmitFromInstantClick);
-		confirmButton.HasPointerHandlers.Should().BeTrue(ClientTestReferences.AssertionReasons.ConfirmationUsesPressAndHoldGate);
+		var continueButton = fixture.FindButtonByText(ClientStrings.Dashboard_ContinueButton);
+		continueButton.Should().NotBeNull(ClientTestReferences.AssertionReasons.StartGameConfirmationShownDirectly);
+		continueButton!.ClickEventHandlerId.Should().Be(0,
+			ClientTestReferences.AssertionReasons.ConfirmationDoesNotSubmitFromInstantClick);
+		continueButton.HasPointerHandlers.Should().BeTrue(
+			ClientTestReferences.AssertionReasons.ConfirmationUsesPressAndHoldGate);
 	}
 
 	[Fact]
-	public async Task HoldConfirmButton_AdvancesGameToNextInstruction()
+	public async Task ContinueHoldButton_AdvancesGameToNextInstruction()
 	{
 		using var fixture = new InteractionFixture();
 		await fixture.RenderAsync();
@@ -45,23 +48,37 @@ public class DashboardPageInteractionTests
 		var instructionBefore = fixture.Game.CurrentInstruction;
 		instructionBefore.Should().BeOfType<StartGameConfirmationInstruction>();
 
-		var confirmButton = fixture.FindButtonByText(ClientStrings.SelectPlayers_SubmitButton);
-		await fixture.CompleteHoldAsync(confirmButton!);
+		var continueButton = fixture.FindButtonByText(ClientStrings.Dashboard_ContinueButton);
+		await fixture.CompleteHoldAsync(continueButton!);
 
 		fixture.Game.CurrentInstruction.Should().NotBeSameAs(instructionBefore,
 			ClientTestReferences.AssertionReasons.HoldingConfirmAdvancesInstruction);
 	}
 
 	[Fact]
-	public async Task HoldConfirmButton_WhenHapticFeedbackFails_KeepsDashboardInteractive()
+	public async Task ContinueHoldButton_CompletedHold_EmitsHapticFeedback()
+	{
+		var haptic = new RecordingHaptic();
+		using var fixture = new InteractionFixture(haptic);
+		await fixture.RenderAsync();
+
+		var continueButton = fixture.FindButtonByText(ClientStrings.Dashboard_ContinueButton);
+
+		await fixture.CompleteHoldAsync(continueButton!);
+
+		haptic.LongPressCount.Should().BeGreaterThan(0);
+	}
+
+	[Fact]
+	public async Task ContinueHoldButton_WhenHapticFeedbackFails_KeepsDashboardInteractive()
 	{
 		using var fixture = new InteractionFixture(new ThrowingHaptic());
 		await fixture.RenderAsync();
 
 		var instructionBefore = fixture.Game.CurrentInstruction;
-		var confirmButton = fixture.FindButtonByText(ClientStrings.SelectPlayers_SubmitButton);
+		var continueButton = fixture.FindButtonByText(ClientStrings.Dashboard_ContinueButton);
 
-		await fixture.CompleteHoldAsync(confirmButton!);
+		await fixture.CompleteHoldAsync(continueButton!);
 
 		fixture.Game.CurrentInstruction.Should().NotBeSameAs(instructionBefore,
 			ClientTestReferences.AssertionReasons.HapticFailureDoesNotBlockProgression);
@@ -103,12 +120,11 @@ public class DashboardPageInteractionTests
 
 			if (instruction is ConfirmationInstruction)
 			{
-				var confirm = fixture.FindButtonByText(ClientStrings.SelectPlayers_SubmitButton)
-					?? fixture.FindButtonByClass(CssClasses.HoldButton);
+				var continueButton = fixture.FindButtonByText(ClientStrings.Dashboard_ContinueButton);
 
-				if (confirm is not null)
+				if (continueButton is not null)
 				{
-					await fixture.CompleteHoldAsync(confirm);
+					await fixture.CompleteHoldAsync(continueButton);
 				}
 				else
 				{
@@ -166,6 +182,7 @@ public class DashboardPageInteractionTests
 		private readonly InteractionTestRenderer _renderer;
 		private readonly int _rootComponentId;
 		private readonly ServiceProvider _serviceProvider;
+		private readonly ControlledHoldButtonTiming _holdTiming = new();
 
 		public InteractionFixture(IHapticFeedbackService? hapticFeedback = null)
 		{
@@ -186,6 +203,7 @@ public class DashboardPageInteractionTests
 			var services = new ServiceCollection();
 			services.AddSingleton(Game);
 			services.AddSingleton(hapticFeedback ?? new NoOpHaptic());
+			services.AddSingleton<IHoldButtonTiming>(_holdTiming);
 			_serviceProvider = services.BuildServiceProvider();
 
 			_renderer = new InteractionTestRenderer(_serviceProvider);
@@ -200,8 +218,22 @@ public class DashboardPageInteractionTests
 		public Task ClickAsync(ButtonSnapshot button) =>
 			_renderer.Dispatcher.InvokeAsync(() => _renderer.DispatchClickAsync(button.ClickEventHandlerId));
 
-		public Task CompleteHoldAsync(ButtonSnapshot button) =>
-			_renderer.Dispatcher.InvokeAsync(() => _renderer.DispatchPointerDownAsync(button.PointerDownEventHandlerId));
+		public async Task CompleteHoldAsync(ButtonSnapshot button)
+		{
+			var holdTask = _renderer.Dispatcher.InvokeAsync(
+				() => _renderer.DispatchPointerDownAsync(button.PointerDownEventHandlerId));
+			await FlushAsync();
+
+			_holdTiming.AdvanceBy(RenderedHoldButtonDriver.HoldDuration);
+			await FlushAsync();
+
+			_holdTiming.AdvanceBy(RenderedHoldButtonDriver.SuccessFlashDuration);
+			await holdTask;
+			await FlushAsync();
+		}
+
+		private Task FlushAsync() =>
+			_renderer.Dispatcher.InvokeAsync(() => Task.CompletedTask);
 
 		public ButtonSnapshot? FindButtonByText(string text) =>
 			FindAllButtons().FirstOrDefault(b =>
@@ -347,6 +379,18 @@ public class DashboardPageInteractionTests
 	{
 		public void Click() { }
 		public void LongPress() { }
+	}
+
+	private sealed class RecordingHaptic : IHapticFeedbackService
+	{
+		public int LongPressCount { get; private set; }
+
+		public void Click() { }
+
+		public void LongPress()
+		{
+			LongPressCount++;
+		}
 	}
 
 	private sealed class ThrowingHaptic : IHapticFeedbackService

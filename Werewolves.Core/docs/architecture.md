@@ -296,22 +296,22 @@ Acts as a high-level phase controller and reactive hook dispatcher. It contains 
 
 *   **Core Components:**
     *   `HookListeners` (static Dictionary<GameHook, List<ListenerIdentifier>>): Declarative mapping of hooks to the ordered list of listeners that respond to them.
-    *   `ListenerFactories` (internal `IReadOnlyDictionary<ListenerIdentifier, Func<IGameHookListener>>` property): Forwarding accessor sourced from `SupportedRoleCatalog.ListenerFactories`, which owns the registry of listener factories alongside the supported-role descriptor list (so adding a new supported Role touches one place). Each game session gets its own fresh listener instances via `GameSession.GetOrCreateListener`, ensuring listener state machine isolation between games. Listener *ordering* still lives in `HookListeners` above (see ADR 0003).
+    *   `ListenerFactories` (internal `IReadOnlyDictionary<ListenerIdentifier, Func<IGameHookListener>>` property): Forwarding accessor sourced from `SupportedRoleCatalog`'s admission catalog. That catalog owns every supported Role's active/passive admission and derives listener factories only for active admissions, so adding a supported Role touches one place. Each game session gets its own fresh listener instances via `GameSession.GetOrCreateListener`, ensuring listener state machine isolation between games. Listener *ordering* still lives in `HookListeners` above (see ADR 0003).
     *   `PhaseDefinitions` (static Dictionary<GamePhase, IPhaseDefinition>): Declarative mapping of each main `GamePhase` to its corresponding `PhaseManager`.
 *   **Primary Methods:**
     *   `GetInitialInstruction(List<MainRoleType> rolesInPlay, Guid gameId)` (StartGameConfirmationInstruction): **Static factory method for bootstrapping.** Returns the initial instruction required to construct a valid `GameSession`. This pure function performs input validation and generates the startup instruction without creating any game state.
-    *   `HandleInput(GameSession session, ModeratorResponse input)` (ProcessResult): **The central state machine orchestrator.**
-        *   Delegates to `RouteInputToPhaseHandler` for phase-level processing.
-        *   Checks for victory conditions at **phase transition boundaries** (see Victory Check Timing below).
+    *   `HandleInput(GameSession session, ModeratorResponse input)` (ProcessResult): **The central state machine orchestrator and silent-transition owner.**
+        *   Delegates one phase at a time to `RouteInputToPhaseHandler`.
+        *   **Silent Transition Loop:** When a phase returns no instruction after entering another main phase, re-routes through the newly entered phase until an instruction is produced.
+        *   Checks for victory at each **phase transition boundary** before any work owned by the newly entered phase runs (see Victory Check Timing below).
         *   Returns a `ProcessResult` with the next instruction.
-    *   `RouteInputToPhaseHandler(GameSession session, ModeratorResponse input)` (`private static`): **Routes input to the appropriate phase handler and manages silent main phase transitions.**
+    *   `RouteInputToPhaseHandler(GameSession session, ModeratorResponse input)` (`private static`): **Routes one processing step to the appropriate phase handler.**
         *   Retrieves the current phase and delegates to the appropriate `IPhaseDefinition` (`PhaseManager`).
-        *   **Silent Transition Loop:** If a `PhaseManager` returns a `MainPhaseHandlerResult` with no instruction (a silent transition), this method loops and re-routes to the new phase's handler. This continues until an instruction is produced.
-        *   **Defensive Null Check:** After the loop exits, an invariant check ensures no null instructions escape from non-`MainPhaseHandlerResult` results, as this would indicate a bug in sub-phase or hook stage logic.
+        *   **Defensive Null Check:** An invariant check ensures no null instructions escape from non-`MainPhaseHandlerResult` results, as this would indicate a bug in sub-phase or hook stage logic.
     *   `TryGetVictoryInstructions(GameSession session, GamePhase oldPhase, GamePhase newPhase, out ModeratorInstruction?)` (`private static`): Checks for victory conditions **only when transitioning between main phases** (entering Day or Night). This ensures victory is detected at natural game boundaries, preventing scenarios like sending the village to sleep only to immediately announce the game is over.
     *   `CheckVictoryConditions(GameSession session)` (`private static`, returns `(Team WinningTeam, string Description)?`): Evaluates win conditions based on the current game state. Returns `null` if no victory condition is met, or a tuple containing the winning team and description.
 *   **Declarative State Machine Architecture:** The game flow is defined by a hierarchy of declarative components:
-    *   **`PhaseManager<TSubPhaseEnum>`**: Manages the flow between sub-phases for a single main `GamePhase`. It contains a dictionary of `SubPhaseManager`s. Each `PhaseManager` is **phase-aware**: it determines which `GamePhase` it manages by finding itself in the `PhaseDefinitions` dictionary (cached after first lookup). This enables clean exit when a silent main phase transition occurs—if the session's current phase no longer matches the owned phase, the manager returns immediately with a `MainPhaseHandlerResult(null, currentPhase)`, allowing `RouteInputToPhaseHandler` to continue processing in the correct new phase.
+    *   **`PhaseManager<TSubPhaseEnum>`**: Manages the flow between sub-phases for a single main `GamePhase`. It contains a dictionary of `SubPhaseManager`s. Each `PhaseManager` is **phase-aware**: it determines which `GamePhase` it manages by finding itself in the `PhaseDefinitions` dictionary (cached after first lookup). This enables clean exit when a silent main phase transition occurs—if the session's current phase no longer matches the owned phase, the manager returns immediately with a `MainPhaseHandlerResult(null, currentPhase)`, allowing `HandleInput` to check the transition boundary before processing the new phase.
     *   **`SubPhaseManager<TSubPhase>`**: Defines a single sub-phase. It contains a linear sequence of `SubPhaseStage`s that are executed in order. It also declares all valid transitions to other sub-phases or main phases.
     *   **`SubPhaseStage`**: An abstract class representing a single, **atomic, non-re-entrant** unit of work. The `GamePhaseStateCache` ensures each stage is executed at most once per sub-phase entry.
         *   `LogicSubPhaseStage`: Executes a custom logic handler.
@@ -329,15 +329,15 @@ Orchestrates the game flow based on moderator input and tracked state. **Delegat
 *   **Public Methods:** 
     *   `StartNewGame(GameSessionConfig config)` (StartGameConfirmationInstruction): **Orchestrates atomic game initialization.** Validates the configuration, generates a unique game ID, retrieves the initial instruction from `GameFlowManager.GetInitialInstruction`, constructs a `GameSession` with the ID, instruction, and config, stores the session, and returns the instruction.
     *   `ProcessInstruction(Guid gameId, ModeratorResponse input)` (ProcessResult): **The central entry point for processing moderator actions.** 
-        *   Retrieves the current `GameSession` and delegates to `GameFlowManager.HandleInput`. 
-        *   The `GameFlowManager` handles all state machine logic, validation, and transition management. 
+        *   Retrieves the current `GameSession`, validates the response against the exact pending instruction, and then delegates to `GameFlowManager.HandleInput`.
+        *   `GameService` owns consume-time correlation, response-type, and complete payload validation; `GameFlowManager` owns state-machine stage and transition validation.
         *   Returns the `ProcessResult` from the state machine, containing either the next instruction or a failure.
-        *   **Session Cleanup:** If the result contains a `FinishedGameConfirmationInstruction`, the session is removed from the active sessions list.
+        *   **Session Cleanup:** A `FinishedGameConfirmationInstruction` remains pending until its correlated Continue acknowledgment is accepted; that successful acknowledgment removes the session from the active sessions list.
     *   `GetCurrentInstruction(Guid gameId)` (ModeratorInstruction?): Retrieves the `PendingModeratorInstruction`. 
     *   `GetGameStateView(Guid gameId)` (IGameSession?): Returns the game state via the read-only `IGameSession` interface. This hides the internal mutation methods present on the concrete object, ensuring the UI cannot modify state.
     *   `RehydrateSession(string serializedSession)` (Guid): Restores a game session from its stable recovery snapshot and adds it to the active session collection. Returns the session's GUID.
 *   **Internal Logic:** 
-    *   `EnsureInputTypeIsExpected(Guid gameId, ModeratorResponse input)`: Retrieves the pending instruction internally and validates input type matches expectation. Throws exception on mismatch.
+    *   `EnsureResponseMatchesPendingInstruction(ModeratorInstruction pendingInstruction, ModeratorResponse response)`: Rejects stale correlation identities, mismatched response types, malformed or incomplete payloads, and non-canonical option order before state can change.
     *   Relies on `GameFlowManager` for all state machine operations. 
     *   Victory condition checking is automatically handled by `GameFlowManager`.
 
@@ -478,19 +478,20 @@ A hierarchy of records represents the outcome of a `SubPhaseStage`'s execution, 
 ## `ModeratorResponse` Class 
 Data structure for communication FROM the moderator. 
 
-The fields below describe the current public shape. PRD #93 deliberately migrates several overloaded cases before new Role flows depend on them: #110 owns instruction correlation, one-way Continue acknowledgments, and semantic option IDs with separately localized labels; #113 owns distinct exact-Role Identification and public Role Reveal responses with complete requested-key validation; #121 owns Faction Agent Group Observation; #111 owns acting-Player/source-power/resource identity; #135/#136 own physical card-instance and zone payloads; and #140 owns Public Group Partition input. Until those contracts land, raw confirmation, option text, and role-assignment fields are not the target architecture for those semantics.
+The fields below describe the current public shape. PRD #110 established instruction correlation, one-way Continue acknowledgments, immutable response payloads, and semantic option IDs with separately localized labels. PRD #93 deliberately migrates the remaining overloaded cases before new Role flows depend on them: #113 owns distinct exact-Role Identification and public Role Reveal responses; #121 owns Faction Agent Group Observation; #111 owns acting-Player/source-power/resource identity; #135/#136 own physical card-instance and zone payloads; and #140 owns Public Group Partition input.
+*   `InstructionId` (`Guid`): Identifies the exact pending instruction that produced the response. `GameService` validates this identity, the response type, and the complete payload before any game state or session-lifecycle mutation.
 *   `Type` (enum `ExpectedInputType`): Indicates which optional field below is populated. 
-*   `SelectedPlayerIds` (`HashSet<Guid>?`): IDs of selected Players. Currently used for exact-Role identification and Vote outcome; an empty set represents a tie when the instruction permits it.
-*   `AssignedPlayerRoles` (Dictionary<Guid, MainRoleType>?): Player IDs mapped to main roles. This currently conflates assignment, private identification, and public reveal and does not yet enforce the complete requested key set; #113 removes that conflation.
-*   `SelectedOption` (string?): Current rendered-text option value; #110 replaces semantic identity with a stable value separate from localization.
-*   `Confirmation` (bool?): Current Boolean confirmation; #110 separates one-way Continue acknowledgment from any genuine yes/no gameplay choice.
-*   **Construction:** Can only be instantiated via `ModeratorInstruction` subclass `CreateResponse()` methods.
+*   `SelectedPlayerIds` (`IReadOnlySet<Guid>?`): IDs of selected Players. Currently used for exact-Role identification and Vote outcome; an empty set represents a tie when the instruction permits it.
+*   `AssignedPlayerRoles` (`IReadOnlyDictionary<Guid, MainRoleType>?`): Player IDs mapped to main roles. Assignments must contain exactly every Player requested by the instruction, though this field still conflates assignment, private identification, and public reveal until #113.
+*   `SelectedOptionIds` (`IReadOnlyList<string>?`): Machine-stable option IDs in the instruction's explicit semantic order. Rendered labels live separately on `ModeratorOption` and never drive Core or simulator decisions.
+*   **Continue:** `ExpectedInputType.Continue` carries no Boolean or gameplay payload. A genuine yes/no branch requires its own semantic instruction rather than overloading Continue.
+*   **Construction:** External consumers create responses through `ModeratorInstruction` subclass `CreateResponse()` methods. Instruction and response collections are defensively copied and exposed read-only.
 
 **Design Note on Vote Input:** 
  
 A key design principle for moderator input, especially during voting phases, is minimizing data entry to enhance usability during live gameplay. The application is designed to guide the moderator through the *process* of voting (whether standard or event-driven like Nightmare, Great Distrust, Punishment), reminding them of the relevant rules. However, the actual vote tallying is expected to happen physically among the players. 
  
-Consequently, the `ModeratorResponse` structure requires the moderator to provide only the final *outcome* of the vote (e.g., who was eliminated via `SelectedPlayerIds`, where an empty list signifies a tie, or confirmation of other outcomes via `Confirmation`). This approach significantly reduces the moderator's interaction time and minimizes the potential for input errors. The application functions primarily as a streamlined state tracker and procedural guide, accepting the loss of granular vote data in its logs as an acceptable trade-off for improved real-time usability. 
+Consequently, the `ModeratorResponse` structure requires the moderator to provide only the final *outcome* of the vote: exactly one living target via `SelectedPlayerIds`, or an empty selection for a tie. It does not collect ballots, per-Player choices, or vote totals. This approach significantly reduces the moderator's interaction time and minimizes the potential for input errors. The application functions primarily as a streamlined state tracker and procedural guide, accepting the loss of granular vote data in its logs as an acceptable trade-off for improved real-time usability.
  
 
  
@@ -499,15 +500,16 @@ Polymorphic instruction system for communication TO the moderator. **Assembly Lo
 
 *   **Encapsulation & Serialization:** Instruction constructors are marked `internal` (or `protected` for the base class) to prevent UI clients from injecting arbitrary instructions—only the trusted `GameFlowManager` should create instruction instances. To support JSON deserialization while preserving this encapsulation, all instruction types use the `[JsonConstructor]` attribute on their internal constructors. Since the custom `ModeratorInstructionConverter` resides in the same assembly (`Werewolves.Core.StateModels`), it can access internal constructors during deserialization.
 *   **Abstract Base Class:** 
+    *   `InstructionId` (`Guid`): Stable identity generated once and preserved through serialization/rehydration so only a response to the exact pending instruction can be consumed.
     *   `PublicAnnouncement` (string?): Text to be read aloud or displayed publicly to all players. 
     *   `PrivateInstruction` (string?): Text for moderator's eyes only, containing reminders, rules, or guidance. 
     *   `AffectedPlayerIds` (IReadOnlyList<Guid>?): Optional: Player(s) this instruction primarily relates to.
-    *   `SoundEffects` (List<SoundEffectsEnum>): Sound effects to play with this instruction. Only listed effects should play; all others should stop. *(Placeholder for future implementation)* 
+    *   `SoundEffects` (IReadOnlyList<SoundEffectsEnum>): Sound effects to play with this instruction. Only listed effects should play; all others should stop. *(Placeholder for future implementation)*
 *   **Concrete Implementations:** Each instruction type has its own `CreateResponse` method for validation and response creation:
-*   **`ConfirmationInstruction`:** Current Boolean confirmation shape. Under #110, one-way Continue acknowledgment is a distinct semantic contract and cannot accept `false` as a gameplay branch.
+*   **`ConfirmationInstruction`:** Creates a one-way Continue acknowledgment with no Boolean payload or false branch.
 *   **`SelectPlayersInstruction`:** For player selection with `NumberRangeConstraint` (defining min/max counts).
-*   **`AssignRolesInstruction`:** Current overloaded role mapping. #113 replaces assignment/identification/reveal conflation and requires exact requested-key validation.
-*   **`SelectOptionsInstruction`:** Current text-valued option selection. #110 adds stable semantic values with separately localized labels.
+*   **`AssignRolesInstruction`:** Requires a complete mapping for exactly the requested Players. #113 replaces the remaining assignment/identification/reveal conflation.
+*   **`SelectOptionsInstruction`:** Carries an ordered list of `ModeratorOption` values, each with a stable ID and a separately rendered label; duplicate labels are allowed but IDs must be unique.
 
 ## Enums
 
@@ -515,7 +517,7 @@ Polymorphic instruction system for communication TO the moderator. **Assembly Lo
 *   `GamePhase`: `Night`, `Dawn`, `Day`.
 *   `GameHook`: `NightMainActionLoop`, `PlayerRoleAssignedOnElimination`, `OnVoteConcluded`, `DawnMainActionLoop`.
 *   `PlayerHealth`: `Alive`, `Dead`. 
-*   `ExpectedInputType`: `PlayerSelection`, `PlayerSelectionSingle`, `PlayerSelectionMultiple`, `AssignPlayerRoles`, `OptionSelection`, `Confirmation`.
+*   `ExpectedInputType`: `None`, `PlayerSelection`, `AssignPlayerRoles`, `OptionSelection`, `Continue`, `FinishedGame`.
 
 ### Team Enum
 *   `Team`: `Villagers`, `Werewolves`.
@@ -547,7 +549,7 @@ Polymorphic instruction system for communication TO the moderator. **Assembly Lo
 ### Sub-Phase Enums
 *   `NightSubPhases`: `Start`.
 *   `DawnSubPhases`: `CalculateVictims`, `AnnounceVictims`, `ProcessRoleReveals`, `Finalize`.
-*   `DaySubPhases`: `Debate`, `DetermineVoteType`, `NormalVoting`, `AccusationVoting`, `FriendVoting`, `HandleNonTieVote`, `ProcessVoteOutcome`, `ProcessVoteDeathLoop`, `Finalize`.
+*   `DaySubPhases`: `Debate`, `DetermineVoteType`, `NormalVoting`, `AccusationVoting`, `FriendVoting`, `HandleNonTieVote`, `ProcessVoteOutcome`, `ProcessVoteEliminationCascade`, `Finalize`.
 *   `VictorySubPhases`: `Complete`.
 
 ## Extensions
@@ -586,20 +588,20 @@ Located in `Werewolves.Core.StateModels/Extensions/MainRoleTypeExtensions.cs`. P
 
 3.  **Dawn Phase (`GamePhase.Dawn`):**
     *   The `PhaseManager` for `Dawn` is activated, starting at `DawnSubPhases.CalculateVictims`.
-    *   **Calculate Victims:** The `NightInteractionResolver` is invoked to process all night actions, resolving conflicts (Witch vs Defender vs Infection) and applying eliminations/status effects. Navigates either to `AnnounceVictims` or `Finalize`, depending on whether or not there were any night deaths.
-    *   **Announce Victims:** If victims exist, the `AnnounceVictims` sub-phase announces the deaths. The current implementation asks for confirmation when all victim Roles are known and otherwise uses `AssignRolesInstruction`. PRD #93/#113 makes both branches one public Role Reveal event: known Roles use a Continue acknowledgment after physical reveal; unknown Roles use a complete valid mapping. Fires `GameHook.PlayerRoleAssignedOnElimination`. Navigates to `Finalize`.
+    *   **Calculate Victims:** The `NightInteractionResolver` is invoked to process all night actions, resolving conflicts (Witch vs Defender vs Infection) and applying Eliminations/status effects. Navigates either to `AnnounceVictims` or `Finalize`, depending on whether the Night caused any Eliminations.
+    *   **Announce Victims:** If victims exist, the `AnnounceVictims` sub-phase announces the Eliminations. The current implementation asks for confirmation when all victim Roles are known and otherwise uses `AssignRolesInstruction`. PRD #93/#113 makes both branches one public Role Reveal event: known Roles use a Continue acknowledgment after physical reveal; unknown Roles use a complete valid mapping. Fires `GameHook.PlayerRoleAssignedOnElimination`. Navigates to `Finalize`.
     *   **Finalize:** The `Finalize` sub-phase transitions to `GamePhase.Day`. Victory is checked at this transition.
 
 4.  **Day Phase (`GamePhase.Day`):**
     *   The `PhaseManager` for `Day` starts at `DaySubPhases.Debate`.
-    *   **Debate:** Issues an instruction for discussion, then transitions to `DetermineVoteType`.
+    *   **Debate:** First fires the post-Dawn `GameHook.DawnMainActionLoop` after the Day-entry victory check, then issues an instruction for discussion and transitions to `DetermineVoteType`.
     *   **Determine Vote Type:** Determines what's the appropriate vote type, checking for active events or modifiers (defaults to `NormalVoting` sub-phase).
     *   **Normal Voting:** Handles standard village voting to end the debate. The current implementation silently skips a Role response when the voted Player is already Moderator-known and otherwise sends `AssignRolesInstruction`. This is a known PRD #93/#113 migration: public reveal must still be committed when privately known, using acknowledgment for known Roles and a complete mapping for unknown Roles. Transitions to either `HandleNonTieVote` if there was no tie, or `ProcessVoteOutcome` if there was a tie.
     *   **Accusation Voting:** *(Not yet implemented)* Reserved for accusation-based voting mechanics.
     *   **Friend Voting:** *(Not yet implemented)* Reserved for friend-based voting mechanics (e.g., Angel event).
     *   **Handle Non Tie Vote:** Handles checking if the voted for player is susceptible to be actually lynched due to the vote (i.e. Village Idiot), eliminates it if they are, otherwise applies `LynchImmunityUsed` status effect. Transitions to `ProcessVoteOutcome`
-    *   **Process Vote Outcome:** Fires `GameHook.OnVoteConcluded`, and then checks where to navigate. Can loop back to `DetermineVoteType` if a re-vote was triggered (i.e. stuttering judge), advance to `ProcessVoteDeathLoop` if there were any voting deaths, or `Finalize` if not.
-    *   **Process Vote Death Loop:** Fires `GameHook.PlayerRoleAssignedOnElimination`.
+    *   **Process Vote Outcome:** Fires `GameHook.OnVoteConcluded`, then advances to `ProcessVoteEliminationCascade` when the Vote caused an Elimination or a Consecutive Vote is required; otherwise it advances to `Finalize`.
+    *   **Process Vote Elimination Cascade:** Fires `GameHook.PlayerRoleAssignedOnElimination`, then decides whether to start the Consecutive Vote or finalize the Day.
     *   **Finalize:** Transitions to `GamePhase.Night`. Victory is checked at this transition.
 
 # Game Logs 

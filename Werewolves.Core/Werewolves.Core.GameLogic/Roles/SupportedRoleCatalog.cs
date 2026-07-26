@@ -9,24 +9,22 @@ namespace Werewolves.Core.GameLogic.Roles;
 
 public static class SupportedRoleCatalog
 {
-	private static readonly SupportedRoleDescriptor[] SupportedRoles =
+	private static readonly RoleAdmissionCatalog Catalog = new(
 	[
-		new(MainRoleType.SimpleWerewolf, () => new SimpleWerewolfRole()),
-		new(MainRoleType.Seer, () => new SeerRole()),
-		new(MainRoleType.WildChild, () => new WildChildRole()),
-		new(MainRoleType.SimpleVillager, () => new SimpleVillagerRole())
-	];
+		RoleAdmission.Active(MainRoleType.SimpleWerewolf, () => new SimpleWerewolfRole()),
+		RoleAdmission.Active(MainRoleType.Seer, () => new SeerRole()),
+		RoleAdmission.Active(MainRoleType.WildChild, () => new WildChildRole()),
+		RoleAdmission.Passive(MainRoleType.SimpleVillager)
+	]);
 
-	private static readonly MainRoleType[] SupportedRoleTypes = SupportedRoles
-		.Select(role => role.Role)
-		.ToArray();
+	private static readonly MainRoleType[] SupportedRoleTypes = Catalog.Roles.ToArray();
 
 	private static readonly HashSet<MainRoleType> SupportedRoleSet = SupportedRoleTypes.ToHashSet();
 
 	internal static readonly IReadOnlyDictionary<ListenerIdentifier, Func<IGameHookListener>> ListenerFactories =
-		SupportedRoles.ToDictionary(
-			role => ListenerIdentifier.Listener(role.Role),
-			role => role.CreateListener);
+		Catalog.ListenerFactories;
+
+	internal static RoleAdmissionCatalog Admissions => Catalog;
 
 	public static IReadOnlyList<MainRoleType> Roles => SupportedRoleTypes;
 
@@ -58,7 +56,4 @@ public static class SupportedRoleCatalog
 			GameSessionConfig.RoleCountConstraints[role]);
 	}
 
-	private sealed record SupportedRoleDescriptor(
-		MainRoleType Role,
-		Func<IGameHookListener> CreateListener);
 }
