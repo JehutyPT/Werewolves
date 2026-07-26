@@ -29,6 +29,7 @@ internal class SimpleWerewolfRole : StandardNightRoleHookListener
         var potentialTargets = GetPotentialTargets(session, false);
 
         return new SelectPlayersInstruction(
+			ModeratorInstructionSemantic.SelectWerewolfVictim,
             publicAnnouncement: GameStrings.WerewolvesChooseVictimPrompt,
             selectablePlayerIds: potentialTargets,
             affectedPlayerIds: werewolves.Select(w => w.Id).ToList(),

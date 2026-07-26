@@ -52,7 +52,7 @@ public sealed class BuildTimeCachePublicationTests
 	public void GenerateToFiles_WithEquivalentPaths_RejectsBeforeGenerationOrFileSystemAccess(
 		string prospectiveOutcome)
 	{
-		var entry = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()
+		var entry = TerminalLobbyScenarioCatalog.EnumerateLegacyCore()
 			.First(value => prospectiveOutcome == "completed" || !value.IsAlreadyDecided);
 		using var cancellation = new CancellationTokenSource();
 		var executionCount = 0;
@@ -102,7 +102,7 @@ public sealed class BuildTimeCachePublicationTests
 			return;
 		}
 
-		var entry = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()
+		var entry = TerminalLobbyScenarioCatalog.EnumerateLegacyCore()
 			.First(value => value.IsAlreadyDecided);
 		var fileSystem = new RecordingPublicationFileSystem();
 		var generator = CreateGenerator(fileSystem: fileSystem);
@@ -133,7 +133,7 @@ public sealed class BuildTimeCachePublicationTests
 	public void GenerateToFiles_WithSymlinkedParentAlias_RejectsBeforeGenerationOrWrites(
 		string prospectiveOutcome)
 	{
-		var entry = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()
+		var entry = TerminalLobbyScenarioCatalog.EnumerateLegacyCore()
 			.First(value => prospectiveOutcome == "completed" || !value.IsAlreadyDecided);
 		using var cancellation = new CancellationTokenSource();
 		var executionCount = 0;
@@ -192,7 +192,7 @@ public sealed class BuildTimeCachePublicationTests
 			return;
 		}
 
-		var entry = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()
+		var entry = TerminalLobbyScenarioCatalog.EnumerateLegacyCore()
 			.First(value => prospectiveOutcome == "completed" || !value.IsAlreadyDecided);
 		using var cancellation = new CancellationTokenSource();
 		var executionCount = 0;
@@ -241,7 +241,7 @@ public sealed class BuildTimeCachePublicationTests
 	[Fact]
 	public void Generate_WhenFinalProgressCallbackCancels_ObservesCancellationBeforeFinalization()
 	{
-		var entry = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()
+		var entry = TerminalLobbyScenarioCatalog.EnumerateLegacyCore()
 			.First(value => value.IsAlreadyDecided);
 		using var cancellation = new CancellationTokenSource();
 		var generator = CreateGenerator(
@@ -261,7 +261,7 @@ public sealed class BuildTimeCachePublicationTests
 	[Fact]
 	public void GenerateToFiles_WhenFinalProgressCallbackCancels_PreservesPreviousArtifact()
 	{
-		var entry = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()
+		var entry = TerminalLobbyScenarioCatalog.EnumerateLegacyCore()
 			.First(value => value.IsAlreadyDecided);
 		using var cancellation = new CancellationTokenSource();
 		var generator = CreateGenerator(
@@ -301,7 +301,7 @@ public sealed class BuildTimeCachePublicationTests
 	[Fact]
 	public void GenerateToFiles_WhenCancellationFollowsReturnedIncompleteBatch_RetainsObservedEvidence()
 	{
-		var entry = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()
+		var entry = TerminalLobbyScenarioCatalog.EnumerateLegacyCore()
 			.First(value => !value.IsAlreadyDecided);
 		using var cancellation = new CancellationTokenSource();
 		var generator = CreateGenerator((scenario, identity, count, _) =>
@@ -533,7 +533,7 @@ public sealed class BuildTimeCachePublicationTests
 	[Fact]
 	public void DiagnosticsJson_WriteAndRead_UseTheExactDiagnosticCodeVocabulary()
 	{
-		var entry = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()
+		var entry = TerminalLobbyScenarioCatalog.EnumerateLegacyCore()
 			.First(value => !value.IsAlreadyDecided);
 		var seed = new BuildTimeIncompleteRunDiagnostic(
 			BuildTimeBatchPhase.Screening,
@@ -606,7 +606,7 @@ public sealed class BuildTimeCachePublicationTests
 				"\"cache\":{\"schema\":\"unknown-cache-schema\"",
 				StringComparison.Ordinal),
 			"simulator-profile" => canonical.Replace(
-				$"\"simulator\":{{\"profile\":\"{SimulatorProfile.Active.Identity.ProfileId}\"",
+			$"\"simulator\":{{\"profile\":\"{SimulatorProfile.LegacyCore.Identity.ProfileId}\"",
 				"\"simulator\":{\"profile\":\"unknown-profile\"",
 				StringComparison.Ordinal),
 			"decision-strategy" => canonical.Replace(
@@ -625,7 +625,7 @@ public sealed class BuildTimeCachePublicationTests
 	[Fact]
 	public void DiagnosticsJson_Read_RejectsDuplicateAndOutOfOrderIncompleteSeeds()
 	{
-		var entries = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()
+		var entries = TerminalLobbyScenarioCatalog.EnumerateLegacyCore()
 			.Where(value => !value.IsAlreadyDecided)
 			.Take(2)
 			.ToArray();
@@ -665,7 +665,7 @@ public sealed class BuildTimeCachePublicationTests
 	[Fact]
 	public void DiagnosticsJson_Read_RejectsDuplicateCodesAndOutOfOrderFields()
 	{
-		var entry = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()
+		var entry = TerminalLobbyScenarioCatalog.EnumerateLegacyCore()
 			.First(value => !value.IsAlreadyDecided);
 		var result = CreateGenerator((scenario, identity, count, _) =>
 			Batch(scenario, identity, count, incompleteLastRun: true))
@@ -698,7 +698,7 @@ public sealed class BuildTimeCachePublicationTests
 	[Fact]
 	public void DiagnosticsJson_Write_RejectsEnumeratedCountBeyondCatalogTotal()
 	{
-		var entry = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()
+		var entry = TerminalLobbyScenarioCatalog.EnumerateLegacyCore()
 			.First(value => value.IsAlreadyDecided);
 		var result = CreateGenerator().Generate([entry]);
 		var extraOmissions = result.Diagnostics.TotalScenarioCount;
@@ -720,7 +720,7 @@ public sealed class BuildTimeCachePublicationTests
 	[Fact]
 	public void DiagnosticsJson_Write_RejectsCompletedPartialCatalog()
 	{
-		var entry = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()
+		var entry = TerminalLobbyScenarioCatalog.EnumerateLegacyCore()
 			.First(value => value.IsAlreadyDecided);
 		var result = CreateGenerator().Generate([entry]);
 
@@ -740,7 +740,7 @@ public sealed class BuildTimeCachePublicationTests
 	[Fact]
 	public void DiagnosticsJson_WriteAndRead_RejectCompletedOneOfOneCatalogClaim()
 	{
-		var entry = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()
+		var entry = TerminalLobbyScenarioCatalog.EnumerateLegacyCore()
 			.First(value => value.IsAlreadyDecided);
 		var partial = CreateGenerator().Generate([entry]);
 		var oneOfOne = partial.Diagnostics with { TotalScenarioCount = 1 };
@@ -771,7 +771,7 @@ public sealed class BuildTimeCachePublicationTests
 			new RunSeedMaterial(
 				new SimulationCompatibilityIdentity(
 					scenario.ToCanonical(),
-					SimulatorProfile.Active.Identity),
+				SimulatorProfile.LegacyCore.Identity),
 				BaselineRandomDecisionStrategy.Identity,
 				runNumber: 0));
 		var invalid = result.Diagnostics with
@@ -879,8 +879,8 @@ public sealed class BuildTimeCachePublicationTests
 				"unknown-terminal-lobby-cache-generator",
 				StringComparison.Ordinal),
 			"artifact-profile" => json.Replace(
-				$"\"profileVersion\":\"{SimulatorProfile.Active.Identity.Version}\"",
-				$"\"profileVersion\":\"{SimulatorProfile.Active.Identity.Version}-other\"",
+				$"\"profileVersion\":\"{SimulatorProfile.LegacyCore.Identity.Version}\"",
+				$"\"profileVersion\":\"{SimulatorProfile.LegacyCore.Identity.Version}-other\"",
 				StringComparison.Ordinal),
 			"artifact-hash" => ReplaceArtifactHash(json),
 			"artifact-length" => ReplaceArtifactLength(json),
@@ -945,7 +945,7 @@ public sealed class BuildTimeCachePublicationTests
 
 	private static BuildTimeCacheGenerationResult GenerateIncompleteDiagnostics()
 	{
-		var entry = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()
+		var entry = TerminalLobbyScenarioCatalog.EnumerateLegacyCore()
 			.First(value => !value.IsAlreadyDecided);
 		return CreateGenerator((scenario, identity, count, _) =>
 			Batch(scenario, identity, count, incompleteLastRun: true))

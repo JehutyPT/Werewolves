@@ -70,7 +70,7 @@ public static class BuildTimeCacheDiagnosticsJson
 				RequiredString(simulator, "version"));
 			var decisionStrategy = DecisionStrategyIdentity.Parse(
 				RequiredString(simulator, "decisionStrategy"));
-			if (profile != SimulatorProfile.Active.Identity
+			if (profile != SimulatorProfile.LegacyCore.Identity
 				|| !decisionStrategy.Equals(BaselineRandomDecisionStrategy.Identity))
 			{
 				throw new FormatException("Unexpected simulator identity.");
@@ -158,8 +158,8 @@ public static class BuildTimeCacheDiagnosticsJson
 		writer.WriteEndObject();
 		writer.WritePropertyName("simulator");
 		writer.WriteStartObject();
-		writer.WriteString("profile", SimulatorProfile.Active.Identity.ProfileId);
-		writer.WriteString("version", SimulatorProfile.Active.Identity.Version);
+		writer.WriteString("profile", SimulatorProfile.LegacyCore.Identity.ProfileId);
+		writer.WriteString("version", SimulatorProfile.LegacyCore.Identity.Version);
 		writer.WriteString("decisionStrategy", BaselineRandomDecisionStrategy.Identity.ToString());
 		writer.WriteEndObject();
 		writer.WritePropertyName("scenarios");
@@ -240,7 +240,7 @@ public static class BuildTimeCacheDiagnosticsJson
 			diagnostics.ProbabilityCount,
 			diagnostics.OmittedCount
 		};
-		var catalogScenarioCount = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile().Count;
+		var catalogScenarioCount = TerminalLobbyScenarioCatalog.EnumerateLegacyCore().Count;
 		if (counts.Any(value => value < 0)
 			|| diagnostics.TotalScenarioCount != catalogScenarioCount
 			|| diagnostics.EnumeratedScenarioCount > diagnostics.TotalScenarioCount)
@@ -306,14 +306,14 @@ public static class BuildTimeCacheDiagnosticsJson
 	{
 		ArgumentNullException.ThrowIfNull(diagnostics.IncompleteRunSeedMaterial);
 		var seeds = diagnostics.IncompleteRunSeedMaterial;
-		var catalogIdentities = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()
+		var catalogIdentities = TerminalLobbyScenarioCatalog.EnumerateLegacyCore()
 			.Select(entry => entry.Identity.ToString())
 			.ToHashSet(StringComparer.Ordinal);
 		if (seeds.Any(seed =>
 				seed is null
 				|| !Enum.IsDefined(seed.BatchPhase)
 				|| seed.RunSeedMaterial is null
-				|| seed.RunSeedMaterial.CompatibilityIdentity.Profile != SimulatorProfile.Active.Identity
+				|| seed.RunSeedMaterial.CompatibilityIdentity.Profile != SimulatorProfile.LegacyCore.Identity
 				|| !catalogIdentities.Contains(
 					seed.RunSeedMaterial.CompatibilityIdentity.ToString())
 				|| !seed.RunSeedMaterial.DecisionStrategyIdentity.Equals(
@@ -357,8 +357,8 @@ public static class BuildTimeCacheDiagnosticsJson
 		if (artifact.LogicalName != BuildTimeTerminalLobbyCacheGenerator.ArtifactLogicalName
 			|| artifact.SchemaIdentifier != TerminalLobbyCache.SchemaIdentifier
 			|| artifact.SchemaVersion != TerminalLobbyCache.SchemaVersion
-			|| artifact.ProfileIdentifier != SimulatorProfile.Active.Identity.ProfileId
-			|| artifact.ProfileVersion != SimulatorProfile.Active.Identity.Version
+			|| artifact.ProfileIdentifier != SimulatorProfile.LegacyCore.Identity.ProfileId
+			|| artifact.ProfileVersion != SimulatorProfile.LegacyCore.Identity.Version
 			|| artifact.RecordCount < 0
 			|| artifact.ByteLength != artifactBytes.Length
 			|| artifact.Sha256.Length != 64
@@ -378,7 +378,7 @@ public static class BuildTimeCacheDiagnosticsJson
 		if (read.Document is not { } document
 			|| document.Records.Count != artifact.RecordCount
 			|| document.Records.Any(record =>
-				record.CompatibilityIdentity.Profile != SimulatorProfile.Active.Identity)
+				record.CompatibilityIdentity.Profile != SimulatorProfile.LegacyCore.Identity)
 			|| document.Records.OfType<AlreadyDecidedTerminalCacheRecord>().Count()
 				!= diagnostics.AlreadyDecidedCount
 			|| document.Records.OfType<DegenerateTerminalCacheRecord>().Count()

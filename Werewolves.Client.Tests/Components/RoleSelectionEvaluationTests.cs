@@ -47,7 +47,8 @@ public class RoleSelectionEvaluationTests
 		using var context = CreateContext(
 			EmptyTerminalLobbyCacheByteSource.Instance,
 			evaluator,
-			depth: LobbyEvaluationDepth.DegenerateScreeningOnly);
+			depth: LobbyEvaluationDepth.DegenerateScreeningOnly,
+			capability: SimulatorCapability.SafetyScreening);
 		SeedValidLobby(context.Services.GetRequiredService<LobbySetupState>());
 		var starts = 0;
 		var cut = context.RenderModeratorComponent<RoleSelectionPage>(parameters => parameters
@@ -76,7 +77,8 @@ public class RoleSelectionEvaluationTests
 		using var context = CreateContext(
 			EmptyTerminalLobbyCacheByteSource.Instance,
 			evaluator,
-			depth: LobbyEvaluationDepth.DegenerateScreeningOnly);
+			depth: LobbyEvaluationDepth.DegenerateScreeningOnly,
+			capability: SimulatorCapability.SafetyScreening);
 		SeedValidLobby(context.Services.GetRequiredService<LobbySetupState>());
 		var starts = 0;
 		var cut = context.RenderModeratorComponent<RoleSelectionPage>(parameters => parameters
@@ -135,12 +137,16 @@ public class RoleSelectionEvaluationTests
 	public void AlreadyDecidedStartAttempt_IsAtomicallyBlockedAndAnnounced()
 	{
 		var record = new AlreadyDecidedTerminalCacheRecord(
-			CreateIdentity(villagers: 2, werewolves: 3),
+			CreateIdentity(
+				villagers: 2,
+				werewolves: 3,
+				profile: SimulatorCapability.SafetyScreening),
 			new SingleFactionGameResult(Faction.Werewolf),
 			AlreadyDecidedReason.WerewolfControlShortcut);
 		using var context = CreateContext(
 			new ImmediateByteSource(record),
-			depth: LobbyEvaluationDepth.DegenerateScreeningOnly);
+			depth: LobbyEvaluationDepth.DegenerateScreeningOnly,
+			capability: SimulatorCapability.SafetyScreening);
 		SeedValidLobby(context.Services.GetRequiredService<LobbySetupState>(), villagers: 2, werewolves: 3);
 		var starts = 0;
 		var cut = context.RenderModeratorComponent<RoleSelectionPage>(parameters => parameters
@@ -165,7 +171,7 @@ public class RoleSelectionEvaluationTests
 		var werewolf = new SingleFactionGameResult(Faction.Werewolf);
 		var noWinner = new NoWinnerGameResult();
 		var record = new DegenerateTerminalCacheRecord(
-			CreateIdentity(),
+			CreateIdentity(profile: SimulatorCapability.SafetyScreening),
 			[
 				new(villager, 750, 1_000),
 				new(werewolf, 250, 1_000),
@@ -177,7 +183,8 @@ public class RoleSelectionEvaluationTests
 			]);
 		using var context = CreateContext(
 			new ImmediateByteSource(record),
-			depth: LobbyEvaluationDepth.DegenerateScreeningOnly);
+			depth: LobbyEvaluationDepth.DegenerateScreeningOnly,
+			capability: SimulatorCapability.SafetyScreening);
 		SeedValidLobby(context.Services.GetRequiredService<LobbySetupState>());
 		var starts = 0;
 		var cut = context.RenderModeratorComponent<RoleSelectionPage>(parameters => parameters
@@ -201,7 +208,7 @@ public class RoleSelectionEvaluationTests
 		var villager = new SingleFactionGameResult(Faction.Villager);
 		var werewolf = new SingleFactionGameResult(Faction.Werewolf);
 		var record = new ProbabilityTerminalCacheRecord(
-			CreateIdentity(),
+			CreateIdentity(profile: SimulatorProfile.LegacyCore),
 			[
 				new(villager, 7_000, 10_000),
 				new(werewolf, 3_000, 10_000),
@@ -213,7 +220,8 @@ public class RoleSelectionEvaluationTests
 			]);
 		using var context = CreateContext(
 			new ImmediateByteSource(record),
-			depth: LobbyEvaluationDepth.DegenerateScreeningOnly);
+			depth: LobbyEvaluationDepth.DegenerateScreeningOnly,
+			capability: SimulatorCapability.SafetyScreening);
 		SeedValidLobby(context.Services.GetRequiredService<LobbySetupState>());
 		var cut = context.RenderModeratorComponent<Routes>();
 		cut.FindAll("button")
@@ -254,7 +262,10 @@ public class RoleSelectionEvaluationTests
 				new(villager, 1, VictoryCheckWindow.Dawn, 7_000, 10_000),
 				new(werewolf, 2, VictoryCheckWindow.PreNight, 3_000, 10_000)
 			]);
-		using var context = CreateContext(new ImmediateByteSource(record));
+		using var context = CreateContext(
+			new ImmediateByteSource(record),
+			depth: LobbyEvaluationDepth.FullProbability,
+			capability: SimulatorCapability.FullProbability);
 		SeedValidLobby(context.Services.GetRequiredService<LobbySetupState>());
 		var cut = context.RenderModeratorComponent<Routes>();
 		cut.FindAll("button")
@@ -280,14 +291,14 @@ public class RoleSelectionEvaluationTests
 		LobbyEvaluationStateKind expectedState)
 	{
 		var classify = expectedState == LobbyEvaluationStateKind.NotApplicable
-			? new Func<SimulationScenario, LobbyScenarioSupport>(_ => new(
+			? new Func<SimulationScenario, SimulatorCapability, LobbyScenarioSupport>((_, _) => new(
 				RulesValid: true,
 				AppSupported: false,
-				SimulatorProfile: null))
-			: _ => new(
+				SimulatorSupported: false))
+			: (_, _) => new(
 				RulesValid: true,
 				AppSupported: true,
-				SimulatorProfile: null);
+				SimulatorSupported: false);
 		using var context = CreateContext(
 			EmptyTerminalLobbyCacheByteSource.Instance,
 			classify: classify);
@@ -301,15 +312,7 @@ public class RoleSelectionEvaluationTests
 		cut.Find(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Click();
 
 		starts.Should().Be(1);
-		if (expectedState == LobbyEvaluationStateKind.NotApplicable)
-		{
-			cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationPanel)).Should().BeEmpty();
-		}
-		else
-		{
-			cut.Find(TestId(ModeratorUiTestIds.LobbyEvaluationSummary))
-				.TextContent.Should().Contain(ClientStrings.LobbyEvaluation_SimulatorUnavailable);
-		}
+		cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationPanel)).Should().BeEmpty();
 	}
 
 	[Fact]
@@ -317,11 +320,12 @@ public class RoleSelectionEvaluationTests
 	{
 		using var context = CreateContext(
 			EmptyTerminalLobbyCacheByteSource.Instance,
-			classify: _ => new(
+			classify: (_, _) => new(
 				RulesValid: true,
 				AppSupported: true,
-				SimulatorProfile: null),
-			depth: LobbyEvaluationDepth.DegenerateScreeningOnly);
+				SimulatorSupported: false),
+			depth: LobbyEvaluationDepth.DegenerateScreeningOnly,
+			capability: SimulatorCapability.SafetyScreening);
 		SeedValidLobby(context.Services.GetRequiredService<LobbySetupState>());
 		var starts = 0;
 		var cut = context.RenderModeratorComponent<RoleSelectionPage>(parameters => parameters
@@ -341,7 +345,8 @@ public class RoleSelectionEvaluationTests
 	{
 		using var context = CreateContext(
 			EmptyTerminalLobbyCacheByteSource.Instance,
-			depth: LobbyEvaluationDepth.DegenerateScreeningOnly);
+			depth: LobbyEvaluationDepth.DegenerateScreeningOnly,
+			capability: SimulatorCapability.SafetyScreening);
 		SeedValidLobby(context.Services.GetRequiredService<LobbySetupState>());
 		var starts = 0;
 		var cut = context.RenderModeratorComponent<RoleSelectionPage>(parameters => parameters
@@ -364,7 +369,11 @@ public class RoleSelectionEvaluationTests
 	public async Task CouldNotEvaluate_AllowsStartAndCurrentRetrySynchronouslyReturnsToPendingGate()
 	{
 		var evaluator = new RetrySequenceEvaluator();
-		using var context = CreateContext(EmptyTerminalLobbyCacheByteSource.Instance, evaluator);
+		using var context = CreateContext(
+			EmptyTerminalLobbyCacheByteSource.Instance,
+			evaluator,
+			depth: LobbyEvaluationDepth.FullProbability,
+			capability: SimulatorCapability.FullProbability);
 		SeedValidLobby(context.Services.GetRequiredService<LobbySetupState>());
 		var starts = 0;
 		var cut = context.RenderModeratorComponent<RoleSelectionPage>(parameters => parameters
@@ -404,7 +413,11 @@ public class RoleSelectionEvaluationTests
 	public void IdentityChange_SynchronouslyRemovesTheOldFailureRetry()
 	{
 		var evaluator = new RetrySequenceEvaluator();
-		using var context = CreateContext(EmptyTerminalLobbyCacheByteSource.Instance, evaluator);
+		using var context = CreateContext(
+			EmptyTerminalLobbyCacheByteSource.Instance,
+			evaluator,
+			depth: LobbyEvaluationDepth.FullProbability,
+			capability: SimulatorCapability.FullProbability);
 		var lobby = context.Services.GetRequiredService<LobbySetupState>();
 		SeedValidLobby(lobby);
 		var cut = context.RenderModeratorComponent<RoleSelectionPage>();
@@ -468,7 +481,9 @@ public class RoleSelectionEvaluationTests
 		using var context = CreateContext(
 			EmptyTerminalLobbyCacheByteSource.Instance,
 			evaluator,
-			timeProvider: time);
+			timeProvider: time,
+			depth: LobbyEvaluationDepth.FullProbability,
+			capability: SimulatorCapability.FullProbability);
 		var lobby = context.Services.GetRequiredService<LobbySetupState>();
 		SeedValidLobby(lobby);
 		var cut = context.RenderModeratorComponent<RoleSelectionPage>();
@@ -513,10 +528,14 @@ public class RoleSelectionEvaluationTests
 	private static ModeratorComponentTestContext CreateContext(
 		ITerminalLobbyCacheByteSource bundled,
 		ILobbyTerminalEvaluator? evaluator = null,
-		Func<SimulationScenario, LobbyScenarioSupport>? classify = null,
+		Func<SimulationScenario, SimulatorCapability, LobbyScenarioSupport>? classify = null,
 		TimeProvider? timeProvider = null,
-		LobbyEvaluationDepth depth = LobbyEvaluationDepth.FullProbability)
+		LobbyEvaluationDepth depth = LobbyEvaluationDepth.FullProbability,
+		SimulatorCapability? capability = null)
 	{
+		var settings = new LobbyEvaluationSettings(
+			capability ?? SimulatorCapability.FullProbability,
+			depth);
 		var context = new ModeratorComponentTestContext();
 		context.Services.AddSingleton(bundled);
 		context.Services.AddSingleton<ILocalTerminalLobbyCacheStore, InMemoryTerminalLobbyCacheStore>();
@@ -530,7 +549,7 @@ public class RoleSelectionEvaluationTests
 				sp.GetRequiredService<ITerminalLobbyCacheByteSource>(),
 				sp.GetRequiredService<ILocalTerminalLobbyCacheStore>(),
 				sp.GetRequiredService<ILobbyTerminalEvaluator>(),
-				depth,
+				settings,
 				sp.GetRequiredService<TimeProvider>()));
 		}
 		else
@@ -540,7 +559,7 @@ public class RoleSelectionEvaluationTests
 				sp.GetRequiredService<ITerminalLobbyCacheByteSource>(),
 				sp.GetRequiredService<ILocalTerminalLobbyCacheStore>(),
 				sp.GetRequiredService<ILobbyTerminalEvaluator>(),
-				depth,
+				settings,
 				sp.GetRequiredService<TimeProvider>(),
 				classify));
 		}
@@ -566,13 +585,16 @@ public class RoleSelectionEvaluationTests
 
 	private static SimulationCompatibilityIdentity CreateIdentity(
 		int villagers = 3,
-		int werewolves = 2)
+		int werewolves = 2,
+		SimulatorProfile? profile = null)
 	{
 		var scenario = new SimulationScenario(
 			5,
 			Enumerable.Repeat(MainRoleType.SimpleVillager, villagers)
 				.Concat(Enumerable.Repeat(MainRoleType.SimpleWerewolf, werewolves)));
-		return new(scenario.ToCanonical(), SimulatorProfile.Active.Identity);
+		return new(
+			scenario.ToCanonical(),
+			(profile ?? SimulatorCapability.FullProbability).Identity);
 	}
 
 	private static string TestId(string value) => $"[data-testid='{value}']";
@@ -612,6 +634,7 @@ public class RoleSelectionEvaluationTests
 
 		public async Task<LobbyEvaluationResult> EvaluateAsync(
 			SimulationScenario scenario,
+			SimulatorCapability capability,
 			LobbyEvaluationDepth depth,
 			CancellationToken cancellationToken = default)
 		{
@@ -635,6 +658,7 @@ public class RoleSelectionEvaluationTests
 
 		public async Task<LobbyEvaluationResult> EvaluateAsync(
 			SimulationScenario scenario,
+			SimulatorCapability capability,
 			LobbyEvaluationDepth depth,
 			CancellationToken cancellationToken = default)
 		{
@@ -654,6 +678,7 @@ public class RoleSelectionEvaluationTests
 
 		public async Task<LobbyEvaluationResult> EvaluateAsync(
 			SimulationScenario scenario,
+			SimulatorCapability capability,
 			LobbyEvaluationDepth depth,
 			CancellationToken cancellationToken = default)
 		{
@@ -684,6 +709,7 @@ public class RoleSelectionEvaluationTests
 
 		public async Task<LobbyEvaluationResult> EvaluateAsync(
 			SimulationScenario scenario,
+			SimulatorCapability capability,
 			LobbyEvaluationDepth depth,
 			CancellationToken cancellationToken = default)
 		{

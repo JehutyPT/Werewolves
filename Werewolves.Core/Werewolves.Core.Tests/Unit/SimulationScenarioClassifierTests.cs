@@ -9,6 +9,45 @@ namespace Werewolves.Core.Tests.Unit;
 public class SimulationScenarioClassifierTests
 {
 	[Fact]
+	public void Classify_UsesTheExplicitlySelectedCapability()
+	{
+		var scenario = new SimulationScenario(
+			5,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.WildChild,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+		var safety = new SimulatorCapability(
+			new SimulatorProfileIdentity("test-safety", "1"),
+			[
+				new(MainRoleType.SimpleWerewolf, Faction.Werewolf),
+				new(MainRoleType.WildChild, Faction.Villager),
+				new(MainRoleType.SimpleVillager, Faction.Villager)
+			]);
+		var probability = new SimulatorCapability(
+			new SimulatorProfileIdentity("test-probability", "1"),
+			[
+				new(MainRoleType.SimpleWerewolf, Faction.Werewolf),
+				new(MainRoleType.SimpleVillager, Faction.Villager)
+			]);
+		_ = new SimulatorCapabilityRegistry(safety, probability);
+
+		var safetyClassification = SimulationScenarioClassifier.Classify(scenario, safety);
+		var probabilityClassification = SimulationScenarioClassifier.Classify(scenario, probability);
+
+		safetyClassification.SimulatorSupport.Should().Match<SimulatorSupportResult>(
+			result => result.IsSupported && result.Capability == safety);
+		probabilityClassification.SimulatorSupport.Should().Match<SimulatorSupportResult>(
+			result => !result.IsSupported
+				&& result.Capability == probability);
+		probabilityClassification.SimulatorSupport!.UnsupportedRoles.Should()
+			.Equal(MainRoleType.WildChild);
+	}
+
+	[Fact]
 	public void Classify_WithAppSupportedButProfileUnsupportedRole_StopsBeforeAlreadyDecidedAndPreservesInput()
 	{
 		var scenario = new SimulationScenario(

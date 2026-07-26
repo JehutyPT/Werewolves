@@ -46,6 +46,23 @@ public sealed class SimulationExecutor
 
 	public SimulationRun Execute(
 		SimulationScenario scenario,
+		SimulatorCapability capability,
+		SimulationCompatibilityIdentity compatibilityIdentity,
+		long runNumber,
+		CancellationToken cancellationToken = default)
+	{
+		ArgumentNullException.ThrowIfNull(capability);
+		return Execute(
+			scenario,
+			(SimulatorProfile)capability,
+			compatibilityIdentity,
+			runNumber,
+			cancellationToken);
+	}
+
+	private SimulationRun Execute(
+		SimulationScenario scenario,
+		SimulatorProfile profile,
 		SimulationCompatibilityIdentity compatibilityIdentity,
 		long runNumber,
 		CancellationToken cancellationToken = default)
@@ -53,24 +70,80 @@ public sealed class SimulationExecutor
 		ArgumentNullException.ThrowIfNull(scenario);
 		ArgumentNullException.ThrowIfNull(compatibilityIdentity);
 		ArgumentOutOfRangeException.ThrowIfNegative(runNumber);
-		EnsureSupportedMatchingInput(scenario, compatibilityIdentity);
-		return ExecuteValidated(compatibilityIdentity, runNumber, cancellationToken);
+		EnsureSupportedMatchingInput(scenario, profile, compatibilityIdentity);
+		return ExecuteValidated(profile, compatibilityIdentity, runNumber, cancellationToken);
 	}
 
 	public SimulationBatchSourceEvidence ExecuteBatch(
 		SimulationScenario scenario,
+		SimulatorCapability capability,
 		SimulationCompatibilityIdentity compatibilityIdentity,
 		int runCount,
 		CancellationToken cancellationToken = default) =>
 		ExecuteBatch(
 			scenario,
+			capability,
 			compatibilityIdentity,
 			runCount,
 			degreeOfParallelism: 1,
 			cancellationToken);
 
+	internal SimulationBatchSourceEvidence ExecuteBatchLegacy(
+		SimulationScenario scenario,
+		SimulatorProfile legacyProfile,
+		SimulationCompatibilityIdentity compatibilityIdentity,
+		int runCount,
+		CancellationToken cancellationToken = default)
+	{
+		ArgumentNullException.ThrowIfNull(legacyProfile);
+		return ExecuteBatch(
+			scenario,
+			legacyProfile,
+			compatibilityIdentity,
+			runCount,
+			degreeOfParallelism: 1,
+			cancellationToken);
+	}
+
 	internal SimulationBatchSourceEvidence ExecuteBatch(
 		SimulationScenario scenario,
+		SimulatorCapability capability,
+		SimulationCompatibilityIdentity compatibilityIdentity,
+		int runCount,
+		int degreeOfParallelism,
+		CancellationToken cancellationToken = default)
+	{
+		ArgumentNullException.ThrowIfNull(capability);
+		return ExecuteBatch(
+			scenario,
+			(SimulatorProfile)capability,
+			compatibilityIdentity,
+			runCount,
+			degreeOfParallelism,
+			cancellationToken);
+	}
+
+	internal SimulationBatchSourceEvidence ExecuteBatchLegacy(
+		SimulationScenario scenario,
+		SimulatorProfile legacyProfile,
+		SimulationCompatibilityIdentity compatibilityIdentity,
+		int runCount,
+		int degreeOfParallelism,
+		CancellationToken cancellationToken = default)
+	{
+		ArgumentNullException.ThrowIfNull(legacyProfile);
+		return ExecuteBatch(
+			scenario,
+			legacyProfile,
+			compatibilityIdentity,
+			runCount,
+			degreeOfParallelism,
+			cancellationToken);
+	}
+
+	private SimulationBatchSourceEvidence ExecuteBatch(
+		SimulationScenario scenario,
+		SimulatorProfile profile,
 		SimulationCompatibilityIdentity compatibilityIdentity,
 		int runCount,
 		int degreeOfParallelism,
@@ -80,7 +153,7 @@ public sealed class SimulationExecutor
 		ArgumentNullException.ThrowIfNull(compatibilityIdentity);
 		ArgumentOutOfRangeException.ThrowIfNegative(runCount);
 		ArgumentOutOfRangeException.ThrowIfNegativeOrZero(degreeOfParallelism);
-		EnsureSupportedMatchingInput(scenario, compatibilityIdentity);
+		EnsureSupportedMatchingInput(scenario, profile, compatibilityIdentity);
 		cancellationToken.ThrowIfCancellationRequested();
 
 		var records = new SimulationRun[runCount];
@@ -98,6 +171,7 @@ public sealed class SimulationExecutor
 			}
 
 			records[runNumber] = ExecuteValidated(
+				profile,
 				compatibilityIdentity,
 				runNumber,
 				cancellationToken);
@@ -106,11 +180,12 @@ public sealed class SimulationExecutor
 		return new SimulationBatchSourceEvidence(
 			scenario.ToCanonical(),
 			compatibilityIdentity.Profile,
-			BaselineRandomDecisionStrategy.Identity,
+			profile.HeadlessResponsePolicy.StrategyIdentity,
 			records);
 	}
 
 	private SimulationRun ExecuteValidated(
+		SimulatorProfile profile,
 		SimulationCompatibilityIdentity compatibilityIdentity,
 		long runNumber,
 		CancellationToken cancellationToken)
@@ -118,7 +193,7 @@ public sealed class SimulationExecutor
 		cancellationToken.ThrowIfCancellationRequested();
 		var material = new RunSeedMaterial(
 			compatibilityIdentity,
-			BaselineRandomDecisionStrategy.Identity,
+			profile.HeadlessResponsePolicy.StrategyIdentity,
 			runNumber);
 		try
 		{
@@ -126,7 +201,11 @@ public sealed class SimulationExecutor
 			cancellationToken.ThrowIfCancellationRequested();
 			var random = new DeterministicRandomSource(material);
 			var startState = _startStateDeriver(material, random);
-			var strategy = new BaselineRandomDecisionStrategy(material, startState, random);
+			var strategy = new BaselineRandomDecisionStrategy(
+				material,
+				startState,
+				profile.HeadlessResponsePolicy,
+				random);
 			var driver = _driverFactory(strategy);
 			var execution = driver.CompleteGameSession(
 				startState.CreateGameSessionConfig(),
@@ -152,13 +231,14 @@ public sealed class SimulationExecutor
 
 	private static void EnsureSupportedMatchingInput(
 		SimulationScenario scenario,
+		SimulatorProfile profile,
 		SimulationCompatibilityIdentity compatibilityIdentity)
 	{
-		var classification = SimulationScenarioClassifier.Classify(scenario);
+		var classification = SimulationScenarioClassifier.Classify(scenario, profile);
 		if (classification.SimulatorSupport is not { IsSupported: true } simulatorSupport)
 		{
 			throw new ArgumentException(
-				"The Simulation Scenario is not supported by the active simulator profile.",
+				"The Simulation Scenario is not supported by the selected simulator descriptor.",
 				nameof(scenario));
 		}
 
@@ -168,7 +248,7 @@ public sealed class SimulationExecutor
 		if (!compatibilityIdentity.Equals(expectedIdentity))
 		{
 			throw new ArgumentException(
-				"The Simulation Compatibility Identity does not match the supplied Simulation Scenario and active profile.",
+				"The Simulation Compatibility Identity does not match the supplied Simulation Scenario and selected simulator descriptor.",
 				nameof(compatibilityIdentity));
 		}
 	}

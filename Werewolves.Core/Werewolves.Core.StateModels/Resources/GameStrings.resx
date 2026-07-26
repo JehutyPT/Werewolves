@@ -409,4 +409,8 @@
     <value>Lua Nova</value>
     <comment/>
   </data>
+  <data name="GameSessionNotFoundError" xml:space="preserve">
+    <value>ERROR: Game not found</value>
+    <comment/>
+  </data>
 </root>

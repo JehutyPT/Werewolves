@@ -119,8 +119,9 @@ public sealed class BuildTimeTerminalLobbyCacheGenerator
 	{
 		ArgumentOutOfRangeException.ThrowIfNegativeOrZero(degreeOfParallelism);
 		var executor = new SimulationExecutor();
-		_executeBatch = (scenario, identity, count, token) => executor.ExecuteBatch(
+		_executeBatch = (scenario, identity, count, token) => executor.ExecuteBatchLegacy(
 			scenario,
+			SimulatorProfile.LegacyCore,
 			identity,
 			count,
 			degreeOfParallelism,
@@ -158,7 +159,7 @@ public sealed class BuildTimeTerminalLobbyCacheGenerator
 
 	public BuildTimeCacheGenerationResult Generate(
 		CancellationToken cancellationToken = default) => Generate(
-			TerminalLobbyScenarioCatalog.EnumerateCurrentProfile(),
+			TerminalLobbyScenarioCatalog.EnumerateLegacyCore(),
 			cancellationToken);
 
 	internal BuildTimeCacheGenerationResult Generate(
@@ -174,7 +175,7 @@ public sealed class BuildTimeTerminalLobbyCacheGenerator
 		string destinationPath,
 		CancellationToken cancellationToken = default) => GenerateToFile(
 			destinationPath,
-			TerminalLobbyScenarioCatalog.EnumerateCurrentProfile(),
+			TerminalLobbyScenarioCatalog.EnumerateLegacyCore(),
 			cancellationToken);
 
 	internal BuildTimeCacheGenerationResult GenerateToFile(
@@ -196,7 +197,7 @@ public sealed class BuildTimeTerminalLobbyCacheGenerator
 		CancellationToken cancellationToken = default) => GenerateToFiles(
 			destinationPath,
 			diagnosticsPath,
-			TerminalLobbyScenarioCatalog.EnumerateCurrentProfile(),
+			TerminalLobbyScenarioCatalog.EnumerateLegacyCore(),
 			cancellationToken);
 
 	internal BuildTimeCacheGenerationResult GenerateToFiles(
@@ -292,7 +293,11 @@ public sealed class BuildTimeTerminalLobbyCacheGenerator
 
 				return batch;
 			});
-			var evaluation = evaluator.Evaluate(entry.Scenario, cancellationToken);
+			var evaluation = evaluator.EvaluateLegacy(
+				entry.Scenario,
+				SimulatorProfile.LegacyCore,
+				LobbyEvaluationDepth.FullProbability,
+				cancellationToken);
 
 			if (evaluation is CouldNotEvaluateLobbyEvaluation)
 			{
@@ -354,8 +359,8 @@ public sealed class BuildTimeTerminalLobbyCacheGenerator
 			ArtifactLogicalName,
 			TerminalLobbyCache.SchemaIdentifier,
 			TerminalLobbyCache.SchemaVersion,
-			SimulatorProfile.Active.Identity.ProfileId,
-			SimulatorProfile.Active.Identity.Version,
+			SimulatorProfile.LegacyCore.Identity.ProfileId,
+			SimulatorProfile.LegacyCore.Identity.Version,
 			records.Count,
 			hash,
 			bytes.Length);
@@ -565,8 +570,19 @@ public sealed class BuildTimeTerminalLobbyCacheGenerator
 	}
 
 	private static TerminalLobbyGenerationScenario[] SelectScenarios(
-		IEnumerable<TerminalLobbyGenerationScenario>? scenarios) =>
-		(scenarios ?? TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()).ToArray();
+		IEnumerable<TerminalLobbyGenerationScenario>? scenarios)
+	{
+		var selected = (scenarios ?? TerminalLobbyScenarioCatalog.EnumerateLegacyCore()).ToArray();
+		if (selected.Any(entry =>
+			entry.Identity.Profile != SimulatorProfile.LegacyCore.Identity))
+		{
+			throw new ArgumentException(
+				"Build-time generation accepts only frozen core-simulator@1 scenarios.",
+				nameof(scenarios));
+		}
+
+		return selected;
+	}
 
 	private static string NormalizePath(string path, string parameterName)
 	{
@@ -688,7 +704,7 @@ public sealed class BuildTimeTerminalLobbyCacheGenerator
 			GeneratorIdentifier,
 			GeneratorVersion,
 			status,
-			TerminalLobbyScenarioCatalog.EnumerateCurrentProfile().Count,
+			TerminalLobbyScenarioCatalog.EnumerateLegacyCore().Count,
 			EnumeratedScenarioCount,
 			AlreadyDecidedCount,
 			DegenerateCount,

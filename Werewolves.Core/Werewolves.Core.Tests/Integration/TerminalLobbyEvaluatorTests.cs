@@ -16,6 +16,26 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 	}
 
 	[Fact]
+	public void Evaluate_FullProbabilityDepthWithSafetyCapabilityRejectsBeforeExecution()
+	{
+		var calls = 0;
+		var evaluator = new TerminalLobbyEvaluator((_, _, _, _, _) =>
+		{
+			calls++;
+			throw new InvalidOperationException();
+		});
+
+		var act = () => evaluator.Evaluate(
+			SupportedScenario(),
+			SimulatorCapability.SafetyScreening,
+			LobbyEvaluationDepth.FullProbability);
+
+		act.Should().Throw<ArgumentException>().WithParameterName("depth");
+		calls.Should().Be(0);
+		MarkTestCompleted();
+	}
+
+	[Fact]
 	public void Evaluate_RulesInvalid_ReturnsRulesGateResultWithoutExecuting()
 	{
 		var calls = 0;
@@ -27,7 +47,10 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 		var scenario = Scenario(MainRoleType.Seer, MainRoleType.SimpleVillager,
 			MainRoleType.SimpleVillager, MainRoleType.SimpleVillager, MainRoleType.SimpleVillager);
 
-		var result = evaluator.Evaluate(scenario);
+		var result = evaluator.Evaluate(
+			scenario,
+			SimulatorCapability.SafetyScreening,
+			LobbyEvaluationDepth.DegenerateScreeningOnly);
 
 		var stopped = result.Should().BeOfType<RulesInvalidLobbyEvaluation>().Subject.RulesValidity;
 		stopped.Scenario.Should().BeSameAs(scenario);
@@ -48,7 +71,10 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 		var scenario = Scenario(MainRoleType.BigBadWolf, MainRoleType.Seer,
 			MainRoleType.SimpleVillager, MainRoleType.SimpleVillager, MainRoleType.SimpleVillager);
 
-		var result = evaluator.Evaluate(scenario);
+		var result = evaluator.Evaluate(
+			scenario,
+			SimulatorCapability.SafetyScreening,
+			LobbyEvaluationDepth.DegenerateScreeningOnly);
 
 		var stopped = result.Should().BeOfType<AppUnsupportedLobbyEvaluation>().Subject.AppSupport;
 		stopped.Scenario.Should().BeSameAs(scenario);
@@ -73,7 +99,10 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 				MainRoleType.SimpleVillager, MainRoleType.SimpleVillager],
 			new ActorSetupCards([MainRoleType.Cupid, MainRoleType.Defender, MainRoleType.Elder]));
 
-		var result = evaluator.Evaluate(scenario);
+		var result = evaluator.Evaluate(
+			scenario,
+			SimulatorCapability.SafetyScreening,
+			LobbyEvaluationDepth.DegenerateScreeningOnly);
 
 		var stopped = result.Should().BeOfType<SimulatorUnsupportedLobbyEvaluation>().Subject.SimulatorSupport;
 		stopped.Scenario.Should().BeSameAs(scenario);
@@ -95,7 +124,10 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 		var scenario = Scenario(MainRoleType.SimpleWerewolf, MainRoleType.SimpleWerewolf,
 			MainRoleType.SimpleWerewolf, MainRoleType.SimpleVillager, MainRoleType.SimpleVillager);
 
-		var result = evaluator.Evaluate(scenario, LobbyEvaluationDepth.DegenerateScreeningOnly);
+		var result = evaluator.Evaluate(
+			scenario,
+			SimulatorCapability.SafetyScreening,
+			LobbyEvaluationDepth.DegenerateScreeningOnly);
 
 		var decided = result.Should().BeOfType<AlreadyDecidedTerminalEvaluation>().Subject;
 		decided.GameResult.Should().Be(new SingleFactionGameResult(Faction.Werewolf));
@@ -116,6 +148,7 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 
 		var result = evaluator.Evaluate(
 			SupportedScenario(),
+			SimulatorCapability.SafetyScreening,
 			LobbyEvaluationDepth.DegenerateScreeningOnly);
 
 		result.Should().BeOfType<DegenerateTerminalEvaluation>().Subject
@@ -138,6 +171,7 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 
 		var result = evaluator.Evaluate(
 			SupportedScenario(),
+			SimulatorCapability.SafetyScreening,
 			LobbyEvaluationDepth.DegenerateScreeningOnly);
 
 		result.Should().BeOfType<ScreeningPassedLobbyEvaluation>();
@@ -157,7 +191,10 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 				: (1, VictoryCheckWindow.Dawn));
 		});
 
-		var result = evaluator.Evaluate(SupportedScenario());
+		var result = evaluator.Evaluate(
+			SupportedScenario(),
+			SimulatorCapability.FullProbability,
+			LobbyEvaluationDepth.FullProbability);
 
 		var probability = result.Should().BeOfType<ProbabilityTerminalEvaluation>().Subject;
 		calls.Select(call => call.Count).Should().Equal(1_000, 10_000);
@@ -190,7 +227,69 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 			return batch;
 		});
 
-		evaluator.Evaluate(SupportedScenario()).Should().BeOfType<CouldNotEvaluateLobbyEvaluation>();
+		evaluator.Evaluate(
+				SupportedScenario(),
+				SimulatorCapability.FullProbability,
+				LobbyEvaluationDepth.FullProbability)
+			.Should().BeOfType<CouldNotEvaluateLobbyEvaluation>();
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void Evaluate_PolicyMissingReachableStartGameSemantic_UsesOneRealIncompleteScreeningBatch()
+	{
+		const long runNumber = 41;
+		var scenario = SupportedScenario();
+		var capability = FullProbabilityWithoutStartGame();
+		var identity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			capability.Identity);
+		var expectedMaterial = new RunSeedMaterial(
+			identity,
+			BaselineRandomDecisionStrategy.Identity,
+			runNumber);
+		var executor = new SimulationExecutor();
+
+		var run = executor.Execute(
+			scenario,
+			capability,
+			identity,
+			runNumber);
+
+		run.Should().Be(new IncompleteSimulationRun(expectedMaterial));
+
+		var calls = new List<int>();
+		SimulationBatchSourceEvidence? screening = null;
+		var evaluator = new TerminalLobbyEvaluator(
+			(batchScenario, batchCapability, batchIdentity, count, cancellationToken) =>
+			{
+				calls.Add(count);
+				screening = executor.ExecuteBatch(
+					batchScenario,
+					batchCapability,
+					batchIdentity,
+					count,
+					cancellationToken);
+				return screening;
+			});
+
+		var result = evaluator.Evaluate(
+			scenario,
+			capability,
+			LobbyEvaluationDepth.FullProbability);
+
+		result.Should().BeOfType<CouldNotEvaluateLobbyEvaluation>();
+		calls.Should().Equal(TerminalLobbyEvaluator.ScreeningAttemptCount);
+		screening.Should().NotBeNull();
+		screening!.Records.Should().HaveCount(TerminalLobbyEvaluator.ScreeningAttemptCount);
+		screening.Records.OfType<IncompleteSimulationRun>().Should()
+			.HaveCount(TerminalLobbyEvaluator.ScreeningAttemptCount);
+		screening.Records.Select(record => record.RunSeedMaterial).Should().Equal(
+			Enumerable.Range(0, TerminalLobbyEvaluator.ScreeningAttemptCount)
+				.Select(attempt => new RunSeedMaterial(
+					identity,
+					BaselineRandomDecisionStrategy.Identity,
+					attempt)));
 		MarkTestCompleted();
 	}
 
@@ -199,7 +298,10 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 	{
 		var evaluator = new TerminalLobbyEvaluator((_, _, _, _) => throw new InvalidOperationException("secret"));
 
-		var result = evaluator.Evaluate(SupportedScenario());
+		var result = evaluator.Evaluate(
+			SupportedScenario(),
+			SimulatorCapability.FullProbability,
+			LobbyEvaluationDepth.FullProbability);
 
 		result.Should().Be(new CouldNotEvaluateLobbyEvaluation());
 		MarkTestCompleted();
@@ -213,7 +315,11 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 				scenario.ToCanonical(), new SimulatorProfileIdentity("other", "1"),
 				BaselineRandomDecisionStrategy.Identity, []));
 
-		evaluator.Evaluate(SupportedScenario()).Should().BeOfType<CouldNotEvaluateLobbyEvaluation>();
+		evaluator.Evaluate(
+				SupportedScenario(),
+				SimulatorCapability.FullProbability,
+				LobbyEvaluationDepth.FullProbability)
+			.Should().BeOfType<CouldNotEvaluateLobbyEvaluation>();
 		MarkTestCompleted();
 	}
 
@@ -228,7 +334,11 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 			return Batch(scenario, identity, count, _ => (1, VictoryCheckWindow.Dawn));
 		});
 		LobbyEvaluationResult? result = null;
-		Action pre = () => result = evaluator.Evaluate(SupportedScenario(), preCancelled.Token);
+		Action pre = () => result = evaluator.Evaluate(
+			SupportedScenario(),
+			SimulatorCapability.FullProbability,
+			LobbyEvaluationDepth.FullProbability,
+			preCancelled.Token);
 
 		using var between = new CancellationTokenSource();
 		var betweenEvaluator = new TerminalLobbyEvaluator((scenario, identity, count, token) =>
@@ -238,7 +348,11 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 			between.Cancel();
 			return batch;
 		});
-		Action betweenGates = () => result = betweenEvaluator.Evaluate(SupportedScenario(), between.Token);
+		Action betweenGates = () => result = betweenEvaluator.Evaluate(
+			SupportedScenario(),
+			SimulatorCapability.FullProbability,
+			LobbyEvaluationDepth.FullProbability,
+			between.Token);
 
 		pre.Should().Throw<OperationCanceledException>();
 		betweenGates.Should().Throw<OperationCanceledException>();
@@ -265,7 +379,11 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 		});
 		LobbyEvaluationResult? result = null;
 
-		Action evaluate = () => result = evaluator.Evaluate(SupportedScenario(), cancellation.Token);
+		Action evaluate = () => result = evaluator.Evaluate(
+			SupportedScenario(),
+			SimulatorCapability.FullProbability,
+			LobbyEvaluationDepth.FullProbability,
+			cancellation.Token);
 
 		evaluate.Should().Throw<OperationCanceledException>();
 		result.Should().BeNull();
@@ -277,6 +395,38 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 		MainRoleType.SimpleVillager, MainRoleType.SimpleVillager);
 
 	private static SimulationScenario Scenario(params MainRoleType[] roles) => new(5, roles);
+
+	private static SimulatorCapability FullProbabilityWithoutStartGame() => new(
+		SimulatorCapability.FullProbability.Identity,
+		[
+			new(MainRoleType.SimpleWerewolf, Faction.Werewolf),
+			new(MainRoleType.Seer, Faction.Villager),
+			new(MainRoleType.WildChild, Faction.Villager),
+			new(MainRoleType.SimpleVillager, Faction.Villager)
+		],
+		headlessResponsePolicy: new HeadlessResponsePolicy(
+			BaselineRandomDecisionStrategy.Identity,
+			[
+				ModeratorInstructionSemantic.FinishedGame,
+				ModeratorInstructionSemantic.StartNight,
+				ModeratorInstructionSemantic.FinishNightActions,
+				ModeratorInstructionSemantic.WakeRole,
+				ModeratorInstructionSemantic.IdentifyRoleHolders,
+				ModeratorInstructionSemantic.PutRoleToSleep,
+				ModeratorInstructionSemantic.SelectWerewolfVictim,
+				ModeratorInstructionSemantic.SelectSeerTarget,
+				ModeratorInstructionSemantic.RevealSeerResult,
+				ModeratorInstructionSemantic.SelectWildChildModel,
+				ModeratorInstructionSemantic.AnnounceDawnVictims,
+				ModeratorInstructionSemantic.AssignDawnVictimRoles,
+				ModeratorInstructionSemantic.StartDayDebate,
+				ModeratorInstructionSemantic.RecordDayVote,
+				ModeratorInstructionSemantic.AssignDayVoteTargetRole,
+				ModeratorInstructionSemantic.AnnounceLynchingImmunity,
+				ModeratorInstructionSemantic.AnnounceDayElimination
+			]),
+		supportsActorSetupCards: false,
+		supportedRuleStates: [SimulationRuleState.Default]);
 
 	private static SimulationBatchSourceEvidence Batch(
 		SimulationScenario scenario,

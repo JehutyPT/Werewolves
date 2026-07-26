@@ -52,11 +52,31 @@ public record SelectOptionsInstruction : ModeratorInstruction
 		string? privateInstruction = null,
 		IReadOnlyList<Guid>? affectedPlayerIds = null,
 		Guid instructionId = default)
+		: this(
+			ModeratorInstructionSemantic.Unspecified,
+			options,
+			selectionRange,
+			publicAnnouncement,
+			privateInstruction,
+			affectedPlayerIds,
+			instructionId)
+	{
+	}
+
+	internal SelectOptionsInstruction(
+		ModeratorInstructionSemantic semantic,
+		IReadOnlyList<ModeratorOption> options,
+		NumberRangeConstraint selectionRange,
+		string? publicAnnouncement = null,
+		string? privateInstruction = null,
+		IReadOnlyList<Guid>? affectedPlayerIds = null,
+		Guid instructionId = default)
 		: base(
 			publicAnnouncement,
 			privateInstruction,
 			affectedPlayerIds,
-			instructionId: instructionId)
+			instructionId: instructionId,
+			semantic: semantic)
 	{
 		ArgumentNullException.ThrowIfNull(options);
 

@@ -18,6 +18,37 @@ public class SimulationExecutionTests : DiagnosticTestBase
 	}
 
 	[Fact]
+	public void ExecuteBatch_UsesSelectedCapabilityIdentityAndNumbersEachBatchFromZero()
+	{
+		var scenario = CreateKnownDawnOracle();
+		var safetyIdentity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+		var probabilityIdentity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorCapability.FullProbability.Identity);
+		var executor = new SimulationExecutor();
+
+		var safety = executor.ExecuteBatch(
+			scenario,
+			SimulatorCapability.SafetyScreening,
+			safetyIdentity,
+			runCount: 2);
+		var probability = executor.ExecuteBatch(
+			scenario,
+			SimulatorCapability.FullProbability,
+			probabilityIdentity,
+			runCount: 2);
+
+		safety.SimulatorProfile.Should().Be(SimulatorCapability.SafetyScreening.Identity);
+		probability.SimulatorProfile.Should().Be(SimulatorCapability.FullProbability.Identity);
+		safety.Records.Select(run => run.RunSeedMaterial.RunNumber).Should().Equal(0, 1);
+		probability.Records.Select(run => run.RunSeedMaterial.RunNumber).Should().Equal(0, 1);
+		safety.Records[0].RunSeedMaterial.Should().NotBe(probability.Records[0].RunSeedMaterial);
+		MarkTestCompleted();
+	}
+
+	[Fact]
 	public void Execute_WithKnownDawnOracle_ReturnsCompletedSemanticEvidence()
 	{
 		var scenario = new SimulationScenario(
@@ -31,10 +62,14 @@ public class SimulationExecutionTests : DiagnosticTestBase
 			]);
 		var identity = new SimulationCompatibilityIdentity(
 			scenario.ToCanonical(),
-			SimulatorProfile.Active.Identity);
+			SimulatorCapability.FullProbability.Identity);
 		var executor = new SimulationExecutor();
 
-		var run = executor.Execute(scenario, identity, runNumber: 0);
+		var run = executor.Execute(
+			scenario,
+			SimulatorCapability.FullProbability,
+			identity,
+			runNumber: 0);
 
 		var completed = run.Should().BeOfType<CompletedSimulationRun>().Subject;
 		completed.RunSeedMaterial.Should().Be(
@@ -59,8 +94,16 @@ public class SimulationExecutionTests : DiagnosticTestBase
 			]);
 		var identity = CreateIdentity(scenario);
 
-		var first = new SimulationExecutor().Execute(scenario, identity, runNumber: 0);
-		var replay = new SimulationExecutor().Execute(scenario, identity, runNumber: 0);
+		var first = new SimulationExecutor().Execute(
+			scenario,
+			SimulatorCapability.FullProbability,
+			identity,
+			runNumber: 0);
+		var replay = new SimulationExecutor().Execute(
+			scenario,
+			SimulatorCapability.FullProbability,
+			identity,
+			runNumber: 0);
 
 		first.Should().BeOfType<CompletedSimulationRun>();
 		replay.Should().Be(first);
@@ -76,17 +119,19 @@ public class SimulationExecutionTests : DiagnosticTestBase
 
 		SimulationBatchSourceEvidence sequential = executor.ExecuteBatch(
 			scenario,
+			SimulatorCapability.FullProbability,
 			identity,
 			runCount: 8,
 			degreeOfParallelism: 1);
 		SimulationBatchSourceEvidence parallel = executor.ExecuteBatch(
 			scenario,
+			SimulatorCapability.FullProbability,
 			identity,
 			runCount: 8,
 			degreeOfParallelism: 4);
 
 		sequential.CanonicalScenario.Should().Be(scenario.ToCanonical());
-		sequential.SimulatorProfile.Should().Be(SimulatorProfile.Active.Identity);
+		sequential.SimulatorProfile.Should().Be(SimulatorCapability.FullProbability.Identity);
 		sequential.DecisionStrategy.Should().Be(BaselineRandomDecisionStrategy.Identity);
 		sequential.Records.Select(record => record.RunSeedMaterial.RunNumber)
 			.Should().Equal(0, 1, 2, 3, 4, 5, 6, 7);
@@ -110,7 +155,11 @@ public class SimulationExecutionTests : DiagnosticTestBase
 				? SimulationExecutor.AdaptTerminalEvidence(material, history)
 				: new IncompleteSimulationRun(material));
 
-		var batch = executor.ExecuteBatch(scenario, identity, runCount: 4);
+		var batch = executor.ExecuteBatch(
+			scenario,
+			SimulatorCapability.FullProbability,
+			identity,
+			runCount: 4);
 
 		batch.Records.Should().HaveCount(4);
 		batch.Records.Should().SatisfyRespectively(
@@ -143,6 +192,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 
 		Action executeRun = () => runEvidence = executor.Execute(
 			scenario,
+			SimulatorCapability.FullProbability,
 			identity,
 			runNumber: 0,
 			cancellation.Token);
@@ -173,6 +223,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 
 		Action executeBatch = () => batchEvidence = executor.ExecuteBatch(
 			scenario,
+			SimulatorCapability.FullProbability,
 			identity,
 			runCount: 2,
 			cancellation.Token);
@@ -200,6 +251,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 
 		Action execute = () => evidence = executor.Execute(
 			scenario,
+			SimulatorCapability.FullProbability,
 			identity,
 			runNumber: 0,
 			cancellation.Token);
@@ -228,6 +280,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 
 		Action execute = () => evidence = executor.ExecuteBatch(
 			scenario,
+			SimulatorCapability.FullProbability,
 			identity,
 			runCount: 3,
 			degreeOfParallelism: 1,
@@ -286,10 +339,26 @@ public class SimulationExecutionTests : DiagnosticTestBase
 			new SimulatorProfileIdentity("core-simulator", "2"));
 		var attempts = new Action[]
 		{
-			() => executor.Execute(rulesInvalid, CreateIdentity(rulesInvalid), 0),
-			() => executor.Execute(appUnsupported, CreateIdentity(appUnsupported), 0),
-			() => executor.Execute(simulatorUnsupported, CreateIdentity(simulatorUnsupported), 0),
-			() => executor.Execute(supported, mismatchedIdentity, 0)
+			() => executor.Execute(
+				rulesInvalid,
+				SimulatorCapability.FullProbability,
+				CreateIdentity(rulesInvalid),
+				0),
+			() => executor.Execute(
+				appUnsupported,
+				SimulatorCapability.FullProbability,
+				CreateIdentity(appUnsupported),
+				0),
+			() => executor.Execute(
+				simulatorUnsupported,
+				SimulatorCapability.FullProbability,
+				CreateIdentity(simulatorUnsupported),
+				0),
+			() => executor.Execute(
+				supported,
+				SimulatorCapability.FullProbability,
+				mismatchedIdentity,
+				0)
 		};
 
 		foreach (var attempt in attempts)
@@ -332,7 +401,11 @@ public class SimulationExecutionTests : DiagnosticTestBase
 
 		foreach (var executor in executors)
 		{
-			var run = executor.Execute(scenario, identity, runNumber: 23);
+			var run = executor.Execute(
+				scenario,
+				SimulatorCapability.FullProbability,
+				identity,
+				runNumber: 23);
 
 			run.Should().Be(new IncompleteSimulationRun(expectedMaterial));
 		}
@@ -353,7 +426,11 @@ public class SimulationExecutionTests : DiagnosticTestBase
 				MainRoleType.SimpleVillager
 			]);
 		var identity = CreateIdentity(scenario);
-		var run = new SimulationExecutor().Execute(scenario, identity, runNumber: 11);
+		var run = new SimulationExecutor().Execute(
+			scenario,
+			SimulatorCapability.FullProbability,
+			identity,
+			runNumber: 11);
 
 		var completed = run.Should().BeOfType<CompletedSimulationRun>().Subject;
 		completed.EndingTurn.Should().BeGreaterThanOrEqualTo(2);
@@ -469,7 +546,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 			]);
 
 	private static SimulationCompatibilityIdentity CreateIdentity(SimulationScenario scenario) =>
-		new(scenario.ToCanonical(), SimulatorProfile.Active.Identity);
+		new(scenario.ToCanonical(), SimulatorCapability.FullProbability.Identity);
 
 	private static SimulationExecutor CreateExecutor(
 		Action<SimulationExecutionCheckpoint, long> checkpoint) =>

@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using Werewolves.Core.GameLogic.Queries;
 using Werewolves.Core.StateModels.Core;
+using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
@@ -27,17 +28,22 @@ internal static class DawnPhaseHandlers
 
         if (victimsNeedingRoles.Count == 0)
         {
-            return new ConfirmationInstruction(publicAnnouncement: announcement);
+            return new ConfirmationInstruction(
+				ModeratorInstructionSemantic.AnnounceDawnVictims,
+				publicAnnouncement: announcement);
         }
 
         if (victimsNeedingRoles.Count == 1 &&
             GameSessionQueries.TryGetOnlyPossibleUnassignedRole(session, requiredAssignmentCount: 1, out var role))
         {
             session.AssignRole(victimsNeedingRoles.Single().Id, role);
-            return new ConfirmationInstruction(publicAnnouncement: announcement);
+            return new ConfirmationInstruction(
+				ModeratorInstructionSemantic.AnnounceDawnVictims,
+				publicAnnouncement: announcement);
         }
 
         return new AssignRolesInstruction(
+			ModeratorInstructionSemantic.AssignDawnVictimRoles,
             publicAnnouncement: announcement,
             privateInstruction: GameStrings.RevealRolePromptSpecify,
             playersForAssignment: victimsNeedingRoles.Select(p => p.Id).ToImmutableHashSet(),

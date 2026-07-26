@@ -1,5 +1,6 @@
 using System.Collections.Frozen;
 using Werewolves.Core.GameLogic.Simulation;
+using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Models.Simulation;
 
 namespace Werewolves.Client.Services;
@@ -13,40 +14,24 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 	private readonly ITerminalLobbyCacheByteSource _bundledCache;
 	private readonly ILocalTerminalLobbyCacheStore _localCache;
 	private readonly ILobbyTerminalEvaluator _evaluator;
+	private readonly SimulatorCapability _capability;
 	private readonly LobbyEvaluationDepth _depth;
 	private readonly TimeProvider _timeProvider;
-	private readonly Func<SimulationScenario, LobbyScenarioSupport> _classify;
+	private readonly Func<SimulationScenario, SimulatorCapability, LobbyScenarioSupport> _classify;
 	private readonly CancellationTokenSource _lifetimeCancellation = new();
 	private readonly Lazy<Task<BundledCacheIndex?>> _bundledCacheIndex;
 	private readonly object _sync = new();
 	private EvaluationRequest? _currentRequest;
 	private bool _disposed;
 
-	internal LobbyEvaluationCoordinator(
-		LobbySetupState lobby,
-		ITerminalLobbyCacheByteSource bundledCache,
-		ILocalTerminalLobbyCacheStore localCache,
-		ILobbyTerminalEvaluator evaluator,
-		TimeProvider? timeProvider = null)
-		: this(
-			lobby,
-			bundledCache,
-			localCache,
-			evaluator,
-			LobbyEvaluationDepth.FullProbability,
-			timeProvider,
-			ClassifyScenario)
-	{
-	}
-
 	public LobbyEvaluationCoordinator(
 		LobbySetupState lobby,
 		ITerminalLobbyCacheByteSource bundledCache,
 		ILocalTerminalLobbyCacheStore localCache,
 		ILobbyTerminalEvaluator evaluator,
-		LobbyEvaluationDepth depth,
+		LobbyEvaluationSettings settings,
 		TimeProvider? timeProvider = null)
-		: this(lobby, bundledCache, localCache, evaluator, depth, timeProvider, ClassifyScenario)
+		: this(lobby, bundledCache, localCache, evaluator, settings, timeProvider, ClassifyScenario)
 	{
 	}
 
@@ -55,37 +40,17 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 		ITerminalLobbyCacheByteSource bundledCache,
 		ILocalTerminalLobbyCacheStore localCache,
 		ILobbyTerminalEvaluator evaluator,
+		LobbyEvaluationSettings settings,
 		TimeProvider? timeProvider,
-		Func<SimulationScenario, LobbyScenarioSupport> classify)
-		: this(
-			lobby,
-			bundledCache,
-			localCache,
-			evaluator,
-			LobbyEvaluationDepth.FullProbability,
-			timeProvider,
-			classify)
-	{
-	}
-
-	internal LobbyEvaluationCoordinator(
-		LobbySetupState lobby,
-		ITerminalLobbyCacheByteSource bundledCache,
-		ILocalTerminalLobbyCacheStore localCache,
-		ILobbyTerminalEvaluator evaluator,
-		LobbyEvaluationDepth depth,
-		TimeProvider? timeProvider,
-		Func<SimulationScenario, LobbyScenarioSupport> classify)
+		Func<SimulationScenario, SimulatorCapability, LobbyScenarioSupport> classify)
 	{
 		_lobby = lobby ?? throw new ArgumentNullException(nameof(lobby));
 		_bundledCache = bundledCache ?? throw new ArgumentNullException(nameof(bundledCache));
 		_localCache = localCache ?? throw new ArgumentNullException(nameof(localCache));
 		_evaluator = evaluator ?? throw new ArgumentNullException(nameof(evaluator));
-		if (!Enum.IsDefined(depth))
-		{
-			throw new ArgumentOutOfRangeException(nameof(depth));
-		}
-		_depth = depth;
+		ArgumentNullException.ThrowIfNull(settings);
+		_capability = settings.Capability;
+		_depth = settings.Depth;
 		_timeProvider = timeProvider ?? TimeProvider.System;
 		_classify = classify ?? throw new ArgumentNullException(nameof(classify));
 		_bundledCacheIndex = new(
@@ -99,6 +64,7 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 	public event EventHandler? StateChanged;
 
 	public LobbyEvaluationState State { get; private set; }
+	public SimulatorCapability Capability => _capability;
 	public LobbyEvaluationDepth Depth => _depth;
 	public bool EvaluationBlocksLobbyExit => State.BlocksLobbyExit;
 
@@ -186,13 +152,13 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 			}
 
 			var scenario = _lobby.CreateSimulationScenario();
-			var support = _classify(scenario);
+			var support = _classify(scenario, _capability);
 			if (!support.RulesValid || !support.AppSupported)
 			{
 				replacement = null;
 				nextState = LobbyEvaluationState.NotApplicable();
 			}
-			else if (support.SimulatorProfile is not { } simulatorProfile)
+			else if (!support.SimulatorSupported)
 			{
 				replacement = null;
 				nextState = LobbyEvaluationState.SimulatorUnavailable();
@@ -201,7 +167,7 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 			{
 				var identity = new SimulationCompatibilityIdentity(
 					scenario.ToCanonical(),
-					simulatorProfile.Identity);
+					_capability.Identity);
 				replacement = new EvaluationRequest(scenario, identity);
 				nextState = LobbyEvaluationState.Pending(identity);
 			}
@@ -238,15 +204,15 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 		}
 	}
 
-	private static LobbyScenarioSupport ClassifyScenario(SimulationScenario scenario)
+	private static LobbyScenarioSupport ClassifyScenario(
+		SimulationScenario scenario,
+		SimulatorCapability capability)
 	{
-		var classification = SimulationScenarioClassifier.Classify(scenario);
+		var classification = SimulationScenarioClassifier.Classify(scenario, capability);
 		return new LobbyScenarioSupport(
 			classification.RulesValidity.IsValid,
 			classification.AppSupport is { IsSupported: true },
-			classification.SimulatorSupport is { IsSupported: true } simulatorSupport
-				? simulatorSupport.Profile
-				: null);
+			classification.SimulatorSupport is { IsSupported: true });
 	}
 
 	private void StartPipeline(EvaluationRequest request) =>
@@ -278,7 +244,7 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 			if (bundledIndex is not null
 				&& bundledIndex.TryGet(request.Identity, out var bundledRecord))
 			{
-				PublishIfCurrent(request, ProjectTerminalRecord(bundledRecord));
+				PublishIfCurrent(request, ProjectTerminalRecord(bundledRecord, request.Identity));
 				return;
 			}
 
@@ -292,7 +258,27 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 			if (localDocument is not null
 				&& TerminalLobbyCache.TryGet(localDocument, request.Identity, out var localRecord))
 			{
-				PublishIfCurrent(request, ProjectTerminalRecord(localRecord));
+				PublishIfCurrent(request, ProjectTerminalRecord(localRecord, request.Identity));
+				return;
+			}
+
+			if (bundledIndex is not null
+				&& TryProjectLegacyRecord(
+					bundledIndex.Records,
+					request.Identity,
+					out var bundledProjection))
+			{
+				PublishIfCurrent(request, ProjectLegacyTerminalRecord(bundledProjection));
+				return;
+			}
+
+			if (localDocument is not null
+				&& TryProjectLegacyRecord(
+					localDocument.Records,
+					request.Identity,
+					out var localProjection))
+			{
+				PublishIfCurrent(request, ProjectLegacyTerminalRecord(localProjection));
 				return;
 			}
 
@@ -300,6 +286,7 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 			request.Token.ThrowIfCancellationRequested();
 			var evaluation = await _evaluator.EvaluateAsync(
 				request.Scenario,
+				_capability,
 				_depth,
 				request.Token);
 			if (!IsCurrent(request))
@@ -310,6 +297,11 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 				&& evaluation is ScreeningPassedLobbyEvaluation or ProbabilityTerminalEvaluation)
 			{
 				PublishIfCurrent(request, LobbyEvaluationState.ScreeningPassed(request.Identity));
+				return;
+			}
+			if (evaluation is SimulatorUnsupportedLobbyEvaluation)
+			{
+				PublishIfCurrent(request, LobbyEvaluationState.SimulatorUnavailable());
 				return;
 			}
 			if (evaluation is not TerminalLobbyEvaluation terminal)
@@ -368,7 +360,7 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 				// The terminal meaning remains valid for this app session even if persistence fails.
 			}
 
-			PublishIfCurrent(request, ProjectTerminalRecord(record));
+			PublishIfCurrent(request, ProjectTerminalRecord(record, request.Identity));
 		}
 		catch (OperationCanceledException) when (request.IsCancellationRequested)
 		{
@@ -442,35 +434,104 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 	}
 
 	private LobbyEvaluationState ProjectTerminalRecord(
-		TerminalLobbyCacheRecord record) =>
-		record switch
+		TerminalLobbyCacheRecord record,
+		SimulationCompatibilityIdentity consumerIdentity) =>
+		ProjectTerminalMeaning(
+			consumerIdentity,
+			record switch
+			{
+				AlreadyDecidedTerminalCacheRecord decided =>
+					new AlreadyDecidedTerminalMeaning(decided.GameResult, decided.Reason),
+				DegenerateTerminalCacheRecord => new DegenerateTerminalMeaning(),
+				ProbabilityTerminalCacheRecord
+					when _depth == LobbyEvaluationDepth.DegenerateScreeningOnly =>
+					new ScreeningPassedTerminalMeaning(),
+				ProbabilityTerminalCacheRecord probability => new ProbabilityTerminalMeaning(
+					ProjectProbability(
+						probability.GameResultFrequencies,
+						probability.GameResultFrequencyByTurn)),
+				_ => throw new ArgumentException("Unknown terminal cache record.", nameof(record))
+			});
+
+	private bool TryProjectLegacyRecord(
+		IEnumerable<TerminalLobbyCacheRecord> records,
+		SimulationCompatibilityIdentity consumerIdentity,
+		out LegacyTerminalLobbyCacheProjection projection)
+	{
+		foreach (var record in records)
 		{
-			AlreadyDecidedTerminalCacheRecord decided => LobbyEvaluationState.AlreadyDecided(
-				decided.CompatibilityIdentity,
+			if (LegacyTerminalLobbyCacheCompatibility.TryProject(
+				record,
+				_capability,
+				consumerIdentity,
+				_depth,
+				out projection))
+			{
+				return true;
+			}
+		}
+
+		projection = null!;
+		return false;
+	}
+
+	private static LobbyEvaluationState ProjectLegacyTerminalRecord(
+		LegacyTerminalLobbyCacheProjection projection) =>
+		ProjectTerminalMeaning(
+			projection.ConsumerIdentity,
+			projection switch
+			{
+				LegacyAlreadyDecidedTerminalLobbyCacheProjection decided =>
+					new AlreadyDecidedTerminalMeaning(decided.GameResult, decided.Reason),
+				LegacyDegenerateTerminalLobbyCacheProjection => new DegenerateTerminalMeaning(),
+				LegacyScreeningPassedTerminalLobbyCacheProjection =>
+					new ScreeningPassedTerminalMeaning(),
+				LegacyProbabilityTerminalLobbyCacheProjection probability =>
+					new ProbabilityTerminalMeaning(
+						ProjectProbability(
+							probability.GameResultFrequencies,
+							probability.GameResultFrequencyByTurn)),
+				_ => throw new ArgumentException(
+					"Unknown legacy terminal cache projection.",
+					nameof(projection))
+			});
+
+	private static LobbyEvaluationState ProjectTerminalMeaning(
+		SimulationCompatibilityIdentity consumerIdentity,
+		TerminalMeaning meaning) =>
+		meaning switch
+		{
+			AlreadyDecidedTerminalMeaning decided => LobbyEvaluationState.AlreadyDecided(
+				consumerIdentity,
 				decided.GameResult,
 				decided.Reason),
-			DegenerateTerminalCacheRecord degenerate => LobbyEvaluationState.Degenerate(
-				degenerate.CompatibilityIdentity),
-			ProbabilityTerminalCacheRecord probability
-				when _depth == LobbyEvaluationDepth.DegenerateScreeningOnly =>
-				LobbyEvaluationState.ScreeningPassed(probability.CompatibilityIdentity),
-			ProbabilityTerminalCacheRecord probability => LobbyEvaluationState.ProbabilityResult(
-				probability.CompatibilityIdentity,
-				new LobbyProbabilityData(probability.GameResultFrequencies.Select(row =>
-					new LobbyProbabilityOutcomeData(
-						row.GameResult,
-						row.Numerator,
-						row.Denominator,
-						probability.GameResultFrequencyByTurn
-							.Where(cell => cell.GameResult.Equals(row.GameResult))
-							.GroupBy(cell => cell.EndingTurn)
-							.OrderBy(group => group.Key)
-							.Select(group => new LobbyProbabilityTurnData(
-								group.Key,
-								group.Sum(cell => cell.Numerator),
-								group.First().Denominator)))))),
-			_ => throw new ArgumentException("Unknown terminal cache record.", nameof(record))
+			DegenerateTerminalMeaning => LobbyEvaluationState.Degenerate(consumerIdentity),
+			ScreeningPassedTerminalMeaning => LobbyEvaluationState.ScreeningPassed(consumerIdentity),
+			ProbabilityTerminalMeaning probability => LobbyEvaluationState.ProbabilityResult(
+				consumerIdentity,
+				probability.Probability),
+			_ => throw new ArgumentException("Unknown terminal meaning.", nameof(meaning))
 		};
+
+	private static LobbyProbabilityData ProjectProbability(
+		IEnumerable<TerminalCacheGameResultFrequency> frequencies,
+		IEnumerable<TerminalCacheTurnWindowFrequency> frequenciesByTurn)
+	{
+		var cells = frequenciesByTurn.ToArray();
+		return new LobbyProbabilityData(frequencies.Select(row =>
+			new LobbyProbabilityOutcomeData(
+				row.GameResult,
+				row.Numerator,
+				row.Denominator,
+				cells
+					.Where(cell => cell.GameResult.Equals(row.GameResult))
+					.GroupBy(cell => cell.EndingTurn)
+					.OrderBy(group => group.Key)
+					.Select(group => new LobbyProbabilityTurnData(
+						group.Key,
+						group.Sum(cell => cell.Numerator),
+						group.First().Denominator)))));
+	}
 
 	private void PublishIfCurrent(
 		EvaluationRequest request,
@@ -543,6 +604,19 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 		}
 	}
 
+	private abstract record TerminalMeaning;
+
+	private sealed record AlreadyDecidedTerminalMeaning(
+		GameResult GameResult,
+		AlreadyDecidedReason Reason) : TerminalMeaning;
+
+	private sealed record DegenerateTerminalMeaning : TerminalMeaning;
+
+	private sealed record ScreeningPassedTerminalMeaning : TerminalMeaning;
+
+	private sealed record ProbabilityTerminalMeaning(
+		LobbyProbabilityData Probability) : TerminalMeaning;
+
 	private sealed class BundledCacheIndex
 	{
 		private readonly FrozenDictionary<SimulationCompatibilityIdentity, TerminalLobbyCacheRecord>
@@ -550,8 +624,11 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 
 		public BundledCacheIndex(IEnumerable<TerminalLobbyCacheRecord> records)
 		{
-			_records = records.ToFrozenDictionary(record => record.CompatibilityIdentity);
+			Records = records.ToArray();
+			_records = Records.ToFrozenDictionary(record => record.CompatibilityIdentity);
 		}
+
+		public IReadOnlyList<TerminalLobbyCacheRecord> Records { get; }
 
 		public bool TryGet(
 			SimulationCompatibilityIdentity identity,
@@ -645,4 +722,4 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 internal readonly record struct LobbyScenarioSupport(
 	bool RulesValid,
 	bool AppSupported,
-	SimulatorProfile? SimulatorProfile);
+	bool SimulatorSupported);

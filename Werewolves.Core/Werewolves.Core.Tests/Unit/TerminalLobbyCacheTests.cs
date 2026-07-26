@@ -20,7 +20,7 @@ public class TerminalLobbyCacheTests
 		"{\"schema\":\"terminal-lobby-cache\",\"version\":1,\"record\":{\"identity\":\"profile=core-simulator@1|players=6|roles=[SimpleVillager=5,SimpleWerewolf=1]|actor=[]|rules=[]\",\"kind\":\"probability\",\"attempted\":10000,\"completed\":10000,\"incomplete\":0,\"results\":[{\"result\":{\"kind\":0,\"factions\":[0]},\"numerator\":7000,\"denominator\":10000},{\"result\":{\"kind\":0,\"factions\":[1]},\"numerator\":3000,\"denominator\":10000},{\"result\":{\"kind\":2,\"factions\":[]},\"numerator\":0,\"denominator\":10000}],\"cells\":[{\"result\":{\"kind\":0,\"factions\":[0]},\"turn\":1,\"window\":0,\"numerator\":7000,\"denominator\":10000},{\"result\":{\"kind\":0,\"factions\":[1]},\"turn\":2,\"window\":1,\"numerator\":3000,\"denominator\":10000}]}}";
 
 	[Fact]
-	public void Capture_AlreadyDecided_RequiresExactActiveProfileClassifierMeaning()
+	public void Capture_AlreadyDecided_RequiresExactLegacyProducerClassifierMeaning()
 	{
 		var scenario = new SimulationScenario(
 			5,
@@ -33,10 +33,15 @@ public class TerminalLobbyCacheTests
 			]);
 		var identity = new SimulationCompatibilityIdentity(
 			scenario.ToCanonical(),
-			SimulatorProfile.Active.Identity);
-		var classification = SimulationScenarioClassifier.Classify(scenario);
+			SimulatorProfile.LegacyCore.Identity);
+		var classification = SimulationScenarioClassifier.Classify(
+			scenario,
+			SimulatorProfile.LegacyCore);
 		var evaluation = new TerminalLobbyEvaluator()
-			.Evaluate(scenario)
+			.EvaluateLegacy(
+				scenario,
+				SimulatorProfile.LegacyCore,
+				LobbyEvaluationDepth.FullProbability)
 			.Should().BeOfType<AlreadyDecidedTerminalEvaluation>().Subject;
 
 		var record = TerminalLobbyCache.Capture(identity, evaluation);
@@ -424,6 +429,289 @@ public class TerminalLobbyCacheTests
 	}
 
 	[Fact]
+	public void ReadDocument_ValidatesMixedRecordsAgainstEachRecordsProducer()
+	{
+		var legacy = RecordJson(DegenerateGolden);
+		var fullProbability = RecordJson(ProbabilityGolden.Replace(
+			"core-simulator@1",
+			"full-probability@1",
+			StringComparison.Ordinal));
+		var safetyScreening = RecordJson(AlreadyGolden.Replace(
+			"core-simulator@1",
+			"safety-screening@1",
+			StringComparison.Ordinal));
+		var payload = "{\"schema\":\"terminal-lobby-cache\",\"version\":1,\"records\":["
+			+ legacy + "," + fullProbability + "," + safetyScreening + "]}";
+
+		var read = TerminalLobbyCache.ReadDocument(Utf8(payload));
+
+		read.Rejection.Should().BeNull();
+		read.Document!.Records.Select(record => record.CompatibilityIdentity.Profile.ToString())
+			.Should().Equal("core-simulator@1", "full-probability@1", "safety-screening@1");
+	}
+
+	[Fact]
+	public void ReadDocument_RejectsProbabilityRecordProducedBySafetyScreening()
+	{
+		var record = RecordJson(ProbabilityGolden.Replace(
+			"core-simulator@1",
+			"safety-screening@1",
+			StringComparison.Ordinal));
+		var payload = "{\"schema\":\"terminal-lobby-cache\",\"version\":1,\"records\":["
+			+ record + "]}";
+
+		TerminalLobbyCache.ReadDocument(Utf8(payload)).IsUsable.Should().BeFalse();
+	}
+
+	[Fact]
+	public void LegacyCompatibility_ProjectsProbabilityBySelectedCurrentConsumerWithoutCreatingCacheRecord()
+	{
+		var legacyRecord = ProbabilityRecord();
+		var safetyIdentity = CurrentIdentity(
+			legacyRecord.CompatibilityIdentity,
+			"safety-screening");
+		var probabilityIdentity = CurrentIdentity(
+			legacyRecord.CompatibilityIdentity,
+			"full-probability");
+
+		LegacyTerminalLobbyCacheCompatibility.TryProject(
+			legacyRecord,
+			SimulatorCapability.SafetyScreening,
+			safetyIdentity,
+			LobbyEvaluationDepth.DegenerateScreeningOnly,
+			out var safetyProjection).Should().BeTrue();
+		LegacyTerminalLobbyCacheCompatibility.TryProject(
+			legacyRecord,
+			SimulatorCapability.FullProbability,
+			probabilityIdentity,
+			LobbyEvaluationDepth.FullProbability,
+			out var probabilityProjection).Should().BeTrue();
+
+		safetyProjection.Should().BeOfType<LegacyScreeningPassedTerminalLobbyCacheProjection>()
+			.Which.ConsumerIdentity.Should().Be(safetyIdentity);
+		var probability = probabilityProjection
+			.Should().BeOfType<LegacyProbabilityTerminalLobbyCacheProjection>().Subject;
+		probability.ConsumerIdentity.Should().Be(probabilityIdentity);
+		probability.GameResultFrequencies.Should().Equal(legacyRecord.GameResultFrequencies);
+		probability.GameResultFrequencyByTurn.Should().Equal(legacyRecord.GameResultFrequencyByTurn);
+		safetyProjection.Should().NotBeAssignableTo<TerminalLobbyCacheRecord>();
+		probabilityProjection.Should().NotBeAssignableTo<TerminalLobbyCacheRecord>();
+	}
+
+	[Fact]
+	public void LegacyCompatibility_PreservesAlreadyDecidedAndDegenerateTerminalMeanings()
+	{
+		var already = AlreadyDecidedRecord();
+		var degenerate = DegenerateRecord();
+		var safetyAlreadyIdentity = CurrentIdentity(
+			already.CompatibilityIdentity,
+			"safety-screening");
+		var safetyDegenerateIdentity = CurrentIdentity(
+			degenerate.CompatibilityIdentity,
+			"safety-screening");
+		var fullAlreadyIdentity = CurrentIdentity(
+			already.CompatibilityIdentity,
+			"full-probability");
+		var fullDegenerateIdentity = CurrentIdentity(
+			degenerate.CompatibilityIdentity,
+			"full-probability");
+
+		LegacyTerminalLobbyCacheCompatibility.TryProject(
+			already,
+			SimulatorCapability.SafetyScreening,
+			safetyAlreadyIdentity,
+			LobbyEvaluationDepth.DegenerateScreeningOnly,
+			out var safetyAlready).Should().BeTrue();
+		LegacyTerminalLobbyCacheCompatibility.TryProject(
+			degenerate,
+			SimulatorCapability.SafetyScreening,
+			safetyDegenerateIdentity,
+			LobbyEvaluationDepth.DegenerateScreeningOnly,
+			out var safetyDegenerate).Should().BeTrue();
+		LegacyTerminalLobbyCacheCompatibility.TryProject(
+			already,
+			SimulatorCapability.FullProbability,
+			fullAlreadyIdentity,
+			LobbyEvaluationDepth.FullProbability,
+			out var fullAlready).Should().BeTrue();
+		LegacyTerminalLobbyCacheCompatibility.TryProject(
+			degenerate,
+			SimulatorCapability.FullProbability,
+			fullDegenerateIdentity,
+			LobbyEvaluationDepth.FullProbability,
+			out var fullDegenerate).Should().BeTrue();
+
+		var alreadyProjection = safetyAlready
+			.Should().BeOfType<LegacyAlreadyDecidedTerminalLobbyCacheProjection>().Subject;
+		alreadyProjection.ConsumerIdentity.Should().Be(safetyAlreadyIdentity);
+		alreadyProjection.GameResult.Should().Be(already.GameResult);
+		alreadyProjection.Reason.Should().Be(already.Reason);
+		safetyDegenerate.Should().BeOfType<LegacyDegenerateTerminalLobbyCacheProjection>()
+			.Which.ConsumerIdentity.Should().Be(safetyDegenerateIdentity);
+		fullAlready.Should().BeOfType<LegacyAlreadyDecidedTerminalLobbyCacheProjection>()
+			.Which.ConsumerIdentity.Should().Be(fullAlreadyIdentity);
+		fullDegenerate.Should().BeOfType<LegacyDegenerateTerminalLobbyCacheProjection>()
+			.Which.ConsumerIdentity.Should().Be(fullDegenerateIdentity);
+	}
+
+	[Fact]
+	public void LegacyCompatibility_FullProbabilityConsumerAtScreeningDepth_UsesOnlyEarlierTerminalMeaning()
+	{
+		var already = AlreadyDecidedRecord();
+		var degenerate = DegenerateRecord();
+		var probability = ProbabilityRecord();
+		var alreadyIdentity = CurrentIdentity(
+			already.CompatibilityIdentity,
+			"full-probability");
+		var degenerateIdentity = CurrentIdentity(
+			degenerate.CompatibilityIdentity,
+			"full-probability");
+		var probabilityIdentity = CurrentIdentity(
+			probability.CompatibilityIdentity,
+			"full-probability");
+
+		LegacyTerminalLobbyCacheCompatibility.TryProject(
+			already,
+			SimulatorCapability.FullProbability,
+			alreadyIdentity,
+			LobbyEvaluationDepth.DegenerateScreeningOnly,
+			out var alreadyProjection).Should().BeTrue();
+		LegacyTerminalLobbyCacheCompatibility.TryProject(
+			degenerate,
+			SimulatorCapability.FullProbability,
+			degenerateIdentity,
+			LobbyEvaluationDepth.DegenerateScreeningOnly,
+			out var degenerateProjection).Should().BeTrue();
+		LegacyTerminalLobbyCacheCompatibility.TryProject(
+			probability,
+			SimulatorCapability.FullProbability,
+			probabilityIdentity,
+			LobbyEvaluationDepth.DegenerateScreeningOnly,
+			out var probabilityProjection).Should().BeTrue();
+
+		alreadyProjection.Should().BeOfType<LegacyAlreadyDecidedTerminalLobbyCacheProjection>()
+			.Which.ConsumerIdentity.Should().Be(alreadyIdentity);
+		degenerateProjection.Should().BeOfType<LegacyDegenerateTerminalLobbyCacheProjection>()
+			.Which.ConsumerIdentity.Should().Be(degenerateIdentity);
+		probabilityProjection.Should().BeOfType<LegacyScreeningPassedTerminalLobbyCacheProjection>()
+			.Which.ConsumerIdentity.Should().Be(probabilityIdentity);
+	}
+
+	[Fact]
+	public void LegacyCompatibility_RejectsChangedRoleBeneficiarySemantics()
+	{
+		var capability = CreateDriftedSafetyCapability(roleDescriptors:
+		[
+			new(MainRoleType.SimpleWerewolf, Faction.Werewolf),
+			new(MainRoleType.Seer, Faction.Villager),
+			new(MainRoleType.WildChild, Faction.Villager),
+			new(MainRoleType.SimpleVillager, Faction.Werewolf)
+		]);
+
+		AssertLegacyProjectionRejected(capability);
+	}
+
+	[Fact]
+	public void LegacyCompatibility_RejectsChangedActorSetupDeclaration()
+	{
+		var capability = CreateDriftedSafetyCapability(supportsActorSetupCards: true);
+
+		AssertLegacyProjectionRejected(capability);
+	}
+
+	[Fact]
+	public void LegacyCompatibility_RejectsChangedCompleteSupportedRuleStateDeclaration()
+	{
+		var capability = CreateDriftedSafetyCapability(supportedRuleStates:
+		[
+			SimulationRuleState.Default,
+			new SimulationRuleState(NewMoonEnabled: true)
+		]);
+
+		AssertLegacyProjectionRejected(capability);
+	}
+
+	[Fact]
+	public void LegacyCompatibility_RejectsChangedSharedVictoryOutcomeSemantics()
+	{
+		var capability = CreateDriftedSafetyCapability(sharedVictoryCapabilities:
+		[
+			new SharedVictoryGameResult([Faction.Villager, Faction.Werewolf])
+		]);
+
+		AssertLegacyProjectionRejected(capability);
+	}
+
+	[Fact]
+	public void LegacyCompatibility_RejectsChangedHeadlessResponsePolicy()
+	{
+		var capability = CreateDriftedSafetyCapability(headlessResponsePolicy:
+			new HeadlessResponsePolicy(
+				new DecisionStrategyIdentity("changed-policy", "1"),
+				SimulatorProfile.LegacyCore.HeadlessResponsePolicy.AdmittedSemantics));
+
+		AssertLegacyProjectionRejected(capability);
+	}
+
+	[Fact]
+	public void LegacyCompatibility_RejectsNonLegacyProducerScenarioMismatchStaleConsumerAndUnsupportedDepth()
+	{
+		var legacy = ProbabilityRecord();
+		var safetyIdentity = CurrentIdentity(legacy.CompatibilityIdentity, "safety-screening");
+		var fullIdentity = CurrentIdentity(legacy.CompatibilityIdentity, "full-probability");
+		var nonLegacy = new ProbabilityTerminalCacheRecord(
+			fullIdentity,
+			legacy.GameResultFrequencies,
+			legacy.GameResultFrequencyByTurn);
+		var mismatchedScenario = CurrentIdentity(AggregateIdentity(), "safety-screening");
+		var stale = new SimulationCompatibilityIdentity(
+			legacy.CompatibilityIdentity.Scenario,
+			new SimulatorProfileIdentity("safety-screening", "0"));
+		var changedPolicyCapability = new SimulatorCapability(
+			SimulatorCapability.SafetyScreening.Identity,
+			[
+				new(MainRoleType.SimpleWerewolf, Faction.Werewolf),
+				new(MainRoleType.Seer, Faction.Villager),
+				new(MainRoleType.WildChild, Faction.Villager),
+				new(MainRoleType.SimpleVillager, Faction.Villager)
+			],
+			headlessResponsePolicy: new HeadlessResponsePolicy(
+				new DecisionStrategyIdentity("changed-policy", "1"),
+				SimulatorCapability.SafetyScreening.HeadlessResponsePolicy.AdmittedSemantics));
+
+		LegacyTerminalLobbyCacheCompatibility.TryProject(
+			nonLegacy,
+			SimulatorCapability.FullProbability,
+			fullIdentity,
+			LobbyEvaluationDepth.FullProbability,
+			out _).Should().BeFalse();
+		LegacyTerminalLobbyCacheCompatibility.TryProject(
+			legacy,
+			SimulatorCapability.SafetyScreening,
+			mismatchedScenario,
+			LobbyEvaluationDepth.DegenerateScreeningOnly,
+			out _).Should().BeFalse();
+		LegacyTerminalLobbyCacheCompatibility.TryProject(
+			legacy,
+			SimulatorCapability.SafetyScreening,
+			stale,
+			LobbyEvaluationDepth.DegenerateScreeningOnly,
+			out _).Should().BeFalse();
+		LegacyTerminalLobbyCacheCompatibility.TryProject(
+			legacy,
+			SimulatorCapability.SafetyScreening,
+			safetyIdentity,
+			LobbyEvaluationDepth.FullProbability,
+			out _).Should().BeFalse();
+		LegacyTerminalLobbyCacheCompatibility.TryProject(
+			legacy,
+			changedPolicyCapability,
+			safetyIdentity,
+			LobbyEvaluationDepth.DegenerateScreeningOnly,
+			out _).Should().BeFalse();
+	}
+
+	[Fact]
 	public void CompatibilitySelection_RequiresTheCompleteActiveIdentity()
 	{
 		var document = TerminalLobbyCache.CreateDocument([DegenerateRecord()]);
@@ -501,6 +789,45 @@ public class TerminalLobbyCacheTests
 		AggregateIdentity(),
 		DegenerateRows(),
 		DegenerateCells());
+
+	private static AlreadyDecidedTerminalCacheRecord AlreadyDecidedRecord() => new(
+		AlreadyDecidedIdentity(),
+		new SingleFactionGameResult(Faction.Werewolf),
+		AlreadyDecidedReason.WerewolfControlShortcut);
+
+	private static SimulatorCapability CreateDriftedSafetyCapability(
+		IEnumerable<SimulatorProfileRoleDescriptor>? roleDescriptors = null,
+		IEnumerable<SharedVictoryGameResult>? sharedVictoryCapabilities = null,
+		HeadlessResponsePolicy? headlessResponsePolicy = null,
+		bool supportsActorSetupCards = false,
+		IEnumerable<SimulationRuleState>? supportedRuleStates = null) => new(
+			SimulatorCapability.SafetyScreening.Identity,
+			roleDescriptors ??
+			[
+				new(MainRoleType.SimpleWerewolf, Faction.Werewolf),
+				new(MainRoleType.Seer, Faction.Villager),
+				new(MainRoleType.WildChild, Faction.Villager),
+				new(MainRoleType.SimpleVillager, Faction.Villager)
+			],
+			sharedVictoryCapabilities,
+			headlessResponsePolicy ?? SimulatorProfile.LegacyCore.HeadlessResponsePolicy,
+			supportsActorSetupCards,
+			supportedRuleStates ?? SimulatorProfile.LegacyCore.SupportedRuleStates);
+
+	private static void AssertLegacyProjectionRejected(SimulatorCapability capability)
+	{
+		var legacy = ProbabilityRecord();
+		var consumerIdentity = new SimulationCompatibilityIdentity(
+			legacy.CompatibilityIdentity.Scenario,
+			capability.Identity);
+
+		LegacyTerminalLobbyCacheCompatibility.TryProject(
+			legacy,
+			capability,
+			consumerIdentity,
+			LobbyEvaluationDepth.DegenerateScreeningOnly,
+			out _).Should().BeFalse();
+	}
 
 	private static ProbabilityTerminalCacheRecord ProbabilityRecord() => new(
 		ProbabilityIdentity(),
@@ -595,10 +922,16 @@ public class TerminalLobbyCacheTests
 	private static SimulationCompatibilityIdentity ProbabilityIdentity() => Identity(6, 5, 1);
 	private static SimulationCompatibilityIdentity AlreadyDecidedIdentity() => Identity(5, 2, 3);
 
+	private static SimulationCompatibilityIdentity CurrentIdentity(
+		SimulationCompatibilityIdentity legacyIdentity,
+		string profileId) => new(
+			legacyIdentity.Scenario,
+			new SimulatorProfileIdentity(profileId, "1"));
+
 	private static SimulationCompatibilityIdentity Identity(int players, int villagers, int werewolves) => new(
 		CanonicalSimulationScenario.Parse(
 			$"players={players}|roles=[SimpleVillager={villagers},SimpleWerewolf={werewolves}]|actor=[]|rules=[]"),
-		SimulatorProfile.Active.Identity);
+		SimulatorProfile.LegacyCore.Identity);
 
 	private static byte[] Utf8(string value) => Encoding.UTF8.GetBytes(value);
 

@@ -9,6 +9,7 @@ public sealed class AsyncTerminalLobbyEvaluator : ILobbyTerminalEvaluator
 
 	private readonly Func<
 		SimulationScenario,
+		SimulatorCapability,
 		LobbyEvaluationDepth,
 		CancellationToken,
 		LobbyEvaluationResult> _evaluate;
@@ -23,6 +24,7 @@ public sealed class AsyncTerminalLobbyEvaluator : ILobbyTerminalEvaluator
 	internal AsyncTerminalLobbyEvaluator(
 		Func<
 			SimulationScenario,
+			SimulatorCapability,
 			LobbyEvaluationDepth,
 			CancellationToken,
 			LobbyEvaluationResult> evaluate,
@@ -34,6 +36,7 @@ public sealed class AsyncTerminalLobbyEvaluator : ILobbyTerminalEvaluator
 	internal AsyncTerminalLobbyEvaluator(
 		Func<
 			SimulationScenario,
+			SimulatorCapability,
 			LobbyEvaluationDepth,
 			CancellationToken,
 			LobbyEvaluationResult> evaluate,
@@ -47,10 +50,12 @@ public sealed class AsyncTerminalLobbyEvaluator : ILobbyTerminalEvaluator
 
 	public async Task<LobbyEvaluationResult> EvaluateAsync(
 		SimulationScenario scenario,
+		SimulatorCapability capability,
 		LobbyEvaluationDepth depth,
 		CancellationToken cancellationToken = default)
 	{
 		ArgumentNullException.ThrowIfNull(scenario);
+		ArgumentNullException.ThrowIfNull(capability);
 		if (!Enum.IsDefined(depth))
 		{
 			throw new ArgumentOutOfRangeException(nameof(depth));
@@ -61,7 +66,7 @@ public sealed class AsyncTerminalLobbyEvaluator : ILobbyTerminalEvaluator
 		using var timeoutCancellation =
 			CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 		var evaluation = Task.Run(
-			() => _evaluate(scenario, depth, evaluationCancellation.Token),
+			() => _evaluate(scenario, capability, depth, evaluationCancellation.Token),
 			CancellationToken.None);
 		var timeout = Task.Delay(
 			EvaluationTimeout,

@@ -7,8 +7,13 @@ namespace Werewolves.Core.GameLogic.Simulation;
 
 public static class SimulationScenarioClassifier
 {
-	public static SimulationScenarioClassification Classify(SimulationScenario scenario)
-		=> Classify(scenario, SimulatorProfile.Active);
+	public static SimulationScenarioClassification Classify(
+		SimulationScenario scenario,
+		SimulatorCapability capability)
+	{
+		ArgumentNullException.ThrowIfNull(capability);
+		return Classify(scenario, (SimulatorProfile)capability);
+	}
 
 	internal static SimulationScenarioClassification Classify(
 		SimulationScenario scenario,
@@ -196,6 +201,11 @@ public sealed class SimulatorSupportResult
 	public AppSupportResult AppSupport { get; }
 
 	public SimulatorProfile Profile { get; }
+
+	public SimulatorCapability Capability =>
+		Profile as SimulatorCapability
+		?? throw new InvalidOperationException(
+			"Legacy simulator-profile classifications do not select a current Simulator Capability.");
 
 	public IReadOnlyList<MainRoleType> UnsupportedRoles { get; }
 

@@ -3,10 +3,15 @@ using Werewolves.Core.StateModels.Models.Simulation;
 
 namespace Werewolves.Core.GameLogic.Simulation;
 
-public static class CurrentProfileFactionBridge
+public static class SimulatorFactionBeneficiaryBridge
 {
-	public static FactionBeneficiaryComposition Map(CanonicalRoleComposition composition)
-		=> Map(composition, SimulatorProfile.Active);
+	public static FactionBeneficiaryComposition Map(
+		CanonicalRoleComposition composition,
+		SimulatorCapability capability)
+	{
+		ArgumentNullException.ThrowIfNull(capability);
+		return Map(composition, (SimulatorProfile)capability);
+	}
 
 	internal static FactionBeneficiaryComposition Map(
 		CanonicalRoleComposition composition,
@@ -20,7 +25,7 @@ public static class CurrentProfileFactionBridge
 			if (!profile.TryGetBeneficiaryFaction(entry.Role, out var faction))
 			{
 				throw new ArgumentException(
-					$"Role {entry.Role} is not supported by the current simulator profile.",
+					$"Role {entry.Role} is not supported by the selected simulator producer.",
 					nameof(composition));
 			}
 
@@ -34,8 +39,12 @@ public static class CurrentProfileFactionBridge
 public static class AlreadyDecidedRoleCompositionClassifier
 {
 	public static AlreadyDecidedRoleCompositionResult Classify(
-		CanonicalRoleComposition composition)
-		=> Classify(composition, SimulatorProfile.Active);
+		CanonicalRoleComposition composition,
+		SimulatorCapability capability)
+	{
+		ArgumentNullException.ThrowIfNull(capability);
+		return Classify(composition, (SimulatorProfile)capability);
+	}
 
 	internal static AlreadyDecidedRoleCompositionResult Classify(
 		CanonicalRoleComposition composition,
@@ -43,7 +52,7 @@ public static class AlreadyDecidedRoleCompositionClassifier
 	{
 		ArgumentNullException.ThrowIfNull(composition);
 		ArgumentNullException.ThrowIfNull(profile);
-		var evidence = CurrentProfileFactionBridge.Map(composition, profile);
+		var evidence = SimulatorFactionBeneficiaryBridge.Map(composition, profile);
 		var werewolves = evidence.GetBeneficiaryCount(Faction.Werewolf);
 		var villagers = evidence.GetBeneficiaryCount(Faction.Villager);
 

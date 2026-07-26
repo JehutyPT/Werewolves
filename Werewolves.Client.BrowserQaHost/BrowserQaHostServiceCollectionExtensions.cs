@@ -24,7 +24,9 @@ public static class BrowserQaHostServiceCollectionExtensions
 		services.TryAddScoped<IScreenWakeLock, BrowserSafeScreenWakeLock>();
 		services.TryAddScoped<IGameSessionSaveStore, BrowserQaInMemoryGameSessionSaveStore>();
 		services.TryAddSingleton(
-			new LobbyEvaluationSettings(LobbyEvaluationDepth.DegenerateScreeningOnly));
+			new LobbyEvaluationSettings(
+				SimulatorCapability.SafetyScreening,
+				LobbyEvaluationDepth.DegenerateScreeningOnly));
 		services.TryAddSingleton<TimeProvider>(_ => TimeProvider.System);
 		services.TryAddScoped<ITerminalLobbyCacheByteSource, BrowserQaScenarioTerminalLobbyCacheByteSource>();
 		services.TryAddScoped<ILocalTerminalLobbyCacheStore, InMemoryTerminalLobbyCacheStore>();
@@ -35,7 +37,7 @@ public static class BrowserQaHostServiceCollectionExtensions
 			sp.GetRequiredService<ITerminalLobbyCacheByteSource>(),
 			sp.GetRequiredService<ILocalTerminalLobbyCacheStore>(),
 			sp.GetRequiredService<ILobbyTerminalEvaluator>(),
-			sp.GetRequiredService<LobbyEvaluationSettings>().Depth,
+			sp.GetRequiredService<LobbyEvaluationSettings>(),
 			sp.GetRequiredService<TimeProvider>()));
 		services.TryAddScoped<GameClientManager>();
 		services.TryAddScoped<GameplayWakeLockController>();

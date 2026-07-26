@@ -31,7 +31,9 @@ public class BrowserQaHostCompositionTests
 		using var context = new BunitContext();
 		var evaluator = new CountingEvaluator();
 		var source = new SemanticFixtureByteSource();
+		var local = new InMemoryTerminalLobbyCacheStore();
 		context.Services.AddScoped<ITerminalLobbyCacheByteSource>(_ => source);
+		context.Services.AddScoped<ILocalTerminalLobbyCacheStore>(_ => local);
 		context.Services.AddScoped<ILobbyTerminalEvaluator>(_ => evaluator);
 		context.Services.AddBrowserQaHostModeratorServices();
 
@@ -40,8 +42,16 @@ public class BrowserQaHostCompositionTests
 
 		source.LogicalNames.Should().Equal("terminal-lobby-cache.json");
 		evaluator.CallCount.Should().Be(0);
+		coordinator.Capability.Should().Be(SimulatorCapability.SafetyScreening);
 		coordinator.Depth.Should().Be(LobbyEvaluationDepth.DegenerateScreeningOnly);
+		coordinator.State.Identity.Should().Be(new SimulationCompatibilityIdentity(
+			context.Services.GetRequiredService<LobbySetupState>()
+				.CreateSimulationScenario()
+				.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity));
 		coordinator.State.Probability.Should().BeNull();
+		var localBytes = await local.ReadAsync();
+		(localBytes is null || localBytes.Value.IsEmpty).Should().BeTrue();
 	}
 
 	[Fact]
@@ -57,8 +67,12 @@ public class BrowserQaHostCompositionTests
 		context.Services.GetRequiredService<IGameSessionSaveStore>().Load().Should().BeNull();
 		context.Services.GetRequiredService<LobbyEvaluationCoordinator>().Depth
 			.Should().Be(LobbyEvaluationDepth.DegenerateScreeningOnly);
+		context.Services.GetRequiredService<LobbyEvaluationCoordinator>().Capability
+			.Should().Be(SimulatorCapability.SafetyScreening);
 		context.Services.GetRequiredService<LobbyEvaluationSettings>().Depth
 			.Should().Be(LobbyEvaluationDepth.DegenerateScreeningOnly);
+		context.Services.GetRequiredService<LobbyEvaluationSettings>().Capability
+			.Should().Be(SimulatorCapability.SafetyScreening);
 		context.Services.GetRequiredService<ITerminalLobbyCacheByteSource>()
 			.Should().BeOfType<BrowserQaScenarioTerminalLobbyCacheByteSource>();
 		context.Services.GetRequiredService<ILocalTerminalLobbyCacheStore>()
@@ -276,7 +290,7 @@ public class BrowserQaHostCompositionTests
 				BrowserQaFixtures.DefaultRoles);
 			var identity = new SimulationCompatibilityIdentity(
 				scenario.ToCanonical(),
-				SimulatorProfile.Active.Identity);
+				SimulatorProfile.LegacyCore.Identity);
 			var record = new ProbabilityTerminalCacheRecord(
 				identity,
 				[
@@ -301,6 +315,7 @@ public class BrowserQaHostCompositionTests
 
 		public Task<LobbyEvaluationResult> EvaluateAsync(
 			SimulationScenario scenario,
+			SimulatorCapability capability,
 			LobbyEvaluationDepth depth,
 			CancellationToken cancellationToken = default)
 		{

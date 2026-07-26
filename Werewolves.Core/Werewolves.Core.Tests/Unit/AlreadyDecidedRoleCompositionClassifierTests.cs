@@ -9,7 +9,7 @@ namespace Werewolves.Core.Tests.Unit;
 public class AlreadyDecidedRoleCompositionClassifierTests
 {
 	[Fact]
-	public void Map_WithSupportedCurrentProfileRoles_ReturnsFactionBeneficiaryEvidence()
+	public void Map_WithCapabilitySupportedRoles_ReturnsFactionBeneficiaryEvidence()
 	{
 		var composition = CanonicalRoleComposition.Create(
 		[
@@ -19,18 +19,22 @@ public class AlreadyDecidedRoleCompositionClassifierTests
 			MainRoleType.SimpleVillager
 		]);
 
-		var evidence = CurrentProfileFactionBridge.Map(composition);
+		var evidence = SimulatorFactionBeneficiaryBridge.Map(
+			composition,
+			SimulatorCapability.FullProbability);
 
 		evidence.GetBeneficiaryCount(Faction.Werewolf).Should().Be(1);
 		evidence.GetBeneficiaryCount(Faction.Villager).Should().Be(3);
 	}
 
 	[Fact]
-	public void Map_WithUnsupportedRole_RejectsInsteadOfInferringLegacyTeam()
+	public void Map_WithUnsupportedRole_RejectsInsteadOfInferringLegacyFaction()
 	{
 		var composition = CanonicalRoleComposition.Create([MainRoleType.BigBadWolf]);
 
-		var action = () => CurrentProfileFactionBridge.Map(composition);
+		var action = () => SimulatorFactionBeneficiaryBridge.Map(
+			composition,
+			SimulatorCapability.FullProbability);
 
 		action.Should().Throw<ArgumentException>();
 	}
@@ -43,7 +47,7 @@ public class AlreadyDecidedRoleCompositionClassifierTests
 			[new(MainRoleType.Seer, Faction.Villager)]);
 		var composition = CanonicalRoleComposition.Create([MainRoleType.Seer]);
 
-		var evidence = CurrentProfileFactionBridge.Map(composition, profile);
+		var evidence = SimulatorFactionBeneficiaryBridge.Map(composition, profile);
 
 		evidence.GetBeneficiaryCount(Faction.Villager).Should().Be(1);
 		evidence.GetBeneficiaryCount(Faction.Werewolf).Should().Be(0);

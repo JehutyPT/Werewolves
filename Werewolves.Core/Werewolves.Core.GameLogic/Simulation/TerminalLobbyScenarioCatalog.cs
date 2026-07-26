@@ -10,7 +10,7 @@ public sealed record TerminalLobbyGenerationScenario(
 
 public static class TerminalLobbyScenarioCatalog
 {
-	public static IReadOnlyList<TerminalLobbyGenerationScenario> EnumerateCurrentProfile()
+	public static IReadOnlyList<TerminalLobbyGenerationScenario> EnumerateLegacyCore()
 	{
 		var entries = new List<TerminalLobbyGenerationScenario>();
 		for (var playerCount = 5; playerCount <= 30; playerCount++)
@@ -37,10 +37,12 @@ public static class TerminalLobbyScenarioCatalog
 							.Concat(Enumerable.Repeat(MainRoleType.WildChild, wildChildCount))
 							.Concat(Enumerable.Repeat(MainRoleType.SimpleVillager, villagerCount));
 						var scenario = new SimulationScenario(playerCount, roles);
-						var classification = SimulationScenarioClassifier.Classify(scenario);
+						var classification = SimulationScenarioClassifier.Classify(
+							scenario,
+							SimulatorProfile.LegacyCore);
 						if (!classification.RulesValidity.IsValid
 							|| classification.AppSupport is not { IsSupported: true }
-							|| classification.SimulatorSupport is not { IsSupported: true } support
+						|| classification.SimulatorSupport is not { IsSupported: true }
 							|| classification.AlreadyDecided is null)
 						{
 							continue;
@@ -50,7 +52,7 @@ public static class TerminalLobbyScenarioCatalog
 							scenario,
 							new SimulationCompatibilityIdentity(
 								scenario.ToCanonical(),
-								support.Profile.Identity),
+								SimulatorProfile.LegacyCore.Identity),
 							classification.AlreadyDecided.IsAlreadyDecided));
 					}
 				}
