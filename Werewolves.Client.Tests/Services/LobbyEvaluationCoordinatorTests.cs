@@ -26,6 +26,7 @@ public class LobbyEvaluationCoordinatorTests
 			bundled,
 			local,
 			evaluator,
+			FullProbabilitySettings,
 			TimeProvider.System);
 		var read = await bundled.NextReadAsync();
 
@@ -60,17 +61,22 @@ public class LobbyEvaluationCoordinatorTests
 			]);
 		var secondRecord = AlreadyDecidedRecord(secondScenario);
 		var bundled = new RecordingByteSource(DocumentBytes());
-		var local = new RecordingLocalStore(DocumentBytes(firstRecord, secondRecord));
+		var local = new ControlledReadLocalStore();
 		using var coordinator = new LobbyEvaluationCoordinator(
 			lobby,
 			bundled,
 			local,
 			new RecordingEvaluator(new CouldNotEvaluateLobbyEvaluation()),
+			FullProbabilitySettings,
 			TimeProvider.System);
+		var firstRead = await local.NextReadAsync();
+		firstRead.Complete(DocumentBytes(firstRecord, secondRecord));
 		await WaitForStateAsync(coordinator, LobbyEvaluationStateKind.AlreadyDecided);
 
 		ChangeToFourWerewolves(lobby);
+		var secondRead = await local.NextReadAsync();
 		coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.Pending);
+		secondRead.Complete(DocumentBytes(firstRecord, secondRecord));
 		await WaitForStateAsync(coordinator, LobbyEvaluationStateKind.AlreadyDecided);
 
 		coordinator.State.Identity.Should().Be(secondRecord.CompatibilityIdentity);
@@ -98,11 +104,12 @@ public class LobbyEvaluationCoordinatorTests
 				new RecordingByteSource(bytes: null),
 				new RecordingLocalStore(bytes: null),
 				evaluator,
+				FullProbabilitySettings,
 				TimeProvider.System,
-				_ => new LobbyScenarioSupport(
+				(_, _) => new LobbyScenarioSupport(
 					RulesValid: true,
 					AppSupported: true,
-					SimulatorProfile.Active));
+					SimulatorSupported: true));
 			coordinator.TryRequestLobbyExit().Should().BeFalse();
 			pump.Drain();
 		});
@@ -147,11 +154,12 @@ public class LobbyEvaluationCoordinatorTests
 			bundled,
 			local,
 			evaluator,
+			FullProbabilitySettings,
 			TimeProvider.System,
-			_ => new LobbyScenarioSupport(
+			(_, _) => new LobbyScenarioSupport(
 				RulesValid: true,
 				AppSupported: true,
-				SimulatorProfile: null));
+				SimulatorSupported: false));
 
 		coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.SimulatorUnavailable);
 		coordinator.State.Identity.Should().BeNull();
@@ -177,6 +185,7 @@ public class LobbyEvaluationCoordinatorTests
 			new RecordingByteSource(bytes: null),
 			new RecordingLocalStore(bytes: null),
 			new RecordingEvaluator(new CouldNotEvaluateLobbyEvaluation()),
+			FullProbabilitySettings,
 			clock);
 		coordinator.TryRequestLobbyExit().Should().BeFalse();
 		await WaitForStateAsync(coordinator, LobbyEvaluationStateKind.CouldNotEvaluate);
@@ -205,6 +214,7 @@ public class LobbyEvaluationCoordinatorTests
 			new RecordingByteSource(bytes: null),
 			new RecordingLocalStore(bytes: null),
 			evaluator,
+			FullProbabilitySettings,
 			TimeProvider.System);
 
 		coordinator.TryRequestLobbyExit().Should().BeFalse();
@@ -237,6 +247,7 @@ public class LobbyEvaluationCoordinatorTests
 			new RecordingEvaluator(new AlreadyDecidedTerminalEvaluation(
 				new SingleFactionGameResult(Faction.Werewolf),
 				AlreadyDecidedReason.WerewolfControlShortcut)),
+			FullProbabilitySettings,
 			TimeProvider.System);
 
 		coordinator.TryRequestLobbyExit().Should().BeFalse();
@@ -259,6 +270,7 @@ public class LobbyEvaluationCoordinatorTests
 			new RecordingByteSource(bytes: null),
 			local,
 			new RecordingEvaluator(new UnexpectedTerminalEvaluation()),
+			FullProbabilitySettings,
 			TimeProvider.System);
 
 		coordinator.TryRequestLobbyExit().Should().BeFalse();
@@ -281,7 +293,7 @@ public class LobbyEvaluationCoordinatorTests
 		var local = new RecordingLocalStore(bytes: null);
 		var evaluator = new RecordingEvaluator(new CouldNotEvaluateLobbyEvaluation());
 		using var coordinator = new LobbyEvaluationCoordinator(
-			lobby, bundled, local, evaluator, TimeProvider.System);
+			lobby, bundled, local, evaluator, FullProbabilitySettings, TimeProvider.System);
 		var sharedRead = await bundled.NextReadAsync();
 		var staleRecord = AlreadyDecidedRecord(lobby.CreateSimulationScenario());
 
@@ -317,6 +329,7 @@ public class LobbyEvaluationCoordinatorTests
 				new RecordingByteSource(bytes: null),
 				local,
 				evaluator,
+				FullProbabilitySettings,
 				clock);
 			pump.Drain();
 			var staleRead = local.NextReadAsync().GetAwaiter().GetResult();
@@ -354,6 +367,7 @@ public class LobbyEvaluationCoordinatorTests
 			new RecordingEvaluator(new AlreadyDecidedTerminalEvaluation(
 				new SingleFactionGameResult(Faction.Werewolf),
 				AlreadyDecidedReason.WerewolfControlShortcut)),
+			FullProbabilitySettings,
 			TimeProvider.System);
 		coordinator.TryRequestLobbyExit().Should().BeFalse();
 		var staleWrite = await local.NextWriteAsync();
@@ -395,6 +409,7 @@ public class LobbyEvaluationCoordinatorTests
 			new RecordingEvaluator(new AlreadyDecidedTerminalEvaluation(
 				new SingleFactionGameResult(Faction.Werewolf),
 				AlreadyDecidedReason.WerewolfControlShortcut)),
+			FullProbabilitySettings,
 			clock);
 		coordinator.TryRequestLobbyExit().Should().BeFalse();
 		await local.StageStarted.WaitAsync(TimeSpan.FromSeconds(5));
@@ -419,7 +434,7 @@ public class LobbyEvaluationCoordinatorTests
 			MainRoleType.SimpleVillager);
 		var identity = new SimulationCompatibilityIdentity(
 			lobby.CreateSimulationScenario().ToCanonical(),
-			SimulatorProfile.Active.Identity);
+			SimulatorCapability.FullProbability.Identity);
 		var rows1000 = AggregateRows(1_000, 750, 250);
 		var cells1000 = AggregateCells(1_000, 750, 250, turnOneOnly: true);
 		var rows10000 = AggregateRows(10_000, 7_000, 3_000);
@@ -446,6 +461,7 @@ public class LobbyEvaluationCoordinatorTests
 				new RecordingByteSource(DocumentBytes(@case.Record)),
 				new RecordingLocalStore(bytes: null),
 				new RecordingEvaluator(new CouldNotEvaluateLobbyEvaluation()),
+				FullProbabilitySettings,
 				TimeProvider.System);
 			await WaitForStateAsync(coordinator, @case.Kind);
 			coordinator.Depth.Should().Be(LobbyEvaluationDepth.FullProbability);
@@ -477,7 +493,7 @@ public class LobbyEvaluationCoordinatorTests
 			MainRoleType.SimpleVillager);
 		var identity = new SimulationCompatibilityIdentity(
 			lobby.CreateSimulationScenario().ToCanonical(),
-			SimulatorProfile.Active.Identity);
+			SimulatorProfile.LegacyCore.Identity);
 		var cachedProbability = new ProbabilityTerminalCacheRecord(
 			identity,
 			AggregateRows(10_000, 7_000, 3_000),
@@ -489,7 +505,7 @@ public class LobbyEvaluationCoordinatorTests
 			new RecordingByteSource(DocumentBytes(cachedProbability)),
 			new RecordingLocalStore(bytes: null),
 			evaluator,
-			LobbyEvaluationDepth.DegenerateScreeningOnly,
+			SafetyScreeningSettings,
 			TimeProvider.System);
 		await WaitForStateAsync(coordinator, LobbyEvaluationStateKind.ScreeningPassed);
 
@@ -511,7 +527,7 @@ public class LobbyEvaluationCoordinatorTests
 			MainRoleType.SimpleVillager);
 		var identity = new SimulationCompatibilityIdentity(
 			lobby.CreateSimulationScenario().ToCanonical(),
-			SimulatorProfile.Active.Identity);
+			SimulatorCapability.SafetyScreening.Identity);
 		var cachedDegenerate = new DegenerateTerminalCacheRecord(
 			identity,
 			AggregateRows(1_000, 750, 250),
@@ -523,7 +539,7 @@ public class LobbyEvaluationCoordinatorTests
 			new RecordingByteSource(DocumentBytes(cachedDegenerate)),
 			new RecordingLocalStore(bytes: null),
 			evaluator,
-			LobbyEvaluationDepth.DegenerateScreeningOnly,
+			SafetyScreeningSettings,
 			TimeProvider.System);
 		await WaitForStateAsync(coordinator, LobbyEvaluationStateKind.Degenerate);
 
@@ -550,7 +566,7 @@ public class LobbyEvaluationCoordinatorTests
 			new RecordingByteSource(bytes: null),
 			local,
 			evaluator,
-			LobbyEvaluationDepth.DegenerateScreeningOnly,
+			SafetyScreeningSettings,
 			TimeProvider.System);
 
 		coordinator.TryRequestLobbyExit().Should().BeFalse();
@@ -559,6 +575,7 @@ public class LobbyEvaluationCoordinatorTests
 		coordinator.State.Probability.Should().BeNull();
 		coordinator.TryRequestLobbyExit().Should().BeTrue();
 		local.Writes.Should().BeEmpty();
+		evaluator.Capabilities.Should().Equal(SimulatorCapability.SafetyScreening);
 		evaluator.Depths.Should().Equal(LobbyEvaluationDepth.DegenerateScreeningOnly);
 	}
 
@@ -589,6 +606,7 @@ public class LobbyEvaluationCoordinatorTests
 			new RecordingByteSource(bytes: null),
 			local,
 			evaluator,
+			FullProbabilitySettings,
 			TimeProvider.System);
 
 		coordinator.TryRequestLobbyExit().Should().BeFalse();
@@ -620,6 +638,7 @@ public class LobbyEvaluationCoordinatorTests
 			new RecordingEvaluator(new AlreadyDecidedTerminalEvaluation(
 				new SingleFactionGameResult(Faction.Werewolf),
 				AlreadyDecidedReason.WerewolfControlShortcut)),
+			FullProbabilitySettings,
 			TimeProvider.System);
 
 		coordinator.TryRequestLobbyExit().Should().BeFalse();
@@ -645,6 +664,7 @@ public class LobbyEvaluationCoordinatorTests
 			new RecordingEvaluator(new AlreadyDecidedTerminalEvaluation(
 				new SingleFactionGameResult(Faction.Werewolf),
 				AlreadyDecidedReason.WerewolfControlShortcut)),
+			FullProbabilitySettings,
 			TimeProvider.System);
 
 		coordinator.TryRequestLobbyExit().Should().BeFalse();
@@ -673,6 +693,7 @@ public class LobbyEvaluationCoordinatorTests
 				new RecordingByteSource(bytes: null),
 				local,
 				evaluator,
+				FullProbabilitySettings,
 				TimeProvider.System);
 			var transitions = 0;
 			coordinator.StateChanged += (_, _) => transitions++;
@@ -711,6 +732,7 @@ public class LobbyEvaluationCoordinatorTests
 			new RecordingByteSource("not-json"u8.ToArray()),
 			local,
 			evaluator,
+			FullProbabilitySettings,
 			TimeProvider.System);
 
 		await WaitForStateAsync(coordinator, LobbyEvaluationStateKind.AlreadyDecided);
@@ -738,6 +760,7 @@ public class LobbyEvaluationCoordinatorTests
 			new RecordingByteSource(bytes: null),
 			new RecordingLocalStore(bytes: null),
 			evaluator,
+			FullProbabilitySettings,
 			clock);
 		await WaitUntilAsync(() => coordinator.State.Kind == LobbyEvaluationStateKind.Pending);
 
@@ -769,6 +792,7 @@ public class LobbyEvaluationCoordinatorTests
 				new RecordingByteSource(bytes: null),
 				local,
 				evaluator,
+				FullProbabilitySettings,
 				TimeProvider.System);
 			coordinator.TryRequestLobbyExit().Should().BeFalse();
 			pump.Drain();
@@ -817,6 +841,7 @@ public class LobbyEvaluationCoordinatorTests
 			new RecordingByteSource(bytes: null),
 			new RecordingLocalStore(bytes: null),
 			evaluator,
+			FullProbabilitySettings,
 			TimeProvider.System);
 
 		coordinator.RetryCurrent().Should().BeFalse();
@@ -851,6 +876,7 @@ public class LobbyEvaluationCoordinatorTests
 			new RecordingByteSource(bytes: null),
 			local,
 			evaluator,
+			FullProbabilitySettings,
 			TimeProvider.System);
 
 		coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.Pending);
@@ -872,6 +898,161 @@ public class LobbyEvaluationCoordinatorTests
 	}
 
 	[Fact]
+	public async Task ExactCurrentLocal_PrecedesCompatibleLegacyBundled()
+	{
+		var lobby = CreateLobby(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager);
+		var scenario = lobby.CreateSimulationScenario();
+		var consumerIdentity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+		var legacyIdentity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorProfile.LegacyCore.Identity);
+		var exactLocal = new DegenerateTerminalCacheRecord(
+			consumerIdentity,
+			AggregateRows(1_000, 750, 250),
+			AggregateCells(1_000, 750, 250, turnOneOnly: true));
+		var legacyBundled = new ProbabilityTerminalCacheRecord(
+			legacyIdentity,
+			AggregateRows(10_000, 7_000, 3_000),
+			AggregateCells(10_000, 7_000, 3_000, turnOneOnly: false));
+		var evaluator = new RecordingEvaluator(new CouldNotEvaluateLobbyEvaluation());
+		var local = new RecordingLocalStore(DocumentBytes(exactLocal));
+		using var coordinator = new LobbyEvaluationCoordinator(
+			lobby,
+			new RecordingByteSource(DocumentBytes(legacyBundled)),
+			local,
+			evaluator,
+			new LobbyEvaluationSettings(
+				SimulatorCapability.SafetyScreening,
+				LobbyEvaluationDepth.DegenerateScreeningOnly),
+			TimeProvider.System);
+
+		await WaitForStateAsync(coordinator, LobbyEvaluationStateKind.Degenerate);
+
+		coordinator.State.Identity.Should().Be(consumerIdentity);
+		evaluator.CallCount.Should().Be(0);
+		local.Writes.Should().BeEmpty();
+	}
+
+	[Fact]
+	public async Task CompatibleLegacyBundledProjection_UsesCurrentConsumerIdentityWithoutPersisting()
+	{
+		var lobby = CreateLobby(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager);
+		var scenario = lobby.CreateSimulationScenario();
+		var consumerIdentity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+		var legacyRecord = new DegenerateTerminalCacheRecord(
+			new SimulationCompatibilityIdentity(
+				scenario.ToCanonical(),
+				SimulatorProfile.LegacyCore.Identity),
+			AggregateRows(1_000, 750, 250),
+			AggregateCells(1_000, 750, 250, turnOneOnly: true));
+		var local = new RecordingLocalStore(bytes: null);
+		var evaluator = new RecordingEvaluator(new CouldNotEvaluateLobbyEvaluation());
+		using var coordinator = new LobbyEvaluationCoordinator(
+			lobby,
+			new RecordingByteSource(DocumentBytes(legacyRecord)),
+			local,
+			evaluator,
+			new LobbyEvaluationSettings(
+				SimulatorCapability.SafetyScreening,
+				LobbyEvaluationDepth.DegenerateScreeningOnly),
+			TimeProvider.System);
+
+		await WaitForStateAsync(coordinator, LobbyEvaluationStateKind.Degenerate);
+
+		coordinator.State.Identity.Should().Be(consumerIdentity);
+		evaluator.CallCount.Should().Be(0);
+		local.Writes.Should().BeEmpty();
+	}
+
+	[Fact]
+	public async Task CompatibleLegacyBundled_PrecedesCompatibleLegacyLocal()
+	{
+		var lobby = CreateLobby(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager);
+		var scenario = lobby.CreateSimulationScenario();
+		var legacyIdentity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorProfile.LegacyCore.Identity);
+		var legacyBundled = new DegenerateTerminalCacheRecord(
+			legacyIdentity,
+			AggregateRows(1_000, 750, 250),
+			AggregateCells(1_000, 750, 250, turnOneOnly: true));
+		var legacyLocal = new ProbabilityTerminalCacheRecord(
+			legacyIdentity,
+			AggregateRows(10_000, 7_000, 3_000),
+			AggregateCells(10_000, 7_000, 3_000, turnOneOnly: false));
+		var local = new RecordingLocalStore(DocumentBytes(legacyLocal));
+		var evaluator = new RecordingEvaluator(new CouldNotEvaluateLobbyEvaluation());
+		using var coordinator = new LobbyEvaluationCoordinator(
+			lobby,
+			new RecordingByteSource(DocumentBytes(legacyBundled)),
+			local,
+			evaluator,
+			SafetyScreeningSettings,
+			TimeProvider.System);
+
+		await WaitForStateAsync(coordinator, LobbyEvaluationStateKind.Degenerate);
+
+		coordinator.State.Identity!.Profile.Should()
+			.Be(SimulatorCapability.SafetyScreening.Identity);
+		evaluator.CallCount.Should().Be(0);
+		local.Writes.Should().BeEmpty();
+	}
+
+	[Fact]
+	public async Task CompatibleLegacyLocal_PrecedesFallbackAndUsesConsumerIdentity()
+	{
+		var lobby = CreateLobby(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager);
+		var scenario = lobby.CreateSimulationScenario();
+		var legacyLocal = new ProbabilityTerminalCacheRecord(
+			new SimulationCompatibilityIdentity(
+				scenario.ToCanonical(),
+				SimulatorProfile.LegacyCore.Identity),
+			AggregateRows(10_000, 7_000, 3_000),
+			AggregateCells(10_000, 7_000, 3_000, turnOneOnly: false));
+		var local = new RecordingLocalStore(DocumentBytes(legacyLocal));
+		var evaluator = new RecordingEvaluator(new CouldNotEvaluateLobbyEvaluation());
+		using var coordinator = new LobbyEvaluationCoordinator(
+			lobby,
+			new RecordingByteSource(bytes: null),
+			local,
+			evaluator,
+			SafetyScreeningSettings,
+			TimeProvider.System);
+
+		await WaitForStateAsync(coordinator, LobbyEvaluationStateKind.ScreeningPassed);
+
+		coordinator.State.Identity!.Profile.Should()
+			.Be(SimulatorCapability.SafetyScreening.Identity);
+		coordinator.State.Probability.Should().BeNull();
+		evaluator.CallCount.Should().Be(0);
+		local.Writes.Should().BeEmpty();
+	}
+
+	[Fact]
 	public async Task BundledHit_UsesFrozenLogicalNameAndPreventsLocalLookupAndFallback()
 	{
 		var lobby = CreateLobby(
@@ -890,6 +1071,7 @@ public class LobbyEvaluationCoordinatorTests
 			bundled,
 			local,
 			evaluator,
+			FullProbabilitySettings,
 			TimeProvider.System);
 		await WaitForStateAsync(coordinator, LobbyEvaluationStateKind.AlreadyDecided);
 
@@ -927,13 +1109,15 @@ public class LobbyEvaluationCoordinatorTests
 			MainRoleType.SimpleVillager,
 			MainRoleType.SimpleVillager);
 		var scenario = decidedLobby.CreateSimulationScenario();
-		SimulationScenarioClassifier.Classify(scenario).Cacheability.Should().BeNull();
+		SimulationScenarioClassifier.Classify(
+			scenario,
+			SimulatorCapability.FullProbability).Cacheability.Should().BeNull();
 		using var decided = CreateCoordinator(decidedLobby);
 
 		decided.State.Kind.Should().Be(LobbyEvaluationStateKind.Pending);
 		decided.State.Identity.Should().Be(new SimulationCompatibilityIdentity(
 			scenario.ToCanonical(),
-			SimulatorProfile.Active.Identity));
+			SimulatorCapability.FullProbability.Identity));
 		decided.State.BlocksLobbyExit.Should().BeTrue();
 	}
 
@@ -943,7 +1127,18 @@ public class LobbyEvaluationCoordinatorTests
 			EmptyTerminalLobbyCacheByteSource.Instance,
 			new InMemoryTerminalLobbyCacheStore(),
 			DisabledLobbyTerminalEvaluator.Instance,
+			FullProbabilitySettings,
 			TimeProvider.System);
+
+	private static LobbyEvaluationSettings FullProbabilitySettings { get; } =
+		new(
+			SimulatorCapability.FullProbability,
+			LobbyEvaluationDepth.FullProbability);
+
+	private static LobbyEvaluationSettings SafetyScreeningSettings { get; } =
+		new(
+			SimulatorCapability.SafetyScreening,
+			LobbyEvaluationDepth.DegenerateScreeningOnly);
 
 	private static LobbySetupState CreateLobby(params MainRoleType[] roles)
 	{
@@ -978,7 +1173,7 @@ public class LobbyEvaluationCoordinatorTests
 		new(
 			new SimulationCompatibilityIdentity(
 				scenario.ToCanonical(),
-				SimulatorProfile.Active.Identity),
+				SimulatorCapability.FullProbability.Identity),
 			new SingleFactionGameResult(Faction.Werewolf),
 			AlreadyDecidedReason.WerewolfControlShortcut);
 
@@ -1164,10 +1359,14 @@ public class LobbyEvaluationCoordinatorTests
 	{
 		private readonly Queue<ControlledRead> _reads = new();
 		private readonly SemaphoreSlim _available = new(0);
+		private int _readCount;
+
+		public int ReadCount => Volatile.Read(ref _readCount);
 
 		public async ValueTask<ReadOnlyMemory<byte>?> ReadAsync(
 			CancellationToken cancellationToken = default)
 		{
+			Interlocked.Increment(ref _readCount);
 			var read = new ControlledRead();
 			lock (_reads)
 			{
@@ -1375,15 +1574,18 @@ public class LobbyEvaluationCoordinatorTests
 		: ILobbyTerminalEvaluator
 	{
 		public int CallCount { get; private set; }
+		public List<SimulatorCapability> Capabilities { get; } = [];
 		public List<LobbyEvaluationDepth> Depths { get; } = [];
 
 		public Task<LobbyEvaluationResult> EvaluateAsync(
 			SimulationScenario scenario,
+			SimulatorCapability capability,
 			LobbyEvaluationDepth depth,
 			CancellationToken cancellationToken = default)
 		{
 			cancellationToken.ThrowIfCancellationRequested();
 			CallCount++;
+			Capabilities.Add(capability);
 			Depths.Add(depth);
 			return Task.FromResult(result);
 		}
@@ -1397,6 +1599,7 @@ public class LobbyEvaluationCoordinatorTests
 
 		public Task<LobbyEvaluationResult> EvaluateAsync(
 			SimulationScenario scenario,
+			SimulatorCapability capability,
 			LobbyEvaluationDepth depth,
 			CancellationToken cancellationToken = default)
 		{
@@ -1414,14 +1617,14 @@ public class LobbyEvaluationCoordinatorTests
 
 		public async Task<LobbyEvaluationResult> EvaluateAsync(
 			SimulationScenario scenario,
+			SimulatorCapability capability,
 			LobbyEvaluationDepth depth,
 			CancellationToken cancellationToken = default)
 		{
 			CallCount++;
-			var classification = SimulationScenarioClassifier.Classify(scenario);
 			var identity = new SimulationCompatibilityIdentity(
 				scenario.ToCanonical(),
-				classification.SimulatorSupport!.Profile.Identity);
+				capability.Identity);
 			var call = new ControlledCall(identity, cancellationToken);
 			lock (_calls)
 			{
@@ -1462,6 +1665,7 @@ public class LobbyEvaluationCoordinatorTests
 
 		public async Task<LobbyEvaluationResult> EvaluateAsync(
 			SimulationScenario scenario,
+			SimulatorCapability capability,
 			LobbyEvaluationDepth depth,
 			CancellationToken cancellationToken = default)
 		{

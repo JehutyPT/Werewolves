@@ -1,5 +1,6 @@
 using Werewolves.Core.GameLogic.Interfaces;
 using Werewolves.Core.StateModels.Core;
+using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Models.Simulation;
@@ -10,26 +11,54 @@ public sealed class BaselineRandomDecisionStrategy : IModeratorDecisionStrategy
 {
 	private readonly SimulationStartState _startState;
 	private readonly DeterministicRandomSource _random;
+	private readonly HeadlessResponsePolicy _policy;
 
 	public static DecisionStrategyIdentity Identity { get; } =
 		new("baseline-random", "1-splitmix64");
 
+	public static HeadlessResponsePolicy Policy { get; } = new(
+		Identity,
+		[
+			ModeratorInstructionSemantic.StartGame,
+			ModeratorInstructionSemantic.FinishedGame,
+			ModeratorInstructionSemantic.StartNight,
+			ModeratorInstructionSemantic.FinishNightActions,
+			ModeratorInstructionSemantic.WakeRole,
+			ModeratorInstructionSemantic.IdentifyRoleHolders,
+			ModeratorInstructionSemantic.PutRoleToSleep,
+			ModeratorInstructionSemantic.SelectWerewolfVictim,
+			ModeratorInstructionSemantic.SelectSeerTarget,
+			ModeratorInstructionSemantic.RevealSeerResult,
+			ModeratorInstructionSemantic.SelectWildChildModel,
+			ModeratorInstructionSemantic.AnnounceDawnVictims,
+			ModeratorInstructionSemantic.AssignDawnVictimRoles,
+			ModeratorInstructionSemantic.StartDayDebate,
+			ModeratorInstructionSemantic.RecordDayVote,
+			ModeratorInstructionSemantic.AssignDayVoteTargetRole,
+			ModeratorInstructionSemantic.AnnounceLynchingImmunity,
+			ModeratorInstructionSemantic.AnnounceDayElimination
+		]);
+
 	public BaselineRandomDecisionStrategy(
 		RunSeedMaterial material,
-		SimulationStartState startState)
-		: this(material, startState, new DeterministicRandomSource(material))
+		SimulationStartState startState,
+		HeadlessResponsePolicy policy)
+		: this(material, startState, policy, new DeterministicRandomSource(material))
 	{
 	}
 
 	internal BaselineRandomDecisionStrategy(
 		RunSeedMaterial material,
 		SimulationStartState startState,
+		HeadlessResponsePolicy policy,
 		DeterministicRandomSource random)
 	{
 		ArgumentNullException.ThrowIfNull(material);
 		ArgumentNullException.ThrowIfNull(startState);
+		ArgumentNullException.ThrowIfNull(policy);
 		ArgumentNullException.ThrowIfNull(random);
 		if (!material.DecisionStrategyIdentity.Equals(Identity)
+			|| !policy.StrategyIdentity.Equals(Identity)
 			|| !material.CompatibilityIdentity.Equals(startState.CompatibilityIdentity)
 			|| !random.Material.Equals(material))
 		{
@@ -38,6 +67,7 @@ public sealed class BaselineRandomDecisionStrategy : IModeratorDecisionStrategy
 		}
 
 		_startState = startState;
+		_policy = policy;
 		_random = random;
 	}
 
@@ -47,6 +77,12 @@ public sealed class BaselineRandomDecisionStrategy : IModeratorDecisionStrategy
 	{
 		ArgumentNullException.ThrowIfNull(instruction);
 		ArgumentNullException.ThrowIfNull(session);
+
+		if (!_policy.Admits(instruction.Semantic))
+		{
+			throw new NotSupportedException(
+				$"The selected headless response policy does not admit semantic '{instruction.Semantic}'.");
+		}
 
 		return instruction switch
 		{

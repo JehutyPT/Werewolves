@@ -69,7 +69,7 @@ public static partial class TerminalLobbyCache
 		ArgumentNullException.ThrowIfNull(expectedIdentity);
 		try
 		{
-			_ = ClassifyCurrent(expectedIdentity);
+			_ = ClassifyProducer(expectedIdentity, probabilityRecord: false);
 		}
 		catch (ArgumentException)
 		{

@@ -5,13 +5,24 @@ namespace Werewolves.Client.Services;
 
 public sealed record LobbyEvaluationSettings
 {
+	public SimulatorCapability Capability { get; }
 	public LobbyEvaluationDepth Depth { get; }
 
-	public LobbyEvaluationSettings(LobbyEvaluationDepth depth)
+	public LobbyEvaluationSettings(
+		SimulatorCapability capability,
+		LobbyEvaluationDepth depth)
 	{
+		Capability = capability ?? throw new ArgumentNullException(nameof(capability));
 		if (!Enum.IsDefined(depth))
 		{
 			throw new ArgumentOutOfRangeException(nameof(depth));
+		}
+		if (depth == LobbyEvaluationDepth.FullProbability
+			&& !capability.Identity.Equals(SimulatorCapability.FullProbability.Identity))
+		{
+			throw new ArgumentException(
+				"Full probability depth requires the full-probability simulator capability.",
+				nameof(depth));
 		}
 		Depth = depth;
 	}
@@ -43,6 +54,7 @@ public interface ILobbyTerminalEvaluator
 {
 	Task<LobbyEvaluationResult> EvaluateAsync(
 		SimulationScenario scenario,
+		SimulatorCapability capability,
 		LobbyEvaluationDepth depth,
 		CancellationToken cancellationToken = default);
 }
@@ -141,10 +153,12 @@ public sealed class DisabledLobbyTerminalEvaluator : ILobbyTerminalEvaluator
 
 	public Task<LobbyEvaluationResult> EvaluateAsync(
 		SimulationScenario scenario,
+		SimulatorCapability capability,
 		LobbyEvaluationDepth depth,
 		CancellationToken cancellationToken = default)
 	{
 		ArgumentNullException.ThrowIfNull(scenario);
+		ArgumentNullException.ThrowIfNull(capability);
 		if (!Enum.IsDefined(depth))
 		{
 			throw new ArgumentOutOfRangeException(nameof(depth));

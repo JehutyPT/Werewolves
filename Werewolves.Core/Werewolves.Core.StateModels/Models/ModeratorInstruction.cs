@@ -15,6 +15,13 @@ public abstract record ModeratorInstruction
     /// </summary>
     public Guid InstructionId { get; }
 
+	/// <summary>
+	/// Machine-stable gameplay meaning used by headless decision policies.
+	/// This execution-only value is deliberately absent from the session wire contract.
+	/// </summary>
+	[JsonIgnore]
+	public ModeratorInstructionSemantic Semantic { get; }
+
     /// <summary>
     /// The text to be read aloud or displayed publicly to all players.
     /// </summary>
@@ -49,9 +56,16 @@ public abstract record ModeratorInstruction
         string? privateInstruction = null,
         IReadOnlyList<Guid>? affectedPlayerIds = null,
         IReadOnlyList<SoundEffectsEnum>? soundEffects = null,
-        Guid instructionId = default)
+        Guid instructionId = default,
+		ModeratorInstructionSemantic semantic = ModeratorInstructionSemantic.Unspecified)
     {
+		if (!Enum.IsDefined(semantic))
+		{
+			throw new ArgumentOutOfRangeException(nameof(semantic));
+		}
+
         InstructionId = instructionId == Guid.Empty ? Guid.NewGuid() : instructionId;
+		Semantic = semantic;
         PublicAnnouncement = publicAnnouncement;
         PrivateInstruction = privateInstruction;
         AffectedPlayerIds = affectedPlayerIds?.ToImmutableArray();

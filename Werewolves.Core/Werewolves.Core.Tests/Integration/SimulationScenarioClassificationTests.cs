@@ -20,7 +20,9 @@ public class SimulationScenarioClassificationTests : DiagnosticTestBase
 	{
 		var scenario = CreateWerewolfControlAtLobbyExitScenario();
 
-		var classification = SimulationScenarioClassifier.Classify(scenario);
+		var classification = SimulationScenarioClassifier.Classify(
+			scenario,
+			SimulatorCapability.FullProbability);
 
 		classification.AlreadyDecided.Should().NotBeNull();
 		classification.AlreadyDecided!.GameResult.Should().Be(
@@ -36,7 +38,9 @@ public class SimulationScenarioClassificationTests : DiagnosticTestBase
 	{
 		var scenario = CreateSupportedScenario();
 
-		var classification = SimulationScenarioClassifier.Classify(scenario);
+		var classification = SimulationScenarioClassifier.Classify(
+			scenario,
+			SimulatorCapability.FullProbability);
 
 		classification.Scenario.Should().BeSameAs(scenario);
 		classification.RulesValidity.IsValid.Should().BeTrue();
@@ -61,7 +65,7 @@ public class SimulationScenarioClassificationTests : DiagnosticTestBase
 		classification.Cacheability.CompatibilityIdentity.Should().Be(
 			new SimulationCompatibilityIdentity(
 				scenario.ToCanonical(),
-				SimulatorProfile.Active.Identity));
+			SimulatorCapability.FullProbability.Identity));
 		MarkTestCompleted();
 	}
 
@@ -78,7 +82,9 @@ public class SimulationScenarioClassificationTests : DiagnosticTestBase
 				MainRoleType.SimpleVillager
 			]);
 
-		var classification = SimulationScenarioClassifier.Classify(scenario);
+		var classification = SimulationScenarioClassifier.Classify(
+			scenario,
+			SimulatorCapability.FullProbability);
 
 		classification.RulesValidity.IsValid.Should().BeFalse();
 		classification.RulesValidity.Scenario.Should().BeSameAs(scenario);
@@ -104,7 +110,9 @@ public class SimulationScenarioClassificationTests : DiagnosticTestBase
 				MainRoleType.SimpleVillager
 			]);
 
-		var classification = SimulationScenarioClassifier.Classify(scenario);
+		var classification = SimulationScenarioClassifier.Classify(
+			scenario,
+			SimulatorCapability.FullProbability);
 
 		classification.RulesValidity.IsValid.Should().BeTrue();
 		classification.AppSupport.Should().NotBeNull();
@@ -129,7 +137,9 @@ public class SimulationScenarioClassificationTests : DiagnosticTestBase
 				MainRoleType.SimpleVillager
 			]);
 
-		var classification = SimulationScenarioClassifier.Classify(scenario);
+		var classification = SimulationScenarioClassifier.Classify(
+			scenario,
+			SimulatorCapability.FullProbability);
 
 		classification.RulesValidity.IsValid.Should().BeTrue();
 		classification.AppSupport.Should().NotBeNull();
@@ -151,7 +161,9 @@ public class SimulationScenarioClassificationTests : DiagnosticTestBase
 			new ActorSetupCards(
 				[MainRoleType.Cupid, MainRoleType.Defender, MainRoleType.Elder]));
 
-		var classification = SimulationScenarioClassifier.Classify(scenario);
+		var classification = SimulationScenarioClassifier.Classify(
+			scenario,
+			SimulatorCapability.FullProbability);
 
 		classification.RulesValidity.IsValid.Should().BeTrue();
 		classification.AppSupport!.IsSupported.Should().BeTrue();
@@ -173,7 +185,9 @@ public class SimulationScenarioClassificationTests : DiagnosticTestBase
 			CreateSupportedScenario().RoleCompositionCards,
 			ruleState: new SimulationRuleState(NewMoonEnabled: true));
 
-		var classification = SimulationScenarioClassifier.Classify(scenario);
+		var classification = SimulationScenarioClassifier.Classify(
+			scenario,
+			SimulatorCapability.FullProbability);
 
 		classification.RulesValidity.IsValid.Should().BeTrue();
 		classification.AppSupport!.IsSupported.Should().BeTrue();
@@ -201,8 +215,12 @@ public class SimulationScenarioClassificationTests : DiagnosticTestBase
 				MainRoleType.SimpleWerewolf
 			]);
 
-		var firstResult = SimulationScenarioClassifier.Classify(first).AlreadyDecided;
-		var secondResult = SimulationScenarioClassifier.Classify(second).AlreadyDecided;
+		var firstResult = SimulationScenarioClassifier.Classify(
+			first,
+			SimulatorCapability.FullProbability).AlreadyDecided;
+		var secondResult = SimulationScenarioClassifier.Classify(
+			second,
+			SimulatorCapability.FullProbability).AlreadyDecided;
 
 		firstResult.Should().Be(secondResult);
 		MarkTestCompleted();
@@ -222,8 +240,12 @@ public class SimulationScenarioClassificationTests : DiagnosticTestBase
 				MainRoleType.Seer
 			]);
 
-		var firstResult = SimulationScenarioClassifier.Classify(first).AlreadyDecided;
-		var secondResult = SimulationScenarioClassifier.Classify(second).AlreadyDecided;
+		var firstResult = SimulationScenarioClassifier.Classify(
+			first,
+			SimulatorCapability.FullProbability).AlreadyDecided;
+		var secondResult = SimulationScenarioClassifier.Classify(
+			second,
+			SimulatorCapability.FullProbability).AlreadyDecided;
 
 		firstResult.Should().Be(
 			new AlreadyDecidedRoleCompositionResult(

@@ -45,14 +45,16 @@ public static partial class TerminalLobbyCache
 	internal static void ValidateAlreadyDecided(
 		AlreadyDecidedTerminalCacheRecord record)
 	{
-		var classification = ClassifyCurrent(record.CompatibilityIdentity);
+		var classification = ClassifyProducer(
+			record.CompatibilityIdentity,
+			probabilityRecord: false);
 		var expected = classification.AlreadyDecided;
 		if (expected is not { IsAlreadyDecided: true, GameResult: not null }
 			|| !expected.GameResult.Equals(record.GameResult)
 			|| expected.Reason != record.Reason)
 		{
 			throw new ArgumentException(
-				"The record does not match the current profile's already-decided classification.");
+				"The record does not match its cache producer's already-decided classification.");
 		}
 	}
 
@@ -72,21 +74,23 @@ public static partial class TerminalLobbyCache
 			throw new ArgumentException("Invalid complete Game Result distribution.");
 		}
 
-		var classification = ClassifyCurrent(identity);
+		var probabilityRecord = !turnOneOnly;
+		var profile = ResolveProducerProfile(identity.Profile, probabilityRecord);
+		var classification = ClassifyProducer(identity, probabilityRecord);
 		if (classification.AlreadyDecided is not { IsAlreadyDecided: false }
 			|| classification.Cacheability?.CompatibilityIdentity != identity)
 		{
 			throw new ArgumentException(
-				"Aggregate records require a current-profile cacheable Simulation Scenario.");
+				"Aggregate records require a cacheable Simulation Scenario for their named producer.");
 		}
 
 		if (!PossibleGameResultInventory.TryCreate(
 			classification.Scenario,
-			SimulatorProfile.Active,
+			profile,
 			out var derivedInventory))
 		{
 			throw new ArgumentException(
-				"The Simulation Scenario does not have a current-profile Game Result inventory.");
+				"The Simulation Scenario does not have a Game Result inventory for its named producer.");
 		}
 
 		var expectedInventory = derivedInventory.GameResults
@@ -97,7 +101,7 @@ public static partial class TerminalLobbyCache
 			.SequenceEqual(expectedInventory))
 		{
 			throw new ArgumentException(
-				"The Game Result distribution must exactly match the current profile inventory.");
+				"The Game Result distribution must exactly match the named producer's inventory.");
 		}
 
 		var inventory = rows.Select(row => row.GameResult).ToArray();
@@ -133,16 +137,12 @@ public static partial class TerminalLobbyCache
 		}
 	}
 
-	private static SimulationScenarioClassification ClassifyCurrent(
-		SimulationCompatibilityIdentity identity)
+	private static SimulationScenarioClassification ClassifyProducer(
+		SimulationCompatibilityIdentity identity,
+		bool probabilityRecord)
 	{
 		ArgumentNullException.ThrowIfNull(identity);
-		if (!identity.Profile.Equals(SimulatorProfile.Active.Identity))
-		{
-			throw new ArgumentException(
-				"The cache identity does not use the active simulator profile.",
-				nameof(identity));
-		}
+		var producer = ResolveProducerProfile(identity.Profile, probabilityRecord);
 
 		var canonical = identity.Scenario;
 		ValidateMaterializationBounds(canonical);
@@ -159,7 +159,7 @@ public static partial class TerminalLobbyCache
 				nameof(identity));
 		}
 
-		var classification = SimulationScenarioClassifier.Classify(scenario);
+		var classification = SimulationScenarioClassifier.Classify(scenario, producer);
 		if (classification.SimulatorSupport is not
 			{
 				IsSupported: true,
@@ -168,11 +168,46 @@ public static partial class TerminalLobbyCache
 			|| !profile.Identity.Equals(identity.Profile))
 		{
 			throw new ArgumentException(
-				"The canonical Simulation Scenario is not supported by the active simulator profile.",
+				"The canonical Simulation Scenario is not supported by its cache producer.",
 				nameof(identity));
 		}
 
 		return classification;
+	}
+
+	private static SimulatorProfile ResolveProducerProfile(
+		SimulatorProfileIdentity identity,
+		bool probabilityRecord)
+	{
+		ArgumentNullException.ThrowIfNull(identity);
+		SimulatorProfile producer;
+		if (identity.Equals(SimulatorProfile.LegacyCore.Identity))
+		{
+			producer = SimulatorProfile.LegacyCore;
+		}
+		else if (identity.Equals(SimulatorCapability.SafetyScreening.Identity))
+		{
+			if (probabilityRecord)
+			{
+				throw new ArgumentException(
+					"Safety screening cannot produce probability cache records.",
+					nameof(identity));
+			}
+
+			producer = SimulatorCapability.SafetyScreening;
+		}
+		else if (identity.Equals(SimulatorCapability.FullProbability.Identity))
+		{
+			producer = SimulatorCapability.FullProbability;
+		}
+		else
+		{
+			throw new ArgumentException(
+				"The cache identity does not name a known producer.",
+				nameof(identity));
+		}
+
+		return producer;
 	}
 
 	private static void ValidateMaterializationBounds(

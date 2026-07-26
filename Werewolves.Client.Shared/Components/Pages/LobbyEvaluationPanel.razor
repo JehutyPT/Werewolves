@@ -3,7 +3,8 @@
 @using Werewolves.Core.StateModels.Models.Simulation
 
 @if (State.Kind is not LobbyEvaluationStateKind.NotApplicable
-	and not LobbyEvaluationStateKind.ScreeningPassed)
+	and not LobbyEvaluationStateKind.ScreeningPassed
+	and not LobbyEvaluationStateKind.SimulatorUnavailable)
 {
 	<section class="ww-lobby-evaluation"
 			 data-testid="@ModeratorUiTestIds.LobbyEvaluationPanel"
@@ -90,10 +91,6 @@
 					@ClientStrings.LobbyEvaluation_Retry
 				</button>
 			}
-			else if (State.Kind == LobbyEvaluationStateKind.SimulatorUnavailable)
-			{
-				<p class="ww-lobby-evaluation__copy">@ClientStrings.LobbyEvaluation_SimulatorUnavailable</p>
-			}
 		</div>
 	</section>
 }
@@ -132,8 +129,6 @@
 		LobbyEvaluationStateKind.AlreadyDecided => ClientStrings.LobbyEvaluation_AlreadyDecided,
 		LobbyEvaluationStateKind.Degenerate => ClientStrings.LobbyEvaluation_Degenerate,
 		LobbyEvaluationStateKind.Probability => ClientStrings.LobbyEvaluation_Probability,
-		LobbyEvaluationStateKind.SimulatorUnavailable =>
-			ClientStrings.LobbyEvaluation_SimulatorUnavailable,
 		LobbyEvaluationStateKind.CouldNotEvaluate => ClientStrings.LobbyEvaluation_CouldNotEvaluate,
 		_ => string.Empty
 	};

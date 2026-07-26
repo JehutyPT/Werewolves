@@ -11,6 +11,17 @@ namespace Werewolves.Client.Tests.Services;
 public class NativeLobbyEvaluationCompositionTests
 {
 	[Fact]
+	public void Settings_RejectSafetyCapabilityWithFullProbabilityDepth()
+	{
+		var act = () => new LobbyEvaluationSettings(
+			SimulatorCapability.SafetyScreening,
+			LobbyEvaluationDepth.FullProbability);
+
+		act.Should().Throw<ArgumentException>()
+			.WithParameterName("depth");
+	}
+
+	[Fact]
 	public async Task ProductionComposition_ResolvesCoordinatorAndNativeAdapters()
 	{
 		var services = new ServiceCollection();
@@ -24,10 +35,12 @@ public class NativeLobbyEvaluationCompositionTests
 		provider.GetRequiredService<ILocalTerminalLobbyCacheStore>()
 			.Should().BeOfType<FileTerminalLobbyCacheStore>();
 		var settings = provider.GetRequiredService<LobbyEvaluationSettings>();
+		settings.Capability.Should().Be(SimulatorCapability.SafetyScreening);
 		settings.Depth.Should().Be(LobbyEvaluationDepth.DegenerateScreeningOnly);
 		provider.GetRequiredService<ILobbyTerminalEvaluator>()
 			.Should().BeOfType<AsyncTerminalLobbyEvaluator>();
 		var coordinator = provider.GetRequiredService<LobbyEvaluationCoordinator>();
+		coordinator.Capability.Should().Be(settings.Capability);
 		coordinator.Depth.Should().Be(settings.Depth);
 		coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.Pending);
 

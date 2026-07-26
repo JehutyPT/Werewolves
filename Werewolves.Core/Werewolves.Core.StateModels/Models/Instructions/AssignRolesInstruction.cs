@@ -31,11 +31,31 @@ public record AssignRolesInstruction : ModeratorInstruction
         string? privateInstruction = null,
         IReadOnlyList<Guid>? affectedPlayerIds = null,
         Guid instructionId = default)
+		: this(
+			ModeratorInstructionSemantic.Unspecified,
+			playersForAssignment,
+			rolesForAssignment,
+			publicAnnouncement,
+			privateInstruction,
+			affectedPlayerIds,
+			instructionId)
+	{
+	}
+
+	internal AssignRolesInstruction(
+		ModeratorInstructionSemantic semantic,
+		ImmutableHashSet<Guid> playersForAssignment,
+		IReadOnlyList<MainRoleType> rolesForAssignment,
+		string? publicAnnouncement = null,
+		string? privateInstruction = null,
+		IReadOnlyList<Guid>? affectedPlayerIds = null,
+		Guid instructionId = default)
         : base(
-            publicAnnouncement,
-            privateInstruction,
-            affectedPlayerIds,
-            instructionId: instructionId)
+			publicAnnouncement,
+			privateInstruction,
+			affectedPlayerIds,
+			instructionId: instructionId,
+			semantic: semantic)
     {
         PlayersForAssignment = playersForAssignment ?? throw new ArgumentNullException(nameof(playersForAssignment));
 

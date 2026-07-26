@@ -129,10 +129,14 @@
 	private bool IsCountMatching => Lobby.TotalSelectedRoleCount == Lobby.ExpectedRoleCount;
 	private bool CanStartGame => !Lobby.HasRoleConfigIssues(out _);
 	private bool ShouldRenderEvaluationPanel =>
-		Evaluation.Depth == LobbyEvaluationDepth.FullProbability
-		|| _evaluationState.Kind is
+		_evaluationState.Kind is
 			LobbyEvaluationStateKind.AlreadyDecided or
-			LobbyEvaluationStateKind.Degenerate;
+			LobbyEvaluationStateKind.Degenerate
+		|| (Evaluation.Depth == LobbyEvaluationDepth.FullProbability
+			&& _evaluationState.Kind is
+				LobbyEvaluationStateKind.Pending or
+				LobbyEvaluationStateKind.Probability or
+				LobbyEvaluationStateKind.CouldNotEvaluate);
 
 	private string CountLabel => Format(
 		ClientStrings.RoleSelection_SelectedCountFormat,

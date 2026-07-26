@@ -12,6 +12,7 @@ internal static class DayPhaseHandlers
 {
     internal static ModeratorInstruction StartDebate(GameSession session, ModeratorResponse input)
         => new ConfirmationInstruction(
+			ModeratorInstructionSemantic.StartDayDebate,
             publicAnnouncement: GameStrings.DebateStartsPrompt,
             privateInstruction: GameStrings.DebateModeratorInstructions);
 
@@ -20,6 +21,7 @@ internal static class DayPhaseHandlers
         var alivePlayers = session.GetPlayers().WithHealth(PlayerHealth.Alive);
 
         return new SelectPlayersInstruction(
+			ModeratorInstructionSemantic.RecordDayVote,
             alivePlayers.ToIdSet(),
             NumberRangeConstraint.SingleOptional,
             publicAnnouncement: GameStrings.VoteStartsPublicInstruction,
@@ -60,6 +62,7 @@ internal static class DayPhaseHandlers
         }
 
         return new AssignRolesInstruction(
+			ModeratorInstructionSemantic.AssignDayVoteTargetRole,
             [playerId],
             GameSessionQueries.GetUnassignedRoles(session),
             privateInstruction: GameStrings.RevealRolePromptSpecify);
@@ -80,6 +83,7 @@ internal static class DayPhaseHandlers
         if (lynchedPlayerState.IsImmuneToLynching)
         {
             var instruction = new ConfirmationInstruction(
+				ModeratorInstructionSemantic.AnnounceLynchingImmunity,
                 publicAnnouncement: lynchedPlayerState.LynchingImmunityAnnouncement!);
 
             session.ApplyStatusEffect(StatusEffectTypes.LynchingImmunityUsed, lynchedPlayerId);
@@ -90,6 +94,7 @@ internal static class DayPhaseHandlers
         session.EliminatePlayer(lynchedPlayerId, EliminationReason.DayVote);
 
         return new ConfirmationInstruction(
+			ModeratorInstructionSemantic.AnnounceDayElimination,
             publicAnnouncement: GameStrings.SingleVictimEliminatedAnnounce.Format(lynchedPlayer.Name));
     }
 }

@@ -9,9 +9,9 @@ namespace Werewolves.Core.Tests.Unit;
 public sealed class TerminalLobbyScenarioCatalogTests
 {
 	[Fact]
-	public void EnumerateCurrentProfile_ReturnsCompleteSupportedIdentitySet()
+	public void EnumerateLegacyCore_ReturnsCompleteSupportedIdentitySet()
 	{
-		var entries = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile();
+		var entries = TerminalLobbyScenarioCatalog.EnumerateLegacyCore();
 
 		entries.Should().HaveCount(1_664);
 		entries.Select(entry => entry.Identity).Should().OnlyHaveUniqueItems();
@@ -46,13 +46,15 @@ public sealed class TerminalLobbyScenarioCatalogTests
 			entry.Scenario.ActorSetupCards.Cards.Should().BeEmpty();
 			entry.Scenario.RuleState.Should().Be(SimulationRuleState.Default);
 
-			var classification = SimulationScenarioClassifier.Classify(entry.Scenario);
+			var classification = SimulationScenarioClassifier.Classify(
+				entry.Scenario,
+				SimulatorProfile.LegacyCore);
 			classification.RulesValidity.IsValid.Should().BeTrue();
 			classification.AppSupport.Should().Match<AppSupportResult>(value => value.IsSupported);
 			classification.SimulatorSupport.Should().Match<SimulatorSupportResult>(value => value.IsSupported);
 			entry.Identity.Should().Be(new SimulationCompatibilityIdentity(
 				entry.Scenario.ToCanonical(),
-				SimulatorProfile.Active.Identity));
+				SimulatorProfile.LegacyCore.Identity));
 			entry.IsAlreadyDecided.Should().Be(
 				classification.AlreadyDecided!.IsAlreadyDecided);
 			if (entry.IsAlreadyDecided)
@@ -101,7 +103,7 @@ public sealed class TerminalLobbyScenarioCatalogTests
 	private static string IdentityFor(SimulationScenario scenario) =>
 		new SimulationCompatibilityIdentity(
 			scenario.ToCanonical(),
-			SimulatorProfile.Active.Identity).ToString();
+			SimulatorProfile.LegacyCore.Identity).ToString();
 
 	private static SimulationScenario Scenario(
 		int playerCount,

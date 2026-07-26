@@ -11,26 +11,30 @@ namespace Werewolves.Client.Tests.Services;
 public class AsyncTerminalLobbyEvaluatorTests
 {
 	[Fact]
-	public async Task EachPerCallDepth_IsForwardedToTheCoreEvaluator()
+	public async Task EachPerCallCapabilityAndDepth_AreForwardedToTheCoreEvaluator()
 	{
-		var observedDepths = new List<LobbyEvaluationDepth>();
+		var observedSettings = new List<(SimulatorCapability, LobbyEvaluationDepth)>();
 		var adapter = new AsyncTerminalLobbyEvaluator(
-			(_, depth, _) =>
+			(_, capability, depth, _) =>
 			{
-				observedDepths.Add(depth);
+				observedSettings.Add((capability, depth));
 				return new ScreeningPassedLobbyEvaluation();
 			},
 			new ManualTimeProvider());
 
 		(await adapter.EvaluateAsync(
 			SupportedScenario(),
+			SimulatorCapability.SafetyScreening,
 			LobbyEvaluationDepth.DegenerateScreeningOnly))
 			.Should().BeOfType<ScreeningPassedLobbyEvaluation>();
-		(await adapter.EvaluateAsync(SupportedScenario(), LobbyEvaluationDepth.FullProbability))
+		(await adapter.EvaluateAsync(
+			SupportedScenario(),
+			SimulatorCapability.FullProbability,
+			LobbyEvaluationDepth.FullProbability))
 			.Should().BeOfType<ScreeningPassedLobbyEvaluation>();
-		observedDepths.Should().Equal(
-			LobbyEvaluationDepth.DegenerateScreeningOnly,
-			LobbyEvaluationDepth.FullProbability);
+		observedSettings.Should().Equal(
+			(SimulatorCapability.SafetyScreening, LobbyEvaluationDepth.DegenerateScreeningOnly),
+			(SimulatorCapability.FullProbability, LobbyEvaluationDepth.FullProbability));
 	}
 
 	[Fact]
@@ -42,7 +46,7 @@ public class AsyncTerminalLobbyEvaluatorTests
 		var observed = new TaskCompletionSource<Task>(
 			TaskCreationOptions.RunContinuationsAsynchronously);
 		var adapter = new AsyncTerminalLobbyEvaluator(
-			(_, _, token) =>
+			(_, _, _, token) =>
 			{
 				started.TrySetResult();
 				release.Task.GetAwaiter().GetResult();
@@ -53,6 +57,7 @@ public class AsyncTerminalLobbyEvaluatorTests
 		using var cancellation = new CancellationTokenSource();
 		var evaluation = adapter.EvaluateAsync(
 			SupportedScenario(),
+			SimulatorCapability.FullProbability,
 			LobbyEvaluationDepth.FullProbability,
 			cancellation.Token);
 		await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
@@ -77,7 +82,7 @@ public class AsyncTerminalLobbyEvaluatorTests
 		var observed = new TaskCompletionSource<Task>(
 			TaskCreationOptions.RunContinuationsAsynchronously);
 		var adapter = new AsyncTerminalLobbyEvaluator(
-			(_, _, token) =>
+			(_, _, _, token) =>
 			{
 				using var registration = token.Register(() => cancelled.TrySetResult());
 				started.TrySetResult();
@@ -91,7 +96,8 @@ public class AsyncTerminalLobbyEvaluatorTests
 
 		var evaluation = adapter.EvaluateAsync(
 			SupportedScenario(),
-			LobbyEvaluationDepth.FullProbability);
+			SimulatorCapability.SafetyScreening,
+			LobbyEvaluationDepth.DegenerateScreeningOnly);
 		await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
 		clock.Advance(TimeSpan.FromMilliseconds(9_999));
 		evaluation.IsCompleted.Should().BeFalse();
@@ -111,9 +117,12 @@ public class AsyncTerminalLobbyEvaluatorTests
 		var expected = new AlreadyDecidedTerminalEvaluation(
 			new SingleFactionGameResult(Faction.Werewolf),
 			AlreadyDecidedReason.WerewolfControlShortcut);
-		var adapter = new AsyncTerminalLobbyEvaluator((_, _, _) => expected, new ManualTimeProvider());
+		var adapter = new AsyncTerminalLobbyEvaluator((_, _, _, _) => expected, new ManualTimeProvider());
 
-		(await adapter.EvaluateAsync(SupportedScenario(), LobbyEvaluationDepth.FullProbability))
+		(await adapter.EvaluateAsync(
+			SupportedScenario(),
+			SimulatorCapability.FullProbability,
+			LobbyEvaluationDepth.FullProbability))
 			.Should().BeSameAs(expected);
 	}
 
@@ -121,10 +130,13 @@ public class AsyncTerminalLobbyEvaluatorTests
 	public async Task EvaluateAsync_ExecutionFailureCollapsesToCouldNotEvaluate()
 	{
 		var adapter = new AsyncTerminalLobbyEvaluator(
-			(_, _, _) => throw new InvalidOperationException("injected evaluator failure"),
+			(_, _, _, _) => throw new InvalidOperationException("injected evaluator failure"),
 			new ManualTimeProvider());
 
-		(await adapter.EvaluateAsync(SupportedScenario(), LobbyEvaluationDepth.FullProbability))
+		(await adapter.EvaluateAsync(
+			SupportedScenario(),
+			SimulatorCapability.FullProbability,
+			LobbyEvaluationDepth.FullProbability))
 			.Should().BeOfType<CouldNotEvaluateLobbyEvaluation>();
 	}
 

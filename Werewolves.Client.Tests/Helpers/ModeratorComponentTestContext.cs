@@ -39,7 +39,9 @@ public sealed class ModeratorComponentTestContext : BunitContext
 			sp.GetRequiredService<ITerminalLobbyCacheByteSource>(),
 			sp.GetRequiredService<ILocalTerminalLobbyCacheStore>(),
 			sp.GetRequiredService<ILobbyTerminalEvaluator>(),
-			LobbyEvaluationDepth.FullProbability,
+			new LobbyEvaluationSettings(
+				SimulatorCapability.FullProbability,
+				LobbyEvaluationDepth.FullProbability),
 			sp.GetRequiredService<TimeProvider>()));
 		Services.AddSingleton<GameClientManager>();
 	}

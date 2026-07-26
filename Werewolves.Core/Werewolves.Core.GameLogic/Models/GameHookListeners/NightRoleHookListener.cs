@@ -81,7 +81,9 @@ internal abstract class NightRoleHookListener<T> : RoleHookListener<T> where T :
 	private HookListenerActionResult PrepareWakeupInstruction(GameSession session)
 	{
 		return HookListenerActionResult.NeedInput(
-			new ConfirmationInstruction(GameStrings.RoleWakesUp.Format(PublicName)),
+			new ConfirmationInstruction(
+				ModeratorInstructionSemantic.WakeRole,
+				GameStrings.RoleWakesUp.Format(PublicName)),
 			WokenUpStateEnum);
 	}
 
@@ -110,6 +112,7 @@ internal abstract class NightRoleHookListener<T> : RoleHookListener<T> where T :
 
 		return HookListenerActionResult.NeedInput(
 			new SelectPlayersInstruction(
+				ModeratorInstructionSemantic.IdentifyRoleHolders,
 				selectablePlayerIds: playersWithoutRole,
 				countConstraint: NumberRangeConstraint.Exact(roleCount),
 				publicAnnouncement: publicText,
@@ -134,7 +137,9 @@ internal abstract class NightRoleHookListener<T> : RoleHookListener<T> where T :
 	protected virtual HookListenerActionResult PrepareSleepInstruction(GameSession session)
 	{
 		return HookListenerActionResult.NeedInput(
-			new ConfirmationInstruction(GameStrings.RoleGoesToSleepSingle.Format(PublicName)),
+			new ConfirmationInstruction(
+				ModeratorInstructionSemantic.PutRoleToSleep,
+				GameStrings.RoleGoesToSleepSingle.Format(PublicName)),
 			ReadyToSleepStateEnum);
 	}
 

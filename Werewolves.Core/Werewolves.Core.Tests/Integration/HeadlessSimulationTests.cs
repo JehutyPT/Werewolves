@@ -1,5 +1,6 @@
 using FluentAssertions;
 using System.Collections.Immutable;
+using System.Text.Json;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.GameLogic.Simulation;
 using Werewolves.Core.GameLogic.Strategies;
@@ -21,6 +22,95 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 	}
 
 	[Fact]
+	public void BaselineRandomDecisionStrategy_WithSameShapeUnadmittedSemantic_RejectsInstruction()
+	{
+		var material = CreateRunSeedMaterial(runNumber: 7);
+		var startState = SimulationStartStateDeriver.Derive(material);
+		var config = startState.CreateGameSessionConfig();
+		var builder = CreateBuilder()
+			.WithPlayers(config.Players.ToArray())
+			.WithRoles(config.Roles.ToArray());
+		builder.StartGame();
+		var session = builder.GetGameState()!;
+		var policy = new HeadlessResponsePolicy(
+			BaselineRandomDecisionStrategy.Identity,
+			[ModeratorInstructionSemantic.StartNight]);
+		var admitted = new ConfirmationInstruction(
+			ModeratorInstructionSemantic.StartNight,
+			privateInstruction: "Same response shape.");
+		var unadmitted = new ConfirmationInstruction(
+			ModeratorInstructionSemantic.FinishNightActions,
+			privateInstruction: "Same response shape.");
+		var strategy = new BaselineRandomDecisionStrategy(material, startState, policy);
+
+		var admittedResponse = strategy.CreateResponse(admitted, session);
+		var act = () => strategy.CreateResponse(unadmitted, session);
+
+		admittedResponse.Type.Should().Be(ExpectedInputType.Continue);
+		admittedResponse.InstructionId.Should().Be(admitted.InstructionId);
+		act.Should().Throw<NotSupportedException>();
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void BaselineRandomPolicy_DeclaresStableIdentityAndExactInstructionSemantics()
+	{
+		BaselineRandomDecisionStrategy.Policy.StrategyIdentity.ToString()
+			.Should().Be("baseline-random@1-splitmix64");
+		BaselineRandomDecisionStrategy.Policy.AdmittedSemantics.Should().BeEquivalentTo(
+		[
+			ModeratorInstructionSemantic.StartGame,
+			ModeratorInstructionSemantic.FinishedGame,
+			ModeratorInstructionSemantic.StartNight,
+			ModeratorInstructionSemantic.FinishNightActions,
+			ModeratorInstructionSemantic.WakeRole,
+			ModeratorInstructionSemantic.IdentifyRoleHolders,
+			ModeratorInstructionSemantic.PutRoleToSleep,
+			ModeratorInstructionSemantic.SelectWerewolfVictim,
+			ModeratorInstructionSemantic.SelectSeerTarget,
+			ModeratorInstructionSemantic.RevealSeerResult,
+			ModeratorInstructionSemantic.SelectWildChildModel,
+			ModeratorInstructionSemantic.AnnounceDawnVictims,
+			ModeratorInstructionSemantic.AssignDawnVictimRoles,
+			ModeratorInstructionSemantic.StartDayDebate,
+			ModeratorInstructionSemantic.RecordDayVote,
+			ModeratorInstructionSemantic.AssignDayVoteTargetRole,
+			ModeratorInstructionSemantic.AnnounceLynchingImmunity,
+			ModeratorInstructionSemantic.AnnounceDayElimination
+		]);
+	}
+
+	[Fact]
+	public void HeadlessResponsePolicy_SnapshotsItsAdmittedSemantics()
+	{
+		var source = new HashSet<ModeratorInstructionSemantic>
+		{
+			ModeratorInstructionSemantic.StartGame
+		};
+		var policy = new HeadlessResponsePolicy(
+			BaselineRandomDecisionStrategy.Identity,
+			source);
+
+		source.Clear();
+
+		policy.Admits(ModeratorInstructionSemantic.StartGame).Should().BeTrue();
+		policy.AdmittedSemantics.Should().ContainSingle();
+	}
+
+	[Fact]
+	public void ModeratorInstructionSemantic_IsObservableWithoutChangingJsonWireShape()
+	{
+		var instruction = new StartGameConfirmationInstruction(Guid.NewGuid());
+
+		var json = JsonSerializer.Serialize(instruction);
+		using var document = JsonDocument.Parse(json);
+
+		instruction.Semantic.Should().Be(ModeratorInstructionSemantic.StartGame);
+		document.RootElement.TryGetProperty(nameof(ModeratorInstruction.Semantic), out _)
+			.Should().BeFalse();
+	}
+
+	[Fact]
 	public void BaselineRandomDecisionStrategy_WithRoleIdentification_UsesSeededAssignmentAndAcknowledgesConfirmation()
 	{
 		var scenario = new StateModels.Models.Simulation.SimulationScenario(
@@ -35,7 +125,7 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 		var material = new RunSeedMaterial(
 			new SimulationCompatibilityIdentity(
 				scenario.ToCanonical(),
-				SimulatorProfile.Active.Identity),
+				SimulatorProfile.LegacyCore.Identity),
 			BaselineRandomDecisionStrategy.Identity,
 			runNumber: 3);
 		var startState = SimulationStartStateDeriver.Derive(material);
@@ -45,10 +135,14 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 			.WithRoles(config.Roles.ToArray());
 		var startInstruction = builder.StartGame();
 		var session = builder.GetGameState()!;
-		var strategy = new BaselineRandomDecisionStrategy(material, startState);
+		var strategy = new BaselineRandomDecisionStrategy(
+			material,
+			startState,
+			BaselineRandomDecisionStrategy.Policy);
 		var players = session.GetPlayers().ToList();
 		var seerSeat = startState.RoleAssignments.Single(assignment => assignment.Role == MainRoleType.Seer).SeatNumber;
 		var identifySeer = new SelectPlayersInstruction(
+			ModeratorInstructionSemantic.IdentifyRoleHolders,
 			players.Select(player => player.Id).ToHashSet(),
 			NumberRangeConstraint.Single,
 			publicAnnouncement: null,
@@ -76,49 +170,40 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 			.WithRoles(config.Roles.ToArray());
 		builder.StartGame();
 		var session = builder.GetGameState()!;
-		var firstStrategy = new BaselineRandomDecisionStrategy(material, startState);
-		var replayStrategy = new BaselineRandomDecisionStrategy(material, startState);
+		var firstStrategy = new BaselineRandomDecisionStrategy(
+			material,
+			startState,
+			BaselineRandomDecisionStrategy.Policy);
+		var replayStrategy = new BaselineRandomDecisionStrategy(
+			material,
+			startState,
+			BaselineRandomDecisionStrategy.Policy);
 		var players = session.GetPlayers().ToList();
 
 		var firstPlayerSelection = new SelectPlayersInstruction(
+			ModeratorInstructionSemantic.SelectWerewolfVictim,
 			players.Select(player => player.Id).ToHashSet(),
 			NumberRangeConstraint.Exact(2),
 			privateInstruction: GameStrings.RevealRolePromptSpecify);
 		var replayPlayerSelection = new SelectPlayersInstruction(
+			ModeratorInstructionSemantic.SelectWerewolfVictim,
 			players.Select(player => player.Id).ToHashSet(),
 			NumberRangeConstraint.Exact(2),
 			privateInstruction: GameStrings.RevealRolePromptSpecify);
 		var firstAssignment = new AssignRolesInstruction(
+			ModeratorInstructionSemantic.AssignDawnVictimRoles,
 			ImmutableHashSet.Create(players[1].Id, players[3].Id),
 			[MainRoleType.Seer, MainRoleType.SimpleVillager],
 			privateInstruction: GameStrings.RevealRolePromptSpecify);
 		var replayAssignment = new AssignRolesInstruction(
+			ModeratorInstructionSemantic.AssignDawnVictimRoles,
 			ImmutableHashSet.Create(players[1].Id, players[3].Id),
 			[MainRoleType.Seer, MainRoleType.SimpleVillager],
 			privateInstruction: GameStrings.RevealRolePromptSpecify);
-		var firstOptions = new SelectOptionsInstruction(
-			[
-				new ModeratorOption("alpha", "Alpha"),
-				new ModeratorOption("beta", "Beta"),
-				new ModeratorOption("gamma", "Gamma")
-			],
-			NumberRangeConstraint.SingleOptional,
-			privateInstruction: GameStrings.RevealRolePromptSpecify);
-		var replayOptions = new SelectOptionsInstruction(
-			[
-				new ModeratorOption("alpha", "First"),
-				new ModeratorOption("beta", "Second"),
-				new ModeratorOption("gamma", "Third")
-			],
-			NumberRangeConstraint.SingleOptional,
-			privateInstruction: GameStrings.RevealRolePromptSpecify);
-
 		var selected = firstStrategy.CreateResponse(firstPlayerSelection, session);
 		var replaySelected = replayStrategy.CreateResponse(replayPlayerSelection, session);
 		var assigned = firstStrategy.CreateResponse(firstAssignment, session);
 		var replayAssigned = replayStrategy.CreateResponse(replayAssignment, session);
-		var options = firstStrategy.CreateResponse(firstOptions, session);
-		var replayOptionResponse = replayStrategy.CreateResponse(replayOptions, session);
 
 		selected.SelectedPlayerIds.Should().HaveCount(2)
 			.And.BeSubsetOf(firstPlayerSelection.SelectablePlayerIds);
@@ -131,9 +216,6 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 		assigned.AssignedPlayerRoles.OrderBy(pair => players.FindIndex(player => player.Id == pair.Key)).Select(pair => pair.Value)
 			.Should().Equal(
 				replayAssigned.AssignedPlayerRoles!.OrderBy(pair => players.FindIndex(player => player.Id == pair.Key)).Select(pair => pair.Value));
-		options.SelectedOptionIds.Should().BeSubsetOf(firstOptions.Options.Select(option => option.Id));
-		firstOptions.SelectionRange.IsValid(options.SelectedOptionIds!.ToList()).Should().BeTrue();
-		options.SelectedOptionIds.Should().Equal(replayOptionResponse.SelectedOptionIds);
 		MarkTestCompleted();
 	}
 
@@ -148,15 +230,20 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 			.WithRoles(config.Roles.ToArray());
 		builder.StartGame();
 		var session = builder.GetGameState()!;
-		var instruction = new SelectOptionsInstruction(
-			[new ModeratorOption("alpha", "Alpha")],
+		var players = session.GetPlayers().ToList();
+		var instruction = new SelectPlayersInstruction(
+			ModeratorInstructionSemantic.RecordDayVote,
+			[players[0].Id],
 			NumberRangeConstraint.SingleOptional,
 			privateInstruction: GameStrings.RevealRolePromptSpecify);
-		var strategy = new BaselineRandomDecisionStrategy(material, startState);
+		var strategy = new BaselineRandomDecisionStrategy(
+			material,
+			startState,
+			BaselineRandomDecisionStrategy.Policy);
 
 		var response = strategy.CreateResponse(instruction, session);
 
-		response.SelectedOptionIds.Should().BeEmpty();
+		response.SelectedPlayerIds.Should().BeEmpty();
 		MarkTestCompleted();
 	}
 
@@ -289,7 +376,7 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 		return new RunSeedMaterial(
 			new SimulationCompatibilityIdentity(
 				scenario.ToCanonical(),
-				SimulatorProfile.Active.Identity),
+				SimulatorProfile.LegacyCore.Identity),
 			BaselineRandomDecisionStrategy.Identity,
 			runNumber);
 	}

@@ -33,7 +33,7 @@ internal static class BuildTimeCacheTestFixtures
 	private static BuildTimeCacheGenerationResult CreateIncompleteEvidenceResult()
 	{
 		var complete = Complete;
-		var incompleteEntry = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()
+		var incompleteEntry = TerminalLobbyScenarioCatalog.EnumerateLegacyCore()
 			.First(entry => !entry.IsAlreadyDecided);
 		var document = TerminalLobbyCache.CreateDocument(complete.Document!.Records.Where(record =>
 			!record.CompatibilityIdentity.Equals(incompleteEntry.Identity)));
@@ -70,8 +70,8 @@ internal static class BuildTimeCacheTestFixtures
 			BuildTimeTerminalLobbyCacheGenerator.ArtifactLogicalName,
 			TerminalLobbyCache.SchemaIdentifier,
 			TerminalLobbyCache.SchemaVersion,
-			SimulatorProfile.Active.Identity.ProfileId,
-			SimulatorProfile.Active.Identity.Version,
+			SimulatorProfile.LegacyCore.Identity.ProfileId,
+			SimulatorProfile.LegacyCore.Identity.Version,
 			records.Count,
 			Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant(),
 			bytes.Length);

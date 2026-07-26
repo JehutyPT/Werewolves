@@ -210,14 +210,13 @@ public class LobbyEvaluationPanelTests
 	}
 
 	[Fact]
-	public void SimulatorUnavailable_MakesUnavailabilityVisibleWithoutActions()
+	public void SimulatorUnavailable_RendersNoEvaluationPanel()
 	{
 		using var context = new ModeratorComponentTestContext();
 		var cut = context.RenderModeratorComponent<LobbyEvaluationPanel>(parameters => parameters
 			.Add(component => component.State, LobbyEvaluationState.SimulatorUnavailable()));
 
-		cut.Find(TestId(ModeratorUiTestIds.LobbyEvaluationSummary))
-			.TextContent.Should().Contain(ClientStrings.LobbyEvaluation_SimulatorUnavailable);
+		cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationPanel)).Should().BeEmpty();
 		cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationRetry)).Should().BeEmpty();
 		cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationDisclosure)).Should().BeEmpty();
 	}
@@ -250,7 +249,7 @@ public class LobbyEvaluationPanelTests
 			villagers + werewolves,
 			Enumerable.Repeat(MainRoleType.SimpleVillager, villagers)
 				.Concat(Enumerable.Repeat(MainRoleType.SimpleWerewolf, werewolves)));
-		return new(scenario.ToCanonical(), SimulatorProfile.Active.Identity);
+		return new(scenario.ToCanonical(), SimulatorCapability.FullProbability.Identity);
 	}
 
 	private static LobbyEvaluationState CreateProbabilityState(

@@ -11,7 +11,9 @@ public static class NativeLobbyEvaluationServiceCollectionExtensions
 	{
 		ArgumentNullException.ThrowIfNull(services);
 		services.TryAddSingleton(
-			new LobbyEvaluationSettings(LobbyEvaluationDepth.DegenerateScreeningOnly));
+			new LobbyEvaluationSettings(
+				SimulatorCapability.SafetyScreening,
+				LobbyEvaluationDepth.DegenerateScreeningOnly));
 		services.TryAddSingleton<TimeProvider>(_ => TimeProvider.System);
 		services.TryAddSingleton<ITerminalLobbyCacheByteSource, MauiTerminalLobbyCacheByteSource>();
 		services.TryAddSingleton<ILocalTerminalLobbyCacheStore>(
@@ -24,7 +26,7 @@ public static class NativeLobbyEvaluationServiceCollectionExtensions
 				provider.GetRequiredService<ITerminalLobbyCacheByteSource>(),
 				provider.GetRequiredService<ILocalTerminalLobbyCacheStore>(),
 				provider.GetRequiredService<ILobbyTerminalEvaluator>(),
-				provider.GetRequiredService<LobbyEvaluationSettings>().Depth,
+				provider.GetRequiredService<LobbyEvaluationSettings>(),
 				provider.GetRequiredService<TimeProvider>()));
 		return services;
 	}

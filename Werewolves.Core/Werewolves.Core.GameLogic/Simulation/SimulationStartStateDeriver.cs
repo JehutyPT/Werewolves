@@ -5,8 +5,31 @@ namespace Werewolves.Core.GameLogic.Simulation;
 
 public static class SimulationStartStateDeriver
 {
-	public static SimulationStartState Derive(RunSeedMaterial material) =>
+	internal static SimulationStartState Derive(RunSeedMaterial material) =>
 		Derive(material, new DeterministicRandomSource(material));
+
+	public static SimulationStartState Derive(
+		RunSeedMaterial material,
+		SimulatorCapability capability)
+	{
+		ArgumentNullException.ThrowIfNull(material);
+		ArgumentNullException.ThrowIfNull(capability);
+		if (!material.CompatibilityIdentity.Profile.Equals(capability.Identity))
+		{
+			throw new ArgumentException(
+				"Run Seed Material does not identify the selected Simulator Capability.",
+				nameof(capability));
+		}
+		if (!material.DecisionStrategyIdentity.Equals(
+			capability.HeadlessResponsePolicy.StrategyIdentity))
+		{
+			throw new ArgumentException(
+				"Run Seed Material does not identify the selected Simulator Capability response policy.",
+				nameof(material));
+		}
+
+		return Derive(material, new DeterministicRandomSource(material));
+	}
 
 	internal static SimulationStartState Derive(
 		RunSeedMaterial material,

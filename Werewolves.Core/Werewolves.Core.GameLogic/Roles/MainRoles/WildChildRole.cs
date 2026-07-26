@@ -37,6 +37,7 @@ internal class WildChildRole : StandardNightRoleHookListener
         }
 
         return new SelectPlayersInstruction(
+			ModeratorInstructionSemantic.SelectWildChildModel,
             selectablePlayerIds: GetPotentialTargets(session, canTargetSelf: false),
             countConstraint: NumberRangeConstraint.Single,
             publicAnnouncement: GameStrings.WildChildModelSelectionPrompt,

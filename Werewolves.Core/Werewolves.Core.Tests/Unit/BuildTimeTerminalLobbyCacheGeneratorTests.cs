@@ -23,11 +23,13 @@ public sealed class BuildTimeTerminalLobbyCacheGeneratorTests
 		var read = TerminalLobbyCache.ReadDocument(bytes);
 		read.Rejection.Should().BeNull();
 		read.Document!.Records.Should().HaveCount(1_664);
+		read.Document.Records.Should().OnlyContain(record =>
+			record.CompatibilityIdentity.Profile == SimulatorProfile.LegacyCore.Identity);
 		read.Document.Records.OfType<AlreadyDecidedTerminalCacheRecord>().Should().HaveCount(832);
 		read.Document.Records.OfType<DegenerateTerminalCacheRecord>().Should().HaveCount(52);
 		read.Document.Records.OfType<ProbabilityTerminalCacheRecord>().Should().HaveCount(780);
 		read.Document.Records.Select(record => record.CompatibilityIdentity.ToString())
-			.Should().Equal(TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()
+			.Should().Equal(TerminalLobbyScenarioCatalog.EnumerateLegacyCore()
 				.Select(entry => entry.Identity.ToString()));
 	}
 
@@ -105,6 +107,24 @@ public sealed class BuildTimeTerminalLobbyCacheGeneratorTests
 		]);
 		methods.Should().OnlyContain(method => method.GetParameters().All(parameter =>
 			parameter.ParameterType != typeof(IEnumerable<TerminalLobbyGenerationScenario>)));
+	}
+
+	[Fact]
+	public void Generate_RejectsCurrentCapabilityScenarioInsteadOfChangingFrozenProducerPath()
+	{
+		var legacy = TerminalLobbyScenarioCatalog.EnumerateLegacyCore().First();
+		var current = legacy with
+		{
+			Identity = new SimulationCompatibilityIdentity(
+				legacy.Scenario.ToCanonical(),
+				SimulatorCapability.FullProbability.Identity)
+		};
+		var generator = new BuildTimeTerminalLobbyCacheGenerator(
+			(_, _, _, _) => throw new InvalidOperationException());
+
+		var act = () => generator.Generate([current]);
+
+		act.Should().Throw<ArgumentException>();
 	}
 
 	[Fact]
@@ -187,7 +207,7 @@ public sealed class BuildTimeTerminalLobbyCacheGeneratorTests
 	[Fact]
 	public void GenerateToFile_WithSelectedSubset_DoesNotPublishPartialCompletion()
 	{
-		var entry = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()
+		var entry = TerminalLobbyScenarioCatalog.EnumerateLegacyCore()
 			.First(value => value.IsAlreadyDecided);
 		var generator = new BuildTimeTerminalLobbyCacheGenerator(
 			(_, _, _, _) => throw new InvalidOperationException());
@@ -212,7 +232,7 @@ public sealed class BuildTimeTerminalLobbyCacheGeneratorTests
 	[Fact]
 	public void GenerateToFiles_WhenCancelled_PreservesPreviousArtifactAndReturnsCancelledDiagnostics()
 	{
-		var entry = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()
+		var entry = TerminalLobbyScenarioCatalog.EnumerateLegacyCore()
 			.First(value => !value.IsAlreadyDecided);
 		using var cancellation = new CancellationTokenSource();
 		var generator = new BuildTimeTerminalLobbyCacheGenerator((_, _, _, _) =>
@@ -255,7 +275,7 @@ public sealed class BuildTimeTerminalLobbyCacheGeneratorTests
 	[Fact]
 	public void GenerateToFiles_WhenDocumentConstructionFails_PreservesPreviousArtifactAndReturnsFailedDiagnostics()
 	{
-		var entry = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()
+		var entry = TerminalLobbyScenarioCatalog.EnumerateLegacyCore()
 			.First(value => value.IsAlreadyDecided);
 		var generator = new BuildTimeTerminalLobbyCacheGenerator(
 			(_, _, _, _) => throw new InvalidOperationException());
@@ -290,7 +310,7 @@ public sealed class BuildTimeTerminalLobbyCacheGeneratorTests
 	[Fact]
 	public void Generate_WhenProbabilityEvaluationCompletes_InvokesScreeningThenProbabilityOnce()
 	{
-		var entry = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()
+		var entry = TerminalLobbyScenarioCatalog.EnumerateLegacyCore()
 			.First(value => !value.IsAlreadyDecided);
 		var attemptCounts = new List<int>();
 		var generator = new BuildTimeTerminalLobbyCacheGenerator(
@@ -315,7 +335,7 @@ public sealed class BuildTimeTerminalLobbyCacheGeneratorTests
 	[Fact]
 	public void Generate_WhenBatchExecutionThrows_OmitsScenarioAsCouldNotEvaluate()
 	{
-		var entry = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()
+		var entry = TerminalLobbyScenarioCatalog.EnumerateLegacyCore()
 			.First(value => !value.IsAlreadyDecided);
 		var callCount = 0;
 		var generator = new BuildTimeTerminalLobbyCacheGenerator((_, _, _, _) =>
@@ -339,7 +359,7 @@ public sealed class BuildTimeTerminalLobbyCacheGeneratorTests
 	[Fact]
 	public void Generate_WhenTerminalRecordIdentityIsRejected_OmitsScenarioWithStableCode()
 	{
-		var entries = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()
+		var entries = TerminalLobbyScenarioCatalog.EnumerateLegacyCore()
 			.Where(value => !value.IsAlreadyDecided)
 			.Take(2)
 			.ToArray();
@@ -360,7 +380,7 @@ public sealed class BuildTimeTerminalLobbyCacheGeneratorTests
 	[Fact]
 	public void Generate_WhenExpectedTerminalKindDiffers_ReportsExactMismatchCode()
 	{
-		var entry = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()
+		var entry = TerminalLobbyScenarioCatalog.EnumerateLegacyCore()
 			.First(value => value.IsAlreadyDecided) with
 		{
 				IsAlreadyDecided = false
@@ -391,7 +411,7 @@ public sealed class BuildTimeTerminalLobbyCacheGeneratorTests
 	[Fact]
 	public void Generate_WithMultipleIncompleteRuns_OrdersReplayMaterialByIdentityThenRunNumber()
 	{
-		var entries = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()
+		var entries = TerminalLobbyScenarioCatalog.EnumerateLegacyCore()
 			.Where(value => !value.IsAlreadyDecided)
 			.Take(2)
 			.OrderByDescending(value => value.Identity.ToString(), StringComparer.Ordinal)
@@ -426,7 +446,7 @@ public sealed class BuildTimeTerminalLobbyCacheGeneratorTests
 	[Fact]
 	public void Generate_WithShortIncompleteScreeningBatch_UsesRequestedPhaseForDiagnostics()
 	{
-		var entry = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()
+		var entry = TerminalLobbyScenarioCatalog.EnumerateLegacyCore()
 			.First(value => !value.IsAlreadyDecided);
 		var generator = new BuildTimeTerminalLobbyCacheGenerator(
 			(scenario, identity, count, _) => Batch(
@@ -448,7 +468,7 @@ public sealed class BuildTimeTerminalLobbyCacheGeneratorTests
 	[Fact]
 	public void Generate_WithCompleteTerminalResults_ProducesCanonicalArtifactAndDiagnostics()
 	{
-		var catalog = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile();
+		var catalog = TerminalLobbyScenarioCatalog.EnumerateLegacyCore();
 		var scenarios = new[]
 		{
 			catalog.First(entry => entry.IsAlreadyDecided),
@@ -504,7 +524,7 @@ public sealed class BuildTimeTerminalLobbyCacheGeneratorTests
 		BuildTimeCacheOmissionCode expectedCode,
 		int expectedIncompleteRunNumber)
 	{
-		var entry = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile()
+		var entry = TerminalLobbyScenarioCatalog.EnumerateLegacyCore()
 			.First(value => !value.IsAlreadyDecided);
 		var generator = new BuildTimeTerminalLobbyCacheGenerator(
 			(scenario, identity, count, _) => Batch(

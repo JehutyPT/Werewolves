@@ -13,6 +13,7 @@ using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
+using Werewolves.Core.StateModels.Resources;
 using static Werewolves.Core.StateModels.Enums.ExpectedInputType;
 
 namespace Werewolves.Core.GameLogic.Services;
@@ -122,7 +123,9 @@ public class GameService
 
 		if (!_sessions.TryGetValue(gameId, out var session))
 		{
-			return ProcessResult.Failure(new ConfirmationInstruction(privateInstruction: "ERROR: Game not found"));
+			return ProcessResult.Failure(new ConfirmationInstruction(
+				ModeratorInstructionSemantic.GameSessionNotFound,
+				privateInstruction: GameStrings.GameSessionNotFoundError));
 		}
 
         var pendingInstruction = session.PendingModeratorInstruction

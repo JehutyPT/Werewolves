@@ -39,7 +39,7 @@ public sealed class BrowserQaScenarioTerminalLobbyCacheByteSource(
 			BrowserQaFixtures.DefaultRoles);
 		var identity = new SimulationCompatibilityIdentity(
 			scenario.ToCanonical(),
-			SimulatorProfile.Active.Identity);
+			SimulatorProfile.LegacyCore.Identity);
 		var villager = new SingleFactionGameResult(Faction.Villager);
 		var werewolf = new SingleFactionGameResult(Faction.Werewolf);
 		var noWinner = new NoWinnerGameResult();
@@ -72,7 +72,7 @@ public sealed class BrowserQaScenarioTerminalLobbyCacheByteSource(
 			BrowserQaFixtures.DefaultRoles);
 		var identity = new SimulationCompatibilityIdentity(
 			scenario.ToCanonical(),
-			SimulatorProfile.Active.Identity);
+			SimulatorProfile.LegacyCore.Identity);
 		var villager = new SingleFactionGameResult(Faction.Villager);
 		var werewolf = new SingleFactionGameResult(Faction.Werewolf);
 		var record = new DegenerateTerminalCacheRecord(

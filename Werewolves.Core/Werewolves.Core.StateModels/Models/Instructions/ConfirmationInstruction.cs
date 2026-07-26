@@ -22,13 +22,29 @@ public record ConfirmationInstruction : ModeratorInstruction
         string? privateInstruction = null,
         IReadOnlyList<Guid>? affectedPlayerIds = null,
         Guid instructionId = default)
-        : base(
-            publicAnnouncement,
-            privateInstruction,
-            affectedPlayerIds,
-            instructionId: instructionId)
+		: this(
+			ModeratorInstructionSemantic.Unspecified,
+			publicAnnouncement,
+			privateInstruction,
+			affectedPlayerIds,
+			instructionId)
     {
     }
+
+	internal ConfirmationInstruction(
+		ModeratorInstructionSemantic semantic,
+		string? publicAnnouncement = null,
+		string? privateInstruction = null,
+		IReadOnlyList<Guid>? affectedPlayerIds = null,
+		Guid instructionId = default)
+		: base(
+			publicAnnouncement,
+			privateInstruction,
+			affectedPlayerIds,
+			instructionId: instructionId,
+			semantic: semantic)
+	{
+	}
 
     /// <summary>
     /// Creates a one-way Continue acknowledgment.
@@ -55,7 +71,10 @@ public record StartGameConfirmationInstruction : ConfirmationInstruction
 
     [JsonConstructor]
     internal StartGameConfirmationInstruction(Guid GameGuid, Guid instructionId)
-        : base(GameStrings.GameStartPrompt, instructionId: instructionId)
+        : base(
+			ModeratorInstructionSemantic.StartGame,
+			GameStrings.GameStartPrompt,
+			instructionId: instructionId)
     {
         this.GameGuid = GameGuid;
     }
@@ -75,6 +94,7 @@ public record FinishedGameConfirmationInstruction : ConfirmationInstruction
     [JsonConstructor]
     internal FinishedGameConfirmationInstruction(string VictoryDescription, Guid instructionId)
         : base(
+			ModeratorInstructionSemantic.FinishedGame,
             GameStrings.GameOverMessage.Format(VictoryDescription),
             instructionId: instructionId)
     {

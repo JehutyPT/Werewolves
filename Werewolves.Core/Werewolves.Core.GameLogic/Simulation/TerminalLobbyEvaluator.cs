@@ -43,15 +43,48 @@ public sealed class TerminalLobbyEvaluator
 
 	private readonly Func<
 		SimulationScenario,
+		SimulatorCapability,
 		SimulationCompatibilityIdentity,
 		int,
 		CancellationToken,
 		SimulationBatchSourceEvidence> _executeBatch;
+	private readonly Func<
+		SimulationScenario,
+		SimulationCompatibilityIdentity,
+		int,
+		CancellationToken,
+		SimulationBatchSourceEvidence> _executeLegacyBatch;
 
 	public TerminalLobbyEvaluator()
 	{
 		var executor = new SimulationExecutor();
 		_executeBatch = executor.ExecuteBatch;
+		_executeLegacyBatch = (scenario, identity, count, cancellationToken) =>
+			executor.ExecuteBatchLegacy(
+				scenario,
+				SimulatorProfile.LegacyCore,
+				identity,
+				count,
+				cancellationToken);
+	}
+
+	internal TerminalLobbyEvaluator(
+		Func<
+			SimulationScenario,
+			SimulatorCapability,
+			SimulationCompatibilityIdentity,
+			int,
+			CancellationToken,
+			SimulationBatchSourceEvidence> executeBatch)
+	{
+		_executeBatch = executeBatch ?? throw new ArgumentNullException(nameof(executeBatch));
+		_executeLegacyBatch = (scenario, identity, count, cancellationToken) =>
+			_executeBatch(
+				scenario,
+				SimulatorCapability.FullProbability,
+				identity,
+				count,
+				cancellationToken);
 	}
 
 	internal TerminalLobbyEvaluator(
@@ -62,18 +95,50 @@ public sealed class TerminalLobbyEvaluator
 			CancellationToken,
 			SimulationBatchSourceEvidence> executeBatch)
 	{
-		_executeBatch = executeBatch ?? throw new ArgumentNullException(nameof(executeBatch));
+		_executeLegacyBatch = executeBatch ?? throw new ArgumentNullException(nameof(executeBatch));
+		_executeBatch = (scenario, _, identity, count, cancellationToken) =>
+			_executeLegacyBatch(scenario, identity, count, cancellationToken);
+	}
+
+	internal LobbyEvaluationResult EvaluateLegacy(
+		SimulationScenario scenario,
+		SimulatorProfile legacyProfile,
+		LobbyEvaluationDepth depth,
+		CancellationToken cancellationToken = default)
+	{
+		ArgumentNullException.ThrowIfNull(legacyProfile);
+		return EvaluateCore(
+			scenario,
+			legacyProfile,
+			capability: null,
+			depth,
+			cancellationToken);
 	}
 
 	public LobbyEvaluationResult Evaluate(
 		SimulationScenario scenario,
-		CancellationToken cancellationToken = default)
-		=> Evaluate(scenario, LobbyEvaluationDepth.FullProbability, cancellationToken);
-
-	public LobbyEvaluationResult Evaluate(
-		SimulationScenario scenario,
+		SimulatorCapability capability,
 		LobbyEvaluationDepth depth,
 		CancellationToken cancellationToken = default)
+	{
+		ArgumentNullException.ThrowIfNull(capability);
+		if (depth == LobbyEvaluationDepth.FullProbability
+			&& !capability.Identity.Equals(SimulatorCapability.FullProbability.Identity))
+		{
+			throw new ArgumentException(
+				"Full-Probability evaluation requires the Full-Probability Simulator Capability.",
+				nameof(depth));
+		}
+
+		return EvaluateCore(scenario, capability, capability, depth, cancellationToken);
+	}
+
+	private LobbyEvaluationResult EvaluateCore(
+		SimulationScenario scenario,
+		SimulatorProfile profile,
+		SimulatorCapability? capability,
+		LobbyEvaluationDepth depth,
+		CancellationToken cancellationToken)
 	{
 		ArgumentNullException.ThrowIfNull(scenario);
 		if (!Enum.IsDefined(depth))
@@ -81,7 +146,7 @@ public sealed class TerminalLobbyEvaluator
 			throw new ArgumentOutOfRangeException(nameof(depth));
 		}
 		cancellationToken.ThrowIfCancellationRequested();
-		var classification = SimulationScenarioClassifier.Classify(scenario);
+		var classification = SimulationScenarioClassifier.Classify(scenario, profile);
 		cancellationToken.ThrowIfCancellationRequested();
 		if (!classification.RulesValidity.IsValid)
 		{
@@ -123,13 +188,17 @@ public sealed class TerminalLobbyEvaluator
 		}
 
 		if (!TryExecuteBatch(
-			scenario, identity, ScreeningAttemptCount, cancellationToken, out var screening))
+			scenario, capability, identity, ScreeningAttemptCount, cancellationToken, out var screening))
 		{
 			return new CouldNotEvaluateLobbyEvaluation();
 		}
 
 		cancellationToken.ThrowIfCancellationRequested();
-		if (!IsConsistentCompleteBatch(screening, identity, ScreeningAttemptCount))
+		if (!IsConsistentCompleteBatch(
+			screening,
+			identity,
+			simulatorSupport.Profile.HeadlessResponsePolicy.StrategyIdentity,
+			ScreeningAttemptCount))
 		{
 			return new CouldNotEvaluateLobbyEvaluation();
 		}
@@ -157,13 +226,17 @@ public sealed class TerminalLobbyEvaluator
 
 		cancellationToken.ThrowIfCancellationRequested();
 		if (!TryExecuteBatch(
-			scenario, identity, ProbabilityAttemptCount, cancellationToken, out var probability))
+			scenario, capability, identity, ProbabilityAttemptCount, cancellationToken, out var probability))
 		{
 			return new CouldNotEvaluateLobbyEvaluation();
 		}
 
 		cancellationToken.ThrowIfCancellationRequested();
-		if (!IsConsistentCompleteBatch(probability, identity, ProbabilityAttemptCount))
+		if (!IsConsistentCompleteBatch(
+			probability,
+			identity,
+			simulatorSupport.Profile.HeadlessResponsePolicy.StrategyIdentity,
+			ProbabilityAttemptCount))
 		{
 			return new CouldNotEvaluateLobbyEvaluation();
 		}
@@ -182,6 +255,7 @@ public sealed class TerminalLobbyEvaluator
 
 	private bool TryExecuteBatch(
 		SimulationScenario scenario,
+		SimulatorCapability? capability,
 		SimulationCompatibilityIdentity identity,
 		int attemptCount,
 		CancellationToken cancellationToken,
@@ -189,7 +263,9 @@ public sealed class TerminalLobbyEvaluator
 	{
 		try
 		{
-			evidence = _executeBatch(scenario, identity, attemptCount, cancellationToken);
+			evidence = capability is null
+				? _executeLegacyBatch(scenario, identity, attemptCount, cancellationToken)
+				: _executeBatch(scenario, capability, identity, attemptCount, cancellationToken);
 			cancellationToken.ThrowIfCancellationRequested();
 			return true;
 		}
@@ -207,11 +283,12 @@ public sealed class TerminalLobbyEvaluator
 	private static bool IsConsistentCompleteBatch(
 		SimulationBatchSourceEvidence evidence,
 		SimulationCompatibilityIdentity identity,
+		DecisionStrategyIdentity decisionStrategyIdentity,
 		int expectedCount) =>
 		evidence is not null
 		&& evidence.CanonicalScenario.Equals(identity.Scenario)
 		&& evidence.SimulatorProfile.Equals(identity.Profile)
-		&& evidence.DecisionStrategy.Equals(BaselineRandomDecisionStrategy.Identity)
+		&& evidence.DecisionStrategy.Equals(decisionStrategyIdentity)
 		&& evidence.Records.Count == expectedCount
 		&& evidence.CompletedRunCount == expectedCount
 		&& evidence.IncompleteRunCount == 0;

@@ -70,7 +70,8 @@ public record SelectPlayersInstruction : ModeratorInstruction
 		MainRoleType? roleIdentification,
 		Guid instructionId = default)
 		: this(
-			selectablePlayerIds.ToImmutableHashSet(),
+			ModeratorInstructionSemantic.Unspecified,
+			selectablePlayerIds,
 			countConstraint,
 			publicAnnouncement,
 			privateInstruction,
@@ -92,14 +93,57 @@ public record SelectPlayersInstruction : ModeratorInstruction
 		IReadOnlyList<Guid>? affectedPlayerIds,
 		MainRoleType? roleIdentification,
         Guid instructionId = default)
+		: this(
+			ModeratorInstructionSemantic.Unspecified,
+			selectablePlayerIds,
+			countConstraint,
+			publicAnnouncement,
+			privateInstruction,
+			affectedPlayerIds,
+			roleIdentification,
+			instructionId)
+	{
+	}
+
+	internal SelectPlayersInstruction(
+		ModeratorInstructionSemantic semantic,
+		HashSet<Guid> selectablePlayerIds,
+		NumberRangeConstraint countConstraint,
+		string? publicAnnouncement = null,
+		string? privateInstruction = null,
+		IReadOnlyList<Guid>? affectedPlayerIds = null,
+		MainRoleType? roleIdentification = null,
+		Guid instructionId = default)
+		: this(
+			semantic,
+			selectablePlayerIds?.ToImmutableHashSet()
+				?? throw new ArgumentNullException(nameof(selectablePlayerIds)),
+			countConstraint,
+			publicAnnouncement,
+			privateInstruction,
+			affectedPlayerIds,
+			roleIdentification,
+			instructionId)
+	{
+	}
+
+	private SelectPlayersInstruction(
+		ModeratorInstructionSemantic semantic,
+		ImmutableHashSet<Guid> selectablePlayerIds,
+		NumberRangeConstraint countConstraint,
+		string? publicAnnouncement,
+		string? privateInstruction,
+		IReadOnlyList<Guid>? affectedPlayerIds,
+		MainRoleType? roleIdentification,
+		Guid instructionId)
         : base(
-            publicAnnouncement,
-            privateInstruction,
-            affectedPlayerIds,
-            instructionId: instructionId)
+			publicAnnouncement,
+			privateInstruction,
+			affectedPlayerIds,
+			instructionId: instructionId,
+			semantic: semantic)
     {
-        ArgumentNullException.ThrowIfNull(selectablePlayerIds);
-        SelectablePlayerIds = selectablePlayerIds.ToImmutableHashSet();
+        SelectablePlayerIds = selectablePlayerIds;
         CountConstraint = countConstraint;
 		if (roleIdentification.HasValue && !Enum.IsDefined(roleIdentification.Value))
 		{

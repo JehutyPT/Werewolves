@@ -29,6 +29,7 @@ internal class SeerRole : ImmediateFeedbackNightRoleHookListener
         var potentialTargets = GetPotentialTargets(session, false);
 
         return new SelectPlayersInstruction(
+			ModeratorInstructionSemantic.SelectSeerTarget,
             publicAnnouncement: GameStrings.SeerNightActionPrompt,
             countConstraint: NumberRangeConstraint.Single, 
             selectablePlayerIds: potentialTargets,
@@ -49,6 +50,8 @@ internal class SeerRole : ImmediateFeedbackNightRoleHookListener
 
         session.PerformNightAction(NightActionType.SeerCheck, targetId);
 
-        return new ConfirmationInstruction(privateInstruction: privateFeedback);
+        return new ConfirmationInstruction(
+			ModeratorInstructionSemantic.RevealSeerResult,
+			privateInstruction: privateFeedback);
 	}
 }

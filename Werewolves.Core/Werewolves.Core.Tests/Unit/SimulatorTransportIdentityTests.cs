@@ -22,7 +22,7 @@ public class SimulatorTransportIdentityTests
 			]);
 		var compatibilityIdentity = new SimulationCompatibilityIdentity(
 			scenario.ToCanonical(),
-			SimulatorProfile.Active.Identity);
+			SimulatorProfile.LegacyCore.Identity);
 		var runSeedMaterial = new RunSeedMaterial(
 			compatibilityIdentity,
 			BaselineRandomDecisionStrategy.Identity,
@@ -30,9 +30,9 @@ public class SimulatorTransportIdentityTests
 
 		BaselineRandomDecisionStrategy.Identity.Should().Be(
 			new DecisionStrategyIdentity("baseline-random", "1-splitmix64"));
-		SimulatorProfile.Active.Identity.Should().Be(
+		SimulatorProfile.LegacyCore.Identity.Should().Be(
 			new SimulatorProfileIdentity("core-simulator", "1"));
-		SimulatorProfile.Active.SupportedRoles.Should().Equal(
+		SimulatorProfile.LegacyCore.SupportedRoles.Should().Equal(
 			MainRoleType.SimpleWerewolf,
 			MainRoleType.Seer,
 			MainRoleType.WildChild,
@@ -42,7 +42,7 @@ public class SimulatorTransportIdentityTests
 		BuildTimeTerminalLobbyCacheGenerator.GeneratorIdentifier
 			.Should().Be("terminal-lobby-cache-generator");
 		BuildTimeTerminalLobbyCacheGenerator.GeneratorVersion.Should().Be("1");
-		var compatibilityCatalog = TerminalLobbyScenarioCatalog.EnumerateCurrentProfile();
+		var compatibilityCatalog = TerminalLobbyScenarioCatalog.EnumerateLegacyCore();
 		compatibilityCatalog.Should().HaveCount(1_664);
 		compatibilityCatalog.Select(entry => entry.Identity).Should().OnlyHaveUniqueItems();
 		runSeedMaterial.ToString().Should().Be(

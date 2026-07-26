@@ -20,6 +20,7 @@ public class ModeratorDecisionStrategySemanticTraceTests
 		var fixture = CreateFixture(runNumber: 11);
 		var players = fixture.Session.GetPlayers().ToArray();
 		var identifySeer = new SelectPlayersInstruction(
+			ModeratorInstructionSemantic.IdentifyRoleHolders,
 			players.Select(player => player.Id).ToHashSet(),
 			NumberRangeConstraint.Single,
 			publicAnnouncement: null,
@@ -27,10 +28,12 @@ public class ModeratorDecisionStrategySemanticTraceTests
 			affectedPlayerIds: null,
 			roleIdentification: MainRoleType.Seer);
 		var exactTwo = new SelectPlayersInstruction(
+			ModeratorInstructionSemantic.SelectWerewolfVictim,
 			players.Select(player => player.Id).ToHashSet(),
 			NumberRangeConstraint.Exact(2),
 			privateInstruction: nameof(BaselineRandom_ProductionCursor_PreservesLiteralUpstreamSemanticSequence));
 		var assignRoles = new AssignRolesInstruction(
+			ModeratorInstructionSemantic.AssignDawnVictimRoles,
 			ImmutableHashSet.Create(players[1].Id, players[3].Id),
 			[MainRoleType.Seer, MainRoleType.SimpleVillager],
 			privateInstruction: nameof(BaselineRandom_ProductionCursor_PreservesLiteralUpstreamSemanticSequence));
@@ -54,76 +57,29 @@ public class ModeratorDecisionStrategySemanticTraceTests
 	}
 
 	[Fact]
-	public void BaselineRandom_ProductionCursor_WithTieThenOption_PreservesLiteralSemanticTrace()
+	public void BaselineRandom_ProductionCursor_WithTie_PreservesLiteralSemanticTrace()
 	{
 		var fixture = CreateFixture(runNumber: 4);
 		var players = fixture.Session.GetPlayers().ToArray();
 		var vote = new SelectPlayersInstruction(
+			ModeratorInstructionSemantic.RecordDayVote,
 			players.Select(player => player.Id).ToHashSet(),
 			NumberRangeConstraint.SingleOptional,
-			privateInstruction: nameof(BaselineRandom_ProductionCursor_WithTieThenOption_PreservesLiteralSemanticTrace));
-		var options = new SelectOptionsInstruction(
-			[
-				new ModeratorOption("alpha", "Primeira"),
-				new ModeratorOption("beta", "Segunda"),
-				new ModeratorOption("gamma", "Terceira")
-			],
-			NumberRangeConstraint.SingleOptional,
-			privateInstruction: nameof(BaselineRandom_ProductionCursor_WithTieThenOption_PreservesLiteralSemanticTrace));
+			privateInstruction: nameof(BaselineRandom_ProductionCursor_WithTie_PreservesLiteralSemanticTrace));
 
 		var continueResponse = fixture.Strategy.CreateResponse(fixture.StartInstruction, fixture.Session);
 		var voteResponse = fixture.Strategy.CreateResponse(vote, fixture.Session);
-		var optionResponse = fixture.Strategy.CreateResponse(options, fixture.Session);
 
 		var trace = new[]
 		{
 			continueResponse.Type.ToString(),
-			voteResponse.SelectedPlayerIds!.Count == 0 ? "Vote:Tie" : "Vote:Target",
-			$"Option:{string.Join(",", optionResponse.SelectedOptionIds!)}"
+			voteResponse.SelectedPlayerIds!.Count == 0 ? "Vote:Tie" : "Vote:Target"
 		};
 		trace.Should().Equal(
 			ExpectedInputType.Continue.ToString(),
-			"Vote:Tie",
-			"Option:alpha");
+			"Vote:Tie");
 		continueResponse.InstructionId.Should().Be(fixture.StartInstruction.InstructionId);
 		voteResponse.InstructionId.Should().Be(vote.InstructionId);
-		optionResponse.InstructionId.Should().Be(options.InstructionId);
-	}
-
-	[Fact]
-	public void BaselineRandom_ExplicitSemanticOrder_DrivesTargetAndOptionTraceIndependentOfLabels()
-	{
-		var duplicateLabelTrace = ExecuteTrace(
-			CreateFixture(runNumber: 11),
-			[
-				new ModeratorOption("alpha", "Mesmo rótulo"),
-				new ModeratorOption("beta", "Mesmo rótulo"),
-				new ModeratorOption("gamma", "Outro rótulo")
-			]);
-		var relabeledTrace = ExecuteTrace(
-			CreateFixture(runNumber: 11),
-			[
-				new ModeratorOption("alpha", "A"),
-				new ModeratorOption("beta", "B"),
-				new ModeratorOption("gamma", "C")
-			]);
-		var reorderedTrace = ExecuteTrace(
-			CreateFixture(runNumber: 11),
-			[
-				new ModeratorOption("gamma", "Outro rótulo"),
-				new ModeratorOption("alpha", "Mesmo rótulo"),
-				new ModeratorOption("beta", "Mesmo rótulo")
-			]);
-
-		duplicateLabelTrace.Should().Equal(
-			ExpectedInputType.Continue.ToString(),
-			"Vote:Seat2",
-			"Option:beta");
-		relabeledTrace.Should().Equal(duplicateLabelTrace);
-		reorderedTrace.Should().Equal(
-			ExpectedInputType.Continue.ToString(),
-			"Vote:Seat2",
-			"Option:alpha");
 	}
 
 	[Fact]
@@ -131,18 +87,16 @@ public class ModeratorDecisionStrategySemanticTraceTests
 	{
 		var attemptedFixture = CreateFixture(runNumber: 11);
 		var replayFixture = CreateFixture(runNumber: 11);
-		var options = new[]
-		{
-			new ModeratorOption("alpha", "A"),
-			new ModeratorOption("beta", "B"),
-			new ModeratorOption("gamma", "C")
-		};
-		var attemptedInstruction = new SelectOptionsInstruction(
-			options,
+		var attemptedPlayers = attemptedFixture.Session.GetPlayers().ToArray();
+		var replayPlayers = replayFixture.Session.GetPlayers().ToArray();
+		var attemptedInstruction = new SelectPlayersInstruction(
+			ModeratorInstructionSemantic.RecordDayVote,
+			attemptedPlayers.Select(player => player.Id).ToHashSet(),
 			NumberRangeConstraint.SingleOptional,
 			privateInstruction: nameof(BaselineRandom_UnsupportedInstruction_FailsWithoutGuessingOrAdvancingCursor));
-		var replayInstruction = new SelectOptionsInstruction(
-			options,
+		var replayInstruction = new SelectPlayersInstruction(
+			ModeratorInstructionSemantic.RecordDayVote,
+			replayPlayers.Select(player => player.Id).ToHashSet(),
 			NumberRangeConstraint.SingleOptional,
 			privateInstruction: nameof(BaselineRandom_UnsupportedInstruction_FailsWithoutGuessingOrAdvancingCursor));
 
@@ -158,8 +112,8 @@ public class ModeratorDecisionStrategySemanticTraceTests
 		var replayResponse = replayFixture.Strategy.CreateResponse(
 			replayInstruction,
 			replayFixture.Session);
-		responseAfterFailure.SelectedOptionIds.Should().Equal("beta");
-		responseAfterFailure.SelectedOptionIds.Should().Equal(replayResponse.SelectedOptionIds);
+		ToSeatNumbers(responseAfterFailure.SelectedPlayerIds!, attemptedPlayers)
+			.Should().Equal(ToSeatNumbers(replayResponse.SelectedPlayerIds!, replayPlayers));
 	}
 
 	[Fact]
@@ -185,37 +139,6 @@ public class ModeratorDecisionStrategySemanticTraceTests
 		optionResponse.InstructionId.Should().Be(options.InstructionId);
 	}
 
-	private static IReadOnlyList<string> ExecuteTrace(
-		StrategyFixture fixture,
-		IReadOnlyList<ModeratorOption> options)
-	{
-		var players = fixture.Session.GetPlayers().ToArray();
-		var vote = new SelectPlayersInstruction(
-			players.Select(player => player.Id).ToHashSet(),
-			NumberRangeConstraint.SingleOptional,
-			privateInstruction: nameof(ExecuteTrace));
-		var optionInstruction = new SelectOptionsInstruction(
-			options,
-			NumberRangeConstraint.SingleOptional,
-			privateInstruction: nameof(ExecuteTrace));
-
-		var continueResponse = fixture.Strategy.CreateResponse(fixture.StartInstruction, fixture.Session);
-		var voteResponse = fixture.Strategy.CreateResponse(vote, fixture.Session);
-		var optionResponse = fixture.Strategy.CreateResponse(optionInstruction, fixture.Session);
-		var selectedSeat = voteResponse.SelectedPlayerIds!.Count == 0
-			? "Tie"
-			: $"Seat{Array.FindIndex(
-				players,
-				player => voteResponse.SelectedPlayerIds.Contains(player.Id)) + 1}";
-
-		return
-		[
-			continueResponse.Type.ToString(),
-			$"Vote:{selectedSeat}",
-			$"Option:{string.Join(",", optionResponse.SelectedOptionIds!)}"
-		];
-	}
-
 	private static IReadOnlyList<int> ToSeatNumbers(
 		IReadOnlySet<Guid> selectedPlayerIds,
 		IReadOnlyList<IPlayer> players) =>
@@ -239,7 +162,7 @@ public class ModeratorDecisionStrategySemanticTraceTests
 		var material = new RunSeedMaterial(
 			new SimulationCompatibilityIdentity(
 				scenario.ToCanonical(),
-				SimulatorProfile.Active.Identity),
+				SimulatorProfile.LegacyCore.Identity),
 			BaselineRandomDecisionStrategy.Identity,
 			runNumber);
 		var random = new DeterministicRandomSource(material);
@@ -251,7 +174,11 @@ public class ModeratorDecisionStrategySemanticTraceTests
 		var startInstruction = builder.StartGame();
 
 		return new StrategyFixture(
-			new BaselineRandomDecisionStrategy(material, startState, random),
+			new BaselineRandomDecisionStrategy(
+				material,
+				startState,
+				SimulatorProfile.LegacyCore.HeadlessResponsePolicy,
+				random),
 			builder.GetGameState()!,
 			startInstruction,
 			startState);
@@ -264,5 +191,7 @@ public class ModeratorDecisionStrategySemanticTraceTests
 		SimulationStartState StartState);
 
 	private sealed record UnsupportedInstruction()
-		: ModeratorInstruction(privateInstruction: nameof(UnsupportedInstruction));
+		: ModeratorInstruction(
+			privateInstruction: nameof(UnsupportedInstruction),
+			semantic: ModeratorInstructionSemantic.RecordDayVote);
 }
