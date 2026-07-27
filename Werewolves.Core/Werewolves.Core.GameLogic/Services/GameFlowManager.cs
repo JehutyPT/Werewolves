@@ -596,6 +596,18 @@ internal static class GameFlowManager
                     Listener(TwoSisters),
                     CardinalityRoleHolderNightState.SleepConfirmation.ToString(),
                     AcceptedObservationInstructionShape.Confirmation),
+            (ThreeBrothers, ModeratorInstructionSemantic.RecognizeRoleHolders) =>
+                new(
+                    NightMainActionLoop.ToString(),
+                    Listener(ThreeBrothers),
+                    CardinalityRoleHolderNightState.RecognitionConfirmation.ToString(),
+                    AcceptedObservationInstructionShape.Confirmation),
+            (ThreeBrothers, ModeratorInstructionSemantic.PutRoleToSleep) =>
+                new(
+                    NightMainActionLoop.ToString(),
+                    Listener(ThreeBrothers),
+                    CardinalityRoleHolderNightState.SleepConfirmation.ToString(),
+                    AcceptedObservationInstructionShape.Confirmation),
             _ => null
         };
 

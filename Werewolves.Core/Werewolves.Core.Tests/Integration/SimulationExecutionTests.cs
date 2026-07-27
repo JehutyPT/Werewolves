@@ -21,29 +21,41 @@ public class SimulationExecutionTests : DiagnosticTestBase
 	}
 
 	[Theory]
-	[InlineData(ModeratorInstructionSemantic.RecognizeRoleHolders)]
-	[InlineData(ModeratorInstructionSemantic.CommunicateAsRoleHolders)]
-	public void Execute_WithTwoSistersSemanticMissingFromPolicy_ReturnsIncompleteEvidence(
+	[InlineData(
+		MainRoleType.TwoSisters,
+		2,
+		ModeratorInstructionSemantic.RecognizeRoleHolders)]
+	[InlineData(
+		MainRoleType.TwoSisters,
+		2,
+		ModeratorInstructionSemantic.CommunicateAsRoleHolders)]
+	[InlineData(
+		MainRoleType.ThreeBrothers,
+		3,
+		ModeratorInstructionSemantic.RecognizeRoleHolders)]
+	[InlineData(
+		MainRoleType.ThreeBrothers,
+		3,
+		ModeratorInstructionSemantic.CommunicateAsRoleHolders)]
+	public void Execute_WithRoleHolderSemanticMissingFromPolicy_ReturnsIncompleteEvidence(
+		MainRoleType role,
+		int roleHolderCardinality,
 		ModeratorInstructionSemantic missingSemantic)
 	{
+		var roles = Enumerable
+			.Repeat(role, roleHolderCardinality)
+			.Append(MainRoleType.SimpleWerewolf)
+			.Concat(Enumerable.Repeat(MainRoleType.SimpleVillager, 5))
+			.ToArray();
 		var scenario = new SimulationScenario(
-			8,
-			[
-				MainRoleType.TwoSisters,
-				MainRoleType.TwoSisters,
-				MainRoleType.SimpleWerewolf,
-				MainRoleType.SimpleVillager,
-				MainRoleType.SimpleVillager,
-				MainRoleType.SimpleVillager,
-				MainRoleType.SimpleVillager,
-				MainRoleType.SimpleVillager
-			]);
+			roles.Length,
+			roles);
 		var capability = new SimulatorCapability(
 			new SimulatorProfileIdentity(
-				$"test-two-sisters-missing-{missingSemantic}",
+				$"test-{role}-missing-{missingSemantic}",
 				"1"),
 			[
-				new(MainRoleType.TwoSisters, Faction.Villager),
+				new(role, Faction.Villager),
 				new(MainRoleType.SimpleWerewolf, Faction.Werewolf),
 				new(MainRoleType.SimpleVillager, Faction.Villager)
 			],
@@ -55,12 +67,14 @@ public class SimulationExecutionTests : DiagnosticTestBase
 		var identity = new SimulationCompatibilityIdentity(
 			scenario.ToCanonical(),
 			capability.Identity);
-		var decorators = new List<PreserveTwoSistersUntilNightThreeStrategy>();
+		var decorators = new List<PreserveRoleHoldersUntilNightThreeStrategy>();
 		var executor = new SimulationExecutor(
 			SimulationStartStateDeriver.Derive,
 			strategy =>
 			{
-				var decorator = new PreserveTwoSistersUntilNightThreeStrategy(strategy);
+				var decorator = new PreserveRoleHoldersUntilNightThreeStrategy(
+					strategy,
+					role);
 				decorators.Add(decorator);
 				return new HeadlessGameDriver(decorator);
 			},
@@ -83,27 +97,28 @@ public class SimulationExecutionTests : DiagnosticTestBase
 			decorators[^1].ObservedSemantics.Should().Contain(missingSemantic);
 			if (missingSemantic == ModeratorInstructionSemantic.CommunicateAsRoleHolders)
 			{
-				decorators[^1].LivingSisterCountAtCommunication.Should().Be(2);
+				decorators[^1].LivingRoleHolderCountAtCommunication.Should()
+					.Be(roleHolderCardinality);
 			}
 		}
 		MarkTestCompleted();
 	}
 
-	[Fact]
-	public void ExecuteBatch_WithTwoSisters_SafetyRepresentativeCompletesAllOneThousandAttempts()
+	[Theory]
+	[InlineData(MainRoleType.TwoSisters, 2)]
+	[InlineData(MainRoleType.ThreeBrothers, 3)]
+	public void ExecuteBatch_WithCardinalityRoleHolders_SafetyRepresentativeCompletesAllOneThousandAttempts(
+		MainRoleType role,
+		int roleHolderCardinality)
 	{
+		var roles = Enumerable
+			.Repeat(role, roleHolderCardinality)
+			.Append(MainRoleType.SimpleWerewolf)
+			.Concat(Enumerable.Repeat(MainRoleType.SimpleVillager, 5))
+			.ToArray();
 		var scenario = new SimulationScenario(
-			8,
-			[
-				MainRoleType.TwoSisters,
-				MainRoleType.TwoSisters,
-				MainRoleType.SimpleWerewolf,
-				MainRoleType.SimpleVillager,
-				MainRoleType.SimpleVillager,
-				MainRoleType.SimpleVillager,
-				MainRoleType.SimpleVillager,
-				MainRoleType.SimpleVillager
-			]);
+			roles.Length,
+			roles);
 		var identity = new SimulationCompatibilityIdentity(
 			scenario.ToCanonical(),
 			SimulatorCapability.SafetyScreening.Identity);
@@ -245,7 +260,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 
 		first.Should().BeOfType<CompletedSimulationRun>();
 		first.RunSeedMaterial.CompatibilityIdentity.Profile.Should()
-			.Be(new SimulatorProfileIdentity("safety-screening", "3"));
+			.Be(new SimulatorProfileIdentity("safety-screening", "4"));
 		replay.Should().Be(first);
 		MarkTestCompleted();
 	}
@@ -685,20 +700,23 @@ public class SimulationExecutionTests : DiagnosticTestBase
 				MainRoleType.SimpleVillager
 			]);
 
-	private sealed class PreserveTwoSistersUntilNightThreeStrategy
+	private sealed class PreserveRoleHoldersUntilNightThreeStrategy
 		: IModeratorDecisionStrategy
 	{
 		private readonly IModeratorDecisionStrategy _inner;
+		private readonly MainRoleType _role;
 
-		internal PreserveTwoSistersUntilNightThreeStrategy(
-			IModeratorDecisionStrategy inner)
+		internal PreserveRoleHoldersUntilNightThreeStrategy(
+			IModeratorDecisionStrategy inner,
+			MainRoleType role)
 		{
 			ArgumentNullException.ThrowIfNull(inner);
 			_inner = inner;
+			_role = role;
 		}
 
 		internal List<ModeratorInstructionSemantic> ObservedSemantics { get; } = [];
-		internal int? LivingSisterCountAtCommunication { get; private set; }
+		internal int? LivingRoleHolderCountAtCommunication { get; private set; }
 
 		public ModeratorResponse CreateResponse(
 			ModeratorInstruction instruction,
@@ -708,9 +726,9 @@ public class SimulationExecutionTests : DiagnosticTestBase
 			if (instruction.Semantic ==
 			    ModeratorInstructionSemantic.CommunicateAsRoleHolders)
 			{
-				LivingSisterCountAtCommunication = session.GetPlayers().Count(player =>
+				LivingRoleHolderCountAtCommunication = session.GetPlayers().Count(player =>
 					player.State.Health == PlayerHealth.Alive &&
-					player.State.CurrentRole == MainRoleType.TwoSisters);
+					player.State.CurrentRole == _role);
 			}
 
 			return instruction switch
@@ -722,8 +740,8 @@ public class SimulationExecutionTests : DiagnosticTestBase
 					session.GetPlayers()
 						.Where(player =>
 							victim.SelectablePlayerIds.Contains(player.Id) &&
-							player.State.CurrentRole != MainRoleType.TwoSisters &&
-							player.State.ModeratorKnownRole != MainRoleType.TwoSisters)
+							player.State.CurrentRole != _role &&
+							player.State.ModeratorKnownRole != _role)
 						.OrderBy(player => player.Id)
 						.Take(1)
 						.Select(player => player.Id)

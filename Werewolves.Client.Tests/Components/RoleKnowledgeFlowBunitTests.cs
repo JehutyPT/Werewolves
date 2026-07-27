@@ -49,16 +49,27 @@ public sealed class RoleKnowledgeFlowBunitTests
 		lobby.GetRoleCount(MainRoleType.VillagerVillager).Should().Be(0);
 	}
 
-	[Fact]
-	public void TwoSistersLobby_UsesProductionCatalogAsPortuguesePairToggle()
+	[Theory]
+	[InlineData(MainRoleType.TwoSisters, 2)]
+	[InlineData(MainRoleType.ThreeBrothers, 3)]
+	public void CardinalityRoleLobby_UsesProductionCatalogAsPortugueseBatchToggle(
+		MainRoleType role,
+		int batchSize)
 	{
 		using var context = new ModeratorComponentTestContext();
 		var lobby = context.Services.GetRequiredService<LobbySetupState>();
-		var roleInfo = lobby.GetRoleInfo(MainRoleType.TwoSisters);
+		var roleInfo = lobby.GetRoleInfo(role);
+		var expectedDisplayName = role switch
+		{
+			MainRoleType.TwoSisters => GameStrings.TwoSistersRoleName,
+			MainRoleType.ThreeBrothers => GameStrings.ThreeBrothersRoleName,
+			_ => throw new InvalidOperationException(
+				$"Unexpected Cardinality Role {role}.")
+		};
 
-		roleInfo.DisplayName.Should().Be(GameStrings.TwoSistersRoleName);
+		roleInfo.DisplayName.Should().Be(expectedDisplayName);
 		roleInfo.Affordance.Should().Be(RoleAffordance.Toggle);
-		roleInfo.BatchSize.Should().Be(2);
+		roleInfo.BatchSize.Should().Be(batchSize);
 
 		var cut = context.RenderModeratorComponent<RoleSelectionPage>();
 		var toggle = cut.FindAll(Html.Selectors.Button)
@@ -70,7 +81,7 @@ public sealed class RoleKnowledgeFlowBunitTests
 
 		toggle.Click();
 
-		lobby.GetRoleCount(MainRoleType.TwoSisters).Should().Be(2);
+		lobby.GetRoleCount(role).Should().Be(batchSize);
 		toggle = cut.FindAll(Html.Selectors.Button)
 			.Single(button =>
 				button.GetAttribute(Html.Attributes.AriaLabel) == roleInfo.DisplayName);
@@ -79,7 +90,7 @@ public sealed class RoleKnowledgeFlowBunitTests
 
 		toggle.Click();
 
-		lobby.GetRoleCount(MainRoleType.TwoSisters).Should().Be(0);
+		lobby.GetRoleCount(role).Should().Be(0);
 	}
 
 	[Fact]

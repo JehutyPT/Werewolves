@@ -163,6 +163,35 @@ public class GameTestBuilder
         return instruction;
     }
 
+	internal GameTestBuilder ArrangePartiallyKnownThreeBrothers(Guid committedBrotherId)
+	{
+		EnsureGameStarted();
+		var session = GetMutableSessionForArrangement();
+		session.AssignRole(committedBrotherId, MainRoleType.ThreeBrothers);
+		session.IdentifyRole([committedBrotherId], MainRoleType.ThreeBrothers);
+		return this;
+	}
+
+	internal GameTestBuilder ArrangeKnownThreeBrothers(
+		IReadOnlySet<Guid> brotherIds)
+	{
+		EnsureGameStarted();
+		var session = GetMutableSessionForArrangement();
+		var committedBrotherIds = brotherIds.ToHashSet();
+		session.AssignRole(committedBrotherIds, MainRoleType.ThreeBrothers);
+		session.IdentifyRole(committedBrotherIds, MainRoleType.ThreeBrothers);
+		return this;
+	}
+
+	internal GameTestBuilder ArrangeThreeBrotherLeavesCurrentRole(Guid brotherId)
+	{
+		EnsureGameStarted();
+		GetMutableSessionForArrangement().AssignRole(
+			brotherId,
+			MainRoleType.SimpleVillager);
+		return this;
+	}
+
     /// <summary>
     /// Confirms the game start and transitions to Night phase.
     /// </summary>
@@ -620,4 +649,9 @@ public class GameTestBuilder
         if (!_gameStarted)
             throw new InvalidOperationException(CoreTestReferences.ExceptionMessages.GameMustBeStartedFirst);
     }
+
+	private GameSession GetMutableSessionForArrangement() =>
+		(GameSession)(GetGameState()
+			?? throw new InvalidOperationException(
+				CoreTestReferences.ExceptionMessages.GameMustBeStartedFirst));
 }

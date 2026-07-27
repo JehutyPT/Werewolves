@@ -139,7 +139,8 @@ public sealed class SimulatorCapability : SimulatorProfile
 		new(MainRoleType.WildChild, Faction.Villager),
 		new(MainRoleType.SimpleVillager, Faction.Villager),
 		new(MainRoleType.VillagerVillager, Faction.Villager),
-		new(MainRoleType.TwoSisters, Faction.Villager)
+		new(MainRoleType.TwoSisters, Faction.Villager),
+		new(MainRoleType.ThreeBrothers, Faction.Villager)
 	];
 
 	private static readonly SimulatorProfileRoleDescriptor[] FullProbabilityRoleDescriptors =
@@ -157,7 +158,7 @@ public sealed class SimulatorCapability : SimulatorProfile
 		SimulatorCapabilityRegistry.Production.FullProbability;
 
 	internal static SimulatorCapability CreateSafetyScreening() => new(
-		new SimulatorProfileIdentity("safety-screening", "3"),
+		new SimulatorProfileIdentity("safety-screening", "4"),
 		SafetyScreeningRoleDescriptors,
 		headlessResponsePolicy: new HeadlessResponsePolicy(
 			BaselineRandomDecisionStrategy.Identity,

@@ -40,7 +40,7 @@ public class SimulatorProfileTests
 		var safety = SimulatorCapability.SafetyScreening;
 		var probability = SimulatorCapability.FullProbability;
 
-		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "3"));
+		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "4"));
 		probability.Identity.Should().Be(new SimulatorProfileIdentity("full-probability", "1"));
 		legacy.Identity.Should().Be(new SimulatorProfileIdentity("core-simulator", "1"));
 		BaselineRandomDecisionStrategy.Identity.Should()
@@ -51,7 +51,8 @@ public class SimulatorProfileTests
 			MainRoleType.WildChild,
 			MainRoleType.SimpleVillager,
 			MainRoleType.VillagerVillager,
-			MainRoleType.TwoSisters);
+			MainRoleType.TwoSisters,
+			MainRoleType.ThreeBrothers);
 		probability.SupportedRoles.Should().Equal(
 			MainRoleType.SimpleWerewolf,
 			MainRoleType.Seer,

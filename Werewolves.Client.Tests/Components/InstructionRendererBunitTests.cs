@@ -28,10 +28,13 @@ public class InstructionRendererBunitTests
 	private static string HoldButtonSelector => Html.Selectors.ButtonWithClass(ClientTestReferences.Css.Classes.HoldButton);
 	private static string PlayerOptionSelector => Html.Selectors.ElementWithRole(Html.Elements.ListItem, Html.Roles.Option);
 
-	[Fact]
-	public void RoleHolderConfirmations_RenderThroughGenericPublicContinueWithoutTimer()
+	[Theory]
+	[InlineData(MainRoleType.TwoSisters)]
+	[InlineData(MainRoleType.ThreeBrothers)]
+	public void RoleHolderConfirmations_RenderThroughGenericPublicContinueWithoutTimer(
+		MainRoleType role)
 	{
-		var roleName = MainRoleType.TwoSisters.GetPublicName();
+		var roleName = role.GetPublicName();
 		var recognitionAnnouncement =
 			GameStrings.RoleHoldersRecognitionPrompt.Format(roleName);
 		var announcements = new[]

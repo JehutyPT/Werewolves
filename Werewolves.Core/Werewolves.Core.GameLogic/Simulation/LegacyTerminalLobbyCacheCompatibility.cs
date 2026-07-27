@@ -17,7 +17,8 @@ public static class LegacyTerminalLobbyCacheCompatibility
 	private static readonly MainRoleType[] FrozenSafetyOnlyRoles =
 	[
 		MainRoleType.VillagerVillager,
-		MainRoleType.TwoSisters
+		MainRoleType.TwoSisters,
+		MainRoleType.ThreeBrothers
 	];
 
 	private static readonly ModeratorInstructionSemantic[] FrozenSafetyOnlySemantics =

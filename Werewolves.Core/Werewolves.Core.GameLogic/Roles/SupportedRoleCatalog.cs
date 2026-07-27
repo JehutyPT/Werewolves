@@ -42,6 +42,9 @@ public static class SupportedRoleCatalog
 			RoleAdmission.Active(
 				MainRoleType.TwoSisters,
 				() => new TwoSistersRole(rolePowerAvailabilityGateway)),
+			RoleAdmission.Active(
+				MainRoleType.ThreeBrothers,
+				() => new ThreeBrothersRole(rolePowerAvailabilityGateway)),
 			RoleAdmission.Passive(MainRoleType.SimpleVillager),
 			RoleAdmission.Passive(MainRoleType.VillagerVillager)
 		]);

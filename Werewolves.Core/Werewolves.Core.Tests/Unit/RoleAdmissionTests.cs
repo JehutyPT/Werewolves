@@ -138,17 +138,18 @@ public class RoleAdmissionTests
 	}
 
 	[Fact]
-	public void SupportedRoleCatalog_AdmitsFourActiveRolesAndBothVillagerRolesAsPassive()
+	public void SupportedRoleCatalog_AdmitsFiveActiveRolesAndBothVillagerRolesAsPassive()
 	{
 		var catalog = SupportedRoleCatalog.Admissions;
 
 		catalog.Roles.Should().BeEquivalentTo(
 		[
 			MainRoleType.SimpleWerewolf,
-				MainRoleType.Seer,
-				MainRoleType.WildChild,
-				MainRoleType.TwoSisters,
-				MainRoleType.SimpleVillager,
+			MainRoleType.Seer,
+			MainRoleType.WildChild,
+			MainRoleType.TwoSisters,
+			MainRoleType.ThreeBrothers,
+			MainRoleType.SimpleVillager,
 			MainRoleType.VillagerVillager
 		]);
 
@@ -157,7 +158,8 @@ public class RoleAdmissionTests
 			         MainRoleType.SimpleWerewolf,
 			         MainRoleType.Seer,
 			         MainRoleType.WildChild,
-			         MainRoleType.TwoSisters
+			         MainRoleType.TwoSisters,
+			         MainRoleType.ThreeBrothers
 		         })
 		{
 			var listenerId = ListenerIdentifier.Listener(activeRole);

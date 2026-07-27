@@ -210,6 +210,63 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 	}
 
 	[Fact]
+	public void BaselineRandomDecisionStrategy_WithThreeBrothersIdentification_UsesExactSeededTrio()
+	{
+		var scenario = new StateModels.Models.Simulation.SimulationScenario(
+			9,
+			[
+				MainRoleType.ThreeBrothers,
+				MainRoleType.ThreeBrothers,
+				MainRoleType.ThreeBrothers,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+		var material = new RunSeedMaterial(
+			new SimulationCompatibilityIdentity(
+				scenario.ToCanonical(),
+				SimulatorCapability.SafetyScreening.Identity),
+			BaselineRandomDecisionStrategy.Identity,
+			runNumber: 11);
+		var startState = SimulationStartStateDeriver.Derive(
+			material,
+			SimulatorCapability.SafetyScreening);
+		var config = startState.CreateGameSessionConfig();
+		var builder = CreateBuilder()
+			.WithPlayers(config.Players.ToArray())
+			.WithRoles(config.Roles.ToArray());
+		builder.StartGame();
+		builder.ConfirmGameStart();
+		var identification =
+			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+				builder.ConfirmNightStart());
+		var session = builder.GetGameState()!;
+		var players = session.GetPlayers().ToArray();
+		var seededBrotherIds = startState.RoleAssignments
+			.Select((assignment, index) => (assignment, index))
+			.Where(pair => pair.assignment.Role == MainRoleType.ThreeBrothers)
+			.Select(pair => players[pair.index].Id)
+			.ToHashSet();
+		var strategy = new BaselineRandomDecisionStrategy(
+			material,
+			startState,
+			SimulatorCapability.SafetyScreening.HeadlessResponsePolicy);
+
+		var response = strategy.CreateResponse(identification, session);
+		var accepted = builder.Process(response);
+
+		identification.RoleIdentification.Should().Be(MainRoleType.ThreeBrothers);
+		identification.CountConstraint.Should().BeEquivalentTo(
+			NumberRangeConstraint.Exact(3));
+		response.SelectedPlayerIds.Should().BeEquivalentTo(seededBrotherIds);
+		accepted.IsSuccess.Should().BeTrue();
+		MarkTestCompleted();
+	}
+
+	[Fact]
 	public void BaselineRandomDecisionStrategy_WithRoleIdentification_UsesCommittedCurrentRoleWithinSelectionContract()
 	{
 		var material = CreateRunSeedMaterial(runNumber: 13);
