@@ -49,7 +49,7 @@
 						{
 							<button type="button"
 									class="ww-toggle @(info.Count > 0 ? "ww-toggle--on" : "")"
-									aria-pressed="@(info.Count > 0)"
+									aria-pressed="@(info.Count > 0 ? "true" : "false")"
 									aria-label="@info.DisplayName"
 									@onclick="() => ToggleRole(role)">
 								@if (info.Count > 0 && info.BatchSize <= 1)

@@ -10,7 +10,6 @@ public enum GameHook
 	NightMainActionLoop,                    // Main hook for iterating through night role actions
     
     // Player lifecycle hooks
-    PlayerRoleAssignedOnElimination,       // Fired when a player's role is assigned due to elimination
     OnVoteConcluded,                  // Fired when any day vote concludes
     
     

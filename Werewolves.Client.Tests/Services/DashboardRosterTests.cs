@@ -13,7 +13,7 @@ namespace Werewolves.Client.Tests.Services;
 public class DashboardRosterTests
 {
 	[Fact]
-	public void FromSession_ProjectsKnownRosterInformationInPortuguese()
+	public void FromSession_DistinguishesUnknownPrivateAndPublicRoleKnowledgeWithoutLeakingHiddenFacts()
 	{
 		var brunoStatusEffects = new[]
 		{
@@ -24,23 +24,42 @@ public class DashboardRosterTests
 		};
 		var brunoStatusLabels = brunoStatusEffects.Select(DashboardRoster.StatusEffectLabel).ToArray();
 		var session = new TestGameSession([
-			new TestPlayer(PlayerNames.Ana),
+			new TestPlayer(
+				PlayerNames.Ana,
+				currentRole: MainRoleType.Seer,
+				physicalCharacterCardRole: MainRoleType.Seer),
 			new TestPlayer(
 				PlayerNames.Bruno,
-				MainRoleType.SimpleWerewolf,
-				PlayerHealth.Dead,
-				brunoStatusEffects)
+				currentRole: MainRoleType.SimpleWerewolf,
+				physicalCharacterCardRole: MainRoleType.SimpleWerewolf,
+				moderatorKnownRole: MainRoleType.SimpleWerewolf,
+				health: PlayerHealth.Dead,
+				activeEffects: brunoStatusEffects),
+			new TestPlayer(
+				PlayerNames.Carla,
+				currentRole: MainRoleType.VillagerVillager,
+				physicalCharacterCardRole: MainRoleType.VillagerVillager,
+				moderatorKnownRole: MainRoleType.VillagerVillager,
+				publiclyRevealedRole: MainRoleType.VillagerVillager),
+			new TestPlayer(
+				PlayerNames.Diana,
+				currentRole: MainRoleType.WildChild,
+				physicalCharacterCardRole: MainRoleType.SimpleVillager,
+				moderatorKnownRole: MainRoleType.WildChild,
+				publiclyRevealedRole: MainRoleType.SimpleVillager)
 		]);
 
 		var roster = DashboardRoster.FromSession(session);
 
-		roster.Should().HaveCount(2);
+		roster.Should().HaveCount(4);
 		roster[0].Should().BeEquivalentTo(new
 		{
 			SeatNumber = 1,
 			Name = PlayerNames.Ana,
 			RoleLabel = DashboardRoster.RoleLabel(null),
 			IsRoleKnown = false,
+			RoleVisibility = DashboardRoleVisibility.Unknown,
+			RoleVisibilityLabel = DashboardRoster.RoleVisibilityLabel(DashboardRoleVisibility.Unknown),
 			HealthLabel = DashboardRoster.HealthLabel(PlayerHealth.Alive),
 			IsDead = false,
 			StatusEffectsLabel = DashboardRoster.NoStatusEffectsLabel,
@@ -52,10 +71,38 @@ public class DashboardRosterTests
 			Name = PlayerNames.Bruno,
 			RoleLabel = MainRoleType.SimpleWerewolf.GetPublicName(),
 			IsRoleKnown = true,
+			RoleVisibility = DashboardRoleVisibility.ModeratorPrivate,
+			RoleVisibilityLabel = DashboardRoster.RoleVisibilityLabel(DashboardRoleVisibility.ModeratorPrivate),
 			HealthLabel = DashboardRoster.HealthLabel(PlayerHealth.Dead),
 			IsDead = true,
 			StatusEffectsLabel = string.Join(ClientStrings.Common_ListSeparator, brunoStatusLabels),
 			StatusEffects = brunoStatusLabels
+		});
+		roster[2].Should().BeEquivalentTo(new
+		{
+			SeatNumber = 3,
+			Name = PlayerNames.Carla,
+			RoleLabel = MainRoleType.VillagerVillager.GetPublicName(),
+			IsRoleKnown = true,
+			RoleVisibility = DashboardRoleVisibility.Public,
+			RoleVisibilityLabel = DashboardRoster.RoleVisibilityLabel(DashboardRoleVisibility.Public),
+			HealthLabel = DashboardRoster.HealthLabel(PlayerHealth.Alive),
+			IsDead = false,
+			StatusEffectsLabel = DashboardRoster.NoStatusEffectsLabel,
+			StatusEffects = Array.Empty<string>()
+		});
+		roster[3].Should().BeEquivalentTo(new
+		{
+			SeatNumber = 4,
+			Name = PlayerNames.Diana,
+			RoleLabel = MainRoleType.WildChild.GetPublicName(),
+			IsRoleKnown = true,
+			RoleVisibility = DashboardRoleVisibility.ModeratorPrivate,
+			RoleVisibilityLabel = DashboardRoster.RoleVisibilityLabel(DashboardRoleVisibility.ModeratorPrivate),
+			HealthLabel = DashboardRoster.HealthLabel(PlayerHealth.Alive),
+			IsDead = false,
+			StatusEffectsLabel = DashboardRoster.NoStatusEffectsLabel,
+			StatusEffects = Array.Empty<string>()
 		});
 	}
 
@@ -68,31 +115,47 @@ public class DashboardRosterTests
 		public IPlayer GetPlayer(Guid playerId) => players.Single(player => player.Id == playerId);
 		public IPlayerState GetPlayerState(Guid playerId) => GetPlayer(playerId).State;
 		public IEnumerable<IPlayer> GetPlayers() => players;
-		public int RoleInPlayCount(MainRoleType type) => players.Count(player => player.State.MainRole == type);
+		public int RoleInPlayCount(MainRoleType type) => players.Count(player => player.State.CurrentRole == type);
 		public string Serialize() => string.Empty;
 	}
 
 	private sealed class TestPlayer(
 		string name,
-		MainRoleType? role = null,
+		MainRoleType? currentRole = null,
+		MainRoleType? physicalCharacterCardRole = null,
+		MainRoleType? moderatorKnownRole = null,
+		MainRoleType? publiclyRevealedRole = null,
 		PlayerHealth health = PlayerHealth.Alive,
 		IReadOnlyList<StatusEffectTypes>? activeEffects = null) : IPlayer
 	{
 		public Guid Id { get; } = Guid.NewGuid();
 		public string Name { get; init; } = name;
-		public IPlayerState State { get; } = new TestPlayerState(role, health, activeEffects ?? []);
+		public IPlayerState State { get; } = new TestPlayerState(
+			currentRole,
+			physicalCharacterCardRole,
+			moderatorKnownRole,
+			publiclyRevealedRole,
+			health,
+			activeEffects ?? []);
 	}
 
 	private sealed class TestPlayerState(
-		MainRoleType? role,
+		MainRoleType? currentRole,
+		MainRoleType? physicalCharacterCardRole,
+		MainRoleType? moderatorKnownRole,
+		MainRoleType? publiclyRevealedRole,
 		PlayerHealth health,
 		IReadOnlyList<StatusEffectTypes> activeEffects) : IPlayerState
 	{
-		public MainRoleType? MainRole => role;
+		public MainRoleType? CurrentRole => currentRole;
+		public MainRoleType? MainRole => CurrentRole;
+		public MainRoleType? PhysicalCharacterCardRole => physicalCharacterCardRole;
+		public MainRoleType? ModeratorKnownRole => moderatorKnownRole;
+		public MainRoleType? PubliclyRevealedRole => publiclyRevealedRole;
 		public PlayerHealth Health => health;
 		public bool IsImmuneToLynching => false;
 		public string? LynchingImmunityAnnouncement => null;
-		public Team Team => role == MainRoleType.SimpleWerewolf ? Team.Werewolves : Team.Villagers;
+		public Team Team => currentRole == MainRoleType.SimpleWerewolf ? Team.Werewolves : Team.Villagers;
 		public List<StatusEffectTypes> GetActiveStatusEffects() => activeEffects.ToList();
 		public bool HasStatusEffect(StatusEffectTypes effect) => activeEffects.Contains(effect);
 	}

@@ -17,10 +17,11 @@ public abstract record ModeratorInstruction
 
 	/// <summary>
 	/// Machine-stable gameplay meaning used by headless decision policies.
-	/// This execution-only value is deliberately absent from the session wire contract.
+	/// This execution-only value is omitted from the polymorphic instruction payload;
+	/// stable recovery snapshots may restore it from separate recovery metadata.
 	/// </summary>
 	[JsonIgnore]
-	public ModeratorInstructionSemantic Semantic { get; }
+	public ModeratorInstructionSemantic Semantic { get; private init; }
 
     /// <summary>
     /// The text to be read aloud or displayed publicly to all players.
@@ -76,5 +77,15 @@ public abstract record ModeratorInstruction
         {
             throw new ArgumentException("At least one of PublicAnnouncement or PrivateInstruction must be provided.");
         }
+    }
+
+    internal ModeratorInstruction WithSemantic(ModeratorInstructionSemantic semantic)
+    {
+        if (!Enum.IsDefined(semantic))
+        {
+            throw new ArgumentOutOfRangeException(nameof(semantic));
+        }
+
+        return this with { Semantic = semantic };
     }
 }

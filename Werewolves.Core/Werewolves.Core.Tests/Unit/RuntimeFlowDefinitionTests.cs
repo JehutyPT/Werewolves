@@ -43,50 +43,15 @@ public class RuntimeFlowDefinitionTests
     }
 
     [Fact]
-    public void NightInformationActions_ResolveSeerBeforeWitch()
+    public void NightInformationActions_ResolveSeerThenWitchThenGypsy()
     {
         var listeners = GameFlowManager.HookListeners[NightMainActionLoop];
 
 		ListenerIndex(listeners, Seer)
 			.Should().BeLessThan(ListenerIndex(listeners, Witch));
+		ListenerIndex(listeners, Witch)
+			.Should().BeLessThan(ListenerIndex(listeners, Gypsy));
     }
-
-    [Theory]
-    [InlineData(false, true)]
-    [InlineData(true, false)]
-    [InlineData(true, true)]
-    public void VoteOutcome_WithEliminationOrRepeat_RoutesThroughEliminationCascade(
-        bool shouldVoteRepeat,
-        bool hasPlayerElimination)
-    {
-        var nextSubPhase = GameFlowManager.ChoosePostVoteOutcomeSubPhase(
-            shouldVoteRepeat,
-            hasPlayerElimination);
-
-        nextSubPhase.Should().Be(DaySubPhases.ProcessVoteEliminationCascade);
-    }
-
-    [Fact]
-    public void VoteOutcome_WithoutEliminationOrRepeat_RoutesToFinalize()
-    {
-        var nextSubPhase = GameFlowManager.ChoosePostVoteOutcomeSubPhase(
-            shouldVoteRepeat: false,
-            hasPlayerElimination: false);
-
-        nextSubPhase.Should().Be(DaySubPhases.Finalize);
-    }
-
-    [Theory]
-    [InlineData(true, DaySubPhases.DetermineVoteType)]
-    [InlineData(false, DaySubPhases.Finalize)]
-    public void VoteRepeatDecision_IsMadeOnlyAfterEliminationCascade(
-        bool shouldVoteRepeat,
-        DaySubPhases expectedSubPhase)
-	{
-		var nextSubPhase = GameFlowManager.ChoosePostVoteEliminationCascadeSubPhase(shouldVoteRepeat);
-
-		nextSubPhase.Should().Be(expectedSubPhase);
-	}
 
 	private static int ListenerIndex(
 		List<ListenerIdentifier> listeners,

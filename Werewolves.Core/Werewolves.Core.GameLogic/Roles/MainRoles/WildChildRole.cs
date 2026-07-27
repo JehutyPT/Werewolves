@@ -1,4 +1,5 @@
 using Werewolves.Core.GameLogic.Models.GameHookListeners;
+using Werewolves.Core.GameLogic.Models.EliminationCascades;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
@@ -10,22 +11,29 @@ using Werewolves.Core.StateModels.Resources;
 
 namespace Werewolves.Core.GameLogic.Roles.MainRoles;
 
-internal class WildChildRole : StandardNightRoleHookListener
+internal class WildChildRole :
+    StandardNightRoleHookListener,
+    IEliminationCascadeReaction
 {
     internal override string PublicName => GameStrings.WildChildRoleName;
     public override ListenerIdentifier Id => ListenerIdentifier.Listener(MainRoleType.WildChild);
     protected override bool HasNightPowers => false;
 
     protected override List<RoleStateMachineStage> DefineStateMachineStages()
-    {
-        var stages = base.DefineStateMachineStages();
-        stages.Add(CreateStage(
-            GameHook.PlayerRoleAssignedOnElimination,
-            null,
-            StandardNightRoleState.Asleep,
-            TransformWildChildrenWhoseModelWasEliminated));
+        => base.DefineStateMachineStages();
 
-        return stages;
+    public string ReactionId =>
+        EliminationCascadeReactionIds.WildChildModelEliminated;
+
+    public EliminationCascadeReactionResult Advance(
+        GameSession session,
+        IReadOnlyCollection<Guid> eliminatedPlayerIds,
+        ModeratorResponse input)
+    {
+        TransformWildChildrenWhoseModelWasEliminated(
+            session,
+            eliminatedPlayerIds);
+        return EliminationCascadeReactionResult.Complete();
     }
 
     protected override ModeratorInstruction GenerateTargetSelectionInstruction(GameSession session, ModeratorResponse input)
@@ -50,19 +58,13 @@ internal class WildChildRole : StandardNightRoleHookListener
         session.PerformNightAction(NightActionType.WildChildModel, modelId);
     }
 
-    private HookListenerActionResult TransformWildChildrenWhoseModelWasEliminated(GameSession session, ModeratorResponse input)
+    private void TransformWildChildrenWhoseModelWasEliminated(
+        GameSession session,
+        IReadOnlyCollection<Guid> eliminatedPlayerIds)
     {
-        var eliminatedPlayerIds = session.GameHistoryLog
-            .OfType<PlayerEliminatedLogEntry>()
-            .Where(entry =>
-                entry.TurnNumber == session.TurnNumber &&
-                entry.CurrentPhase == session.GetCurrentPhase())
-            .Select(entry => entry.PlayerId)
-            .ToHashSet();
-
-        if (!eliminatedPlayerIds.Any())
+        if (eliminatedPlayerIds.Count == 0)
         {
-            return HookListenerActionResult.Skip();
+            return;
         }
 
         var modelIds = session.GameHistoryLog
@@ -73,7 +75,7 @@ internal class WildChildRole : StandardNightRoleHookListener
 
         if (!modelIds.Overlaps(eliminatedPlayerIds))
         {
-            return HookListenerActionResult.Skip();
+            return;
         }
 
         var wildChildrenToTransform = session.GetPlayers()
@@ -88,8 +90,5 @@ internal class WildChildRole : StandardNightRoleHookListener
             session.AssignRole(wildChild.Id, MainRoleType.SimpleWerewolf);
         }
 
-        return wildChildrenToTransform.Count == 0
-            ? HookListenerActionResult.Skip()
-            : HookListenerActionResult.Complete(StandardNightRoleState.Asleep);
     }
 }

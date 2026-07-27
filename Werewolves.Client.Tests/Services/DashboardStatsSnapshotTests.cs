@@ -14,16 +14,40 @@ namespace Werewolves.Client.Tests.Services;
 public class DashboardStatsSnapshotTests
 {
 	[Fact]
-	public void FromSession_GroupsKnownAliveRolesByRoleGroup()
+	public void FromSession_GroupsOnlyPubliclyRevealedAliveRolesWithoutLeakingPrivateKnowledge()
 	{
 		var players = new[]
 		{
-			FakePlayer.Create(PlayerNames.Ana, MainRoleType.SimpleVillager),
-			FakePlayer.Create(PlayerNames.Bruno, MainRoleType.Seer),
-			FakePlayer.Create(PlayerNames.Carla, MainRoleType.SimpleWerewolf),
-			FakePlayer.Create(PlayerNames.Diana, MainRoleType.SimpleWerewolf, PlayerHealth.Dead),
-			FakePlayer.Create(PlayerNames.Eva, MainRoleType.WildChild),
-			FakePlayer.Create(PlayerNames.Filipe)
+			FakePlayer.Create(
+				PlayerNames.Ana,
+				MainRoleType.VillagerVillager,
+				physicalCharacterCardRole: MainRoleType.VillagerVillager,
+				moderatorKnownRole: MainRoleType.VillagerVillager,
+				publiclyRevealedRole: MainRoleType.VillagerVillager),
+			FakePlayer.Create(
+				PlayerNames.Bruno,
+				MainRoleType.Seer,
+				moderatorKnownRole: MainRoleType.Seer,
+				publiclyRevealedRole: MainRoleType.Seer),
+			FakePlayer.Create(
+				PlayerNames.Carla,
+				MainRoleType.SimpleWerewolf,
+				moderatorKnownRole: MainRoleType.SimpleWerewolf,
+				publiclyRevealedRole: MainRoleType.SimpleWerewolf),
+			FakePlayer.Create(
+				PlayerNames.Diana,
+				MainRoleType.SimpleWerewolf,
+				PlayerHealth.Dead,
+				moderatorKnownRole: MainRoleType.SimpleWerewolf,
+				publiclyRevealedRole: MainRoleType.SimpleWerewolf),
+			FakePlayer.Create(
+				PlayerNames.Eva,
+				MainRoleType.WildChild,
+				moderatorKnownRole: MainRoleType.WildChild),
+			FakePlayer.Create(
+				PlayerNames.Filipe,
+				MainRoleType.SimpleVillager,
+				physicalCharacterCardRole: MainRoleType.SimpleVillager)
 		};
 		var session = new FakeGameSession(players);
 
@@ -34,7 +58,7 @@ public class DashboardStatsSnapshotTests
 			RoleGroup.Werewolves,
 			RoleGroup.Ambiguous,
 			RoleGroup.Loners);
-		snapshot.RoleGroups.Select(group => group.RemainingCount).Should().Equal(2, 1, 1, 0);
+		snapshot.RoleGroups.Select(group => group.RemainingCount).Should().Equal(2, 1, 0, 0);
 	}
 
 	[Fact]
@@ -96,17 +120,28 @@ public class DashboardStatsSnapshotTests
 		public IEnumerable<IPlayer> GetPlayers() => players;
 
 		public int RoleInPlayCount(MainRoleType type) =>
-			players.Count(player => player.State.MainRole == type);
+			players.Count(player => player.State.CurrentRole == type);
 
 		public string Serialize() => throw new NotSupportedException();
 	}
 
 	private sealed class FakePlayer : IPlayer
 	{
-		private FakePlayer(string name, MainRoleType? role, PlayerHealth health)
+		private FakePlayer(
+			string name,
+			MainRoleType? currentRole,
+			PlayerHealth health,
+			MainRoleType? physicalCharacterCardRole,
+			MainRoleType? moderatorKnownRole,
+			MainRoleType? publiclyRevealedRole)
 		{
 			Name = name;
-			State = new FakePlayerState(role, health);
+			State = new FakePlayerState(
+				currentRole,
+				physicalCharacterCardRole,
+				moderatorKnownRole,
+				publiclyRevealedRole,
+				health);
 		}
 
 		public Guid Id { get; } = Guid.NewGuid();
@@ -115,14 +150,32 @@ public class DashboardStatsSnapshotTests
 
 		public static FakePlayer Create(
 			string name,
-			MainRoleType? role = null,
-			PlayerHealth health = PlayerHealth.Alive) =>
-			new(name, role, health);
+			MainRoleType? currentRole = null,
+			PlayerHealth health = PlayerHealth.Alive,
+			MainRoleType? physicalCharacterCardRole = null,
+			MainRoleType? moderatorKnownRole = null,
+			MainRoleType? publiclyRevealedRole = null) =>
+			new(
+				name,
+				currentRole,
+				health,
+				physicalCharacterCardRole,
+				moderatorKnownRole,
+				publiclyRevealedRole);
 	}
 
-	private sealed class FakePlayerState(MainRoleType? role, PlayerHealth health) : IPlayerState
+	private sealed class FakePlayerState(
+		MainRoleType? currentRole,
+		MainRoleType? physicalCharacterCardRole,
+		MainRoleType? moderatorKnownRole,
+		MainRoleType? publiclyRevealedRole,
+		PlayerHealth health) : IPlayerState
 	{
-		public MainRoleType? MainRole { get; } = role;
+		public MainRoleType? CurrentRole { get; } = currentRole;
+		public MainRoleType? MainRole => CurrentRole;
+		public MainRoleType? PhysicalCharacterCardRole { get; } = physicalCharacterCardRole;
+		public MainRoleType? ModeratorKnownRole { get; } = moderatorKnownRole;
+		public MainRoleType? PubliclyRevealedRole { get; } = publiclyRevealedRole;
 		public PlayerHealth Health { get; } = health;
 		public bool IsImmuneToLynching => false;
 		public string? LynchingImmunityAnnouncement => null;

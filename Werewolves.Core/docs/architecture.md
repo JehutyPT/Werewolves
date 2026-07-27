@@ -157,17 +157,18 @@ A static helper class that serves as the "Rule Engine" for the Dawn phase, resol
 *   **Purpose:** Decouples the `GameFlowManager` from specific role logic (e.g., Witch vs. Defender vs. Infection).
 *   **Process:**
     1.  **Input:** Accepts the `GameSession` state.
-    2.  **Resolution:** Gets the current night action target map from `GameSessionQueries`. Iterates through players to resolve conflicts based on the priority rules below.
-    3.  **Output:** The current implementation directly calls `session.EliminatePlayer()` or `session.ApplyStatusEffect()` based on the resolved outcome. PRD #93/#112/#113 replaces this eager-Elimination boundary with resolution-scoped pending consequences: any pre-reveal interception runs first, each required generic public reveal commits next, and only then does Core commit the actual Elimination or replacement effect and drain every resulting reaction before navigation.
+    2.  **Resolution:** Reads the ordered current-night committed attempts and resolves their target outcomes in canonical global slot order rather than grouping them by Player or Seating Order.
+    3.  **Output:** Records resolution-scoped Dawn victim candidates and applies settled Status Effects. `EliminationCascadeStage` consumes those candidates: pre-reveal interceptions run first, each required generic public reveal commits next, the entire distinct batch is eliminated atomically, and every resulting reaction batch drains before navigation.
 
 *   **Resolution Priority & Special Rules:**
-    1.  **Witch Save (Absolute Defense):** If the Witch saved a player, they are protected from wolf attacks.
-    2.  **Defender Protection:** Blocks applicable physical Werewolf attacks for the whole Night, but never blocks Accursed Wolf-Father infection.
+    1.  **Collective Slot:** A committed Accursed Wolf-Father infection globally replaces the collective physical Werewolf attempt; otherwise the collective physical attempt resolves first.
+    2.  **White Werewolf Attack:** Resolves after the collective slot.
+    3.  **Big Bad Wolf Attack:** Resolves after the White Werewolf attack.
+    4.  **Defender Protection:** Blocks each applicable physical Werewolf attack for the whole Night, but never blocks Accursed Wolf-Father infection.
         *   **Exception - Little Girl:** Cannot be protected by the Defender. Protection fails silently.
-    3.  **Elder Extra Life:** If an Elder with their extra life remaining is targeted by a qualifying physical Werewolf attack or infection, the extra life is consumed instead of applying that effect. Defender may have already blocked a physical attack; it never blocks infection. The Elder survives and a resisted infection leaves the Elder uninfected, while a confirmed one-use infection remains spent.
-    4.  **Infection:** If the Accursed Wolf-Father targets a Player whose Elder resistance did not prevent the effect, they become infected. Infection replaces the collective physical Elimination rather than being treated as a protected physical attack.
-    5.  **Wolf Attacks:** Physical attacks from Werewolves, Big Bad Wolf, or White Werewolf result in elimination if not blocked by the above.
-    6.  **Unstoppable Actions:** The following actions **ignore all protection** (Defender, Witch Save) and always result in elimination:
+    5.  **Elder Extra Life:** If an Elder with their extra life remaining is targeted by a qualifying physical Werewolf attack or infection, the extra life is consumed instead of applying that attempt. Defender may have already blocked a physical attack; it never blocks infection. A resisted infection leaves the Elder uninfected, while the confirmed one-use infection remains spent.
+    6.  **Witch Save:** Resolves after every physical attack slot. It removes the newly applied physical loss, but does not cure infection or undo Elder protection consumed before a later lethal physical hit.
+    7.  **Independent Lethal Actions:** The following actions ignore Defender protection and Witch healing:
         *   **Witch Kill (Death Potion):** Cannot be blocked or prevented.
         *   **Rusty Sword:** The Knight's posthumous revenge attack cannot be blocked.
 
@@ -296,6 +297,7 @@ Acts as a high-level phase controller and reactive hook dispatcher. It contains 
 
 *   **Core Components:**
     *   `HookListeners` (static Dictionary<GameHook, List<ListenerIdentifier>>): Declarative mapping of hooks to the ordered list of listeners that respond to them.
+    *   `EliminationCascadeReactionRegistrations`: The single ordered registration list for elimination reactions. Each entry binds a stable reaction ID and execution boundary to a listener; reaction implementations do not declare priorities or sort themselves (see ADR 0003). Forced reactions, including Wild Child transformation, drain before interactive reactions such as the Hunter's final shot.
     *   `ListenerFactories` (internal `IReadOnlyDictionary<ListenerIdentifier, Func<IGameHookListener>>` property): Forwarding accessor sourced from `SupportedRoleCatalog`'s admission catalog. That catalog owns every supported Role's active/passive admission and derives listener factories only for active admissions, so adding a supported Role touches one place. Each game session gets its own fresh listener instances via `GameSession.GetOrCreateListener`, ensuring listener state machine isolation between games. Listener *ordering* still lives in `HookListeners` above (see ADR 0003).
     *   `PhaseDefinitions` (static Dictionary<GamePhase, IPhaseDefinition>): Declarative mapping of each main `GamePhase` to its corresponding `PhaseManager`.
 *   **Primary Methods:**
@@ -316,6 +318,7 @@ Acts as a high-level phase controller and reactive hook dispatcher. It contains 
     *   **`SubPhaseStage`**: An abstract class representing a single, **atomic, non-re-entrant** unit of work. The `GamePhaseStateCache` ensures each stage is executed at most once per sub-phase entry.
         *   `LogicSubPhaseStage`: Executes a custom logic handler.
         *   `HookSubPhaseStage`: Fires a `GameHook` and dispatches to all registered listeners.
+        *   `EliminationCascadeStage`: Drains one scoped Dawn or Day elimination cascade. It reveals before committing, commits every Player in the current distinct batch before reactions run, admits chained batches until empty, and may pause for moderator input. A newly Eliminated Hunter is evaluated through the shared Role Power availability boundary after forced reactions drain; a non-empty legal roster produces one mandatory exact-one target instruction, while an empty roster completes silently. The shot creates a child batch in the same cascade. The stage never navigates.
         *   `NavigationSubPhaseStage`: A stage that results in a transition to a new sub-phase or main phase. Created via factory methods (`NavigationEndStage`, `NavigationEndStageSilent`) as the required final stage for any sub-phase.
 *   **State Machine Validation:** The architecture provides strong runtime guarantees:
     *   **Transition Validation:** All transitions are validated against the `PossibleNextSubPhases` and `PossibleNextMainPhaseTransitions` sets defined in the `SubPhaseManager`. An illegal transition throws an `InvalidOperationException`.
@@ -332,6 +335,7 @@ Orchestrates the game flow based on moderator input and tracked state. **Delegat
         *   Retrieves the current `GameSession`, validates the response against the exact pending instruction, and then delegates to `GameFlowManager.HandleInput`.
         *   `GameService` owns consume-time correlation, response-type, and complete payload validation; `GameFlowManager` owns state-machine stage and transition validation.
         *   Returns the `ProcessResult` from the state machine, containing either the next instruction or a failure.
+        *   An emitted elimination-reaction input is a stable recovery boundary. Rehydration restores the exact committed Hunter selector and resumes it without re-evaluating Role Power availability, while stale or structurally mismatched selector context fails closed.
         *   **Session Cleanup:** A `FinishedGameConfirmationInstruction` remains pending until its correlated Continue acknowledgment is accepted; that successful acknowledgment removes the session from the active sessions list.
     *   `GetCurrentInstruction(Guid gameId)` (ModeratorInstruction?): Retrieves the `PendingModeratorInstruction`. 
     *   `GetGameStateView(Guid gameId)` (IGameSession?): Returns the game state via the read-only `IGameSession` interface. This hides the internal mutation methods present on the concrete object, ensuring the UI cannot modify state.
@@ -443,7 +447,6 @@ A hierarchy of records represents the outcome of a `SubPhaseStage`'s execution, 
  
 *   **`GameHook` Enum:** Defines all possible hook points in the game flow:
     *   `NightMainActionLoop`
-    *   `PlayerRoleAssignedOnElimination`
     *   `OnVoteConcluded`
     *   `DawnMainActionLoop`
 
@@ -516,7 +519,7 @@ Polymorphic instruction system for communication TO the moderator. **Assembly Lo
 
 ### Core Game Flow Enums
 *   `GamePhase`: `Night`, `Dawn`, `Day`.
-*   `GameHook`: `NightMainActionLoop`, `PlayerRoleAssignedOnElimination`, `OnVoteConcluded`, `DawnMainActionLoop`.
+*   `GameHook`: `NightMainActionLoop`, `OnVoteConcluded`, `DawnMainActionLoop`.
 *   `PlayerHealth`: `Alive`, `Dead`. 
 *   `ExpectedInputType`: `None`, `PlayerSelection`, `AssignPlayerRoles`, `OptionSelection`, `Continue`, `FinishedGame`.
 
@@ -549,8 +552,8 @@ Polymorphic instruction system for communication TO the moderator. **Assembly Lo
 
 ### Sub-Phase Enums
 *   `NightSubPhases`: `Start`.
-*   `DawnSubPhases`: `CalculateVictims`, `AnnounceVictims`, `ProcessRoleReveals`, `Finalize`.
-*   `DaySubPhases`: `Debate`, `DetermineVoteType`, `NormalVoting`, `AccusationVoting`, `FriendVoting`, `HandleNonTieVote`, `ProcessVoteOutcome`, `ProcessVoteEliminationCascade`, `Finalize`.
+*   `DawnSubPhases`: `CalculateVictims`, `AnnounceVictims`, `Finalize`.
+*   `DaySubPhases`: `Debate`, `DetermineVoteType`, `NormalVoting`, `AccusationVoting`, `FriendVoting`, `HandleNonTieVote`, `ProcessVoteOutcome`, `Finalize`.
 *   `VictorySubPhases`: `Complete`.
 
 ## Extensions
@@ -589,20 +592,19 @@ Located in `Werewolves.Core.StateModels/Extensions/MainRoleTypeExtensions.cs`. P
 
 3.  **Dawn Phase (`GamePhase.Dawn`):**
     *   The `PhaseManager` for `Dawn` is activated, starting at `DawnSubPhases.CalculateVictims`.
-    *   **Calculate Victims:** The `NightInteractionResolver` is invoked to process all night actions, resolving conflicts (Witch vs Defender vs Infection) and applying Eliminations/status effects. Navigates either to `AnnounceVictims` or `Finalize`, depending on whether the Night caused any Eliminations.
-    *   **Announce Victims:** If victims exist, the `AnnounceVictims` sub-phase announces the Eliminations. The current implementation asks for confirmation when all victim Roles are known and otherwise uses `AssignRolesInstruction`. PRD #93/#113 makes both branches one public Role Reveal event: known Roles use a Continue acknowledgment after physical reveal; unknown Roles use a complete valid mapping. Fires `GameHook.PlayerRoleAssignedOnElimination`. Navigates to `Finalize`.
+    *   **Calculate Victims:** The `NightInteractionResolver` processes all Night actions, resolves conflicts (Witch vs Defender vs Infection), applies settled Status Effects, and records the pending Dawn elimination candidates. It navigates either to `AnnounceVictims` or `Finalize`.
+    *   **Announce Victims:** `EliminationCascadeStage` reveals the current distinct victim batch, commits every elimination in that batch, and then runs the centrally ordered forced and interactive reactions. Reaction-caused eliminations become child batches in the same scoped cascade. Only after the cascade is empty does the following navigation stage advance to `Finalize`.
     *   **Finalize:** The `Finalize` sub-phase transitions to `GamePhase.Day`. Victory is checked at this transition.
 
 4.  **Day Phase (`GamePhase.Day`):**
     *   The `PhaseManager` for `Day` starts at `DaySubPhases.Debate`.
     *   **Debate:** First fires the post-Dawn `GameHook.DawnMainActionLoop` after the Day-entry victory check, then issues an instruction for discussion and transitions to `DetermineVoteType`.
     *   **Determine Vote Type:** Determines what's the appropriate vote type, checking for active events or modifiers (defaults to `NormalVoting` sub-phase).
-    *   **Normal Voting:** Handles standard village voting to end the debate. The current implementation silently skips a Role response when the voted Player is already Moderator-known and otherwise sends `AssignRolesInstruction`. This is a known PRD #93/#113 migration: public reveal must still be committed when privately known, using acknowledgment for known Roles and a complete mapping for unknown Roles. Transitions to either `HandleNonTieVote` if there was no tie, or `ProcessVoteOutcome` if there was a tie.
+    *   **Normal Voting:** Records a standard village vote. A tie advances directly to `ProcessVoteOutcome`; a selected living Player advances to `HandleNonTieVote`.
     *   **Accusation Voting:** *(Not yet implemented)* Reserved for accusation-based voting mechanics.
     *   **Friend Voting:** *(Not yet implemented)* Reserved for friend-based voting mechanics (e.g., Angel event).
-    *   **Handle Non Tie Vote:** Handles checking if the voted for player is susceptible to be actually lynched due to the vote (i.e. Village Idiot), eliminates it if they are, otherwise applies `LynchImmunityUsed` status effect. Transitions to `ProcessVoteOutcome`
-    *   **Process Vote Outcome:** Fires `GameHook.OnVoteConcluded`, then advances to `ProcessVoteEliminationCascade` when the Vote caused an Elimination or a Consecutive Vote is required; otherwise it advances to `Finalize`.
-    *   **Process Vote Elimination Cascade:** Fires `GameHook.PlayerRoleAssignedOnElimination`, then decides whether to start the Consecutive Vote or finalize the Day.
+    *   **Handle Non Tie Vote:** Runs a fresh vote-scoped `EliminationCascadeStage`. It reveals the target, settles pre-commit interception such as Village Idiot lynching immunity, commits any resulting Day Vote elimination, drains reactions, and only then transitions to `ProcessVoteOutcome`.
+    *   **Process Vote Outcome:** Fires `GameHook.OnVoteConcluded`, then starts a fresh vote when a Consecutive Vote is required or advances to `Finalize`.
     *   **Finalize:** Transitions to `GamePhase.Night`. Victory is checked at this transition.
 
 # Game Logs 
@@ -628,6 +630,10 @@ The chosen approach is an abstract base class (`GameLogEntryBase`) providing uni
 6.  **`StatusEffectLogEntry`:** Records the application of a status effect (e.g., `ElderProtectionLost`, `LycanthropyInfection`, `WildChildChanged`, `LynchingImmunityUsed`). Note: Currently only application is implemented; removal is not handled.
 7.  **`VictoryConditionMetLogEntry`:** Records that a specific team has met their win condition.
 8.  **`VoteOutcomeReportedLogEntry`:** Records the result of a day vote (who was eliminated, or if it was a tie).
+9.  **`RoleRevealLogEntry`:** Records one public Role Reveal fact for the complete revealed batch.
+10. **`EliminationCascadeBatchResolvedLogEntry`:** Records a scoped requested batch and its actual committed eliminations. A zero-commit Vote interception remains durable while its consequence announcement is pending.
+11. **`EliminationCascadeReactionCompletedLogEntry`:** Records a reaction's scoped triggering batch and the exact elimination candidates it admitted, allowing recovery to skip the completed side effect and reconstruct its child work.
+12. **`EliminationCascadeCompletedLogEntry`:** Records that one Dawn or vote-scoped cascade drained completely.
 
 This list covers the distinct, loggable events derived from the rules. Each entry captures unique information critical for game logic, auditing, or moderator context.
 
@@ -776,12 +782,12 @@ public class MyTests : DiagnosticTestBase
 
 *Status: **Implemented** — Stable recovery snapshot serialization via `System.Text.Json`.*
 
-The Core persistence boundary is `IGameSession.Serialize()` plus `GameService.RehydrateSession(string)`. Serialization returns the latest stable Main Phase recovery snapshot captured by `GameSessionKernel.CaptureRecoveryBoundary()`. It does not serialize the live in-memory tail of the current phase, and Rehydration does not replay the event log.
+The Core persistence boundary is `IGameSession.Serialize()` plus `GameService.RehydrateSession(string)`. Serialization returns the latest stable recovery snapshot captured by `GameSessionKernel.CaptureRecoveryBoundary()`. It does not serialize the live in-memory execution tail, and Rehydration does not replay the event log.
 
 ## Design
 
 *   **Serialization:** `GameSession.Serialize()` delegates to `GameSessionKernel.Serialize()`, which returns the last captured stable boundary snapshot.
-*   **Boundary advancement:** `GameFlowManager.HandleInput(...)` captures a new boundary only after phase routing, victory override handling, and `PendingInstruction` settlement are complete.
+*   **Boundary advancement:** `GameFlowManager.HandleInput(...)` captures a new boundary only after routing, victory override handling, and `PendingInstruction` settlement are complete. Accepted observations, committed one-use resources, settled elimination batches, completed elimination reactions, and fully drained elimination cascades are additional semantic boundaries.
 *   **Rehydration:** `GameService.RehydrateSession(string serializedSession)` restores the stable snapshot into a new active session and returns the session's GUID.
 
 **Planned ADR-0017 exception:** the target Thief flow creates one narrow mid-Night stable checkpoint atomically with a successful `Offer1`, `Offer2`, or `Decline` response. That checkpoint contains the committed outcome, resulting card zones, current Role and fresh power state, and the pending public sleep instruction before Core returns success. It does not serialize arbitrary listener progress. This exception is not implemented by the current persistence path.
@@ -799,6 +805,8 @@ The Core persistence boundary is `IGameSession.Serialize()` plus `GameService.Re
 *   `PhaseStateCache`: Serialized for DTO compatibility, but stable Rehydration restores only `CurrentPhase`, `SubPhase`, and `CompletedSubPhaseStages`. `ActiveSubPhaseStage`, `CurrentListenerId`, `CurrentListenerType`, and `CurrentListenerState` are ignored because they are transient execution state.
 
 For legacy or non-stable payloads, `GamePhaseStateCache.FromDto(...)` restores only the current Main Phase and discards all sub-phase, stage, listener, and listener-state details. For stable payloads, `GamePhaseStateCache.FromStableRecoveryBoundaryDto(...)` restores the minimal cursor needed to consume the committed boundary `PendingInstruction`.
+
+An interrupted elimination cascade is reconstructed from its scoped semantic facts. A batch-resolution fact prevents a settled zero-elimination interception from being reevaluated, completed reaction facts re-admit their recorded child eliminations without executing the reaction again, and a cascade-completed fact prevents a finished vote scope from being reused. Pre-reveal completion facts are replayed in registration order after Moderator input so every admission from that boundary reconstructs the same concurrent next wave. Reconstruction occurs only when each frame reaches the queue head, so nested descendants cannot overtake sibling waves admitted by an earlier frame. The live wave queue, reaction instances, and listener state are never serialized.
 
 ## Implementation Details
 

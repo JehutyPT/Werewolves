@@ -6,6 +6,8 @@ Dispatch order is a correctness property of the game rules — the Defender must
 
 Distributing priority across listener classes (via attributes, abstract properties, or numeric priorities) would make the ordering invisible at a glance. Inserting a new role in the middle of the sequence would require inspecting every existing listener's priority to determine what to bump. The locality gain (role defines everything about itself) is not worth the correctness risk.
 
+Elimination cascade reactions follow the same rule. Their order and execution boundary are declared once in `GameFlowManager.EliminationCascadeReactionRegistrations`. A reaction exposes only its stable ID and behavior; it does not expose a numeric priority or participate in runtime sorting.
+
 ## Considered options
 
 - **Per-listener priority numbers**: each listener declares an integer priority; dispatcher sorts at startup. Rejected because priority numbers are meaningless without seeing all other values, and inserting in the middle forces renumbering across files.

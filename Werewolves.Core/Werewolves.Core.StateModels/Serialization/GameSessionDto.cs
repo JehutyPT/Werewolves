@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
@@ -17,17 +18,33 @@ internal class GameSessionDto
     // Derived state restored directly during Rehydration.
     public List<PlayerDto> Players { get; set; } = new();
     public int TurnNumber { get; set; }
+    public int RoleFactSchemaVersion { get; set; }
 
     // True for the ADR-0002 payload shape that preserves a committed boundary cursor.
     public bool IsStableRecoveryBoundary { get; set; }
 
-    // Committed boundary instruction and minimal phase cursor. Active stage/listener fields in
-    // GamePhaseStateCacheDto are serialized for DTO compatibility but ignored during Rehydration.
+    // Narrow, versioned semantic cursor for an accepted observation and its
+    // committed next Pending Instruction. It never carries live listener state.
+    public AcceptedObservationRecoveryCursor? AcceptedObservationRecoveryCursor { get; set; }
+
+    // Generalized, versioned semantic cursor for a committed domain operation
+    // whose exact next Pending Instruction must be resumed without replay.
+    public DomainRecoveryCursor? DomainRecoveryCursor { get; set; }
+
+    // Committed boundary instruction and minimal phase cursor. Active stage/listener fields
+    // remain compatibility-only and are ignored during Rehydration.
     public GamePhaseStateCacheDto PhaseStateCache { get; set; } = new();
     public ModeratorInstruction? PendingInstruction { get; set; }
+    public ModeratorInstructionSemantic? PendingInstructionSemantic { get; set; }
 
     // Event source as of the same stable boundary as the derived state above.
     public List<GameLogEntryBase> GameHistoryLog { get; set; } = new();
+}
+
+internal static class RoleFactSchema
+{
+    public const int LegacyVersion = 0;
+    public const int CurrentVersion = 1;
 }
 
 /// <summary>
@@ -38,8 +55,66 @@ internal class PlayerDto
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public MainRoleType? MainRole { get; set; }
+    public MainRoleType? PhysicalCharacterCardRole { get; set; }
+    public MainRoleType? ModeratorKnownRole { get; set; }
+    public MainRoleType? PubliclyRevealedRole { get; set; }
     public StatusEffectTypes ActiveEffects { get; set; }
     public PlayerHealth Health { get; set; }
+}
+
+/// <summary>
+/// Durable semantic continuation for a completed observation boundary.
+/// </summary>
+internal sealed class AcceptedObservationRecoveryCursor
+{
+    public const int CurrentVersion = 1;
+
+    public int Version { get; set; }
+    public ModeratorInstructionSemantic AcceptedObservationSemantic { get; set; }
+    public MainRoleType ObservedRole { get; set; }
+    public ModeratorInstructionSemantic NextInstructionSemantic { get; set; }
+    public Guid NextInstructionId { get; set; }
+}
+
+internal enum DomainRecoveryCursorKind
+{
+    OneUseRolePowerCommit = 1
+}
+
+/// <summary>
+/// Durable semantic continuation for a committed domain operation.
+/// It carries no live listener state.
+/// </summary>
+internal sealed class DomainRecoveryCursor
+{
+    public const int CurrentVersion = 1;
+
+    public int Version { get; set; }
+    public DomainRecoveryCursorKind Kind { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public MainRoleType? SourceRole { get; set; }
+    public NightActionType CommittedActionType { get; set; }
+    public Guid ActingPlayerId { get; set; }
+    public string SourcePowerIdentifier { get; set; } = string.Empty;
+    public Guid PowerInstanceId { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public RolePowerInstanceOrigin? PowerInstanceOrigin { get; set; }
+    public Guid OneUseResourceId { get; set; }
+    public Guid CommittedTargetId { get; set; }
+    public ModeratorInstructionSemantic NextInstructionSemantic { get; set; }
+    public Guid NextInstructionId { get; set; }
+
+    internal OneUseRolePowerResourceIdentity? ResourceIdentity =>
+        SourceRole is { } sourceRole &&
+        PowerInstanceOrigin is { } powerInstanceOrigin
+            ? new(
+                ActingPlayerId,
+                sourceRole,
+                SourcePowerIdentifier,
+                PowerInstanceId,
+                powerInstanceOrigin,
+                OneUseResourceId)
+            : null;
 }
 
 /// <summary>

@@ -43,8 +43,9 @@ internal abstract class NightRoleHookListener<T> : RoleHookListener<T> where T :
 	protected virtual HookListenerActionResult HandleNightPowerUse_AndId(GameSession session, ModeratorResponse input)
 	{
 		var state = GetCurrentListenerState(session);
-		
-		if (session.TurnNumber == 1 && state.Equals(WokenUpStateEnum))
+
+		if (state.Equals(WokenUpStateEnum) &&
+		    !IsCompleteRoleHolderSetKnown(session))
 		{
 			ProcessRoleIdentification(session, input);
 			//fall through intentionally to HandleNightPowerUse so the identification process flows seamlessly
@@ -59,15 +60,16 @@ internal abstract class NightRoleHookListener<T> : RoleHookListener<T> where T :
 	{
 		HookListenerActionResult output;
 		
-		// wake up the role. piggyback the id request if it's the first night
-		if (session.TurnNumber == 1 || HasNightPowers)
+		if (!IsCompleteRoleHolderSetKnown(session))
 		{
-			output = session.TurnNumber == 1
-				? PrepareWakeupInstructionWithIdRequest(session)
-				: PrepareWakeupInstruction(session);
-			
+			output = PrepareWakeupInstructionWithIdRequest(session);
 		}
-		// otherwise, if it's not the first night and the role has no night powers, complete immediately
+		// Wake for genuine first-night or recurring behavior once identification is complete.
+		else if (session.TurnNumber == 1 || HasNightPowers)
+		{
+			output = PrepareWakeupInstruction(session);
+		}
+		// Otherwise, later-night Roles with no powers complete immediately.
 		else
 		{
 			output = HookListenerActionResult.Complete(AsleepStateEnum);
@@ -76,8 +78,29 @@ internal abstract class NightRoleHookListener<T> : RoleHookListener<T> where T :
 		return output;
 	}
 	#endregion
-	
+
 	#region Helper functions
+	private bool IsCompleteRoleHolderSetKnown(GameSession session)
+	{
+		var committedLivingRoleHolderCount = GetCommittedLivingRoleHolderIds(session).Count;
+		var knownLivingRoleHolderCount = GetKnownLivingRoleHolderIds(session).Count;
+		var expectedLivingRoleHolderCount = GetExpectedLivingRoleHolderCount(session);
+
+		return committedLivingRoleHolderCount == expectedLivingRoleHolderCount &&
+		       knownLivingRoleHolderCount == expectedLivingRoleHolderCount;
+	}
+
+	private HashSet<Guid> GetKnownLivingRoleHolderIds(GameSession session)
+	{
+		var role = (MainRoleType)Id;
+		return session.GetPlayers()
+			.WithHealth(PlayerHealth.Alive)
+			.Where(player =>
+				player.State.CurrentRole == role &&
+				player.State.ModeratorKnownRole == role)
+			.ToIdSet();
+	}
+
 	private HookListenerActionResult PrepareWakeupInstruction(GameSession session)
 	{
 		return HookListenerActionResult.NeedInput(
@@ -91,16 +114,29 @@ internal abstract class NightRoleHookListener<T> : RoleHookListener<T> where T :
 	{
 		var defaultInstruction = PrepareWakeupInstruction(session);
 
-		var playersWithoutRole = 
-			session.GetPlayers().
-				WithHealth(PlayerHealth.Alive).
-				WithRole(null).
-				ToIdSet();
+		var role = (MainRoleType)Id;
+		var selectablePlayerIds = session.GetPlayers()
+			.WithHealth(PlayerHealth.Alive)
+			.Where(player =>
+				player.State.CurrentRole == role ||
+				(player.State.CurrentRole == null &&
+				 (player.State.ModeratorKnownRole == null ||
+				  player.State.ModeratorKnownRole == role)))
+			.ToIdSet();
 
 		var publicText = defaultInstruction.Instruction!.PublicAnnouncement!;
 		var privateInstruction = "";
 
-		var roleCount = session.RoleInPlayCount(Id);
+		var roleCount = GetExpectedLivingRoleHolderCount(session);
+		var committedLivingRoleHolderCount = GetCommittedLivingRoleHolderIds(session).Count;
+		if (roleCount <= 0 ||
+		    committedLivingRoleHolderCount > roleCount ||
+		    selectablePlayerIds.Count < roleCount)
+		{
+			throw new InvalidOperationException(
+				"Confirmed Role knowledge contradicts the required Living Role Holder count.");
+		}
+
 		if (roleCount == 1)
 		{
 			privateInstruction = GameStrings.RoleSingleIdentificationPrompt.Format(PublicName);
@@ -113,7 +149,7 @@ internal abstract class NightRoleHookListener<T> : RoleHookListener<T> where T :
 		return HookListenerActionResult.NeedInput(
 			new SelectPlayersInstruction(
 				ModeratorInstructionSemantic.IdentifyRoleHolders,
-				selectablePlayerIds: playersWithoutRole,
+				selectablePlayerIds: selectablePlayerIds,
 				countConstraint: NumberRangeConstraint.Exact(roleCount),
 				publicAnnouncement: publicText,
 				privateInstruction: privateInstruction,
@@ -125,7 +161,8 @@ internal abstract class NightRoleHookListener<T> : RoleHookListener<T> where T :
 
 	protected virtual void ProcessRoleIdentification(GameSession session, ModeratorResponse input)
 	{
-		session.AssignRole(input.SelectedPlayerIds!.ToHashSet(), Id);
+		var selectedPlayerIds = input.SelectedPlayerIds!.ToHashSet();
+		IdentifyCompleteLivingRoleHolderSet(session, selectedPlayerIds);
 	}
 
 

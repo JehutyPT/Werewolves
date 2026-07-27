@@ -1,4 +1,6 @@
 using Werewolves.Core.GameLogic.Models.GameHookListeners;
+using Werewolves.Core.GameLogic.Models.InternalMessages;
+using Werewolves.Core.GameLogic.RolePowers;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
@@ -14,9 +16,48 @@ namespace Werewolves.Core.GameLogic.Roles.MainRoles;
 /// </summary>
 internal class SeerRole : ImmediateFeedbackNightRoleHookListener
 {
+	private readonly RolePowerAvailabilityGateway _rolePowerAvailabilityGateway;
+
+	private static readonly RolePowerDefinition WerewolfDetectionPower = new(
+		new RolePowerIdentifier("seer-werewolf-detection"),
+		RolePowerCategory.Chosen);
+
+	internal SeerRole(RolePowerAvailabilityGateway rolePowerAvailabilityGateway)
+	{
+		ArgumentNullException.ThrowIfNull(rolePowerAvailabilityGateway);
+		_rolePowerAvailabilityGateway = rolePowerAvailabilityGateway;
+	}
+
     public override ListenerIdentifier Id => ListenerIdentifier.Listener(MainRoleType.Seer);
     internal override string PublicName => GameStrings.SeerRoleName;
     protected override bool HasNightPowers => true;
+
+	protected override HookListenerActionResult HandleTargetSelectionRequest(
+		GameSession session,
+		ModeratorResponse input)
+	{
+		var seerPlayer = GetAliveRolePlayers(session)?.SingleOrDefault()
+			?? throw new InvalidOperationException(
+				"No alive Seer found for Role Power availability.");
+		var context = _rolePowerAvailabilityGateway.Evaluate(
+			new RolePowerAttempt(
+				seerPlayer,
+				MainRoleType.Seer,
+				WerewolfDetectionPower,
+				RolePowerInstance.CreateNative(
+					seerPlayer,
+					MainRoleType.Seer,
+					WerewolfDetectionPower)));
+
+		return context.AvailabilityResult.IsAvailable
+			? base.HandleTargetSelectionRequest(session, input)
+			: HookListenerActionResult.NeedInput(
+				new ConfirmationInstruction(
+					ModeratorInstructionSemantic.PutRoleToSleep,
+					GameStrings.RoleGoesToSleepSingle.Format(PublicName),
+					affectedPlayerIds: [seerPlayer.Id]),
+				ReadyToSleepStateEnum);
+	}
 
     protected override ModeratorInstruction GenerateTargetSelectionInstruction(GameSession session, ModeratorResponse input)
     {

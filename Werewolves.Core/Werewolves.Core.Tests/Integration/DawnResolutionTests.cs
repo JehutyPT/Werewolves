@@ -1,9 +1,6 @@
 using FluentAssertions;
-using Werewolves.Core.GameLogic.Services;
-using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
-using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.Tests.Helpers;
 using Xunit;
@@ -117,10 +114,10 @@ public class DawnResolutionTests : DiagnosticTestBase
     #region DR-010 to DR-012: Role Reveal Flow
 
     /// <summary>
-    /// DR-010: When a dawn victim has a single possible role type, the system records it automatically.
+    /// DR-010: A sole remaining role type is never inferred for a Dawn victim.
     /// </summary>
     [Fact]
-    public void VictimEliminated_SinglePossibleRole_AutoAssignsRoleAndAnnouncesVictim()
+    public void VictimEliminated_SingleRemainingRoleType_StillRequiresPublicRevealMapping()
     {
         // Arrange
         var builder = CreateBuilder()
@@ -143,126 +140,37 @@ public class DawnResolutionTests : DiagnosticTestBase
         // Act - Get the next instruction after night.
         var instruction = builder.GetCurrentInstruction();
 
-        // Assert - Should be a confirmation-only announcement containing the victim.
-        var confirmation = instruction.Should().BeOfType<ConfirmationInstruction>().Subject;
-        confirmation.PublicAnnouncement.Should().Contain(victim.Name);
+        // Assert - public physical reveal still requires an exact Moderator mapping.
+        var reveal = instruction.Should().BeOfType<AssignRolesInstruction>().Subject;
+        reveal.PublicAnnouncement.Should().Contain(victim.Name);
+        reveal.PlayersForAssignment.Should().Equal(victim.Id);
+        victim.State.MainRole.Should().BeNull();
+        victim.State.Health.Should().Be(PlayerHealth.Alive);
+
+        builder.Process(reveal.CreateResponse(new()
+        {
+            [victim.Id] = MainRoleType.SimpleVillager
+        })).IsSuccess.Should().BeTrue();
+
         var victimAfterReveal = gameState.GetPlayer(victim.Id);
         victimAfterReveal.State.MainRole.Should().Be(MainRoleType.SimpleVillager);
+        victimAfterReveal.State.PubliclyRevealedRole.Should().Be(MainRoleType.SimpleVillager);
+        victimAfterReveal.State.Health.Should().Be(PlayerHealth.Dead);
 
         var roleLog = gameState.GameHistoryLog
-            .OfType<AssignRoleLogEntry>()
-            .Single(entry => entry.PlayerIds.Contains(victim.Id));
-        roleLog.AssignedMainRole.Should().Be(MainRoleType.SimpleVillager);
+            .OfType<RoleRevealLogEntry>()
+            .Single(entry => entry.RevealedRoles.ContainsKey(victim.Id));
+        roleLog.RevealedRoles[victim.Id].Should().Be(MainRoleType.SimpleVillager);
         roleLog.CurrentPhase.Should().Be(GamePhase.Dawn);
 
         MarkTestCompleted();
     }
 
     /// <summary>
-    /// DR-010b: When a dawn victim has multiple possible role types, Moderator assignment is still requested.
+    /// DR-011: Public reveal for a Dawn victim creates one RoleRevealLogEntry.
     /// </summary>
     [Fact]
-    public void VictimEliminated_MultiplePossibleRoles_RequestsRoleAssignment()
-    {
-        var session = new GameSession(
-            Guid.NewGuid(),
-            new ConfirmationInstruction(privateInstruction: nameof(VictimEliminated_MultiplePossibleRoles_RequestsRoleAssignment)),
-            new GameSessionConfig(
-                ["Werewolf", "Seer", "Wild Child", "Villager A", "Villager B"],
-                [
-                    MainRoleType.SimpleWerewolf,
-                    MainRoleType.Seer,
-                    MainRoleType.WildChild,
-                    MainRoleType.SimpleVillager,
-                    MainRoleType.SimpleVillager
-                ]));
-
-        var players = session.GetPlayers().ToList();
-        var knownWerewolf = players[0];
-        var victim = players[1];
-
-        session.AssignRole(knownWerewolf.Id, MainRoleType.SimpleWerewolf);
-        session.TransitionMainPhase(GamePhase.Dawn);
-        session.EliminatePlayer(victim.Id, EliminationReason.WerewolfAttack);
-
-        var instruction = DawnPhaseHandlers.AnnounceVictimsAndRequestRoles(session, new ModeratorResponse());
-
-        var assignment = instruction.Should().BeOfType<AssignRolesInstruction>().Subject;
-        assignment.PlayersForAssignment.Should().Contain(victim.Id);
-        assignment.RolesForAssignment.Distinct().Should().HaveCountGreaterThan(1);
-        session.GetPlayer(victim.Id).State.MainRole.Should().BeNull();
-
-        DawnPhaseHandlers.AssignVictimRoles(session, assignment.CreateResponse(new Dictionary<Guid, MainRoleType>
-        {
-            [victim.Id] = MainRoleType.Seer
-        }));
-
-        session.GetPlayer(victim.Id).State.MainRole.Should().Be(MainRoleType.Seer);
-        session.GameHistoryLog
-            .OfType<AssignRoleLogEntry>()
-            .Should()
-            .ContainSingle(entry =>
-                entry.PlayerIds.Contains(victim.Id) &&
-                entry.AssignedMainRole == MainRoleType.Seer);
-
-        MarkTestCompleted();
-    }
-
-    /// <summary>
-    /// DR-010c: Multiple dawn victims still require Moderator assignment even when their remaining role type is duplicated.
-    /// </summary>
-    [Fact]
-    public void VictimsEliminated_MultipleVictimsWithSamePossibleRole_RequestRoleAssignment()
-    {
-        var session = new GameSession(
-            Guid.NewGuid(),
-            new ConfirmationInstruction(privateInstruction: nameof(VictimsEliminated_MultipleVictimsWithSamePossibleRole_RequestRoleAssignment)),
-            new GameSessionConfig(
-                ["Werewolf", "Villager A", "Villager B", "Villager C", "Villager D"],
-                [
-                    MainRoleType.SimpleWerewolf,
-                    MainRoleType.SimpleVillager,
-                    MainRoleType.SimpleVillager,
-                    MainRoleType.SimpleVillager,
-                    MainRoleType.SimpleVillager
-                ]));
-
-        var players = session.GetPlayers().ToList();
-        var werewolf = players[0];
-        var victimIds = players.Skip(1).Select(player => player.Id).ToHashSet();
-
-        session.AssignRole(werewolf.Id, MainRoleType.SimpleWerewolf);
-        session.TransitionMainPhase(GamePhase.Dawn);
-        foreach (var victimId in victimIds)
-        {
-            session.EliminatePlayer(victimId, EliminationReason.WerewolfAttack);
-        }
-
-        var instruction = DawnPhaseHandlers.AnnounceVictimsAndRequestRoles(session, new ModeratorResponse());
-
-        var assignment = instruction.Should().BeOfType<AssignRolesInstruction>().Subject;
-        assignment.PlayersForAssignment.Should().BeEquivalentTo(victimIds);
-        assignment.RolesForAssignment.Should().BeEquivalentTo(
-            [
-                MainRoleType.SimpleVillager,
-                MainRoleType.SimpleVillager,
-                MainRoleType.SimpleVillager,
-                MainRoleType.SimpleVillager
-            ]);
-
-        foreach (var victimId in victimIds)
-        {
-            session.GetPlayer(victimId).State.MainRole.Should().BeNull();
-        }
-
-        MarkTestCompleted();
-    }
-
-    /// <summary>
-    /// DR-011: Role assignment for eliminated victim creates AssignRoleLogEntry.
-    /// </summary>
-    [Fact]
-    public void VictimRole_Revealed_CreatesAssignRoleLogEntry()
+    public void VictimRole_Revealed_CreatesRoleRevealLogEntry()
     {
         // Arrange
         var builder = CreateBuilder()
@@ -289,14 +197,14 @@ public class DawnResolutionTests : DiagnosticTestBase
         };
         builder.CompleteDawnPhase(roleAssignments);
 
-        // Assert - Verify AssignRoleLogEntry was created
+        // Assert - Verify the distinct public reveal event was created.
         var roleLogs = gameState.GameHistoryLog
-            .OfType<AssignRoleLogEntry>()
-            .Where(e => e.PlayerIds.Contains(victim.Id))
+            .OfType<RoleRevealLogEntry>()
+            .Where(e => e.RevealedRoles.ContainsKey(victim.Id))
             .ToList();
 
         roleLogs.Should().HaveCount(1);
-        roleLogs[0].AssignedMainRole.Should().Be(MainRoleType.SimpleVillager);
+        roleLogs[0].RevealedRoles[victim.Id].Should().Be(MainRoleType.SimpleVillager);
 
         MarkTestCompleted();
     }

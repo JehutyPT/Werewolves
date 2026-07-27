@@ -15,7 +15,11 @@ public interface IPlayer : IEquatable<IPlayer>
 
 public interface IPlayerState
 {
+	public MainRoleType? CurrentRole { get; }
 	public MainRoleType? MainRole { get; }
+	public MainRoleType? PhysicalCharacterCardRole { get; }
+	public MainRoleType? ModeratorKnownRole { get; }
+	public MainRoleType? PubliclyRevealedRole { get; }
 	public PlayerHealth Health { get; }
 	
 	/// <summary>
@@ -107,7 +111,19 @@ internal partial class GameSessionKernel
 	/// </summary>
 	private class PlayerState : IPlayerState
 	{
-		public MainRoleType? MainRole { get; internal set; } = null;
+		public MainRoleType? CurrentRole { get; internal set; }
+
+		public MainRoleType? MainRole
+		{
+			get => CurrentRole;
+			internal set => CurrentRole = value;
+		}
+
+		public MainRoleType? PhysicalCharacterCardRole { get; internal set; }
+
+		public MainRoleType? ModeratorKnownRole { get; internal set; }
+
+		public MainRoleType? PubliclyRevealedRole { get; internal set; }
 
 		public PlayerHealth Health { get; internal set; } = PlayerHealth.Alive;
 

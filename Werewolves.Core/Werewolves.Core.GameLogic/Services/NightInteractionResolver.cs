@@ -6,12 +6,16 @@ namespace Werewolves.Core.GameLogic.Services;
 
 internal static class NightInteractionResolver
 {
+	private readonly record struct CommittedNightAttempt(
+		NightActionType ActionType,
+		Guid TargetId);
+
 	private static readonly NightActionType[] DawnResolutionActionTypes =
 	[
 		NightActionType.WerewolfVictimSelection,
-		NightActionType.BigBadWolfVictimSelection,
-		NightActionType.WhiteWerewolfVictimSelection,
 		NightActionType.AccursedWolfFatherInfection,
+		NightActionType.WhiteWerewolfVictimSelection,
+		NightActionType.BigBadWolfVictimSelection,
 		NightActionType.DefenderProtect,
 		NightActionType.WitchSave,
 		NightActionType.WitchKill,
@@ -24,83 +28,163 @@ internal static class NightInteractionResolver
 	/// </summary>
 	public static void ResolveNightPhase(GameSession session)
 	{
-		var nightActionMap = GameSessionQueries.GetNightActionMap(session, DawnResolutionActionTypes);
+		var committedAttempts = GameSessionQueries
+			.GetOrderedNightActionsThisNight(
+				session,
+				DawnResolutionActionTypes)
+			.SelectMany(log =>
+				(log.TargetIds ?? []).Select(targetId =>
+					new CommittedNightAttempt(log.ActionType, targetId)))
+			.ToArray();
+		var defenderTargets = committedAttempts
+			.Where(attempt =>
+				attempt.ActionType == NightActionType.DefenderProtect)
+			.Select(attempt => attempt.TargetId)
+			.ToHashSet();
+		var elderProtectionConsumedThisResolution = new HashSet<Guid>();
+		var lethalPhysicalTargets = new HashSet<Guid>();
+		var orderedLethalTargets = new List<Guid>();
 
-		var targetedPlayers = session.GetPlayers().IntersectBy(nightActionMap.Keys, player => player.Id);
-
-		foreach (var player in targetedPlayers)
+		void ResolveAttackAttempt(
+			CommittedNightAttempt attempt,
+			bool isInfection)
 		{
-			EliminationReason? eliminationReason = null;
-
-			var incomingActions = nightActionMap[player.Id];
-
-			// 1. Resolve Witch Save (Absolute Defense)
-			// If the Witch saved this player, they are safe from wolves.
-			bool isProtectedFromWolves = incomingActions.Contains(NightActionType.WitchSave);
-
-			// 2. Resolve Defender Protection
-
-			if (incomingActions.Contains(NightActionType.DefenderProtect))
+			var player = session.GetPlayer(attempt.TargetId);
+			var defenderBlocksPhysical =
+				defenderTargets.Contains(player.Id) &&
+				player.State.MainRole != MainRoleType.LittleGirl;
+			if (!isInfection && defenderBlocksPhysical)
 			{
-				// RULE: Little Girl cannot be protected by the Defender.
-				if (player.State.MainRole == MainRoleType.LittleGirl)
-				{
-					// Protection fails silently.
-					isProtectedFromWolves = false;
-				}
-				else
-				{
-					isProtectedFromWolves = true;
-				}
+				return;
 			}
 
-			// 3. Resolve Wolf Faction Actions (Infection & Attacks)
-			// These are grouped because Defender blocks all of them.
-			if (!isProtectedFromWolves)
+			if (player.State.MainRole == MainRoleType.Elder &&
+			    !player.State.HasStatusEffect(
+				    StatusEffectTypes.ElderProtectionLost))
 			{
-				// RULE: Elder with extra life resists infection or wolf attacks automatically, but loses its extra life.
-				if (player.State.MainRole == MainRoleType.Elder && !player.State.HasStatusEffect(StatusEffectTypes.ElderProtectionLost))
-				{
-					session.ApplyStatusEffect(StatusEffectTypes.ElderProtectionLost, player.Id);
-				}
-				// A. Check for Infection (Prioritized over death)
-				else if (incomingActions.Contains(NightActionType.AccursedWolfFatherInfection))
-				{
-					
-					session.ApplyStatusEffect(StatusEffectTypes.LycanthropyInfection, player.Id);
-					// If infected (or successfully resisted infection), the physical attack is negated.
-					// We stop processing wolf actions here.
+				session.ApplyStatusEffect(
+					StatusEffectTypes.ElderProtectionLost,
+					player.Id);
+				elderProtectionConsumedThisResolution.Add(player.Id);
+				return;
+			}
 
-				}
-				// B. Check for Physical Attacks (Simple, BigBad, White)
-				else if (incomingActions.Contains(NightActionType.WerewolfVictimSelection) ||
-				         incomingActions.Contains(NightActionType.BigBadWolfVictimSelection) ||
-				         incomingActions.Contains(NightActionType.WhiteWerewolfVictimSelection))
+			if (isInfection)
+			{
+				session.ApplyStatusEffect(
+					StatusEffectTypes.LycanthropyInfection,
+					player.Id);
+			}
+			else
+			{
+				if (lethalPhysicalTargets.Add(player.Id))
 				{
-					eliminationReason = EliminationReason.WerewolfAttack;
+					orderedLethalTargets.Add(player.Id);
 				}
 			}
+		}
 
-			// 4. Resolve Unstoppable Attacks
-			// These ignore Defender protection.
+		// Infection globally replaces the collective physical slot. Attempts
+		// within each canonical slot retain their committed log/target order.
+		var infectionAttempts = committedAttempts
+			.Where(attempt =>
+				attempt.ActionType ==
+				NightActionType.AccursedWolfFatherInfection)
+			.ToArray();
+		var collectiveAttempts = infectionAttempts.Length > 0
+			? infectionAttempts
+			: committedAttempts
+				.Where(attempt =>
+					attempt.ActionType ==
+					NightActionType.WerewolfVictimSelection)
+				.ToArray();
+		foreach (var attempt in collectiveAttempts)
+		{
+			ResolveAttackAttempt(
+				attempt,
+				isInfection:
+					attempt.ActionType ==
+					NightActionType.AccursedWolfFatherInfection);
+		}
 
-			// Witch Death Potion
-			if (incomingActions.Contains(NightActionType.WitchKill))
+		foreach (var attempt in committedAttempts.Where(attempt =>
+			         attempt.ActionType ==
+			         NightActionType.WhiteWerewolfVictimSelection))
+		{
+			ResolveAttackAttempt(attempt, isInfection: false);
+		}
+
+		foreach (var attempt in committedAttempts.Where(attempt =>
+			         attempt.ActionType ==
+			         NightActionType.BigBadWolfVictimSelection))
+		{
+			ResolveAttackAttempt(attempt, isInfection: false);
+		}
+
+		foreach (var attempt in committedAttempts.Where(attempt =>
+			         attempt.ActionType == NightActionType.WitchSave))
+		{
+			var lethalPhysicalBeforeHealing =
+				lethalPhysicalTargets.Remove(attempt.TargetId);
+			if (lethalPhysicalBeforeHealing)
 			{
-				eliminationReason = EliminationReason.WitchKill;
+				orderedLethalTargets.Remove(attempt.TargetId);
+			}
+			var protectionConsumed =
+				elderProtectionConsumedThisResolution.Remove(
+					attempt.TargetId);
+			if (protectionConsumed && !lethalPhysicalBeforeHealing)
+			{
+				session.RemoveStatusEffect(
+					StatusEffectTypes.ElderProtectionLost,
+					attempt.TargetId);
+			}
+		}
+
+		var independentEliminationReasons =
+			new Dictionary<Guid, EliminationReason>();
+
+		void ResolveIndependentAttempts(
+			NightActionType actionType,
+			EliminationReason eliminationReason)
+		{
+			foreach (var attempt in committedAttempts.Where(attempt =>
+				         attempt.ActionType == actionType))
+			{
+				if (!lethalPhysicalTargets.Contains(attempt.TargetId) &&
+				    !independentEliminationReasons.ContainsKey(attempt.TargetId))
+				{
+					orderedLethalTargets.Add(attempt.TargetId);
+				}
+
+				independentEliminationReasons[attempt.TargetId] =
+					eliminationReason;
+			}
+		}
+
+		ResolveIndependentAttempts(
+			NightActionType.WitchKill,
+			EliminationReason.WitchKill);
+		ResolveIndependentAttempts(
+			NightActionType.RustySword,
+			EliminationReason.RustySword);
+
+		foreach (var targetId in orderedLethalTargets)
+		{
+			if (!independentEliminationReasons.TryGetValue(
+				    targetId,
+				    out var eliminationReason))
+			{
+				if (!lethalPhysicalTargets.Contains(targetId))
+				{
+					continue;
+				}
+
+				eliminationReason = EliminationReason.WerewolfAttack;
 			}
 
-			// Knight with Rusty Sword (if applicable as a night trigger)
-			if (incomingActions.Contains(NightActionType.RustySword))
-			{
-				eliminationReason = EliminationReason.RustySword;
-			}
-
-			// --- Apply Elimination if determined ---
-			if (eliminationReason.HasValue)
-			{
-				session.EliminatePlayer(player.Id, eliminationReason.Value);
-			}
+			// --- Record the consequence so public Role Reveal can precede elimination ---
+			session.DetermineDawnVictim(targetId, eliminationReason);
 		}
 	}
 }

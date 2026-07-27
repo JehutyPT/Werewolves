@@ -1,4 +1,6 @@
 using Werewolves.Core.GameLogic.Models.InternalMessages;
+using Werewolves.Core.GameLogic.Models.EliminationCascades;
+using Werewolves.Core.GameLogic.RolePowers;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
@@ -48,7 +50,7 @@ public class GameTestBuilder
 {
     private List<string> _playerNames = [];
     private List<MainRoleType> _roles = [];
-    private readonly GameService _gameService = new();
+    private GameService _gameService = new();
     private Guid _gameId;
     private bool _gameStarted;
     private ModeratorInstruction? _lastInstruction = null;
@@ -64,6 +66,47 @@ public class GameTestBuilder
 	/// Creates a new test builder instance.
 	/// </summary>
 	public static GameTestBuilder Create(ITestOutputHelper? output = null) => new(output);
+
+	internal GameTestBuilder WithRolePowerAvailabilityPolicy(
+		IRolePowerAvailabilityPolicy policy)
+	{
+		if (_gameStarted)
+		{
+			throw new InvalidOperationException(
+				"The Role Power availability policy must be configured before starting the game.");
+		}
+
+		_gameService = new GameService(policy);
+		return this;
+	}
+
+	internal GameTestBuilder WithOptionalRolePowerAvailabilityPolicy(
+		IRolePowerAvailabilityPolicy? policy) =>
+		policy == null ? this : WithRolePowerAvailabilityPolicy(policy);
+
+	internal GameTestBuilder WithEliminationCascadeReaction(
+		IEliminationCascadeReaction reaction,
+		EliminationCascadeReactionBoundary boundary =
+			EliminationCascadeReactionBoundary.Forced)
+		=> WithEliminationCascadeReactions(
+			new EliminationCascadeReactionBinding(
+				reaction,
+				boundary));
+
+	internal GameTestBuilder WithEliminationCascadeReactions(
+		params EliminationCascadeReactionBinding[] reactions)
+	{
+		if (_gameStarted)
+		{
+			throw new InvalidOperationException(
+				"The Elimination Cascade reaction must be configured before starting the game.");
+		}
+
+		_gameService = new GameService(
+			AllowAllRolePowerAvailabilityPolicy.Instance,
+			reactions);
+		return this;
+	}
 
     /// <summary>
     /// Adds players with auto-generated names (Player1, Player2, etc.).
@@ -148,6 +191,130 @@ public class GameTestBuilder
         
         return instruction;
     }
+
+	internal GameTestBuilder ArrangePartiallyKnownThreeBrothers(Guid committedBrotherId)
+	{
+		EnsureGameStarted();
+		var session = GetMutableSessionForArrangement();
+		session.AssignRole(committedBrotherId, MainRoleType.ThreeBrothers);
+		session.IdentifyRole([committedBrotherId], MainRoleType.ThreeBrothers);
+		return this;
+	}
+
+	internal GameTestBuilder ArrangeKnownThreeBrothers(
+		IReadOnlySet<Guid> brotherIds)
+	{
+		EnsureGameStarted();
+		var session = GetMutableSessionForArrangement();
+		var committedBrotherIds = brotherIds.ToHashSet();
+		session.AssignRole(committedBrotherIds, MainRoleType.ThreeBrothers);
+		session.IdentifyRole(committedBrotherIds, MainRoleType.ThreeBrothers);
+		return this;
+	}
+
+	internal GameTestBuilder ArrangeThreeBrotherLeavesCurrentRole(Guid brotherId)
+	{
+		EnsureGameStarted();
+		GetMutableSessionForArrangement().AssignRole(
+			brotherId,
+			MainRoleType.SimpleVillager);
+		return this;
+	}
+
+	internal GameTestBuilder ArrangeKnownRole(
+		Guid playerId,
+		MainRoleType role)
+	{
+		EnsureGameStarted();
+		var session = GetMutableSessionForArrangement();
+		session.AssignRole(playerId, role);
+		session.IdentifyRole([playerId], role);
+		return this;
+	}
+
+	internal GameTestBuilder ArrangeEliminatedPlayer(
+		Guid playerId,
+		EliminationReason reason = EliminationReason.EventElimination)
+	{
+		EnsureGameStarted();
+		GetMutableSessionForArrangement().EliminatePlayer(playerId, reason);
+		return this;
+	}
+
+	internal GameTestBuilder ArrangeCommittedWitchPotion(
+		Guid witchId,
+		Guid resourceId,
+		NightActionType actionType,
+		Guid targetId,
+		Guid? powerInstanceId = null,
+		RolePowerInstanceOrigin powerInstanceOrigin =
+			RolePowerInstanceOrigin.Native,
+		Guid? actingPlayerId = null,
+		MainRoleType sourceRole = MainRoleType.Witch,
+		string sourcePowerIdentifier = "witch-potions")
+	{
+		var identity = new OneUseRolePowerResourceIdentity(
+			actingPlayerId ?? witchId,
+			sourceRole,
+			sourcePowerIdentifier,
+			powerInstanceId ?? witchId,
+			powerInstanceOrigin,
+			resourceId);
+		return ArrangeCommittedOneUseRolePower(
+			identity,
+			actionType,
+			targetId);
+	}
+
+	internal GameTestBuilder ArrangeCommittedOneUseRolePower(
+		OneUseRolePowerResourceIdentity resourceIdentity,
+		NightActionType actionType,
+		Guid targetId)
+	{
+		EnsureGameStarted();
+		GetMutableSessionForArrangement().CommitOneUseRolePowerNightAction(
+			actionType,
+			targetId,
+			resourceIdentity);
+		return this;
+	}
+
+	internal GameTestBuilder ArrangeCurrentRole(
+		Guid playerId,
+		MainRoleType role)
+	{
+		EnsureGameStarted();
+		GetMutableSessionForArrangement().AssignRole(playerId, role);
+		return this;
+	}
+
+	internal GameTestBuilder ArrangeStatusEffect(
+		Guid playerId,
+		StatusEffectTypes effect)
+	{
+		EnsureGameStarted();
+		GetMutableSessionForArrangement().ApplyStatusEffect(effect, playerId);
+		return this;
+	}
+
+	internal GameTestBuilder ArrangeNightAction(
+		NightActionType actionType,
+		Guid targetId)
+	{
+		EnsureGameStarted();
+		GetMutableSessionForArrangement().PerformNightAction(
+			actionType,
+			targetId);
+		return this;
+	}
+
+	internal GameTestBuilder ArrangeDayAction(DayPowerType actionType)
+	{
+		EnsureGameStarted();
+		GetMutableSessionForArrangement()
+			.PerformDayActionNoTarget(actionType);
+		return this;
+	}
 
     /// <summary>
     /// Confirms the game start and transitions to Night phase.
@@ -606,4 +773,9 @@ public class GameTestBuilder
         if (!_gameStarted)
             throw new InvalidOperationException(CoreTestReferences.ExceptionMessages.GameMustBeStartedFirst);
     }
+
+	private GameSession GetMutableSessionForArrangement() =>
+		(GameSession)(GetGameState()
+			?? throw new InvalidOperationException(
+				CoreTestReferences.ExceptionMessages.GameMustBeStartedFirst));
 }

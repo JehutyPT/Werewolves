@@ -1,0 +1,344 @@
+using FluentAssertions;
+using Werewolves.Core.GameLogic.Services;
+using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Log;
+using Werewolves.Core.StateModels.Models;
+using Werewolves.Core.StateModels.Models.Instructions;
+using Werewolves.Core.Tests.Helpers;
+using Xunit;
+using Xunit.Abstractions;
+
+namespace Werewolves.Core.Tests.Integration;
+
+public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
+{
+    public RoleKnowledgeContractTests(ITestOutputHelper output) : base(output) { }
+
+    [Fact]
+    public void LiveGameSession_FromRoleComposition_LeavesEveryPlayerRoleFactUnknown()
+    {
+        var builder = CreateBuilder()
+            .WithPlayers("Alice", "Bob", "Charlie", "Diana", "Eve")
+            .WithRoles(
+                MainRoleType.SimpleWerewolf,
+                MainRoleType.Seer,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager);
+
+        builder.StartGame();
+
+        var session = builder.GetGameState()!;
+        session.RoleInPlayCount(MainRoleType.SimpleWerewolf).Should().Be(1);
+        session.RoleInPlayCount(MainRoleType.Seer).Should().Be(1);
+        session.RoleInPlayCount(MainRoleType.SimpleVillager).Should().Be(3);
+
+        foreach (var player in session.GetPlayers())
+        {
+            player.State.CurrentRole.Should().BeNull();
+            player.State.PhysicalCharacterCardRole.Should().BeNull();
+            player.State.ModeratorKnownRole.Should().BeNull();
+            player.State.PubliclyRevealedRole.Should().BeNull();
+        }
+
+        MarkTestCompleted();
+    }
+
+    [Fact]
+    public void RoleIdentification_RecordsPrivateCurrentRoleWithoutAssigningOrRevealingCard()
+    {
+        var builder = CreateBuilder()
+            .WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);
+
+        builder.StartGame();
+        builder.ConfirmGameStart();
+        builder.ConfirmNightStart();
+
+        var session = builder.GetGameState()!;
+        var holder = session.GetPlayers().First();
+        var identification = builder.GetCurrentInstruction()
+            .Should().BeOfType<SelectPlayersInstruction>().Subject;
+        identification.RoleIdentification.Should().Be(MainRoleType.SimpleWerewolf);
+
+        var result = builder.Process(identification.CreateResponse([holder.Id]));
+
+        result.IsSuccess.Should().BeTrue();
+        holder.State.CurrentRole.Should().Be(MainRoleType.SimpleWerewolf);
+        holder.State.ModeratorKnownRole.Should().Be(MainRoleType.SimpleWerewolf);
+        holder.State.PhysicalCharacterCardRole.Should().BeNull();
+        holder.State.PubliclyRevealedRole.Should().BeNull();
+        session.GameHistoryLog.OfType<RoleIdentificationLogEntry>()
+            .Should().ContainSingle(entry =>
+                entry.Role == MainRoleType.SimpleWerewolf &&
+                entry.PlayerIds.SetEquals(new[] { holder.Id }));
+        session.GameHistoryLog.OfType<AssignRoleLogEntry>().Should().BeEmpty();
+
+        MarkTestCompleted();
+    }
+
+    [Fact]
+    public void RoleIdentification_AcceptedObservation_RehydratesAtExactNextInstruction()
+    {
+        var builder = CreateBuilder()
+            .WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);
+
+        builder.StartGame();
+        builder.ConfirmGameStart();
+        builder.ConfirmNightStart();
+        var players = builder.GetGameState()!.GetPlayers().ToArray();
+        var holder = players[0];
+        var target = players[2];
+        var identification = builder.GetCurrentInstruction()
+            .Should().BeOfType<SelectPlayersInstruction>().Subject;
+        var acceptedIdentification = identification.CreateResponse([holder.Id]);
+        var afterIdentification = builder.Process(acceptedIdentification);
+        var expectedNext = afterIdentification.ModeratorInstruction
+            .Should().BeOfType<SelectPlayersInstruction>().Subject;
+
+        var recoveredService = new GameService();
+        var recoveredId = recoveredService.RehydrateSession(builder.GetGameState()!.Serialize());
+        var recovered = recoveredService.GetGameStateView(recoveredId)!;
+        var recoveredNext = recoveredService.GetCurrentInstruction(recoveredId)
+            .Should().BeOfType<SelectPlayersInstruction>().Subject;
+
+        recovered.GetPlayerState(holder.Id).CurrentRole.Should().Be(MainRoleType.SimpleWerewolf);
+        recovered.GetPlayerState(holder.Id).ModeratorKnownRole.Should().Be(MainRoleType.SimpleWerewolf);
+        recovered.GetPlayerState(holder.Id).PubliclyRevealedRole.Should().BeNull();
+        recovered.GameHistoryLog.OfType<RoleIdentificationLogEntry>().Should()
+            .ContainSingle(entry =>
+                entry.Role == MainRoleType.SimpleWerewolf &&
+                entry.PlayerIds.SetEquals(new[] { holder.Id }));
+        recoveredNext.InstructionId.Should().Be(expectedNext.InstructionId);
+        recoveredNext.SelectablePlayerIds.Should().BeEquivalentTo(expectedNext.SelectablePlayerIds);
+        recoveredNext.AffectedPlayerIds.Should().Equal(expectedNext.AffectedPlayerIds);
+
+        Action replayAcceptedIdentification = () =>
+            recoveredService.ProcessInstruction(recoveredId, acceptedIdentification);
+        replayAcceptedIdentification.Should().Throw<InvalidOperationException>();
+        recovered.GameHistoryLog.OfType<RoleIdentificationLogEntry>().Should().ContainSingle();
+
+        var continued = recoveredService.ProcessInstruction(
+            recoveredId,
+            recoveredNext.CreateResponse([target.Id]));
+
+        continued.IsSuccess.Should().BeTrue();
+        continued.ModeratorInstruction.Should().BeOfType<ConfirmationInstruction>();
+        recovered.GameHistoryLog.OfType<NightActionLogEntry>().Should()
+            .ContainSingle(entry =>
+                entry.ActionType == NightActionType.WerewolfVictimSelection &&
+                entry.TargetIds!.SequenceEqual(new[] { target.Id }));
+
+        MarkTestCompleted();
+    }
+
+    [Fact]
+    public void VillagerVillager_AfterPhysicalDeal_RecordsOnePublicHolderBeforeNightPlay()
+    {
+        var builder = CreateBuilder()
+            .WithPlayers("Alice", "Bob", "Charlie", "Diana", "Eve")
+            .WithRoles(
+                MainRoleType.SimpleWerewolf,
+                MainRoleType.Seer,
+                MainRoleType.VillagerVillager,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager);
+
+        builder.StartGame();
+        var afterStart = builder.ConfirmGameStart();
+
+        var observation = InstructionAssert
+            .ExpectSuccessWithType<SelectPlayersInstruction>(afterStart);
+        observation.Semantic.Should()
+            .Be(ModeratorInstructionSemantic.ObserveVillagerVillagerFromDeal);
+        observation.CountConstraint.Should().Be(NumberRangeConstraint.Single);
+        observation.SelectablePlayerIds.Should()
+            .BeEquivalentTo(builder.GetGameState()!.GetPlayers().Select(player => player.Id));
+
+        var holder = builder.GetGameState()!.GetPlayers().ElementAt(2);
+        var accepted = builder.Process(observation.CreateResponse([holder.Id]));
+
+        accepted.IsSuccess.Should().BeTrue();
+        accepted.ModeratorInstruction!.Semantic.Should().Be(ModeratorInstructionSemantic.StartNight);
+        holder.State.CurrentRole.Should().Be(MainRoleType.VillagerVillager);
+        holder.State.PhysicalCharacterCardRole.Should().Be(MainRoleType.VillagerVillager);
+        holder.State.ModeratorKnownRole.Should().Be(MainRoleType.VillagerVillager);
+        holder.State.PubliclyRevealedRole.Should().Be(MainRoleType.VillagerVillager);
+        builder.GetGameState()!.GameHistoryLog
+            .OfType<VillagerVillagerPublicFromDealLogEntry>()
+            .Should().ContainSingle(entry => entry.PlayerId == holder.Id);
+
+        MarkTestCompleted();
+    }
+
+    [Fact]
+    public void VillagerVillager_AcceptedPublicFromDealObservation_RehydratesExactlyOnceAtNextInstruction()
+    {
+        var builder = CreateBuilder()
+            .WithPlayers("Alice", "Bob", "Charlie", "Diana", "Eve")
+            .WithRoles(
+                MainRoleType.SimpleWerewolf,
+                MainRoleType.Seer,
+                MainRoleType.VillagerVillager,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager);
+
+        builder.StartGame();
+        var observation = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+            builder.ConfirmGameStart());
+        var holder = builder.GetGameState()!.GetPlayers().ElementAt(2);
+        var afterObservation = builder.Process(observation.CreateResponse([holder.Id]));
+        var expectedNextInstruction = afterObservation.ModeratorInstruction!;
+
+        var recoveredService = new GameService();
+        var recoveredId = recoveredService.RehydrateSession(builder.GetGameState()!.Serialize());
+        var recovered = recoveredService.GetGameStateView(recoveredId)!;
+        var recoveredHolder = recovered.GetPlayer(holder.Id);
+
+        recoveredHolder.State.CurrentRole.Should().Be(MainRoleType.VillagerVillager);
+        recoveredHolder.State.PhysicalCharacterCardRole.Should().Be(MainRoleType.VillagerVillager);
+        recoveredHolder.State.ModeratorKnownRole.Should().Be(MainRoleType.VillagerVillager);
+        recoveredHolder.State.PubliclyRevealedRole.Should().Be(MainRoleType.VillagerVillager);
+        recovered.GameHistoryLog.OfType<VillagerVillagerPublicFromDealLogEntry>()
+            .Should().ContainSingle(entry => entry.PlayerId == holder.Id);
+        var recoveredInstruction = recoveredService.GetCurrentInstruction(recoveredId)!;
+        recoveredInstruction.GetType().Should().Be(expectedNextInstruction.GetType());
+        recoveredInstruction.InstructionId.Should().Be(expectedNextInstruction.InstructionId);
+        recoveredInstruction.PublicAnnouncement.Should().Be(expectedNextInstruction.PublicAnnouncement);
+        recoveredInstruction.PrivateInstruction.Should().Be(expectedNextInstruction.PrivateInstruction);
+
+        MarkTestCompleted();
+    }
+
+    [Fact]
+    public void GenericRoleReveal_WhenRoleIsPrivatelyKnown_StillCommitsPublicRevealOnContinue()
+    {
+        var builder = CreateBuilder()
+            .WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);
+
+        builder.StartGame();
+        builder.ConfirmGameStart();
+        var players = builder.GetGameState()!.GetPlayers().ToArray();
+        var werewolf = players[0];
+        var seer = players[1];
+        var otherVillager = players[2];
+
+        builder.CompleteNightPhase(new NightActionInputs
+        {
+            WerewolfIds = [werewolf.Id],
+            WerewolfVictimId = seer.Id,
+            SeerId = seer.Id,
+            SeerTargetId = otherVillager.Id
+        });
+
+        var reveal = builder.GetCurrentInstruction()
+            .Should().BeOfType<ConfirmationInstruction>().Subject;
+        reveal.AffectedPlayerIds.Should().Equal(seer.Id);
+        seer.State.ModeratorKnownRole.Should().Be(MainRoleType.Seer);
+        seer.State.PubliclyRevealedRole.Should().BeNull();
+
+        var afterReveal = builder.Process(reveal.CreateResponse());
+
+        afterReveal.IsSuccess.Should().BeTrue();
+        seer.State.CurrentRole.Should().Be(MainRoleType.Seer);
+        seer.State.ModeratorKnownRole.Should().Be(MainRoleType.Seer);
+        seer.State.PubliclyRevealedRole.Should().Be(MainRoleType.Seer);
+        var revealEntry = builder.GetGameState()!.GameHistoryLog
+            .OfType<RoleRevealLogEntry>()
+            .Should().ContainSingle().Subject;
+        revealEntry.RevealedRoles.Should()
+            .Contain(new KeyValuePair<Guid, MainRoleType>(seer.Id, MainRoleType.Seer));
+
+        var recoveredService = new GameService();
+        var recoveredId = recoveredService.RehydrateSession(builder.GetGameState()!.Serialize());
+        var recovered = recoveredService.GetGameStateView(recoveredId)!;
+        var recoveredNext = recoveredService.GetCurrentInstruction(recoveredId)!;
+
+        recovered.GetPlayerState(seer.Id).PubliclyRevealedRole.Should().Be(MainRoleType.Seer);
+        recovered.GameHistoryLog.OfType<RoleRevealLogEntry>().Should().ContainSingle();
+        recoveredNext.GetType().Should().Be(afterReveal.ModeratorInstruction!.GetType());
+        recoveredNext.InstructionId.Should().Be(afterReveal.ModeratorInstruction.InstructionId);
+        Action replayAcceptedReveal = () =>
+            recoveredService.ProcessInstruction(recoveredId, reveal.CreateResponse());
+        replayAcceptedReveal.Should().Throw<InvalidOperationException>();
+        recovered.GameHistoryLog.OfType<RoleRevealLogEntry>().Should().ContainSingle();
+
+        MarkTestCompleted();
+    }
+
+    [Fact]
+    public void GenericRoleReveal_UnknownDawnVictim_MapsBeforeEliminationWithoutInventoryInference()
+    {
+        var builder = CreateBuilder()
+            .WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);
+
+        builder.StartGame();
+        builder.ConfirmGameStart();
+        var players = builder.GetGameState()!.GetPlayers().ToArray();
+        var werewolf = players[0];
+        var seer = players[1];
+        var unknownVictim = players[2];
+
+        builder.CompleteNightPhase(new NightActionInputs
+        {
+            WerewolfIds = [werewolf.Id],
+            WerewolfVictimId = unknownVictim.Id,
+            SeerId = seer.Id,
+            SeerTargetId = players[3].Id
+        });
+
+        var reveal = builder.GetCurrentInstruction()
+            .Should().BeOfType<AssignRolesInstruction>().Subject;
+        reveal.PlayersForAssignment.Should().Equal(unknownVictim.Id);
+        reveal.AffectedPlayerIds.Should().Equal(unknownVictim.Id);
+        unknownVictim.State.CurrentRole.Should().BeNull();
+        unknownVictim.State.PubliclyRevealedRole.Should().BeNull();
+        unknownVictim.State.Health.Should().Be(PlayerHealth.Alive);
+        builder.GetGameState()!.GameHistoryLog.OfType<PlayerEliminatedLogEntry>()
+            .Should().NotContain(entry => entry.PlayerId == unknownVictim.Id);
+
+        var afterReveal = builder.Process(reveal.CreateResponse(new()
+        {
+            [unknownVictim.Id] = MainRoleType.SimpleVillager
+        }));
+
+        afterReveal.IsSuccess.Should().BeTrue();
+        unknownVictim.State.CurrentRole.Should().Be(MainRoleType.SimpleVillager);
+        unknownVictim.State.ModeratorKnownRole.Should().Be(MainRoleType.SimpleVillager);
+        unknownVictim.State.PubliclyRevealedRole.Should().Be(MainRoleType.SimpleVillager);
+        unknownVictim.State.PhysicalCharacterCardRole.Should().BeNull();
+        unknownVictim.State.Health.Should().Be(PlayerHealth.Dead);
+
+        var history = builder.GetGameState()!.GameHistoryLog.ToList();
+        history.FindIndex(entry => entry is RoleRevealLogEntry).Should().BeLessThan(
+            history.FindIndex(entry =>
+                entry is PlayerEliminatedLogEntry eliminated &&
+                eliminated.PlayerId == unknownVictim.Id));
+        history.OfType<AssignRoleLogEntry>().Should().BeEmpty();
+
+        var recoveredService = new GameService();
+        var recoveredId = recoveredService.RehydrateSession(builder.GetGameState()!.Serialize());
+        var recovered = recoveredService.GetGameStateView(recoveredId)!;
+        var recoveredNext = recoveredService.GetCurrentInstruction(recoveredId)!;
+
+        recovered.GetPlayerState(unknownVictim.Id).PubliclyRevealedRole.Should()
+            .Be(MainRoleType.SimpleVillager);
+        recovered.GetPlayerState(unknownVictim.Id).Health.Should().Be(PlayerHealth.Dead);
+        recovered.GameHistoryLog.OfType<RoleRevealLogEntry>().Should().ContainSingle();
+        recovered.GameHistoryLog.OfType<PlayerEliminatedLogEntry>().Should()
+            .ContainSingle(entry => entry.PlayerId == unknownVictim.Id);
+        recoveredNext.GetType().Should().Be(afterReveal.ModeratorInstruction!.GetType());
+        recoveredNext.InstructionId.Should().Be(afterReveal.ModeratorInstruction.InstructionId);
+        Action replayAcceptedReveal = () => recoveredService.ProcessInstruction(
+            recoveredId,
+            reveal.CreateResponse(new()
+            {
+                [unknownVictim.Id] = MainRoleType.SimpleVillager
+            }));
+        replayAcceptedReveal.Should().Throw<InvalidOperationException>();
+        recovered.GameHistoryLog.OfType<RoleRevealLogEntry>().Should().ContainSingle();
+        recovered.GameHistoryLog.OfType<PlayerEliminatedLogEntry>().Should()
+            .ContainSingle(entry => entry.PlayerId == unknownVictim.Id);
+
+        MarkTestCompleted();
+    }
+}

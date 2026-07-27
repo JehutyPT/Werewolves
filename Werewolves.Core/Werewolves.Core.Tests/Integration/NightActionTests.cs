@@ -1,7 +1,9 @@
 using FluentAssertions;
+using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
+using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Resources;
 using Werewolves.Core.Tests.Helpers;
@@ -639,19 +641,22 @@ public class NightActionTests : DiagnosticTestBase
         var identifyResponse = wwInstruction.CreateResponse([werewolfPlayer.Id]);
         builder.Process(identifyResponse);
 
-        // Assert - Role should now be assigned
+        // Assert - private identification establishes current and Moderator-known facts only.
         var updatedState = builder.GetGameState()!;
         var updatedPlayer = updatedState.GetPlayer(werewolfPlayer.Id);
         updatedPlayer.State.MainRole.Should().Be(MainRoleType.SimpleWerewolf);
+        updatedPlayer.State.ModeratorKnownRole.Should().Be(MainRoleType.SimpleWerewolf);
+        updatedPlayer.State.PhysicalCharacterCardRole.Should().BeNull();
+        updatedPlayer.State.PubliclyRevealedRole.Should().BeNull();
 
         // Also verify via log entry
         var roleAssignments = updatedState.GameHistoryLog
-            .OfType<AssignRoleLogEntry>()
+            .OfType<RoleIdentificationLogEntry>()
             .Where(e => e.PlayerIds.Contains(werewolfPlayer.Id))
             .ToList();
 
         roleAssignments.Should().HaveCount(1);
-        roleAssignments[0].AssignedMainRole.Should().Be(MainRoleType.SimpleWerewolf);
+        roleAssignments[0].Role.Should().Be(MainRoleType.SimpleWerewolf);
 
         MarkTestCompleted();
     }
@@ -765,12 +770,352 @@ public class NightActionTests : DiagnosticTestBase
             CoreTestReferences.InstructionContexts.WerewolfWakeIdentification);
 
         // Assert — instruction must have both announcement and private identification prompt
+        wwInstruction.RoleIdentification.Should().Be(MainRoleType.SimpleWerewolf);
+        wwInstruction.CountConstraint.Should().Be(NumberRangeConstraint.Single);
         wwInstruction.PublicAnnouncement.Should().Contain(GameStrings.SimpleWerewolfRoleName,
             CoreTestReferences.AssertionReasons.PublicAnnouncementMentionsRoleName);
         wwInstruction.PrivateInstruction.Should().NotBeNullOrWhiteSpace(
             CoreTestReferences.AssertionReasons.FirstNightWakeUpIncludesPrivateIdentificationPrompt);
         wwInstruction.PrivateInstruction.Should().Contain(GameStrings.SimpleWerewolfRoleName,
             CoreTestReferences.AssertionReasons.PrivateInstructionIdentifiesRole);
+
+        MarkTestCompleted();
+    }
+
+    #endregion
+
+    #region NA-031: Known Role Holder Set
+
+    [Fact]
+    public void FirstNight_CompleteKnownWerewolfSet_SkipsOnlyIdentificationAndContinuesNightAction()
+    {
+        var builder = CreateBuilder()
+            .WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);
+        builder.StartGame();
+
+        var session = builder.GetGameState()
+            .Should().BeOfType<GameSession>().Subject;
+        var players = session.GetPlayers().ToArray();
+        var holder = players[0];
+        var victim = players[4];
+        session.IdentifyRole([holder.Id], MainRoleType.SimpleWerewolf);
+
+        builder.ConfirmGameStart();
+        ConfirmNightStart(builder);
+
+        var wakeInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
+            builder.GetCurrentInstruction(),
+            CoreTestReferences.InstructionContexts.WerewolfWakeConfirmation);
+        wakeInstruction.Semantic.Should().Be(ModeratorInstructionSemantic.WakeRole);
+
+        var afterWake = builder.Process(wakeInstruction.CreateResponse());
+
+        var victimInstruction = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+            afterWake,
+            CoreTestReferences.InstructionContexts.WerewolfVictimSelection);
+        victimInstruction.RoleIdentification.Should().BeNull();
+        victimInstruction.SelectablePlayerIds.Should().NotContain(holder.Id);
+        victimInstruction.SelectablePlayerIds.Should().Contain(victim.Id);
+
+        builder.Process(victimInstruction.CreateResponse([victim.Id]));
+
+        session.GameHistoryLog.OfType<RoleIdentificationLogEntry>()
+            .Should().ContainSingle(entry =>
+                entry.Role == MainRoleType.SimpleWerewolf &&
+                entry.PlayerIds.SetEquals(new[] { holder.Id }));
+        session.GameHistoryLog.OfType<NightActionLogEntry>()
+            .Should().ContainSingle(entry =>
+                entry.ActionType == NightActionType.WerewolfVictimSelection &&
+                entry.TargetIds!.SequenceEqual(new[] { victim.Id }));
+
+        MarkTestCompleted();
+    }
+
+    [Fact]
+    public void FirstNight_PartiallyKnownWerewolfSet_RequiresCompleteConsistentIdentification()
+    {
+        var builder = CreateBuilder()
+            .WithSimpleGame(playerCount: 5, werewolfCount: 2, includeSeer: true);
+        builder.StartGame();
+
+        var session = builder.GetGameState()
+            .Should().BeOfType<GameSession>().Subject;
+        var players = session.GetPlayers().ToArray();
+        var knownHolder = players[0];
+        var secondHolder = players[1];
+        var contradictoryReplacement = players[2];
+        session.RevealRoles(new Dictionary<Guid, MainRoleType>
+        {
+            [knownHolder.Id] = MainRoleType.SimpleWerewolf
+        });
+
+        builder.ConfirmGameStart();
+        ConfirmNightStart(builder);
+
+        var identification = InstructionAssert.ExpectType<SelectPlayersInstruction>(
+            builder.GetCurrentInstruction(),
+            CoreTestReferences.InstructionContexts.WerewolfWakeIdentification);
+        identification.RoleIdentification.Should().Be(MainRoleType.SimpleWerewolf);
+        identification.CountConstraint.Should().Be(NumberRangeConstraint.Exact(2));
+        identification.SelectablePlayerIds.Should().Contain(knownHolder.Id);
+        identification.SelectablePlayerIds.Should().Contain(secondHolder.Id);
+
+        var contradictoryResponse = identification.CreateResponse(
+            [secondHolder.Id, contradictoryReplacement.Id]);
+        Action submitContradictoryResponse = () => builder.Process(contradictoryResponse);
+
+        submitContradictoryResponse.Should().Throw<InvalidOperationException>();
+        builder.GetCurrentInstruction()!.InstructionId.Should().Be(identification.InstructionId);
+        session.GetPlayerState(knownHolder.Id).CurrentRole.Should().Be(MainRoleType.SimpleWerewolf);
+        session.GetPlayerState(secondHolder.Id).CurrentRole.Should().BeNull();
+        session.GetPlayerState(contradictoryReplacement.Id).CurrentRole.Should().BeNull();
+        session.GameHistoryLog.OfType<RoleIdentificationLogEntry>().Should().BeEmpty();
+
+        var accepted = builder.Process(
+            identification.CreateResponse([knownHolder.Id, secondHolder.Id]));
+
+        var victimInstruction = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+            accepted,
+            CoreTestReferences.InstructionContexts.WerewolfVictimSelection);
+        victimInstruction.RoleIdentification.Should().BeNull();
+        session.GetPlayerState(knownHolder.Id).ModeratorKnownRole
+            .Should().Be(MainRoleType.SimpleWerewolf);
+        session.GetPlayerState(secondHolder.Id).ModeratorKnownRole
+            .Should().Be(MainRoleType.SimpleWerewolf);
+        session.GameHistoryLog.OfType<RoleIdentificationLogEntry>()
+            .Should().ContainSingle(entry =>
+                entry.Role == MainRoleType.SimpleWerewolf &&
+                entry.PlayerIds.SetEquals(new[] { knownHolder.Id, secondHolder.Id }));
+
+        MarkTestCompleted();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void FirstNight_CommittedWerewolfWithMissingOrStaleKnowledge_IsMandatoryInCompleteIdentification(
+        bool moderatorKnowledgeIsStale)
+    {
+        var builder = CreateBuilder()
+            .WithSimpleGame(playerCount: 5, werewolfCount: 2, includeSeer: true);
+        builder.StartGame();
+
+        var session = builder.GetGameState()
+            .Should().BeOfType<GameSession>().Subject;
+        var players = session.GetPlayers().ToArray();
+        var committedHolder = players[0];
+        var secondHolder = players[1];
+        var committedOtherRole = players[2];
+        var contradictoryReplacement = players[3];
+
+        if (moderatorKnowledgeIsStale)
+        {
+            session.IdentifyRole([committedHolder.Id], MainRoleType.Seer);
+        }
+
+        session.AssignRole(committedHolder.Id, MainRoleType.SimpleWerewolf);
+        session.AssignRole(committedOtherRole.Id, MainRoleType.Seer);
+        var expectedKnowledgeBeforeIdentification = moderatorKnowledgeIsStale
+            ? MainRoleType.Seer
+            : (MainRoleType?)null;
+
+        builder.ConfirmGameStart();
+        ConfirmNightStart(builder);
+
+        var identification = InstructionAssert.ExpectType<SelectPlayersInstruction>(
+            builder.GetCurrentInstruction(),
+            CoreTestReferences.InstructionContexts.WerewolfWakeIdentification);
+        identification.CountConstraint.Should().Be(NumberRangeConstraint.Exact(2));
+        identification.SelectablePlayerIds.Should().Contain(committedHolder.Id);
+        identification.SelectablePlayerIds.Should().NotContain(committedOtherRole.Id);
+        var historyBeforeReplacement = session.GameHistoryLog.ToArray();
+
+        var contradictoryResponse = identification.CreateResponse(
+            [secondHolder.Id, contradictoryReplacement.Id]);
+        Action submitContradictoryResponse = () => builder.Process(contradictoryResponse);
+
+        submitContradictoryResponse.Should().Throw<InvalidOperationException>();
+        builder.GetCurrentInstruction()!.InstructionId.Should().Be(identification.InstructionId);
+        session.GameHistoryLog.Should().Equal(historyBeforeReplacement);
+        session.GetPlayerState(committedHolder.Id).CurrentRole
+            .Should().Be(MainRoleType.SimpleWerewolf);
+        session.GetPlayerState(committedHolder.Id).ModeratorKnownRole
+            .Should().Be(expectedKnowledgeBeforeIdentification);
+        session.GetPlayerState(secondHolder.Id).CurrentRole.Should().BeNull();
+        session.GetPlayerState(committedOtherRole.Id).CurrentRole
+            .Should().Be(MainRoleType.Seer);
+        session.GetPlayerState(contradictoryReplacement.Id).CurrentRole.Should().BeNull();
+        session.GetPlayers().Count(player =>
+                player.State.CurrentRole == MainRoleType.SimpleWerewolf)
+            .Should().Be(1);
+
+        var accepted = builder.Process(
+            identification.CreateResponse([committedHolder.Id, secondHolder.Id]));
+
+        InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+            accepted,
+            CoreTestReferences.InstructionContexts.WerewolfVictimSelection);
+        session.GetPlayerState(committedHolder.Id).ModeratorKnownRole
+            .Should().Be(MainRoleType.SimpleWerewolf);
+        session.GetPlayerState(secondHolder.Id).CurrentRole
+            .Should().Be(MainRoleType.SimpleWerewolf);
+        session.GetPlayerState(secondHolder.Id).ModeratorKnownRole
+            .Should().Be(MainRoleType.SimpleWerewolf);
+        session.GetPlayers().Count(player =>
+                player.State.CurrentRole == MainRoleType.SimpleWerewolf)
+            .Should().Be(2);
+        session.GameHistoryLog.OfType<RoleIdentificationLogEntry>()
+            .Should().ContainSingle(entry =>
+                entry.Role == MainRoleType.SimpleWerewolf &&
+                entry.PlayerIds.SetEquals(new[] { committedHolder.Id, secondHolder.Id }));
+
+        MarkTestCompleted();
+    }
+
+    [Fact]
+    public void FirstNight_KnownEmptyWerewolfSet_OmitsEntireWerewolfCall()
+    {
+        var builder = CreateBuilder()
+            .WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);
+        builder.StartGame();
+
+        var session = builder.GetGameState()
+            .Should().BeOfType<GameSession>().Subject;
+        var holder = session.GetPlayers().First();
+        session.IdentifyRole([holder.Id], MainRoleType.SimpleWerewolf);
+        session.EliminatePlayer(holder.Id, EliminationReason.WerewolfAttack);
+
+        builder.ConfirmGameStart();
+        ConfirmNightStart(builder);
+
+        var seerIdentification = InstructionAssert.ExpectType<SelectPlayersInstruction>(
+            builder.GetCurrentInstruction(),
+            CoreTestReferences.InstructionContexts.SeerIdentification);
+        seerIdentification.RoleIdentification.Should().Be(MainRoleType.Seer);
+        session.GameHistoryLog.OfType<RoleIdentificationLogEntry>()
+            .Should().ContainSingle(entry =>
+                entry.Role == MainRoleType.SimpleWerewolf &&
+                entry.PlayerIds.SetEquals(new[] { holder.Id }));
+
+        MarkTestCompleted();
+    }
+
+    [Fact]
+    public void LaterNight_TransformedWildChild_ReidentifiesAndActsAfterOriginalWerewolfDies()
+    {
+        var builder = CreateBuilder()
+            .WithPlayers(
+                "Alice",
+                "Bob",
+                "Charlie",
+                "Diana",
+                "Eve",
+                "Frank")
+            .WithRoles(
+                MainRoleType.WildChild,
+                MainRoleType.SimpleWerewolf,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager);
+
+        builder.StartGame();
+        builder.ConfirmGameStart();
+        ConfirmNightStart(builder);
+
+        var session = builder.GetGameState()!;
+        var players = session.GetPlayers().ToArray();
+        var wildChild = players[0];
+        var roleModel = players[1];
+        var originalWerewolf = players[2];
+        var laterVictim = players[3];
+
+        var wildChildIdentification = InstructionAssert.ExpectType<SelectPlayersInstruction>(
+            builder.GetCurrentInstruction(),
+            CoreTestReferences.InstructionContexts.WildChildIdentification);
+        var afterWildChildIdentification = builder.Process(
+            wildChildIdentification.CreateResponse([wildChild.Id]));
+
+        var modelSelection = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+            afterWildChildIdentification,
+            CoreTestReferences.InstructionContexts.WildChildModelSelection);
+        var afterModelSelection = builder.Process(
+            modelSelection.CreateResponse([roleModel.Id]));
+
+        var wildChildSleep = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+            afterModelSelection,
+            CoreTestReferences.InstructionContexts.WildChildSleepConfirmation);
+        var afterWildChildSleep = builder.Process(wildChildSleep.CreateResponse());
+
+        var werewolfIdentification = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+            afterWildChildSleep,
+            CoreTestReferences.InstructionContexts.WerewolfIdentification);
+        var afterWerewolfIdentification = builder.Process(
+            werewolfIdentification.CreateResponse([originalWerewolf.Id]));
+
+        var firstVictimSelection = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+            afterWerewolfIdentification,
+            CoreTestReferences.InstructionContexts.WerewolfVictimSelection);
+        var afterFirstVictim = builder.Process(
+            firstVictimSelection.CreateResponse([roleModel.Id]));
+
+        var werewolfSleep = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+            afterFirstVictim,
+            CoreTestReferences.InstructionContexts.WerewolfSleepConfirmation);
+        var afterWerewolfSleep = builder.Process(werewolfSleep.CreateResponse());
+
+        var nightEnd = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+            afterWerewolfSleep,
+            CoreTestReferences.InstructionContexts.NightEndConfirmation);
+        builder.Process(nightEnd.CreateResponse());
+        builder.CompleteDawnPhase(new Dictionary<Guid, MainRoleType>
+        {
+            [roleModel.Id] = MainRoleType.SimpleVillager
+        });
+
+        session.GetPlayerState(wildChild.Id).CurrentRole
+            .Should().Be(MainRoleType.SimpleWerewolf);
+        session.GetPlayerState(wildChild.Id).ModeratorKnownRole
+            .Should().Be(MainRoleType.WildChild);
+        session.GetPlayerState(wildChild.Id)
+            .HasStatusEffect(StatusEffectTypes.WildChildChanged).Should().BeTrue();
+
+        builder.CompleteDayPhaseWithLynch(originalWerewolf.Id);
+        session.GetPlayerState(originalWerewolf.Id).Health.Should().Be(PlayerHealth.Dead);
+        session.GetCurrentPhase().Should().Be(GamePhase.Night);
+        session.TurnNumber.Should().Be(2);
+
+        ConfirmNightStart(builder);
+
+        var transformedWerewolfIdentification = InstructionAssert.ExpectType<SelectPlayersInstruction>(
+            builder.GetCurrentInstruction(),
+            CoreTestReferences.InstructionContexts.WerewolfIdentification);
+        transformedWerewolfIdentification.RoleIdentification
+            .Should().Be(MainRoleType.SimpleWerewolf);
+        transformedWerewolfIdentification.CountConstraint
+            .Should().Be(NumberRangeConstraint.Single);
+        transformedWerewolfIdentification.SelectablePlayerIds.Should().Contain(wildChild.Id);
+        transformedWerewolfIdentification.SelectablePlayerIds.Should().NotContain(originalWerewolf.Id);
+
+        var afterTransformedWerewolfIdentification = builder.Process(
+            transformedWerewolfIdentification.CreateResponse([wildChild.Id]));
+
+        var secondVictimSelection = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+            afterTransformedWerewolfIdentification,
+            CoreTestReferences.InstructionContexts.WerewolfVictimSelection);
+        secondVictimSelection.SelectablePlayerIds.Should().Contain(laterVictim.Id);
+        secondVictimSelection.SelectablePlayerIds.Should().NotContain(wildChild.Id);
+
+        builder.Process(secondVictimSelection.CreateResponse([laterVictim.Id]));
+
+        session.GetPlayerState(wildChild.Id).ModeratorKnownRole
+            .Should().Be(MainRoleType.SimpleWerewolf);
+        session.GameHistoryLog.OfType<NightActionLogEntry>()
+            .Where(entry => entry.ActionType == NightActionType.WerewolfVictimSelection)
+            .Should().HaveCount(2)
+            .And.ContainSingle(entry =>
+                entry.TurnNumber == 2 &&
+                entry.TargetIds!.SequenceEqual(new[] { laterVictim.Id }));
 
         MarkTestCompleted();
     }

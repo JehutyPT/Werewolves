@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using FluentAssertions;
 using Werewolves.Core.GameLogic.Models.StateMachine;
@@ -124,6 +125,73 @@ public class SerializationTests : DiagnosticTestBase
         MarkTestCompleted();
     }
 
+    [Fact]
+    public void CurrentRoleFactSchema_DoubleRehydration_PreservesExplicitUnknownModeratorRole()
+    {
+        var builder = CreateBuilder()
+            .WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);
+        builder.StartGame();
+        var session = builder.GetGameState()
+            .Should().BeOfType<GameSession>().Subject;
+        var players = session.GetPlayers().ToArray();
+        var werewolf = players[0];
+        var seer = players[1];
+        session.AssignRole(werewolf.Id, MainRoleType.SimpleWerewolf);
+        session.AssignRole(seer.Id, MainRoleType.Seer);
+        builder.ConfirmGameStart();
+        builder.ConfirmNightStart();
+        var identification = builder.GetCurrentInstruction()
+            .Should().BeOfType<SelectPlayersInstruction>().Subject;
+        builder.Process(identification.CreateResponse([werewolf.Id]));
+        session.GetPlayerState(seer.Id).CurrentRole.Should()
+            .Be(MainRoleType.Seer);
+        session.GetPlayerState(seer.Id).ModeratorKnownRole.Should().BeNull();
+
+        var firstService = new GameService();
+        var firstId = firstService.RehydrateSession(session.Serialize());
+        var firstRecovered = firstService.GetGameStateView(firstId)!;
+        var secondService = new GameService();
+        var secondId = secondService.RehydrateSession(firstRecovered.Serialize());
+        var secondRecovered = secondService.GetGameStateView(secondId)!;
+
+        firstRecovered.GetPlayerState(seer.Id).CurrentRole.Should()
+            .Be(MainRoleType.Seer);
+        firstRecovered.GetPlayerState(seer.Id).ModeratorKnownRole.Should().BeNull();
+        secondRecovered.GetPlayerState(seer.Id).CurrentRole.Should()
+            .Be(MainRoleType.Seer);
+        secondRecovered.GetPlayerState(seer.Id).ModeratorKnownRole.Should().BeNull();
+
+        MarkTestCompleted();
+    }
+
+    [Fact]
+    public void LegacyRoleFactSchema_MigratesCurrentRoleToModeratorKnownRole()
+    {
+        var builder = CreateBuilder()
+            .WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);
+        builder.StartGame();
+        builder.ConfirmGameStart();
+        var snapshot = JsonNode.Parse(builder.GetGameState()!.Serialize())!.AsObject();
+        snapshot.Remove(nameof(GameSessionDto.RoleFactSchemaVersion));
+        var player = snapshot[nameof(GameSessionDto.Players)]!
+            .AsArray()[0]!
+            .AsObject();
+        player[nameof(PlayerDto.MainRole)] = MainRoleType.SimpleWerewolf.ToString();
+        player[nameof(PlayerDto.ModeratorKnownRole)] = null;
+
+        var service = new GameService();
+        var gameId = service.RehydrateSession(snapshot.ToJsonString());
+        var recovered = service.GetGameStateView(gameId)!;
+        var playerId = recovered.GetPlayers().First().Id;
+
+        recovered.GetPlayerState(playerId).CurrentRole.Should()
+            .Be(MainRoleType.SimpleWerewolf);
+        recovered.GetPlayerState(playerId).ModeratorKnownRole.Should()
+            .Be(MainRoleType.SimpleWerewolf);
+
+        MarkTestCompleted();
+    }
+
     /// <summary>
     /// SZ-004: Round-trip preserves status effects.
     /// </summary>
@@ -195,7 +263,7 @@ public class SerializationTests : DiagnosticTestBase
     [Fact]
     public void Serialize_GameHistoryLog_PreservesAllEntryTypes()
     {
-        // Arrange - Complete a night to get AssignRoleLogEntry and NightActionLogEntry
+        // Arrange - Complete a night action to get private identification and action events.
         var builder = CreateBuilder()
             .WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);
         builder.StartGame();
@@ -237,7 +305,7 @@ public class SerializationTests : DiagnosticTestBase
         rehydratedEntryTypes.Should().BeEquivalentTo(originalEntryTypes);
 
         // Verify specific entries exist
-        rehydratedSession.GameHistoryLog.OfType<AssignRoleLogEntry>().Should().NotBeEmpty();
+        rehydratedSession.GameHistoryLog.OfType<RoleIdentificationLogEntry>().Should().NotBeEmpty();
         rehydratedSession.GameHistoryLog.OfType<NightActionLogEntry>().Should().NotBeEmpty();
 
         MarkTestCompleted();
@@ -309,6 +377,56 @@ public class SerializationTests : DiagnosticTestBase
             .Subject;
         rehydratedInstruction.EmptySelectionOptionLabel.Should().Be(GameStrings.DayVoteNoEliminationOption);
 
+        MarkTestCompleted();
+    }
+
+    [Fact]
+    public void StatusEffectRemovalLog_RoundTripsAsInactiveOperation()
+    {
+        GameLogEntryBase entry = new StatusEffectLogEntry
+        {
+            Timestamp = DateTimeOffset.UtcNow,
+            TurnNumber = 2,
+            CurrentPhase = GamePhase.Dawn,
+            EffectType = StatusEffectTypes.ElderProtectionLost,
+            PlayerId = Guid.NewGuid(),
+            IsActive = false
+        };
+
+        var json = JsonSerializer.Serialize(
+            entry,
+            RecoverySerializationOptions);
+        var restored = JsonSerializer.Deserialize<GameLogEntryBase>(
+            json,
+            RecoverySerializationOptions);
+
+        restored.Should().BeOfType<StatusEffectLogEntry>()
+            .Which.IsActive.Should().BeFalse();
+        MarkTestCompleted();
+    }
+
+    [Fact]
+    public void LegacyStatusEffectLogWithoutOperation_DefaultsToApply()
+    {
+        GameLogEntryBase entry = new StatusEffectLogEntry
+        {
+            Timestamp = DateTimeOffset.UtcNow,
+            TurnNumber = 2,
+            CurrentPhase = GamePhase.Dawn,
+            EffectType = StatusEffectTypes.ElderProtectionLost,
+            PlayerId = Guid.NewGuid()
+        };
+        var payload = JsonNode.Parse(JsonSerializer.Serialize(
+            entry,
+            RecoverySerializationOptions))!.AsObject();
+        payload.Remove("IsActive");
+
+        var restored = JsonSerializer.Deserialize<GameLogEntryBase>(
+            payload.ToJsonString(),
+            RecoverySerializationOptions);
+
+        restored.Should().BeOfType<StatusEffectLogEntry>()
+            .Which.IsActive.Should().BeTrue();
         MarkTestCompleted();
     }
 

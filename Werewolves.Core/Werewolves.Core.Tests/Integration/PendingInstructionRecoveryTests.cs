@@ -1,5 +1,6 @@
 using FluentAssertions;
 using FluentAssertions.Execution;
+using System.Text.Json.Nodes;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
@@ -112,14 +113,17 @@ public sealed class PendingInstructionRecoveryTests
             recoveredService,
             recoveredGameId,
             seerSleep.CreateResponse());
-        var roleReveal = ProcessAndExpect<ConfirmationInstruction>(
+        var roleReveal = ProcessAndExpect<AssignRolesInstruction>(
             recoveredService,
             recoveredGameId,
             nightEnd.CreateResponse());
 
         recoveredService.ProcessInstruction(
             recoveredGameId,
-            roleReveal.CreateResponse()).IsSuccess.Should().BeTrue();
+            roleReveal.CreateResponse(new()
+            {
+                [roleModelId] = MainRoleType.SimpleVillager
+            })).IsSuccess.Should().BeTrue();
 
         using (new AssertionScope())
         {
@@ -152,6 +156,285 @@ public sealed class PendingInstructionRecoveryTests
             recoveredSession.GameHistoryLog.OfType<AssignRoleLogEntry>()
                 .Should().NotContain(entry => entry.PlayerIds.Contains(passiveVillagerId));
         }
+    }
+
+    [Fact]
+    public void AcceptedRoleIdentification_DoubleRehydration_PreservesFactAndExactNextInstruction()
+    {
+        var builder = GameTestBuilder.Create()
+            .WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);
+
+        builder.StartGame();
+        builder.ConfirmGameStart();
+        builder.ConfirmNightStart();
+        var players = builder.GetGameState()!.GetPlayers().ToArray();
+        var werewolf = players[0];
+        var victim = players[2];
+        var identification = builder.GetCurrentInstruction()
+            .Should().BeOfType<SelectPlayersInstruction>().Subject;
+        var acceptedIdentification = identification.CreateResponse([werewolf.Id]);
+        var expectedNext = builder.Process(acceptedIdentification).ModeratorInstruction
+            .Should().BeOfType<SelectPlayersInstruction>().Subject;
+
+        var firstService = new GameService();
+        var firstGameId = firstService.RehydrateSession(
+            builder.GetGameState()!.Serialize());
+        var firstRecovered = firstService.GetGameStateView(firstGameId)!;
+        var secondService = new GameService();
+        var secondGameId = secondService.RehydrateSession(firstRecovered.Serialize());
+        var secondRecovered = secondService.GetGameStateView(secondGameId)!;
+        var secondNext = secondService.GetCurrentInstruction(secondGameId)
+            .Should().BeOfType<SelectPlayersInstruction>().Subject;
+
+        using (new AssertionScope())
+        {
+            secondRecovered.GameHistoryLog.OfType<RoleIdentificationLogEntry>().Should()
+                .ContainSingle(entry =>
+                    entry.Role == MainRoleType.SimpleWerewolf &&
+                    entry.PlayerIds.SetEquals(new[] { werewolf.Id }));
+            secondRecovered.GetPlayerState(werewolf.Id).CurrentRole.Should()
+                .Be(MainRoleType.SimpleWerewolf);
+            secondNext.InstructionId.Should().Be(expectedNext.InstructionId);
+            secondNext.Semantic.Should().Be(expectedNext.Semantic);
+            secondNext.PublicAnnouncement.Should().Be(expectedNext.PublicAnnouncement);
+            secondNext.PrivateInstruction.Should().Be(expectedNext.PrivateInstruction);
+            secondNext.AffectedPlayerIds.Should().Equal(expectedNext.AffectedPlayerIds);
+            secondNext.SoundEffects.Should().Equal(expectedNext.SoundEffects);
+            secondNext.SelectablePlayerIds.Should()
+                .BeEquivalentTo(expectedNext.SelectablePlayerIds);
+            secondNext.CountConstraint.Should().BeEquivalentTo(expectedNext.CountConstraint);
+            secondNext.RoleIdentification.Should().Be(expectedNext.RoleIdentification);
+            secondNext.EmptySelectionOptionLabel.Should()
+                .Be(expectedNext.EmptySelectionOptionLabel);
+        }
+
+        Action replayAcceptedIdentification = () =>
+            secondService.ProcessInstruction(secondGameId, acceptedIdentification);
+        replayAcceptedIdentification.Should().Throw<InvalidOperationException>();
+        secondRecovered.GameHistoryLog.OfType<RoleIdentificationLogEntry>()
+            .Should().ContainSingle();
+
+        var continued = secondService.ProcessInstruction(
+            secondGameId,
+            secondNext.CreateResponse([victim.Id]));
+
+        continued.IsSuccess.Should().BeTrue();
+        continued.ModeratorInstruction.Should().BeOfType<ConfirmationInstruction>();
+        secondRecovered.GameHistoryLog.OfType<RoleIdentificationLogEntry>()
+            .Should().ContainSingle();
+        secondRecovered.GameHistoryLog.OfType<NightActionLogEntry>().Should()
+            .ContainSingle(entry =>
+                entry.ActionType == NightActionType.WerewolfVictimSelection &&
+                entry.TargetIds!.SequenceEqual(new[] { victim.Id }));
+    }
+
+    [Fact]
+    public void AcceptedWildChildIdentification_DoubleRehydration_ContinuesAtModelSelection()
+    {
+        var builder = GameTestBuilder.Create()
+            .WithPlayers("Wild Child", "Werewolf", "Seer", "Villager A", "Villager B")
+            .WithRoles(
+                MainRoleType.WildChild,
+                MainRoleType.SimpleWerewolf,
+                MainRoleType.Seer,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager);
+
+        builder.StartGame();
+        builder.ConfirmGameStart();
+        builder.ConfirmNightStart();
+        var players = builder.GetGameState()!.GetPlayers().ToArray();
+        var wildChild = players[0];
+        var model = players[3];
+        var identification = builder.GetCurrentInstruction()
+            .Should().BeOfType<SelectPlayersInstruction>().Subject;
+        var acceptedIdentification = identification.CreateResponse([wildChild.Id]);
+        var expectedNext = builder.Process(acceptedIdentification).ModeratorInstruction
+            .Should().BeOfType<SelectPlayersInstruction>().Subject;
+
+        var firstService = new GameService();
+        var firstGameId = firstService.RehydrateSession(
+            builder.GetGameState()!.Serialize());
+        var firstRecovered = firstService.GetGameStateView(firstGameId)!;
+        var secondService = new GameService();
+        var secondGameId = secondService.RehydrateSession(firstRecovered.Serialize());
+        var secondRecovered = secondService.GetGameStateView(secondGameId)!;
+        var secondNext = secondService.GetCurrentInstruction(secondGameId)
+            .Should().BeOfType<SelectPlayersInstruction>().Subject;
+
+        using (new AssertionScope())
+        {
+            secondRecovered.GameHistoryLog.OfType<RoleIdentificationLogEntry>().Should()
+                .ContainSingle(entry =>
+                    entry.Role == MainRoleType.WildChild &&
+                    entry.PlayerIds.SetEquals(new[] { wildChild.Id }));
+            secondNext.InstructionId.Should().Be(expectedNext.InstructionId);
+            secondNext.Semantic.Should().Be(expectedNext.Semantic);
+            secondNext.AffectedPlayerIds.Should().Equal(expectedNext.AffectedPlayerIds);
+            secondNext.SelectablePlayerIds.Should()
+                .BeEquivalentTo(expectedNext.SelectablePlayerIds);
+            secondNext.CountConstraint.Should().BeEquivalentTo(expectedNext.CountConstraint);
+        }
+
+        var continued = secondService.ProcessInstruction(
+            secondGameId,
+            secondNext.CreateResponse([model.Id]));
+
+        continued.IsSuccess.Should().BeTrue();
+        continued.ModeratorInstruction.Should().BeOfType<ConfirmationInstruction>();
+        secondRecovered.GameHistoryLog.OfType<RoleIdentificationLogEntry>()
+            .Count(entry => entry.Role == MainRoleType.WildChild).Should().Be(1);
+        secondRecovered.GameHistoryLog.OfType<NightActionLogEntry>().Should()
+            .ContainSingle(entry =>
+                entry.ActionType == NightActionType.WildChildModel &&
+                entry.TargetIds!.SequenceEqual(new[] { model.Id }));
+    }
+
+    [Fact]
+    public void AcceptedSeerIdentification_DoubleRehydration_ContinuesAtTargetSelection()
+    {
+        var builder = GameTestBuilder.Create()
+            .WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);
+
+        builder.StartGame();
+        builder.ConfirmGameStart();
+        builder.ConfirmNightStart();
+        var players = builder.GetGameState()!.GetPlayers().ToArray();
+        var werewolf = players[0];
+        var seer = players[1];
+        var werewolfVictim = players[2];
+        var seerTarget = players[3];
+        var werewolfIdentification = builder.GetCurrentInstruction()
+            .Should().BeOfType<SelectPlayersInstruction>().Subject;
+        var werewolfTarget = builder.Process(
+                werewolfIdentification.CreateResponse([werewolf.Id]))
+            .ModeratorInstruction.Should().BeOfType<SelectPlayersInstruction>().Subject;
+        var werewolfSleep = builder.Process(
+                werewolfTarget.CreateResponse([werewolfVictim.Id]))
+            .ModeratorInstruction.Should().BeOfType<ConfirmationInstruction>().Subject;
+        var seerIdentification = builder.Process(werewolfSleep.CreateResponse())
+            .ModeratorInstruction.Should().BeOfType<SelectPlayersInstruction>().Subject;
+        var acceptedIdentification = seerIdentification.CreateResponse([seer.Id]);
+        var expectedNext = builder.Process(acceptedIdentification).ModeratorInstruction
+            .Should().BeOfType<SelectPlayersInstruction>().Subject;
+
+        var firstService = new GameService();
+        var firstGameId = firstService.RehydrateSession(
+            builder.GetGameState()!.Serialize());
+        var firstRecovered = firstService.GetGameStateView(firstGameId)!;
+        var secondService = new GameService();
+        var secondGameId = secondService.RehydrateSession(firstRecovered.Serialize());
+        var secondRecovered = secondService.GetGameStateView(secondGameId)!;
+        var secondNext = secondService.GetCurrentInstruction(secondGameId)
+            .Should().BeOfType<SelectPlayersInstruction>().Subject;
+
+        using (new AssertionScope())
+        {
+            secondRecovered.GameHistoryLog.OfType<RoleIdentificationLogEntry>().Should()
+                .ContainSingle(entry =>
+                    entry.Role == MainRoleType.Seer &&
+                    entry.PlayerIds.SetEquals(new[] { seer.Id }));
+            secondRecovered.GetPlayerState(seer.Id).CurrentRole.Should()
+                .Be(MainRoleType.Seer);
+            secondNext.InstructionId.Should().Be(expectedNext.InstructionId);
+            secondNext.Semantic.Should().Be(expectedNext.Semantic);
+            secondNext.PublicAnnouncement.Should().Be(expectedNext.PublicAnnouncement);
+            secondNext.PrivateInstruction.Should().Be(expectedNext.PrivateInstruction);
+            secondNext.AffectedPlayerIds.Should().Equal(expectedNext.AffectedPlayerIds);
+            secondNext.SelectablePlayerIds.Should()
+                .BeEquivalentTo(expectedNext.SelectablePlayerIds);
+            secondNext.CountConstraint.Should().BeEquivalentTo(expectedNext.CountConstraint);
+        }
+
+        Action replayAcceptedIdentification = () =>
+            secondService.ProcessInstruction(secondGameId, acceptedIdentification);
+        replayAcceptedIdentification.Should().Throw<InvalidOperationException>();
+        secondRecovered.GameHistoryLog.OfType<RoleIdentificationLogEntry>()
+            .Count(entry => entry.Role == MainRoleType.Seer).Should().Be(1);
+
+        var continued = secondService.ProcessInstruction(
+            secondGameId,
+            secondNext.CreateResponse([seerTarget.Id]));
+
+        continued.IsSuccess.Should().BeTrue();
+        continued.ModeratorInstruction.Should().BeOfType<ConfirmationInstruction>();
+        secondRecovered.GameHistoryLog.OfType<RoleIdentificationLogEntry>()
+            .Count(entry => entry.Role == MainRoleType.Seer).Should().Be(1);
+        secondRecovered.GameHistoryLog.OfType<NightActionLogEntry>().Should()
+            .ContainSingle(entry =>
+                entry.ActionType == NightActionType.SeerCheck &&
+                entry.TargetIds!.SequenceEqual(new[] { seerTarget.Id }));
+    }
+
+    [Fact]
+    public void AcceptedRoleIdentification_UnknownSemanticCursorVersion_IsRejected()
+    {
+        var builder = GameTestBuilder.Create()
+            .WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);
+
+        builder.StartGame();
+        builder.ConfirmGameStart();
+        builder.ConfirmNightStart();
+        var werewolf = builder.GetGameState()!.GetPlayers().First();
+        var identification = builder.GetCurrentInstruction()
+            .Should().BeOfType<SelectPlayersInstruction>().Subject;
+        builder.Process(identification.CreateResponse([werewolf.Id]));
+        var payload = JsonNode.Parse(builder.GetGameState()!.Serialize())!.AsObject();
+        payload["AcceptedObservationRecoveryCursor"]!["Version"] = int.MaxValue;
+        var service = new GameService();
+
+        Action rehydrate = () => service.RehydrateSession(payload.ToJsonString());
+
+        rehydrate.Should().Throw<InvalidOperationException>()
+            .WithMessage("*cursor version*");
+    }
+
+    [Fact]
+    public void AcceptedRoleIdentification_MismatchedPendingInstructionSemantic_IsRejected()
+    {
+        var builder = GameTestBuilder.Create()
+            .WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);
+
+        builder.StartGame();
+        builder.ConfirmGameStart();
+        builder.ConfirmNightStart();
+        var werewolf = builder.GetGameState()!.GetPlayers().First();
+        var identification = builder.GetCurrentInstruction()
+            .Should().BeOfType<SelectPlayersInstruction>().Subject;
+        builder.Process(identification.CreateResponse([werewolf.Id]));
+        var payload = JsonNode.Parse(builder.GetGameState()!.Serialize())!.AsObject();
+        payload["PendingInstructionSemantic"] =
+            ModeratorInstructionSemantic.SelectSeerTarget.ToString();
+        var service = new GameService();
+
+        Action rehydrate = () => service.RehydrateSession(payload.ToJsonString());
+
+        rehydrate.Should().Throw<InvalidOperationException>()
+            .WithMessage("*Pending Instruction Semantic*");
+    }
+
+    [Fact]
+    public void AcceptedRoleIdentification_MismatchedNightSubPhase_IsRejected()
+    {
+        var builder = GameTestBuilder.Create()
+            .WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);
+
+        builder.StartGame();
+        builder.ConfirmGameStart();
+        builder.ConfirmNightStart();
+        var werewolf = builder.GetGameState()!.GetPlayers().First();
+        var identification = builder.GetCurrentInstruction()
+            .Should().BeOfType<SelectPlayersInstruction>().Subject;
+        builder.Process(identification.CreateResponse([werewolf.Id]));
+        var payload = JsonNode.Parse(builder.GetGameState()!.Serialize())!.AsObject();
+        payload["PhaseStateCache"]!["SubPhase"] =
+            DawnSubPhases.CalculateVictims.ToString();
+        var service = new GameService();
+
+        Action rehydrate = () => service.RehydrateSession(payload.ToJsonString());
+
+        rehydrate.Should().Throw<InvalidOperationException>()
+            .WithMessage("*Role Identification continuation*");
     }
 
     [Fact]
@@ -270,9 +553,18 @@ public sealed class PendingInstructionRecoveryTests
                 return;
             }
 
-            var instruction = builder.GetCurrentInstruction()
-                .Should().BeOfType<ConfirmationInstruction>().Subject;
-            builder.Process(instruction.CreateResponse()).IsSuccess.Should().BeTrue();
+            var instruction = builder.GetCurrentInstruction()!;
+            var response = instruction switch
+            {
+                ConfirmationInstruction confirmation => confirmation.CreateResponse(),
+                AssignRolesInstruction reveal => reveal.CreateResponse(
+                    reveal.PlayersForAssignment.ToDictionary(
+                        playerId => playerId,
+                        _ => MainRoleType.SimpleVillager)),
+                _ => throw new InvalidOperationException(
+                    $"Unexpected instruction {instruction.GetType().Name} while advancing to Night.")
+            };
+            builder.Process(response).IsSuccess.Should().BeTrue();
         }
 
         throw new InvalidOperationException(

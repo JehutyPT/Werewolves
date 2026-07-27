@@ -1,4 +1,3 @@
-using Werewolves.Core.GameLogic.Queries;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
@@ -47,54 +46,4 @@ internal static class DayPhaseHandlers
         return playerId;
     }
 
-    internal static ModeratorInstruction? RequestRoleRevealIfNeeded(GameSession session, Guid playerId)
-    {
-        var votedPlayer = session.GetPlayer(playerId);
-        if (votedPlayer.State.MainRole != null)
-        {
-            return null;
-        }
-
-        if (GameSessionQueries.TryGetOnlyPossibleUnassignedRole(session, requiredAssignmentCount: 1, out var role))
-        {
-            session.AssignRole(playerId, role);
-            return null;
-        }
-
-        return new AssignRolesInstruction(
-			ModeratorInstructionSemantic.AssignDayVoteTargetRole,
-            [playerId],
-            GameSessionQueries.GetUnassignedRoles(session),
-            privateInstruction: GameStrings.RevealRolePromptSpecify);
-    }
-
-    internal static ModeratorInstruction ResolveNonTieVote(GameSession session, ModeratorResponse input)
-    {
-        var lynchedPlayerId = GameSessionQueries.GetCurrentVoteTarget(session)!.Value;
-        var lynchedPlayer = session.GetPlayer(lynchedPlayerId);
-        var lynchedPlayerState = lynchedPlayer.State;
-
-        if (lynchedPlayerState.MainRole == null)
-        {
-            var lynchedPlayerRole = input.AssignedPlayerRoles!.Single().Value;
-            session.AssignRole(lynchedPlayerId, lynchedPlayerRole);
-        }
-
-        if (lynchedPlayerState.IsImmuneToLynching)
-        {
-            var instruction = new ConfirmationInstruction(
-				ModeratorInstructionSemantic.AnnounceLynchingImmunity,
-                publicAnnouncement: lynchedPlayerState.LynchingImmunityAnnouncement!);
-
-            session.ApplyStatusEffect(StatusEffectTypes.LynchingImmunityUsed, lynchedPlayerId);
-
-            return instruction;
-        }
-
-        session.EliminatePlayer(lynchedPlayerId, EliminationReason.DayVote);
-
-        return new ConfirmationInstruction(
-			ModeratorInstructionSemantic.AnnounceDayElimination,
-            publicAnnouncement: GameStrings.SingleVictimEliminatedAnnounce.Format(lynchedPlayer.Name));
-    }
 }

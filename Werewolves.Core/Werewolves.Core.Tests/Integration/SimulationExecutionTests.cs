@@ -1,9 +1,12 @@
 using FluentAssertions;
+using Werewolves.Core.GameLogic.Interfaces;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.GameLogic.Simulation;
+using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
+using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Models.Simulation;
 using Werewolves.Core.Tests.Helpers;
 using Xunit;
@@ -15,6 +18,125 @@ public class SimulationExecutionTests : DiagnosticTestBase
 {
 	public SimulationExecutionTests(ITestOutputHelper output) : base(output)
 	{
+	}
+
+	[Theory]
+	[InlineData(
+		MainRoleType.TwoSisters,
+		2,
+		ModeratorInstructionSemantic.RecognizeRoleHolders)]
+	[InlineData(
+		MainRoleType.TwoSisters,
+		2,
+		ModeratorInstructionSemantic.CommunicateAsRoleHolders)]
+	[InlineData(
+		MainRoleType.ThreeBrothers,
+		3,
+		ModeratorInstructionSemantic.RecognizeRoleHolders)]
+	[InlineData(
+		MainRoleType.ThreeBrothers,
+		3,
+		ModeratorInstructionSemantic.CommunicateAsRoleHolders)]
+	public void Execute_WithRoleHolderSemanticMissingFromPolicy_ReturnsIncompleteEvidence(
+		MainRoleType role,
+		int roleHolderCardinality,
+		ModeratorInstructionSemantic missingSemantic)
+	{
+		var roles = Enumerable
+			.Repeat(role, roleHolderCardinality)
+			.Append(MainRoleType.SimpleWerewolf)
+			.Concat(Enumerable.Repeat(MainRoleType.SimpleVillager, 5))
+			.ToArray();
+		var scenario = new SimulationScenario(
+			roles.Length,
+			roles);
+		var capability = new SimulatorCapability(
+			new SimulatorProfileIdentity(
+				$"test-{role}-missing-{missingSemantic}",
+				"1"),
+			[
+				new(role, Faction.Villager),
+				new(MainRoleType.SimpleWerewolf, Faction.Werewolf),
+				new(MainRoleType.SimpleVillager, Faction.Villager)
+			],
+			headlessResponsePolicy: new HeadlessResponsePolicy(
+				BaselineRandomDecisionStrategy.Identity,
+				SimulatorCapability.SafetyScreening.HeadlessResponsePolicy
+					.AdmittedSemantics
+					.Where(semantic => semantic != missingSemantic)));
+		var identity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			capability.Identity);
+		var decorators = new List<PreserveRoleHoldersUntilNightThreeStrategy>();
+		var executor = new SimulationExecutor(
+			SimulationStartStateDeriver.Derive,
+			strategy =>
+			{
+				var decorator = new PreserveRoleHoldersUntilNightThreeStrategy(
+					strategy,
+					role);
+				decorators.Add(decorator);
+				return new HeadlessGameDriver(decorator);
+			},
+			SimulationExecutor.AdaptTerminalEvidence);
+
+		foreach (var runNumber in Enumerable.Range(0, 16).Select(value => (long)value))
+		{
+			var run = executor.Execute(
+				scenario,
+				capability,
+				identity,
+				runNumber);
+
+			run.Should().Be(new IncompleteSimulationRun(
+				new RunSeedMaterial(
+					identity,
+					BaselineRandomDecisionStrategy.Identity,
+					runNumber)));
+			decorators.Should().HaveCount((int)runNumber + 1);
+			decorators[^1].ObservedSemantics.Should().Contain(missingSemantic);
+			if (missingSemantic == ModeratorInstructionSemantic.CommunicateAsRoleHolders)
+			{
+				decorators[^1].LivingRoleHolderCountAtCommunication.Should()
+					.Be(roleHolderCardinality);
+			}
+		}
+		MarkTestCompleted();
+	}
+
+	[Theory]
+	[InlineData(MainRoleType.Hunter, 1)]
+	[InlineData(MainRoleType.Witch, 1)]
+	[InlineData(MainRoleType.TwoSisters, 2)]
+	[InlineData(MainRoleType.ThreeBrothers, 3)]
+	public void ExecuteBatch_WithCardinalityRoleHolders_SafetyRepresentativeCompletesAllOneThousandAttempts(
+		MainRoleType role,
+		int roleHolderCardinality)
+	{
+		var roles = Enumerable
+			.Repeat(role, roleHolderCardinality)
+			.Append(MainRoleType.SimpleWerewolf)
+			.Concat(Enumerable.Repeat(MainRoleType.SimpleVillager, 5))
+			.ToArray();
+		var scenario = new SimulationScenario(
+			roles.Length,
+			roles);
+		var identity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+
+		var batch = new SimulationExecutor().ExecuteBatch(
+			scenario,
+			SimulatorCapability.SafetyScreening,
+			identity,
+			runCount: 1_000);
+
+		batch.Records.Should().HaveCount(1_000);
+		batch.CompletedRunCount.Should().Be(1_000);
+		batch.IncompleteRunCount.Should().Be(0);
+		batch.Records.Should().OnlyContain(run =>
+			run is CompletedSimulationRun);
+		MarkTestCompleted();
 	}
 
 	[Fact]
@@ -106,6 +228,41 @@ public class SimulationExecutionTests : DiagnosticTestBase
 			runNumber: 0);
 
 		first.Should().BeOfType<CompletedSimulationRun>();
+		replay.Should().Be(first);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void Execute_WithVillagerVillager_UsesSafetyCapabilityAndCompletesDeterministicReplay()
+	{
+		var scenario = new SimulationScenario(
+			5,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Seer,
+				MainRoleType.VillagerVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+		var identity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+		var executor = new SimulationExecutor();
+
+		var first = executor.Execute(
+			scenario,
+			SimulatorCapability.SafetyScreening,
+			identity,
+			runNumber: 17);
+		var replay = executor.Execute(
+			scenario,
+			SimulatorCapability.SafetyScreening,
+			identity,
+			runNumber: 17);
+
+		first.Should().BeOfType<CompletedSimulationRun>();
+		first.RunSeedMaterial.CompatibilityIdentity.Profile.Should()
+			.Be(new SimulatorProfileIdentity("safety-screening", "6"));
 		replay.Should().Be(first);
 		MarkTestCompleted();
 	}
@@ -544,6 +701,61 @@ public class SimulationExecutionTests : DiagnosticTestBase
 				MainRoleType.SimpleVillager,
 				MainRoleType.SimpleVillager
 			]);
+
+	private sealed class PreserveRoleHoldersUntilNightThreeStrategy
+		: IModeratorDecisionStrategy
+	{
+		private readonly IModeratorDecisionStrategy _inner;
+		private readonly MainRoleType _role;
+
+		internal PreserveRoleHoldersUntilNightThreeStrategy(
+			IModeratorDecisionStrategy inner,
+			MainRoleType role)
+		{
+			ArgumentNullException.ThrowIfNull(inner);
+			_inner = inner;
+			_role = role;
+		}
+
+		internal List<ModeratorInstructionSemantic> ObservedSemantics { get; } = [];
+		internal int? LivingRoleHolderCountAtCommunication { get; private set; }
+
+		public ModeratorResponse CreateResponse(
+			ModeratorInstruction instruction,
+			IGameSession session)
+		{
+			ObservedSemantics.Add(instruction.Semantic);
+			if (instruction.Semantic ==
+			    ModeratorInstructionSemantic.CommunicateAsRoleHolders)
+			{
+				LivingRoleHolderCountAtCommunication = session.GetPlayers().Count(player =>
+					player.State.Health == PlayerHealth.Alive &&
+					player.State.CurrentRole == _role);
+			}
+
+			return instruction switch
+			{
+				SelectPlayersInstruction
+				{
+					Semantic: ModeratorInstructionSemantic.SelectWerewolfVictim
+				} victim => victim.CreateResponse(
+					session.GetPlayers()
+						.Where(player =>
+							victim.SelectablePlayerIds.Contains(player.Id) &&
+							player.State.CurrentRole != _role &&
+							player.State.ModeratorKnownRole != _role)
+						.OrderBy(player => player.Id)
+						.Take(1)
+						.Select(player => player.Id)
+						.ToHashSet()),
+				SelectPlayersInstruction
+				{
+					Semantic: ModeratorInstructionSemantic.RecordDayVote
+				} dayVote => dayVote.CreateResponse([]),
+				_ => _inner.CreateResponse(instruction, session)
+			};
+		}
+	}
 
 	private static SimulationCompatibilityIdentity CreateIdentity(SimulationScenario scenario) =>
 		new(scenario.ToCanonical(), SimulatorCapability.FullProbability.Identity);

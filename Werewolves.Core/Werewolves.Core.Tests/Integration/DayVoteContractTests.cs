@@ -84,6 +84,14 @@ public sealed class DayVoteContractTests
             session.GameHistoryLog.OfType<PlayerEliminatedLogEntry>()
                 .Should().NotContain(entry =>
                     entry.Reason == EliminationReason.DayVote);
+			result.ModeratorInstruction.Should()
+				.NotBeOfType<AssignRolesInstruction>();
+			session.GameHistoryLog
+				.OfType<EliminationCascadeCompletedLogEntry>()
+				.Should().NotContain(entry =>
+					entry.ScopeId.StartsWith(
+						$"Day:{session.TurnNumber}:Vote:",
+						StringComparison.Ordinal));
             session.GetPlayers()
                 .Where(player => player.State.Health == PlayerHealth.Alive)
                 .Select(player => player.Id)
@@ -91,6 +99,124 @@ public sealed class DayVoteContractTests
                 .Should().Equal(livingPlayersBefore);
         }
     }
+
+	[Fact]
+	public void ConsecutiveVotes_UseFreshScopesAndRehydrateAtTheExactSecondVote()
+	{
+		var builder = GameTestBuilder.Create()
+			.WithPlayers(
+				"Werewolf",
+				"Public Villager-Villager",
+				"Night victim",
+				"Second vote target",
+				"Villager A",
+				"Villager B")
+			.WithRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.VillagerVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		var werewolfId = players[0].Id;
+		var publicVoteTargetId = players[1].Id;
+		var nightVictimId = players[2].Id;
+		var secondVoteTargetId = players[3].Id;
+
+		var publicObservation = builder.ConfirmGameStart()
+			.ModeratorInstruction.Should()
+			.BeOfType<SelectPlayersInstruction>().Subject;
+		builder.Process(
+			publicObservation.CreateResponse([publicVoteTargetId]));
+		builder.ConfirmNightStart();
+		builder.CompleteWerewolfNightAction(
+			[werewolfId],
+			nightVictimId);
+		builder.CompleteDawnPhase(new()
+		{
+			[nightVictimId] = MainRoleType.SimpleVillager
+		});
+
+		var debate = builder.GetCurrentInstruction()
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var firstVote = builder.Process(debate.CreateResponse())
+			.ModeratorInstruction.Should()
+			.BeOfType<SelectPlayersInstruction>().Subject;
+		builder.ArrangeDayAction(DayPowerType.JudgeExtraVote);
+
+		var firstAnnouncement = builder.Process(
+				firstVote.CreateResponse([publicVoteTargetId]))
+			.ModeratorInstruction.Should()
+			.BeOfType<ConfirmationInstruction>().Subject;
+		firstAnnouncement.Semantic.Should().Be(
+			ModeratorInstructionSemantic.AnnounceDayElimination);
+		var secondVote = builder.Process(firstAnnouncement.CreateResponse())
+			.ModeratorInstruction.Should()
+			.BeOfType<SelectPlayersInstruction>().Subject;
+
+		var recoveredService = new GameService();
+		var recoveredGameId = recoveredService.RehydrateSession(
+			builder.GetGameState()!.Serialize());
+		var recoveredSecondVote = recoveredService
+			.GetCurrentInstruction(recoveredGameId)
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		recoveredSecondVote.InstructionId.Should().Be(
+			secondVote.InstructionId);
+		recoveredSecondVote.Semantic.Should().Be(
+			secondVote.Semantic);
+
+		var secondReveal = recoveredService.ProcessInstruction(
+				recoveredGameId,
+				recoveredSecondVote.CreateResponse(
+					[secondVoteTargetId]))
+			.ModeratorInstruction.Should()
+			.BeOfType<AssignRolesInstruction>().Subject;
+		secondReveal.PlayersForAssignment.Should().Equal(
+			secondVoteTargetId);
+		var secondAnnouncement = recoveredService.ProcessInstruction(
+				recoveredGameId,
+				secondReveal.CreateResponse(new()
+				{
+					[secondVoteTargetId] =
+						MainRoleType.SimpleVillager
+				}))
+			.ModeratorInstruction.Should()
+			.BeOfType<ConfirmationInstruction>().Subject;
+		recoveredService.ProcessInstruction(
+			recoveredGameId,
+			secondAnnouncement.CreateResponse());
+
+		var recovered = recoveredService.GetGameStateView(recoveredGameId)!;
+		recovered.GameHistoryLog
+			.OfType<VoteOutcomeReportedLogEntry>()
+			.Select(entry => entry.ReportedOutcomePlayerId)
+			.Should().Equal(
+				publicVoteTargetId,
+				secondVoteTargetId);
+		recovered.GameHistoryLog
+			.OfType<PlayerEliminatedLogEntry>()
+			.Where(entry => entry.Reason == EliminationReason.DayVote)
+			.Select(entry => entry.PlayerId)
+			.Should().Equal(
+				publicVoteTargetId,
+				secondVoteTargetId);
+		recovered.GameHistoryLog
+			.OfType<EliminationCascadeCompletedLogEntry>()
+			.Where(entry =>
+				entry.ScopeId.StartsWith(
+					"Day:1:Vote:",
+					StringComparison.Ordinal))
+			.Select(entry => entry.ScopeId)
+			.Should().Equal(
+				"Day:1:Vote:1",
+				"Day:1:Vote:2");
+		recovered.GameHistoryLog
+			.OfType<EliminationCascadeReactionCompletedLogEntry>()
+			.Should().BeEmpty();
+
+	}
 
     [Fact]
     public void StaleSameShapedResponse_FromAnotherGameSession_IsSideEffectFree()

@@ -1,5 +1,6 @@
 using Werewolves.Core.GameLogic.Interfaces;
 using Werewolves.Core.GameLogic.Models;
+using Werewolves.Core.GameLogic.RolePowers;
 using Werewolves.Core.GameLogic.Roles.MainRoles;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
@@ -9,13 +10,9 @@ namespace Werewolves.Core.GameLogic.Roles;
 
 public static class SupportedRoleCatalog
 {
-	private static readonly RoleAdmissionCatalog Catalog = new(
-	[
-		RoleAdmission.Active(MainRoleType.SimpleWerewolf, () => new SimpleWerewolfRole()),
-		RoleAdmission.Active(MainRoleType.Seer, () => new SeerRole()),
-		RoleAdmission.Active(MainRoleType.WildChild, () => new WildChildRole()),
-		RoleAdmission.Passive(MainRoleType.SimpleVillager)
-	]);
+	private static readonly RoleAdmissionCatalog Catalog = CreateAdmissions(
+		new RolePowerAvailabilityGateway(
+			AllowAllRolePowerAvailabilityPolicy.Instance));
 
 	private static readonly MainRoleType[] SupportedRoleTypes = Catalog.Roles.ToArray();
 
@@ -25,6 +22,39 @@ public static class SupportedRoleCatalog
 		Catalog.ListenerFactories;
 
 	internal static RoleAdmissionCatalog Admissions => Catalog;
+
+	internal static RoleAdmissionCatalog CreateAdmissions(
+		RolePowerAvailabilityGateway rolePowerAvailabilityGateway)
+	{
+		ArgumentNullException.ThrowIfNull(rolePowerAvailabilityGateway);
+
+		return new RoleAdmissionCatalog(
+		[
+			RoleAdmission.Active(
+				MainRoleType.SimpleWerewolf,
+				() => new SimpleWerewolfRole()),
+			RoleAdmission.Active(
+				MainRoleType.Seer,
+				() => new SeerRole(rolePowerAvailabilityGateway)),
+			RoleAdmission.Active(
+				MainRoleType.WildChild,
+				() => new WildChildRole()),
+			RoleAdmission.Active(
+				MainRoleType.TwoSisters,
+				() => new TwoSistersRole(rolePowerAvailabilityGateway)),
+			RoleAdmission.Active(
+				MainRoleType.ThreeBrothers,
+				() => new ThreeBrothersRole(rolePowerAvailabilityGateway)),
+			RoleAdmission.Active(
+				MainRoleType.Witch,
+				() => new WitchRole(rolePowerAvailabilityGateway)),
+			RoleAdmission.Active(
+				MainRoleType.Hunter,
+				() => new HunterRole(rolePowerAvailabilityGateway)),
+			RoleAdmission.Passive(MainRoleType.SimpleVillager),
+			RoleAdmission.Passive(MainRoleType.VillagerVillager)
+		]);
+	}
 
 	public static IReadOnlyList<MainRoleType> Roles => SupportedRoleTypes;
 

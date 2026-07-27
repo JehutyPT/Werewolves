@@ -22,7 +22,11 @@ internal abstract class ImmediateFeedbackNightRoleHookListener : StandardNightRo
 	protected override List<RoleStateMachineStage> DefineStateMachineStages() =>
 	[
 		CreateStage(GameHook.NightMainActionLoop, null, WokenUpStateEnum, HandleRoleWakeupAndId),
-		CreateStage(GameHook.NightMainActionLoop, WokenUpStateEnum, AwaitingTargetSelectionEnum, HandleNightPowerUse_AndId),
+		CreateStage(
+			GameHook.NightMainActionLoop,
+			WokenUpStateEnum,
+			[AwaitingTargetSelectionEnum, ReadyToSleepStateEnum],
+			HandleNightPowerUse_AndId),
 		CreateStage(GameHook.NightMainActionLoop, AwaitingTargetSelectionEnum, AwaitingModeratorFeedbackEnum, HandleParseNightPowerConsequences),
 		CreateStage(GameHook.NightMainActionLoop, AwaitingModeratorFeedbackEnum, ReadyToSleepStateEnum, ConfirmModeratorFeedbackGiven),
 		CreateStage(GameHook.NightMainActionLoop, ReadyToSleepStateEnum, AsleepStateEnum, HandleAsleepConfirmation),

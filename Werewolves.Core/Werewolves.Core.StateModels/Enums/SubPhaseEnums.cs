@@ -31,7 +31,6 @@ public enum DawnSubPhases
 {
     CalculateVictims,   // Process night actions to determine final victims
     AnnounceVictims,    // Moderator announces all victims from the night
-    ProcessRoleReveals, // Reveal roles for each eliminated player
     Finalize           // Complete dawn processing and transition to debate
 }
 
@@ -47,7 +46,6 @@ public enum DaySubPhases
     FriendVoting,
     HandleNonTieVote,
     ProcessVoteOutcome,
-    ProcessVoteEliminationCascade,
     Finalize
 }
 

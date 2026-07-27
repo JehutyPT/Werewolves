@@ -138,21 +138,32 @@ public class RoleAdmissionTests
 	}
 
 	[Fact]
-	public void SupportedRoleCatalog_AdmitsThreeActiveRolesAndSimpleVillagerAsPassive()
+	public void SupportedRoleCatalog_AdmitsSevenActiveRolesAndBothVillagerRolesAsPassive()
 	{
 		var catalog = SupportedRoleCatalog.Admissions;
 
-		catalog.Roles.Should().Equal(
+		catalog.Roles.Should().BeEquivalentTo(
+		[
 			MainRoleType.SimpleWerewolf,
 			MainRoleType.Seer,
 			MainRoleType.WildChild,
-			MainRoleType.SimpleVillager);
+			MainRoleType.TwoSisters,
+			MainRoleType.ThreeBrothers,
+			MainRoleType.Witch,
+			MainRoleType.Hunter,
+			MainRoleType.SimpleVillager,
+			MainRoleType.VillagerVillager
+		]);
 
 		foreach (var activeRole in new[]
 		         {
 			         MainRoleType.SimpleWerewolf,
 			         MainRoleType.Seer,
-			         MainRoleType.WildChild
+			         MainRoleType.WildChild,
+			         MainRoleType.TwoSisters,
+			         MainRoleType.ThreeBrothers,
+			         MainRoleType.Witch,
+			         MainRoleType.Hunter
 		         })
 		{
 			var listenerId = ListenerIdentifier.Listener(activeRole);
@@ -160,8 +171,15 @@ public class RoleAdmissionTests
 			catalog.TryGetListenerFactory(listenerId, out _).Should().BeTrue();
 		}
 
-		var simpleVillagerListener = ListenerIdentifier.Listener(MainRoleType.SimpleVillager);
-		catalog.GetAdmission(simpleVillagerListener).Should().Be(RoleAdmissionKind.Passive);
-		catalog.TryGetListenerFactory(simpleVillagerListener, out _).Should().BeFalse();
+		foreach (var passiveRole in new[]
+		         {
+			         MainRoleType.SimpleVillager,
+			         MainRoleType.VillagerVillager
+		         })
+		{
+			var listenerId = ListenerIdentifier.Listener(passiveRole);
+			catalog.GetAdmission(listenerId).Should().Be(RoleAdmissionKind.Passive);
+			catalog.TryGetListenerFactory(listenerId, out _).Should().BeFalse();
+		}
 	}
 }

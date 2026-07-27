@@ -45,39 +45,6 @@ public class GameSessionQueriesTests : DiagnosticTestBase
         MarkTestCompleted();
     }
 
-    [Fact]
-    public void GetNightActionMap_GroupsCurrentNightActionsByTargetPlayer()
-    {
-        var builder = CreateBuilder()
-            .WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);
-        builder.StartGame();
-        builder.ConfirmGameStart();
-
-        var gameState = builder.GetGameState()!;
-        var players = gameState.GetPlayers().ToList();
-        var werewolf = players[0];
-        var seer = players[1];
-        var victim = players[2];
-
-        builder.CompleteNightPhase(
-            werewolfIds: [werewolf.Id],
-            victimId: victim.Id,
-            seerId: seer.Id,
-            seerTargetId: werewolf.Id);
-
-        var actionMap = GameSessionQueries.GetNightActionMap(
-            gameState,
-            [
-                NightActionType.WerewolfVictimSelection,
-                NightActionType.SeerCheck
-            ]);
-
-        actionMap[victim.Id].Should().Contain(NightActionType.WerewolfVictimSelection);
-        actionMap[werewolf.Id].Should().Contain(NightActionType.SeerCheck);
-
-        MarkTestCompleted();
-    }
-
     #region TryGetOnlyPossibleUnassignedRole
 
     [Fact]

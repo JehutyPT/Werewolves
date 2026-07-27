@@ -48,6 +48,41 @@ public class SimulationScenarioClassifierTests
 	}
 
 	[Fact]
+	public void Classify_TwoSisters_IsCurrentSafetyOnlyAndRejectedByLegacyRoleGate()
+	{
+		var scenario = new SimulationScenario(
+			5,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.TwoSisters,
+				MainRoleType.TwoSisters,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+
+		var safety = SimulationScenarioClassifier.Classify(
+			scenario,
+			SimulatorCapability.SafetyScreening);
+		var probability = SimulationScenarioClassifier.Classify(
+			scenario,
+			SimulatorCapability.FullProbability);
+		var legacy = SimulationScenarioClassifier.Classify(
+			scenario,
+			SimulatorProfile.LegacyCore);
+
+		safety.AppSupport!.IsSupported.Should().BeTrue();
+		safety.SimulatorSupport!.IsSupported.Should().BeTrue();
+		safety.Cacheability!.CompatibilityIdentity.Profile.Should()
+			.Be(new SimulatorProfileIdentity("safety-screening", "6"));
+		probability.SimulatorSupport!.IsSupported.Should().BeFalse();
+		probability.SimulatorSupport.UnsupportedRoles.Should()
+			.Equal(MainRoleType.TwoSisters);
+		legacy.SimulatorSupport!.IsSupported.Should().BeFalse();
+		legacy.SimulatorSupport.UnsupportedRoles.Should()
+			.Equal(MainRoleType.TwoSisters);
+	}
+
+	[Fact]
 	public void Classify_WithAppSupportedButProfileUnsupportedRole_StopsBeforeAlreadyDecidedAndPreservesInput()
 	{
 		var scenario = new SimulationScenario(
@@ -75,5 +110,146 @@ public class SimulationScenarioClassifierTests
 		classification.SimulatorSupport.UnsupportedRoles.Should().Equal(MainRoleType.WildChild);
 		classification.AlreadyDecided.Should().BeNull();
 		classification.Cacheability.Should().BeNull();
+	}
+
+	[Fact]
+	public void Classify_VillagerVillager_IsSafetyScreeningOnly()
+	{
+		var scenario = new SimulationScenario(
+			5,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Seer,
+				MainRoleType.VillagerVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+
+		var safety = SimulationScenarioClassifier.Classify(
+			scenario,
+			SimulatorCapability.SafetyScreening);
+		var probability = SimulationScenarioClassifier.Classify(
+			scenario,
+			SimulatorCapability.FullProbability);
+
+		safety.SimulatorSupport.Should().Match<SimulatorSupportResult>(
+			result =>
+				result.IsSupported &&
+				result.Capability == SimulatorCapability.SafetyScreening);
+		safety.Cacheability!.CompatibilityIdentity.Profile.Should()
+			.Be(new SimulatorProfileIdentity("safety-screening", "6"));
+		probability.SimulatorSupport.Should().Match<SimulatorSupportResult>(
+			result =>
+				!result.IsSupported &&
+				result.Capability == SimulatorCapability.FullProbability);
+		probability.SimulatorSupport!.UnsupportedRoles.Should()
+			.Equal(MainRoleType.VillagerVillager);
+		probability.Cacheability.Should().BeNull();
+	}
+
+	[Fact]
+	public void Classify_ThreeBrothers_IsCurrentSafetyOnlyAndRejectedByLegacyRoleGate()
+	{
+		var scenario = new SimulationScenario(
+			6,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.ThreeBrothers,
+				MainRoleType.ThreeBrothers,
+				MainRoleType.ThreeBrothers,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+
+		var safety = SimulationScenarioClassifier.Classify(
+			scenario,
+			SimulatorCapability.SafetyScreening);
+		var probability = SimulationScenarioClassifier.Classify(
+			scenario,
+			SimulatorCapability.FullProbability);
+		var legacy = SimulationScenarioClassifier.Classify(
+			scenario,
+			SimulatorProfile.LegacyCore);
+
+		safety.AppSupport!.IsSupported.Should().BeTrue();
+		safety.SimulatorSupport!.IsSupported.Should().BeTrue();
+		safety.Cacheability!.CompatibilityIdentity.Profile.Should()
+			.Be(new SimulatorProfileIdentity("safety-screening", "6"));
+		probability.SimulatorSupport!.IsSupported.Should().BeFalse();
+		probability.SimulatorSupport.UnsupportedRoles.Should()
+			.Equal(MainRoleType.ThreeBrothers);
+		legacy.SimulatorSupport!.IsSupported.Should().BeFalse();
+		legacy.SimulatorSupport.UnsupportedRoles.Should()
+			.Equal(MainRoleType.ThreeBrothers);
+	}
+
+	[Fact]
+	public void Classify_Witch_IsCurrentSafetyOnlyAndRejectedByFrozenProfiles()
+	{
+		var scenario = new SimulationScenario(
+			5,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Witch,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+
+		var safety = SimulationScenarioClassifier.Classify(
+			scenario,
+			SimulatorCapability.SafetyScreening);
+		var probability = SimulationScenarioClassifier.Classify(
+			scenario,
+			SimulatorCapability.FullProbability);
+		var legacy = SimulationScenarioClassifier.Classify(
+			scenario,
+			SimulatorProfile.LegacyCore);
+
+		safety.AppSupport!.IsSupported.Should().BeTrue();
+		safety.SimulatorSupport!.IsSupported.Should().BeTrue();
+		safety.Cacheability!.CompatibilityIdentity.Profile.Should()
+			.Be(new SimulatorProfileIdentity("safety-screening", "6"));
+		probability.SimulatorSupport!.IsSupported.Should().BeFalse();
+		probability.SimulatorSupport.UnsupportedRoles.Should()
+			.Equal(MainRoleType.Witch);
+		legacy.SimulatorSupport!.IsSupported.Should().BeFalse();
+		legacy.SimulatorSupport.UnsupportedRoles.Should()
+			.Equal(MainRoleType.Witch);
+	}
+
+	[Fact]
+	public void Classify_Hunter_IsCurrentSafetyOnlyAndRejectedByFrozenProfiles()
+	{
+		var scenario = new SimulationScenario(
+			5,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Hunter,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+
+		var safety = SimulationScenarioClassifier.Classify(
+			scenario,
+			SimulatorCapability.SafetyScreening);
+		var probability = SimulationScenarioClassifier.Classify(
+			scenario,
+			SimulatorCapability.FullProbability);
+		var legacy = SimulationScenarioClassifier.Classify(
+			scenario,
+			SimulatorProfile.LegacyCore);
+
+		safety.AppSupport!.IsSupported.Should().BeTrue();
+		safety.SimulatorSupport!.IsSupported.Should().BeTrue();
+		safety.Cacheability!.CompatibilityIdentity.Profile.Should()
+			.Be(new SimulatorProfileIdentity("safety-screening", "6"));
+		probability.SimulatorSupport!.IsSupported.Should().BeFalse();
+		probability.SimulatorSupport.UnsupportedRoles.Should()
+			.Equal(MainRoleType.Hunter);
+		legacy.SimulatorSupport!.IsSupported.Should().BeFalse();
+		legacy.SimulatorSupport.UnsupportedRoles.Should()
+			.Equal(MainRoleType.Hunter);
 	}
 }

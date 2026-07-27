@@ -6,6 +6,8 @@ The navigation graph is a correctness and auditability property of the game rule
 
 This deliberately accepts a larger `GameFlowManager`. The value of extracting phase-specific behavior is to keep prompts, role assignment, victim calculation, and vote resolution close to their domain code. The value of keeping navigation centralized is different: it preserves one visible map of the game loop. When these values conflict, navigation visibility wins.
 
+`EliminationCascadeStage` therefore never selects a sub-phase or Main Phase destination. It drains the full scoped batch/reaction chain and reports completion; the following Dawn or Day navigation stage owns the transition. Victory and consecutive-vote routing cannot run while a cascade remains active.
+
 ## Considered options
 
 - **Per-phase modules own their full state machines**: each phase file defines its sub-phases, branch points, and main-phase exits. Rejected because the game's full navigation path becomes distributed across files, making it harder to audit where phases can go.

@@ -161,6 +161,10 @@
     <value>Indica em segredo os papéis dos eliminados. Não os reveles publicamente nesta fase.</value>
     <comment/>
   </data>
+  <data name="PublicRoleRevealInstruction" xml:space="preserve">
+    <value>Confirma que todos os jogadores indicados revelaram fisicamente a carta e regista os papéis ainda desconhecidos.</value>
+    <comment/>
+  </data>
   <data name="DebateStartsPrompt" xml:space="preserve">
     <value>Começa o debate do dia. Quando terminar, confirma para avançar para a votação.</value>
     <comment/>
@@ -245,6 +249,10 @@
     <value>Aldeão-Aldeão</value>
     <comment/>
   </data>
+  <data name="VillagerVillagerPublicFromDealInstruction" xml:space="preserve">
+    <value>Regista o jogador que recebeu a carta Aldeão-Aldeão, visível durante a distribuição.</value>
+    <comment/>
+  </data>
   <data name="CupidRoleName" xml:space="preserve">
     <value>Cupido</value>
     <comment/>
@@ -253,8 +261,32 @@
     <value>Bruxa</value>
     <comment/>
   </data>
+  <data name="WitchHealingSelectionInstruction" xml:space="preserve">
+    <value>Alvos dos ataques físicos desta noite: {0}. Bruxa, escolhe no máximo um jogador para curar.</value>
+    <comment/>
+  </data>
+  <data name="WitchPoisonSelectionInstruction" xml:space="preserve">
+    <value>Bruxa, escolhe no máximo um jogador para envenenar.</value>
+    <comment/>
+  </data>
+  <data name="WitchAttackTargetsAndPoisonSelectionInstruction" xml:space="preserve">
+    <value>Alvos dos ataques físicos desta noite: {0}. Bruxa, escolhe no máximo um jogador para envenenar.</value>
+    <comment/>
+  </data>
+  <data name="WitchAttackTargetsInstruction" xml:space="preserve">
+    <value>Alvos dos ataques físicos desta noite: {0}.</value>
+    <comment/>
+  </data>
+  <data name="DeclineOption" xml:space="preserve">
+    <value>Recusar</value>
+    <comment/>
+  </data>
   <data name="HunterRoleName" xml:space="preserve">
     <value>Caçador</value>
+    <comment/>
+  </data>
+  <data name="HunterFinalShotSelectionInstruction" xml:space="preserve">
+    <value>Caçador, escolhe exatamente um jogador vivo para eliminar com o teu último tiro.</value>
     <comment/>
   </data>
   <data name="LittleGirlRoleName" xml:space="preserve">
@@ -411,6 +443,22 @@
   </data>
   <data name="GameSessionNotFoundError" xml:space="preserve">
     <value>ERROR: Game not found</value>
+    <comment/>
+  </data>
+  <data name="RoleHoldersWakeUp" xml:space="preserve">
+    <value>{0} acordam.</value>
+    <comment/>
+  </data>
+  <data name="RoleHoldersRecognitionPrompt" xml:space="preserve">
+    <value>{0}, acordem e reconheçam-se.</value>
+    <comment/>
+  </data>
+  <data name="RoleHoldersCommunicationPrompt" xml:space="preserve">
+    <value>{0}, acordem e comuniquem em silêncio.</value>
+    <comment/>
+  </data>
+  <data name="RoleHoldersGoToSleep" xml:space="preserve">
+    <value>{0} voltam a dormir.</value>
     <comment/>
   </data>
 </root>
