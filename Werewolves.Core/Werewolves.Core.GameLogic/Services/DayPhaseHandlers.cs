@@ -1,4 +1,3 @@
-using Werewolves.Core.GameLogic.Queries;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
@@ -47,35 +46,4 @@ internal static class DayPhaseHandlers
         return playerId;
     }
 
-    internal static ModeratorInstruction? RequestRoleRevealIfNeeded(GameSession session, Guid playerId)
-        => RoleKnowledgeHandlers.RequestPublicRoleReveal(
-            session,
-            [session.GetPlayer(playerId)],
-            ModeratorInstructionSemantic.AssignDayVoteTargetRole);
-
-    internal static ModeratorInstruction ResolveNonTieVote(GameSession session, ModeratorResponse input)
-    {
-        var lynchedPlayerId = GameSessionQueries.GetCurrentVoteTarget(session)!.Value;
-        var lynchedPlayer = session.GetPlayer(lynchedPlayerId);
-        var lynchedPlayerState = lynchedPlayer.State;
-
-        RoleKnowledgeHandlers.RecordPublicRoleReveal(session, [lynchedPlayer], input);
-
-        if (lynchedPlayerState.IsImmuneToLynching)
-        {
-            var instruction = new ConfirmationInstruction(
-				ModeratorInstructionSemantic.AnnounceLynchingImmunity,
-                publicAnnouncement: lynchedPlayerState.LynchingImmunityAnnouncement!);
-
-            session.ApplyStatusEffect(StatusEffectTypes.LynchingImmunityUsed, lynchedPlayerId);
-
-            return instruction;
-        }
-
-        session.EliminatePlayer(lynchedPlayerId, EliminationReason.DayVote);
-
-        return new ConfirmationInstruction(
-			ModeratorInstructionSemantic.AnnounceDayElimination,
-            publicAnnouncement: GameStrings.SingleVictimEliminatedAnnounce.Format(lynchedPlayer.Name));
-    }
 }

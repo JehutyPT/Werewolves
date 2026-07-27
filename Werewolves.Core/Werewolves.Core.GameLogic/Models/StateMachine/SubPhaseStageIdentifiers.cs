@@ -11,8 +11,7 @@ internal enum NightSubPhaseStage
 internal enum DawnSubPhaseStage
 {
     CheckForVictims,
-    AnnounceVictimsAndRequestRoles,
-    AssignVictimRoles
+    ResolveEliminationCascade
 }
 
 internal enum DaySubPhaseStage
@@ -20,6 +19,6 @@ internal enum DaySubPhaseStage
     Debate,
     RequestVote,
     HandleVoteResponse,
-    VerifyLynchingOcurred,
+    ResolveEliminationCascade,
     VoteOutcomeNavigation
 }

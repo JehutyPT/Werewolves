@@ -274,6 +274,61 @@ internal class GameSession : IGameSession
         _gameSessionKernel.AddEntryAndUpdateState(entry);
     }
 
+	internal void RecordEliminationCascadeReactionCompletion(
+		string scopeId,
+		string reactionId,
+		IReadOnlyCollection<EliminationCascadeElimination>
+			triggeringEliminations,
+		IReadOnlyCollection<EliminationCascadeElimination>
+			admittedEliminations)
+	{
+		var entry = new EliminationCascadeReactionCompletedLogEntry
+		{
+			Timestamp = DateTimeOffset.UtcNow,
+			TurnNumber = TurnNumber,
+			CurrentPhase = _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+			ScopeId = scopeId,
+			ReactionId = reactionId,
+			TriggeringEliminations = triggeringEliminations.ToList(),
+			AdmittedEliminations = admittedEliminations.ToList()
+		};
+
+		_gameSessionKernel.AddEntryAndUpdateState(entry);
+	}
+
+	internal void RecordEliminationCascadeBatchResolution(
+		string scopeId,
+		IReadOnlyCollection<EliminationCascadeElimination>
+			requestedEliminations,
+		IReadOnlyCollection<EliminationCascadeElimination>
+			committedEliminations)
+	{
+		var entry = new EliminationCascadeBatchResolvedLogEntry
+		{
+			Timestamp = DateTimeOffset.UtcNow,
+			TurnNumber = TurnNumber,
+			CurrentPhase = _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+			ScopeId = scopeId,
+			RequestedEliminations = requestedEliminations.ToList(),
+			CommittedEliminations = committedEliminations.ToList()
+		};
+
+		_gameSessionKernel.AddEntryAndUpdateState(entry);
+	}
+
+	internal void RecordEliminationCascadeCompletion(string scopeId)
+	{
+		var entry = new EliminationCascadeCompletedLogEntry
+		{
+			Timestamp = DateTimeOffset.UtcNow,
+			TurnNumber = TurnNumber,
+			CurrentPhase = _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+			ScopeId = scopeId
+		};
+
+		_gameSessionKernel.AddEntryAndUpdateState(entry);
+	}
+
     internal void DetermineDawnVictim(Guid playerId, EliminationReason reason)
     {
         var entry = new DawnVictimDeterminedLogEntry
@@ -414,6 +469,25 @@ internal class GameSession : IGameSession
             WinningTeam = winningTeam,
             ConditionDescription = description
         };
+
+		_gameSessionKernel.AddEntryAndUpdateState(entry);
+	}
+
+	internal void PerformDayActionNoTarget(DayPowerType type)
+	{
+		if (type == DayPowerType.Unknown)
+		{
+			throw new ArgumentOutOfRangeException(nameof(type));
+		}
+
+		var entry = new DayActionLogEntry
+		{
+			Timestamp = DateTimeOffset.UtcNow,
+			TurnNumber = TurnNumber,
+			CurrentPhase = _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+			ActionType = type,
+			TargetIds = null
+		};
 
 		_gameSessionKernel.AddEntryAndUpdateState(entry);
 	}

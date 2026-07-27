@@ -527,7 +527,7 @@ Tests for the unified status effects system.
 
 - **SE-022b**: `WildChildModelEliminated_AppliesStatusEffectAndAssignsWerewolfRole`
   - Given: Wild Child player whose model was eliminated
-  - When: the `PlayerRoleAssignedOnElimination` hook runs
+  - When: the Elimination Cascade reaches its centrally ordered forced-reaction boundary
   - Then: the Wild Child listener applies `StatusEffectLogEntry` and `AssignRoleLogEntry` separately
 
 - **SE-023**: `ApplyStatusEffect_LynchingImmunityUsed_SetsEffect`

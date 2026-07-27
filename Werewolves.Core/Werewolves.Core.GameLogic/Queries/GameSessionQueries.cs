@@ -5,6 +5,16 @@ using Werewolves.Core.StateModels.Models;
 
 namespace Werewolves.Core.GameLogic.Queries;
 
+internal readonly record struct PendingDawnElimination(
+    IPlayer Player,
+    EliminationReason Reason,
+    int LogIndex);
+
+internal readonly record struct CurrentDayVoteOutcome(
+    Guid PlayerId,
+    int VoteOrdinal,
+    int LogIndex);
+
 internal static class GameSessionQueries
 {
     internal static IEnumerable<TLogEntry> FindLogEntries<TLogEntry>(
@@ -121,13 +131,26 @@ internal static class GameSessionQueries
                 GamePhase.Dawn)
             .Select(log => session.GetPlayer(log.PlayerId));
 
-    internal static IEnumerable<(IPlayer Player, EliminationReason Reason)> GetPendingDawnEliminations(
-        IGameSession session)
-        => FindLogEntries<DawnVictimDeterminedLogEntry>(
-                session,
-                NumberRangeConstraint.Exact(session.TurnNumber),
-                GamePhase.Dawn)
-            .Select(log => (session.GetPlayer(log.PlayerId), log.Reason));
+    internal static IReadOnlyList<PendingDawnElimination>
+        GetPendingDawnEliminations(IGameSession session) =>
+        session.GameHistoryLog
+            .Select((entry, index) => (Entry: entry, Index: index))
+            .Where(item =>
+                item.Entry is DawnVictimDeterminedLogEntry
+                {
+                    TurnNumber: var turnNumber,
+                    CurrentPhase: GamePhase.Dawn
+                } &&
+                turnNumber == session.TurnNumber)
+            .Select(item =>
+            {
+                var entry = (DawnVictimDeterminedLogEntry)item.Entry;
+                return new PendingDawnElimination(
+                    session.GetPlayer(entry.PlayerId),
+                    entry.Reason,
+                    item.Index);
+            })
+            .ToArray();
 
     /// <summary>
     /// Returns all players eliminated during the Day phase of the current turn,
@@ -188,18 +211,55 @@ internal static class GameSessionQueries
 
     internal static Guid? GetCurrentVoteTarget(IGameSession session)
     {
-        var voteEntry = FindLogEntries<VoteOutcomeReportedLogEntry>(
-                session,
-                NumberRangeConstraint.Exact(session.TurnNumber))
-            .LastOrDefault();
-
-        if (voteEntry == null || voteEntry.ReportedOutcomePlayerId == Guid.Empty)
+        var voteOutcome = GetCurrentDayVoteOutcome(session);
+        if (voteOutcome is not { PlayerId: var playerId } ||
+            playerId == Guid.Empty)
         {
             return null;
         }
 
-        return voteEntry.ReportedOutcomePlayerId;
+        return playerId;
     }
+
+    internal static CurrentDayVoteOutcome? GetCurrentDayVoteOutcome(
+        IGameSession session)
+    {
+        var currentTurnVotes = session.GameHistoryLog
+            .Select((entry, index) => (Entry: entry, Index: index))
+            .Where(item =>
+                item.Entry is VoteOutcomeReportedLogEntry
+                {
+                    TurnNumber: var turnNumber,
+                    CurrentPhase: GamePhase.Day
+                } &&
+                turnNumber == session.TurnNumber)
+            .ToArray();
+        if (currentTurnVotes is not [.., var currentVote])
+        {
+            return null;
+        }
+
+        var entry = (VoteOutcomeReportedLogEntry)currentVote.Entry;
+        return new CurrentDayVoteOutcome(
+            entry.ReportedOutcomePlayerId,
+            currentTurnVotes.Length,
+            currentVote.Index);
+    }
+
+    internal static EliminationCascadeBatchResolvedLogEntry?
+        GetEliminationCascadeBatchResolution(
+            IGameSession session,
+            string scopeId,
+            int scopeStartLogIndex,
+            IReadOnlyCollection<EliminationCascadeElimination>
+                requestedEliminations) =>
+        session.GameHistoryLog
+            .Skip(scopeStartLogIndex + 1)
+            .OfType<EliminationCascadeBatchResolvedLogEntry>()
+            .SingleOrDefault(entry =>
+                entry.ScopeId == scopeId &&
+                entry.RequestedEliminations.SequenceEqual(
+                    requestedEliminations));
 
     private static IEnumerable<MainRoleType> GetRolesInPlay(IGameSession session)
     {

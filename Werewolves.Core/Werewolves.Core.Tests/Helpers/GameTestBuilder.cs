@@ -1,4 +1,5 @@
 using Werewolves.Core.GameLogic.Models.InternalMessages;
+using Werewolves.Core.GameLogic.Models.EliminationCascades;
 using Werewolves.Core.GameLogic.RolePowers;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Core;
@@ -82,6 +83,30 @@ public class GameTestBuilder
 	internal GameTestBuilder WithOptionalRolePowerAvailabilityPolicy(
 		IRolePowerAvailabilityPolicy? policy) =>
 		policy == null ? this : WithRolePowerAvailabilityPolicy(policy);
+
+	internal GameTestBuilder WithEliminationCascadeReaction(
+		IEliminationCascadeReaction reaction,
+		EliminationCascadeReactionBoundary boundary =
+			EliminationCascadeReactionBoundary.Forced)
+		=> WithEliminationCascadeReactions(
+			new EliminationCascadeReactionBinding(
+				reaction,
+				boundary));
+
+	internal GameTestBuilder WithEliminationCascadeReactions(
+		params EliminationCascadeReactionBinding[] reactions)
+	{
+		if (_gameStarted)
+		{
+			throw new InvalidOperationException(
+				"The Elimination Cascade reaction must be configured before starting the game.");
+		}
+
+		_gameService = new GameService(
+			AllowAllRolePowerAvailabilityPolicy.Instance,
+			reactions);
+		return this;
+	}
 
     /// <summary>
     /// Adds players with auto-generated names (Player1, Player2, etc.).
@@ -280,6 +305,14 @@ public class GameTestBuilder
 		GetMutableSessionForArrangement().PerformNightAction(
 			actionType,
 			targetId);
+		return this;
+	}
+
+	internal GameTestBuilder ArrangeDayAction(DayPowerType actionType)
+	{
+		EnsureGameStarted();
+		GetMutableSessionForArrangement()
+			.PerformDayActionNoTarget(actionType);
 		return this;
 	}
 

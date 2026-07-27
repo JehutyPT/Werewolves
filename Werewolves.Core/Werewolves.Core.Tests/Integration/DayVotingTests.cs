@@ -1,6 +1,4 @@
 using FluentAssertions;
-using Werewolves.Core.GameLogic.Services;
-using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
@@ -220,116 +218,71 @@ public class DayVotingTests : DiagnosticTestBase
         MarkTestCompleted();
     }
 
-    /// <summary>
-    /// DV-006: Vote outcome with multiple possible role types still requests Moderator role assignment.
-    /// </summary>
-    [Fact]
-    public void VoteOutcome_MultiplePossibleRoles_RequestsRoleAssignment()
-    {
-        var session = new GameSession(
-            Guid.NewGuid(),
-            new ConfirmationInstruction(privateInstruction: nameof(VoteOutcome_MultiplePossibleRoles_RequestsRoleAssignment)),
-            new GameSessionConfig(
-                ["Werewolf", "Seer", "Wild Child", "Villager A", "Villager B"],
-                [
-                    MainRoleType.SimpleWerewolf,
-                    MainRoleType.Seer,
-                    MainRoleType.WildChild,
-                    MainRoleType.SimpleVillager,
-                    MainRoleType.SimpleVillager
-                ]));
-
-        var players = session.GetPlayers().ToList();
-        var knownWerewolf = players[0];
-        var lynchedPlayer = players[1];
-
-        session.AssignRole(knownWerewolf.Id, MainRoleType.SimpleWerewolf);
-        session.TransitionMainPhase(GamePhase.Day);
-        session.PerformDayVote(lynchedPlayer.Id);
-
-        var instruction = DayPhaseHandlers.RequestRoleRevealIfNeeded(session, lynchedPlayer.Id);
-
-        var assignment = instruction.Should().BeOfType<AssignRolesInstruction>().Subject;
-        assignment.PlayersForAssignment.Should().Contain(lynchedPlayer.Id);
-        assignment.RolesForAssignment.Distinct().Should().HaveCountGreaterThan(1);
-        session.GetPlayer(lynchedPlayer.Id).State.MainRole.Should().BeNull();
-
-        var announcement = DayPhaseHandlers.ResolveNonTieVote(
-            session,
-            assignment.CreateResponse(new Dictionary<Guid, MainRoleType>
-            {
-                [lynchedPlayer.Id] = MainRoleType.Seer
-            }));
-
-        announcement.Should().BeOfType<ConfirmationInstruction>()
-            .Which.PublicAnnouncement.Should().Contain(lynchedPlayer.Name);
-        session.GetPlayer(lynchedPlayer.Id).State.MainRole.Should().Be(MainRoleType.Seer);
-        session.GetPlayer(lynchedPlayer.Id).State.Health.Should().Be(PlayerHealth.Dead);
-
-        MarkTestCompleted();
-    }
-
     [Fact]
     public void VoteOutcome_CommittedRoleWithoutModeratorKnowledge_RequiresMatchingRevealAtomically()
     {
-        var session = new GameSession(
-            Guid.NewGuid(),
-            new ConfirmationInstruction(
-                privateInstruction: nameof(VoteOutcome_CommittedRoleWithoutModeratorKnowledge_RequiresMatchingRevealAtomically)),
-            new GameSessionConfig(
-                ["Werewolf", "Seer", "Wild Child", "Villager A", "Villager B"],
-                [
-                    MainRoleType.SimpleWerewolf,
-                    MainRoleType.Seer,
-                    MainRoleType.WildChild,
-                    MainRoleType.SimpleVillager,
-                    MainRoleType.SimpleVillager
-                ]));
+        var scenario = DayVoteScenario.Start();
+        var builder = scenario.Builder
+            .ArrangeCurrentRole(
+                scenario.LivingTargetId,
+                MainRoleType.SimpleVillager);
+        var afterVote = builder.Process(
+            scenario.Instruction.CreateResponse([scenario.LivingTargetId]));
+        var assignment = afterVote.ModeratorInstruction.Should()
+            .BeOfType<AssignRolesInstruction>().Subject;
 
-        var lynchedPlayer = session.GetPlayers().ElementAt(1);
-        session.AssignRole(lynchedPlayer.Id, MainRoleType.Seer);
-        session.TransitionMainPhase(GamePhase.Day);
-        session.PerformDayVote(lynchedPlayer.Id);
+        assignment.PlayersForAssignment.Should().Equal(
+            scenario.LivingTargetId);
+        assignment.RolesForAssignment.Should().Contain(
+            MainRoleType.SimpleVillager);
+        var playerState = builder.GetGameState()!.GetPlayerState(
+            scenario.LivingTargetId);
+        playerState.CurrentRole.Should().Be(MainRoleType.SimpleVillager);
+        playerState.ModeratorKnownRole.Should().BeNull();
+        playerState.Health.Should().Be(PlayerHealth.Alive);
 
-        var instruction = DayPhaseHandlers.RequestRoleRevealIfNeeded(session, lynchedPlayer.Id);
-
-        var assignment = instruction.Should().BeOfType<AssignRolesInstruction>().Subject;
-        assignment.PlayersForAssignment.Should().Equal(lynchedPlayer.Id);
-        assignment.RolesForAssignment.Should().Contain(MainRoleType.Seer);
-
-        var historyCountBeforeInvalidResponse = session.GameHistoryLog.Count();
-        var invalidResponse = assignment.CreateResponse(new Dictionary<Guid, MainRoleType>
+        var beforeInvalidReveal = PublicGameSessionSnapshot.Capture(builder);
+        var invalidResponse = new ModeratorResponse
         {
-            [lynchedPlayer.Id] = MainRoleType.WildChild
-        });
-
-        var act = () => DayPhaseHandlers.ResolveNonTieVote(session, invalidResponse);
-
-        act.Should().Throw<InvalidOperationException>();
-        lynchedPlayer.State.CurrentRole.Should().Be(MainRoleType.Seer);
-        lynchedPlayer.State.ModeratorKnownRole.Should().BeNull();
-        lynchedPlayer.State.PubliclyRevealedRole.Should().BeNull();
-        lynchedPlayer.State.Health.Should().Be(PlayerHealth.Alive);
-        session.GameHistoryLog.Should().HaveCount(historyCountBeforeInvalidResponse);
-
-        var announcement = DayPhaseHandlers.ResolveNonTieVote(
-            session,
-            assignment.CreateResponse(new Dictionary<Guid, MainRoleType>
+            InstructionId = assignment.InstructionId,
+            Type = ExpectedInputType.AssignPlayerRoles,
+            AssignedPlayerRoles = new Dictionary<Guid, MainRoleType>
             {
-                [lynchedPlayer.Id] = MainRoleType.Seer
-            }));
+                [scenario.LivingTargetId] = MainRoleType.Seer
+            }
+        };
+        var invalidReveal = () => builder.Process(invalidResponse);
 
-        announcement.Should().BeOfType<ConfirmationInstruction>();
-        lynchedPlayer.State.CurrentRole.Should().Be(MainRoleType.Seer);
-        lynchedPlayer.State.ModeratorKnownRole.Should().Be(MainRoleType.Seer);
-        lynchedPlayer.State.PubliclyRevealedRole.Should().Be(MainRoleType.Seer);
-        lynchedPlayer.State.Health.Should().Be(PlayerHealth.Dead);
-        session.GameHistoryLog
+        invalidReveal.Should().Throw<InvalidOperationException>();
+        PublicGameSessionSnapshot.Capture(builder).Should().BeEquivalentTo(
+            beforeInvalidReveal,
+            options => options.WithStrictOrdering());
+
+        var afterReveal = builder.Process(assignment.CreateResponse(new()
+        {
+            [scenario.LivingTargetId] = MainRoleType.SimpleVillager
+        }));
+
+        afterReveal.ModeratorInstruction.Should()
+            .BeOfType<ConfirmationInstruction>();
+        playerState.CurrentRole.Should().Be(MainRoleType.SimpleVillager);
+        playerState.ModeratorKnownRole.Should().Be(
+            MainRoleType.SimpleVillager);
+        playerState.PubliclyRevealedRole.Should().Be(
+            MainRoleType.SimpleVillager);
+        playerState.Health.Should().Be(PlayerHealth.Dead);
+        builder.GetGameState()!.GameHistoryLog
             .OfType<RoleRevealLogEntry>()
             .Should()
             .ContainSingle(entry =>
                 entry.RevealedRoles.Count == 1 &&
-                entry.RevealedRoles.GetValueOrDefault(lynchedPlayer.Id) == MainRoleType.Seer);
+                entry.RevealedRoles.GetValueOrDefault(
+                    scenario.LivingTargetId) == MainRoleType.SimpleVillager);
+        builder.GetGameState()!.GameHistoryLog
+            .OfType<PlayerEliminatedLogEntry>()
+            .Should().ContainSingle(entry =>
+                entry.PlayerId == scenario.LivingTargetId &&
+                entry.Reason == EliminationReason.DayVote);
 
         MarkTestCompleted();
     }
@@ -337,68 +290,150 @@ public class DayVotingTests : DiagnosticTestBase
     [Fact]
     public void VoteOutcome_StaleModeratorKnowledge_RequiresCurrentRoleRevealAtomically()
     {
-        var session = new GameSession(
-            Guid.NewGuid(),
-            new ConfirmationInstruction(
-                privateInstruction: nameof(VoteOutcome_StaleModeratorKnowledge_RequiresCurrentRoleRevealAtomically)),
-            new GameSessionConfig(
-                ["Werewolf", "Seer", "Wild Child", "Villager A", "Villager B"],
-                [
-                    MainRoleType.SimpleWerewolf,
-                    MainRoleType.Seer,
-                    MainRoleType.WildChild,
-                    MainRoleType.SimpleVillager,
-                    MainRoleType.SimpleVillager
-                ]));
+        var builder = CreateBuilder()
+            .WithPlayers(
+                "Wild Child",
+                "Role Model",
+                "Werewolf",
+                "Villager A",
+                "Villager B",
+                "Villager C",
+                "Villager D")
+            .WithRoles(
+                MainRoleType.WildChild,
+                MainRoleType.SimpleWerewolf,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager);
+        builder.StartGame();
+        var players = builder.GetGameState()!.GetPlayers().ToArray();
+        var wildChildId = players[0].Id;
+        var roleModelId = players[1].Id;
+        var werewolfId = players[2].Id;
 
-        var lynchedPlayer = session.GetPlayers().ElementAt(2);
-        session.IdentifyRole([lynchedPlayer.Id], MainRoleType.WildChild);
-        session.AssignRole(lynchedPlayer.Id, MainRoleType.SimpleWerewolf);
-        session.TransitionMainPhase(GamePhase.Day);
-        session.PerformDayVote(lynchedPlayer.Id);
-
-        lynchedPlayer.State.CurrentRole.Should().Be(MainRoleType.SimpleWerewolf);
-        lynchedPlayer.State.ModeratorKnownRole.Should().Be(MainRoleType.WildChild);
-
-        var instruction = DayPhaseHandlers.RequestRoleRevealIfNeeded(session, lynchedPlayer.Id);
-
-        var assignment = instruction.Should().BeOfType<AssignRolesInstruction>().Subject;
-        assignment.PlayersForAssignment.Should().Equal(lynchedPlayer.Id);
-        assignment.RolesForAssignment.Should().Contain(MainRoleType.SimpleWerewolf);
-
-        var historyCountBeforeInvalidResponse = session.GameHistoryLog.Count();
-        var invalidResponse = assignment.CreateResponse(new Dictionary<Guid, MainRoleType>
-        {
-            [lynchedPlayer.Id] = MainRoleType.WildChild
-        });
-
-        var act = () => DayPhaseHandlers.ResolveNonTieVote(session, invalidResponse);
-
-        act.Should().Throw<InvalidOperationException>();
-        lynchedPlayer.State.CurrentRole.Should().Be(MainRoleType.SimpleWerewolf);
-        lynchedPlayer.State.ModeratorKnownRole.Should().Be(MainRoleType.WildChild);
-        lynchedPlayer.State.PubliclyRevealedRole.Should().BeNull();
-        lynchedPlayer.State.Health.Should().Be(PlayerHealth.Alive);
-        session.GameHistoryLog.Should().HaveCount(historyCountBeforeInvalidResponse);
-
-        var announcement = DayPhaseHandlers.ResolveNonTieVote(
-            session,
-            assignment.CreateResponse(new Dictionary<Guid, MainRoleType>
+        builder.ConfirmGameStart();
+        builder.ConfirmNightStart();
+        var wildChildIdentification = builder.GetCurrentInstruction()
+            .Should().BeOfType<SelectPlayersInstruction>().Subject;
+        var modelSelection = builder.Process(
+                wildChildIdentification.CreateResponse([wildChildId]))
+            .ModeratorInstruction.Should()
+            .BeOfType<SelectPlayersInstruction>().Subject;
+        var wildChildSleep = builder.Process(
+                modelSelection.CreateResponse([roleModelId]))
+            .ModeratorInstruction.Should()
+            .BeOfType<ConfirmationInstruction>().Subject;
+        var werewolfIdentification = builder.Process(
+                wildChildSleep.CreateResponse())
+            .ModeratorInstruction.Should()
+            .BeOfType<SelectPlayersInstruction>().Subject;
+        var victimSelection = builder.Process(
+                werewolfIdentification.CreateResponse([werewolfId]))
+            .ModeratorInstruction.Should()
+            .BeOfType<SelectPlayersInstruction>().Subject;
+        var werewolfSleep = builder.Process(
+                victimSelection.CreateResponse([roleModelId]))
+            .ModeratorInstruction.Should()
+            .BeOfType<ConfirmationInstruction>().Subject;
+        var finishNight = builder.Process(werewolfSleep.CreateResponse())
+            .ModeratorInstruction.Should()
+            .BeOfType<ConfirmationInstruction>().Subject;
+        var roleModelReveal = builder.Process(finishNight.CreateResponse())
+            .ModeratorInstruction.Should()
+            .BeOfType<AssignRolesInstruction>().Subject;
+        var afterModelReveal = builder.Process(
+            roleModelReveal.CreateResponse(new()
             {
-                [lynchedPlayer.Id] = MainRoleType.SimpleWerewolf
+                [roleModelId] = MainRoleType.SimpleVillager
             }));
 
-        announcement.Should().BeOfType<ConfirmationInstruction>();
-        lynchedPlayer.State.CurrentRole.Should().Be(MainRoleType.SimpleWerewolf);
-        lynchedPlayer.State.ModeratorKnownRole.Should().Be(MainRoleType.SimpleWerewolf);
-        lynchedPlayer.State.PubliclyRevealedRole.Should().Be(MainRoleType.SimpleWerewolf);
-        lynchedPlayer.State.Health.Should().Be(PlayerHealth.Dead);
+        var session = builder.GetGameState()!;
+        var wildChildState = session.GetPlayerState(wildChildId);
+        wildChildState.CurrentRole.Should().Be(MainRoleType.SimpleWerewolf);
+        wildChildState.ModeratorKnownRole.Should().Be(MainRoleType.WildChild);
+        session.GameHistoryLog
+            .OfType<StatusEffectLogEntry>()
+            .Should().ContainSingle(entry =>
+                entry.PlayerId == wildChildId &&
+                entry.EffectType == StatusEffectTypes.WildChildChanged &&
+                entry.IsActive);
+        session.GameHistoryLog
+            .OfType<AssignRoleLogEntry>()
+            .Should().ContainSingle(entry =>
+                entry.PlayerIds.SetEquals(new[] { wildChildId }) &&
+                entry.AssignedMainRole == MainRoleType.SimpleWerewolf);
+
+        var debate = afterModelReveal.ModeratorInstruction.Should()
+            .BeOfType<ConfirmationInstruction>().Subject;
+        var vote = builder.Process(debate.CreateResponse())
+            .ModeratorInstruction.Should()
+            .BeOfType<SelectPlayersInstruction>().Subject;
+        var assignment = builder.Process(
+                vote.CreateResponse([wildChildId]))
+            .ModeratorInstruction.Should()
+            .BeOfType<AssignRolesInstruction>().Subject;
+
+        assignment.PlayersForAssignment.Should().Equal(wildChildId);
+        assignment.RolesForAssignment.Should().Contain(
+            MainRoleType.SimpleWerewolf);
+        wildChildState.Health.Should().Be(PlayerHealth.Alive);
+
+        var beforeInvalidReveal = PublicGameSessionSnapshot.Capture(builder);
+        var invalidResponse = new ModeratorResponse
+        {
+            InstructionId = assignment.InstructionId,
+            Type = ExpectedInputType.AssignPlayerRoles,
+            AssignedPlayerRoles = new Dictionary<Guid, MainRoleType>
+            {
+                [wildChildId] = MainRoleType.WildChild
+            }
+        };
+        var invalidReveal = () => builder.Process(invalidResponse);
+
+        invalidReveal.Should().Throw<InvalidOperationException>();
+        PublicGameSessionSnapshot.Capture(builder).Should().BeEquivalentTo(
+            beforeInvalidReveal,
+            options => options.WithStrictOrdering());
+        session.GameHistoryLog
+            .OfType<StatusEffectLogEntry>()
+            .Should().ContainSingle(entry =>
+                entry.PlayerId == wildChildId &&
+                entry.EffectType == StatusEffectTypes.WildChildChanged &&
+                entry.IsActive);
+        session.GameHistoryLog
+            .OfType<AssignRoleLogEntry>()
+            .Should().ContainSingle(entry =>
+                entry.PlayerIds.SetEquals(new[] { wildChildId }) &&
+                entry.AssignedMainRole == MainRoleType.SimpleWerewolf);
+
+        var afterReveal = builder.Process(assignment.CreateResponse(new()
+        {
+            [wildChildId] = MainRoleType.SimpleWerewolf
+        }));
+
+        afterReveal.ModeratorInstruction.Should()
+            .BeOfType<ConfirmationInstruction>();
+        wildChildState.CurrentRole.Should().Be(MainRoleType.SimpleWerewolf);
+        wildChildState.ModeratorKnownRole.Should().Be(
+            MainRoleType.SimpleWerewolf);
+        wildChildState.PubliclyRevealedRole.Should().Be(
+            MainRoleType.SimpleWerewolf);
+        wildChildState.Health.Should().Be(PlayerHealth.Dead);
         session.GameHistoryLog
             .OfType<RoleRevealLogEntry>()
             .Should()
             .ContainSingle(entry =>
                 entry.RevealedRoles.Count == 1 &&
-                entry.RevealedRoles.GetValueOrDefault(lynchedPlayer.Id) == MainRoleType.SimpleWerewolf);
+                entry.RevealedRoles.ContainsKey(wildChildId) &&
+                entry.RevealedRoles.GetValueOrDefault(
+                    wildChildId) == MainRoleType.SimpleWerewolf);
+        session.GameHistoryLog
+            .OfType<PlayerEliminatedLogEntry>()
+            .Should().ContainSingle(entry =>
+                entry.PlayerId == wildChildId &&
+                entry.Reason == EliminationReason.DayVote);
 
         MarkTestCompleted();
     }

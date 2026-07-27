@@ -6,6 +6,7 @@
 // For Debug.Fail
 
 using System.Collections.Concurrent;
+using Werewolves.Core.GameLogic.Models.EliminationCascades;
 using Werewolves.Core.GameLogic.Models;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
 using Werewolves.Core.GameLogic.RolePowers;
@@ -27,15 +28,27 @@ public class GameService
 	// Simple in-memory storage for game sessions. Replaceable with DI.
 	private readonly ConcurrentDictionary<Guid, GameSession> _sessions = new();
 	private readonly RoleAdmissionCatalog _roleAdmissions;
+	private readonly IReadOnlyList<EliminationCascadeReactionBinding>
+		_eliminationCascadeReactionExtensions;
 
 	public GameService()
-		: this(AllowAllRolePowerAvailabilityPolicy.Instance) { }
+		: this(AllowAllRolePowerAvailabilityPolicy.Instance, []) { }
 
 	internal GameService(IRolePowerAvailabilityPolicy rolePowerAvailabilityPolicy)
+		: this(rolePowerAvailabilityPolicy, []) { }
+
+	internal GameService(
+		IRolePowerAvailabilityPolicy rolePowerAvailabilityPolicy,
+		IReadOnlyList<EliminationCascadeReactionBinding>
+			eliminationCascadeReactionExtensions)
 	{
 		ArgumentNullException.ThrowIfNull(rolePowerAvailabilityPolicy);
+		ArgumentNullException.ThrowIfNull(
+			eliminationCascadeReactionExtensions);
 		_roleAdmissions = SupportedRoleCatalog.CreateAdmissions(
 			new RolePowerAvailabilityGateway(rolePowerAvailabilityPolicy));
+		_eliminationCascadeReactionExtensions =
+			eliminationCascadeReactionExtensions.ToArray();
 	}
 
     public LobbySetupMetadata GetLobbySetupMetadata()
@@ -66,6 +79,7 @@ public class GameService
     {
         var session = new GameSession(serializedSession);
         SeedActiveRoleListeners(session);
+        ConfigureEliminationCascadeReactions(session);
         GameFlowManager.RestoreDurableContinuation(session);
         _sessions.TryAdd(session.Id, session);
         return session.Id;
@@ -93,6 +107,7 @@ public class GameService
         // 3. Create the session with both the ID and instruction
         var session = new GameSession(gameId, initialInstruction, config, stateChangeObserver);
         SeedActiveRoleListeners(session);
+        ConfigureEliminationCascadeReactions(session);
         
         // 4. Store the session
         _sessions.TryAdd(session.Id, session);
@@ -109,6 +124,54 @@ public class GameService
 		    session.GetOrCreateListener(listenerId, listenerFactory);
 	    }
     }
+
+	private void ConfigureEliminationCascadeReactions(GameSession session)
+	{
+		var roleReactions = GameFlowManager
+			.EliminationCascadeReactionRegistrations
+			.Where(registration =>
+				session.RoleInPlayCount(
+					(MainRoleType)registration.Listener) > 0)
+			.Select(registration =>
+				CreateEliminationCascadeReactionBinding(
+					session,
+					registration));
+		EliminationCascadeRuntimeStore.Configure(
+			session,
+			roleReactions
+				.Concat(_eliminationCascadeReactionExtensions)
+				.ToArray());
+	}
+
+	private EliminationCascadeReactionBinding
+		CreateEliminationCascadeReactionBinding(
+			GameSession session,
+			EliminationCascadeReactionRegistration registration)
+	{
+		if (!_roleAdmissions.ListenerFactories.TryGetValue(
+				registration.Listener,
+				out var listenerFactory) ||
+			session.GetOrCreateListener(
+				registration.Listener,
+				listenerFactory) is not IEliminationCascadeReaction reaction)
+		{
+			throw new InvalidOperationException(
+				$"Elimination Cascade reaction '{registration.ReactionId}' has no admitted listener adapter.");
+		}
+
+		if (!string.Equals(
+			reaction.ReactionId,
+			registration.ReactionId,
+			StringComparison.Ordinal))
+		{
+			throw new InvalidOperationException(
+				$"Elimination Cascade registration '{registration.ReactionId}' does not match adapter '{reaction.ReactionId}'.");
+		}
+
+		return new EliminationCascadeReactionBinding(
+			reaction,
+			registration.Boundary);
+	}
 
     /// <summary>
     /// Retrieves the currently pending instruction for the moderator.

@@ -29,5 +29,7 @@ public enum ModeratorInstructionSemantic
 	RecognizeRoleHolders = 21,
 	CommunicateAsRoleHolders = 22,
 	SelectWitchHealingTarget = 23,
-	SelectWitchPoisonTarget = 24
+	SelectWitchPoisonTarget = 24,
+	AnnounceEliminationCascadeVictims = 25,
+	AssignEliminationCascadeRoles = 26
 }

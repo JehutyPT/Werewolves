@@ -13,6 +13,9 @@ internal sealed partial class GameSessionKernel
 		internal void AddLogEntry(SessionMutator.IStateMutatorKey key, GameLogEntryBase entry)
 		{
 			ValidateOneUseResourceCommit(entry);
+			ValidateEliminationCascadeBatchResolution(entry);
+			ValidateEliminationCascadeCompletion(entry);
+			ValidateEliminationCascadeReactionCompletion(entry);
 			_logEntries.Add(entry);
 		}
 
@@ -23,6 +26,9 @@ internal sealed partial class GameSessionKernel
 		internal void RestoreLogEntry(GameLogEntryBase entry)
 		{
 			ValidateOneUseResourceCommit(entry);
+			ValidateEliminationCascadeBatchResolution(entry);
+			ValidateEliminationCascadeCompletion(entry);
+			ValidateEliminationCascadeReactionCompletion(entry);
 			_logEntries.Add(entry);
 		}
 
@@ -41,6 +47,61 @@ internal sealed partial class GameSessionKernel
 			{
 				throw new InvalidOperationException(
 					"The One-Use Role Power Resource is already spent by its owning power instance.");
+			}
+		}
+
+		private void ValidateEliminationCascadeReactionCompletion(
+			GameLogEntryBase entry)
+		{
+			if (entry is not EliminationCascadeReactionCompletedLogEntry
+				completion)
+			{
+				return;
+			}
+
+			completion.EnforceValidity();
+			if (_logEntries
+				.OfType<EliminationCascadeReactionCompletedLogEntry>()
+				.Any(existing => existing.HasSameCompletionKey(completion)))
+			{
+				throw new InvalidOperationException(
+					"The Elimination Cascade reaction already completed for this scope and trigger batch.");
+			}
+		}
+
+		private void ValidateEliminationCascadeBatchResolution(
+			GameLogEntryBase entry)
+		{
+			if (entry is not EliminationCascadeBatchResolvedLogEntry resolution)
+			{
+				return;
+			}
+
+			resolution.EnforceValidity();
+			if (_logEntries
+				.OfType<EliminationCascadeBatchResolvedLogEntry>()
+				.Any(existing => existing.HasSameResolutionKey(resolution)))
+			{
+				throw new InvalidOperationException(
+					"The Elimination Cascade batch is already resolved for this scope.");
+			}
+		}
+
+		private void ValidateEliminationCascadeCompletion(
+			GameLogEntryBase entry)
+		{
+			if (entry is not EliminationCascadeCompletedLogEntry completion)
+			{
+				return;
+			}
+
+			completion.EnforceValidity();
+			if (_logEntries
+				.OfType<EliminationCascadeCompletedLogEntry>()
+				.Any(existing => existing.ScopeId == completion.ScopeId))
+			{
+				throw new InvalidOperationException(
+					"The Elimination Cascade scope is already complete.");
 			}
 		}
 
