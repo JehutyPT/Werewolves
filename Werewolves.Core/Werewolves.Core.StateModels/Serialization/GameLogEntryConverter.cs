@@ -25,12 +25,16 @@ public class GameLogEntryConverter : JsonConverter<GameLogEntryBase>
         ["PhaseTransitionLogEntry"] = typeof(PhaseTransitionLogEntry),
         ["PlayerEliminatedLogEntry"] = typeof(PlayerEliminatedLogEntry),
         ["RoleIdentificationLogEntry"] = typeof(RoleIdentificationLogEntry),
-        ["RoleRevealLogEntry"] = typeof(RoleRevealLogEntry),
-        ["StatusEffectLogEntry"] = typeof(StatusEffectLogEntry),
-        ["VillagerVillagerPublicFromDealLogEntry"] = typeof(VillagerVillagerPublicFromDealLogEntry),
-        ["VictoryConditionMetLogEntry"] = typeof(VictoryConditionMetLogEntry),
-        ["VoteOutcomeReportedLogEntry"] = typeof(VoteOutcomeReportedLogEntry),
-    };
+	        ["RoleRevealLogEntry"] = typeof(RoleRevealLogEntry),
+	        ["StatusEffectLogEntry"] = typeof(StatusEffectLogEntry),
+	        ["StutteringJudgeConsecutiveVoteCommittedLogEntry"] = typeof(StutteringJudgeConsecutiveVoteCommittedLogEntry),
+	        ["StutteringJudgeSignalDidNotOccurLogEntry"] = typeof(StutteringJudgeSignalDidNotOccurLogEntry),
+	        ["StutteringJudgeSignalEstablishedLogEntry"] = typeof(StutteringJudgeSignalEstablishedLogEntry),
+	        ["VillagerVillagerPublicFromDealLogEntry"] = typeof(VillagerVillagerPublicFromDealLogEntry),
+	        ["VictoryConditionMetLogEntry"] = typeof(VictoryConditionMetLogEntry),
+	        ["VoteOutcomeReportedLogEntry"] = typeof(VoteOutcomeReportedLogEntry),
+	        ["VotingRightChangedLogEntry"] = typeof(VotingRightChangedLogEntry),
+	    };
 
     private static readonly Dictionary<Type, string> ReverseTypeMap = 
         TypeMap.ToDictionary(kvp => kvp.Value, kvp => kvp.Key);

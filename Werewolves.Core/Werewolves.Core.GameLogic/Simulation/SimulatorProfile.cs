@@ -142,7 +142,8 @@ public sealed class SimulatorCapability : SimulatorProfile
 		new(MainRoleType.TwoSisters, Faction.Villager),
 		new(MainRoleType.ThreeBrothers, Faction.Villager),
 		new(MainRoleType.Witch, Faction.Villager),
-		new(MainRoleType.Hunter, Faction.Villager)
+		new(MainRoleType.Hunter, Faction.Villager),
+		new(MainRoleType.StutteringJudge, Faction.Villager)
 	];
 
 	private static readonly SimulatorProfileRoleDescriptor[] FullProbabilityRoleDescriptors =
@@ -160,7 +161,7 @@ public sealed class SimulatorCapability : SimulatorProfile
 		SimulatorCapabilityRegistry.Production.FullProbability;
 
 	internal static SimulatorCapability CreateSafetyScreening() => new(
-		new SimulatorProfileIdentity("safety-screening", "6"),
+		new SimulatorProfileIdentity("safety-screening", "7"),
 		SafetyScreeningRoleDescriptors,
 		headlessResponsePolicy: new HeadlessResponsePolicy(
 			BaselineRandomDecisionStrategy.Identity,
@@ -183,6 +184,7 @@ public sealed class SimulatorCapability : SimulatorProfile
 				ModeratorInstructionSemantic.AssignDayVoteTargetRole,
 				ModeratorInstructionSemantic.AnnounceLynchingImmunity,
 				ModeratorInstructionSemantic.AnnounceDayElimination,
+				ModeratorInstructionSemantic.ConductDayVote,
 				ModeratorInstructionSemantic.ObserveVillagerVillagerFromDeal,
 				ModeratorInstructionSemantic.RecognizeRoleHolders,
 				ModeratorInstructionSemantic.CommunicateAsRoleHolders,
@@ -190,7 +192,9 @@ public sealed class SimulatorCapability : SimulatorProfile
 				ModeratorInstructionSemantic.SelectWitchPoisonTarget,
 				ModeratorInstructionSemantic.AnnounceEliminationCascadeVictims,
 				ModeratorInstructionSemantic.AssignEliminationCascadeRoles,
-				ModeratorInstructionSemantic.SelectHunterFinalShotTarget
+				ModeratorInstructionSemantic.SelectHunterFinalShotTarget,
+				ModeratorInstructionSemantic.EstablishStutteringJudgeSignal,
+				ModeratorInstructionSemantic.ObserveStutteringJudgeSignal
 			]),
 		supportsActorSetupCards: false,
 		supportedRuleStates: [SimulationRuleState.Default]);

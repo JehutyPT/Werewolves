@@ -80,7 +80,7 @@ public class GameService
         var session = new GameSession(serializedSession);
         SeedActiveRoleListeners(session);
         ConfigureEliminationCascadeReactions(session);
-        GameFlowManager.RestoreDurableContinuation(session);
+        GameFlowManager.RestoreDurableContinuation(session, _roleAdmissions);
         _sessions.TryAdd(session.Id, session);
         return session.Id;
 	}

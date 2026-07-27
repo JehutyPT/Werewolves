@@ -438,7 +438,7 @@ public class TerminalLobbyCacheTests
 			StringComparison.Ordinal));
 		var safetyScreening = RecordJson(AlreadyGolden.Replace(
 			"core-simulator@1",
-			"safety-screening@6",
+			"safety-screening@7",
 			StringComparison.Ordinal));
 		var payload = "{\"schema\":\"terminal-lobby-cache\",\"version\":1,\"records\":["
 			+ legacy + "," + fullProbability + "," + safetyScreening + "]}";
@@ -447,7 +447,7 @@ public class TerminalLobbyCacheTests
 
 		read.Rejection.Should().BeNull();
 		read.Document!.Records.Select(record => record.CompatibilityIdentity.Profile.ToString())
-			.Should().Equal("core-simulator@1", "full-probability@1", "safety-screening@6");
+			.Should().Equal("core-simulator@1", "full-probability@1", "safety-screening@7");
 	}
 
 	[Fact]
@@ -455,7 +455,7 @@ public class TerminalLobbyCacheTests
 	{
 		var record = RecordJson(ProbabilityGolden.Replace(
 			"core-simulator@1",
-			"safety-screening@6",
+			"safety-screening@7",
 			StringComparison.Ordinal));
 		var payload = "{\"schema\":\"terminal-lobby-cache\",\"version\":1,\"records\":["
 			+ record + "]}";
@@ -468,7 +468,7 @@ public class TerminalLobbyCacheTests
 	{
 		var record = RecordJson(AlreadyGolden.Replace(
 			"core-simulator@1",
-			"safety-screening@5",
+			"safety-screening@6",
 			StringComparison.Ordinal));
 		var payload = "{\"schema\":\"terminal-lobby-cache\",\"version\":1,\"records\":["
 			+ record + "]}";
@@ -672,6 +672,30 @@ public class TerminalLobbyCacheTests
 			[
 				MainRoleType.SimpleWerewolf,
 				MainRoleType.Hunter,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]).ToCanonical();
+		var safetyIdentity = new SimulationCompatibilityIdentity(
+			scenario,
+			SimulatorCapability.SafetyScreening.Identity);
+
+		LegacyTerminalLobbyCacheCompatibility.TryProject(
+			ProbabilityRecord(),
+			SimulatorCapability.SafetyScreening,
+			safetyIdentity,
+			LobbyEvaluationDepth.DegenerateScreeningOnly,
+			out _).Should().BeFalse();
+	}
+
+	[Fact]
+	public void LegacyCompatibility_RejectsEveryStutteringJudgeScenario()
+	{
+		var scenario = new SimulationScenario(
+			5,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.StutteringJudge,
 				MainRoleType.SimpleVillager,
 				MainRoleType.SimpleVillager,
 				MainRoleType.SimpleVillager

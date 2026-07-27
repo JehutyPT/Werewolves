@@ -18,9 +18,10 @@ public interface IPlayerState
 	public MainRoleType? CurrentRole { get; }
 	public MainRoleType? MainRole { get; }
 	public MainRoleType? PhysicalCharacterCardRole { get; }
-	public MainRoleType? ModeratorKnownRole { get; }
-	public MainRoleType? PubliclyRevealedRole { get; }
-	public PlayerHealth Health { get; }
+		public MainRoleType? ModeratorKnownRole { get; }
+		public MainRoleType? PubliclyRevealedRole { get; }
+		public PlayerHealth Health { get; }
+		public bool HasVotingRight { get; }
 	
 	/// <summary>
 	/// Returns a list of all currently active status effects for this player.
@@ -125,7 +126,8 @@ internal partial class GameSessionKernel
 
 		public MainRoleType? PubliclyRevealedRole { get; internal set; }
 
-		public PlayerHealth Health { get; internal set; } = PlayerHealth.Alive;
+			public PlayerHealth Health { get; internal set; } = PlayerHealth.Alive;
+			public bool HasVotingRight { get; internal set; } = true;
 
 		/// <summary>
 		/// Internal flags field for all status effects - not exposed on interface.

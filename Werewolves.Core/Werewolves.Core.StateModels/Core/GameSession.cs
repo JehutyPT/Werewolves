@@ -241,8 +241,8 @@ internal class GameSession : IGameSession
 				"One-use Role Power commits require a concrete target identity.");
 		}
 
-		resourceIdentity.EnforceValidity();
-		var entry = new OneUseRolePowerCommittedLogEntry
+				resourceIdentity.EnforceValidity();
+				var entry = new OneUseRolePowerCommittedLogEntry
 		{
 			Timestamp = DateTimeOffset.UtcNow,
 			TurnNumber = TurnNumber,
@@ -260,8 +260,8 @@ internal class GameSession : IGameSession
 		_gameSessionKernel.AddEntryAndUpdateState(entry);
 	}
 
-    internal void EliminatePlayer(Guid playerId, EliminationReason reason)
-    {
+	    internal void EliminatePlayer(Guid playerId, EliminationReason reason)
+	    {
         var entry = new PlayerEliminatedLogEntry
         {
             Timestamp = DateTimeOffset.UtcNow,
@@ -271,8 +271,22 @@ internal class GameSession : IGameSession
             Reason = reason,
         };
 
-        _gameSessionKernel.AddEntryAndUpdateState(entry);
-    }
+	        _gameSessionKernel.AddEntryAndUpdateState(entry);
+	    }
+
+		internal void SetPlayerVotingRight(Guid playerId, bool hasVotingRight)
+		{
+			var entry = new VotingRightChangedLogEntry
+			{
+				Timestamp = DateTimeOffset.UtcNow,
+				TurnNumber = TurnNumber,
+				CurrentPhase = _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+				PlayerId = playerId,
+				HasVotingRight = hasVotingRight
+			};
+
+			_gameSessionKernel.AddEntryAndUpdateState(entry);
+		}
 
 	internal void RecordEliminationCascadeReactionCompletion(
 		string scopeId,
@@ -492,7 +506,71 @@ internal class GameSession : IGameSession
 		_gameSessionKernel.AddEntryAndUpdateState(entry);
 	}
 
-	#endregion
+	internal void RecordStutteringJudgeSignalEstablished(Guid judgePlayerId)
+	{
+		if (judgePlayerId == Guid.Empty)
+		{
+			throw new ArgumentException(
+				"The Stuttering Judge holder identity is required.",
+				nameof(judgePlayerId));
+		}
+
+		_gameSessionKernel.AddEntryAndUpdateState(
+			new StutteringJudgeSignalEstablishedLogEntry
+			{
+				Timestamp = DateTimeOffset.UtcNow,
+				TurnNumber = TurnNumber,
+				CurrentPhase =
+					_gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+				JudgePlayerId = judgePlayerId
+			});
+	}
+
+	internal void RecordStutteringJudgeSignalDidNotOccur(Guid judgePlayerId)
+	{
+		if (judgePlayerId == Guid.Empty)
+		{
+			throw new ArgumentException(
+				"The Stuttering Judge holder identity is required.",
+				nameof(judgePlayerId));
+		}
+
+		_gameSessionKernel.AddEntryAndUpdateState(
+			new StutteringJudgeSignalDidNotOccurLogEntry
+			{
+				Timestamp = DateTimeOffset.UtcNow,
+				TurnNumber = TurnNumber,
+				CurrentPhase =
+					_gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+				JudgePlayerId = judgePlayerId
+			});
+	}
+
+	internal void CommitStutteringJudgeConsecutiveVote(
+		OneUseRolePowerResourceIdentity resourceIdentity)
+	{
+		resourceIdentity.EnforceValidity();
+		if (resourceIdentity.SourceRole != MainRoleType.StutteringJudge)
+		{
+			throw new InvalidOperationException(
+				"The Consecutive Vote resource must belong to the Stuttering Judge.");
+		}
+
+			var entry = new StutteringJudgeConsecutiveVoteCommittedLogEntry
+			{
+			Timestamp = DateTimeOffset.UtcNow,
+			TurnNumber = TurnNumber,
+			CurrentPhase =
+				_gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+				ActionType = DayPowerType.JudgeExtraVote,
+				TargetIds = null,
+				ResourceIdentity = resourceIdentity
+			};
+			entry.EnforceValidity();
+			_gameSessionKernel.AddEntryAndUpdateState(entry);
+		}
+
+		#endregion
 
 	#region Private helpers
 

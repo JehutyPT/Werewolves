@@ -329,6 +329,26 @@
     <value>Juiz Gago</value>
     <comment/>
   </data>
+  <data name="StutteringJudgeSignalSetupInstruction" xml:space="preserve">
+    <value>Estabeleça em privado com o Juiz Gago um sinal físico que possa ser usado durante o Dia. Não registe o sinal na aplicação.</value>
+    <comment/>
+  </data>
+  <data name="StutteringJudgeSignalObservationInstruction" xml:space="preserve">
+    <value>O sinal privado do Juiz Gago ocorreu durante esta votação?</value>
+    <comment/>
+  </data>
+  <data name="StutteringJudgeSignalOccurredOption" xml:space="preserve">
+    <value>O sinal ocorreu</value>
+    <comment/>
+  </data>
+  <data name="StutteringJudgeSignalDidNotOccurOption" xml:space="preserve">
+    <value>O sinal não ocorreu</value>
+    <comment/>
+  </data>
+  <data name="DayVoteConductInstruction" xml:space="preserve">
+    <value>Conduza a votação física e confirme quando estiver concluída. O resultado será registado no passo seguinte.</value>
+    <comment/>
+  </data>
   <data name="KnightWithRustySwordRoleName" xml:space="preserve">
     <value>Cavaleiro da Espada Enferrujada</value>
     <comment/>

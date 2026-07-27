@@ -80,6 +80,57 @@ internal sealed class RecoveryPayloadTestDriver
 		return this;
 	}
 
+	internal RecoveryPayloadTestDriver RewriteLatestStutteringJudgeAction(
+		DayPowerType actionType)
+	{
+		var entryIndex = _payload.GameHistoryLog.FindLastIndex(
+			entry => entry is
+				StutteringJudgeConsecutiveVoteCommittedLogEntry);
+		if (entryIndex < 0 ||
+		    _payload.GameHistoryLog[entryIndex] is not
+			    StutteringJudgeConsecutiveVoteCommittedLogEntry entry)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no committed Stuttering Judge vote.");
+		}
+
+		_payload.GameHistoryLog[entryIndex] = entry with
+		{
+			ActionType = actionType
+		};
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver AddCrossTypeDuplicateOfStutteringJudgeResource()
+	{
+		var judgeCommit = _payload.GameHistoryLog
+			.OfType<StutteringJudgeConsecutiveVoteCommittedLogEntry>()
+			.LastOrDefault()
+			?? throw new InvalidOperationException(
+				"The recovery test payload has no committed Stuttering Judge vote.");
+		var resourceIdentity = judgeCommit.ResourceIdentity;
+		var targetId = _payload.Players
+			.Select(player => player.Id)
+			.First(id => id != resourceIdentity.ActingPlayerId);
+		_payload.GameHistoryLog.Add(new OneUseRolePowerCommittedLogEntry
+		{
+			Timestamp = judgeCommit.Timestamp.AddTicks(1),
+			TurnNumber = judgeCommit.TurnNumber,
+			CurrentPhase = judgeCommit.CurrentPhase,
+			ActionType = NightActionType.WitchKill,
+			TargetIds = [targetId],
+			ActingPlayerId = resourceIdentity.ActingPlayerId,
+			SourceRole = resourceIdentity.SourceRole,
+			SourcePowerIdentifier =
+				resourceIdentity.SourcePowerIdentifier,
+			PowerInstanceId = resourceIdentity.PowerInstanceId,
+			PowerInstanceOrigin =
+				resourceIdentity.PowerInstanceOrigin,
+			OneUseResourceId = resourceIdentity.OneUseResourceId
+		});
+		return this;
+	}
+
 	internal RecoveryPayloadTestDriver ReplacePendingInstructionWithConfirmation()
 	{
 		var pending = _payload.PendingInstruction

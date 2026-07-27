@@ -192,6 +192,29 @@ public class SerializationTests : DiagnosticTestBase
         MarkTestCompleted();
     }
 
+    [Fact]
+    public void LegacyPlayerPayload_WithoutVotingRight_DefaultsToEligible()
+    {
+        var builder = CreateBuilder()
+            .WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);
+        builder.StartGame();
+        builder.ConfirmGameStart();
+        var snapshot = JsonNode.Parse(builder.GetGameState()!.Serialize())!
+            .AsObject();
+        foreach (var player in snapshot[nameof(GameSessionDto.Players)]!.AsArray())
+        {
+            player!.AsObject().Remove(nameof(PlayerDto.HasVotingRight));
+        }
+
+        var service = new GameService();
+        var gameId = service.RehydrateSession(snapshot.ToJsonString());
+        var recovered = service.GetGameStateView(gameId)!;
+
+        recovered.GetPlayers().Should().OnlyContain(player =>
+            player.State.HasVotingRight);
+        MarkTestCompleted();
+    }
+
     /// <summary>
     /// SZ-004: Round-trip preserves status effects.
     /// </summary>

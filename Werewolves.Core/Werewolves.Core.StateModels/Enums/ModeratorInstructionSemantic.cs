@@ -32,5 +32,8 @@ public enum ModeratorInstructionSemantic
 	SelectWitchPoisonTarget = 24,
 	AnnounceEliminationCascadeVictims = 25,
 	AssignEliminationCascadeRoles = 26,
-	SelectHunterFinalShotTarget = 27
+	SelectHunterFinalShotTarget = 27,
+	EstablishStutteringJudgeSignal = 28,
+	ObserveStutteringJudgeSignal = 29,
+	ConductDayVote = 30
 }

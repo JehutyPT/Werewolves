@@ -8,9 +8,10 @@ public interface ISessionMutator
 {
 	int CurrentTurnNumber { get; }
 	void SetModeratorKnownRole(Guid playerId, MainRoleType role);
-	void SetPhysicalCharacterCardRole(Guid playerId, MainRoleType role);
-	void SetPlayerHealth(Guid playerId, PlayerHealth health);
-	void SetPlayerRole(Guid playerId, MainRoleType role);
+		void SetPhysicalCharacterCardRole(Guid playerId, MainRoleType role);
+		void SetPlayerHealth(Guid playerId, PlayerHealth health);
+		void SetVotingRight(Guid playerId, bool hasVotingRight);
+		void SetPlayerRole(Guid playerId, MainRoleType role);
 	void SetPubliclyRevealedRole(Guid playerId, MainRoleType role);
 	void SetCurrentPhase(GamePhase newPhase);
 	
@@ -50,8 +51,11 @@ internal partial class GameSessionKernel
 		public void SetPhysicalCharacterCardRole(Guid playerId, MainRoleType role)
 			=> GetMutablePlayerState(playerId).PhysicalCharacterCardRole = role;
 
-		public void SetPlayerHealth(Guid playerId, PlayerHealth health)
-			=> GetMutablePlayerState(playerId).Health = health;
+			public void SetPlayerHealth(Guid playerId, PlayerHealth health)
+				=> GetMutablePlayerState(playerId).Health = health;
+
+			public void SetVotingRight(Guid playerId, bool hasVotingRight)
+				=> GetMutablePlayerState(playerId).HasVotingRight = hasVotingRight;
 
 		public void SetPlayerRole(Guid playerId, MainRoleType role)
 			=> GetMutablePlayerState(playerId).MainRole = role;

@@ -8,7 +8,9 @@ namespace Werewolves.Core.StateModels.Log;
 /// Atomically records a one-use Role Power resource spend and its Night Action intent.
 /// The resource identity is qualified by its concrete owning power instance.
 /// </summary>
-public sealed record OneUseRolePowerCommittedLogEntry : NightActionLogEntry
+public sealed record OneUseRolePowerCommittedLogEntry
+	: NightActionLogEntry,
+		IOneUseRolePowerCommittedLogEntry
 {
 	public required Guid ActingPlayerId { get; init; }
 	public required MainRoleType SourceRole { get; init; }

@@ -20,11 +20,13 @@ public static class LegacyTerminalLobbyCacheCompatibility
 		MainRoleType.TwoSisters,
 		MainRoleType.ThreeBrothers,
 		MainRoleType.Witch,
-		MainRoleType.Hunter
+		MainRoleType.Hunter,
+		MainRoleType.StutteringJudge
 	];
 
 	private static readonly ModeratorInstructionSemantic[] FrozenSafetyOnlySemantics =
 	[
+		ModeratorInstructionSemantic.ConductDayVote,
 		ModeratorInstructionSemantic.ObserveVillagerVillagerFromDeal,
 		ModeratorInstructionSemantic.RecognizeRoleHolders,
 		ModeratorInstructionSemantic.CommunicateAsRoleHolders,
@@ -32,7 +34,9 @@ public static class LegacyTerminalLobbyCacheCompatibility
 		ModeratorInstructionSemantic.SelectWitchPoisonTarget,
 		ModeratorInstructionSemantic.AnnounceEliminationCascadeVictims,
 		ModeratorInstructionSemantic.AssignEliminationCascadeRoles,
-		ModeratorInstructionSemantic.SelectHunterFinalShotTarget
+		ModeratorInstructionSemantic.SelectHunterFinalShotTarget,
+		ModeratorInstructionSemantic.EstablishStutteringJudgeSignal,
+		ModeratorInstructionSemantic.ObserveStutteringJudgeSignal
 	];
 
 	public static bool TryProject(

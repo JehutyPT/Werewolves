@@ -9,8 +9,9 @@ public enum GameHook
     // Core phase hooks
 	NightMainActionLoop,                    // Main hook for iterating through night role actions
     
-    // Player lifecycle hooks
-    OnVoteConcluded,                  // Fired when any day vote concludes
+	    // Player lifecycle hooks
+	    OnVoteConducted,                  // Fired after the physical Vote and before its outcome is recorded
+		OnVoteConcluded,                  // Fired when any day vote concludes
     
     
     // Day phase hooks

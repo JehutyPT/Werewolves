@@ -16,9 +16,9 @@ internal enum DawnSubPhaseStage
 
 internal enum DaySubPhaseStage
 {
-    Debate,
-    RequestVote,
-    HandleVoteResponse,
+	Debate,
+	RequestVote,
+	HandleVoteResponse,
     ResolveEliminationCascade,
     VoteOutcomeNavigation
 }

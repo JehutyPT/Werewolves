@@ -149,6 +149,11 @@ internal sealed class LogicSubPhaseStage : SubPhaseStage
 /// complete successfully, the provided completion delegate is called to finalize the phase. If a listener requires
 /// additional input, the phase remains active until input is provided. This type is intended for internal use within
 /// the game flow management system and is not thread-safe.</remarks>
+internal readonly record struct PendingHookListenerContinuation(
+    string ActiveSubPhaseStage,
+    ListenerIdentifier Listener,
+    string ListenerState);
+
 internal sealed class HookSubPhaseStage : SubPhaseStage
 {
     private class HookSubPhaseKey : IHookSubPhaseKey { }
@@ -157,8 +162,49 @@ internal sealed class HookSubPhaseStage : SubPhaseStage
 	private readonly GameHook _hook;
     private readonly Func<GameSession, ModeratorResponse, PhaseHandlerResult> _onComplete;
 
-    internal static SubPhaseStage HookStage(GameHook gameHook) 
+    internal static SubPhaseStage HookStage(GameHook gameHook)
         => new HookSubPhaseStage(gameHook);
+
+    internal static PendingHookListenerContinuation?
+        ResolvePendingInstructionContinuation(
+            GameSession session,
+            ModeratorInstruction pendingInstruction,
+            IRoleAdmissionSource admissions)
+    {
+        PendingHookListenerContinuation? resolved = null;
+        foreach (var (hook, listeners) in GameFlowManager.HookListeners)
+        {
+            foreach (var listenerId in listeners)
+            {
+                var listenerState =
+                    RoleListenerDispatch.ResolvePendingInstructionContinuation(
+                        listenerId,
+                        hook,
+                        admissions,
+                        (id, factory) =>
+                            session.GetOrCreateListener(id, factory),
+                        session,
+                        pendingInstruction);
+                if (listenerState == null)
+                {
+                    continue;
+                }
+
+                if (resolved.HasValue)
+                {
+                    throw new InvalidOperationException(
+                        $"Pending instruction '{pendingInstruction.Semantic}' has multiple listener continuations.");
+                }
+
+                resolved = new PendingHookListenerContinuation(
+                    hook.ToString(),
+                    listenerId,
+                    listenerState);
+            }
+        }
+
+        return resolved;
+    }
 
     private HookSubPhaseStage(GameHook hook) : base(hook)
     {

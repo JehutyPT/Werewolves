@@ -314,6 +314,57 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 	}
 
 	[Fact]
+	public void Evaluate_StutteringJudgePolicyMissingSignalObservation_UsesOneRealIncompleteScreeningBatch()
+	{
+		var scenario = Scenario(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.StutteringJudge,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager);
+		var capability = SafetyScreeningWithoutStutteringJudgeSignalObservation();
+		var identity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			capability.Identity);
+		var executor = new SimulationExecutor();
+		var calls = new List<int>();
+		SimulationBatchSourceEvidence? screening = null;
+		var evaluator = new TerminalLobbyEvaluator(
+			(batchScenario, batchCapability, batchIdentity, count, cancellationToken) =>
+			{
+				calls.Add(count);
+				screening = executor.ExecuteBatch(
+					batchScenario,
+					batchCapability,
+					batchIdentity,
+					count,
+					cancellationToken);
+				return screening;
+			});
+
+		var result = evaluator.Evaluate(
+			scenario,
+			capability,
+			LobbyEvaluationDepth.DegenerateScreeningOnly);
+
+		result.Should().BeOfType<CouldNotEvaluateLobbyEvaluation>();
+		calls.Should().Equal(TerminalLobbyEvaluator.ScreeningAttemptCount);
+		screening.Should().NotBeNull();
+		screening!.Records.Should().HaveCount(TerminalLobbyEvaluator.ScreeningAttemptCount);
+		screening.IncompleteRunCount.Should()
+			.BeGreaterThan(0);
+		screening.CompletedRunCount.Should()
+			.BeGreaterThan(0);
+		screening.Records.Select(record => record.RunSeedMaterial).Should().Equal(
+			Enumerable.Range(0, TerminalLobbyEvaluator.ScreeningAttemptCount)
+				.Select(attempt => new RunSeedMaterial(
+					identity,
+					BaselineRandomDecisionStrategy.Identity,
+					attempt)));
+		MarkTestCompleted();
+	}
+
+	[Fact]
 	public void Evaluate_ExecutionFailure_ReturnsCouldNotEvaluateWithoutDiagnostics()
 	{
 		var evaluator = new TerminalLobbyEvaluator((_, _, _, _) => throw new InvalidOperationException("secret"));
@@ -445,6 +496,21 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 				ModeratorInstructionSemantic.AnnounceLynchingImmunity,
 				ModeratorInstructionSemantic.AnnounceDayElimination
 			]),
+		supportsActorSetupCards: false,
+		supportedRuleStates: [SimulationRuleState.Default]);
+
+	private static SimulatorCapability SafetyScreeningWithoutStutteringJudgeSignalObservation() => new(
+		SimulatorCapability.SafetyScreening.Identity,
+		[
+			new(MainRoleType.SimpleWerewolf, Faction.Werewolf),
+			new(MainRoleType.StutteringJudge, Faction.Villager),
+			new(MainRoleType.SimpleVillager, Faction.Villager)
+		],
+		headlessResponsePolicy: new HeadlessResponsePolicy(
+			BaselineRandomDecisionStrategy.Identity,
+			SimulatorCapability.SafetyScreening.HeadlessResponsePolicy.AdmittedSemantics
+				.Where(semantic =>
+					semantic != ModeratorInstructionSemantic.ObserveStutteringJudgeSignal)),
 		supportsActorSetupCards: false,
 		supportedRuleStates: [SimulationRuleState.Default]);
 

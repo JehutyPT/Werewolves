@@ -174,10 +174,11 @@ public class DashboardStatsSnapshotTests
 		public MainRoleType? CurrentRole { get; } = currentRole;
 		public MainRoleType? MainRole => CurrentRole;
 		public MainRoleType? PhysicalCharacterCardRole { get; } = physicalCharacterCardRole;
-		public MainRoleType? ModeratorKnownRole { get; } = moderatorKnownRole;
-		public MainRoleType? PubliclyRevealedRole { get; } = publiclyRevealedRole;
-		public PlayerHealth Health { get; } = health;
-		public bool IsImmuneToLynching => false;
+			public MainRoleType? ModeratorKnownRole { get; } = moderatorKnownRole;
+			public MainRoleType? PubliclyRevealedRole { get; } = publiclyRevealedRole;
+			public PlayerHealth Health { get; } = health;
+			public bool HasVotingRight => true;
+			public bool IsImmuneToLynching => false;
 		public string? LynchingImmunityAnnouncement => null;
 
 		public List<StatusEffectTypes> GetActiveStatusEffects() => [];

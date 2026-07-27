@@ -246,6 +246,7 @@ public sealed class RolePowerAvailabilityTests
 		public MainRoleType? ModeratorKnownRole => currentRole;
 		public MainRoleType? PubliclyRevealedRole => null;
 		public PlayerHealth Health => PlayerHealth.Alive;
+		public bool HasVotingRight => true;
 		public bool IsImmuneToLynching => false;
 		public string? LynchingImmunityAnnouncement => null;
 		public List<StatusEffectTypes> GetActiveStatusEffects() => [];

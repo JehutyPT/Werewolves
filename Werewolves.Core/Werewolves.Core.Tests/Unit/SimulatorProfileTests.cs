@@ -33,6 +33,7 @@ public class SimulatorProfileTests
 			ModeratorInstructionSemantic.AnnounceDayElimination
 		];
 		var expectedSafetySemantics = expectedLegacyAndProbabilitySemantics
+			.Append(ModeratorInstructionSemantic.ConductDayVote)
 			.Append(ModeratorInstructionSemantic.ObserveVillagerVillagerFromDeal)
 			.Append(ModeratorInstructionSemantic.RecognizeRoleHolders)
 			.Append(ModeratorInstructionSemantic.CommunicateAsRoleHolders)
@@ -40,12 +41,14 @@ public class SimulatorProfileTests
 			.Append(ModeratorInstructionSemantic.SelectWitchPoisonTarget)
 			.Append(ModeratorInstructionSemantic.AnnounceEliminationCascadeVictims)
 			.Append(ModeratorInstructionSemantic.AssignEliminationCascadeRoles)
-			.Append(ModeratorInstructionSemantic.SelectHunterFinalShotTarget);
+			.Append(ModeratorInstructionSemantic.SelectHunterFinalShotTarget)
+			.Append(ModeratorInstructionSemantic.EstablishStutteringJudgeSignal)
+			.Append(ModeratorInstructionSemantic.ObserveStutteringJudgeSignal);
 		var legacy = SimulatorProfile.LegacyCore;
 		var safety = SimulatorCapability.SafetyScreening;
 		var probability = SimulatorCapability.FullProbability;
 
-		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "6"));
+		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "7"));
 		probability.Identity.Should().Be(new SimulatorProfileIdentity("full-probability", "1"));
 		legacy.Identity.Should().Be(new SimulatorProfileIdentity("core-simulator", "1"));
 		BaselineRandomDecisionStrategy.Identity.Should()
@@ -59,7 +62,8 @@ public class SimulatorProfileTests
 			MainRoleType.TwoSisters,
 			MainRoleType.ThreeBrothers,
 			MainRoleType.Witch,
-			MainRoleType.Hunter);
+			MainRoleType.Hunter,
+			MainRoleType.StutteringJudge);
 		probability.SupportedRoles.Should().Equal(
 			MainRoleType.SimpleWerewolf,
 			MainRoleType.Seer,
