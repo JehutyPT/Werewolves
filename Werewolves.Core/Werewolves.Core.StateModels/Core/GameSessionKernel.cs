@@ -209,10 +209,11 @@ namespace Werewolves.Core.StateModels.Core
 					MainRole = p.State.MainRole,
 					PhysicalCharacterCardRole = p.State.PhysicalCharacterCardRole,
 					ModeratorKnownRole = p.State.ModeratorKnownRole,
-					PubliclyRevealedRole = p.State.PubliclyRevealedRole,
-					ActiveEffects = ((PlayerState)p.State).ActiveEffects,
-					Health = p.State.Health
-				}).ToList()
+						PubliclyRevealedRole = p.State.PubliclyRevealedRole,
+						ActiveEffects = ((PlayerState)p.State).ActiveEffects,
+						Health = p.State.Health,
+						HasVotingRight = p.State.HasVotingRight
+					}).ToList()
 			};
 		}
 
@@ -257,9 +258,10 @@ namespace Werewolves.Core.StateModels.Core
 						? playerDto.ModeratorKnownRole ?? playerDto.MainRole
 						: playerDto.ModeratorKnownRole;
 				mutableState.PubliclyRevealedRole = playerDto.PubliclyRevealedRole;
-				mutableState.ActiveEffects = playerDto.ActiveEffects;
-				mutableState.Health = playerDto.Health;
-				_players.Add(player.Id, player);
+					mutableState.ActiveEffects = playerDto.ActiveEffects;
+					mutableState.Health = playerDto.Health;
+					mutableState.HasVotingRight = playerDto.HasVotingRight ?? true;
+					_players.Add(player.Id, player);
 			}
 
 			// Restore log entries (already deserialized, just store them)

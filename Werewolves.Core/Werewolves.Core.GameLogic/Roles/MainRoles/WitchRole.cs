@@ -336,9 +336,9 @@ internal sealed class WitchRole : NightRoleHookListener<WitchRoleState>
 	private static bool IsSpent(
 		GameSession session,
 		OneUseRolePowerResourceIdentity resourceIdentity) =>
-		session.GameHistoryLog
-			.OfType<OneUseRolePowerCommittedLogEntry>()
-			.Any(entry => entry.ResourceIdentity == resourceIdentity);
+		GameSessionQueries.IsOneUseRolePowerResourceCommitted(
+			session,
+			resourceIdentity);
 
 	private static RolePowerInstance CreatePowerInstance(IPlayer witch) =>
 		RolePowerInstance.CreateNative(

@@ -1,3 +1,4 @@
+using Werewolves.Core.GameLogic.Queries;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
@@ -9,6 +10,16 @@ namespace Werewolves.Core.GameLogic.Services;
 
 internal static class DayPhaseHandlers
 {
+	internal static bool CanConductVote(GameSession session)
+	{
+		var alivePlayers = session.GetPlayers()
+			.WithHealth(PlayerHealth.Alive)
+			.ToList();
+
+		return alivePlayers.Count > 0 &&
+			alivePlayers.Any(player => player.State.HasVotingRight);
+	}
+
     internal static ModeratorInstruction StartDebate(GameSession session, ModeratorResponse input)
         => new ConfirmationInstruction(
 			ModeratorInstructionSemantic.StartDayDebate,
@@ -18,12 +29,17 @@ internal static class DayPhaseHandlers
     internal static ModeratorInstruction RequestNormalVoteOutcome(GameSession session, ModeratorResponse input)
     {
         var alivePlayers = session.GetPlayers().WithHealth(PlayerHealth.Alive);
+        var hasPendingJudgeObservation =
+	        GameSessionQueries.HasUnreportedStutteringJudgeSignalObservation(
+		        session);
 
         return new SelectPlayersInstruction(
 			ModeratorInstructionSemantic.RecordDayVote,
             alivePlayers.ToIdSet(),
             NumberRangeConstraint.SingleOptional,
-            publicAnnouncement: GameStrings.VoteStartsPublicInstruction,
+            publicAnnouncement: hasPendingJudgeObservation
+	            ? null
+	            : GameStrings.VoteStartsPublicInstruction,
             privateInstruction: GameStrings.VoteStartsModeratorInstruction)
         {
             EmptySelectionOptionLabel = GameStrings.DayVoteNoEliminationOption

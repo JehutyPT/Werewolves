@@ -138,7 +138,7 @@ public class RoleAdmissionTests
 	}
 
 	[Fact]
-	public void SupportedRoleCatalog_AdmitsSevenActiveRolesAndBothVillagerRolesAsPassive()
+	public void SupportedRoleCatalog_AdmitsEightActiveRolesAndBothVillagerRolesAsPassive()
 	{
 		var catalog = SupportedRoleCatalog.Admissions;
 
@@ -151,6 +151,7 @@ public class RoleAdmissionTests
 			MainRoleType.ThreeBrothers,
 			MainRoleType.Witch,
 			MainRoleType.Hunter,
+			MainRoleType.StutteringJudge,
 			MainRoleType.SimpleVillager,
 			MainRoleType.VillagerVillager
 		]);
@@ -163,7 +164,8 @@ public class RoleAdmissionTests
 			         MainRoleType.TwoSisters,
 			         MainRoleType.ThreeBrothers,
 			         MainRoleType.Witch,
-			         MainRoleType.Hunter
+			         MainRoleType.Hunter,
+			         MainRoleType.StutteringJudge
 		         })
 		{
 			var listenerId = ListenerIdentifier.Listener(activeRole);

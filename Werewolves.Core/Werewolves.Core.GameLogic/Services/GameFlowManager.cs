@@ -103,7 +103,11 @@ internal static class GameFlowManager
         [OnVoteConcluded] =
         [
             Listener(Scapegoat),            // in case of a tie, scapegoat ability triggers
-            Listener(StutteringJudge),      // power can only trigger once per game
+        ],
+
+        [OnVoteConducted] =
+        [
+            Listener(StutteringJudge),      // signal is observed before the Vote result
         ],
 	};
 
@@ -229,13 +233,17 @@ internal static class GameFlowManager
                     ],
                     possibleNextSubPhases:
                     [
-                        DaySubPhases.NormalVoting
+                        DaySubPhases.NormalVoting,
+                        DaySubPhases.Finalize
                     ]),
                 new(
                     subPhase: DaySubPhases.NormalVoting,
                     subPhaseStages:
                     [
-                        LogicStage(DaySubPhaseStage.RequestVote, DayPhaseHandlers.RequestNormalVoteOutcome),
+                        HookStage(OnVoteConducted),
+                        LogicStage(
+	                        DaySubPhaseStage.RequestVote,
+	                        DayPhaseHandlers.RequestNormalVoteOutcome),
                         NavigationEndStage(DaySubPhaseStage.HandleVoteResponse, RecordNormalVoteAndChooseDayPath)
                             .RequiresInputType(ExpectedInputType.PlayerSelection)
                     ],
@@ -406,7 +414,10 @@ internal static class GameFlowManager
         => TransitionSubPhase(DayPhaseHandlers.StartDebate(session, input), DaySubPhases.DetermineVoteType);
 
     private static SubPhaseHandlerResult GoToNormalVoting(GameSession session, ModeratorResponse input)
-        => TransitionSubPhaseSilent(DaySubPhases.NormalVoting);
+        => TransitionSubPhaseSilent(
+	        DayPhaseHandlers.CanConductVote(session)
+		        ? DaySubPhases.NormalVoting
+		        : DaySubPhases.Finalize);
 
     private static MajorNavigationPhaseHandlerResult RecordNormalVoteAndChooseDayPath(GameSession session, ModeratorResponse input)
     {
@@ -528,10 +539,16 @@ internal static class GameFlowManager
             return true;
         }
 
-        if (IsAcceptedObservation(startingInstruction))
-        {
-            return true;
-        }
+	        if (IsAcceptedObservation(startingInstruction))
+	        {
+	            return true;
+	        }
+
+	        if (nextInstructionToSend.Semantic ==
+	            ModeratorInstructionSemantic.ObserveStutteringJudgeSignal)
+	        {
+		        return true;
+	        }
 
 		if (IsEliminationCascadeReactionInput(nextInstructionToSend))
 		{
@@ -656,11 +673,13 @@ internal static class GameFlowManager
         };
     }
 
-    private static bool IsAcceptedObservation(ModeratorInstruction? instruction)
-        => instruction?.Semantic is
-            ModeratorInstructionSemantic.IdentifyRoleHolders or
-            ModeratorInstructionSemantic.ObserveVillagerVillagerFromDeal or
-             ModeratorInstructionSemantic.AnnounceDawnVictims or
+	    private static bool IsAcceptedObservation(ModeratorInstruction? instruction)
+	        => instruction?.Semantic is
+	            ModeratorInstructionSemantic.IdentifyRoleHolders or
+	            ModeratorInstructionSemantic.ObserveVillagerVillagerFromDeal or
+	            ModeratorInstructionSemantic.EstablishStutteringJudgeSignal or
+	            ModeratorInstructionSemantic.ObserveStutteringJudgeSignal or
+	             ModeratorInstructionSemantic.AnnounceDawnVictims or
              ModeratorInstructionSemantic.AssignDawnVictimRoles or
              ModeratorInstructionSemantic.AssignDayVoteTargetRole or
              ModeratorInstructionSemantic.AssignEliminationCascadeRoles;
@@ -706,7 +725,8 @@ internal static class GameFlowManager
     }
 
     internal static void RestoreDurableContinuation(
-        GameSession session)
+        GameSession session,
+        IRoleAdmissionSource admissions)
     {
         var domainCursor = session.GetDomainRecoveryCursor(Key);
         if (domainCursor != null)
@@ -715,11 +735,12 @@ internal static class GameFlowManager
             return;
         }
 
-        var cursor = session.GetAcceptedObservationRecoveryCursor(Key);
-        if (cursor == null)
-        {
-            return;
-        }
+	        var cursor = session.GetAcceptedObservationRecoveryCursor(Key);
+	        if (cursor == null)
+	        {
+		        RestorePendingHookListenerContinuation(session, admissions);
+	            return;
+	        }
 
         var continuation = ResolveAcceptedObservationContinuation(
             cursor.ObservedRole,
@@ -740,12 +761,38 @@ internal static class GameFlowManager
                 "The Pending Instruction does not match the accepted Role Identification continuation.");
         }
 
-        session.RestoreTransientContinuation(
-            Key,
-            continuation.Value.ActiveSubPhaseStage,
-            continuation.Value.Listener,
-            continuation.Value.ListenerState);
-    }
+	        session.RestoreTransientContinuation(
+	            Key,
+	            continuation.Value.ActiveSubPhaseStage,
+	            continuation.Value.Listener,
+	            continuation.Value.ListenerState);
+	    }
+
+	    private static void RestorePendingHookListenerContinuation(
+		    GameSession session,
+		    IRoleAdmissionSource admissions)
+	    {
+		    var pendingInstruction = session.PendingModeratorInstruction;
+		    if (pendingInstruction == null)
+		    {
+			    return;
+		    }
+
+		    var continuation = ResolvePendingInstructionContinuation(
+			    session,
+			    pendingInstruction,
+			    admissions);
+		    if (continuation == null)
+		    {
+			    return;
+		    }
+
+		    session.RestoreTransientContinuation(
+			    Key,
+			    continuation.Value.ActiveSubPhaseStage,
+			    continuation.Value.Listener,
+			    continuation.Value.ListenerState);
+	    }
 
     private static void RestoreDomainContinuation(
         GameSession session,
@@ -883,14 +930,20 @@ internal static class GameFlowManager
                     Listener(ThreeBrothers),
                     CardinalityRoleHolderNightState.RecognitionConfirmation.ToString(),
                     AcceptedObservationInstructionShape.Confirmation),
-            (ThreeBrothers, ModeratorInstructionSemantic.PutRoleToSleep) =>
-                new(
-                    NightMainActionLoop.ToString(),
-                    Listener(ThreeBrothers),
-                    CardinalityRoleHolderNightState.SleepConfirmation.ToString(),
-                    AcceptedObservationInstructionShape.Confirmation),
-            _ => null
-        };
+	            (ThreeBrothers, ModeratorInstructionSemantic.PutRoleToSleep) =>
+	                new(
+	                    NightMainActionLoop.ToString(),
+	                    Listener(ThreeBrothers),
+	                    CardinalityRoleHolderNightState.SleepConfirmation.ToString(),
+	                    AcceptedObservationInstructionShape.Confirmation),
+	            (StutteringJudge, ModeratorInstructionSemantic.EstablishStutteringJudgeSignal) =>
+	                new(
+	                    NightMainActionLoop.ToString(),
+	                    Listener(StutteringJudge),
+	                    StutteringJudgeRoleState.AwaitingSignalSetup.ToString(),
+	                    AcceptedObservationInstructionShape.Confirmation),
+	            _ => null
+	        };
 
     private static bool TryGetVictoryInstructions(GameSession session, GamePhase oldPhase, GamePhase newPhase,
 		out ModeratorInstruction? nextInstructionToSend)

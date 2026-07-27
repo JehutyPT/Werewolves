@@ -434,6 +434,74 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 	}
 
 	[Fact]
+	public void BaselineRandomDecisionStrategy_WithStutteringJudgeInstructions_ReturnsLegalDeterministicResponses()
+	{
+		var scenario = new StateModels.Models.Simulation.SimulationScenario(
+			5,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.StutteringJudge,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+		var material = new RunSeedMaterial(
+			new SimulationCompatibilityIdentity(
+				scenario.ToCanonical(),
+				SimulatorCapability.SafetyScreening.Identity),
+			BaselineRandomDecisionStrategy.Identity,
+			runNumber: 23);
+		var startState = SimulationStartStateDeriver.Derive(
+			material,
+			SimulatorCapability.SafetyScreening);
+		var config = startState.CreateGameSessionConfig();
+		var builder = CreateBuilder()
+			.WithPlayers(config.Players.ToArray())
+			.WithRoles(config.Roles.ToArray());
+		builder.StartGame();
+		var session = builder.GetGameState()!;
+		var setup = new ConfirmationInstruction(
+			ModeratorInstructionSemantic.EstablishStutteringJudgeSignal,
+			privateInstruction: GameStrings.StutteringJudgeSignalSetupInstruction);
+		var observation = new SelectOptionsInstruction(
+			ModeratorInstructionSemantic.ObserveStutteringJudgeSignal,
+			[
+				new ModeratorOption(
+					StutteringJudgeSignalOptionIds.Occurred,
+					GameStrings.StutteringJudgeSignalOccurredOption),
+				new ModeratorOption(
+					StutteringJudgeSignalOptionIds.DidNotOccur,
+					GameStrings.StutteringJudgeSignalDidNotOccurOption)
+			],
+			NumberRangeConstraint.Single,
+			privateInstruction: GameStrings.StutteringJudgeSignalObservationInstruction);
+		var firstStrategy = new BaselineRandomDecisionStrategy(
+			material,
+			startState,
+			SimulatorCapability.SafetyScreening.HeadlessResponsePolicy);
+		var replayStrategy = new BaselineRandomDecisionStrategy(
+			material,
+			startState,
+			SimulatorCapability.SafetyScreening.HeadlessResponsePolicy);
+
+		var setupResponse = firstStrategy.CreateResponse(setup, session);
+		var observationResponse = firstStrategy.CreateResponse(observation, session);
+		var replayObservationResponse = replayStrategy.CreateResponse(observation, session);
+
+		setupResponse.InstructionId.Should().Be(setup.InstructionId);
+		setupResponse.Type.Should().Be(ExpectedInputType.Continue);
+		observationResponse.InstructionId.Should().Be(observation.InstructionId);
+		observationResponse.Type.Should().Be(ExpectedInputType.OptionSelection);
+		observationResponse.SelectedOptionIds.Should().ContainSingle()
+			.Which.Should().BeOneOf(
+				StutteringJudgeSignalOptionIds.Occurred,
+				StutteringJudgeSignalOptionIds.DidNotOccur);
+		replayObservationResponse.SelectedOptionIds.Should()
+			.Equal(observationResponse.SelectedOptionIds);
+		MarkTestCompleted();
+	}
+
+	[Fact]
 	public void BaselineRandomDecisionStrategy_WithHunterFinalShot_SelectsOneLegalTargetDeterministically()
 	{
 		var scenario = new StateModels.Models.Simulation.SimulationScenario(

@@ -32,18 +32,30 @@ internal sealed partial class GameSessionKernel
 			_logEntries.Add(entry);
 		}
 
-		private void ValidateOneUseResourceCommit(GameLogEntryBase entry)
-		{
-			if (entry is not OneUseRolePowerCommittedLogEntry commit)
+			private void ValidateOneUseResourceCommit(GameLogEntryBase entry)
 			{
-				return;
-			}
+				if (entry is not IOneUseRolePowerCommittedLogEntry commit)
+				{
+					return;
+				}
 
-			commit.EnforceValidity();
-			if (_logEntries
-			    .OfType<OneUseRolePowerCommittedLogEntry>()
-			    .Any(existing =>
-				    existing.ResourceIdentity == commit.ResourceIdentity))
+				switch (entry)
+				{
+					case OneUseRolePowerCommittedLogEntry nightCommit:
+						nightCommit.EnforceValidity();
+						break;
+					case StutteringJudgeConsecutiveVoteCommittedLogEntry dayCommit:
+						dayCommit.EnforceValidity();
+						break;
+					default:
+						throw new InvalidOperationException(
+							$"Unsupported One-Use Role Power commit log type '{entry.GetType().Name}'.");
+				}
+
+				if (_logEntries
+				    .OfType<IOneUseRolePowerCommittedLogEntry>()
+				    .Any(existing =>
+					    existing.ResourceIdentity == commit.ResourceIdentity))
 			{
 				throw new InvalidOperationException(
 					"The One-Use Role Power Resource is already spent by its owning power instance.");

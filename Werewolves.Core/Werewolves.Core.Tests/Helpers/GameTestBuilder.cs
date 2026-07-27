@@ -232,14 +232,25 @@ public class GameTestBuilder
 		return this;
 	}
 
-	internal GameTestBuilder ArrangeEliminatedPlayer(
-		Guid playerId,
-		EliminationReason reason = EliminationReason.EventElimination)
+		internal GameTestBuilder ArrangeEliminatedPlayer(
+			Guid playerId,
+			EliminationReason reason = EliminationReason.EventElimination)
 	{
 		EnsureGameStarted();
-		GetMutableSessionForArrangement().EliminatePlayer(playerId, reason);
-		return this;
-	}
+			GetMutableSessionForArrangement().EliminatePlayer(playerId, reason);
+			return this;
+		}
+
+		internal GameTestBuilder ArrangeVotingRight(
+			Guid playerId,
+			bool hasVotingRight)
+		{
+			EnsureGameStarted();
+			GetMutableSessionForArrangement().SetPlayerVotingRight(
+				playerId,
+				hasVotingRight);
+			return this;
+		}
 
 	internal GameTestBuilder ArrangeCommittedWitchPotion(
 		Guid witchId,

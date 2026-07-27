@@ -60,6 +60,7 @@ internal class PlayerDto
     public MainRoleType? PubliclyRevealedRole { get; set; }
     public StatusEffectTypes ActiveEffects { get; set; }
     public PlayerHealth Health { get; set; }
+    public bool? HasVotingRight { get; set; }
 }
 
 /// <summary>

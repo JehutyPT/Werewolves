@@ -107,6 +107,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 	[Theory]
 	[InlineData(MainRoleType.Hunter, 1)]
 	[InlineData(MainRoleType.Witch, 1)]
+	[InlineData(MainRoleType.StutteringJudge, 1)]
 	[InlineData(MainRoleType.TwoSisters, 2)]
 	[InlineData(MainRoleType.ThreeBrothers, 3)]
 	public void ExecuteBatch_WithCardinalityRoleHolders_SafetyRepresentativeCompletesAllOneThousandAttempts(
@@ -136,6 +137,53 @@ public class SimulationExecutionTests : DiagnosticTestBase
 		batch.IncompleteRunCount.Should().Be(0);
 		batch.Records.Should().OnlyContain(run =>
 			run is CompletedSimulationRun);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void ExecuteBatch_WithFrozenFullProbabilityFourRoleScenario_CompletesWithoutSafetyOnlySemantics()
+	{
+		var scenario = new SimulationScenario(
+			5,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Seer,
+				MainRoleType.WildChild,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+		var identity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorCapability.FullProbability.Identity);
+		var recorders = new List<RecordingDecisionStrategy>();
+		var executor = new SimulationExecutor(
+			SimulationStartStateDeriver.Derive,
+			strategy =>
+			{
+				var recorder = new RecordingDecisionStrategy(strategy);
+				recorders.Add(recorder);
+				return new HeadlessGameDriver(recorder);
+			},
+			SimulationExecutor.AdaptTerminalEvidence);
+
+		var batch = executor.ExecuteBatch(
+			scenario,
+			SimulatorCapability.FullProbability,
+			identity,
+			runCount: 1_000);
+
+		batch.Records.Should().HaveCount(1_000);
+		batch.CompletedRunCount.Should().Be(1_000);
+		batch.IncompleteRunCount.Should().Be(0);
+		recorders.Should().HaveCount(1_000);
+		var safetyOnlySemantics = new[]
+		{
+			ModeratorInstructionSemantic.ConductDayVote,
+			ModeratorInstructionSemantic.EstablishStutteringJudgeSignal,
+			ModeratorInstructionSemantic.ObserveStutteringJudgeSignal
+		};
+		recorders.SelectMany(recorder => recorder.ObservedSemantics)
+			.Should().NotContain(semantic => safetyOnlySemantics.Contains(semantic));
 		MarkTestCompleted();
 	}
 
@@ -262,7 +310,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 
 		first.Should().BeOfType<CompletedSimulationRun>();
 		first.RunSeedMaterial.CompatibilityIdentity.Profile.Should()
-			.Be(new SimulatorProfileIdentity("safety-screening", "6"));
+			.Be(new SimulatorProfileIdentity("safety-screening", "7"));
 		replay.Should().Be(first);
 		MarkTestCompleted();
 	}
@@ -754,6 +802,27 @@ public class SimulationExecutionTests : DiagnosticTestBase
 				} dayVote => dayVote.CreateResponse([]),
 				_ => _inner.CreateResponse(instruction, session)
 			};
+		}
+	}
+
+	private sealed class RecordingDecisionStrategy : IModeratorDecisionStrategy
+	{
+		private readonly IModeratorDecisionStrategy _inner;
+
+		internal RecordingDecisionStrategy(IModeratorDecisionStrategy inner)
+		{
+			ArgumentNullException.ThrowIfNull(inner);
+			_inner = inner;
+		}
+
+		internal List<ModeratorInstructionSemantic> ObservedSemantics { get; } = [];
+
+		public ModeratorResponse CreateResponse(
+			ModeratorInstruction instruction,
+			IGameSession session)
+		{
+			ObservedSemantics.Add(instruction.Semantic);
+			return _inner.CreateResponse(instruction, session);
 		}
 	}
 

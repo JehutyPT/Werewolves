@@ -56,6 +56,12 @@ internal class TestSessionMutator : ISessionMutator
             state.Health = health;
     }
 
+    public void SetVotingRight(Guid playerId, bool hasVotingRight)
+    {
+        if (_states.TryGetValue(playerId, out var state))
+            state.HasVotingRight = hasVotingRight;
+    }
+
     public void SetStatusEffect(Guid playerId, StatusEffectTypes effect, bool active)
     {
         if (!_states.TryGetValue(playerId, out var state))
@@ -101,6 +107,7 @@ internal class TestPlayerState : IPlayerState
     public MainRoleType? ModeratorKnownRole { get; set; }
     public MainRoleType? PubliclyRevealedRole { get; set; }
     public PlayerHealth Health { get; set; } = PlayerHealth.Alive;
+    public bool HasVotingRight { get; set; } = true;
     internal StatusEffectTypes ActiveEffects { get; set; } = StatusEffectTypes.None;
 
     public List<StatusEffectTypes> GetActiveStatusEffects()

@@ -124,6 +124,39 @@ internal static class GameSessionQueries
         return hasJudgeVoted && currentTurnVoteCount == 1;
     }
 
+    internal static bool HasStutteringJudgeSignalBeenEstablished(
+        IGameSession session) =>
+        FindLogEntries<StutteringJudgeSignalEstablishedLogEntry>(session)
+            .Any();
+
+    internal static bool HasUnreportedStutteringJudgeSignalObservation(
+        IGameSession session)
+    {
+        if (GetCurrentDayVoteOutcome(session) != null)
+        {
+            return false;
+        }
+
+        var currentTurn = NumberRangeConstraint.Exact(session.TurnNumber);
+        return FindLogEntries<StutteringJudgeSignalDidNotOccurLogEntry>(
+                   session,
+                   currentTurn,
+                   GamePhase.Day)
+               .Any() ||
+               FindLogEntries<StutteringJudgeConsecutiveVoteCommittedLogEntry>(
+                   session,
+                   currentTurn,
+                   GamePhase.Day)
+               .Any();
+    }
+
+    internal static bool IsOneUseRolePowerResourceCommitted(
+        IGameSession session,
+        OneUseRolePowerResourceIdentity resourceIdentity) =>
+        session.GameHistoryLog
+            .OfType<IOneUseRolePowerCommittedLogEntry>()
+            .Any(entry => entry.ResourceIdentity == resourceIdentity);
+
     internal static IEnumerable<IPlayer> GetPlayersEliminatedThisDawn(IGameSession session)
         => FindLogEntries<PlayerEliminatedLogEntry>(
                 session,

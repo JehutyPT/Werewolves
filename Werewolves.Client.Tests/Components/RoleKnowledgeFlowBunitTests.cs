@@ -31,6 +31,7 @@ public sealed class RoleKnowledgeFlowBunitTests
 	[InlineData(MainRoleType.VillagerVillager)]
 	[InlineData(MainRoleType.Witch)]
 	[InlineData(MainRoleType.Hunter)]
+	[InlineData(MainRoleType.StutteringJudge)]
 	public void SingleOptionalRoleLobby_UsesCatalogMetadataAsPortugueseToggle(
 		MainRoleType role)
 	{
@@ -42,6 +43,7 @@ public sealed class RoleKnowledgeFlowBunitTests
 			MainRoleType.VillagerVillager => GameStrings.VillagerVillagerRoleName,
 			MainRoleType.Witch => GameStrings.WitchRoleName,
 			MainRoleType.Hunter => GameStrings.HunterRoleName,
+			MainRoleType.StutteringJudge => GameStrings.StutteringJudgeRoleName,
 			_ => throw new InvalidOperationException(
 				$"Unexpected Single-Optional Role {role}.")
 		};
@@ -210,6 +212,125 @@ public sealed class RoleKnowledgeFlowBunitTests
 	}
 
 	[Fact]
+	public async Task StutteringJudgeSignalFlow_RendersLocalizedSetupAndObservationWithDeliberateHolds()
+	{
+		var timing = new ControlledHoldButtonTiming();
+		using var context = new ModeratorComponentTestContext();
+		context.Services.AddSingleton<IHoldButtonTiming>(timing);
+		var manager = context.Services.GetRequiredService<GameClientManager>();
+		var start = manager.StartGame(
+			PlayerNames.DefaultFive,
+			[
+				MainRoleType.StutteringJudge,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+		manager.ProcessInput(start.CreateResponse()).IsSuccess.Should().BeTrue();
+		var startNight = manager.CurrentInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		manager.ProcessInput(startNight.CreateResponse()).IsSuccess.Should().BeTrue();
+		var players = manager.CurrentSession!.GetPlayers().ToArray();
+		var judge = players[0];
+		var werewolf = players[1];
+		var victim = players[4];
+		var identification = manager.CurrentInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		identification.RoleIdentification.Should().Be(MainRoleType.StutteringJudge);
+		manager.ProcessInput(identification.CreateResponse([judge.Id]))
+			.IsSuccess.Should().BeTrue();
+		var setup = manager.CurrentInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		setup.Semantic.Should().Be(
+			ModeratorInstructionSemantic.EstablishStutteringJudgeSignal);
+
+		var cut = context.RenderModeratorComponent<DashboardPage>();
+
+		cut.FindAll(PublicInstructionSelector).Should().BeEmpty();
+		cut.Find(PrivateInstructionSelector).TextContent.Should()
+			.Contain(GameStrings.StutteringJudgeSignalSetupInstruction);
+		await RenderedHoldButtonDriver.CompleteHoldAsync(
+			cut,
+			cut.Find(HoldButtonSelector),
+			timing);
+
+		AdvanceToFirstDayDebate(manager, werewolf.Id, victim.Id);
+		var debate = manager.CurrentInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		debate.Semantic.Should().Be(ModeratorInstructionSemantic.StartDayDebate);
+		manager.ProcessInput(debate.CreateResponse()).IsSuccess.Should().BeTrue();
+		var conductVote = manager.CurrentInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		conductVote.Semantic.Should().Be(
+			ModeratorInstructionSemantic.ConductDayVote);
+		cut.Find(PublicInstructionSelector).TextContent.Should()
+			.Contain(GameStrings.VoteStartsPublicInstruction);
+		cut.Find(PrivateInstructionSelector).TextContent.Should()
+			.Contain(GameStrings.DayVoteConductInstruction);
+
+		await RenderedHoldButtonDriver.CompleteHoldAsync(
+			cut,
+			cut.Find(HoldButtonSelector),
+			timing);
+
+		var signal = manager.CurrentInstruction
+			.Should().BeOfType<SelectOptionsInstruction>().Subject;
+		signal.Semantic.Should().Be(
+			ModeratorInstructionSemantic.ObserveStutteringJudgeSignal);
+		signal.Options.Select(option => (option.Id, option.Label)).Should().Equal(
+			(
+				StutteringJudgeSignalOptionIds.Occurred,
+				GameStrings.StutteringJudgeSignalOccurredOption),
+			(
+				StutteringJudgeSignalOptionIds.DidNotOccur,
+				GameStrings.StutteringJudgeSignalDidNotOccurOption));
+		cut.FindAll(PublicInstructionSelector).Should().BeEmpty();
+		cut.Find(PrivateInstructionSelector).TextContent.Should()
+			.Contain(GameStrings.StutteringJudgeSignalObservationInstruction);
+		var occurredOption = cut.FindAll(Html.Selectors.Button)
+			.Single(button => button.TextContent.Trim() ==
+				GameStrings.StutteringJudgeSignalOccurredOption);
+		var didNotOccurOption = cut.FindAll(Html.Selectors.Button)
+			.Single(button => button.TextContent.Trim() ==
+				GameStrings.StutteringJudgeSignalDidNotOccurOption);
+		occurredOption.GetAttribute(Html.Attributes.AriaPressed)
+			.Should().Be(Html.AriaValues.False);
+		didNotOccurOption.GetAttribute(Html.Attributes.AriaPressed)
+			.Should().Be(Html.AriaValues.False);
+		occurredOption.Click();
+		occurredOption = cut.FindAll(Html.Selectors.Button)
+			.Single(button => button.TextContent.Trim() ==
+				GameStrings.StutteringJudgeSignalOccurredOption);
+		occurredOption.GetAttribute(Html.Attributes.AriaPressed)
+			.Should().Be(Html.AriaValues.True);
+		var pendingInstructionId = signal.InstructionId;
+		var holdButton = cut.Find(HoldButtonSelector);
+		holdButton.HasAttribute(Html.Attributes.Disabled).Should().BeFalse();
+
+		var earlyHold = RenderedHoldButtonDriver.StartHoldAsync(holdButton);
+		await RenderedHoldButtonDriver.FlushAsync(cut);
+		timing.AdvanceBy(
+			RenderedHoldButtonDriver.HoldDuration -
+			TimeSpan.FromMilliseconds(1));
+		await RenderedHoldButtonDriver.ReleaseHoldAsync(holdButton);
+		await earlyHold;
+
+		manager.CurrentInstruction!.InstructionId.Should().Be(
+			pendingInstructionId);
+
+		await RenderedHoldButtonDriver.CompleteHoldAsync(
+			cut,
+			cut.Find(HoldButtonSelector),
+			timing);
+
+		manager.CurrentInstruction!.InstructionId.Should().NotBe(
+			pendingInstructionId);
+		manager.CurrentInstruction.Semantic.Should().Be(
+			ModeratorInstructionSemantic.RecordDayVote);
+	}
+
+	[Fact]
 	public async Task WitchNightFlow_RendersPublicWakePrivatePotionsExplicitDeclineAndPublicSleep()
 	{
 		var timing = new ControlledHoldButtonTiming();
@@ -327,5 +448,52 @@ public sealed class RoleKnowledgeFlowBunitTests
 			.Contain(GameStrings.RoleGoesToSleepSingle.Format(GameStrings.WitchRoleName));
 		cut.FindAll(PrivateInstructionSelector).Should().BeEmpty();
 		cut.FindAll(PlayerOptionSelector).Should().BeEmpty();
+	}
+
+	private static void AdvanceToFirstDayDebate(
+		GameClientManager manager,
+		Guid werewolfId,
+		Guid victimId)
+	{
+		for (var step = 0; step < 30; step++)
+		{
+			if (manager.CurrentPhase == GamePhase.Day &&
+				manager.CurrentInstruction is ConfirmationInstruction
+				{
+					Semantic: ModeratorInstructionSemantic.StartDayDebate
+				})
+			{
+				return;
+			}
+
+			var result = manager.CurrentInstruction switch
+			{
+				SelectPlayersInstruction
+					{
+						RoleIdentification: MainRoleType.SimpleWerewolf
+					} instruction =>
+					manager.ProcessInput(instruction.CreateResponse([werewolfId])),
+				SelectPlayersInstruction
+					{
+						Semantic:
+							ModeratorInstructionSemantic.SelectWerewolfVictim
+					} instruction =>
+					manager.ProcessInput(instruction.CreateResponse([victimId])),
+				AssignRolesInstruction instruction =>
+					manager.ProcessInput(instruction.CreateResponse(
+						instruction.PlayersForAssignment.ToDictionary(
+							playerId => playerId,
+							_ => MainRoleType.SimpleVillager))),
+				ConfirmationInstruction instruction =>
+					manager.ProcessInput(instruction.CreateResponse()),
+				_ => throw new InvalidOperationException(
+					$"Unexpected instruction while advancing the Stuttering Judge game to Day: " +
+					$"{manager.CurrentInstruction?.GetType().Name}.")
+			};
+			result.IsSuccess.Should().BeTrue();
+		}
+
+		throw new InvalidOperationException(
+			"The Stuttering Judge game did not reach the first Day debate.");
 	}
 }

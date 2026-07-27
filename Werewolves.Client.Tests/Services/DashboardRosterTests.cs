@@ -150,10 +150,11 @@ public class DashboardRosterTests
 		public MainRoleType? CurrentRole => currentRole;
 		public MainRoleType? MainRole => CurrentRole;
 		public MainRoleType? PhysicalCharacterCardRole => physicalCharacterCardRole;
-		public MainRoleType? ModeratorKnownRole => moderatorKnownRole;
-		public MainRoleType? PubliclyRevealedRole => publiclyRevealedRole;
-		public PlayerHealth Health => health;
-		public bool IsImmuneToLynching => false;
+			public MainRoleType? ModeratorKnownRole => moderatorKnownRole;
+			public MainRoleType? PubliclyRevealedRole => publiclyRevealedRole;
+			public PlayerHealth Health => health;
+			public bool HasVotingRight => true;
+			public bool IsImmuneToLynching => false;
 		public string? LynchingImmunityAnnouncement => null;
 		public Team Team => currentRole == MainRoleType.SimpleWerewolf ? Team.Werewolves : Team.Villagers;
 		public List<StatusEffectTypes> GetActiveStatusEffects() => activeEffects.ToList();
