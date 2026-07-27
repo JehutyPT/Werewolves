@@ -421,4 +421,20 @@
     <value>ERROR: Game not found</value>
     <comment/>
   </data>
+  <data name="RoleHoldersWakeUp" xml:space="preserve">
+    <value>{0} acordam.</value>
+    <comment/>
+  </data>
+  <data name="RoleHoldersRecognitionPrompt" xml:space="preserve">
+    <value>{0}, acordem e reconheçam-se.</value>
+    <comment/>
+  </data>
+  <data name="RoleHoldersCommunicationPrompt" xml:space="preserve">
+    <value>{0}, acordem e comuniquem em silêncio.</value>
+    <comment/>
+  </data>
+  <data name="RoleHoldersGoToSleep" xml:space="preserve">
+    <value>{0} voltam a dormir.</value>
+    <comment/>
+  </data>
 </root>

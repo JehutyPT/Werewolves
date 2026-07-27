@@ -1,9 +1,12 @@
 using FluentAssertions;
+using Werewolves.Core.GameLogic.Interfaces;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.GameLogic.Simulation;
+using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
+using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Models.Simulation;
 using Werewolves.Core.Tests.Helpers;
 using Xunit;
@@ -15,6 +18,108 @@ public class SimulationExecutionTests : DiagnosticTestBase
 {
 	public SimulationExecutionTests(ITestOutputHelper output) : base(output)
 	{
+	}
+
+	[Theory]
+	[InlineData(ModeratorInstructionSemantic.RecognizeRoleHolders)]
+	[InlineData(ModeratorInstructionSemantic.CommunicateAsRoleHolders)]
+	public void Execute_WithTwoSistersSemanticMissingFromPolicy_ReturnsIncompleteEvidence(
+		ModeratorInstructionSemantic missingSemantic)
+	{
+		var scenario = new SimulationScenario(
+			8,
+			[
+				MainRoleType.TwoSisters,
+				MainRoleType.TwoSisters,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+		var capability = new SimulatorCapability(
+			new SimulatorProfileIdentity(
+				$"test-two-sisters-missing-{missingSemantic}",
+				"1"),
+			[
+				new(MainRoleType.TwoSisters, Faction.Villager),
+				new(MainRoleType.SimpleWerewolf, Faction.Werewolf),
+				new(MainRoleType.SimpleVillager, Faction.Villager)
+			],
+			headlessResponsePolicy: new HeadlessResponsePolicy(
+				BaselineRandomDecisionStrategy.Identity,
+				SimulatorCapability.SafetyScreening.HeadlessResponsePolicy
+					.AdmittedSemantics
+					.Where(semantic => semantic != missingSemantic)));
+		var identity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			capability.Identity);
+		var decorators = new List<PreserveTwoSistersUntilNightThreeStrategy>();
+		var executor = new SimulationExecutor(
+			SimulationStartStateDeriver.Derive,
+			strategy =>
+			{
+				var decorator = new PreserveTwoSistersUntilNightThreeStrategy(strategy);
+				decorators.Add(decorator);
+				return new HeadlessGameDriver(decorator);
+			},
+			SimulationExecutor.AdaptTerminalEvidence);
+
+		foreach (var runNumber in Enumerable.Range(0, 16).Select(value => (long)value))
+		{
+			var run = executor.Execute(
+				scenario,
+				capability,
+				identity,
+				runNumber);
+
+			run.Should().Be(new IncompleteSimulationRun(
+				new RunSeedMaterial(
+					identity,
+					BaselineRandomDecisionStrategy.Identity,
+					runNumber)));
+			decorators.Should().HaveCount((int)runNumber + 1);
+			decorators[^1].ObservedSemantics.Should().Contain(missingSemantic);
+			if (missingSemantic == ModeratorInstructionSemantic.CommunicateAsRoleHolders)
+			{
+				decorators[^1].LivingSisterCountAtCommunication.Should().Be(2);
+			}
+		}
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void ExecuteBatch_WithTwoSisters_SafetyRepresentativeCompletesAllOneThousandAttempts()
+	{
+		var scenario = new SimulationScenario(
+			8,
+			[
+				MainRoleType.TwoSisters,
+				MainRoleType.TwoSisters,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+		var identity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+
+		var batch = new SimulationExecutor().ExecuteBatch(
+			scenario,
+			SimulatorCapability.SafetyScreening,
+			identity,
+			runCount: 1_000);
+
+		batch.Records.Should().HaveCount(1_000);
+		batch.CompletedRunCount.Should().Be(1_000);
+		batch.IncompleteRunCount.Should().Be(0);
+		batch.Records.Should().OnlyContain(run =>
+			run is CompletedSimulationRun);
+		MarkTestCompleted();
 	}
 
 	[Fact]
@@ -140,7 +245,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 
 		first.Should().BeOfType<CompletedSimulationRun>();
 		first.RunSeedMaterial.CompatibilityIdentity.Profile.Should()
-			.Be(new SimulatorProfileIdentity("safety-screening", "2"));
+			.Be(new SimulatorProfileIdentity("safety-screening", "3"));
 		replay.Should().Be(first);
 		MarkTestCompleted();
 	}
@@ -579,6 +684,58 @@ public class SimulationExecutionTests : DiagnosticTestBase
 				MainRoleType.SimpleVillager,
 				MainRoleType.SimpleVillager
 			]);
+
+	private sealed class PreserveTwoSistersUntilNightThreeStrategy
+		: IModeratorDecisionStrategy
+	{
+		private readonly IModeratorDecisionStrategy _inner;
+
+		internal PreserveTwoSistersUntilNightThreeStrategy(
+			IModeratorDecisionStrategy inner)
+		{
+			ArgumentNullException.ThrowIfNull(inner);
+			_inner = inner;
+		}
+
+		internal List<ModeratorInstructionSemantic> ObservedSemantics { get; } = [];
+		internal int? LivingSisterCountAtCommunication { get; private set; }
+
+		public ModeratorResponse CreateResponse(
+			ModeratorInstruction instruction,
+			IGameSession session)
+		{
+			ObservedSemantics.Add(instruction.Semantic);
+			if (instruction.Semantic ==
+			    ModeratorInstructionSemantic.CommunicateAsRoleHolders)
+			{
+				LivingSisterCountAtCommunication = session.GetPlayers().Count(player =>
+					player.State.Health == PlayerHealth.Alive &&
+					player.State.CurrentRole == MainRoleType.TwoSisters);
+			}
+
+			return instruction switch
+			{
+				SelectPlayersInstruction
+				{
+					Semantic: ModeratorInstructionSemantic.SelectWerewolfVictim
+				} victim => victim.CreateResponse(
+					session.GetPlayers()
+						.Where(player =>
+							victim.SelectablePlayerIds.Contains(player.Id) &&
+							player.State.CurrentRole != MainRoleType.TwoSisters &&
+							player.State.ModeratorKnownRole != MainRoleType.TwoSisters)
+						.OrderBy(player => player.Id)
+						.Take(1)
+						.Select(player => player.Id)
+						.ToHashSet()),
+				SelectPlayersInstruction
+				{
+					Semantic: ModeratorInstructionSemantic.RecordDayVote
+				} dayVote => dayVote.CreateResponse([]),
+				_ => _inner.CreateResponse(instruction, session)
+			};
+		}
+	}
 
 	private static SimulationCompatibilityIdentity CreateIdentity(SimulationScenario scenario) =>
 		new(scenario.ToCanonical(), SimulatorCapability.FullProbability.Identity);

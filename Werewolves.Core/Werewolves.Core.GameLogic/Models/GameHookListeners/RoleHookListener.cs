@@ -42,6 +42,22 @@ internal abstract class RoleHookListener : IGameHookListener
 			.WithHealth(Alive)
 			.ToIdSet();
 
+	protected void IdentifyCompleteLivingRoleHolderSet(
+		GameSession session,
+		HashSet<Guid> selectedPlayerIds)
+	{
+		ArgumentNullException.ThrowIfNull(selectedPlayerIds);
+		var committedLivingRoleHolderIds = GetCommittedLivingRoleHolderIds(session);
+		if (committedLivingRoleHolderIds.Count > GetExpectedLivingRoleHolderCount(session) ||
+		    !committedLivingRoleHolderIds.IsSubsetOf(selectedPlayerIds))
+		{
+			throw new InvalidOperationException(
+				"Role Identification cannot replace a committed Living Role Holder.");
+		}
+
+		session.IdentifyRole(selectedPlayerIds, (MainRoleType)Id);
+	}
+
 	protected int GetExpectedLivingRoleHolderCount(GameSession session)
 	{
 		var role = (MainRoleType)Id;

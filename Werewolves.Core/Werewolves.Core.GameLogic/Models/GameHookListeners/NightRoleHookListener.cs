@@ -162,15 +162,7 @@ internal abstract class NightRoleHookListener<T> : RoleHookListener<T> where T :
 	protected virtual void ProcessRoleIdentification(GameSession session, ModeratorResponse input)
 	{
 		var selectedPlayerIds = input.SelectedPlayerIds!.ToHashSet();
-		var committedLivingRoleHolderIds = GetCommittedLivingRoleHolderIds(session);
-		if (committedLivingRoleHolderIds.Count > GetExpectedLivingRoleHolderCount(session) ||
-		    !committedLivingRoleHolderIds.IsSubsetOf(selectedPlayerIds))
-		{
-			throw new InvalidOperationException(
-				"Role Identification cannot replace a committed Living Role Holder.");
-		}
-
-		session.IdentifyRole(selectedPlayerIds, Id);
+		IdentifyCompleteLivingRoleHolderSet(session, selectedPlayerIds);
 	}
 
 

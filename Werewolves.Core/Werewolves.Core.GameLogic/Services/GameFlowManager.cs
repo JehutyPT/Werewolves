@@ -1,4 +1,5 @@
 using Werewolves.Core.GameLogic.Interfaces;
+using Werewolves.Core.GameLogic.Models.GameHookListeners;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
 using Werewolves.Core.GameLogic.Models.StateMachine;
 using Werewolves.Core.GameLogic.Queries;
@@ -582,6 +583,18 @@ internal static class GameFlowManager
                     NightMainActionLoop.ToString(),
                     Listener(Seer),
                     ImmediateFeedbackNightRoleState.AwaitingSleepConfirmation.ToString(),
+                    AcceptedObservationInstructionShape.Confirmation),
+            (TwoSisters, ModeratorInstructionSemantic.RecognizeRoleHolders) =>
+                new(
+                    NightMainActionLoop.ToString(),
+                    Listener(TwoSisters),
+                    CardinalityRoleHolderNightState.RecognitionConfirmation.ToString(),
+                    AcceptedObservationInstructionShape.Confirmation),
+            (TwoSisters, ModeratorInstructionSemantic.PutRoleToSleep) =>
+                new(
+                    NightMainActionLoop.ToString(),
+                    Listener(TwoSisters),
+                    CardinalityRoleHolderNightState.SleepConfirmation.ToString(),
                     AcceptedObservationInstructionShape.Confirmation),
             _ => null
         };

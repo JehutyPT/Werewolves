@@ -29,6 +29,39 @@ public class InstructionRendererBunitTests
 	private static string PlayerOptionSelector => Html.Selectors.ElementWithRole(Html.Elements.ListItem, Html.Roles.Option);
 
 	[Fact]
+	public void RoleHolderConfirmations_RenderThroughGenericPublicContinueWithoutTimer()
+	{
+		var roleName = MainRoleType.TwoSisters.GetPublicName();
+		var recognitionAnnouncement =
+			GameStrings.RoleHoldersRecognitionPrompt.Format(roleName);
+		var announcements = new[]
+		{
+			recognitionAnnouncement,
+			GameStrings.RoleHoldersCommunicationPrompt.Format(roleName),
+			GameStrings.RoleHoldersGoToSleep.Format(roleName)
+		};
+
+		foreach (var announcement in announcements)
+		{
+			using var context = new ModeratorComponentTestContext();
+			var instruction = CreateConfirmationInstruction(
+				publicAnnouncement: announcement);
+
+			var cut = context.RenderModeratorComponent<InstructionRenderer>(
+				parameters => parameters.Add(
+					component => component.Instruction,
+					instruction));
+
+			cut.Find(PublicInstructionSelector).TextContent.Should()
+				.Contain(announcement);
+			cut.FindAll(PrivateInstructionSelector).Should().BeEmpty();
+			cut.Markup.Should().NotContain(
+				ClientStrings.Dashboard_DebateTimerLabel);
+			cut.FindAll(HoldButtonSelector).Should().ContainSingle();
+		}
+	}
+
+	[Fact]
 	public void ConfirmationInstruction_WithPublicAndPrivateGuidance_InitiallyExpandsBothGuidanceBlocks()
 	{
 		using var context = new ModeratorComponentTestContext();

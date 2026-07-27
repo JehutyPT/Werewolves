@@ -16,12 +16,15 @@ public static class LegacyTerminalLobbyCacheCompatibility
 
 	private static readonly MainRoleType[] FrozenSafetyOnlyRoles =
 	[
-		MainRoleType.VillagerVillager
+		MainRoleType.VillagerVillager,
+		MainRoleType.TwoSisters
 	];
 
 	private static readonly ModeratorInstructionSemantic[] FrozenSafetyOnlySemantics =
 	[
-		ModeratorInstructionSemantic.ObserveVillagerVillagerFromDeal
+		ModeratorInstructionSemantic.ObserveVillagerVillagerFromDeal,
+		ModeratorInstructionSemantic.RecognizeRoleHolders,
+		ModeratorInstructionSemantic.CommunicateAsRoleHolders
 	];
 
 	public static bool TryProject(
@@ -115,11 +118,9 @@ public static class LegacyTerminalLobbyCacheCompatibility
 			legacy.TryGetBeneficiaryFaction(role, out var legacyFaction)
 			&& capability.TryGetBeneficiaryFaction(role, out var currentFaction)
 			&& currentFaction == legacyFaction);
-		var hasSafetyOnlyRoleSemantics =
-			capability.TryGetBeneficiaryFaction(
-				MainRoleType.VillagerVillager,
-				out var villagerVillagerFaction)
-			&& villagerVillagerFaction == Faction.Villager;
+		var hasSafetyOnlyRoleSemantics = FrozenSafetyOnlyRoles.All(role =>
+			capability.TryGetBeneficiaryFaction(role, out var faction)
+			&& faction == Faction.Villager);
 
 		return hasFrozenRoleSemantics
 			&& hasSafetyOnlyRoleSemantics

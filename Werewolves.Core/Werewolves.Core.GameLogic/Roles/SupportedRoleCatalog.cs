@@ -39,6 +39,9 @@ public static class SupportedRoleCatalog
 			RoleAdmission.Active(
 				MainRoleType.WildChild,
 				() => new WildChildRole()),
+			RoleAdmission.Active(
+				MainRoleType.TwoSisters,
+				() => new TwoSistersRole(rolePowerAvailabilityGateway)),
 			RoleAdmission.Passive(MainRoleType.SimpleVillager),
 			RoleAdmission.Passive(MainRoleType.VillagerVillager)
 		]);

@@ -25,5 +25,7 @@ public enum ModeratorInstructionSemantic
 	AnnounceLynchingImmunity = 17,
 	AnnounceDayElimination = 18,
 	GameSessionNotFound = 19,
-	ObserveVillagerVillagerFromDeal = 20
+	ObserveVillagerVillagerFromDeal = 20,
+	RecognizeRoleHolders = 21,
+	CommunicateAsRoleHolders = 22
 }

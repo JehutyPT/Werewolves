@@ -50,6 +50,39 @@ public sealed class RoleKnowledgeFlowBunitTests
 	}
 
 	[Fact]
+	public void TwoSistersLobby_UsesProductionCatalogAsPortuguesePairToggle()
+	{
+		using var context = new ModeratorComponentTestContext();
+		var lobby = context.Services.GetRequiredService<LobbySetupState>();
+		var roleInfo = lobby.GetRoleInfo(MainRoleType.TwoSisters);
+
+		roleInfo.DisplayName.Should().Be(GameStrings.TwoSistersRoleName);
+		roleInfo.Affordance.Should().Be(RoleAffordance.Toggle);
+		roleInfo.BatchSize.Should().Be(2);
+
+		var cut = context.RenderModeratorComponent<RoleSelectionPage>();
+		var toggle = cut.FindAll(Html.Selectors.Button)
+			.Single(button =>
+				button.GetAttribute(Html.Attributes.AriaLabel) == roleInfo.DisplayName);
+		toggle.TextContent.Should().Contain($"×{roleInfo.BatchSize}");
+		toggle.GetAttribute(Html.Attributes.AriaPressed)
+			.Should().Be(Html.AriaValues.False);
+
+		toggle.Click();
+
+		lobby.GetRoleCount(MainRoleType.TwoSisters).Should().Be(2);
+		toggle = cut.FindAll(Html.Selectors.Button)
+			.Single(button =>
+				button.GetAttribute(Html.Attributes.AriaLabel) == roleInfo.DisplayName);
+		toggle.GetAttribute(Html.Attributes.AriaPressed)
+			.Should().Be(Html.AriaValues.True);
+
+		toggle.Click();
+
+		lobby.GetRoleCount(MainRoleType.TwoSisters).Should().Be(0);
+	}
+
+	[Fact]
 	public async Task VillagerVillagerPublicFromDeal_UsesCorrelatedPlayerSelectionAndCommitsOnlyAfterCompletedHold()
 	{
 		var timing = new ControlledHoldButtonTiming();
