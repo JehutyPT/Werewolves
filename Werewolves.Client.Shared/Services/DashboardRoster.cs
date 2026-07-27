@@ -6,6 +6,13 @@ using Werewolves.Core.StateModels.Resources;
 
 namespace Werewolves.Client.Services;
 
+public enum DashboardRoleVisibility
+{
+	Unknown,
+	ModeratorPrivate,
+	Public
+}
+
 public sealed record DashboardRosterEntry(
 	Guid PlayerId,
 	int SeatNumber,
@@ -15,7 +22,12 @@ public sealed record DashboardRosterEntry(
 	string HealthLabel,
 	bool IsDead,
 	IReadOnlyList<string> StatusEffects,
-	string StatusEffectsLabel);
+	string StatusEffectsLabel)
+{
+	public DashboardRoleVisibility RoleVisibility { get; init; } = DashboardRoleVisibility.Unknown;
+	public string RoleVisibilityLabel { get; init; } =
+		DashboardRoster.RoleVisibilityLabel(DashboardRoleVisibility.Unknown);
+}
 
 public static class DashboardRoster
 {
@@ -36,25 +48,41 @@ public static class DashboardRoster
 					.GetActiveStatusEffects()
 					.Select(StatusEffectLabel)
 					.ToArray();
+				var roleVisibility = ResolveRoleVisibility(player.State);
+				var visibleToModeratorRole =
+					player.State.ModeratorKnownRole ??
+					player.State.PubliclyRevealedRole;
 
 				return new DashboardRosterEntry(
 					player.Id,
 					index + 1,
 					player.Name,
-					RoleLabel(player.State.MainRole),
-					player.State.MainRole is not null,
+					RoleLabel(visibleToModeratorRole),
+					visibleToModeratorRole is not null,
 					HealthLabel(player.State.Health),
 					player.State.Health == PlayerHealth.Dead,
 					statusEffects,
 					statusEffects.Length == 0
 						? NoStatusEffectsLabel
-						: string.Join(ClientStrings.Common_ListSeparator, statusEffects));
+						: string.Join(ClientStrings.Common_ListSeparator, statusEffects))
+				{
+					RoleVisibility = roleVisibility,
+					RoleVisibilityLabel = RoleVisibilityLabel(roleVisibility)
+				};
 			})
 			.ToArray();
 	}
 
 	public static string RoleLabel(MainRoleType? role) =>
 		role?.GetPublicName() ?? UnknownRoleLabel;
+
+	public static string RoleVisibilityLabel(DashboardRoleVisibility visibility) => visibility switch
+	{
+		DashboardRoleVisibility.Unknown => ClientStrings.Dashboard_RoleKnowledgeUnknown,
+		DashboardRoleVisibility.ModeratorPrivate => ClientStrings.Dashboard_RoleKnowledgePrivate,
+		DashboardRoleVisibility.Public => ClientStrings.Dashboard_RoleKnowledgePublic,
+		_ => ClientStrings.Dashboard_RoleKnowledgeUnknown
+	};
 
 	public static string HealthLabel(PlayerHealth health) => health switch
 	{
@@ -76,4 +104,18 @@ public static class DashboardRoster
 		StatusEffectTypes.Executioner => ClientStrings.StatusEffect_Executioner,
 		_ => ClientStrings.StatusEffect_Fallback
 	};
+
+	private static DashboardRoleVisibility ResolveRoleVisibility(IPlayerState state)
+	{
+		if (state.ModeratorKnownRole is { } moderatorKnownRole)
+		{
+			return state.PubliclyRevealedRole == moderatorKnownRole
+				? DashboardRoleVisibility.Public
+				: DashboardRoleVisibility.ModeratorPrivate;
+		}
+
+		return state.PubliclyRevealedRole is not null
+			? DashboardRoleVisibility.Public
+			: DashboardRoleVisibility.Unknown;
+	}
 }

@@ -55,6 +55,7 @@ public class GameService
     public Guid RehydrateSession(string serializedSession)
     {
         var session = new GameSession(serializedSession);
+        GameFlowManager.RestoreAcceptedObservationContinuation(session);
         _sessions.TryAdd(session.Id, session);
         return session.Id;
 	}

@@ -11,7 +11,7 @@ public class SimulatorProfileTests
 	[Fact]
 	public void ProductionCapabilities_ExposeIndependentFrozenDeclarations()
 	{
-		ModeratorInstructionSemantic[] expectedSemantics =
+		ModeratorInstructionSemantic[] expectedLegacyAndProbabilitySemantics =
 		[
 			ModeratorInstructionSemantic.StartGame,
 			ModeratorInstructionSemantic.FinishedGame,
@@ -32,18 +32,28 @@ public class SimulatorProfileTests
 			ModeratorInstructionSemantic.AnnounceLynchingImmunity,
 			ModeratorInstructionSemantic.AnnounceDayElimination
 		];
+		var expectedSafetySemantics = expectedLegacyAndProbabilitySemantics
+			.Append(ModeratorInstructionSemantic.ObserveVillagerVillagerFromDeal);
 		var legacy = SimulatorProfile.LegacyCore;
 		var safety = SimulatorCapability.SafetyScreening;
 		var probability = SimulatorCapability.FullProbability;
 
-		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "1"));
+		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "2"));
 		probability.Identity.Should().Be(new SimulatorProfileIdentity("full-probability", "1"));
+		legacy.Identity.Should().Be(new SimulatorProfileIdentity("core-simulator", "1"));
+		BaselineRandomDecisionStrategy.Identity.Should()
+			.Be(new DecisionStrategyIdentity("baseline-random", "1-splitmix64"));
 		safety.SupportedRoles.Should().Equal(
 			MainRoleType.SimpleWerewolf,
 			MainRoleType.Seer,
 			MainRoleType.WildChild,
+			MainRoleType.SimpleVillager,
+			MainRoleType.VillagerVillager);
+		probability.SupportedRoles.Should().Equal(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.Seer,
+			MainRoleType.WildChild,
 			MainRoleType.SimpleVillager);
-		probability.SupportedRoles.Should().Equal(safety.SupportedRoles);
 		probability.SupportedRoles.Should().NotBeSameAs(safety.SupportedRoles);
 		safety.SupportsActorSetupCards.Should().BeFalse();
 		probability.SupportsActorSetupCards.Should().BeFalse();
@@ -68,9 +78,12 @@ public class SimulatorProfileTests
 		safety.HeadlessResponsePolicy.StrategyIdentity.Should().Be(BaselineRandomDecisionStrategy.Identity);
 		probability.HeadlessResponsePolicy.StrategyIdentity.Should().Be(BaselineRandomDecisionStrategy.Identity);
 		legacy.HeadlessResponsePolicy.StrategyIdentity.Should().Be(BaselineRandomDecisionStrategy.Identity);
-		legacy.HeadlessResponsePolicy.AdmittedSemantics.Should().BeEquivalentTo(expectedSemantics);
-		safety.HeadlessResponsePolicy.AdmittedSemantics.Should().BeEquivalentTo(expectedSemantics);
-		probability.HeadlessResponsePolicy.AdmittedSemantics.Should().BeEquivalentTo(expectedSemantics);
+		legacy.HeadlessResponsePolicy.AdmittedSemantics.Should()
+			.BeEquivalentTo(expectedLegacyAndProbabilitySemantics);
+		safety.HeadlessResponsePolicy.AdmittedSemantics.Should()
+			.BeEquivalentTo(expectedSafetySemantics);
+		probability.HeadlessResponsePolicy.AdmittedSemantics.Should()
+			.BeEquivalentTo(expectedLegacyAndProbabilitySemantics);
 		SimulatorCapabilityRegistry.Production.SafetyScreening.Should().BeSameAs(safety);
 		SimulatorCapabilityRegistry.Production.FullProbability.Should().BeSameAs(probability);
 	}

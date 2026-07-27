@@ -3,6 +3,7 @@ using Werewolves.Core.GameLogic.Models.InternalMessages;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
+using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using static Werewolves.Core.StateModels.Enums.PlayerHealth;
 
@@ -21,10 +22,7 @@ internal abstract class RoleHookListener : IGameHookListener
 
 	public virtual HookListenerActionResult Execute(GameSession session, ModeratorResponse input)
 	{
-		var roleCount = session.RoleInPlayCount(Id);
-
-		if (roleCount == 0 ||   //if role is not in play, skip
-			session.GetPlayers().WithRole(Id).WithHealth(Dead).Count() == roleCount) // if all players with this role are dead, skip
+		if (GetExpectedLivingRoleHolderCount(session) == 0)
 		{
 			return HookListenerActionResult.Skip();
 		}
@@ -37,6 +35,34 @@ internal abstract class RoleHookListener : IGameHookListener
 		ModeratorResponse input);
 
 	#region MainRole Helper functions
+
+	protected HashSet<Guid> GetCommittedLivingRoleHolderIds(GameSession session) =>
+		session.GetPlayers()
+			.WithRole(Id)
+			.WithHealth(Alive)
+			.ToIdSet();
+
+	protected int GetExpectedLivingRoleHolderCount(GameSession session)
+	{
+		var role = (MainRoleType)Id;
+		var committedRoleHolderIds = session.GetPlayers()
+			.WithRole(Id)
+			.Select(player => player.Id)
+			.ToHashSet();
+		var accountedRoleHolderIds = session.GameHistoryLog
+			.OfType<RoleIdentificationLogEntry>()
+			.Where(entry => entry.Role == role)
+			.SelectMany(entry => entry.PlayerIds)
+			.ToHashSet();
+		accountedRoleHolderIds.UnionWith(committedRoleHolderIds);
+
+		var unaccountedCompositionHolderCount = Math.Max(
+			0,
+			session.RoleInPlayCount(Id) - accountedRoleHolderIds.Count);
+
+		return GetCommittedLivingRoleHolderIds(session).Count +
+		       unaccountedCompositionHolderCount;
+	}
 
 	protected HashSet<IPlayer>? GetAliveRolePlayers(GameSession session) =>
 		session.GetPlayers().WithRole(Id).WithHealth(Alive).ToHashSet();

@@ -35,7 +35,7 @@ public class ModeratorDecisionStrategySemanticTraceTests
 		var assignRoles = new AssignRolesInstruction(
 			ModeratorInstructionSemantic.AssignDawnVictimRoles,
 			ImmutableHashSet.Create(players[1].Id, players[3].Id),
-			[MainRoleType.Seer, MainRoleType.SimpleVillager],
+			[MainRoleType.SimpleWerewolf, MainRoleType.SimpleVillager],
 			privateInstruction: nameof(BaselineRandom_ProductionCursor_PreservesLiteralUpstreamSemanticSequence));
 
 		var identificationResponse = fixture.Strategy.CreateResponse(identifySeer, fixture.Session);
@@ -51,7 +51,7 @@ public class ModeratorDecisionStrategySemanticTraceTests
 		ToSeatNumbers(identificationResponse.SelectedPlayerIds!, players).Should().Equal(5);
 		ToSeatNumbers(selectionResponse.SelectedPlayerIds!, players).Should().Equal(2, 5);
 		assignmentResponse.AssignedPlayerRoles.Should().ContainKey(players[1].Id)
-			.WhoseValue.Should().Be(MainRoleType.Seer);
+			.WhoseValue.Should().Be(MainRoleType.SimpleWerewolf);
 		assignmentResponse.AssignedPlayerRoles.Should().ContainKey(players[3].Id)
 			.WhoseValue.Should().Be(MainRoleType.SimpleVillager);
 	}

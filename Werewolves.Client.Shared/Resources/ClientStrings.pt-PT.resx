@@ -325,6 +325,15 @@
   <data name="Dashboard_UnassignedRole" xml:space="preserve">
     <value>Por atribuir</value>
   </data>
+  <data name="Dashboard_RoleKnowledgeUnknown" xml:space="preserve">
+    <value>Papel desconhecido</value>
+  </data>
+  <data name="Dashboard_RoleKnowledgePrivate" xml:space="preserve">
+    <value>Conhecido apenas pelo Moderador</value>
+  </data>
+  <data name="Dashboard_RoleKnowledgePublic" xml:space="preserve">
+    <value>Papel público</value>
+  </data>
   <data name="Dashboard_HealthAlive" xml:space="preserve">
     <value>Vivo</value>
   </data>

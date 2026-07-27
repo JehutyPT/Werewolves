@@ -7,8 +7,11 @@ namespace Werewolves.Core.StateModels.Core;
 public interface ISessionMutator
 {
 	int CurrentTurnNumber { get; }
+	void SetModeratorKnownRole(Guid playerId, MainRoleType role);
+	void SetPhysicalCharacterCardRole(Guid playerId, MainRoleType role);
 	void SetPlayerHealth(Guid playerId, PlayerHealth health);
 	void SetPlayerRole(Guid playerId, MainRoleType role);
+	void SetPubliclyRevealedRole(Guid playerId, MainRoleType role);
 	void SetCurrentPhase(GamePhase newPhase);
 	
 	/// <summary>
@@ -41,11 +44,20 @@ internal partial class GameSessionKernel
 
 		public int CurrentTurnNumber => kernel.TurnNumber;
 
-		public void SetPlayerHealth(Guid playerId, PlayerHealth health) 
-            => GetMutablePlayerState(playerId).Health = health;
-        public void SetPlayerRole(Guid playerId, MainRoleType role) 
+		public void SetModeratorKnownRole(Guid playerId, MainRoleType role)
+			=> GetMutablePlayerState(playerId).ModeratorKnownRole = role;
 
-            => GetMutablePlayerState(playerId).MainRole = role;
+		public void SetPhysicalCharacterCardRole(Guid playerId, MainRoleType role)
+			=> GetMutablePlayerState(playerId).PhysicalCharacterCardRole = role;
+
+		public void SetPlayerHealth(Guid playerId, PlayerHealth health)
+			=> GetMutablePlayerState(playerId).Health = health;
+
+		public void SetPlayerRole(Guid playerId, MainRoleType role)
+			=> GetMutablePlayerState(playerId).MainRole = role;
+
+		public void SetPubliclyRevealedRole(Guid playerId, MainRoleType role)
+			=> GetMutablePlayerState(playerId).PubliclyRevealedRole = role;
 
 		public void SetCurrentPhase(GamePhase newPhase)
 		{

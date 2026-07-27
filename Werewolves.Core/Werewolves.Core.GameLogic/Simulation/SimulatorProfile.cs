@@ -137,7 +137,8 @@ public sealed class SimulatorCapability : SimulatorProfile
 		new(MainRoleType.SimpleWerewolf, Faction.Werewolf),
 		new(MainRoleType.Seer, Faction.Villager),
 		new(MainRoleType.WildChild, Faction.Villager),
-		new(MainRoleType.SimpleVillager, Faction.Villager)
+		new(MainRoleType.SimpleVillager, Faction.Villager),
+		new(MainRoleType.VillagerVillager, Faction.Villager)
 	];
 
 	private static readonly SimulatorProfileRoleDescriptor[] FullProbabilityRoleDescriptors =
@@ -155,7 +156,7 @@ public sealed class SimulatorCapability : SimulatorProfile
 		SimulatorCapabilityRegistry.Production.FullProbability;
 
 	internal static SimulatorCapability CreateSafetyScreening() => new(
-		new SimulatorProfileIdentity("safety-screening", "1"),
+		new SimulatorProfileIdentity("safety-screening", "2"),
 		SafetyScreeningRoleDescriptors,
 		headlessResponsePolicy: new HeadlessResponsePolicy(
 			BaselineRandomDecisionStrategy.Identity,
@@ -177,7 +178,8 @@ public sealed class SimulatorCapability : SimulatorProfile
 				ModeratorInstructionSemantic.RecordDayVote,
 				ModeratorInstructionSemantic.AssignDayVoteTargetRole,
 				ModeratorInstructionSemantic.AnnounceLynchingImmunity,
-				ModeratorInstructionSemantic.AnnounceDayElimination
+				ModeratorInstructionSemantic.AnnounceDayElimination,
+				ModeratorInstructionSemantic.ObserveVillagerVillagerFromDeal
 			]),
 		supportsActorSetupCards: false,
 		supportedRuleStates: [SimulationRuleState.Default]);

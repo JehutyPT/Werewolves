@@ -15,55 +15,37 @@ internal static class DawnPhaseHandlers
         => NightInteractionResolver.ResolveNightPhase(session);
 
     internal static bool HasVictimsToAnnounce(GameSession session)
-        => GameSessionQueries.GetPlayersEliminatedThisDawn(session).Any();
+        => GameSessionQueries.GetPendingDawnEliminations(session).Any();
 
     internal static ModeratorInstruction AnnounceVictimsAndRequestRoles(GameSession session, ModeratorResponse input)
     {
-        var victimList = GameSessionQueries.GetPlayersEliminatedThisDawn(session).ToImmutableHashSet();
+        var victimList = GameSessionQueries.GetPendingDawnEliminations(session)
+            .Select(consequence => consequence.Player)
+            .ToImmutableHashSet();
         var victimNameList = string.Join(Environment.NewLine, victimList.Select(p => p.Name));
         var announcement = GameStrings.MultipleVictimEliminatedAnnounce.Format(victimNameList);
-        var victimsNeedingRoles = victimList
-            .Where(p => p.State.MainRole == null)
-            .ToImmutableHashSet();
 
-        if (victimsNeedingRoles.Count == 0)
-        {
-            return new ConfirmationInstruction(
-				ModeratorInstructionSemantic.AnnounceDawnVictims,
-				publicAnnouncement: announcement);
-        }
-
-        if (victimsNeedingRoles.Count == 1 &&
-            GameSessionQueries.TryGetOnlyPossibleUnassignedRole(session, requiredAssignmentCount: 1, out var role))
-        {
-            session.AssignRole(victimsNeedingRoles.Single().Id, role);
-            return new ConfirmationInstruction(
-				ModeratorInstructionSemantic.AnnounceDawnVictims,
-				publicAnnouncement: announcement);
-        }
-
-        return new AssignRolesInstruction(
-			ModeratorInstructionSemantic.AssignDawnVictimRoles,
-            publicAnnouncement: announcement,
-            privateInstruction: GameStrings.RevealRolePromptSpecify,
-            playersForAssignment: victimsNeedingRoles.Select(p => p.Id).ToImmutableHashSet(),
-            rolesForAssignment: GameSessionQueries.GetUnassignedRoles(session));
+        return RoleKnowledgeHandlers.RequestPublicRoleReveal(
+                   session,
+                   victimList,
+                   ModeratorInstructionSemantic.AssignDawnVictimRoles,
+                   announcement)
+               ?? new ConfirmationInstruction(
+                   ModeratorInstructionSemantic.AnnounceDawnVictims,
+                   publicAnnouncement: announcement);
     }
 
     internal static void AssignVictimRoles(GameSession session, ModeratorResponse input)
     {
-        var victimsNeedingRoles = GameSessionQueries.GetPlayersEliminatedThisDawn(session)
-            .Where(p => p.State.MainRole == null)
-            .ToList();
+        var pendingEliminations = GameSessionQueries.GetPendingDawnEliminations(session).ToArray();
+        RoleKnowledgeHandlers.RecordPublicRoleReveal(
+            session,
+            pendingEliminations.Select(consequence => consequence.Player).ToArray(),
+            input);
 
-        if (victimsNeedingRoles.Count == 0)
+        foreach (var (player, reason) in pendingEliminations)
         {
-            return;
-        }
-
-        foreach (var entry in input.AssignedPlayerRoles!)
-        {
-            session.AssignRole(entry.Key, entry.Value);
+            session.EliminatePlayer(player.Id, reason);
         }
     }
 }

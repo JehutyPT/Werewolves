@@ -111,6 +111,41 @@ public class SimulationExecutionTests : DiagnosticTestBase
 	}
 
 	[Fact]
+	public void Execute_WithVillagerVillager_UsesSafetyCapabilityAndCompletesDeterministicReplay()
+	{
+		var scenario = new SimulationScenario(
+			5,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Seer,
+				MainRoleType.VillagerVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+		var identity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+		var executor = new SimulationExecutor();
+
+		var first = executor.Execute(
+			scenario,
+			SimulatorCapability.SafetyScreening,
+			identity,
+			runNumber: 17);
+		var replay = executor.Execute(
+			scenario,
+			SimulatorCapability.SafetyScreening,
+			identity,
+			runNumber: 17);
+
+		first.Should().BeOfType<CompletedSimulationRun>();
+		first.RunSeedMaterial.CompatibilityIdentity.Profile.Should()
+			.Be(new SimulatorProfileIdentity("safety-screening", "2"));
+		replay.Should().Be(first);
+		MarkTestCompleted();
+	}
+
+	[Fact]
 	public void ExecuteBatch_WithDifferentScheduling_ReturnsAscendingStableSourceEvidenceAndCounts()
 	{
 		var scenario = CreateKnownDawnOracle();

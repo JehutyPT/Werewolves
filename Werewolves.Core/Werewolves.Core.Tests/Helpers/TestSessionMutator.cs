@@ -26,10 +26,28 @@ internal class TestSessionMutator : ISessionMutator
     /// </summary>
     public IReadOnlyList<GameLogEntryBase> AppliedEntries => _appliedEntries;
 
+    public void SetModeratorKnownRole(Guid playerId, MainRoleType role)
+    {
+        if (_states.TryGetValue(playerId, out var state))
+            state.ModeratorKnownRole = role;
+    }
+
+    public void SetPhysicalCharacterCardRole(Guid playerId, MainRoleType role)
+    {
+        if (_states.TryGetValue(playerId, out var state))
+            state.PhysicalCharacterCardRole = role;
+    }
+
     public void SetPlayerRole(Guid playerId, MainRoleType role)
     {
         if (_states.TryGetValue(playerId, out var state))
             state.MainRole = role;
+    }
+
+    public void SetPubliclyRevealedRole(Guid playerId, MainRoleType role)
+    {
+        if (_states.TryGetValue(playerId, out var state))
+            state.PubliclyRevealedRole = role;
     }
 
     public void SetPlayerHealth(Guid playerId, PlayerHealth health)
@@ -73,7 +91,15 @@ internal class TestSessionMutator : ISessionMutator
 /// </summary>
 internal class TestPlayerState : IPlayerState
 {
-    public MainRoleType? MainRole { get; set; }
+    public MainRoleType? CurrentRole { get; set; }
+    public MainRoleType? MainRole
+    {
+        get => CurrentRole;
+        set => CurrentRole = value;
+    }
+    public MainRoleType? PhysicalCharacterCardRole { get; set; }
+    public MainRoleType? ModeratorKnownRole { get; set; }
+    public MainRoleType? PubliclyRevealedRole { get; set; }
     public PlayerHealth Health { get; set; } = PlayerHealth.Alive;
     internal StatusEffectTypes ActiveEffects { get; set; } = StatusEffectTypes.None;
 

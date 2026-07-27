@@ -9,6 +9,7 @@ using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Resources;
+using Werewolves.Core.StateModels.Serialization;
 using static Werewolves.Core.GameLogic.Models.InternalMessages.MainPhaseHandlerResult;
 using static Werewolves.Core.GameLogic.Models.InternalMessages.SubPhaseHandlerResult;
 using static Werewolves.Core.GameLogic.Models.StateMachine.HookSubPhaseStage;
@@ -29,6 +30,11 @@ internal static class GameFlowManager
     private class GameFlowManagerKey : IGameFlowManagerKey;
 
     private static readonly GameFlowManagerKey Key = new();
+
+    private readonly record struct AcceptedObservationContinuation(
+        string ActiveSubPhaseStage,
+        ListenerIdentifier Listener,
+        string ListenerState);
 
     #region Static Flow Definitions
     internal static readonly Dictionary<GameHook, List<ListenerIdentifier>> HookListeners = new()
@@ -134,6 +140,12 @@ internal static class GameFlowManager
                     subPhase: NightSubPhases.Start,
                     subPhaseStages:
                     [
+                        LogicStage(
+                            NightSubPhaseStage.RequestVillagerVillagerPublicFromDealObservation,
+                            RoleKnowledgeHandlers.RequestVillagerVillagerPublicFromDealObservation),
+                        LogicStage(
+                            NightSubPhaseStage.RecordVillagerVillagerPublicFromDealObservation,
+                            RoleKnowledgeHandlers.RecordVillagerVillagerPublicFromDealObservation),
                         LogicStage(NightSubPhaseStage.NightStart, NightPhaseHandlers.StartNight),
                         HookStage(NightMainActionLoop),
                         NavigationEndStage(NightSubPhaseStage.NightEnd, FinishNightAndGoToDawn)
@@ -365,6 +377,7 @@ internal static class GameFlowManager
 	internal static ProcessResult HandleInput(GameSession session, ModeratorResponse input)
     {
         var startingPhase = session.GetCurrentPhase();
+        var startingInstruction = session.PendingModeratorInstruction;
         ModeratorInstruction? nextInstructionToSend = null;
 
         while (nextInstructionToSend == null)
@@ -392,9 +405,18 @@ internal static class GameFlowManager
         // --- Update Pending Instruction ---
 		session.SetPendingModeratorInstruction(Key, nextInstructionToSend);
         var endingPhase = session.GetCurrentPhase();
-		if (ShouldAdvanceRecoveryBoundary(session, startingPhase, endingPhase, nextInstructionToSend))
+		if (ShouldAdvanceRecoveryBoundary(
+                session,
+                startingPhase,
+                endingPhase,
+                startingInstruction,
+                nextInstructionToSend))
 		{
-			session.CaptureRecoveryBoundary(Key);
+			session.CaptureRecoveryBoundary(
+                Key,
+                CreateAcceptedObservationRecoveryCursor(
+                    startingInstruction,
+                    nextInstructionToSend));
 		}
 
 		return ProcessResult.Success(nextInstructionToSend);
@@ -404,9 +426,15 @@ internal static class GameFlowManager
         GameSession session,
         GamePhase oldPhase,
         GamePhase newPhase,
+        ModeratorInstruction? startingInstruction,
         ModeratorInstruction nextInstructionToSend)
     {
         if (oldPhase != newPhase)
+        {
+            return true;
+        }
+
+        if (IsAcceptedObservation(startingInstruction))
         {
             return true;
         }
@@ -419,6 +447,109 @@ internal static class GameFlowManager
                } &&
                announcement == GameStrings.NightStartsPrompt;
     }
+
+    private static bool IsAcceptedObservation(ModeratorInstruction? instruction)
+        => instruction?.Semantic is
+            ModeratorInstructionSemantic.IdentifyRoleHolders or
+            ModeratorInstructionSemantic.ObserveVillagerVillagerFromDeal or
+            ModeratorInstructionSemantic.AnnounceDawnVictims or
+            ModeratorInstructionSemantic.AssignDawnVictimRoles or
+            ModeratorInstructionSemantic.AssignDayVoteTargetRole;
+
+    private static AcceptedObservationRecoveryCursor?
+        CreateAcceptedObservationRecoveryCursor(
+            ModeratorInstruction? startingInstruction,
+            ModeratorInstruction nextInstruction)
+    {
+        if (startingInstruction is not SelectPlayersInstruction
+            {
+                Semantic: ModeratorInstructionSemantic.IdentifyRoleHolders,
+                RoleIdentification: { } observedRole
+            })
+        {
+            return null;
+        }
+
+        if (ResolveAcceptedObservationContinuation(
+                observedRole,
+                nextInstruction.Semantic) == null)
+        {
+            throw new InvalidOperationException(
+                $"Unsupported Role Identification continuation '{observedRole}:{nextInstruction.Semantic}'.");
+        }
+
+        return new AcceptedObservationRecoveryCursor
+        {
+            Version = AcceptedObservationRecoveryCursor.CurrentVersion,
+            AcceptedObservationSemantic =
+                ModeratorInstructionSemantic.IdentifyRoleHolders,
+            ObservedRole = observedRole,
+            NextInstructionSemantic = nextInstruction.Semantic,
+            NextInstructionId = nextInstruction.InstructionId
+        };
+    }
+
+    internal static void RestoreAcceptedObservationContinuation(
+        GameSession session)
+    {
+        var cursor = session.GetAcceptedObservationRecoveryCursor(Key);
+        if (cursor == null)
+        {
+            return;
+        }
+
+        var continuation = ResolveAcceptedObservationContinuation(
+            cursor.ObservedRole,
+            cursor.NextInstructionSemantic);
+        if (cursor.AcceptedObservationSemantic !=
+                ModeratorInstructionSemantic.IdentifyRoleHolders ||
+            session.GetCurrentPhase() != GamePhase.Night ||
+            !IsNightStartSubPhase(session) ||
+            continuation == null)
+        {
+            throw new InvalidOperationException(
+                $"Unsupported Role Identification continuation '{cursor.ObservedRole}:{cursor.NextInstructionSemantic}'.");
+        }
+
+        session.RestoreTransientContinuation(
+            Key,
+            continuation.Value.ActiveSubPhaseStage,
+            continuation.Value.Listener,
+            continuation.Value.ListenerState);
+    }
+
+    private static bool IsNightStartSubPhase(GameSession session)
+    {
+        var subPhaseId = session.GetSubPhaseId();
+        var nightSubPhase = session.GetSubPhase<NightSubPhases>();
+
+        return (subPhaseId == null || nightSubPhase != null) &&
+            (nightSubPhase ?? NightSubPhases.Start) == NightSubPhases.Start;
+    }
+
+    private static AcceptedObservationContinuation?
+        ResolveAcceptedObservationContinuation(
+            MainRoleType observedRole,
+            ModeratorInstructionSemantic nextInstructionSemantic)
+        => (observedRole, nextInstructionSemantic) switch
+        {
+            (WildChild, ModeratorInstructionSemantic.SelectWildChildModel) =>
+                new(
+                    NightMainActionLoop.ToString(),
+                    Listener(WildChild),
+                    StandardNightRoleState.AwaitingTargetSelection.ToString()),
+            (SimpleWerewolf, ModeratorInstructionSemantic.SelectWerewolfVictim) =>
+                new(
+                    NightMainActionLoop.ToString(),
+                    Listener(SimpleWerewolf),
+                    StandardNightRoleState.AwaitingTargetSelection.ToString()),
+            (Seer, ModeratorInstructionSemantic.SelectSeerTarget) =>
+                new(
+                    NightMainActionLoop.ToString(),
+                    Listener(Seer),
+                    ImmediateFeedbackNightRoleState.AwaitingTargetSelection.ToString()),
+            _ => null
+        };
 
     private static bool TryGetVictoryInstructions(GameSession session, GamePhase oldPhase, GamePhase newPhase,
 		out ModeratorInstruction? nextInstructionToSend)

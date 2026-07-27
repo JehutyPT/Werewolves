@@ -14,6 +14,16 @@ public static class LegacyTerminalLobbyCacheCompatibility
 		MainRoleType.SimpleVillager
 	];
 
+	private static readonly MainRoleType[] FrozenSafetyOnlyRoles =
+	[
+		MainRoleType.VillagerVillager
+	];
+
+	private static readonly ModeratorInstructionSemantic[] FrozenSafetyOnlySemantics =
+	[
+		ModeratorInstructionSemantic.ObserveVillagerVillagerFromDeal
+	];
+
 	public static bool TryProject(
 		TerminalLobbyCacheRecord legacyRecord,
 		SimulatorCapability consumerCapability,
@@ -31,8 +41,7 @@ public static class LegacyTerminalLobbyCacheCompatibility
 				SimulatorProfile.LegacyCore.Identity)
 			|| !legacyRecord.CompatibilityIdentity.Scenario.Equals(consumerIdentity.Scenario)
 			|| !IsFrozenCompatibleScenario(consumerIdentity.Scenario)
-			|| !consumerCapability.HasSameCompatibilitySemanticsAs(
-				SimulatorProfile.LegacyCore))
+			|| !HasFrozenCompatibilitySemantics(consumerCapability))
 		{
 			return false;
 		}
@@ -83,6 +92,47 @@ public static class LegacyTerminalLobbyCacheCompatibility
 		}
 
 		return false;
+	}
+
+	private static bool HasFrozenCompatibilitySemantics(
+		SimulatorCapability capability)
+	{
+		if (capability.Identity.Equals(SimulatorCapability.FullProbability.Identity))
+		{
+			return capability.HasSameCompatibilitySemanticsAs(
+				SimulatorProfile.LegacyCore);
+		}
+
+		if (!capability.Identity.Equals(SimulatorCapability.SafetyScreening.Identity)
+			|| !capability.SupportedRoles.ToHashSet().SetEquals(
+				FrozenLegacyRoles.Concat(FrozenSafetyOnlyRoles)))
+		{
+			return false;
+		}
+
+		var legacy = SimulatorProfile.LegacyCore;
+		var hasFrozenRoleSemantics = FrozenLegacyRoles.All(role =>
+			legacy.TryGetBeneficiaryFaction(role, out var legacyFaction)
+			&& capability.TryGetBeneficiaryFaction(role, out var currentFaction)
+			&& currentFaction == legacyFaction);
+		var hasSafetyOnlyRoleSemantics =
+			capability.TryGetBeneficiaryFaction(
+				MainRoleType.VillagerVillager,
+				out var villagerVillagerFaction)
+			&& villagerVillagerFaction == Faction.Villager;
+
+		return hasFrozenRoleSemantics
+			&& hasSafetyOnlyRoleSemantics
+			&& capability.SupportsActorSetupCards == legacy.SupportsActorSetupCards
+			&& capability.SupportedRuleStates.ToHashSet()
+				.SetEquals(legacy.SupportedRuleStates)
+			&& capability.SharedVictoryCapabilities.ToHashSet()
+				.SetEquals(legacy.SharedVictoryCapabilities)
+			&& capability.HeadlessResponsePolicy.StrategyIdentity.Equals(
+				legacy.HeadlessResponsePolicy.StrategyIdentity)
+			&& capability.HeadlessResponsePolicy.AdmittedSemantics.SetEquals(
+				legacy.HeadlessResponsePolicy.AdmittedSemantics.Concat(
+					FrozenSafetyOnlySemantics));
 	}
 
 	private static bool IsFrozenCompatibleScenario(CanonicalSimulationScenario canonical)

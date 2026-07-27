@@ -25,7 +25,7 @@ public sealed record DashboardStatsSnapshot(
 
 		var aliveKnownRoles = session.GetPlayers()
 			.Where(player => player.State.Health == PlayerHealth.Alive)
-			.Select(player => player.State.MainRole)
+			.Select(player => player.State.PubliclyRevealedRole)
 			.OfType<MainRoleType>()
 			.ToList();
 

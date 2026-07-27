@@ -207,7 +207,7 @@ public class GameClientManagerTests
 	}
 
 	[Fact]
-	public void PlayToDawn_DeterministicRoleReveal_RosterResolvesVictimName()
+	public void PlayToDawn_DeterministicRoleReveal_ProjectsVictimAsPublic()
 	{
 		var manager = new GameClientManager();
 		var startInstruction = manager.StartGame(
@@ -230,18 +230,13 @@ public class GameClientManagerTests
 		SelectCurrentPlayers(manager, [victimId]);
 		ConfirmCurrentInstruction(manager);
 		ConfirmCurrentInstruction(manager);
-
-		var announcement = manager.CurrentInstruction.Should().BeOfType<ConfirmationInstruction>().Subject;
-		announcement.PublicAnnouncement.Should().Contain(players[2].Name);
+		AssignCurrentRoles(manager, MainRoleType.SimpleVillager);
 
 		var roster = manager.CurrentRoster;
-		roster.Should().Contain(r => r.PlayerId == victimId,
-			ClientTestReferences.AssertionReasons.RosterContainsEntriesForRoleAssignmentPlayers);
-
-		var result = manager.ProcessInput(announcement.CreateResponse());
-
-		result.IsSuccess.Should().BeTrue();
-		manager.CurrentInstruction.Should().NotBe(announcement);
+		var victimEntry = roster.Should().ContainSingle(r => r.PlayerId == victimId).Which;
+		victimEntry.Name.Should().Be(players[2].Name);
+		victimEntry.RoleLabel.Should().Be(MainRoleType.SimpleVillager.GetPublicName());
+		victimEntry.RoleVisibility.Should().Be(DashboardRoleVisibility.Public);
 	}
 
 	[Fact]
@@ -258,7 +253,7 @@ public class GameClientManagerTests
 	}
 
 	[Fact]
-	public void ProcessInput_DuringNightAction_PersistsStableNightBoundaryWithoutTailEntries()
+	public void ProcessInput_AcceptedRoleIdentification_PersistsFactWithoutLaterNightAction()
 	{
 		using var saveDirectory = TemporaryDirectory.Create();
 		var manager = new GameClientManager(new GameService(), saveStore: new FileGameSessionSaveStore(saveDirectory.Path));
@@ -268,63 +263,75 @@ public class GameClientManagerTests
 		var players = manager.CurrentSession!.GetPlayers().ToList();
 
 		SelectCurrentPlayers(manager, [players[0].Id]);
+		var instructionAfterAcceptedIdentification = manager.CurrentInstruction!;
 		SelectCurrentPlayers(manager, [players[4].Id]);
 
-		manager.CurrentSession.GameHistoryLog.OfType<AssignRoleLogEntry>().Should().NotBeEmpty();
+		manager.CurrentSession.GameHistoryLog.OfType<RoleIdentificationLogEntry>().Should().NotBeEmpty();
 		manager.CurrentSession.GameHistoryLog.OfType<NightActionLogEntry>().Should().NotBeEmpty();
 		var resumed = new GameClientManager(new GameService(), saveStore: new FileGameSessionSaveStore(saveDirectory.Path));
 		var savedSession = resumed.CurrentSession!;
 		savedSession.GetCurrentPhase().Should().Be(GamePhase.Night);
 		savedSession.TurnNumber.Should().Be(1);
-		savedSession.GameHistoryLog.OfType<AssignRoleLogEntry>().Should().BeEmpty();
+		savedSession.GameHistoryLog.OfType<RoleIdentificationLogEntry>()
+			.Should().ContainSingle(entry =>
+				entry.Role == MainRoleType.SimpleWerewolf &&
+				entry.PlayerIds.SetEquals(new[] { players[0].Id }));
 		savedSession.GameHistoryLog.OfType<NightActionLogEntry>().Should().BeEmpty();
-		resumed.CurrentInstruction.Should().BeOfType<ConfirmationInstruction>()
-			.Subject.PublicAnnouncement.Should().Be(GameStrings.NightStartsPrompt);
-
-		ConfirmCurrentInstruction(resumed);
+		savedSession.GetPlayer(players[0].Id).State.ModeratorKnownRole
+			.Should().Be(MainRoleType.SimpleWerewolf);
+		resumed.CurrentInstruction!.GetType().Should().Be(instructionAfterAcceptedIdentification.GetType());
+		resumed.CurrentInstruction.InstructionId.Should().Be(instructionAfterAcceptedIdentification.InstructionId);
+		resumed.CurrentInstruction.PublicAnnouncement.Should().Be(instructionAfterAcceptedIdentification.PublicAnnouncement);
+		resumed.CurrentInstruction.PrivateInstruction.Should().Be(instructionAfterAcceptedIdentification.PrivateInstruction);
 
 		resumed.CurrentInstruction.Should().BeOfType<SelectPlayersInstruction>();
-		resumed.CurrentSession!.GameHistoryLog.OfType<AssignRoleLogEntry>().Should().BeEmpty();
+		resumed.CurrentSession!.GameHistoryLog.OfType<RoleIdentificationLogEntry>()
+			.Should().ContainSingle();
 	}
 
 	[Fact]
-	public void ProcessInput_DuringDawnResolution_PersistsStableDawnBoundaryWithoutTailEntries()
+	public void ProcessInput_AcceptedPublicRoleReveal_PersistsFactAndNextInstruction()
 	{
 		using var saveDirectory = TemporaryDirectory.Create();
 		var manager = new GameClientManager(new GameService(), saveStore: new FileGameSessionSaveStore(saveDirectory.Path));
-		var startInstruction = StartTwoWerewolfGame(manager);
+		var startInstruction = manager.StartGame(
+			PlayerNames.DefaultFive,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
 		manager.ProcessInput(startInstruction.CreateResponse());
 		var players = manager.CurrentSession!.GetPlayers().ToList();
+		var victim = players[2];
 
 		ConfirmCurrentInstruction(manager);
-		SelectCurrentPlayers(manager, [players[0].Id, players[1].Id]);
-		SelectCurrentPlayers(manager, [players[2].Id]);
-		ConfirmCurrentInstruction(manager);
-
-		manager.CurrentPhase.Should().Be(GamePhase.Dawn);
-		manager.CurrentSession.GameHistoryLog.OfType<PhaseTransitionLogEntry>()
-			.Should().Contain(entry => entry.CurrentPhase == GamePhase.Dawn);
-
+		SelectCurrentPlayers(manager, [players[0].Id]);
+		SelectCurrentPlayers(manager, [victim.Id]);
 		ConfirmCurrentInstruction(manager);
 
 		manager.CurrentPhase.Should().Be(GamePhase.Dawn);
-		manager.CurrentSession.GameHistoryLog.OfType<PlayerEliminatedLogEntry>().Should().NotBeEmpty();
+		ConfirmCurrentInstruction(manager);
+		AssignCurrentRoles(manager, MainRoleType.SimpleVillager);
+		var instructionAfterAcceptedReveal = manager.CurrentInstruction!;
+
+		victim.State.PubliclyRevealedRole.Should().Be(MainRoleType.SimpleVillager);
+		manager.CurrentSession.GameHistoryLog.OfType<RoleRevealLogEntry>()
+			.Should().ContainSingle(entry =>
+				entry.RevealedRoles.Contains(
+					new KeyValuePair<Guid, MainRoleType>(victim.Id, MainRoleType.SimpleVillager)));
 		var resumed = ResumeFromSave(saveDirectory.Path);
 		var savedSession = resumed.CurrentSession!;
-		savedSession.GetCurrentPhase().Should().Be(GamePhase.Dawn);
-		savedSession.GameHistoryLog.OfType<PlayerEliminatedLogEntry>().Should().BeEmpty();
-		savedSession.GameHistoryLog.OfType<AssignRoleLogEntry>()
-			.Where(entry => entry.CurrentPhase == GamePhase.Dawn)
-			.Should().BeEmpty();
-		savedSession.GameHistoryLog.OfType<PhaseTransitionLogEntry>()
-			.Should().Contain(entry => entry.CurrentPhase == GamePhase.Dawn);
-		resumed.CurrentInstruction.Should().BeOfType<ConfirmationInstruction>()
-			.Subject.PublicAnnouncement.Should().Be(GameStrings.NightActionsCompletePrompt);
-
-		ConfirmCurrentInstruction(resumed);
-
-		resumed.CurrentSession!.GameHistoryLog.OfType<PlayerEliminatedLogEntry>()
-			.Should().ContainSingle(entry => entry.PlayerId == players[2].Id);
+		savedSession.GetPlayer(victim.Id).State.PubliclyRevealedRole
+			.Should().Be(MainRoleType.SimpleVillager);
+		savedSession.GameHistoryLog.OfType<RoleRevealLogEntry>()
+			.Should().ContainSingle();
+		resumed.CurrentInstruction!.GetType().Should().Be(instructionAfterAcceptedReveal.GetType());
+		resumed.CurrentInstruction.InstructionId.Should().Be(instructionAfterAcceptedReveal.InstructionId);
+		resumed.CurrentInstruction.PublicAnnouncement.Should().Be(instructionAfterAcceptedReveal.PublicAnnouncement);
+		resumed.CurrentInstruction.PrivateInstruction.Should().Be(instructionAfterAcceptedReveal.PrivateInstruction);
 	}
 
 	[Fact]
@@ -795,6 +802,13 @@ public class GameClientManagerTests
 	{
 		var instruction = manager.CurrentInstruction.Should().BeOfType<SelectPlayersInstruction>().Subject;
 		manager.ProcessInput(instruction.CreateResponse(playerIds));
+	}
+
+	private static void AssignCurrentRoles(GameClientManager manager, MainRoleType role)
+	{
+		var instruction = manager.CurrentInstruction.Should().BeOfType<AssignRolesInstruction>().Subject;
+		manager.ProcessInput(instruction.CreateResponse(
+			instruction.PlayersForAssignment.ToDictionary(playerId => playerId, _ => role)));
 	}
 
 	private sealed class TemporaryDirectory : IDisposable

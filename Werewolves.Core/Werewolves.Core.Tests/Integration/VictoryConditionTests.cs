@@ -81,11 +81,17 @@ public class VictoryConditionTests : DiagnosticTestBase
         var voteInstruction = InstructionAssert.ExpectType<SelectPlayersInstruction>(
             builder.GetCurrentInstruction(),
             CoreTestReferences.InstructionContexts.VoteSelection);
-        builder.Process(voteInstruction.CreateResponse([werewolf.Id]));
+        var afterVote = builder.Process(voteInstruction.CreateResponse([werewolf.Id]));
 
-        // Confirm the death announcement; role is already known from the night wake.
+        // Publicly reveal the role already known from the night wake.
+        var roleRevealInstruction = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+            afterVote,
+            CoreTestReferences.InstructionContexts.RoleAssignmentAfterLynch);
+        var afterRoleReveal = builder.Process(roleRevealInstruction.CreateResponse());
+
+        // Confirm the death announcement.
         var deathAnnouncementInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
-            builder.GetCurrentInstruction(),
+            afterRoleReveal.ModeratorInstruction,
             CoreTestReferences.InstructionContexts.DeathAnnouncementConfirmation);
         var result = builder.Process(deathAnnouncementInstruction.CreateResponse());
 
@@ -267,11 +273,20 @@ public class VictoryConditionTests : DiagnosticTestBase
         var voteInstruction = InstructionAssert.ExpectType<SelectPlayersInstruction>(
             builder.GetCurrentInstruction(),
             CoreTestReferences.InstructionContexts.VoteSelection);
-        builder.Process(voteInstruction.CreateResponse([villager2.Id]));
+        var afterVote = builder.Process(voteInstruction.CreateResponse([villager2.Id]));
 
-        // Confirm death; the villager role is assigned automatically because it is deterministic.
+        var roleRevealInstruction = InstructionAssert.ExpectSuccessWithType<AssignRolesInstruction>(
+            afterVote,
+            CoreTestReferences.InstructionContexts.RoleAssignmentAfterLynch);
+        roleRevealInstruction.PlayersForAssignment.Should().Equal(villager2.Id);
+        var afterRoleReveal = builder.Process(roleRevealInstruction.CreateResponse(new()
+        {
+            [villager2.Id] = MainRoleType.SimpleVillager
+        }));
+
+        // Confirm death after the moderator has publicly revealed the role.
         var deathConfirmation = InstructionAssert.ExpectType<ConfirmationInstruction>(
-            builder.GetCurrentInstruction(),
+            afterRoleReveal.ModeratorInstruction,
             CoreTestReferences.InstructionContexts.DeathConfirmation);
         builder.Process(deathConfirmation.CreateResponse());
 
@@ -364,11 +379,20 @@ public class VictoryConditionTests : DiagnosticTestBase
         var voteInstruction = InstructionAssert.ExpectType<SelectPlayersInstruction>(
             builder.GetCurrentInstruction(),
             CoreTestReferences.InstructionContexts.VoteSelection);
-        builder.Process(voteInstruction.CreateResponse([villager2.Id]));
+        var afterVote = builder.Process(voteInstruction.CreateResponse([villager2.Id]));
 
-        // Confirm death announcement; the villager role is assigned automatically because it is deterministic.
+        var roleRevealInstruction = InstructionAssert.ExpectSuccessWithType<AssignRolesInstruction>(
+            afterVote,
+            CoreTestReferences.InstructionContexts.RoleAssignmentAfterLynch);
+        roleRevealInstruction.PlayersForAssignment.Should().Equal(villager2.Id);
+        var afterRoleReveal = builder.Process(roleRevealInstruction.CreateResponse(new()
+        {
+            [villager2.Id] = MainRoleType.SimpleVillager
+        }));
+
+        // Confirm death announcement after the moderator has publicly revealed the role.
         var deathAnnouncementInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
-            builder.GetCurrentInstruction(),
+            afterRoleReveal.ModeratorInstruction,
             CoreTestReferences.InstructionContexts.DeathAnnouncementConfirmation);
         builder.Process(deathAnnouncementInstruction.CreateResponse());
 
@@ -523,10 +547,14 @@ public class VictoryConditionTests : DiagnosticTestBase
         var voteInstruction = InstructionAssert.ExpectType<SelectPlayersInstruction>(
             builder.GetCurrentInstruction(),
             CoreTestReferences.InstructionContexts.VoteSelection);
-        builder.Process(voteInstruction.CreateResponse([werewolf.Id]));
+        var afterVote = builder.Process(voteInstruction.CreateResponse([werewolf.Id]));
 
+        var roleRevealInstruction = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+            afterVote,
+            CoreTestReferences.InstructionContexts.RoleAssignmentAfterLynch);
+        var afterRoleReveal = builder.Process(roleRevealInstruction.CreateResponse());
         var deathAnnouncementInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
-            builder.GetCurrentInstruction(),
+            afterRoleReveal.ModeratorInstruction,
             CoreTestReferences.InstructionContexts.DeathAnnouncementConfirmation);
         builder.ClearObserverLog();
         var result = builder.Process(deathAnnouncementInstruction.CreateResponse());

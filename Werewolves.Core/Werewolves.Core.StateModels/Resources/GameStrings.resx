@@ -161,6 +161,10 @@
     <value>Indica em segredo os papéis dos eliminados. Não os reveles publicamente nesta fase.</value>
     <comment/>
   </data>
+  <data name="PublicRoleRevealInstruction" xml:space="preserve">
+    <value>Confirma que todos os jogadores indicados revelaram fisicamente a carta e regista os papéis ainda desconhecidos.</value>
+    <comment/>
+  </data>
   <data name="DebateStartsPrompt" xml:space="preserve">
     <value>Começa o debate do dia. Quando terminar, confirma para avançar para a votação.</value>
     <comment/>
@@ -243,6 +247,10 @@
   </data>
   <data name="VillagerVillagerRoleName" xml:space="preserve">
     <value>Aldeão-Aldeão</value>
+    <comment/>
+  </data>
+  <data name="VillagerVillagerPublicFromDealInstruction" xml:space="preserve">
+    <value>Regista o jogador que recebeu a carta Aldeão-Aldeão, visível durante a distribuição.</value>
     <comment/>
   </data>
   <data name="CupidRoleName" xml:space="preserve">

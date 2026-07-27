@@ -310,12 +310,16 @@ public class StatusEffectsTests : DiagnosticTestBase
             CoreTestReferences.InstructionContexts.NightEndConfirmation);
         var afterNightEnd = builder.Process(nightEndInstruction.CreateResponse());
 
-        var roleRevealInstruction = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+        var roleRevealInstruction = InstructionAssert.ExpectSuccessWithType<AssignRolesInstruction>(
             afterNightEnd,
             CoreTestReferences.InstructionContexts.RoleRevealForEliminatedModel);
+        roleRevealInstruction.PlayersForAssignment.Should().Equal(roleModel.Id);
 
         // Act
-        builder.Process(roleRevealInstruction.CreateResponse());
+        builder.Process(roleRevealInstruction.CreateResponse(new Dictionary<Guid, MainRoleType>
+        {
+            { roleModel.Id, MainRoleType.SimpleVillager }
+        }));
 
         // Assert
         var gameState = builder.GetGameState()!;

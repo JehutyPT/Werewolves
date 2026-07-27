@@ -90,6 +90,14 @@ internal static class GameSessionQueries
                 GamePhase.Dawn)
             .Select(log => session.GetPlayer(log.PlayerId));
 
+    internal static IEnumerable<(IPlayer Player, EliminationReason Reason)> GetPendingDawnEliminations(
+        IGameSession session)
+        => FindLogEntries<DawnVictimDeterminedLogEntry>(
+                session,
+                NumberRangeConstraint.Exact(session.TurnNumber),
+                GamePhase.Dawn)
+            .Select(log => (session.GetPlayer(log.PlayerId), log.Reason));
+
     /// <summary>
     /// Returns all players eliminated during the Day phase of the current turn,
     /// including the vote target and any consequential eliminations.

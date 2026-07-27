@@ -325,6 +325,15 @@
   <data name="Dashboard_UnassignedRole" xml:space="preserve">
     <value>Unassigned</value>
   </data>
+  <data name="Dashboard_RoleKnowledgeUnknown" xml:space="preserve">
+    <value>Role unknown</value>
+  </data>
+  <data name="Dashboard_RoleKnowledgePrivate" xml:space="preserve">
+    <value>Known only to the Moderator</value>
+  </data>
+  <data name="Dashboard_RoleKnowledgePublic" xml:space="preserve">
+    <value>Public role</value>
+  </data>
   <data name="Dashboard_HealthAlive" xml:space="preserve">
     <value>Alive</value>
   </data>

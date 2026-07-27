@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
+using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Serialization;
 
 namespace Werewolves.Core.StateModels.Core
@@ -27,6 +28,7 @@ namespace Werewolves.Core.StateModels.Core
 		// Transient execution state
 		private GamePhaseStateCache _phaseStateCache = new();
 		private GameSessionDto? _recoveryBoundary;
+		private AcceptedObservationRecoveryCursor? _acceptedObservationRecoveryCursor;
 
 		internal Guid Id { get; }
 
@@ -45,6 +47,8 @@ namespace Werewolves.Core.StateModels.Core
 		private ModeratorInstruction? _pendingModeratorInstruction = null;
 		
 		internal ModeratorInstruction? PendingModeratorInstruction => _pendingModeratorInstruction;
+		internal AcceptedObservationRecoveryCursor? AcceptedObservationRecoveryCursor =>
+			_acceptedObservationRecoveryCursor;
 		internal GamePhase CurrentPhase => _phaseStateCache.GetCurrentPhase();
 
 		internal GameSessionKernel(Guid id, ModeratorInstruction initialInstruction, GameSessionConfig config, IStateChangeObserver? stateChangeObserver = null)
@@ -103,6 +107,15 @@ namespace Werewolves.Core.StateModels.Core
 			_stateChangeObserver?.OnListenerChanged(listener, state);
 		}
 
+		internal void RestoreTransientContinuation(
+			string activeSubPhaseStage,
+			ListenerIdentifier listener,
+			string listenerState) =>
+			_phaseStateCache.RestoreTransientContinuation(
+				activeSubPhaseStage,
+				listener,
+				listenerState);
+
 		internal void ClearCurrentListener()
 		{
 			_phaseStateCache.ClearCurrentListener();
@@ -150,9 +163,14 @@ namespace Werewolves.Core.StateModels.Core
 			return JsonSerializer.Serialize(_recoveryBoundary ?? CreateDto(), SerializationOptions);
 		}
 
-		internal void CaptureRecoveryBoundary()
+		internal void CaptureRecoveryBoundary(
+			AcceptedObservationRecoveryCursor? acceptedObservationRecoveryCursor = null)
 		{
+			_acceptedObservationRecoveryCursor = acceptedObservationRecoveryCursor;
 			_recoveryBoundary = CreateDto();
+			ValidateAcceptedObservationRecoveryCursor(
+				_recoveryBoundary,
+				_pendingModeratorInstruction);
 		}
 
 		private GameSessionDto CreateDto()
@@ -161,17 +179,23 @@ namespace Werewolves.Core.StateModels.Core
 			{
 				Id = Id,
 				TurnNumber = _turnNumber,
+				RoleFactSchemaVersion = RoleFactSchema.CurrentVersion,
 				IsStableRecoveryBoundary = true,
 				SeatingOrder = _playerSeatingOrder.ToList(),
 				RolesInPlay = _rolesInPlay.ToList(),
 				PendingInstruction = _pendingModeratorInstruction,
+				PendingInstructionSemantic = _pendingModeratorInstruction?.Semantic,
 				GameHistoryLog = _gameHistoryLog.GetAllLogEntries().ToList(),
+				AcceptedObservationRecoveryCursor = _acceptedObservationRecoveryCursor,
 				PhaseStateCache = _phaseStateCache.ToDto(),
 				Players = GetIPlayers().Select(p => new PlayerDto
 				{
 					Id = p.Id,
 					Name = p.Name,
 					MainRole = p.State.MainRole,
+					PhysicalCharacterCardRole = p.State.PhysicalCharacterCardRole,
+					ModeratorKnownRole = p.State.ModeratorKnownRole,
+					PubliclyRevealedRole = p.State.PubliclyRevealedRole,
 					ActiveEffects = ((PlayerState)p.State).ActiveEffects,
 					Health = p.State.Health
 				}).ToList()
@@ -195,7 +219,12 @@ namespace Werewolves.Core.StateModels.Core
 			_turnNumber = dto.TurnNumber;
 			_playerSeatingOrder = dto.SeatingOrder;
 			_rolesInPlay = dto.RolesInPlay;
-			_pendingModeratorInstruction = dto.PendingInstruction;
+			_pendingModeratorInstruction = RestorePendingInstructionSemantic(dto);
+			ValidateRoleFactSchemaVersion(dto.RoleFactSchemaVersion);
+			_acceptedObservationRecoveryCursor =
+				ValidateAcceptedObservationRecoveryCursor(
+					dto,
+					_pendingModeratorInstruction);
 			_phaseStateCache = dto.IsStableRecoveryBoundary
 				? GamePhaseStateCache.FromStableRecoveryBoundaryDto(dto.PhaseStateCache)
 				: GamePhaseStateCache.FromDto(dto.PhaseStateCache);
@@ -205,6 +234,12 @@ namespace Werewolves.Core.StateModels.Core
 				var player = new Player(playerDto.Name, playerDto.Id);
 				var mutableState = player.GetMutableState(new DeserializationKey());
 				mutableState.MainRole = playerDto.MainRole;
+				mutableState.PhysicalCharacterCardRole = playerDto.PhysicalCharacterCardRole;
+				mutableState.ModeratorKnownRole = dto.RoleFactSchemaVersion ==
+					RoleFactSchema.LegacyVersion
+						? playerDto.ModeratorKnownRole ?? playerDto.MainRole
+						: playerDto.ModeratorKnownRole;
+				mutableState.PubliclyRevealedRole = playerDto.PubliclyRevealedRole;
 				mutableState.ActiveEffects = playerDto.ActiveEffects;
 				mutableState.Health = playerDto.Health;
 				_players.Add(player.Id, player);
@@ -216,7 +251,112 @@ namespace Werewolves.Core.StateModels.Core
 				_gameHistoryLog.RestoreLogEntry(entry);
 			}
 
-			CaptureRecoveryBoundary();
+			_recoveryBoundary = CreateDto();
+		}
+
+		private static void ValidateRoleFactSchemaVersion(int version)
+		{
+			if (version is not
+				RoleFactSchema.LegacyVersion and not
+				RoleFactSchema.CurrentVersion)
+			{
+				throw new InvalidOperationException(
+					$"Unsupported Role fact schema version '{version}'.");
+			}
+		}
+
+		private static ModeratorInstruction? RestorePendingInstructionSemantic(
+			GameSessionDto dto)
+		{
+			var semantic = dto.PendingInstructionSemantic;
+			if (semantic == null)
+			{
+				return dto.PendingInstruction;
+			}
+
+			if (!Enum.IsDefined(semantic.Value))
+			{
+				throw new InvalidOperationException(
+					$"Unsupported Pending Instruction Semantic '{semantic.Value}'.");
+			}
+
+			if (dto.PendingInstruction == null)
+			{
+				throw new InvalidOperationException(
+					"A Pending Instruction Semantic requires a Pending Instruction.");
+			}
+
+			return dto.PendingInstruction.WithSemantic(semantic.Value);
+		}
+
+		private static AcceptedObservationRecoveryCursor?
+			ValidateAcceptedObservationRecoveryCursor(
+				GameSessionDto dto,
+				ModeratorInstruction? pendingModeratorInstruction)
+		{
+			var cursor = dto.AcceptedObservationRecoveryCursor;
+			if (cursor == null)
+			{
+				return null;
+			}
+
+			if (!dto.IsStableRecoveryBoundary)
+			{
+				throw new InvalidOperationException(
+					"Accepted observation recovery cursors require a stable recovery boundary.");
+			}
+
+			if (cursor.Version != AcceptedObservationRecoveryCursor.CurrentVersion)
+			{
+				throw new InvalidOperationException(
+					$"Unsupported accepted observation recovery cursor version '{cursor.Version}'.");
+			}
+
+			if (!Enum.IsDefined(cursor.AcceptedObservationSemantic) ||
+				!Enum.IsDefined(cursor.ObservedRole) ||
+				!Enum.IsDefined(cursor.NextInstructionSemantic) ||
+				cursor.NextInstructionSemantic ==
+					ModeratorInstructionSemantic.Unspecified ||
+				cursor.NextInstructionId == Guid.Empty)
+			{
+				throw new InvalidOperationException(
+					"The accepted observation recovery cursor is structurally invalid.");
+			}
+
+			if (cursor.AcceptedObservationSemantic !=
+				ModeratorInstructionSemantic.IdentifyRoleHolders)
+			{
+				throw new InvalidOperationException(
+					$"Unsupported accepted observation semantic '{cursor.AcceptedObservationSemantic}'.");
+			}
+
+			if (pendingModeratorInstruction is not
+					SelectPlayersInstruction pendingInstruction ||
+				pendingInstruction.InstructionId != cursor.NextInstructionId ||
+				pendingInstruction.RoleIdentification != null)
+			{
+				throw new InvalidOperationException(
+					"The accepted observation recovery cursor does not match its Pending Instruction.");
+			}
+
+			if (pendingInstruction.Semantic != cursor.NextInstructionSemantic)
+			{
+				throw new InvalidOperationException(
+					"The Pending Instruction Semantic does not match the accepted observation recovery cursor.");
+			}
+
+			var observedPlayerIds = pendingInstruction.AffectedPlayerIds?.ToHashSet();
+			if (observedPlayerIds == null ||
+				!dto.GameHistoryLog.OfType<RoleIdentificationLogEntry>()
+					.Any(entry =>
+						entry.Role == cursor.ObservedRole &&
+						entry.PlayerIds.SetEquals(observedPlayerIds)))
+			{
+				throw new InvalidOperationException(
+					"The accepted observation recovery cursor does not match a committed Role Identification.");
+			}
+
+			return cursor;
 		}
 
 		/// <summary>

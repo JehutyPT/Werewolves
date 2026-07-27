@@ -180,6 +180,26 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 	}
 
 	[Fact]
+	public void Evaluate_DegenerateScreeningOnly_VillagerVillagerCompletesTheRequiredRealScreen()
+	{
+		var scenario = Scenario(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.Seer,
+			MainRoleType.VillagerVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager);
+
+		var result = new TerminalLobbyEvaluator().Evaluate(
+			scenario,
+			SimulatorCapability.SafetyScreening,
+			LobbyEvaluationDepth.DegenerateScreeningOnly);
+
+		(result is DegenerateTerminalEvaluation or ScreeningPassedLobbyEvaluation)
+			.Should().BeTrue();
+		MarkTestCompleted();
+	}
+
+	[Fact]
 	public void Evaluate_OneLaterScreeningRun_UsesSharedIdentityAndPublishesCompleteProbability()
 	{
 		var calls = new List<(int Count, SimulationCompatibilityIdentity Identity)>();

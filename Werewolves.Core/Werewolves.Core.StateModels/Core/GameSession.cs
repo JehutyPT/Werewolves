@@ -1,6 +1,7 @@
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
+using Werewolves.Core.StateModels.Serialization;
 
 namespace Werewolves.Core.StateModels.Core;
 
@@ -82,8 +83,11 @@ internal class GameSession : IGameSession
 
 	#region Internal Game Cache read-access
     internal ModeratorInstruction? PendingModeratorInstruction => _gameSessionKernel.PendingModeratorInstruction;
-
+    internal AcceptedObservationRecoveryCursor? GetAcceptedObservationRecoveryCursor(
+        IGameFlowManagerKey key) =>
+        _gameSessionKernel.AcceptedObservationRecoveryCursor;
 	internal T? GetSubPhase<T>() where T : struct, Enum => _gameSessionKernel.PhaseStateCache.GetSubPhase<T>();
+    internal string? GetSubPhaseId() => _gameSessionKernel.PhaseStateCache.GetSubPhaseId();
     internal ListenerIdentifier? GetCurrentListener() => _gameSessionKernel.PhaseStateCache.GetCurrentListener();
     internal string? GetActiveSubPhaseStage() => _gameSessionKernel.PhaseStateCache.GetActiveSubPhaseStage();
 
@@ -99,8 +103,21 @@ internal class GameSession : IGameSession
 	internal void SetPendingModeratorInstruction(IGameFlowManagerKey key, ModeratorInstruction instruction) =>
 		_gameSessionKernel.SetPendingModeratorInstruction(instruction);
 
-	internal void CaptureRecoveryBoundary(IGameFlowManagerKey key) =>
-		_gameSessionKernel.CaptureRecoveryBoundary();
+    internal void CaptureRecoveryBoundary(
+        IGameFlowManagerKey key,
+        AcceptedObservationRecoveryCursor? acceptedObservationRecoveryCursor = null) =>
+		_gameSessionKernel.CaptureRecoveryBoundary(
+            acceptedObservationRecoveryCursor);
+
+    internal void RestoreTransientContinuation(
+        IGameFlowManagerKey key,
+        string activeSubPhaseStage,
+        ListenerIdentifier listener,
+        string listenerState) =>
+        _gameSessionKernel.RestoreTransientContinuation(
+            activeSubPhaseStage,
+            listener,
+            listenerState);
 
 	internal void TransitionSubPhaseCache(IPhaseManagerKey key, Enum subPhase) =>
         _gameSessionKernel.TransitionSubPhase(subPhase);
@@ -203,9 +220,23 @@ internal class GameSession : IGameSession
     internal void PerformNightAction(NightActionType type, List<Guid> targetIds)
         => PerformNightActionCore(type, targetIds);
 
-	internal void EliminatePlayer(Guid playerId, EliminationReason reason)
+    internal void EliminatePlayer(Guid playerId, EliminationReason reason)
     {
         var entry = new PlayerEliminatedLogEntry
+        {
+            Timestamp = DateTimeOffset.UtcNow,
+            TurnNumber = TurnNumber,
+            CurrentPhase = _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+            PlayerId = playerId,
+            Reason = reason,
+        };
+
+        _gameSessionKernel.AddEntryAndUpdateState(entry);
+    }
+
+    internal void DetermineDawnVictim(Guid playerId, EliminationReason reason)
+    {
+        var entry = new DawnVictimDeterminedLogEntry
         {
             Timestamp = DateTimeOffset.UtcNow,
             TurnNumber = TurnNumber,
@@ -230,6 +261,52 @@ internal class GameSession : IGameSession
             CurrentPhase = _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
             PlayerIds = playerIds,
             AssignedMainRole = mainRoleType
+        };
+
+        _gameSessionKernel.AddEntryAndUpdateState(entry);
+    }
+
+    internal void IdentifyRole(HashSet<Guid> playerIds, MainRoleType role)
+    {
+        var entry = new RoleIdentificationLogEntry
+        {
+            Timestamp = DateTimeOffset.UtcNow,
+            TurnNumber = TurnNumber,
+            CurrentPhase = _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+            PlayerIds = playerIds,
+            Role = role
+        };
+
+        _gameSessionKernel.AddEntryAndUpdateState(entry);
+    }
+
+    internal void ObserveVillagerVillagerFromDeal(Guid playerId)
+    {
+        var entry = new VillagerVillagerPublicFromDealLogEntry
+        {
+            Timestamp = DateTimeOffset.UtcNow,
+            TurnNumber = TurnNumber,
+            CurrentPhase = _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+            PlayerId = playerId
+        };
+
+        _gameSessionKernel.AddEntryAndUpdateState(entry);
+    }
+
+    internal void RevealRoles(IReadOnlyDictionary<Guid, MainRoleType> revealedRoles)
+    {
+        ArgumentNullException.ThrowIfNull(revealedRoles);
+        if (revealedRoles.Count == 0)
+        {
+            throw new ArgumentException("A Role Reveal must include at least one Player.", nameof(revealedRoles));
+        }
+
+        var entry = new RoleRevealLogEntry
+        {
+            Timestamp = DateTimeOffset.UtcNow,
+            TurnNumber = TurnNumber,
+            CurrentPhase = _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+            RevealedRoles = revealedRoles.ToDictionary()
         };
 
         _gameSessionKernel.AddEntryAndUpdateState(entry);

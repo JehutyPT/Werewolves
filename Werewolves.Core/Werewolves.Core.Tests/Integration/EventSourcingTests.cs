@@ -49,8 +49,8 @@ public class EventSourcingTests : DiagnosticTestBase
         // Assert - Should have multiple entry types
         logEntries.Should().NotBeEmpty();
         
-        // Should have role assignments
-        logEntries.OfType<AssignRoleLogEntry>().Should().NotBeEmpty(
+        // Should have distinct private Role Identification observations.
+        logEntries.OfType<RoleIdentificationLogEntry>().Should().NotBeEmpty(
             CoreTestReferences.AssertionReasons.RoleAssignmentsLogged);
 
         // Should have night actions

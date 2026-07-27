@@ -36,7 +36,8 @@ public sealed class BaselineRandomDecisionStrategy : IModeratorDecisionStrategy
 			ModeratorInstructionSemantic.RecordDayVote,
 			ModeratorInstructionSemantic.AssignDayVoteTargetRole,
 			ModeratorInstructionSemantic.AnnounceLynchingImmunity,
-			ModeratorInstructionSemantic.AnnounceDayElimination
+			ModeratorInstructionSemantic.AnnounceDayElimination,
+			ModeratorInstructionSemantic.ObserveVillagerVillagerFromDeal
 		]);
 
 	public BaselineRandomDecisionStrategy(
@@ -89,6 +90,14 @@ public sealed class BaselineRandomDecisionStrategy : IModeratorDecisionStrategy
 			ConfirmationInstruction confirmation => confirmation.CreateResponse(),
 			SelectPlayersInstruction { RoleIdentification: not null } selectPlayers =>
 				CreateRoleIdentificationResponse(selectPlayers, session),
+			SelectPlayersInstruction
+			{
+				Semantic: ModeratorInstructionSemantic.ObserveVillagerVillagerFromDeal
+			} selectPlayers =>
+				CreateSeededRoleHolderResponse(
+					selectPlayers,
+					session,
+					MainRoleType.VillagerVillager),
 			SelectPlayersInstruction selectPlayers =>
 				CreatePlayerSelectionResponse(selectPlayers, session),
 			AssignRolesInstruction assignRoles =>
@@ -104,16 +113,27 @@ public sealed class BaselineRandomDecisionStrategy : IModeratorDecisionStrategy
 		SelectPlayersInstruction instruction,
 		IGameSession session)
 	{
-		var players = session.GetPlayers().ToArray();
-		if (players.Length != _startState.PlayerCount)
-		{
-			throw new InvalidOperationException(
-				"The Game Session player count does not match the Simulation Start State.");
-		}
+		var players = GetPlayersMatchingStartState(session);
+		var effectiveRolesByPlayerId = CreateEffectiveRolesByPlayerId(players);
+		var selectedPlayerIds = players
+			.Where(player => instruction.SelectablePlayerIds.Contains(player.Id))
+			.Where(player =>
+				effectiveRolesByPlayerId[player.Id] == instruction.RoleIdentification!.Value)
+			.Select(player => player.Id)
+			.ToHashSet();
+		return instruction.CreateResponse(selectedPlayerIds);
+	}
 
+	private ModeratorResponse CreateSeededRoleHolderResponse(
+		SelectPlayersInstruction instruction,
+		IGameSession session,
+		MainRoleType role)
+	{
+		var players = GetPlayersMatchingStartState(session);
 		var selectedPlayerIds = _startState.RoleAssignments
-			.Where(assignment => assignment.Role == instruction.RoleIdentification)
+			.Where(assignment => assignment.Role == role)
 			.Select(assignment => players[assignment.SeatNumber - 1].Id)
+			.Where(instruction.SelectablePlayerIds.Contains)
 			.ToHashSet();
 		return instruction.CreateResponse(selectedPlayerIds);
 	}
@@ -134,22 +154,39 @@ public sealed class BaselineRandomDecisionStrategy : IModeratorDecisionStrategy
 		AssignRolesInstruction instruction,
 		IGameSession session)
 	{
-		var players = session.GetPlayers()
-			.Where(player => instruction.PlayersForAssignment.Contains(player.Id))
-			.ToArray();
-		if (players.Length != instruction.PlayersForAssignment.Count)
+		var players = GetPlayersMatchingStartState(session);
+		var effectiveRolesByPlayerId = CreateEffectiveRolesByPlayerId(players);
+		if (instruction.PlayersForAssignment.Any(playerId =>
+			!effectiveRolesByPlayerId.ContainsKey(playerId)))
 		{
 			throw new InvalidOperationException(
 				"Role assignment instruction refers to a Player outside the Game Session.");
 		}
 
-		var roles = instruction.RolesForAssignment.ToList();
-		_random.Shuffle(roles);
-		var assignments = players
-			.Select((player, index) => (player.Id, Role: roles[index]))
-			.ToDictionary(pair => pair.Id, pair => pair.Role);
+		var assignments = instruction.PlayersForAssignment.ToDictionary(
+			playerId => playerId,
+			playerId => effectiveRolesByPlayerId[playerId]);
 		return instruction.CreateResponse(assignments);
 	}
+
+	private IPlayer[] GetPlayersMatchingStartState(IGameSession session)
+	{
+		var players = session.GetPlayers().ToArray();
+		if (players.Length != _startState.PlayerCount)
+		{
+			throw new InvalidOperationException(
+				"The Game Session player count does not match the Simulation Start State.");
+		}
+
+		return players;
+	}
+
+	private Dictionary<Guid, MainRoleType> CreateEffectiveRolesByPlayerId(
+		IReadOnlyList<IPlayer> players) =>
+		_startState.RoleAssignments.ToDictionary(
+			assignment => players[assignment.SeatNumber - 1].Id,
+			assignment => players[assignment.SeatNumber - 1].State.CurrentRole
+				?? assignment.Role);
 
 	private ModeratorResponse CreateOptionSelectionResponse(SelectOptionsInstruction instruction)
 	{

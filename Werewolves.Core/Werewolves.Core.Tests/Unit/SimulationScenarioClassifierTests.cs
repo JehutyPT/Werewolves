@@ -76,4 +76,39 @@ public class SimulationScenarioClassifierTests
 		classification.AlreadyDecided.Should().BeNull();
 		classification.Cacheability.Should().BeNull();
 	}
+
+	[Fact]
+	public void Classify_VillagerVillager_IsSafetyScreeningOnly()
+	{
+		var scenario = new SimulationScenario(
+			5,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Seer,
+				MainRoleType.VillagerVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+
+		var safety = SimulationScenarioClassifier.Classify(
+			scenario,
+			SimulatorCapability.SafetyScreening);
+		var probability = SimulationScenarioClassifier.Classify(
+			scenario,
+			SimulatorCapability.FullProbability);
+
+		safety.SimulatorSupport.Should().Match<SimulatorSupportResult>(
+			result =>
+				result.IsSupported &&
+				result.Capability == SimulatorCapability.SafetyScreening);
+		safety.Cacheability!.CompatibilityIdentity.Profile.Should()
+			.Be(new SimulatorProfileIdentity("safety-screening", "2"));
+		probability.SimulatorSupport.Should().Match<SimulatorSupportResult>(
+			result =>
+				!result.IsSupported &&
+				result.Capability == SimulatorCapability.FullProbability);
+		probability.SimulatorSupport!.UnsupportedRoles.Should()
+			.Equal(MainRoleType.VillagerVillager);
+		probability.Cacheability.Should().BeNull();
+	}
 }

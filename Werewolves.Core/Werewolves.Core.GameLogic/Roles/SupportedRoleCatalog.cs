@@ -14,7 +14,8 @@ public static class SupportedRoleCatalog
 		RoleAdmission.Active(MainRoleType.SimpleWerewolf, () => new SimpleWerewolfRole()),
 		RoleAdmission.Active(MainRoleType.Seer, () => new SeerRole()),
 		RoleAdmission.Active(MainRoleType.WildChild, () => new WildChildRole()),
-		RoleAdmission.Passive(MainRoleType.SimpleVillager)
+		RoleAdmission.Passive(MainRoleType.SimpleVillager),
+		RoleAdmission.Passive(MainRoleType.VillagerVillager)
 	]);
 
 	private static readonly MainRoleType[] SupportedRoleTypes = Catalog.Roles.ToArray();

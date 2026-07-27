@@ -9,6 +9,7 @@ internal interface IGamePhaseStateCache
 {
 	GamePhase GetCurrentPhase();
 	T? GetSubPhase<T>() where T : struct, Enum;
+	string? GetSubPhaseId();
 	string? GetActiveSubPhaseStage();
 	bool HasSubPhaseStageCompleted(string subPhaseStageId);
 	T? GetCurrentListenerState<T>(ListenerIdentifier listener) where T : struct, Enum;
@@ -115,6 +116,24 @@ internal partial class GameSessionKernel
 			_currentListenerState = state;
 		}
 
+		internal void RestoreTransientContinuation(
+			string activeSubPhaseStage,
+			ListenerIdentifier listener,
+			string listenerState)
+		{
+			if (_currentSubPhaseStage != null ||
+				_currentListener != null ||
+				_currentListenerState != null)
+			{
+				throw new InvalidOperationException(
+					"Transient continuation restoration requires an inactive phase cache.");
+			}
+
+			_currentSubPhaseStage = activeSubPhaseStage;
+			_currentListener = listener;
+			_currentListenerState = listenerState;
+		}
+
 		#endregion
 
 		#region Public Interface Accessors
@@ -170,6 +189,8 @@ internal partial class GameSessionKernel
 
 			return null;
 		}
+
+		public string? GetSubPhaseId() => _currentSubPhase;
 
 		/// <summary>
 		/// Gets the identifier of the currently active listener.
@@ -228,11 +249,7 @@ internal partial class GameSessionKernel
 			{
 				CurrentPhase = _currentPhase,
 				SubPhase = _currentSubPhase,
-				ActiveSubPhaseStage = _currentSubPhaseStage,
-				CompletedSubPhaseStages = _previousSubPhaseStages.ToList(),
-				CurrentListenerId = _currentListener?.ListenerId,
-				CurrentListenerType = _currentListener?.ListenerType.ToString(),
-				CurrentListenerState = _currentListenerState
+				CompletedSubPhaseStages = _previousSubPhaseStages.ToList()
 			};
 		}
 
@@ -248,10 +265,11 @@ internal partial class GameSessionKernel
 		}
 
 		/// <summary>
-		/// Restores the stable-boundary cursor needed to consume the committed PendingInstruction.
-		/// Active stages and listeners are live execution state and remain transient.
+		/// Restores only the durable main-phase position. Active stages and listeners
+		/// are transient and may be restored through the neutral continuation seam.
 		/// </summary>
-		internal static GamePhaseStateCache FromStableRecoveryBoundaryDto(GamePhaseStateCacheDto dto)
+		internal static GamePhaseStateCache FromStableRecoveryBoundaryDto(
+			GamePhaseStateCacheDto dto)
 		{
 			var cache = new GamePhaseStateCache(dto.CurrentPhase)
 			{

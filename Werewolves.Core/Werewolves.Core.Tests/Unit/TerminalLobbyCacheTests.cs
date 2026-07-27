@@ -438,7 +438,7 @@ public class TerminalLobbyCacheTests
 			StringComparison.Ordinal));
 		var safetyScreening = RecordJson(AlreadyGolden.Replace(
 			"core-simulator@1",
-			"safety-screening@1",
+			"safety-screening@2",
 			StringComparison.Ordinal));
 		var payload = "{\"schema\":\"terminal-lobby-cache\",\"version\":1,\"records\":["
 			+ legacy + "," + fullProbability + "," + safetyScreening + "]}";
@@ -447,13 +447,26 @@ public class TerminalLobbyCacheTests
 
 		read.Rejection.Should().BeNull();
 		read.Document!.Records.Select(record => record.CompatibilityIdentity.Profile.ToString())
-			.Should().Equal("core-simulator@1", "full-probability@1", "safety-screening@1");
+			.Should().Equal("core-simulator@1", "full-probability@1", "safety-screening@2");
 	}
 
 	[Fact]
 	public void ReadDocument_RejectsProbabilityRecordProducedBySafetyScreening()
 	{
 		var record = RecordJson(ProbabilityGolden.Replace(
+			"core-simulator@1",
+			"safety-screening@2",
+			StringComparison.Ordinal));
+		var payload = "{\"schema\":\"terminal-lobby-cache\",\"version\":1,\"records\":["
+			+ record + "]}";
+
+		TerminalLobbyCache.ReadDocument(Utf8(payload)).IsUsable.Should().BeFalse();
+	}
+
+	[Fact]
+	public void ReadDocument_RejectsStaleSafetyScreeningVersion()
+	{
+		var record = RecordJson(AlreadyGolden.Replace(
 			"core-simulator@1",
 			"safety-screening@1",
 			StringComparison.Ordinal));
@@ -555,6 +568,30 @@ public class TerminalLobbyCacheTests
 	}
 
 	[Fact]
+	public void LegacyCompatibility_RejectsEveryVillagerVillagerScenario()
+	{
+		var scenario = new SimulationScenario(
+			5,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.VillagerVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]).ToCanonical();
+		var safetyIdentity = new SimulationCompatibilityIdentity(
+			scenario,
+			SimulatorCapability.SafetyScreening.Identity);
+
+		LegacyTerminalLobbyCacheCompatibility.TryProject(
+			ProbabilityRecord(),
+			SimulatorCapability.SafetyScreening,
+			safetyIdentity,
+			LobbyEvaluationDepth.DegenerateScreeningOnly,
+			out _).Should().BeFalse();
+	}
+
+	[Fact]
 	public void LegacyCompatibility_FullProbabilityConsumerAtScreeningDepth_UsesOnlyEarlierTerminalMeaning()
 	{
 		var already = AlreadyDecidedRecord();
@@ -605,7 +642,8 @@ public class TerminalLobbyCacheTests
 			new(MainRoleType.SimpleWerewolf, Faction.Werewolf),
 			new(MainRoleType.Seer, Faction.Villager),
 			new(MainRoleType.WildChild, Faction.Villager),
-			new(MainRoleType.SimpleVillager, Faction.Werewolf)
+			new(MainRoleType.SimpleVillager, Faction.Werewolf),
+			new(MainRoleType.VillagerVillager, Faction.Villager)
 		]);
 
 		AssertLegacyProjectionRejected(capability);
@@ -673,7 +711,8 @@ public class TerminalLobbyCacheTests
 				new(MainRoleType.SimpleWerewolf, Faction.Werewolf),
 				new(MainRoleType.Seer, Faction.Villager),
 				new(MainRoleType.WildChild, Faction.Villager),
-				new(MainRoleType.SimpleVillager, Faction.Villager)
+				new(MainRoleType.SimpleVillager, Faction.Villager),
+				new(MainRoleType.VillagerVillager, Faction.Villager)
 			],
 			headlessResponsePolicy: new HeadlessResponsePolicy(
 				new DecisionStrategyIdentity("changed-policy", "1"),
@@ -807,12 +846,13 @@ public class TerminalLobbyCacheTests
 				new(MainRoleType.SimpleWerewolf, Faction.Werewolf),
 				new(MainRoleType.Seer, Faction.Villager),
 				new(MainRoleType.WildChild, Faction.Villager),
-				new(MainRoleType.SimpleVillager, Faction.Villager)
+				new(MainRoleType.SimpleVillager, Faction.Villager),
+				new(MainRoleType.VillagerVillager, Faction.Villager)
 			],
 			sharedVictoryCapabilities,
-			headlessResponsePolicy ?? SimulatorProfile.LegacyCore.HeadlessResponsePolicy,
+			headlessResponsePolicy ?? SimulatorCapability.SafetyScreening.HeadlessResponsePolicy,
 			supportsActorSetupCards,
-			supportedRuleStates ?? SimulatorProfile.LegacyCore.SupportedRuleStates);
+			supportedRuleStates ?? SimulatorCapability.SafetyScreening.SupportedRuleStates);
 
 	private static void AssertLegacyProjectionRejected(SimulatorCapability capability)
 	{
@@ -926,7 +966,12 @@ public class TerminalLobbyCacheTests
 		SimulationCompatibilityIdentity legacyIdentity,
 		string profileId) => new(
 			legacyIdentity.Scenario,
-			new SimulatorProfileIdentity(profileId, "1"));
+			profileId switch
+			{
+				"safety-screening" => SimulatorCapability.SafetyScreening.Identity,
+				"full-probability" => SimulatorCapability.FullProbability.Identity,
+				_ => throw new ArgumentOutOfRangeException(nameof(profileId))
+			});
 
 	private static SimulationCompatibilityIdentity Identity(int players, int villagers, int werewolves) => new(
 		CanonicalSimulationScenario.Parse(

@@ -48,25 +48,10 @@ internal static class DayPhaseHandlers
     }
 
     internal static ModeratorInstruction? RequestRoleRevealIfNeeded(GameSession session, Guid playerId)
-    {
-        var votedPlayer = session.GetPlayer(playerId);
-        if (votedPlayer.State.MainRole != null)
-        {
-            return null;
-        }
-
-        if (GameSessionQueries.TryGetOnlyPossibleUnassignedRole(session, requiredAssignmentCount: 1, out var role))
-        {
-            session.AssignRole(playerId, role);
-            return null;
-        }
-
-        return new AssignRolesInstruction(
-			ModeratorInstructionSemantic.AssignDayVoteTargetRole,
-            [playerId],
-            GameSessionQueries.GetUnassignedRoles(session),
-            privateInstruction: GameStrings.RevealRolePromptSpecify);
-    }
+        => RoleKnowledgeHandlers.RequestPublicRoleReveal(
+            session,
+            [session.GetPlayer(playerId)],
+            ModeratorInstructionSemantic.AssignDayVoteTargetRole);
 
     internal static ModeratorInstruction ResolveNonTieVote(GameSession session, ModeratorResponse input)
     {
@@ -74,11 +59,7 @@ internal static class DayPhaseHandlers
         var lynchedPlayer = session.GetPlayer(lynchedPlayerId);
         var lynchedPlayerState = lynchedPlayer.State;
 
-        if (lynchedPlayerState.MainRole == null)
-        {
-            var lynchedPlayerRole = input.AssignedPlayerRoles!.Single().Value;
-            session.AssignRole(lynchedPlayerId, lynchedPlayerRole);
-        }
+        RoleKnowledgeHandlers.RecordPublicRoleReveal(session, [lynchedPlayer], input);
 
         if (lynchedPlayerState.IsImmuneToLynching)
         {

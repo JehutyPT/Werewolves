@@ -66,7 +66,7 @@
 						<span class="ww-seat-number">@player.SeatNumber</span>
 						<div class="ww-dashboard-player__main">
 							<span class="ww-player-name">@player.Name</span>
-							<span class="ww-dashboard-player__meta">@player.RoleLabel · @player.HealthLabel</span>
+							<span class="ww-dashboard-player__meta">@player.RoleLabel · @player.RoleVisibilityLabel · @player.HealthLabel</span>
 						</div>
 						<span class="ww-status-list">@StatusEffectsLabel(player)</span>
 					</li>
@@ -211,7 +211,7 @@
 	private int EliminatedCount => Players.Count(player => player.State.Health == PlayerHealth.Dead);
 	private int KnownAliveRoleCount => Players.Count(player =>
 		player.State.Health == PlayerHealth.Alive &&
-		player.State.MainRole is not null);
+		player.State.PubliclyRevealedRole is not null);
 	private DashboardStatsSnapshot StatsSnapshot => DashboardStatsSnapshot.FromSession(Game.CurrentSession);
 
 	private string PlayerCountLabel => Players.Count == 1

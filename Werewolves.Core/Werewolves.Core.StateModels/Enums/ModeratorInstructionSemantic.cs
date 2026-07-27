@@ -24,5 +24,6 @@ public enum ModeratorInstructionSemantic
 	AssignDayVoteTargetRole = 16,
 	AnnounceLynchingImmunity = 17,
 	AnnounceDayElimination = 18,
-	GameSessionNotFound = 19
+	GameSessionNotFound = 19,
+	ObserveVillagerVillagerFromDeal = 20
 }

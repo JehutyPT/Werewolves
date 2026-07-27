@@ -2,6 +2,8 @@ namespace Werewolves.Core.GameLogic.Models.StateMachine;
 
 internal enum NightSubPhaseStage
 {
+    RequestVillagerVillagerPublicFromDealObservation,
+    RecordVillagerVillagerPublicFromDealObservation,
     NightStart,
     NightEnd
 }

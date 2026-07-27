@@ -96,10 +96,10 @@ internal static class NightInteractionResolver
 				eliminationReason = EliminationReason.RustySword;
 			}
 
-			// --- Apply Elimination if determined ---
+			// --- Record the consequence so public Role Reveal can precede elimination ---
 			if (eliminationReason.HasValue)
 			{
-				session.EliminatePlayer(player.Id, eliminationReason.Value);
+				session.DetermineDawnVictim(player.Id, eliminationReason.Value);
 			}
 		}
 	}
