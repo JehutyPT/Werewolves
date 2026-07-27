@@ -37,7 +37,10 @@ public static class SimulationStartStateDeriver
 	{
 		ArgumentNullException.ThrowIfNull(material);
 		ArgumentNullException.ThrowIfNull(random);
-		if (!material.DecisionStrategyIdentity.Equals(BaselineRandomDecisionStrategy.Identity))
+		if (!material.DecisionStrategyIdentity.Equals(
+				BaselineRandomDecisionStrategy.Identity) &&
+		    !material.DecisionStrategyIdentity.Equals(
+			    BaselineRandomDecisionStrategy.SafetyScreeningIdentity))
 		{
 			throw new ArgumentException(
 				"Run Seed Material does not identify the active baseline decision strategy.",

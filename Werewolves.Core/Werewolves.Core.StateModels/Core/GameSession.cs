@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
@@ -454,6 +455,79 @@ internal class GameSession : IGameSession
             ReportedOutcomePlayerId = reportedOutcomePlayerId ?? Guid.Empty
         };
 
+        _gameSessionKernel.AddEntryAndUpdateState(entry);
+    }
+
+    internal void RecordScapegoatTieReplacement(
+        Guid scapegoatPlayerId,
+        int voteOrdinal,
+        int voteLogIndex,
+        string scopeId)
+    {
+        var entry = new ScapegoatTieReplacementLogEntry
+        {
+            Timestamp = DateTimeOffset.UtcNow,
+            TurnNumber = TurnNumber,
+            CurrentPhase = _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+            ScapegoatPlayerId = scapegoatPlayerId,
+            VoteOrdinal = voteOrdinal,
+            VoteLogIndex = voteLogIndex,
+            ScopeId = scopeId
+        };
+
+        _gameSessionKernel.AddEntryAndUpdateState(entry);
+    }
+
+    internal void CommitScapegoatVoterRestriction(
+        string scopeId,
+        Guid scapegoatPlayerId,
+        IReadOnlyCollection<Guid> candidatePlayerIds,
+        IReadOnlyCollection<Guid> permittedVoterIds,
+        int appliesOnTurnNumber,
+        Guid announcementInstructionId)
+    {
+        var entry = new ScapegoatVoterRestrictionCommittedLogEntry
+        {
+            Timestamp = DateTimeOffset.UtcNow,
+            TurnNumber = TurnNumber,
+            CurrentPhase = _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+            ScopeId = scopeId,
+            ScapegoatPlayerId = scapegoatPlayerId,
+            CandidatePlayerIds = candidatePlayerIds.ToImmutableArray(),
+            PermittedVoterIds = permittedVoterIds.ToImmutableArray(),
+            AppliesOnTurnNumber = appliesOnTurnNumber,
+            AnnouncementInstructionId = announcementInstructionId
+        };
+
+        _gameSessionKernel.AddEntryAndUpdateState(entry);
+    }
+
+    internal void AcknowledgeScapegoatVoterRestrictionAnnouncement(
+        string scopeId,
+        Guid announcementInstructionId)
+    {
+        var entry =
+            new ScapegoatVoterRestrictionAnnouncementAcknowledgedLogEntry
+            {
+                Timestamp = DateTimeOffset.UtcNow,
+                TurnNumber = TurnNumber,
+                CurrentPhase =
+                    _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+                ScopeId = scopeId,
+                AnnouncementInstructionId = announcementInstructionId
+            };
+        _gameSessionKernel.AddEntryAndUpdateState(entry);
+    }
+
+    internal void ExpireScapegoatVoterRestriction(string scopeId)
+    {
+        var entry = new ScapegoatVoterRestrictionExpiredLogEntry
+        {
+            Timestamp = DateTimeOffset.UtcNow,
+            TurnNumber = TurnNumber,
+            CurrentPhase = _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+            ScopeId = scopeId
+        };
         _gameSessionKernel.AddEntryAndUpdateState(entry);
     }
 

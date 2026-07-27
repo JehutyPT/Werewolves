@@ -304,6 +304,25 @@ internal abstract class RoleHookListener<TRoleStateEnum> : RoleHookListener wher
 			ShouldAdvanceState: false
 		);
 
+	/// <summary>
+	/// Creates a stage that may pause repeatedly in its current state before
+	/// eventually completing in another state.
+	/// </summary>
+	internal RoleStateMachineStage CreateLoopStage(
+		GameHook gameHook,
+		TRoleStateEnum startStage,
+		Func<GameSession, ModeratorResponse, HookListenerActionResult>
+			actionToPerform,
+		bool shouldOverwriteStartStage = false)
+		=> new(
+			Id,
+			gameHook,
+			startStage,
+			actionToPerform,
+			PossibleEndStages: null,
+			ShouldOverwriteStartStage: shouldOverwriteStartStage,
+			ShouldAdvanceState: false);
+
 	#endregion
 
 	#region RoleStateMachineStage Definition

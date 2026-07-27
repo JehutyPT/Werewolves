@@ -20,5 +20,6 @@ internal enum DaySubPhaseStage
 	RequestVote,
 	HandleVoteResponse,
     ResolveEliminationCascade,
-    VoteOutcomeNavigation
+    VoteOutcomeNavigation,
+    ExpireScapegoatVoterRestriction
 }

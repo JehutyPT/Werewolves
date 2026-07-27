@@ -285,6 +285,10 @@ internal static class GameFlowManager
                     subPhase: DaySubPhases.Finalize,
                     subPhaseStages:
                     [
+                        LogicStage(
+                            DaySubPhaseStage.ExpireScapegoatVoterRestriction,
+                            DayPhaseHandlers
+                                .ExpireScapegoatVoterRestriction),
                         NavigationEndStageSilent(GamePhase.Night)
                     ],
                     possibleNextMainPhaseTransitions:
@@ -673,16 +677,20 @@ internal static class GameFlowManager
         };
     }
 
-	    private static bool IsAcceptedObservation(ModeratorInstruction? instruction)
-	        => instruction?.Semantic is
-	            ModeratorInstructionSemantic.IdentifyRoleHolders or
-	            ModeratorInstructionSemantic.ObserveVillagerVillagerFromDeal or
-	            ModeratorInstructionSemantic.EstablishStutteringJudgeSignal or
-	            ModeratorInstructionSemantic.ObserveStutteringJudgeSignal or
-	             ModeratorInstructionSemantic.AnnounceDawnVictims or
-             ModeratorInstructionSemantic.AssignDawnVictimRoles or
-             ModeratorInstructionSemantic.AssignDayVoteTargetRole or
-             ModeratorInstructionSemantic.AssignEliminationCascadeRoles;
+    private static bool IsAcceptedObservation(ModeratorInstruction? instruction)
+        => instruction?.Semantic is
+            ModeratorInstructionSemantic.IdentifyRoleHolders or
+            ModeratorInstructionSemantic.ObserveVillagerVillagerFromDeal or
+            ModeratorInstructionSemantic.ObserveScapegoatHolderForTie or
+            ModeratorInstructionSemantic.RevealScapegoatForTie or
+            ModeratorInstructionSemantic.SelectScapegoatPermittedVoters or
+            ModeratorInstructionSemantic.AnnounceScapegoatPermittedVoters or
+            ModeratorInstructionSemantic.EstablishStutteringJudgeSignal or
+            ModeratorInstructionSemantic.ObserveStutteringJudgeSignal or
+            ModeratorInstructionSemantic.AnnounceDawnVictims or
+            ModeratorInstructionSemantic.AssignDawnVictimRoles or
+            ModeratorInstructionSemantic.AssignDayVoteTargetRole or
+            ModeratorInstructionSemantic.AssignEliminationCascadeRoles;
 
 	private static bool IsEliminationCascadeReactionInput(
 		ModeratorInstruction instruction) =>

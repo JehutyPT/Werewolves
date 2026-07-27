@@ -176,7 +176,7 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 			new SimulationCompatibilityIdentity(
 				scenario.ToCanonical(),
 				SimulatorCapability.SafetyScreening.Identity),
-			BaselineRandomDecisionStrategy.Identity,
+			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
 			runNumber: 7);
 		var startState = SimulationStartStateDeriver.Derive(
 			material,
@@ -210,6 +210,62 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 	}
 
 	[Fact]
+	public void BaselineRandomDecisionStrategy_WithScapegoatHolderObservation_UsesLivingEffectiveHolderOrLegalEmpty()
+	{
+		var scenario = new StateModels.Models.Simulation.SimulationScenario(
+			5,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Scapegoat,
+				MainRoleType.Seer,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+		var material = new RunSeedMaterial(
+			new SimulationCompatibilityIdentity(
+				scenario.ToCanonical(),
+				SimulatorCapability.SafetyScreening.Identity),
+			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
+			runNumber: 29);
+		var startState = SimulationStartStateDeriver.Derive(
+			material,
+			SimulatorCapability.SafetyScreening);
+		var config = startState.CreateGameSessionConfig();
+		var builder = CreateBuilder()
+			.WithPlayers(config.Players.ToArray())
+			.WithRoles(config.Roles.ToArray());
+		builder.StartGame();
+		var session = builder.GetGameState()!;
+		var players = session.GetPlayers().ToArray();
+		var seededHolderSeat = startState.RoleAssignments
+			.Single(assignment => assignment.Role == MainRoleType.Scapegoat)
+			.SeatNumber;
+		var seededHolder = players[seededHolderSeat - 1];
+		var replacementHolder = players.First(player => player.Id != seededHolder.Id);
+		var observation = new SelectPlayersInstruction(
+			ModeratorInstructionSemantic.ObserveScapegoatHolderForTie,
+			players.Select(player => player.Id).ToHashSet(),
+			NumberRangeConstraint.SingleOptional,
+			privateInstruction: GameStrings.ScapegoatHolderObservationInstruction);
+		var strategy = new BaselineRandomDecisionStrategy(
+			material,
+			startState,
+			SimulatorCapability.SafetyScreening.HeadlessResponsePolicy);
+
+		var seededResponse = strategy.CreateResponse(observation, session);
+		builder.ArrangeKnownRole(seededHolder.Id, MainRoleType.SimpleVillager);
+		builder.ArrangeKnownRole(replacementHolder.Id, MainRoleType.Scapegoat);
+		var currentResponse = strategy.CreateResponse(observation, session);
+		builder.ArrangeEliminatedPlayer(replacementHolder.Id);
+		var deadResponse = strategy.CreateResponse(observation, session);
+
+		seededResponse.SelectedPlayerIds.Should().Equal(seededHolder.Id);
+		currentResponse.SelectedPlayerIds.Should().Equal(replacementHolder.Id);
+		deadResponse.SelectedPlayerIds.Should().BeEmpty();
+		MarkTestCompleted();
+	}
+
+	[Fact]
 	public void BaselineRandomDecisionStrategy_WithThreeBrothersIdentification_UsesExactSeededTrio()
 	{
 		var scenario = new StateModels.Models.Simulation.SimulationScenario(
@@ -229,7 +285,7 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 			new SimulationCompatibilityIdentity(
 				scenario.ToCanonical(),
 				SimulatorCapability.SafetyScreening.Identity),
-			BaselineRandomDecisionStrategy.Identity,
+			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
 			runNumber: 11);
 		var startState = SimulationStartStateDeriver.Derive(
 			material,
@@ -449,7 +505,7 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 			new SimulationCompatibilityIdentity(
 				scenario.ToCanonical(),
 				SimulatorCapability.SafetyScreening.Identity),
-			BaselineRandomDecisionStrategy.Identity,
+			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
 			runNumber: 23);
 		var startState = SimulationStartStateDeriver.Derive(
 			material,
@@ -502,6 +558,59 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 	}
 
 	[Fact]
+	public void BaselineRandomDecisionStrategy_WithScapegoatPermittedVoters_SelectsNonEmptyLegalSubsetDeterministically()
+	{
+		var scenario = new StateModels.Models.Simulation.SimulationScenario(
+			5,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Scapegoat,
+				MainRoleType.Seer,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+		var material = new RunSeedMaterial(
+			new SimulationCompatibilityIdentity(
+				scenario.ToCanonical(),
+				SimulatorCapability.SafetyScreening.Identity),
+			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
+			runNumber: 31);
+		var startState = SimulationStartStateDeriver.Derive(
+			material,
+			SimulatorCapability.SafetyScreening);
+		var config = startState.CreateGameSessionConfig();
+		var builder = CreateBuilder()
+			.WithPlayers(config.Players.ToArray())
+			.WithRoles(config.Roles.ToArray());
+		builder.StartGame();
+		var session = builder.GetGameState()!;
+		var candidates = session.GetPlayers()
+			.Select(player => player.Id)
+			.ToHashSet();
+		var instruction = new SelectPlayersInstruction(
+			ModeratorInstructionSemantic.SelectScapegoatPermittedVoters,
+			candidates,
+			NumberRangeConstraint.AtLeast(1),
+			privateInstruction: GameStrings.ScapegoatPermittedVotersSelectionInstruction);
+		var firstStrategy = new BaselineRandomDecisionStrategy(
+			material,
+			startState,
+			SimulatorCapability.SafetyScreening.HeadlessResponsePolicy);
+		var replayStrategy = new BaselineRandomDecisionStrategy(
+			material,
+			startState,
+			SimulatorCapability.SafetyScreening.HeadlessResponsePolicy);
+
+		var first = firstStrategy.CreateResponse(instruction, session);
+		var replay = replayStrategy.CreateResponse(instruction, session);
+
+		first.SelectedPlayerIds.Should().NotBeEmpty()
+			.And.BeSubsetOf(candidates);
+		first.SelectedPlayerIds.Should().Equal(replay.SelectedPlayerIds);
+		MarkTestCompleted();
+	}
+
+	[Fact]
 	public void BaselineRandomDecisionStrategy_WithHunterFinalShot_SelectsOneLegalTargetDeterministically()
 	{
 		var scenario = new StateModels.Models.Simulation.SimulationScenario(
@@ -517,7 +626,7 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 			new SimulationCompatibilityIdentity(
 				scenario.ToCanonical(),
 				SimulatorCapability.SafetyScreening.Identity),
-			BaselineRandomDecisionStrategy.Identity,
+			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
 			runNumber: 17);
 		var startState = SimulationStartStateDeriver.Derive(
 			material,

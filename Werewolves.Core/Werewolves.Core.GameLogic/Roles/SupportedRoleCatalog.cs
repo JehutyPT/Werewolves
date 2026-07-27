@@ -55,8 +55,12 @@ public static class SupportedRoleCatalog
 					MainRoleType.StutteringJudge,
 					() => new StutteringJudgeRole(
 						rolePowerAvailabilityGateway)),
+				RoleAdmission.Active(
+					MainRoleType.Scapegoat,
+					() => new ScapegoatRole(
+						rolePowerAvailabilityGateway)),
 				RoleAdmission.Passive(MainRoleType.SimpleVillager),
-			RoleAdmission.Passive(MainRoleType.VillagerVillager)
+				RoleAdmission.Passive(MainRoleType.VillagerVillager)
 		]);
 	}
 

@@ -21,7 +21,8 @@ public static class LegacyTerminalLobbyCacheCompatibility
 		MainRoleType.ThreeBrothers,
 		MainRoleType.Witch,
 		MainRoleType.Hunter,
-		MainRoleType.StutteringJudge
+		MainRoleType.StutteringJudge,
+		MainRoleType.Scapegoat
 	];
 
 	private static readonly ModeratorInstructionSemantic[] FrozenSafetyOnlySemantics =
@@ -36,7 +37,11 @@ public static class LegacyTerminalLobbyCacheCompatibility
 		ModeratorInstructionSemantic.AssignEliminationCascadeRoles,
 		ModeratorInstructionSemantic.SelectHunterFinalShotTarget,
 		ModeratorInstructionSemantic.EstablishStutteringJudgeSignal,
-		ModeratorInstructionSemantic.ObserveStutteringJudgeSignal
+		ModeratorInstructionSemantic.ObserveStutteringJudgeSignal,
+		ModeratorInstructionSemantic.ObserveScapegoatHolderForTie,
+		ModeratorInstructionSemantic.RevealScapegoatForTie,
+		ModeratorInstructionSemantic.SelectScapegoatPermittedVoters,
+		ModeratorInstructionSemantic.AnnounceScapegoatPermittedVoters
 	];
 
 	public static bool TryProject(
@@ -142,7 +147,9 @@ public static class LegacyTerminalLobbyCacheCompatibility
 			&& capability.SharedVictoryCapabilities.ToHashSet()
 				.SetEquals(legacy.SharedVictoryCapabilities)
 			&& capability.HeadlessResponsePolicy.StrategyIdentity.Equals(
-				legacy.HeadlessResponsePolicy.StrategyIdentity)
+				BaselineRandomDecisionStrategy.SafetyScreeningIdentity)
+			&& legacy.HeadlessResponsePolicy.StrategyIdentity.Equals(
+				BaselineRandomDecisionStrategy.Identity)
 			&& capability.HeadlessResponsePolicy.AdmittedSemantics.SetEquals(
 				legacy.HeadlessResponsePolicy.AdmittedSemantics.Concat(
 					FrozenSafetyOnlySemantics));

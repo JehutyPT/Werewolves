@@ -131,6 +131,46 @@ internal sealed class RecoveryPayloadTestDriver
 		return this;
 	}
 
+	internal RecoveryPayloadTestDriver
+		InvalidateLatestScapegoatRestrictionTurn()
+	{
+		var entryIndex = _payload.GameHistoryLog.FindLastIndex(
+			entry => entry is ScapegoatVoterRestrictionCommittedLogEntry);
+		if (entryIndex < 0 ||
+		    _payload.GameHistoryLog[entryIndex] is not
+			    ScapegoatVoterRestrictionCommittedLogEntry entry)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no committed Scapegoat voter restriction.");
+		}
+
+		_payload.GameHistoryLog[entryIndex] = entry with
+		{
+			AppliesOnTurnNumber = entry.TurnNumber
+		};
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver
+		MismatchLatestScapegoatRestrictionScope()
+	{
+		var entryIndex = _payload.GameHistoryLog.FindLastIndex(
+			entry => entry is ScapegoatVoterRestrictionCommittedLogEntry);
+		if (entryIndex < 0 ||
+		    _payload.GameHistoryLog[entryIndex] is not
+			    ScapegoatVoterRestrictionCommittedLogEntry entry)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no committed Scapegoat voter restriction.");
+		}
+
+		_payload.GameHistoryLog[entryIndex] = entry with
+		{
+			ScopeId = $"{entry.ScopeId}:mismatched"
+		};
+		return this;
+	}
+
 	internal RecoveryPayloadTestDriver ReplacePendingInstructionWithConfirmation()
 	{
 		var pending = _payload.PendingInstruction

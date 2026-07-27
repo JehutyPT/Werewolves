@@ -16,6 +16,9 @@ public sealed class BaselineRandomDecisionStrategy : IModeratorDecisionStrategy
 	public static DecisionStrategyIdentity Identity { get; } =
 		new("baseline-random", "1-splitmix64");
 
+	public static DecisionStrategyIdentity SafetyScreeningIdentity { get; } =
+		new("baseline-random", "2-splitmix64");
+
 	public static HeadlessResponsePolicy Policy { get; } = new(
 		Identity,
 		[
@@ -58,8 +61,19 @@ public sealed class BaselineRandomDecisionStrategy : IModeratorDecisionStrategy
 		ArgumentNullException.ThrowIfNull(startState);
 		ArgumentNullException.ThrowIfNull(policy);
 		ArgumentNullException.ThrowIfNull(random);
-		if (!material.DecisionStrategyIdentity.Equals(Identity)
-			|| !policy.StrategyIdentity.Equals(Identity)
+		var usesScapegoatPolicy = policy.AdmittedSemantics.Any(semantic =>
+			semantic is ModeratorInstructionSemantic.ObserveScapegoatHolderForTie
+				or ModeratorInstructionSemantic.RevealScapegoatForTie
+				or ModeratorInstructionSemantic.SelectScapegoatPermittedVoters
+				or ModeratorInstructionSemantic.AnnounceScapegoatPermittedVoters);
+		var supportedIdentity =
+			material.DecisionStrategyIdentity.Equals(Identity) ||
+			material.DecisionStrategyIdentity.Equals(SafetyScreeningIdentity);
+		if (!supportedIdentity
+			|| !policy.StrategyIdentity.Equals(material.DecisionStrategyIdentity)
+			|| (usesScapegoatPolicy &&
+			    !material.DecisionStrategyIdentity.Equals(
+				    SafetyScreeningIdentity))
 			|| !material.CompatibilityIdentity.Equals(startState.CompatibilityIdentity)
 			|| !random.Material.Equals(material))
 		{
@@ -98,6 +112,14 @@ public sealed class BaselineRandomDecisionStrategy : IModeratorDecisionStrategy
 					selectPlayers,
 					session,
 					MainRoleType.VillagerVillager),
+			SelectPlayersInstruction
+			{
+				Semantic: ModeratorInstructionSemantic.ObserveScapegoatHolderForTie
+			} selectPlayers =>
+				CreateLivingEffectiveRoleHolderResponse(
+					selectPlayers,
+					session,
+					MainRoleType.Scapegoat),
 			SelectPlayersInstruction selectPlayers =>
 				CreatePlayerSelectionResponse(selectPlayers, session),
 			AssignRolesInstruction assignRoles =>
@@ -134,6 +156,22 @@ public sealed class BaselineRandomDecisionStrategy : IModeratorDecisionStrategy
 			.Where(assignment => assignment.Role == role)
 			.Select(assignment => players[assignment.SeatNumber - 1].Id)
 			.Where(instruction.SelectablePlayerIds.Contains)
+			.ToHashSet();
+		return instruction.CreateResponse(selectedPlayerIds);
+	}
+
+	private ModeratorResponse CreateLivingEffectiveRoleHolderResponse(
+		SelectPlayersInstruction instruction,
+		IGameSession session,
+		MainRoleType role)
+	{
+		var players = GetPlayersMatchingStartState(session);
+		var effectiveRolesByPlayerId = CreateEffectiveRolesByPlayerId(players);
+		var selectedPlayerIds = players
+			.Where(player => instruction.SelectablePlayerIds.Contains(player.Id))
+			.Where(player => player.State.Health == PlayerHealth.Alive)
+			.Where(player => effectiveRolesByPlayerId[player.Id] == role)
+			.Select(player => player.Id)
 			.ToHashSet();
 		return instruction.CreateResponse(selectedPlayerIds);
 	}
