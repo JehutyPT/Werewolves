@@ -48,6 +48,9 @@ public static class SupportedRoleCatalog
 			RoleAdmission.Active(
 				MainRoleType.Witch,
 				() => new WitchRole(rolePowerAvailabilityGateway)),
+			RoleAdmission.Active(
+				MainRoleType.Hunter,
+				() => new HunterRole(rolePowerAvailabilityGateway)),
 			RoleAdmission.Passive(MainRoleType.SimpleVillager),
 			RoleAdmission.Passive(MainRoleType.VillagerVillager)
 		]);

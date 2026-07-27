@@ -10,6 +10,7 @@ internal static class EliminationCascadeReactionIds
 {
 	internal const string WildChildModelEliminated =
 		"wild-child-model-eliminated";
+	internal const string HunterFinalShot = "hunter-final-shot";
 }
 
 internal enum EliminationCascadeReactionBoundary

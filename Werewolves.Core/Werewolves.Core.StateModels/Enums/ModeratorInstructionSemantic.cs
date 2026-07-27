@@ -31,5 +31,6 @@ public enum ModeratorInstructionSemantic
 	SelectWitchHealingTarget = 23,
 	SelectWitchPoisonTarget = 24,
 	AnnounceEliminationCascadeVictims = 25,
-	AssignEliminationCascadeRoles = 26
+	AssignEliminationCascadeRoles = 26,
+	SelectHunterFinalShotTarget = 27
 }

@@ -297,7 +297,7 @@ Acts as a high-level phase controller and reactive hook dispatcher. It contains 
 
 *   **Core Components:**
     *   `HookListeners` (static Dictionary<GameHook, List<ListenerIdentifier>>): Declarative mapping of hooks to the ordered list of listeners that respond to them.
-    *   `EliminationCascadeReactionRegistrations`: The single ordered registration list for elimination reactions. Each entry binds a stable reaction ID and execution boundary to a listener; reaction implementations do not declare priorities or sort themselves (see ADR 0003).
+    *   `EliminationCascadeReactionRegistrations`: The single ordered registration list for elimination reactions. Each entry binds a stable reaction ID and execution boundary to a listener; reaction implementations do not declare priorities or sort themselves (see ADR 0003). Forced reactions, including Wild Child transformation, drain before interactive reactions such as the Hunter's final shot.
     *   `ListenerFactories` (internal `IReadOnlyDictionary<ListenerIdentifier, Func<IGameHookListener>>` property): Forwarding accessor sourced from `SupportedRoleCatalog`'s admission catalog. That catalog owns every supported Role's active/passive admission and derives listener factories only for active admissions, so adding a supported Role touches one place. Each game session gets its own fresh listener instances via `GameSession.GetOrCreateListener`, ensuring listener state machine isolation between games. Listener *ordering* still lives in `HookListeners` above (see ADR 0003).
     *   `PhaseDefinitions` (static Dictionary<GamePhase, IPhaseDefinition>): Declarative mapping of each main `GamePhase` to its corresponding `PhaseManager`.
 *   **Primary Methods:**
@@ -318,7 +318,7 @@ Acts as a high-level phase controller and reactive hook dispatcher. It contains 
     *   **`SubPhaseStage`**: An abstract class representing a single, **atomic, non-re-entrant** unit of work. The `GamePhaseStateCache` ensures each stage is executed at most once per sub-phase entry.
         *   `LogicSubPhaseStage`: Executes a custom logic handler.
         *   `HookSubPhaseStage`: Fires a `GameHook` and dispatches to all registered listeners.
-        *   `EliminationCascadeStage`: Drains one scoped Dawn or Day elimination cascade. It reveals before committing, commits every Player in the current distinct batch before reactions run, admits chained batches until empty, and may pause for moderator input. The stage never navigates.
+        *   `EliminationCascadeStage`: Drains one scoped Dawn or Day elimination cascade. It reveals before committing, commits every Player in the current distinct batch before reactions run, admits chained batches until empty, and may pause for moderator input. A newly Eliminated Hunter is evaluated through the shared Role Power availability boundary after forced reactions drain; a non-empty legal roster produces one mandatory exact-one target instruction, while an empty roster completes silently. The shot creates a child batch in the same cascade. The stage never navigates.
         *   `NavigationSubPhaseStage`: A stage that results in a transition to a new sub-phase or main phase. Created via factory methods (`NavigationEndStage`, `NavigationEndStageSilent`) as the required final stage for any sub-phase.
 *   **State Machine Validation:** The architecture provides strong runtime guarantees:
     *   **Transition Validation:** All transitions are validated against the `PossibleNextSubPhases` and `PossibleNextMainPhaseTransitions` sets defined in the `SubPhaseManager`. An illegal transition throws an `InvalidOperationException`.
@@ -335,6 +335,7 @@ Orchestrates the game flow based on moderator input and tracked state. **Delegat
         *   Retrieves the current `GameSession`, validates the response against the exact pending instruction, and then delegates to `GameFlowManager.HandleInput`.
         *   `GameService` owns consume-time correlation, response-type, and complete payload validation; `GameFlowManager` owns state-machine stage and transition validation.
         *   Returns the `ProcessResult` from the state machine, containing either the next instruction or a failure.
+        *   An emitted elimination-reaction input is a stable recovery boundary. Rehydration restores the exact committed Hunter selector and resumes it without re-evaluating Role Power availability, while stale or structurally mismatched selector context fails closed.
         *   **Session Cleanup:** A `FinishedGameConfirmationInstruction` remains pending until its correlated Continue acknowledgment is accepted; that successful acknowledgment removes the session from the active sessions list.
     *   `GetCurrentInstruction(Guid gameId)` (ModeratorInstruction?): Retrieves the `PendingModeratorInstruction`. 
     *   `GetGameStateView(Guid gameId)` (IGameSession?): Returns the game state via the read-only `IGameSession` interface. This hides the internal mutation methods present on the concrete object, ensuring the UI cannot modify state.

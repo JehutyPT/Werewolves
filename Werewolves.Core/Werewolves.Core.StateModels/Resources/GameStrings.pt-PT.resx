@@ -285,6 +285,10 @@
     <value>Caçador</value>
     <comment/>
   </data>
+  <data name="HunterFinalShotSelectionInstruction" xml:space="preserve">
+    <value>Caçador, escolhe exatamente um jogador vivo para eliminar com o teu último tiro.</value>
+    <comment/>
+  </data>
   <data name="LittleGirlRoleName" xml:space="preserve">
     <value>Menina</value>
     <comment/>

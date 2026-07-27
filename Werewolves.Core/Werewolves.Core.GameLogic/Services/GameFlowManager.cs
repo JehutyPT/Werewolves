@@ -116,7 +116,11 @@ internal static class GameFlowManager
 		new(
 			EliminationCascadeReactionIds.WildChildModelEliminated,
 			EliminationCascadeReactionBoundary.Forced,
-			Listener(WildChild))
+			Listener(WildChild)),
+		new(
+			EliminationCascadeReactionIds.HunterFinalShot,
+			EliminationCascadeReactionBoundary.Interactive,
+			Listener(Hunter))
 	];
 
     /// <summary>
@@ -529,6 +533,11 @@ internal static class GameFlowManager
             return true;
         }
 
+		if (IsEliminationCascadeReactionInput(nextInstructionToSend))
+		{
+			return true;
+		}
+
         if (HasNewOneUseRolePowerCommit(session, startingLogCount))
         {
             return true;
@@ -655,6 +664,11 @@ internal static class GameFlowManager
              ModeratorInstructionSemantic.AssignDawnVictimRoles or
              ModeratorInstructionSemantic.AssignDayVoteTargetRole or
              ModeratorInstructionSemantic.AssignEliminationCascadeRoles;
+
+	private static bool IsEliminationCascadeReactionInput(
+		ModeratorInstruction instruction) =>
+		instruction.Semantic is
+			ModeratorInstructionSemantic.SelectHunterFinalShotTarget;
 
     private static AcceptedObservationRecoveryCursor?
         CreateAcceptedObservationRecoveryCursor(

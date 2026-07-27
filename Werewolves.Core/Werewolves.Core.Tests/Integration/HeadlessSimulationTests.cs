@@ -434,6 +434,72 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 	}
 
 	[Fact]
+	public void BaselineRandomDecisionStrategy_WithHunterFinalShot_SelectsOneLegalTargetDeterministically()
+	{
+		var scenario = new StateModels.Models.Simulation.SimulationScenario(
+			5,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Hunter,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+		var material = new RunSeedMaterial(
+			new SimulationCompatibilityIdentity(
+				scenario.ToCanonical(),
+				SimulatorCapability.SafetyScreening.Identity),
+			BaselineRandomDecisionStrategy.Identity,
+			runNumber: 17);
+		var startState = SimulationStartStateDeriver.Derive(
+			material,
+			SimulatorCapability.SafetyScreening);
+		var config = startState.CreateGameSessionConfig();
+		var builder = CreateBuilder()
+			.WithPlayers(config.Players.ToArray())
+			.WithRoles(config.Roles.ToArray());
+		builder.StartGame();
+		var session = builder.GetGameState()!;
+		var players = session.GetPlayers().ToArray();
+		var hunterSeat = startState.RoleAssignments
+			.Single(assignment => assignment.Role == MainRoleType.Hunter)
+			.SeatNumber;
+		var hunterId = players[hunterSeat - 1].Id;
+		var legalTargetIds = players
+			.Where(player => player.Id != hunterId)
+			.Take(3)
+			.Select(player => player.Id)
+			.ToHashSet();
+		var instruction = new SelectPlayersInstruction(
+			ModeratorInstructionSemantic.SelectHunterFinalShotTarget,
+			legalTargetIds,
+			NumberRangeConstraint.Single,
+			publicAnnouncement:
+				GameStrings.HunterFinalShotSelectionInstruction,
+			affectedPlayerIds: [hunterId]);
+		var firstStrategy = new BaselineRandomDecisionStrategy(
+			material,
+			startState,
+			SimulatorCapability.SafetyScreening.HeadlessResponsePolicy);
+		var replayStrategy = new BaselineRandomDecisionStrategy(
+			material,
+			startState,
+			SimulatorCapability.SafetyScreening.HeadlessResponsePolicy);
+
+		var first = firstStrategy.CreateResponse(instruction, session);
+		var replay = replayStrategy.CreateResponse(instruction, session);
+
+		first.InstructionId.Should().Be(instruction.InstructionId);
+		first.Type.Should().Be(ExpectedInputType.PlayerSelection);
+		first.SelectedPlayerIds.Should().ContainSingle();
+		legalTargetIds.Should().Contain(
+			first.SelectedPlayerIds!.Single());
+		first.SelectedPlayerIds.Should().Equal(replay.SelectedPlayerIds);
+		first.SelectedPlayerIds.Should().NotContain(hunterId);
+		MarkTestCompleted();
+	}
+
+	[Fact]
 	public void BaselineRandomDecisionStrategy_WithKnownOptionalChoiceSeed_ReturnsEmptyValidResponse()
 	{
 		var material = CreateRunSeedMaterial(runNumber: 0);

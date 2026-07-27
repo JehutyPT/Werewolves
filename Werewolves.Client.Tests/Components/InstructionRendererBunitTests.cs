@@ -246,6 +246,150 @@ public class InstructionRendererBunitTests
 	}
 
 	[Fact]
+	public async Task LiveHunterFinalShot_RendersMandatoryLocalizedLegalLivingTargetsAndEmitsOneCorrelatedSelection()
+	{
+		var timing = new ControlledHoldButtonTiming();
+		using var context = new ModeratorComponentTestContext();
+		context.Services.AddSingleton<IHoldButtonTiming>(timing);
+		var manager = context.Services.GetRequiredService<GameClientManager>();
+		var start = manager.StartGame(
+			PlayerNames.DefaultFive,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Witch,
+				MainRoleType.Hunter,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+		manager.ProcessInput(start.CreateResponse()).IsSuccess.Should().BeTrue();
+		var nightStart = manager.CurrentInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		manager.ProcessInput(nightStart.CreateResponse()).IsSuccess.Should().BeTrue();
+
+		var players = manager.CurrentSession!.GetPlayers().ToArray();
+		var werewolf = players[0];
+		var witch = players[1];
+		var hunter = players[2];
+		var concurrentVictim = players[3];
+		var selectedTarget = players[4];
+		var werewolfIdentification = manager.CurrentInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		manager.ProcessInput(werewolfIdentification.CreateResponse([werewolf.Id]))
+			.IsSuccess.Should().BeTrue();
+		var werewolfVictim = manager.CurrentInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		manager.ProcessInput(werewolfVictim.CreateResponse([hunter.Id]))
+			.IsSuccess.Should().BeTrue();
+		var werewolfSleep = manager.CurrentInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		manager.ProcessInput(werewolfSleep.CreateResponse()).IsSuccess.Should().BeTrue();
+
+		var witchIdentification = manager.CurrentInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		manager.ProcessInput(witchIdentification.CreateResponse([witch.Id]))
+			.IsSuccess.Should().BeTrue();
+		var healing = manager.CurrentInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		manager.ProcessInput(healing.CreateResponse([])).IsSuccess.Should().BeTrue();
+		var poison = manager.CurrentInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		manager.ProcessInput(poison.CreateResponse([concurrentVictim.Id]))
+			.IsSuccess.Should().BeTrue();
+		var witchSleep = manager.CurrentInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		manager.ProcessInput(witchSleep.CreateResponse()).IsSuccess.Should().BeTrue();
+		var finishNight = manager.CurrentInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		finishNight.Semantic.Should().Be(ModeratorInstructionSemantic.FinishNightActions);
+		manager.ProcessInput(finishNight.CreateResponse()).IsSuccess.Should().BeTrue();
+		var reveal = manager.CurrentInstruction
+			.Should().BeOfType<AssignRolesInstruction>().Subject;
+		reveal.PlayersForAssignment.Should().BeEquivalentTo(
+			[hunter.Id, concurrentVictim.Id]);
+		manager.ProcessInput(reveal.CreateResponse(new()
+		{
+			[hunter.Id] = MainRoleType.Hunter,
+			[concurrentVictim.Id] = MainRoleType.SimpleVillager
+		})).IsSuccess.Should().BeTrue();
+
+		var instruction = manager.CurrentInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		var responses = new List<ModeratorResponse>();
+		var livingRoster = manager.CurrentRoster
+			.Where(entry => !entry.IsDead)
+			.ToArray();
+
+		var cut = context.RenderModeratorComponent<InstructionRenderer>(parameters => parameters
+			.Add(component => component.Instruction, instruction)
+			.Add(component => component.Roster, manager.CurrentRoster)
+			.Add(component => component.OnResponse,
+				EventCallback.Factory.Create<ModeratorResponse>(this, responses.Add)));
+
+		instruction.Semantic.Should().Be(
+			ModeratorInstructionSemantic.SelectHunterFinalShotTarget);
+		instruction.CountConstraint.Should().Be(NumberRangeConstraint.Single);
+		instruction.EmptySelectionOptionLabel.Should().BeNull();
+		instruction.SelectablePlayerIds.Should().BeEquivalentTo(
+			livingRoster.Select(entry => entry.PlayerId));
+		manager.CurrentRoster.Single(entry => entry.PlayerId == hunter.Id)
+			.IsDead.Should().BeTrue();
+		manager.CurrentRoster.Single(entry => entry.PlayerId == concurrentVictim.Id)
+			.IsDead.Should().BeTrue();
+		cut.Find(PublicInstructionSelector).TextContent.Should()
+			.Contain(GameStrings.HunterFinalShotSelectionInstruction);
+
+		var options = cut.FindAll(PlayerOptionSelector);
+		options.Should().HaveCount(livingRoster.Length);
+		foreach (var legalTarget in livingRoster)
+		{
+			options.Should().ContainSingle(option =>
+				option.TextContent.Contains(
+					legalTarget.Name,
+					StringComparison.CurrentCulture));
+		}
+
+		options.Should().NotContain(option =>
+			option.TextContent.Contains(hunter.Name, StringComparison.CurrentCulture));
+		options.Should().NotContain(option =>
+			option.TextContent.Contains(
+				concurrentVictim.Name,
+				StringComparison.CurrentCulture));
+		options.Should().NotContain(option =>
+			option.TextContent.Contains(
+				GameStrings.DeclineOption,
+				StringComparison.CurrentCulture));
+
+		var actionZones = cut.FindAll(DashboardActionZoneSelector);
+		actionZones.Should().ContainSingle();
+		actionZones.Single().TextContent.Should()
+			.Contain(ClientStrings.SelectPlayers_SubmitButton);
+		actionZones.Single().QuerySelectorAll(HoldButtonSelector)
+			.Should().ContainSingle();
+		var holdButton = cut.Find(HoldButtonSelector);
+		holdButton.HasAttribute(Html.Attributes.Disabled).Should().BeTrue();
+
+		var selectedTargetOption = options.Single(option =>
+			option.TextContent.Contains(
+				selectedTarget.Name,
+				StringComparison.CurrentCulture));
+		selectedTargetOption.Click();
+		selectedTargetOption = cut.FindAll(PlayerOptionSelector).Single(option =>
+			option.TextContent.Contains(
+				selectedTarget.Name,
+				StringComparison.CurrentCulture));
+		AssertOptionSelected(selectedTargetOption, isSelected: true);
+		holdButton = cut.Find(HoldButtonSelector);
+		holdButton.HasAttribute(Html.Attributes.Disabled).Should().BeFalse();
+
+		await RenderedHoldButtonDriver.CompleteHoldAsync(cut, holdButton, timing);
+
+		responses.Should().ContainSingle();
+		responses.Single().Type.Should().Be(ExpectedInputType.PlayerSelection);
+		responses.Single().InstructionId.Should().Be(instruction.InstructionId);
+		responses.Single().SelectedPlayerIds.Should().Equal(selectedTarget.Id);
+	}
+
+	[Fact]
 	public async Task DayVoteInstruction_RendersExplicitDrawChoiceAndRequiresAChosenOutcome()
 	{
 		var timing = new ControlledHoldButtonTiming();

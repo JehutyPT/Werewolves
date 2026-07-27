@@ -19,7 +19,8 @@ public static class LegacyTerminalLobbyCacheCompatibility
 		MainRoleType.VillagerVillager,
 		MainRoleType.TwoSisters,
 		MainRoleType.ThreeBrothers,
-		MainRoleType.Witch
+		MainRoleType.Witch,
+		MainRoleType.Hunter
 	];
 
 	private static readonly ModeratorInstructionSemantic[] FrozenSafetyOnlySemantics =
@@ -28,7 +29,10 @@ public static class LegacyTerminalLobbyCacheCompatibility
 		ModeratorInstructionSemantic.RecognizeRoleHolders,
 		ModeratorInstructionSemantic.CommunicateAsRoleHolders,
 		ModeratorInstructionSemantic.SelectWitchHealingTarget,
-		ModeratorInstructionSemantic.SelectWitchPoisonTarget
+		ModeratorInstructionSemantic.SelectWitchPoisonTarget,
+		ModeratorInstructionSemantic.AnnounceEliminationCascadeVictims,
+		ModeratorInstructionSemantic.AssignEliminationCascadeRoles,
+		ModeratorInstructionSemantic.SelectHunterFinalShotTarget
 	];
 
 	public static bool TryProject(

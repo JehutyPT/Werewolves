@@ -105,6 +105,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 	}
 
 	[Theory]
+	[InlineData(MainRoleType.Hunter, 1)]
 	[InlineData(MainRoleType.Witch, 1)]
 	[InlineData(MainRoleType.TwoSisters, 2)]
 	[InlineData(MainRoleType.ThreeBrothers, 3)]
@@ -261,7 +262,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 
 		first.Should().BeOfType<CompletedSimulationRun>();
 		first.RunSeedMaterial.CompatibilityIdentity.Profile.Should()
-			.Be(new SimulatorProfileIdentity("safety-screening", "5"));
+			.Be(new SimulatorProfileIdentity("safety-screening", "6"));
 		replay.Should().Be(first);
 		MarkTestCompleted();
 	}
