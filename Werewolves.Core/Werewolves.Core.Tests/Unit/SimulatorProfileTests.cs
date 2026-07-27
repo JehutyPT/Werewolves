@@ -43,16 +43,22 @@ public class SimulatorProfileTests
 			.Append(ModeratorInstructionSemantic.AssignEliminationCascadeRoles)
 			.Append(ModeratorInstructionSemantic.SelectHunterFinalShotTarget)
 			.Append(ModeratorInstructionSemantic.EstablishStutteringJudgeSignal)
-			.Append(ModeratorInstructionSemantic.ObserveStutteringJudgeSignal);
+			.Append(ModeratorInstructionSemantic.ObserveStutteringJudgeSignal)
+			.Append(ModeratorInstructionSemantic.ObserveScapegoatHolderForTie)
+			.Append(ModeratorInstructionSemantic.RevealScapegoatForTie)
+			.Append(ModeratorInstructionSemantic.SelectScapegoatPermittedVoters)
+			.Append(ModeratorInstructionSemantic.AnnounceScapegoatPermittedVoters);
 		var legacy = SimulatorProfile.LegacyCore;
 		var safety = SimulatorCapability.SafetyScreening;
 		var probability = SimulatorCapability.FullProbability;
 
-		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "7"));
+		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "8"));
 		probability.Identity.Should().Be(new SimulatorProfileIdentity("full-probability", "1"));
 		legacy.Identity.Should().Be(new SimulatorProfileIdentity("core-simulator", "1"));
 		BaselineRandomDecisionStrategy.Identity.Should()
 			.Be(new DecisionStrategyIdentity("baseline-random", "1-splitmix64"));
+		BaselineRandomDecisionStrategy.SafetyScreeningIdentity.Should()
+			.Be(new DecisionStrategyIdentity("baseline-random", "2-splitmix64"));
 		safety.SupportedRoles.Should().Equal(
 			MainRoleType.SimpleWerewolf,
 			MainRoleType.Seer,
@@ -63,7 +69,8 @@ public class SimulatorProfileTests
 			MainRoleType.ThreeBrothers,
 			MainRoleType.Witch,
 			MainRoleType.Hunter,
-			MainRoleType.StutteringJudge);
+			MainRoleType.StutteringJudge,
+			MainRoleType.Scapegoat);
 		probability.SupportedRoles.Should().Equal(
 			MainRoleType.SimpleWerewolf,
 			MainRoleType.Seer,
@@ -90,7 +97,8 @@ public class SimulatorProfileTests
 			.NotBeSameAs(probability.HeadlessResponsePolicy.AdmittedSemantics);
 		safety.HeadlessResponsePolicy.AdmittedSemantics.Should()
 			.NotBeSameAs(probability.HeadlessResponsePolicy.AdmittedSemantics);
-		safety.HeadlessResponsePolicy.StrategyIdentity.Should().Be(BaselineRandomDecisionStrategy.Identity);
+		safety.HeadlessResponsePolicy.StrategyIdentity.Should()
+			.Be(BaselineRandomDecisionStrategy.SafetyScreeningIdentity);
 		probability.HeadlessResponsePolicy.StrategyIdentity.Should().Be(BaselineRandomDecisionStrategy.Identity);
 		legacy.HeadlessResponsePolicy.StrategyIdentity.Should().Be(BaselineRandomDecisionStrategy.Identity);
 		legacy.HeadlessResponsePolicy.AdmittedSemantics.Should()

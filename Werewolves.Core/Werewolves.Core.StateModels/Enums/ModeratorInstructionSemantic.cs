@@ -35,5 +35,9 @@ public enum ModeratorInstructionSemantic
 	SelectHunterFinalShotTarget = 27,
 	EstablishStutteringJudgeSignal = 28,
 	ObserveStutteringJudgeSignal = 29,
-	ConductDayVote = 30
+	ConductDayVote = 30,
+	ObserveScapegoatHolderForTie = 31,
+	RevealScapegoatForTie = 32,
+	SelectScapegoatPermittedVoters = 33,
+	AnnounceScapegoatPermittedVoters = 34
 }

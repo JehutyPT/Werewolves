@@ -88,7 +88,7 @@ public class RunSeedMaterialTests
 			new SimulationCompatibilityIdentity(
 				scenario.ToCanonical(),
 				SimulatorCapability.SafetyScreening.Identity),
-			BaselineRandomDecisionStrategy.Identity,
+			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
 			runNumber: 3);
 
 		var startState = SimulationStartStateDeriver.Derive(

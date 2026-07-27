@@ -60,7 +60,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 				new(MainRoleType.SimpleVillager, Faction.Villager)
 			],
 			headlessResponsePolicy: new HeadlessResponsePolicy(
-				BaselineRandomDecisionStrategy.Identity,
+				BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
 				SimulatorCapability.SafetyScreening.HeadlessResponsePolicy
 					.AdmittedSemantics
 					.Where(semantic => semantic != missingSemantic)));
@@ -91,7 +91,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 			run.Should().Be(new IncompleteSimulationRun(
 				new RunSeedMaterial(
 					identity,
-					BaselineRandomDecisionStrategy.Identity,
+					BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
 					runNumber)));
 			decorators.Should().HaveCount((int)runNumber + 1);
 			decorators[^1].ObservedSemantics.Should().Contain(missingSemantic);
@@ -108,6 +108,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 	[InlineData(MainRoleType.Hunter, 1)]
 	[InlineData(MainRoleType.Witch, 1)]
 	[InlineData(MainRoleType.StutteringJudge, 1)]
+	[InlineData(MainRoleType.Scapegoat, 1)]
 	[InlineData(MainRoleType.TwoSisters, 2)]
 	[InlineData(MainRoleType.ThreeBrothers, 3)]
 	public void ExecuteBatch_WithCardinalityRoleHolders_SafetyRepresentativeCompletesAllOneThousandAttempts(
@@ -310,7 +311,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 
 		first.Should().BeOfType<CompletedSimulationRun>();
 		first.RunSeedMaterial.CompatibilityIdentity.Profile.Should()
-			.Be(new SimulatorProfileIdentity("safety-screening", "7"));
+			.Be(new SimulatorProfileIdentity("safety-screening", "8"));
 		replay.Should().Be(first);
 		MarkTestCompleted();
 	}

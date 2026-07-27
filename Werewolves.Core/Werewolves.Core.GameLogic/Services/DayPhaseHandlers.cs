@@ -10,15 +10,8 @@ namespace Werewolves.Core.GameLogic.Services;
 
 internal static class DayPhaseHandlers
 {
-	internal static bool CanConductVote(GameSession session)
-	{
-		var alivePlayers = session.GetPlayers()
-			.WithHealth(PlayerHealth.Alive)
-			.ToList();
-
-		return alivePlayers.Count > 0 &&
-			alivePlayers.Any(player => player.State.HasVotingRight);
-	}
+    internal static bool CanConductVote(GameSession session)
+        => GameSessionQueries.GetEffectiveDayVoters(session).Count > 0;
 
     internal static ModeratorInstruction StartDebate(GameSession session, ModeratorResponse input)
         => new ConfirmationInstruction(
@@ -29,21 +22,43 @@ internal static class DayPhaseHandlers
     internal static ModeratorInstruction RequestNormalVoteOutcome(GameSession session, ModeratorResponse input)
     {
         var alivePlayers = session.GetPlayers().WithHealth(PlayerHealth.Alive);
+        var activeRestriction =
+            GameSessionQueries.GetActiveScapegoatVoterRestriction(session);
         var hasPendingJudgeObservation =
-	        GameSessionQueries.HasUnreportedStutteringJudgeSignalObservation(
-		        session);
+            GameSessionQueries.HasUnreportedStutteringJudgeSignalObservation(
+                session);
+        var privateInstruction = activeRestriction == null
+            ? GameStrings.VoteStartsModeratorInstruction
+            : GameStrings.ScapegoatEffectiveVotersInstruction.Format(
+                string.Join(
+                    Environment.NewLine,
+                    GameSessionQueries.GetEffectiveDayVoters(session)
+                        .Select(player => player.Name)));
 
         return new SelectPlayersInstruction(
-			ModeratorInstructionSemantic.RecordDayVote,
+            ModeratorInstructionSemantic.RecordDayVote,
             alivePlayers.ToIdSet(),
             NumberRangeConstraint.SingleOptional,
             publicAnnouncement: hasPendingJudgeObservation
-	            ? null
-	            : GameStrings.VoteStartsPublicInstruction,
-            privateInstruction: GameStrings.VoteStartsModeratorInstruction)
+                ? null
+                : GameStrings.VoteStartsPublicInstruction,
+            privateInstruction: privateInstruction)
         {
             EmptySelectionOptionLabel = GameStrings.DayVoteNoEliminationOption
         };
+    }
+
+    internal static void ExpireScapegoatVoterRestriction(
+        GameSession session,
+        ModeratorResponse input)
+    {
+        var restriction =
+            GameSessionQueries.GetActiveScapegoatVoterRestriction(session);
+        if (restriction != null)
+        {
+            session.ExpireScapegoatVoterRestriction(
+                restriction.ScopeId);
+        }
     }
 
     internal static Guid? RecordNormalVoteOutcome(GameSession session, ModeratorResponse input)

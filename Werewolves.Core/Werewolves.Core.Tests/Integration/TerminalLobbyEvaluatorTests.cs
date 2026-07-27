@@ -359,8 +359,64 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 			Enumerable.Range(0, TerminalLobbyEvaluator.ScreeningAttemptCount)
 				.Select(attempt => new RunSeedMaterial(
 					identity,
-					BaselineRandomDecisionStrategy.Identity,
+					BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
 					attempt)));
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void Evaluate_ScapegoatPolicyMissingHolderObservation_UsesFixedIncompleteRunAndSyntheticMixedBatch()
+	{
+		const long runNumber = 2;
+		var scenario = Scenario(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.Scapegoat,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager);
+		var capability = SafetyScreeningWithoutScapegoatHolderObservation();
+		var identity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			capability.Identity);
+		var executor = new SimulationExecutor();
+		var expectedMaterial = new RunSeedMaterial(
+			identity,
+			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
+			runNumber);
+		var run = executor.Execute(
+			scenario,
+			capability,
+			identity,
+			runNumber);
+		run.Should().Be(new IncompleteSimulationRun(expectedMaterial));
+
+		var calls = new List<int>();
+		var evaluator = new TerminalLobbyEvaluator(
+			(batchScenario, _, batchIdentity, count, _) =>
+			{
+				calls.Add(count);
+				var completed = Batch(
+					batchScenario,
+					batchIdentity,
+					count,
+					_ => (1, VictoryCheckWindow.Dawn));
+				var records = completed.Records.ToArray();
+				records[^1] = new IncompleteSimulationRun(
+					records[^1].RunSeedMaterial);
+				return new SimulationBatchSourceEvidence(
+					batchScenario.ToCanonical(),
+					batchIdentity.Profile,
+					BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
+					records);
+			});
+
+		var result = evaluator.Evaluate(
+			scenario,
+			capability,
+			LobbyEvaluationDepth.DegenerateScreeningOnly);
+
+		result.Should().BeOfType<CouldNotEvaluateLobbyEvaluation>();
+		calls.Should().Equal(TerminalLobbyEvaluator.ScreeningAttemptCount);
 		MarkTestCompleted();
 	}
 
@@ -507,10 +563,25 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 			new(MainRoleType.SimpleVillager, Faction.Villager)
 		],
 		headlessResponsePolicy: new HeadlessResponsePolicy(
-			BaselineRandomDecisionStrategy.Identity,
+			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
 			SimulatorCapability.SafetyScreening.HeadlessResponsePolicy.AdmittedSemantics
 				.Where(semantic =>
 					semantic != ModeratorInstructionSemantic.ObserveStutteringJudgeSignal)),
+		supportsActorSetupCards: false,
+		supportedRuleStates: [SimulationRuleState.Default]);
+
+	private static SimulatorCapability SafetyScreeningWithoutScapegoatHolderObservation() => new(
+		SimulatorCapability.SafetyScreening.Identity,
+		[
+			new(MainRoleType.SimpleWerewolf, Faction.Werewolf),
+			new(MainRoleType.Scapegoat, Faction.Villager),
+			new(MainRoleType.SimpleVillager, Faction.Villager)
+		],
+		headlessResponsePolicy: new HeadlessResponsePolicy(
+			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
+			SimulatorCapability.SafetyScreening.HeadlessResponsePolicy.AdmittedSemantics
+				.Where(semantic =>
+					semantic != ModeratorInstructionSemantic.ObserveScapegoatHolderForTie)),
 		supportsActorSetupCards: false,
 		supportedRuleStates: [SimulationRuleState.Default]);
 
@@ -520,16 +591,20 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 		int count,
 		Func<int, (int Turn, VictoryCheckWindow Window)> ending)
 	{
+		var strategyIdentity =
+			identity.Profile == SimulatorCapability.SafetyScreening.Identity
+				? BaselineRandomDecisionStrategy.SafetyScreeningIdentity
+				: BaselineRandomDecisionStrategy.Identity;
 		var records = Enumerable.Range(0, count).Select(run =>
 		{
 			var value = ending(run);
 			return (SimulationRun)new CompletedSimulationRun(
-				new RunSeedMaterial(identity, BaselineRandomDecisionStrategy.Identity, run),
+				new RunSeedMaterial(identity, strategyIdentity, run),
 				new SingleFactionGameResult(run % 2 == 0 ? Faction.Villager : Faction.Werewolf),
 				value.Turn,
 				value.Window);
 		});
 		return new SimulationBatchSourceEvidence(
-			scenario.ToCanonical(), identity.Profile, BaselineRandomDecisionStrategy.Identity, records);
+			scenario.ToCanonical(), identity.Profile, strategyIdentity, records);
 	}
 }

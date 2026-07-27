@@ -21,6 +21,18 @@ internal sealed record EliminationBatchCommitDecision(
 		new(eliminations, ConsequenceInstruction: null);
 }
 
+internal sealed record EliminationCascadePostCommitInteractionResult(
+	bool IsComplete,
+	ModeratorInstruction? Instruction)
+{
+	internal static EliminationCascadePostCommitInteractionResult Complete() =>
+		new(IsComplete: true, Instruction: null);
+
+	internal static EliminationCascadePostCommitInteractionResult NeedInput(
+		ModeratorInstruction instruction) =>
+		new(IsComplete: false, instruction);
+}
+
 /// <summary>
 /// Owns one resolution-scoped Elimination Cascade. The stage can pause for
 /// public Role Reveal or a Role-owned extension, but it never navigates.
@@ -34,6 +46,8 @@ internal sealed class EliminationCascadeStage : SubPhaseStage
 		AwaitingReveal,
 		Commit,
 		AwaitingCommitConsequence,
+		RequestPostCommitInteraction,
+		AwaitingPostCommitInteraction,
 		ForcedReactions,
 		InteractiveReactions
 	}
@@ -70,7 +84,9 @@ internal sealed class EliminationCascadeStage : SubPhaseStage
 
 		internal void Seed(
 			GameSession session,
-			ModeratorInstructionSemantic initialRevealSemantic)
+			ModeratorInstructionSemantic initialRevealSemantic,
+			Func<ModeratorInstruction, bool>
+				matchesPostCommitInteractionInstruction)
 		{
 			var initial = Normalize(seed.InitialEliminations);
 			foreach (var elimination in initial)
@@ -82,7 +98,8 @@ internal sealed class EliminationCascadeStage : SubPhaseStage
 				session,
 				initial,
 				isInitial: true,
-				initialRevealSemantic);
+				initialRevealSemantic,
+				matchesPostCommitInteractionInstruction);
 		}
 
 		internal bool TryTakeNextFrame(out BatchFrame? frame)
@@ -129,7 +146,9 @@ internal sealed class EliminationCascadeStage : SubPhaseStage
 		internal void QueueReactionBatch(
 			GameSession session,
 			IReadOnlyCollection<EliminationRequest> eliminations,
-			ModeratorInstructionSemantic initialRevealSemantic)
+			ModeratorInstructionSemantic initialRevealSemantic,
+			Func<ModeratorInstruction, bool>
+				matchesPostCommitInteractionInstruction)
 		{
 			if (eliminations.Count == 0)
 			{
@@ -140,26 +159,32 @@ internal sealed class EliminationCascadeStage : SubPhaseStage
 				session,
 				eliminations,
 				isInitial: false,
-				initialRevealSemantic);
+				initialRevealSemantic,
+				matchesPostCommitInteractionInstruction);
 		}
 
 		private void EnqueueFrame(
 			GameSession session,
 			IReadOnlyCollection<EliminationRequest> eliminations,
 			bool isInitial,
-			ModeratorInstructionSemantic initialRevealSemantic)
+			ModeratorInstructionSemantic initialRevealSemantic,
+			Func<ModeratorInstruction, bool>
+				matchesPostCommitInteractionInstruction)
 		{
 			_pendingBatches.Enqueue(CreateFrame(
 				session,
 				eliminations,
 				isInitial,
-				initialRevealSemantic));
+				initialRevealSemantic,
+				matchesPostCommitInteractionInstruction));
 		}
 
 		internal void RebuildCompletedPreRevealReactionEliminations(
 			GameSession session,
 			BatchFrame frame,
-			ModeratorInstructionSemantic initialRevealSemantic)
+			ModeratorInstructionSemantic initialRevealSemantic,
+			Func<ModeratorInstruction, bool>
+				matchesPostCommitInteractionInstruction)
 		{
 			if (frame.Progress == BatchProgress.PreReveal)
 			{
@@ -188,14 +213,17 @@ internal sealed class EliminationCascadeStage : SubPhaseStage
 			QueueReactionBatch(
 				session,
 				restoredEliminations,
-				initialRevealSemantic);
+				initialRevealSemantic,
+				matchesPostCommitInteractionInstruction);
 		}
 
 		private BatchFrame CreateFrame(
 			GameSession session,
 			IReadOnlyCollection<EliminationRequest> eliminations,
 			bool isInitial,
-			ModeratorInstructionSemantic initialRevealSemantic)
+			ModeratorInstructionSemantic initialRevealSemantic,
+			Func<ModeratorInstruction, bool>
+				matchesPostCommitInteractionInstruction)
 		{
 			var requestedFacts = eliminations
 				.Select(ToEliminationFact)
@@ -215,7 +243,10 @@ internal sealed class EliminationCascadeStage : SubPhaseStage
 				return new BatchFrame(
 					eliminations,
 					isInitial,
-					BatchProgress.AwaitingCommitConsequence)
+					session.PendingModeratorInstruction is { } pending &&
+					matchesPostCommitInteractionInstruction(pending)
+						? BatchProgress.AwaitingPostCommitInteraction
+						: BatchProgress.AwaitingCommitConsequence)
 				{
 					Eliminations = committedEliminations,
 					CommittedPlayerIds = committedEliminations
@@ -323,6 +354,14 @@ internal sealed class EliminationCascadeStage : SubPhaseStage
 		GameSession,
 		IReadOnlyCollection<EliminationRequest>,
 		ModeratorInstruction?> _createPostCommitInstruction;
+	private readonly Func<
+		GameSession,
+		IReadOnlyCollection<EliminationRequest>,
+		ModeratorResponse?,
+		EliminationCascadePostCommitInteractionResult>
+		_advancePostCommitInteraction;
+	private readonly Func<ModeratorInstruction, bool>
+		_matchesPostCommitInteractionInstruction;
 
 	private EliminationCascadeStage(
 		Enum id,
@@ -336,10 +375,18 @@ internal sealed class EliminationCascadeStage : SubPhaseStage
 			GameSession,
 			IReadOnlyCollection<EliminationRequest>,
 			EliminationBatchCommitDecision>? interceptBeforeCommit,
-		Func<
-			GameSession,
-			IReadOnlyCollection<EliminationRequest>,
-			ModeratorInstruction?>? createPostCommitInstruction)
+			Func<
+				GameSession,
+				IReadOnlyCollection<EliminationRequest>,
+				ModeratorInstruction?>? createPostCommitInstruction,
+			Func<
+				GameSession,
+				IReadOnlyCollection<EliminationRequest>,
+				ModeratorResponse?,
+				EliminationCascadePostCommitInteractionResult>?
+				advancePostCommitInteraction,
+			Func<ModeratorInstruction, bool>?
+				matchesPostCommitInteractionInstruction)
 		: base(id)
 	{
 		_createSeed = createSeed;
@@ -351,6 +398,12 @@ internal sealed class EliminationCascadeStage : SubPhaseStage
 				EliminationBatchCommitDecision.Proceed(eliminations));
 		_createPostCommitInstruction =
 			createPostCommitInstruction ?? ((_, _) => null);
+		_advancePostCommitInteraction =
+			advancePostCommitInteraction ??
+			((_, _, _) =>
+				EliminationCascadePostCommitInteractionResult.Complete());
+		_matchesPostCommitInteractionInstruction =
+			matchesPostCommitInteractionInstruction ?? (_ => false);
 	}
 
 	internal static SubPhaseStage CascadeStage<TEnum>(
@@ -365,18 +418,28 @@ internal sealed class EliminationCascadeStage : SubPhaseStage
 			GameSession,
 			IReadOnlyCollection<EliminationRequest>,
 			EliminationBatchCommitDecision>? interceptBeforeCommit = null,
-		Func<
-			GameSession,
-			IReadOnlyCollection<EliminationRequest>,
-			ModeratorInstruction?>? createPostCommitInstruction = null)
+			Func<
+				GameSession,
+				IReadOnlyCollection<EliminationRequest>,
+				ModeratorInstruction?>? createPostCommitInstruction = null,
+			Func<
+				GameSession,
+				IReadOnlyCollection<EliminationRequest>,
+				ModeratorResponse?,
+				EliminationCascadePostCommitInteractionResult>?
+				advancePostCommitInteraction = null,
+			Func<ModeratorInstruction, bool>?
+				matchesPostCommitInteractionInstruction = null)
 		where TEnum : struct, Enum =>
 		new EliminationCascadeStage(
 			id,
 			createSeed,
 			initialRevealSemantic,
-			createPublicRevealAnnouncement,
-			interceptBeforeCommit,
-			createPostCommitInstruction);
+				createPublicRevealAnnouncement,
+				interceptBeforeCommit,
+				createPostCommitInstruction,
+				advancePostCommitInteraction,
+				matchesPostCommitInteractionInstruction);
 
 	protected override PhaseHandlerResult InnerExecute(
 		GameSession session,
@@ -407,7 +470,8 @@ internal sealed class EliminationCascadeStage : SubPhaseStage
 				execution.RebuildCompletedPreRevealReactionEliminations(
 					session,
 					nextFrame!,
-					_initialRevealSemantic);
+					_initialRevealSemantic,
+					_matchesPostCommitInteractionInstruction);
 			}
 
 			var frame = execution.CurrentFrame!;
@@ -504,13 +568,8 @@ internal sealed class EliminationCascadeStage : SubPhaseStage
 							return PauseSubPhaseStage(postCommitInstruction);
 						}
 
-						if (committed.Count == 0)
-						{
-							execution.CurrentFrame = null;
-							continue;
-						}
-
-						frame.Progress = BatchProgress.ForcedReactions;
+						frame.Progress =
+							BatchProgress.RequestPostCommitInteraction;
 						continue;
 					}
 
@@ -521,8 +580,39 @@ internal sealed class EliminationCascadeStage : SubPhaseStage
 						continue;
 					}
 
-					frame.Progress = BatchProgress.ForcedReactions;
+					frame.Progress =
+						BatchProgress.RequestPostCommitInteraction;
 					continue;
+
+				case BatchProgress.RequestPostCommitInteraction:
+					{
+						var pause = HandlePostCommitInteraction(
+							session,
+							execution,
+							frame,
+							null);
+						if (pause != null)
+						{
+							return pause;
+						}
+
+						continue;
+					}
+
+				case BatchProgress.AwaitingPostCommitInteraction:
+					{
+						var pause = HandlePostCommitInteraction(
+							session,
+							execution,
+							frame,
+							input);
+						if (pause != null)
+						{
+							return pause;
+						}
+
+						continue;
+					}
 
 				case BatchProgress.ForcedReactions:
 					{
@@ -572,6 +662,44 @@ internal sealed class EliminationCascadeStage : SubPhaseStage
 						$"Unknown Elimination Cascade progress '{frame.Progress}'.");
 			}
 		}
+	}
+
+	private PhaseHandlerResult? HandlePostCommitInteraction(
+		GameSession session,
+		CascadeExecution execution,
+		BatchFrame frame,
+		ModeratorResponse? input)
+	{
+		var interaction = _advancePostCommitInteraction(
+			session,
+			frame.Eliminations,
+			input);
+		if (interaction.Instruction != null)
+		{
+			if (interaction.IsComplete)
+			{
+				throw new InvalidOperationException(
+					"A completed Elimination Cascade post-commit interaction returned an instruction.");
+			}
+
+			frame.Progress = BatchProgress.AwaitingPostCommitInteraction;
+			return PauseSubPhaseStage(interaction.Instruction);
+		}
+
+		if (!interaction.IsComplete)
+		{
+			throw new InvalidOperationException(
+				"An Elimination Cascade post-commit interaction paused without an instruction.");
+		}
+
+		if (frame.CommittedPlayerIds.Count == 0)
+		{
+			execution.CurrentFrame = null;
+			return null;
+		}
+
+		frame.Progress = BatchProgress.ForcedReactions;
+		return null;
 	}
 
 	private PhaseHandlerResult? AdvanceBoundary(
@@ -676,10 +804,11 @@ internal sealed class EliminationCascadeStage : SubPhaseStage
 			if (boundary == EliminationCascadeReactionBoundary.Interactive &&
 				scheduledEliminations.Count > 0)
 			{
-				execution.QueueReactionBatch(
-					session,
-					scheduledEliminations,
-					_initialRevealSemantic);
+					execution.QueueReactionBatch(
+						session,
+						scheduledEliminations,
+						_initialRevealSemantic,
+						_matchesPostCommitInteractionInstruction);
 				if (nextIndex < boundaryReactions.Length)
 				{
 					execution.QueueInteractive(frame);
@@ -693,7 +822,8 @@ internal sealed class EliminationCascadeStage : SubPhaseStage
 			execution.QueueReactionBatch(
 				session,
 				scheduledEliminations,
-				_initialRevealSemantic);
+				_initialRevealSemantic,
+				_matchesPostCommitInteractionInstruction);
 		}
 
 		return null;
@@ -792,7 +922,10 @@ internal sealed class EliminationCascadeStage : SubPhaseStage
 		}
 
 		var created = new CascadeExecution(Id, _createSeed(session));
-		created.Seed(session, _initialRevealSemantic);
+		created.Seed(
+			session,
+			_initialRevealSemantic,
+			_matchesPostCommitInteractionInstruction);
 		Executions.Add(session, created);
 		return created;
 	}

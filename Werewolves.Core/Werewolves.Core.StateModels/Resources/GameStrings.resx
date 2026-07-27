@@ -305,6 +305,30 @@
     <value>Bode Expiatório</value>
     <comment/>
   </data>
+  <data name="ScapegoatTieRevealAnnouncement" xml:space="preserve">
+    <value>O empate é substituído: revelem o Bode Expiatório.</value>
+    <comment/>
+  </data>
+  <data name="ScapegoatHolderObservationInstruction" xml:space="preserve">
+    <value>Regista nenhum jogador ou exatamente um jogador vivo que se revele publicamente como Bode Expiatório.</value>
+    <comment/>
+  </data>
+  <data name="ScapegoatNoRevealOption" xml:space="preserve">
+    <value>Ninguém se revela como Bode Expiatório</value>
+    <comment/>
+  </data>
+  <data name="ScapegoatPermittedVotersSelectionInstruction" xml:space="preserve">
+    <value>Seleciona pelo menos outro jogador vivo que poderá votar durante o próximo dia.</value>
+    <comment/>
+  </data>
+  <data name="ScapegoatPermittedVotersAnnouncement" xml:space="preserve">
+    <value>Apenas estes jogadores poderão votar no próximo dia: {0}</value>
+    <comment/>
+  </data>
+  <data name="ScapegoatEffectiveVotersInstruction" xml:space="preserve">
+    <value>Apenas estes jogadores vivos podem votar hoje, desde que mantenham o seu direito de voto. Todos os jogadores vivos continuam a ser alvos legais: {0}</value>
+    <comment/>
+  </data>
   <data name="VillageIdiotRoleName" xml:space="preserve">
     <value>Idiota da Aldeia</value>
     <comment/>
