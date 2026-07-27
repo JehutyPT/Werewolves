@@ -1,4 +1,5 @@
 using Werewolves.Core.GameLogic.Models.InternalMessages;
+using Werewolves.Core.GameLogic.RolePowers;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
@@ -48,7 +49,7 @@ public class GameTestBuilder
 {
     private List<string> _playerNames = [];
     private List<MainRoleType> _roles = [];
-    private readonly GameService _gameService = new();
+    private GameService _gameService = new();
     private Guid _gameId;
     private bool _gameStarted;
     private ModeratorInstruction? _lastInstruction = null;
@@ -64,6 +65,19 @@ public class GameTestBuilder
 	/// Creates a new test builder instance.
 	/// </summary>
 	public static GameTestBuilder Create(ITestOutputHelper? output = null) => new(output);
+
+	internal GameTestBuilder WithRolePowerAvailabilityPolicy(
+		IRolePowerAvailabilityPolicy policy)
+	{
+		if (_gameStarted)
+		{
+			throw new InvalidOperationException(
+				"The Role Power availability policy must be configured before starting the game.");
+		}
+
+		_gameService = new GameService(policy);
+		return this;
+	}
 
     /// <summary>
     /// Adds players with auto-generated names (Player1, Player2, etc.).

@@ -31,10 +31,28 @@ internal static class GameFlowManager
 
     private static readonly GameFlowManagerKey Key = new();
 
+    private enum AcceptedObservationInstructionShape
+    {
+        PlayerSelection,
+        Confirmation
+    }
+
     private readonly record struct AcceptedObservationContinuation(
         string ActiveSubPhaseStage,
         ListenerIdentifier Listener,
-        string ListenerState);
+        string ListenerState,
+        AcceptedObservationInstructionShape InstructionShape)
+    {
+        internal bool Matches(ModeratorInstruction? instruction)
+            => InstructionShape switch
+            {
+                AcceptedObservationInstructionShape.PlayerSelection =>
+                    instruction?.GetType() == typeof(SelectPlayersInstruction),
+                AcceptedObservationInstructionShape.Confirmation =>
+                    instruction?.GetType() == typeof(ConfirmationInstruction),
+                _ => false
+            };
+    }
 
     #region Static Flow Definitions
     internal static readonly Dictionary<GameHook, List<ListenerIdentifier>> HookListeners = new()
@@ -470,9 +488,11 @@ internal static class GameFlowManager
             return null;
         }
 
-        if (ResolveAcceptedObservationContinuation(
-                observedRole,
-                nextInstruction.Semantic) == null)
+        var continuation = ResolveAcceptedObservationContinuation(
+            observedRole,
+            nextInstruction.Semantic);
+        if (continuation == null ||
+            !continuation.Value.Matches(nextInstruction))
         {
             throw new InvalidOperationException(
                 $"Unsupported Role Identification continuation '{observedRole}:{nextInstruction.Semantic}'.");
@@ -511,6 +531,12 @@ internal static class GameFlowManager
                 $"Unsupported Role Identification continuation '{cursor.ObservedRole}:{cursor.NextInstructionSemantic}'.");
         }
 
+        if (!continuation.Value.Matches(session.PendingModeratorInstruction))
+        {
+            throw new InvalidOperationException(
+                "The Pending Instruction does not match the accepted Role Identification continuation.");
+        }
+
         session.RestoreTransientContinuation(
             Key,
             continuation.Value.ActiveSubPhaseStage,
@@ -537,17 +563,26 @@ internal static class GameFlowManager
                 new(
                     NightMainActionLoop.ToString(),
                     Listener(WildChild),
-                    StandardNightRoleState.AwaitingTargetSelection.ToString()),
+                    StandardNightRoleState.AwaitingTargetSelection.ToString(),
+                    AcceptedObservationInstructionShape.PlayerSelection),
             (SimpleWerewolf, ModeratorInstructionSemantic.SelectWerewolfVictim) =>
                 new(
                     NightMainActionLoop.ToString(),
                     Listener(SimpleWerewolf),
-                    StandardNightRoleState.AwaitingTargetSelection.ToString()),
+                    StandardNightRoleState.AwaitingTargetSelection.ToString(),
+                    AcceptedObservationInstructionShape.PlayerSelection),
             (Seer, ModeratorInstructionSemantic.SelectSeerTarget) =>
                 new(
                     NightMainActionLoop.ToString(),
                     Listener(Seer),
-                    ImmediateFeedbackNightRoleState.AwaitingTargetSelection.ToString()),
+                    ImmediateFeedbackNightRoleState.AwaitingTargetSelection.ToString(),
+                    AcceptedObservationInstructionShape.PlayerSelection),
+            (Seer, ModeratorInstructionSemantic.PutRoleToSleep) =>
+                new(
+                    NightMainActionLoop.ToString(),
+                    Listener(Seer),
+                    ImmediateFeedbackNightRoleState.AwaitingSleepConfirmation.ToString(),
+                    AcceptedObservationInstructionShape.Confirmation),
             _ => null
         };
 

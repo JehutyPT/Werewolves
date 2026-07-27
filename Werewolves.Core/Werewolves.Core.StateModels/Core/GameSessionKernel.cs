@@ -330,22 +330,25 @@ namespace Werewolves.Core.StateModels.Core
 					$"Unsupported accepted observation semantic '{cursor.AcceptedObservationSemantic}'.");
 			}
 
-			if (pendingModeratorInstruction is not
-					SelectPlayersInstruction pendingInstruction ||
-				pendingInstruction.InstructionId != cursor.NextInstructionId ||
-				pendingInstruction.RoleIdentification != null)
+			if (pendingModeratorInstruction == null ||
+				pendingModeratorInstruction.InstructionId != cursor.NextInstructionId ||
+				pendingModeratorInstruction is SelectPlayersInstruction
+				{
+					RoleIdentification: not null
+				})
 			{
 				throw new InvalidOperationException(
 					"The accepted observation recovery cursor does not match its Pending Instruction.");
 			}
 
-			if (pendingInstruction.Semantic != cursor.NextInstructionSemantic)
+			if (pendingModeratorInstruction.Semantic != cursor.NextInstructionSemantic)
 			{
 				throw new InvalidOperationException(
 					"The Pending Instruction Semantic does not match the accepted observation recovery cursor.");
 			}
 
-			var observedPlayerIds = pendingInstruction.AffectedPlayerIds?.ToHashSet();
+			var observedPlayerIds =
+				pendingModeratorInstruction.AffectedPlayerIds?.ToHashSet();
 			if (observedPlayerIds == null ||
 				!dto.GameHistoryLog.OfType<RoleIdentificationLogEntry>()
 					.Any(entry =>

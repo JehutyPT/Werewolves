@@ -8,6 +8,7 @@
 using System.Collections.Concurrent;
 using Werewolves.Core.GameLogic.Models;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
+using Werewolves.Core.GameLogic.RolePowers;
 using Werewolves.Core.GameLogic.Roles;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
@@ -25,8 +26,17 @@ public class GameService
 {
 	// Simple in-memory storage for game sessions. Replaceable with DI.
 	private readonly ConcurrentDictionary<Guid, GameSession> _sessions = new();
+	private readonly RoleAdmissionCatalog _roleAdmissions;
 
-	public GameService() {}
+	public GameService()
+		: this(AllowAllRolePowerAvailabilityPolicy.Instance) { }
+
+	internal GameService(IRolePowerAvailabilityPolicy rolePowerAvailabilityPolicy)
+	{
+		ArgumentNullException.ThrowIfNull(rolePowerAvailabilityPolicy);
+		_roleAdmissions = SupportedRoleCatalog.CreateAdmissions(
+			new RolePowerAvailabilityGateway(rolePowerAvailabilityPolicy));
+	}
 
     public LobbySetupMetadata GetLobbySetupMetadata()
     {
@@ -55,6 +65,7 @@ public class GameService
     public Guid RehydrateSession(string serializedSession)
     {
         var session = new GameSession(serializedSession);
+        SeedActiveRoleListeners(session);
         GameFlowManager.RestoreAcceptedObservationContinuation(session);
         _sessions.TryAdd(session.Id, session);
         return session.Id;
@@ -81,12 +92,22 @@ public class GameService
         
         // 3. Create the session with both the ID and instruction
         var session = new GameSession(gameId, initialInstruction, config, stateChangeObserver);
+        SeedActiveRoleListeners(session);
         
         // 4. Store the session
         _sessions.TryAdd(session.Id, session);
         
         // 5. Return the same instruction that was passed to the session
         return initialInstruction;
+    }
+
+    private void SeedActiveRoleListeners(GameSession session)
+    {
+	    foreach (var (listenerId, listenerFactory) in
+	             _roleAdmissions.ListenerFactories)
+	    {
+		    session.GetOrCreateListener(listenerId, listenerFactory);
+	    }
     }
 
     /// <summary>
