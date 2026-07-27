@@ -86,6 +86,9 @@ internal class GameSession : IGameSession
     internal AcceptedObservationRecoveryCursor? GetAcceptedObservationRecoveryCursor(
         IGameFlowManagerKey key) =>
         _gameSessionKernel.AcceptedObservationRecoveryCursor;
+    internal DomainRecoveryCursor? GetDomainRecoveryCursor(
+        IGameFlowManagerKey key) =>
+        _gameSessionKernel.DomainRecoveryCursor;
 	internal T? GetSubPhase<T>() where T : struct, Enum => _gameSessionKernel.PhaseStateCache.GetSubPhase<T>();
     internal string? GetSubPhaseId() => _gameSessionKernel.PhaseStateCache.GetSubPhaseId();
     internal ListenerIdentifier? GetCurrentListener() => _gameSessionKernel.PhaseStateCache.GetCurrentListener();
@@ -105,9 +108,11 @@ internal class GameSession : IGameSession
 
     internal void CaptureRecoveryBoundary(
         IGameFlowManagerKey key,
-        AcceptedObservationRecoveryCursor? acceptedObservationRecoveryCursor = null) =>
+        AcceptedObservationRecoveryCursor? acceptedObservationRecoveryCursor = null,
+        DomainRecoveryCursor? domainRecoveryCursor = null) =>
 		_gameSessionKernel.CaptureRecoveryBoundary(
-            acceptedObservationRecoveryCursor);
+            acceptedObservationRecoveryCursor,
+            domainRecoveryCursor);
 
     internal void RestoreTransientContinuation(
         IGameFlowManagerKey key,
@@ -220,6 +225,41 @@ internal class GameSession : IGameSession
     internal void PerformNightAction(NightActionType type, List<Guid> targetIds)
         => PerformNightActionCore(type, targetIds);
 
+	internal void CommitOneUseRolePowerNightAction(
+		NightActionType actionType,
+		Guid targetId,
+		OneUseRolePowerResourceIdentity resourceIdentity)
+	{
+		if (actionType == NightActionType.Unknown)
+		{
+			throw new ArgumentOutOfRangeException(nameof(actionType));
+		}
+
+		if (targetId == Guid.Empty)
+		{
+			throw new ArgumentException(
+				"One-use Role Power commits require a concrete target identity.");
+		}
+
+		resourceIdentity.EnforceValidity();
+		var entry = new OneUseRolePowerCommittedLogEntry
+		{
+			Timestamp = DateTimeOffset.UtcNow,
+			TurnNumber = TurnNumber,
+			CurrentPhase = _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+			ActionType = actionType,
+			TargetIds = [targetId],
+			ActingPlayerId = resourceIdentity.ActingPlayerId,
+			SourceRole = resourceIdentity.SourceRole,
+			SourcePowerIdentifier = resourceIdentity.SourcePowerIdentifier,
+			PowerInstanceId = resourceIdentity.PowerInstanceId,
+			PowerInstanceOrigin = resourceIdentity.PowerInstanceOrigin,
+			OneUseResourceId = resourceIdentity.OneUseResourceId
+		};
+
+		_gameSessionKernel.AddEntryAndUpdateState(entry);
+	}
+
     internal void EliminatePlayer(Guid playerId, EliminationReason reason)
     {
         var entry = new PlayerEliminatedLogEntry
@@ -313,6 +353,15 @@ internal class GameSession : IGameSession
     }
 
     internal void ApplyStatusEffect(StatusEffectTypes effectType, Guid playerId)
+        => SetStatusEffect(effectType, playerId, isActive: true);
+
+    internal void RemoveStatusEffect(StatusEffectTypes effectType, Guid playerId)
+        => SetStatusEffect(effectType, playerId, isActive: false);
+
+    private void SetStatusEffect(
+	    StatusEffectTypes effectType,
+	    Guid playerId,
+	    bool isActive)
     {
         var entry = new StatusEffectLogEntry
         {
@@ -320,7 +369,8 @@ internal class GameSession : IGameSession
             TurnNumber = TurnNumber,
             CurrentPhase = _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
             PlayerId = playerId,
-            EffectType = effectType
+            EffectType = effectType,
+            IsActive = isActive
         };
         _gameSessionKernel.AddEntryAndUpdateState(entry);
 	}

@@ -20,15 +20,31 @@ public sealed class RoleKnowledgeFlowBunitTests
 {
 	private static string HoldButtonSelector =>
 		Html.Selectors.ButtonWithClass(ClientTestReferences.Css.Classes.HoldButton);
+	private static string PlayerOptionSelector =>
+		Html.Selectors.ElementWithRole(Html.Elements.ListItem, Html.Roles.Option);
+	private static string PublicInstructionSelector =>
+		$".{ClientTestReferences.Css.Classes.InstructionAnnouncement}";
+	private static string PrivateInstructionSelector =>
+		$".{ClientTestReferences.Css.Classes.InstructionPrivate}";
 
-	[Fact]
-	public void VillagerVillagerLobby_UsesCatalogMetadataAsSingleOptionalPortugueseToggle()
+	[Theory]
+	[InlineData(MainRoleType.VillagerVillager)]
+	[InlineData(MainRoleType.Witch)]
+	public void SingleOptionalRoleLobby_UsesCatalogMetadataAsPortugueseToggle(
+		MainRoleType role)
 	{
 		using var context = new ModeratorComponentTestContext();
 		var lobby = context.Services.GetRequiredService<LobbySetupState>();
-		var roleInfo = lobby.GetRoleInfo(MainRoleType.VillagerVillager);
+		var roleInfo = lobby.GetRoleInfo(role);
+		var expectedDisplayName = role switch
+		{
+			MainRoleType.VillagerVillager => GameStrings.VillagerVillagerRoleName,
+			MainRoleType.Witch => GameStrings.WitchRoleName,
+			_ => throw new InvalidOperationException(
+				$"Unexpected Single-Optional Role {role}.")
+		};
 
-		roleInfo.DisplayName.Should().Be(GameStrings.VillagerVillagerRoleName);
+		roleInfo.DisplayName.Should().Be(expectedDisplayName);
 		roleInfo.Affordance.Should().Be(RoleAffordance.Toggle);
 		roleInfo.BatchSize.Should().Be(1);
 
@@ -39,14 +55,14 @@ public sealed class RoleKnowledgeFlowBunitTests
 
 		toggle.Click();
 
-		lobby.GetRoleCount(MainRoleType.VillagerVillager).Should().Be(1);
+		lobby.GetRoleCount(role).Should().Be(1);
 		toggle = cut.FindAll(Html.Selectors.Button)
 			.Single(button => button.GetAttribute(Html.Attributes.AriaLabel) == roleInfo.DisplayName);
 		toggle.GetAttribute(Html.Attributes.AriaPressed).Should().Be(Html.AriaValues.True);
 
 		toggle.Click();
 
-		lobby.GetRoleCount(MainRoleType.VillagerVillager).Should().Be(0);
+		lobby.GetRoleCount(role).Should().Be(0);
 	}
 
 	[Theory]
@@ -189,5 +205,125 @@ public sealed class RoleKnowledgeFlowBunitTests
 		var revealedLabel = cut.FindAll("span")
 			.Single(element => element.TextContent.Trim() == ClientStrings.Dashboard_RevealedStatLabel);
 		revealedLabel.ParentElement!.QuerySelector("strong")!.TextContent.Trim().Should().Be("0");
+	}
+
+	[Fact]
+	public async Task WitchNightFlow_RendersPublicWakePrivatePotionsExplicitDeclineAndPublicSleep()
+	{
+		var timing = new ControlledHoldButtonTiming();
+		using var context = new ModeratorComponentTestContext();
+		context.Services.AddSingleton<IHoldButtonTiming>(timing);
+		var manager = context.Services.GetRequiredService<GameClientManager>();
+		var start = manager.StartGame(
+			PlayerNames.DefaultFive,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Witch,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+		manager.ProcessInput(start.CreateResponse()).IsSuccess.Should().BeTrue();
+		var startNight = manager.CurrentInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		manager.ProcessInput(startNight.CreateResponse()).IsSuccess.Should().BeTrue();
+
+		var players = manager.CurrentSession!.GetPlayers().ToArray();
+		var werewolf = players[0];
+		var witch = players[1];
+		var attackedPlayer = players[2];
+		var werewolfIdentification = manager.CurrentInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		werewolfIdentification.RoleIdentification.Should().Be(MainRoleType.SimpleWerewolf);
+		manager.ProcessInput(werewolfIdentification.CreateResponse([werewolf.Id]))
+			.IsSuccess.Should().BeTrue();
+		var werewolfVictim = manager.CurrentInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		werewolfVictim.Semantic.Should().Be(ModeratorInstructionSemantic.SelectWerewolfVictim);
+		manager.ProcessInput(werewolfVictim.CreateResponse([attackedPlayer.Id]))
+			.IsSuccess.Should().BeTrue();
+		var werewolfSleep = manager.CurrentInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		manager.ProcessInput(werewolfSleep.CreateResponse()).IsSuccess.Should().BeTrue();
+
+		var witchIdentification = manager.CurrentInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		witchIdentification.RoleIdentification.Should().Be(MainRoleType.Witch);
+		witchIdentification.PublicAnnouncement.Should()
+			.Be(GameStrings.RoleWakesUp.Format(GameStrings.WitchRoleName));
+		var cut = context.RenderModeratorComponent<DashboardPage>();
+		cut.Find(PublicInstructionSelector).TextContent.Should()
+			.Contain(GameStrings.RoleWakesUp.Format(GameStrings.WitchRoleName));
+		var witchOption = cut.FindAll(PlayerOptionSelector)
+			.Single(option => option.TextContent.Contains(
+				witch.Name,
+				StringComparison.CurrentCulture));
+		witchOption.Click();
+		await RenderedHoldButtonDriver.CompleteHoldAsync(
+			cut,
+			cut.Find(HoldButtonSelector),
+			timing);
+
+		var healing = manager.CurrentInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		healing.Semantic.Should().Be(
+			ModeratorInstructionSemantic.SelectWitchHealingTarget);
+		healing.EmptySelectionOptionLabel.Should().Be(GameStrings.DeclineOption);
+		cut.FindAll(PublicInstructionSelector).Should().BeEmpty();
+		cut.Find(PrivateInstructionSelector).TextContent.Should()
+			.Contain(attackedPlayer.Name);
+		var healingOptions = cut.FindAll(PlayerOptionSelector);
+		healingOptions.Should().HaveCount(2);
+		healingOptions.Should().ContainSingle(option =>
+			option.TextContent.Contains(
+				GameStrings.DeclineOption,
+				StringComparison.CurrentCulture));
+		var healingTarget = healingOptions.Single(option =>
+			option.TextContent.Contains(
+				attackedPlayer.Name,
+				StringComparison.CurrentCulture));
+		healingTarget.Click();
+		await RenderedHoldButtonDriver.CompleteHoldAsync(
+			cut,
+			cut.Find(HoldButtonSelector),
+			timing);
+
+		var poison = manager.CurrentInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		poison.Semantic.Should().Be(
+			ModeratorInstructionSemantic.SelectWitchPoisonTarget);
+		poison.EmptySelectionOptionLabel.Should().Be(GameStrings.DeclineOption);
+		cut.FindAll(PublicInstructionSelector).Should().BeEmpty();
+		cut.Find(PrivateInstructionSelector).TextContent.Should()
+			.Contain(GameStrings.WitchPoisonSelectionInstruction);
+		var poisonOptions = cut.FindAll(PlayerOptionSelector);
+		poisonOptions.Should().HaveCount(4);
+		poisonOptions.Should().NotContain(option =>
+			option.TextContent.Contains(
+				witch.Name,
+				StringComparison.CurrentCulture));
+		poisonOptions.Should().NotContain(option =>
+			option.TextContent.Contains(
+				attackedPlayer.Name,
+				StringComparison.CurrentCulture));
+		var declineOption = poisonOptions.Single(option =>
+			option.TextContent.Contains(
+				GameStrings.DeclineOption,
+				StringComparison.CurrentCulture));
+		declineOption.Click();
+		await RenderedHoldButtonDriver.CompleteHoldAsync(
+			cut,
+			cut.Find(HoldButtonSelector),
+			timing);
+
+		var sleep = manager.CurrentInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		sleep.Semantic.Should().Be(ModeratorInstructionSemantic.PutRoleToSleep);
+		sleep.PublicAnnouncement.Should()
+			.Be(GameStrings.RoleGoesToSleepSingle.Format(GameStrings.WitchRoleName));
+		cut.Find(PublicInstructionSelector).TextContent.Should()
+			.Contain(GameStrings.RoleGoesToSleepSingle.Format(GameStrings.WitchRoleName));
+		cut.FindAll(PrivateInstructionSelector).Should().BeEmpty();
+		cut.FindAll(PlayerOptionSelector).Should().BeEmpty();
 	}
 }

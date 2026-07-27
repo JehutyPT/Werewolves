@@ -66,7 +66,7 @@ public class GameService
     {
         var session = new GameSession(serializedSession);
         SeedActiveRoleListeners(session);
-        GameFlowManager.RestoreAcceptedObservationContinuation(session);
+        GameFlowManager.RestoreDurableContinuation(session);
         _sessions.TryAdd(session.Id, session);
         return session.Id;
 	}

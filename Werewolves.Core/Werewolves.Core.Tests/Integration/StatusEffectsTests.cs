@@ -188,6 +188,37 @@ public class StatusEffectsTests : DiagnosticTestBase
         MarkTestCompleted();
     }
 
+    [Fact]
+    public void StatusEffectLogEntry_InactiveOperation_RemovesEffectFromPlayerState()
+    {
+        var playerId = Guid.NewGuid();
+        var mutator = new TestSessionMutator([playerId]);
+        new StatusEffectLogEntry
+        {
+            Timestamp = DateTimeOffset.UtcNow,
+            TurnNumber = 1,
+            CurrentPhase = GamePhase.Night,
+            EffectType = StatusEffectTypes.ElderProtectionLost,
+            PlayerId = playerId
+        }.Apply(mutator);
+        var removal = new StatusEffectLogEntry
+        {
+            Timestamp = DateTimeOffset.UtcNow,
+            TurnNumber = 1,
+            CurrentPhase = GamePhase.Night,
+            EffectType = StatusEffectTypes.ElderProtectionLost,
+            PlayerId = playerId,
+            IsActive = false
+        };
+
+        removal.Apply(mutator);
+
+        mutator.GetDerivedStates()[playerId]
+            .HasStatusEffect(StatusEffectTypes.ElderProtectionLost)
+            .Should().BeFalse();
+        MarkTestCompleted();
+    }
+
     /// <summary>
     /// SE-011: StatusEffectLogEntry with LycanthropyInfection applies infection.
     /// </summary>

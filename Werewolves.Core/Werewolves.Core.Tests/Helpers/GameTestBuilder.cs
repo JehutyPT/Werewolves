@@ -79,6 +79,10 @@ public class GameTestBuilder
 		return this;
 	}
 
+	internal GameTestBuilder WithOptionalRolePowerAvailabilityPolicy(
+		IRolePowerAvailabilityPolicy? policy) =>
+		policy == null ? this : WithRolePowerAvailabilityPolicy(policy);
+
     /// <summary>
     /// Adds players with auto-generated names (Player1, Player2, etc.).
     /// </summary>
@@ -189,6 +193,93 @@ public class GameTestBuilder
 		GetMutableSessionForArrangement().AssignRole(
 			brotherId,
 			MainRoleType.SimpleVillager);
+		return this;
+	}
+
+	internal GameTestBuilder ArrangeKnownRole(
+		Guid playerId,
+		MainRoleType role)
+	{
+		EnsureGameStarted();
+		var session = GetMutableSessionForArrangement();
+		session.AssignRole(playerId, role);
+		session.IdentifyRole([playerId], role);
+		return this;
+	}
+
+	internal GameTestBuilder ArrangeEliminatedPlayer(
+		Guid playerId,
+		EliminationReason reason = EliminationReason.EventElimination)
+	{
+		EnsureGameStarted();
+		GetMutableSessionForArrangement().EliminatePlayer(playerId, reason);
+		return this;
+	}
+
+	internal GameTestBuilder ArrangeCommittedWitchPotion(
+		Guid witchId,
+		Guid resourceId,
+		NightActionType actionType,
+		Guid targetId,
+		Guid? powerInstanceId = null,
+		RolePowerInstanceOrigin powerInstanceOrigin =
+			RolePowerInstanceOrigin.Native,
+		Guid? actingPlayerId = null,
+		MainRoleType sourceRole = MainRoleType.Witch,
+		string sourcePowerIdentifier = "witch-potions")
+	{
+		var identity = new OneUseRolePowerResourceIdentity(
+			actingPlayerId ?? witchId,
+			sourceRole,
+			sourcePowerIdentifier,
+			powerInstanceId ?? witchId,
+			powerInstanceOrigin,
+			resourceId);
+		return ArrangeCommittedOneUseRolePower(
+			identity,
+			actionType,
+			targetId);
+	}
+
+	internal GameTestBuilder ArrangeCommittedOneUseRolePower(
+		OneUseRolePowerResourceIdentity resourceIdentity,
+		NightActionType actionType,
+		Guid targetId)
+	{
+		EnsureGameStarted();
+		GetMutableSessionForArrangement().CommitOneUseRolePowerNightAction(
+			actionType,
+			targetId,
+			resourceIdentity);
+		return this;
+	}
+
+	internal GameTestBuilder ArrangeCurrentRole(
+		Guid playerId,
+		MainRoleType role)
+	{
+		EnsureGameStarted();
+		GetMutableSessionForArrangement().AssignRole(playerId, role);
+		return this;
+	}
+
+	internal GameTestBuilder ArrangeStatusEffect(
+		Guid playerId,
+		StatusEffectTypes effect)
+	{
+		EnsureGameStarted();
+		GetMutableSessionForArrangement().ApplyStatusEffect(effect, playerId);
+		return this;
+	}
+
+	internal GameTestBuilder ArrangeNightAction(
+		NightActionType actionType,
+		Guid targetId)
+	{
+		EnsureGameStarted();
+		GetMutableSessionForArrangement().PerformNightAction(
+			actionType,
+			targetId);
 		return this;
 	}
 

@@ -43,12 +43,14 @@ public class RuntimeFlowDefinitionTests
     }
 
     [Fact]
-    public void NightInformationActions_ResolveSeerBeforeWitch()
+    public void NightInformationActions_ResolveSeerThenWitchThenGypsy()
     {
         var listeners = GameFlowManager.HookListeners[NightMainActionLoop];
 
 		ListenerIndex(listeners, Seer)
 			.Should().BeLessThan(ListenerIndex(listeners, Witch));
+		ListenerIndex(listeners, Witch)
+			.Should().BeLessThan(ListenerIndex(listeners, Gypsy));
     }
 
     [Theory]

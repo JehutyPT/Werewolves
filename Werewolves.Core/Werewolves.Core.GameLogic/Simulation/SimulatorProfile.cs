@@ -140,7 +140,8 @@ public sealed class SimulatorCapability : SimulatorProfile
 		new(MainRoleType.SimpleVillager, Faction.Villager),
 		new(MainRoleType.VillagerVillager, Faction.Villager),
 		new(MainRoleType.TwoSisters, Faction.Villager),
-		new(MainRoleType.ThreeBrothers, Faction.Villager)
+		new(MainRoleType.ThreeBrothers, Faction.Villager),
+		new(MainRoleType.Witch, Faction.Villager)
 	];
 
 	private static readonly SimulatorProfileRoleDescriptor[] FullProbabilityRoleDescriptors =
@@ -158,7 +159,7 @@ public sealed class SimulatorCapability : SimulatorProfile
 		SimulatorCapabilityRegistry.Production.FullProbability;
 
 	internal static SimulatorCapability CreateSafetyScreening() => new(
-		new SimulatorProfileIdentity("safety-screening", "4"),
+		new SimulatorProfileIdentity("safety-screening", "5"),
 		SafetyScreeningRoleDescriptors,
 		headlessResponsePolicy: new HeadlessResponsePolicy(
 			BaselineRandomDecisionStrategy.Identity,
@@ -183,7 +184,9 @@ public sealed class SimulatorCapability : SimulatorProfile
 				ModeratorInstructionSemantic.AnnounceDayElimination,
 				ModeratorInstructionSemantic.ObserveVillagerVillagerFromDeal,
 				ModeratorInstructionSemantic.RecognizeRoleHolders,
-				ModeratorInstructionSemantic.CommunicateAsRoleHolders
+				ModeratorInstructionSemantic.CommunicateAsRoleHolders,
+				ModeratorInstructionSemantic.SelectWitchHealingTarget,
+				ModeratorInstructionSemantic.SelectWitchPoisonTarget
 			]),
 		supportsActorSetupCards: false,
 		supportedRuleStates: [SimulationRuleState.Default]);

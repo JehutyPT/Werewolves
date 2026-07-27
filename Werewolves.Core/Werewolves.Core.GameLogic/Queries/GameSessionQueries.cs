@@ -58,6 +58,37 @@ internal static class GameSessionQueries
         return targetIds.Select(session.GetPlayer);
     }
 
+    internal static IReadOnlyList<NightActionLogEntry> GetOrderedNightActionsThisNight(
+        IGameSession session,
+        IReadOnlyCollection<NightActionType> actionTypes) =>
+        FindLogEntries<NightActionLogEntry>(
+                session,
+                NumberRangeConstraint.Exact(session.TurnNumber),
+                GamePhase.Night,
+                log => actionTypes.Contains(log.ActionType))
+            .ToArray();
+
+    internal static IReadOnlyList<IPlayer> GetPhysicalAttackTargetsThisNight(
+        IGameSession session)
+    {
+        var physicalAttackTypes = new HashSet<NightActionType>
+        {
+            NightActionType.WerewolfVictimSelection,
+            NightActionType.WhiteWerewolfVictimSelection,
+            NightActionType.BigBadWolfVictimSelection
+        };
+
+        return FindLogEntries<NightActionLogEntry>(
+                session,
+                NumberRangeConstraint.Exact(session.TurnNumber),
+                GamePhase.Night,
+                log => physicalAttackTypes.Contains(log.ActionType))
+            .SelectMany(log => log.TargetIds ?? [])
+            .Distinct()
+            .Select(session.GetPlayer)
+            .ToArray();
+    }
+
     internal static bool WasDayAbilityTriggeredThisTurn(IGameSession session, DayPowerType powerType)
         => FindLogEntries<DayActionLogEntry>(
                 session,
@@ -168,34 +199,6 @@ internal static class GameSessionQueries
         }
 
         return voteEntry.ReportedOutcomePlayerId;
-    }
-
-    internal static Dictionary<Guid, HashSet<NightActionType>> GetNightActionMap(
-        IGameSession session,
-        IEnumerable<NightActionType> actionTypes)
-    {
-        var map = new Dictionary<Guid, HashSet<NightActionType>>();
-
-        foreach (var actionType in actionTypes)
-        {
-            var targets = GetPlayersTargetedLastNight(
-                session,
-                actionType,
-                NumberRangeConstraint.SingleOptional);
-
-            foreach (var target in targets)
-            {
-                if (!map.TryGetValue(target.Id, out var incomingActions))
-                {
-                    incomingActions = [];
-                    map[target.Id] = incomingActions;
-                }
-
-                incomingActions.Add(actionType);
-            }
-        }
-
-        return map;
     }
 
     private static IEnumerable<MainRoleType> GetRolesInPlay(IGameSession session)

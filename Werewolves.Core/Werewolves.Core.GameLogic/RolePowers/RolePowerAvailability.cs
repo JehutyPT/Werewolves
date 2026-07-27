@@ -13,13 +13,6 @@ internal enum RolePowerCategory
 	Communication,
 }
 
-internal enum RolePowerInstanceOrigin
-{
-	Native,
-	Swapped,
-	Borrowed,
-}
-
 internal readonly record struct RolePowerIdentifier
 {
 	internal RolePowerIdentifier(string value)

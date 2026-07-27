@@ -27,5 +27,7 @@ public enum ModeratorInstructionSemantic
 	GameSessionNotFound = 19,
 	ObserveVillagerVillagerFromDeal = 20,
 	RecognizeRoleHolders = 21,
-	CommunicateAsRoleHolders = 22
+	CommunicateAsRoleHolders = 22,
+	SelectWitchHealingTarget = 23,
+	SelectWitchPoisonTarget = 24
 }

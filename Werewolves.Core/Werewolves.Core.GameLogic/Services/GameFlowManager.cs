@@ -4,9 +4,11 @@ using Werewolves.Core.GameLogic.Models.InternalMessages;
 using Werewolves.Core.GameLogic.Models.StateMachine;
 using Werewolves.Core.GameLogic.Queries;
 using Werewolves.Core.GameLogic.Roles;
+using Werewolves.Core.GameLogic.Roles.MainRoles;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
+using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Resources;
@@ -397,6 +399,7 @@ internal static class GameFlowManager
     {
         var startingPhase = session.GetCurrentPhase();
         var startingInstruction = session.PendingModeratorInstruction;
+        var startingLogCount = session.GameHistoryLog.Count();
         ModeratorInstruction? nextInstructionToSend = null;
 
         while (nextInstructionToSend == null)
@@ -429,13 +432,23 @@ internal static class GameFlowManager
                 startingPhase,
                 endingPhase,
                 startingInstruction,
-                nextInstructionToSend))
+                nextInstructionToSend,
+                startingLogCount))
 		{
+            var domainRecoveryCursor = CreateDomainRecoveryCursor(
+                session,
+                startingInstruction,
+                input,
+                nextInstructionToSend,
+                startingLogCount);
 			session.CaptureRecoveryBoundary(
                 Key,
-                CreateAcceptedObservationRecoveryCursor(
-                    startingInstruction,
-                    nextInstructionToSend));
+                domainRecoveryCursor == null
+                    ? CreateAcceptedObservationRecoveryCursor(
+                        startingInstruction,
+                        nextInstructionToSend)
+                    : null,
+                domainRecoveryCursor);
 		}
 
 		return ProcessResult.Success(nextInstructionToSend);
@@ -446,7 +459,8 @@ internal static class GameFlowManager
         GamePhase oldPhase,
         GamePhase newPhase,
         ModeratorInstruction? startingInstruction,
-        ModeratorInstruction nextInstructionToSend)
+        ModeratorInstruction nextInstructionToSend,
+        int startingLogCount)
     {
         if (oldPhase != newPhase)
         {
@@ -458,6 +472,11 @@ internal static class GameFlowManager
             return true;
         }
 
+        if (HasNewOneUseRolePowerCommit(session, startingLogCount))
+        {
+            return true;
+        }
+
         return newPhase == GamePhase.Night &&
                !session.GameHistoryLog.Any() &&
                nextInstructionToSend is ConfirmationInstruction
@@ -465,6 +484,65 @@ internal static class GameFlowManager
                    PublicAnnouncement: var announcement
                } &&
                announcement == GameStrings.NightStartsPrompt;
+    }
+
+    private static bool HasNewOneUseRolePowerCommit(
+        GameSession session,
+        int startingLogCount) =>
+        session.GameHistoryLog
+            .Skip(startingLogCount)
+            .OfType<OneUseRolePowerCommittedLogEntry>()
+            .Any();
+
+    private static DomainRecoveryCursor? CreateDomainRecoveryCursor(
+        GameSession session,
+        ModeratorInstruction? startingInstruction,
+        ModeratorResponse input,
+        ModeratorInstruction nextInstruction,
+        int startingLogCount)
+    {
+        var newCommittedEntries = session.GameHistoryLog
+            .Skip(startingLogCount)
+            .OfType<OneUseRolePowerCommittedLogEntry>()
+            .ToArray();
+        if (newCommittedEntries.Length == 0)
+        {
+            return null;
+        }
+
+        var selectedPlayerIds = input.SelectedPlayerIds;
+        if (startingInstruction is not SelectPlayersInstruction ||
+            selectedPlayerIds is not { Count: 1 })
+        {
+            throw new InvalidOperationException(
+                "A One-Use Resource commit must correlate to one accepted Player selection.");
+        }
+
+        var committedTargetId = selectedPlayerIds.Single();
+        if (newCommittedEntries is not [var committedEntry] ||
+            committedEntry.TargetIds is not { Count: 1 } ||
+            committedEntry.TargetIds[0] != committedTargetId)
+        {
+            throw new InvalidOperationException(
+                "The accepted One-Use Resource selection did not produce its atomic domain commit.");
+        }
+
+        var resourceIdentity = committedEntry.ResourceIdentity;
+        return new DomainRecoveryCursor
+        {
+            Version = DomainRecoveryCursor.CurrentVersion,
+            Kind = DomainRecoveryCursorKind.OneUseRolePowerCommit,
+            SourceRole = resourceIdentity.SourceRole,
+            CommittedActionType = committedEntry.ActionType,
+            ActingPlayerId = resourceIdentity.ActingPlayerId,
+            SourcePowerIdentifier = resourceIdentity.SourcePowerIdentifier,
+            PowerInstanceId = resourceIdentity.PowerInstanceId,
+            PowerInstanceOrigin = resourceIdentity.PowerInstanceOrigin,
+            OneUseResourceId = resourceIdentity.OneUseResourceId,
+            CommittedTargetId = committedTargetId,
+            NextInstructionSemantic = nextInstruction.Semantic,
+            NextInstructionId = nextInstruction.InstructionId
+        };
     }
 
     private static bool IsAcceptedObservation(ModeratorInstruction? instruction)
@@ -510,9 +588,16 @@ internal static class GameFlowManager
         };
     }
 
-    internal static void RestoreAcceptedObservationContinuation(
+    internal static void RestoreDurableContinuation(
         GameSession session)
     {
+        var domainCursor = session.GetDomainRecoveryCursor(Key);
+        if (domainCursor != null)
+        {
+            RestoreDomainContinuation(session, domainCursor);
+            return;
+        }
+
         var cursor = session.GetAcceptedObservationRecoveryCursor(Key);
         if (cursor == null)
         {
@@ -545,6 +630,39 @@ internal static class GameFlowManager
             continuation.Value.ListenerState);
     }
 
+    private static void RestoreDomainContinuation(
+        GameSession session,
+        DomainRecoveryCursor cursor)
+    {
+        var resourceIdentity = cursor.ResourceIdentity
+            ?? throw new InvalidOperationException(
+                "The domain recovery cursor is structurally invalid.");
+        var continuation = ResolveDomainContinuation(
+            resourceIdentity.SourceRole,
+            cursor.CommittedActionType,
+            cursor.NextInstructionSemantic);
+        if (cursor.Kind != DomainRecoveryCursorKind.OneUseRolePowerCommit ||
+            session.GetCurrentPhase() != GamePhase.Night ||
+            !IsNightStartSubPhase(session) ||
+            continuation == null)
+        {
+            throw new InvalidOperationException(
+                $"Unsupported domain continuation '{resourceIdentity.SourceRole}:{cursor.CommittedActionType}:{cursor.NextInstructionSemantic}'.");
+        }
+
+        if (!continuation.Value.Matches(session.PendingModeratorInstruction))
+        {
+            throw new InvalidOperationException(
+                "The Pending Instruction does not match the committed domain continuation.");
+        }
+
+        session.RestoreTransientContinuation(
+            Key,
+            continuation.Value.ActiveSubPhaseStage,
+            continuation.Value.Listener,
+            continuation.Value.ListenerState);
+    }
+
     private static bool IsNightStartSubPhase(GameSession session)
     {
         var subPhaseId = session.GetSubPhaseId();
@@ -553,6 +671,34 @@ internal static class GameFlowManager
         return (subPhaseId == null || nightSubPhase != null) &&
             (nightSubPhase ?? NightSubPhases.Start) == NightSubPhases.Start;
     }
+
+    private static AcceptedObservationContinuation?
+        ResolveDomainContinuation(
+            MainRoleType sourceRole,
+            NightActionType committedActionType,
+            ModeratorInstructionSemantic nextInstructionSemantic)
+        => (sourceRole, committedActionType, nextInstructionSemantic) switch
+        {
+            (Witch, NightActionType.WitchSave, ModeratorInstructionSemantic.SelectWitchPoisonTarget) =>
+                new(
+                    NightMainActionLoop.ToString(),
+                    Listener(Witch),
+                    WitchRoleState.AwaitingPoisonSelection.ToString(),
+                    AcceptedObservationInstructionShape.PlayerSelection),
+            (Witch, NightActionType.WitchSave, ModeratorInstructionSemantic.PutRoleToSleep) =>
+                new(
+                    NightMainActionLoop.ToString(),
+                    Listener(Witch),
+                    WitchRoleState.ReadyToSleep.ToString(),
+                    AcceptedObservationInstructionShape.Confirmation),
+            (Witch, NightActionType.WitchKill, ModeratorInstructionSemantic.PutRoleToSleep) =>
+                new(
+                    NightMainActionLoop.ToString(),
+                    Listener(Witch),
+                    WitchRoleState.ReadyToSleep.ToString(),
+                    AcceptedObservationInstructionShape.Confirmation),
+            _ => null
+        };
 
     private static AcceptedObservationContinuation?
         ResolveAcceptedObservationContinuation(
@@ -583,6 +729,24 @@ internal static class GameFlowManager
                     NightMainActionLoop.ToString(),
                     Listener(Seer),
                     ImmediateFeedbackNightRoleState.AwaitingSleepConfirmation.ToString(),
+                    AcceptedObservationInstructionShape.Confirmation),
+            (Witch, ModeratorInstructionSemantic.SelectWitchHealingTarget) =>
+                new(
+                    NightMainActionLoop.ToString(),
+                    Listener(Witch),
+                    WitchRoleState.AwaitingHealingSelection.ToString(),
+                    AcceptedObservationInstructionShape.PlayerSelection),
+            (Witch, ModeratorInstructionSemantic.SelectWitchPoisonTarget) =>
+                new(
+                    NightMainActionLoop.ToString(),
+                    Listener(Witch),
+                    WitchRoleState.AwaitingPoisonSelection.ToString(),
+                    AcceptedObservationInstructionShape.PlayerSelection),
+            (Witch, ModeratorInstructionSemantic.PutRoleToSleep) =>
+                new(
+                    NightMainActionLoop.ToString(),
+                    Listener(Witch),
+                    WitchRoleState.ReadyToSleep.ToString(),
                     AcceptedObservationInstructionShape.Confirmation),
             (TwoSisters, ModeratorInstructionSemantic.RecognizeRoleHolders) =>
                 new(

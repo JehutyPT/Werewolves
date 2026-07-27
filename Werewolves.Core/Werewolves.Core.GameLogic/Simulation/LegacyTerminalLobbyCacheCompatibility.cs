@@ -18,14 +18,17 @@ public static class LegacyTerminalLobbyCacheCompatibility
 	[
 		MainRoleType.VillagerVillager,
 		MainRoleType.TwoSisters,
-		MainRoleType.ThreeBrothers
+		MainRoleType.ThreeBrothers,
+		MainRoleType.Witch
 	];
 
 	private static readonly ModeratorInstructionSemantic[] FrozenSafetyOnlySemantics =
 	[
 		ModeratorInstructionSemantic.ObserveVillagerVillagerFromDeal,
 		ModeratorInstructionSemantic.RecognizeRoleHolders,
-		ModeratorInstructionSemantic.CommunicateAsRoleHolders
+		ModeratorInstructionSemantic.CommunicateAsRoleHolders,
+		ModeratorInstructionSemantic.SelectWitchHealingTarget,
+		ModeratorInstructionSemantic.SelectWitchPoisonTarget
 	];
 
 	public static bool TryProject(

@@ -157,17 +157,18 @@ A static helper class that serves as the "Rule Engine" for the Dawn phase, resol
 *   **Purpose:** Decouples the `GameFlowManager` from specific role logic (e.g., Witch vs. Defender vs. Infection).
 *   **Process:**
     1.  **Input:** Accepts the `GameSession` state.
-    2.  **Resolution:** Gets the current night action target map from `GameSessionQueries`. Iterates through players to resolve conflicts based on the priority rules below.
-    3.  **Output:** The current implementation directly calls `session.EliminatePlayer()` or `session.ApplyStatusEffect()` based on the resolved outcome. PRD #93/#112/#113 replaces this eager-Elimination boundary with resolution-scoped pending consequences: any pre-reveal interception runs first, each required generic public reveal commits next, and only then does Core commit the actual Elimination or replacement effect and drain every resulting reaction before navigation.
+    2.  **Resolution:** Reads the ordered current-night committed attempts and resolves their target outcomes in canonical global slot order rather than grouping them by Player or Seating Order.
+    3.  **Output:** The current implementation records resolved Dawn victims and applies Status Effects. PRD #93/#112/#113 replaces this boundary with resolution-scoped pending consequences: any pre-reveal interception runs first, each required generic public reveal commits next, and only then does Core commit the actual Elimination or replacement effect and drain every resulting reaction before navigation.
 
 *   **Resolution Priority & Special Rules:**
-    1.  **Witch Save (Absolute Defense):** If the Witch saved a player, they are protected from wolf attacks.
-    2.  **Defender Protection:** Blocks applicable physical Werewolf attacks for the whole Night, but never blocks Accursed Wolf-Father infection.
+    1.  **Collective Slot:** A committed Accursed Wolf-Father infection globally replaces the collective physical Werewolf attempt; otherwise the collective physical attempt resolves first.
+    2.  **White Werewolf Attack:** Resolves after the collective slot.
+    3.  **Big Bad Wolf Attack:** Resolves after the White Werewolf attack.
+    4.  **Defender Protection:** Blocks each applicable physical Werewolf attack for the whole Night, but never blocks Accursed Wolf-Father infection.
         *   **Exception - Little Girl:** Cannot be protected by the Defender. Protection fails silently.
-    3.  **Elder Extra Life:** If an Elder with their extra life remaining is targeted by a qualifying physical Werewolf attack or infection, the extra life is consumed instead of applying that effect. Defender may have already blocked a physical attack; it never blocks infection. The Elder survives and a resisted infection leaves the Elder uninfected, while a confirmed one-use infection remains spent.
-    4.  **Infection:** If the Accursed Wolf-Father targets a Player whose Elder resistance did not prevent the effect, they become infected. Infection replaces the collective physical Elimination rather than being treated as a protected physical attack.
-    5.  **Wolf Attacks:** Physical attacks from Werewolves, Big Bad Wolf, or White Werewolf result in elimination if not blocked by the above.
-    6.  **Unstoppable Actions:** The following actions **ignore all protection** (Defender, Witch Save) and always result in elimination:
+    5.  **Elder Extra Life:** If an Elder with their extra life remaining is targeted by a qualifying physical Werewolf attack or infection, the extra life is consumed instead of applying that attempt. Defender may have already blocked a physical attack; it never blocks infection. A resisted infection leaves the Elder uninfected, while the confirmed one-use infection remains spent.
+    6.  **Witch Save:** Resolves after every physical attack slot. It removes the newly applied physical loss, but does not cure infection or undo Elder protection consumed before a later lethal physical hit.
+    7.  **Independent Lethal Actions:** The following actions ignore Defender protection and Witch healing:
         *   **Witch Kill (Death Potion):** Cannot be blocked or prevented.
         *   **Rusty Sword:** The Knight's posthumous revenge attack cannot be blocked.
 

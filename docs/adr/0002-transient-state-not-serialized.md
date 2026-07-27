@@ -23,3 +23,9 @@ ADR-0017 adds one narrow target exception for a successful Thief `Offer1`, `Offe
 ## Amendment: accepted observation recovery boundaries
 
 Once accepted, Role Identification, Faction Agent Group Observation, or Role Reveal becomes durable together with the Moderator instruction that follows it. Rehydration resumes at that instruction without asking for or applying the accepted observation again. This preserves the complete observation boundary without making partial work in progress durable.
+
+## Amendment: committed One-Use Resource recovery boundaries
+
+A non-empty accepted One-Use Resource response becomes durable before Core returns success. One atomic domain log entry records the complete owner-qualified resource identity (acting player, source Role and power, concrete power-instance id and origin, and resource id) together with the resulting action intent and target. `GameFlowManager` then commits the exact next `PendingInstruction` and a versioned domain continuation cursor in the same stable snapshot.
+
+Rehydration validates that the cursor matches the latest atomic resource commit and the exact id, semantic, and concrete response shape of the pending instruction, then reconstructs only the transient listener continuation needed to consume that instruction. A resource cursor supersedes an earlier accepted-observation cursor. It never serializes listener state. Declines, omitted opportunities, wake confirmations, and sleep confirmations remain ordinary replayable phase-tail work.

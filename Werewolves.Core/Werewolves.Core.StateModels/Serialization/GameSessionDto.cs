@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
@@ -25,6 +26,10 @@ internal class GameSessionDto
     // Narrow, versioned semantic cursor for an accepted observation and its
     // committed next Pending Instruction. It never carries live listener state.
     public AcceptedObservationRecoveryCursor? AcceptedObservationRecoveryCursor { get; set; }
+
+    // Generalized, versioned semantic cursor for a committed domain operation
+    // whose exact next Pending Instruction must be resumed without replay.
+    public DomainRecoveryCursor? DomainRecoveryCursor { get; set; }
 
     // Committed boundary instruction and minimal phase cursor. Active stage/listener fields
     // remain compatibility-only and are ignored during Rehydration.
@@ -69,6 +74,47 @@ internal sealed class AcceptedObservationRecoveryCursor
     public MainRoleType ObservedRole { get; set; }
     public ModeratorInstructionSemantic NextInstructionSemantic { get; set; }
     public Guid NextInstructionId { get; set; }
+}
+
+internal enum DomainRecoveryCursorKind
+{
+    OneUseRolePowerCommit = 1
+}
+
+/// <summary>
+/// Durable semantic continuation for a committed domain operation.
+/// It carries no live listener state.
+/// </summary>
+internal sealed class DomainRecoveryCursor
+{
+    public const int CurrentVersion = 1;
+
+    public int Version { get; set; }
+    public DomainRecoveryCursorKind Kind { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public MainRoleType? SourceRole { get; set; }
+    public NightActionType CommittedActionType { get; set; }
+    public Guid ActingPlayerId { get; set; }
+    public string SourcePowerIdentifier { get; set; } = string.Empty;
+    public Guid PowerInstanceId { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public RolePowerInstanceOrigin? PowerInstanceOrigin { get; set; }
+    public Guid OneUseResourceId { get; set; }
+    public Guid CommittedTargetId { get; set; }
+    public ModeratorInstructionSemantic NextInstructionSemantic { get; set; }
+    public Guid NextInstructionId { get; set; }
+
+    internal OneUseRolePowerResourceIdentity? ResourceIdentity =>
+        SourceRole is { } sourceRole &&
+        PowerInstanceOrigin is { } powerInstanceOrigin
+            ? new(
+                ActingPlayerId,
+                sourceRole,
+                SourcePowerIdentifier,
+                PowerInstanceId,
+                powerInstanceOrigin,
+                OneUseResourceId)
+            : null;
 }
 
 /// <summary>

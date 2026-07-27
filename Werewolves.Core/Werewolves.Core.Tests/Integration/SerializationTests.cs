@@ -380,6 +380,56 @@ public class SerializationTests : DiagnosticTestBase
         MarkTestCompleted();
     }
 
+    [Fact]
+    public void StatusEffectRemovalLog_RoundTripsAsInactiveOperation()
+    {
+        GameLogEntryBase entry = new StatusEffectLogEntry
+        {
+            Timestamp = DateTimeOffset.UtcNow,
+            TurnNumber = 2,
+            CurrentPhase = GamePhase.Dawn,
+            EffectType = StatusEffectTypes.ElderProtectionLost,
+            PlayerId = Guid.NewGuid(),
+            IsActive = false
+        };
+
+        var json = JsonSerializer.Serialize(
+            entry,
+            RecoverySerializationOptions);
+        var restored = JsonSerializer.Deserialize<GameLogEntryBase>(
+            json,
+            RecoverySerializationOptions);
+
+        restored.Should().BeOfType<StatusEffectLogEntry>()
+            .Which.IsActive.Should().BeFalse();
+        MarkTestCompleted();
+    }
+
+    [Fact]
+    public void LegacyStatusEffectLogWithoutOperation_DefaultsToApply()
+    {
+        GameLogEntryBase entry = new StatusEffectLogEntry
+        {
+            Timestamp = DateTimeOffset.UtcNow,
+            TurnNumber = 2,
+            CurrentPhase = GamePhase.Dawn,
+            EffectType = StatusEffectTypes.ElderProtectionLost,
+            PlayerId = Guid.NewGuid()
+        };
+        var payload = JsonNode.Parse(JsonSerializer.Serialize(
+            entry,
+            RecoverySerializationOptions))!.AsObject();
+        payload.Remove("IsActive");
+
+        var restored = JsonSerializer.Deserialize<GameLogEntryBase>(
+            payload.ToJsonString(),
+            RecoverySerializationOptions);
+
+        restored.Should().BeOfType<StatusEffectLogEntry>()
+            .Which.IsActive.Should().BeTrue();
+        MarkTestCompleted();
+    }
+
     /// <summary>
     /// SZ-012: Serialize NightActionLogEntry preserves ActionType enum.
     /// </summary>

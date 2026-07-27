@@ -29,6 +29,7 @@ namespace Werewolves.Core.StateModels.Core
 		private GamePhaseStateCache _phaseStateCache = new();
 		private GameSessionDto? _recoveryBoundary;
 		private AcceptedObservationRecoveryCursor? _acceptedObservationRecoveryCursor;
+		private DomainRecoveryCursor? _domainRecoveryCursor;
 
 		internal Guid Id { get; }
 
@@ -49,6 +50,8 @@ namespace Werewolves.Core.StateModels.Core
 		internal ModeratorInstruction? PendingModeratorInstruction => _pendingModeratorInstruction;
 		internal AcceptedObservationRecoveryCursor? AcceptedObservationRecoveryCursor =>
 			_acceptedObservationRecoveryCursor;
+		internal DomainRecoveryCursor? DomainRecoveryCursor =>
+			_domainRecoveryCursor;
 		internal GamePhase CurrentPhase => _phaseStateCache.GetCurrentPhase();
 
 		internal GameSessionKernel(Guid id, ModeratorInstruction initialInstruction, GameSessionConfig config, IStateChangeObserver? stateChangeObserver = null)
@@ -164,13 +167,23 @@ namespace Werewolves.Core.StateModels.Core
 		}
 
 		internal void CaptureRecoveryBoundary(
-			AcceptedObservationRecoveryCursor? acceptedObservationRecoveryCursor = null)
+			AcceptedObservationRecoveryCursor? acceptedObservationRecoveryCursor = null,
+			DomainRecoveryCursor? domainRecoveryCursor = null)
 		{
-			_acceptedObservationRecoveryCursor = acceptedObservationRecoveryCursor;
-			_recoveryBoundary = CreateDto();
+			var candidateBoundary = CreateDto();
+			candidateBoundary.AcceptedObservationRecoveryCursor =
+				acceptedObservationRecoveryCursor;
+			candidateBoundary.DomainRecoveryCursor = domainRecoveryCursor;
 			ValidateAcceptedObservationRecoveryCursor(
-				_recoveryBoundary,
+				candidateBoundary,
 				_pendingModeratorInstruction);
+			ValidateDomainRecoveryCursor(
+				candidateBoundary,
+				_pendingModeratorInstruction);
+
+			_acceptedObservationRecoveryCursor = acceptedObservationRecoveryCursor;
+			_domainRecoveryCursor = domainRecoveryCursor;
+			_recoveryBoundary = candidateBoundary;
 		}
 
 		private GameSessionDto CreateDto()
@@ -186,7 +199,8 @@ namespace Werewolves.Core.StateModels.Core
 				PendingInstruction = _pendingModeratorInstruction,
 				PendingInstructionSemantic = _pendingModeratorInstruction?.Semantic,
 				GameHistoryLog = _gameHistoryLog.GetAllLogEntries().ToList(),
-				AcceptedObservationRecoveryCursor = _acceptedObservationRecoveryCursor,
+					AcceptedObservationRecoveryCursor = _acceptedObservationRecoveryCursor,
+					DomainRecoveryCursor = _domainRecoveryCursor,
 				PhaseStateCache = _phaseStateCache.ToDto(),
 				Players = GetIPlayers().Select(p => new PlayerDto
 				{
@@ -225,6 +239,9 @@ namespace Werewolves.Core.StateModels.Core
 				ValidateAcceptedObservationRecoveryCursor(
 					dto,
 					_pendingModeratorInstruction);
+			_domainRecoveryCursor = ValidateDomainRecoveryCursor(
+				dto,
+				_pendingModeratorInstruction);
 			_phaseStateCache = dto.IsStableRecoveryBoundary
 				? GamePhaseStateCache.FromStableRecoveryBoundaryDto(dto.PhaseStateCache)
 				: GamePhaseStateCache.FromDto(dto.PhaseStateCache);
@@ -357,6 +374,79 @@ namespace Werewolves.Core.StateModels.Core
 			{
 				throw new InvalidOperationException(
 					"The accepted observation recovery cursor does not match a committed Role Identification.");
+			}
+
+			return cursor;
+		}
+
+		private static DomainRecoveryCursor? ValidateDomainRecoveryCursor(
+			GameSessionDto dto,
+			ModeratorInstruction? pendingModeratorInstruction)
+		{
+			var cursor = dto.DomainRecoveryCursor;
+			if (cursor == null)
+			{
+				return null;
+			}
+
+			if (!dto.IsStableRecoveryBoundary)
+			{
+				throw new InvalidOperationException(
+					"Domain recovery cursors require a stable recovery boundary.");
+			}
+
+			if (dto.AcceptedObservationRecoveryCursor != null)
+			{
+				throw new InvalidOperationException(
+					"A domain recovery cursor must supersede an accepted observation cursor.");
+			}
+
+			if (cursor.Version != DomainRecoveryCursor.CurrentVersion ||
+			    cursor.Kind != DomainRecoveryCursorKind.OneUseRolePowerCommit)
+			{
+				throw new InvalidOperationException(
+					$"Unsupported domain recovery cursor '{cursor.Kind}' version '{cursor.Version}'.");
+			}
+
+			var cursorResourceIdentity = cursor.ResourceIdentity;
+			if (!cursorResourceIdentity.HasValue ||
+			    !cursorResourceIdentity.Value.IsValid ||
+			    !Enum.IsDefined(cursor.CommittedActionType) ||
+			    cursor.CommittedActionType == NightActionType.Unknown ||
+			    cursor.CommittedTargetId == Guid.Empty ||
+			    !Enum.IsDefined(cursor.NextInstructionSemantic) ||
+			    cursor.NextInstructionSemantic ==
+				    ModeratorInstructionSemantic.Unspecified ||
+			    cursor.NextInstructionId == Guid.Empty)
+			{
+				throw new InvalidOperationException(
+					"The domain recovery cursor is structurally invalid.");
+			}
+
+			if (pendingModeratorInstruction == null ||
+			    pendingModeratorInstruction.InstructionId != cursor.NextInstructionId ||
+			    pendingModeratorInstruction.Semantic !=
+				    cursor.NextInstructionSemantic ||
+			    pendingModeratorInstruction is SelectPlayersInstruction
+			    {
+				    RoleIdentification: not null
+			    })
+			{
+				throw new InvalidOperationException(
+					"The domain recovery cursor does not match its Pending Instruction.");
+			}
+
+			var committedEntry = dto.GameHistoryLog
+				.OfType<OneUseRolePowerCommittedLogEntry>()
+				.LastOrDefault();
+			if (committedEntry == null ||
+			    committedEntry.ActionType != cursor.CommittedActionType ||
+			    committedEntry.ResourceIdentity != cursorResourceIdentity.Value ||
+			    committedEntry.TargetIds is not { Count: 1 } ||
+			    committedEntry.TargetIds[0] != cursor.CommittedTargetId)
+			{
+				throw new InvalidOperationException(
+					"The domain recovery cursor does not match the latest committed One-Use Resource action.");
 			}
 
 			return cursor;

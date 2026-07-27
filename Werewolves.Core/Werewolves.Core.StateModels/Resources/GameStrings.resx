@@ -261,6 +261,26 @@
     <value>Bruxa</value>
     <comment/>
   </data>
+  <data name="WitchHealingSelectionInstruction" xml:space="preserve">
+    <value>Alvos dos ataques físicos desta noite: {0}. Bruxa, escolhe no máximo um jogador para curar.</value>
+    <comment/>
+  </data>
+  <data name="WitchPoisonSelectionInstruction" xml:space="preserve">
+    <value>Bruxa, escolhe no máximo um jogador para envenenar.</value>
+    <comment/>
+  </data>
+  <data name="WitchAttackTargetsAndPoisonSelectionInstruction" xml:space="preserve">
+    <value>Alvos dos ataques físicos desta noite: {0}. Bruxa, escolhe no máximo um jogador para envenenar.</value>
+    <comment/>
+  </data>
+  <data name="WitchAttackTargetsInstruction" xml:space="preserve">
+    <value>Alvos dos ataques físicos desta noite: {0}.</value>
+    <comment/>
+  </data>
+  <data name="DeclineOption" xml:space="preserve">
+    <value>Recusar</value>
+    <comment/>
+  </data>
   <data name="HunterRoleName" xml:space="preserve">
     <value>Caçador</value>
     <comment/>

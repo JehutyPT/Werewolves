@@ -12,6 +12,7 @@ internal sealed partial class GameSessionKernel
 
 		internal void AddLogEntry(SessionMutator.IStateMutatorKey key, GameLogEntryBase entry)
 		{
+			ValidateOneUseResourceCommit(entry);
 			_logEntries.Add(entry);
 		}
 
@@ -21,7 +22,26 @@ internal sealed partial class GameSessionKernel
 		/// </summary>
 		internal void RestoreLogEntry(GameLogEntryBase entry)
 		{
+			ValidateOneUseResourceCommit(entry);
 			_logEntries.Add(entry);
+		}
+
+		private void ValidateOneUseResourceCommit(GameLogEntryBase entry)
+		{
+			if (entry is not OneUseRolePowerCommittedLogEntry commit)
+			{
+				return;
+			}
+
+			commit.EnforceValidity();
+			if (_logEntries
+			    .OfType<OneUseRolePowerCommittedLogEntry>()
+			    .Any(existing =>
+				    existing.ResourceIdentity == commit.ResourceIdentity))
+			{
+				throw new InvalidOperationException(
+					"The One-Use Role Power Resource is already spent by its owning power instance.");
+			}
 		}
 
 		internal IReadOnlyList<GameLogEntryBase> GetAllLogEntries() => _logEntries.AsReadOnly();

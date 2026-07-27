@@ -35,12 +35,14 @@ public class SimulatorProfileTests
 		var expectedSafetySemantics = expectedLegacyAndProbabilitySemantics
 			.Append(ModeratorInstructionSemantic.ObserveVillagerVillagerFromDeal)
 			.Append(ModeratorInstructionSemantic.RecognizeRoleHolders)
-			.Append(ModeratorInstructionSemantic.CommunicateAsRoleHolders);
+			.Append(ModeratorInstructionSemantic.CommunicateAsRoleHolders)
+			.Append(ModeratorInstructionSemantic.SelectWitchHealingTarget)
+			.Append(ModeratorInstructionSemantic.SelectWitchPoisonTarget);
 		var legacy = SimulatorProfile.LegacyCore;
 		var safety = SimulatorCapability.SafetyScreening;
 		var probability = SimulatorCapability.FullProbability;
 
-		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "4"));
+		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "5"));
 		probability.Identity.Should().Be(new SimulatorProfileIdentity("full-probability", "1"));
 		legacy.Identity.Should().Be(new SimulatorProfileIdentity("core-simulator", "1"));
 		BaselineRandomDecisionStrategy.Identity.Should()
@@ -52,7 +54,8 @@ public class SimulatorProfileTests
 			MainRoleType.SimpleVillager,
 			MainRoleType.VillagerVillager,
 			MainRoleType.TwoSisters,
-			MainRoleType.ThreeBrothers);
+			MainRoleType.ThreeBrothers,
+			MainRoleType.Witch);
 		probability.SupportedRoles.Should().Equal(
 			MainRoleType.SimpleWerewolf,
 			MainRoleType.Seer,
