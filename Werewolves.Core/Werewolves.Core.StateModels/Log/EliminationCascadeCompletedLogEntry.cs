@@ -11,7 +11,7 @@ public sealed record EliminationCascadeCompletedLogEntry
 {
 	public required string ScopeId { get; init; }
 
-	internal void EnforceValidity()
+	internal override void EnforceValidity()
 	{
 		if (string.IsNullOrWhiteSpace(ScopeId))
 		{

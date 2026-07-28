@@ -1,5 +1,7 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
 
 namespace Werewolves.Core.StateModels.Serialization;
@@ -27,11 +29,11 @@ public class GameLogEntryConverter : JsonConverter<GameLogEntryBase>
         ["RoleIdentificationLogEntry"] = typeof(RoleIdentificationLogEntry),
 	        ["RoleRevealLogEntry"] = typeof(RoleRevealLogEntry),
 	        ["ScapegoatTieReplacementLogEntry"] = typeof(ScapegoatTieReplacementLogEntry),
-	        ["ScapegoatVoterRestrictionAnnouncementAcknowledgedLogEntry"] = typeof(ScapegoatVoterRestrictionAnnouncementAcknowledgedLogEntry),
-	        ["ScapegoatVoterRestrictionCommittedLogEntry"] = typeof(ScapegoatVoterRestrictionCommittedLogEntry),
-	        ["ScapegoatVoterRestrictionExpiredLogEntry"] = typeof(ScapegoatVoterRestrictionExpiredLogEntry),
+	        ["VoterEligibilityRestrictionAnnouncementAcknowledgedLogEntry"] = typeof(VoterEligibilityRestrictionAnnouncementAcknowledgedLogEntry),
+	        ["VoterEligibilityRestrictionCommittedLogEntry"] = typeof(VoterEligibilityRestrictionCommittedLogEntry),
+	        ["VoterEligibilityRestrictionExpiredLogEntry"] = typeof(VoterEligibilityRestrictionExpiredLogEntry),
 	        ["StatusEffectLogEntry"] = typeof(StatusEffectLogEntry),
-	        ["StutteringJudgeConsecutiveVoteCommittedLogEntry"] = typeof(StutteringJudgeConsecutiveVoteCommittedLogEntry),
+	        ["OneUseRolePowerDayActionCommittedLogEntry"] = typeof(OneUseRolePowerDayActionCommittedLogEntry),
 	        ["StutteringJudgeSignalDidNotOccurLogEntry"] = typeof(StutteringJudgeSignalDidNotOccurLogEntry),
 	        ["StutteringJudgeSignalEstablishedLogEntry"] = typeof(StutteringJudgeSignalEstablishedLogEntry),
 	        ["VillagerVillagerPublicFromDealLogEntry"] = typeof(VillagerVillagerPublicFromDealLogEntry),
@@ -40,8 +42,20 @@ public class GameLogEntryConverter : JsonConverter<GameLogEntryBase>
 	        ["VotingRightChangedLogEntry"] = typeof(VotingRightChangedLogEntry),
 	    };
 
-    private static readonly Dictionary<Type, string> ReverseTypeMap = 
+    private static readonly Dictionary<Type, string> ReverseTypeMap =
         TypeMap.ToDictionary(kvp => kvp.Value, kvp => kvp.Key);
+
+    private static readonly Dictionary<string, Type> LegacyTypeMap = new()
+    {
+        ["ScapegoatVoterRestrictionAnnouncementAcknowledgedLogEntry"] =
+            typeof(VoterEligibilityRestrictionAnnouncementAcknowledgedLogEntry),
+        ["ScapegoatVoterRestrictionCommittedLogEntry"] =
+            typeof(VoterEligibilityRestrictionCommittedLogEntry),
+        ["ScapegoatVoterRestrictionExpiredLogEntry"] =
+            typeof(VoterEligibilityRestrictionExpiredLogEntry),
+        ["StutteringJudgeConsecutiveVoteCommittedLogEntry"] =
+            typeof(OneUseRolePowerDayActionCommittedLogEntry)
+    };
 
     public override GameLogEntryBase? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
@@ -59,15 +73,33 @@ public class GameLogEntryConverter : JsonConverter<GameLogEntryBase>
         }
 
         var typeName = typeProperty.GetString();
-        if (typeName == null || !TypeMap.TryGetValue(typeName, out var targetType))
+        if (typeName == null ||
+            !TypeMap.TryGetValue(typeName, out var targetType) &&
+            !LegacyTypeMap.TryGetValue(typeName, out targetType))
         {
             throw new JsonException($"Unknown type discriminator: {typeName}");
         }
 
         // Create a new options instance without this converter to avoid infinite recursion
         var innerOptions = CreateOptionsWithoutThisConverter(options);
-        
-        return (GameLogEntryBase?)JsonSerializer.Deserialize(root.GetRawText(), targetType, innerOptions);
+
+        if (typeName == "ScapegoatVoterRestrictionCommittedLogEntry")
+        {
+            var migrated = JsonNode.Parse(root.GetRawText())!.AsObject();
+            migrated[nameof(
+                VoterEligibilityRestrictionCommittedLogEntry.SourceRole)] =
+                JsonSerializer.SerializeToNode(
+                    MainRoleType.Scapegoat,
+                    innerOptions);
+            return (GameLogEntryBase?)migrated.Deserialize(
+                targetType,
+                innerOptions);
+        }
+
+        return (GameLogEntryBase?)JsonSerializer.Deserialize(
+            root.GetRawText(),
+            targetType,
+            innerOptions);
     }
 
     public override void Write(Utf8JsonWriter writer, GameLogEntryBase value, JsonSerializerOptions options)

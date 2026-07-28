@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
@@ -212,6 +213,100 @@ public class SerializationTests : DiagnosticTestBase
 
         recovered.GetPlayers().Should().OnlyContain(player =>
             player.State.HasVotingRight);
+        MarkTestCompleted();
+    }
+
+    [Fact]
+    public void GameLogEntryConverter_LegacyDayVoteDiscriminators_MigrateToGenericEntries()
+    {
+        var timestamp = DateTimeOffset.UtcNow;
+        var candidateId = Guid.NewGuid();
+        var scapegoatId = Guid.NewGuid();
+        var announcementId = Guid.NewGuid();
+        const string scopeId = "Day:1:Vote:1";
+        var resourceIdentity = new OneUseRolePowerResourceIdentity(
+            Guid.NewGuid(),
+            MainRoleType.StutteringJudge,
+            "stuttering-judge-consecutive-vote",
+            Guid.NewGuid(),
+            RolePowerInstanceOrigin.Native,
+            Guid.NewGuid());
+        var canonicalEntries = new GameLogEntryBase[]
+        {
+            new VoterEligibilityRestrictionCommittedLogEntry
+            {
+                Timestamp = timestamp,
+                TurnNumber = 1,
+                CurrentPhase = GamePhase.Day,
+                ScopeId = scopeId,
+                SourceRole = MainRoleType.Scapegoat,
+                CandidatePlayerIds = ImmutableArray.Create(candidateId),
+                PermittedVoterIds = ImmutableArray.Create(candidateId),
+                AppliesOnTurnNumber = 2,
+                AnnouncementInstructionId = announcementId
+            },
+            new VoterEligibilityRestrictionAnnouncementAcknowledgedLogEntry
+            {
+                Timestamp = timestamp,
+                TurnNumber = 1,
+                CurrentPhase = GamePhase.Day,
+                ScopeId = scopeId,
+                AnnouncementInstructionId = announcementId
+            },
+            new VoterEligibilityRestrictionExpiredLogEntry
+            {
+                Timestamp = timestamp,
+                TurnNumber = 2,
+                CurrentPhase = GamePhase.Day,
+                ScopeId = scopeId
+            },
+            new OneUseRolePowerDayActionCommittedLogEntry
+            {
+                Timestamp = timestamp,
+                TurnNumber = 1,
+                CurrentPhase = GamePhase.Day,
+                ActionType = DayPowerType.JudgeExtraVote,
+                TargetIds = null,
+                ResourceIdentity = resourceIdentity
+            }
+        };
+        var legacyTypeNames = new[]
+        {
+            "ScapegoatVoterRestrictionCommittedLogEntry",
+            "ScapegoatVoterRestrictionAnnouncementAcknowledgedLogEntry",
+            "ScapegoatVoterRestrictionExpiredLogEntry",
+            "StutteringJudgeConsecutiveVoteCommittedLogEntry"
+        };
+        var restoredEntries = canonicalEntries
+            .Zip(legacyTypeNames, (entry, legacyTypeName) =>
+            {
+                var node = JsonNode.Parse(JsonSerializer.Serialize(
+                    entry,
+                    RecoverySerializationOptions))!.AsObject();
+                node["$type"] = legacyTypeName;
+                if (entry is VoterEligibilityRestrictionCommittedLogEntry)
+                {
+                    node.Remove(nameof(
+                        VoterEligibilityRestrictionCommittedLogEntry
+                            .SourceRole));
+                    node["ScapegoatPlayerId"] = scapegoatId;
+                }
+
+                return JsonSerializer.Deserialize<GameLogEntryBase>(
+                    node.ToJsonString(),
+                    RecoverySerializationOptions)!;
+            })
+            .ToArray();
+
+        restoredEntries[0].Should()
+            .BeEquivalentTo(canonicalEntries[0]);
+        restoredEntries[1].Should()
+            .BeEquivalentTo(canonicalEntries[1]);
+        restoredEntries[2].Should()
+            .BeEquivalentTo(canonicalEntries[2]);
+        restoredEntries[3].Should()
+            .BeEquivalentTo(canonicalEntries[3]);
+
         MarkTestCompleted();
     }
 

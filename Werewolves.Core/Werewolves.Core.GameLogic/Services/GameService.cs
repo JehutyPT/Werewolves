@@ -78,7 +78,8 @@ public class GameService
     public Guid RehydrateSession(string serializedSession)
     {
         var session = new GameSession(serializedSession);
-        ScapegoatLifecycleValidator.EnforceValidHistory(session);
+        DayVoteRules.EnforceValidHistory(session);
+        ScapegoatHistoryValidator.EnforceValidHistory(session);
         SeedActiveRoleListeners(session);
         ConfigureEliminationCascadeReactions(session);
         GameFlowManager.RestoreDurableContinuation(session, _roleAdmissions);

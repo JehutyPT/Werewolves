@@ -21,7 +21,7 @@ public sealed record EliminationCascadeBatchResolvedLogEntry
 		init;
 	}
 
-	internal void EnforceValidity()
+	internal override void EnforceValidity()
 	{
 		if (string.IsNullOrWhiteSpace(ScopeId) ||
 			RequestedEliminations is not { Count: > 0 } ||

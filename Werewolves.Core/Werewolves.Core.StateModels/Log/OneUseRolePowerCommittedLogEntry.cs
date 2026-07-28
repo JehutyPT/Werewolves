@@ -28,7 +28,7 @@ public sealed record OneUseRolePowerCommittedLogEntry
 		PowerInstanceOrigin,
 		OneUseResourceId);
 
-	internal void EnforceValidity()
+	internal override void EnforceValidity()
 	{
 		ResourceIdentity.EnforceValidity();
 		if (ActionType == NightActionType.Unknown ||
