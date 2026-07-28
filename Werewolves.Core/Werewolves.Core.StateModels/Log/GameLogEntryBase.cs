@@ -14,6 +14,10 @@ public abstract record GameLogEntryBase
     public required int TurnNumber { get; init; }
     public required GamePhase CurrentPhase { get; init; }
 
+    internal virtual void EnforceValidity()
+    {
+    }
+
     internal void Apply(ISessionMutator mutator)
     {
         var log = InnerApply(mutator);

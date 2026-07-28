@@ -6,14 +6,16 @@ namespace Werewolves.Core.StateModels.Log;
 /// Records that the Scapegoat replaced one tied Day Vote outcome.
 /// The raw tied Vote remains a separate, unchanged fact.
 /// </summary>
-public sealed record ScapegoatTieReplacementLogEntry : GameLogEntryBase
+public sealed record ScapegoatTieReplacementLogEntry
+	: GameLogEntryBase,
+		IGameFactLogEntry
 {
 	public required Guid ScapegoatPlayerId { get; init; }
 	public required int VoteOrdinal { get; init; }
 	public required int VoteLogIndex { get; init; }
 	public required string ScopeId { get; init; }
 
-	internal void EnforceValidity()
+	internal override void EnforceValidity()
 	{
 		if (ScapegoatPlayerId == Guid.Empty ||
 		    VoteOrdinal <= 0 ||

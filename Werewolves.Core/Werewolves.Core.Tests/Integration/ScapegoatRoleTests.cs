@@ -144,7 +144,7 @@ public sealed class ScapegoatRoleTests : DiagnosticTestBase
 		announcement.AffectedPlayerIds.Should().BeEquivalentTo(selected);
 		var state = builder.GetGameState()!;
 		var restriction = state.GameHistoryLog
-			.OfType<ScapegoatVoterRestrictionCommittedLogEntry>()
+			.OfType<VoterEligibilityRestrictionCommittedLogEntry>()
 			.Should().ContainSingle().Which;
 		restriction.CandidatePlayerIds.Should().BeEquivalentTo(
 			voterChoice.SelectablePlayerIds);
@@ -169,7 +169,7 @@ public sealed class ScapegoatRoleTests : DiagnosticTestBase
 
 		var completed = builder.GetGameState()!;
 		completed.GameHistoryLog
-			.OfType<ScapegoatVoterRestrictionAnnouncementAcknowledgedLogEntry>()
+			.OfType<VoterEligibilityRestrictionAnnouncementAcknowledgedLogEntry>()
 			.Should().ContainSingle()
 			.Which.AnnouncementInstructionId.Should()
 			.Be(announcement.InstructionId);
@@ -226,7 +226,7 @@ public sealed class ScapegoatRoleTests : DiagnosticTestBase
 		builder.GetCurrentInstruction()!.InstructionId.Should().Be(
 			choice.InstructionId);
 		builder.GetGameState()!.GameHistoryLog
-			.OfType<ScapegoatVoterRestrictionCommittedLogEntry>()
+			.OfType<VoterEligibilityRestrictionCommittedLogEntry>()
 			.Should().BeEmpty();
 		MarkTestCompleted();
 	}
@@ -286,7 +286,7 @@ public sealed class ScapegoatRoleTests : DiagnosticTestBase
 		reactionReveal.PlayersForAssignment.Should().Equal(reactionVictim.Id);
 		var interrupted = builder.GetGameState()!;
 		var restriction = interrupted.GameHistoryLog
-			.OfType<ScapegoatVoterRestrictionCommittedLogEntry>()
+			.OfType<VoterEligibilityRestrictionCommittedLogEntry>()
 			.Should().ContainSingle().Which;
 		restriction.PermittedVoterIds.Should().Equal(reactionVictim.Id);
 		var recoveredReaction = new ScapegoatTriggeredReaction();
@@ -314,7 +314,7 @@ public sealed class ScapegoatRoleTests : DiagnosticTestBase
 		recovered.GetPlayerState(reactionVictim.Id).Health.Should().Be(
 			PlayerHealth.Dead);
 		recovered.GameHistoryLog
-			.OfType<ScapegoatVoterRestrictionCommittedLogEntry>()
+			.OfType<VoterEligibilityRestrictionCommittedLogEntry>()
 			.Should().ContainSingle()
 			.Which.PermittedVoterIds.Should().Equal(reactionVictim.Id);
 		recovered.GameHistoryLog.OfType<PlayerEliminatedLogEntry>()
@@ -529,7 +529,7 @@ public sealed class ScapegoatRoleTests : DiagnosticTestBase
 			.Should().NotContain(entry =>
 				entry.Reason == EliminationReason.ScapegoatSacrifice);
 		state.GameHistoryLog
-			.OfType<ScapegoatVoterRestrictionCommittedLogEntry>()
+			.OfType<VoterEligibilityRestrictionCommittedLogEntry>()
 			.Should().BeEmpty();
 		MarkTestCompleted();
 	}
@@ -591,7 +591,7 @@ public sealed class ScapegoatRoleTests : DiagnosticTestBase
 			.Should().ContainSingle(entry =>
 				entry.Reason == EliminationReason.ScapegoatSacrifice);
 		afterChoiceState.GameHistoryLog
-			.OfType<ScapegoatVoterRestrictionCommittedLogEntry>()
+			.OfType<VoterEligibilityRestrictionCommittedLogEntry>()
 			.Should().ContainSingle();
 
 		var afterChoiceService = new GameService();
@@ -618,17 +618,17 @@ public sealed class ScapegoatRoleTests : DiagnosticTestBase
 			.Should().ContainSingle(entry =>
 				entry.Reason == EliminationReason.ScapegoatSacrifice);
 		completed.GameHistoryLog
-			.OfType<ScapegoatVoterRestrictionCommittedLogEntry>()
+			.OfType<VoterEligibilityRestrictionCommittedLogEntry>()
 			.Should().ContainSingle();
 		completed.GameHistoryLog
 			.OfType<
-				ScapegoatVoterRestrictionAnnouncementAcknowledgedLogEntry>()
+				VoterEligibilityRestrictionAnnouncementAcknowledgedLogEntry>()
 			.Should().ContainSingle();
 		MarkTestCompleted();
 	}
 
 	[Theory]
-	[InlineData(false, "*Scapegoat voter restriction*structurally invalid*")]
+	[InlineData(false, "*voter-eligibility restriction*structurally invalid*")]
 	[InlineData(true, "*Scapegoat voter restriction*does not match one unique tie replacement*")]
 	public void Recovery_WithMalformedVoterRestriction_IsRejected(
 		bool mismatchScope,
@@ -762,12 +762,12 @@ public sealed class ScapegoatRoleTests : DiagnosticTestBase
 			.And.OnlyContain(entry =>
 				entry.ReportedOutcomePlayerId == Guid.Empty);
 		state.GameHistoryLog
-			.OfType<StutteringJudgeConsecutiveVoteCommittedLogEntry>()
+			.OfType<OneUseRolePowerDayActionCommittedLogEntry>()
 			.Should().ContainSingle();
 		state.GameHistoryLog.OfType<ScapegoatTieReplacementLogEntry>()
 			.Should().ContainSingle();
 		state.GameHistoryLog
-			.OfType<ScapegoatVoterRestrictionExpiredLogEntry>()
+			.OfType<VoterEligibilityRestrictionExpiredLogEntry>()
 			.Should().BeEmpty();
 		MarkTestCompleted();
 	}
@@ -851,7 +851,7 @@ public sealed class ScapegoatRoleTests : DiagnosticTestBase
 
 		var state = builder.GetGameState()!;
 		state.GameHistoryLog
-			.OfType<ScapegoatVoterRestrictionExpiredLogEntry>()
+			.OfType<VoterEligibilityRestrictionExpiredLogEntry>()
 			.Should().ContainSingle();
 		state.GameHistoryLog.OfType<VoteOutcomeReportedLogEntry>()
 			.Should().ContainSingle(entry =>
@@ -922,7 +922,7 @@ public sealed class ScapegoatRoleTests : DiagnosticTestBase
 		state.GameHistoryLog.OfType<VoteOutcomeReportedLogEntry>()
 			.Should().NotContain(entry => entry.TurnNumber == 2);
 		state.GameHistoryLog
-			.OfType<ScapegoatVoterRestrictionExpiredLogEntry>()
+			.OfType<VoterEligibilityRestrictionExpiredLogEntry>()
 			.Should().ContainSingle();
 		MarkTestCompleted();
 	}

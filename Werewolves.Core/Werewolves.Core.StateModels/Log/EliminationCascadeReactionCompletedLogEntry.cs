@@ -24,7 +24,7 @@ public sealed record EliminationCascadeReactionCompletedLogEntry
 		init;
 	}
 
-	internal void EnforceValidity()
+	internal override void EnforceValidity()
 	{
 		if (string.IsNullOrWhiteSpace(ScopeId) ||
 			string.IsNullOrWhiteSpace(ReactionId) ||

@@ -281,15 +281,16 @@ internal static class GameFlowManager
                         DaySubPhases.DetermineVoteType,
                         DaySubPhases.Finalize
                     ]),
-                new(
-                    subPhase: DaySubPhases.Finalize,
-                    subPhaseStages:
-                    [
-                        LogicStage(
-                            DaySubPhaseStage.ExpireScapegoatVoterRestriction,
-                            DayPhaseHandlers
-                                .ExpireScapegoatVoterRestriction),
-                        NavigationEndStageSilent(GamePhase.Night)
+	                new(
+	                    subPhase: DaySubPhases.Finalize,
+	                    subPhaseStages:
+	                    [
+	                        LogicStage(
+	                            DaySubPhaseStage
+	                                .ExpireVoterEligibilityRestriction,
+	                            DayPhaseHandlers
+	                                .ExpireVoterEligibilityRestriction),
+	                        NavigationEndStageSilent(GamePhase.Night)
                     ],
                     possibleNextMainPhaseTransitions:
                     [
@@ -437,7 +438,7 @@ internal static class GameFlowManager
 
     private static SubPhaseHandlerResult ChoosePathAfterVoteConcluded(GameSession session, ModeratorResponse input)
         => TransitionSubPhaseSilent(ChoosePostVoteOutcomeSubPhase(
-            GameSessionQueries.ShouldVoteRepeat(session)));
+            DayVoteRules.ShouldConductConsecutiveVote(session)));
 
     internal static DaySubPhases ChoosePostVoteOutcomeSubPhase(
         bool shouldVoteRepeat)

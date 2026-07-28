@@ -12,11 +12,11 @@ internal sealed partial class GameSessionKernel
 
         internal void AddLogEntry(SessionMutator.IStateMutatorKey key, GameLogEntryBase entry)
         {
+            entry.EnforceValidity();
             ValidateOneUseResourceCommit(entry);
             ValidateEliminationCascadeBatchResolution(entry);
             ValidateEliminationCascadeCompletion(entry);
             ValidateEliminationCascadeReactionCompletion(entry);
-            ValidateScapegoatLogEntryStructure(entry);
             _logEntries.Add(entry);
         }
 
@@ -26,11 +26,11 @@ internal sealed partial class GameSessionKernel
         /// </summary>
         internal void RestoreLogEntry(GameLogEntryBase entry)
         {
+            entry.EnforceValidity();
             ValidateOneUseResourceCommit(entry);
             ValidateEliminationCascadeBatchResolution(entry);
             ValidateEliminationCascadeCompletion(entry);
             ValidateEliminationCascadeReactionCompletion(entry);
-            ValidateScapegoatLogEntryStructure(entry);
             _logEntries.Add(entry);
         }
 
@@ -39,19 +39,6 @@ internal sealed partial class GameSessionKernel
             if (entry is not IOneUseRolePowerCommittedLogEntry commit)
             {
                 return;
-            }
-
-            switch (entry)
-            {
-                case OneUseRolePowerCommittedLogEntry nightCommit:
-                    nightCommit.EnforceValidity();
-                    break;
-                case StutteringJudgeConsecutiveVoteCommittedLogEntry dayCommit:
-                    dayCommit.EnforceValidity();
-                    break;
-                default:
-                    throw new InvalidOperationException(
-                        $"Unsupported One-Use Role Power commit log type '{entry.GetType().Name}'.");
             }
 
             if (_logEntries
@@ -73,7 +60,6 @@ internal sealed partial class GameSessionKernel
                 return;
             }
 
-            completion.EnforceValidity();
             if (_logEntries
                 .OfType<EliminationCascadeReactionCompletedLogEntry>()
                 .Any(existing => existing.HasSameCompletionKey(completion)))
@@ -91,7 +77,6 @@ internal sealed partial class GameSessionKernel
                 return;
             }
 
-            resolution.EnforceValidity();
             if (_logEntries
                 .OfType<EliminationCascadeBatchResolvedLogEntry>()
                 .Any(existing => existing.HasSameResolutionKey(resolution)))
@@ -109,35 +94,12 @@ internal sealed partial class GameSessionKernel
                 return;
             }
 
-            completion.EnforceValidity();
             if (_logEntries
                 .OfType<EliminationCascadeCompletedLogEntry>()
                 .Any(existing => existing.ScopeId == completion.ScopeId))
             {
                 throw new InvalidOperationException(
                     "The Elimination Cascade scope is already complete.");
-            }
-        }
-
-        private static void ValidateScapegoatLogEntryStructure(
-            GameLogEntryBase entry)
-        {
-            switch (entry)
-            {
-                case ScapegoatTieReplacementLogEntry replacement:
-                    replacement.EnforceValidity();
-                    break;
-                case ScapegoatVoterRestrictionCommittedLogEntry restriction:
-                    restriction.EnforceValidity();
-                    break;
-                case
-                    ScapegoatVoterRestrictionAnnouncementAcknowledgedLogEntry
-                        acknowledgment:
-                    acknowledgment.EnforceValidity();
-                    break;
-                case ScapegoatVoterRestrictionExpiredLogEntry expiry:
-                    expiry.EnforceValidity();
-                    break;
             }
         }
 

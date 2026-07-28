@@ -241,9 +241,8 @@ public sealed class StutteringJudgeRoleTests : DiagnosticTestBase
 		voteResult.Semantic.Should().Be(
 			ModeratorInstructionSemantic.RecordDayVote);
 		var commit = builder.GetGameState()!.GameHistoryLog
-			.OfType<StutteringJudgeConsecutiveVoteCommittedLogEntry>()
+			.OfType<OneUseRolePowerDayActionCommittedLogEntry>()
 			.Should().ContainSingle().Subject;
-		commit.SignalOccurred.Should().BeTrue();
 		commit.ActionType.Should().Be(DayPowerType.JudgeExtraVote);
 		commit.TargetIds.Should().BeNull();
 		commit.ResourceIdentity.ActingPlayerId.Should().Be(judge.Id);
@@ -402,7 +401,7 @@ public sealed class StutteringJudgeRoleTests : DiagnosticTestBase
 			GameStrings.VoteStartsPublicInstruction);
 		var session = service.GetGameStateView(gameId)!;
 		session.GameHistoryLog
-			.OfType<StutteringJudgeConsecutiveVoteCommittedLogEntry>()
+			.OfType<OneUseRolePowerDayActionCommittedLogEntry>()
 			.Should().ContainSingle();
 		session.GameHistoryLog
 			.OfType<VoteOutcomeReportedLogEntry>()
@@ -495,7 +494,7 @@ public sealed class StutteringJudgeRoleTests : DiagnosticTestBase
 		builder.GetGameState()!.Serialize().Should().Be(before);
 		builder.GetGameState()!.GameHistoryLog.Should().Equal(beforeLogs);
 		builder.GetGameState()!.GameHistoryLog
-			.OfType<StutteringJudgeConsecutiveVoteCommittedLogEntry>()
+			.OfType<OneUseRolePowerDayActionCommittedLogEntry>()
 			.Should().ContainSingle();
 		MarkTestCompleted();
 	}
@@ -541,7 +540,7 @@ public sealed class StutteringJudgeRoleTests : DiagnosticTestBase
 			.OfType<StutteringJudgeSignalDidNotOccurLogEntry>()
 			.Should().BeEmpty();
 		builder.GetGameState()!.GameHistoryLog
-			.OfType<StutteringJudgeConsecutiveVoteCommittedLogEntry>()
+			.OfType<OneUseRolePowerDayActionCommittedLogEntry>()
 			.Should().BeEmpty();
 		MarkTestCompleted();
 	}
@@ -579,7 +578,7 @@ public sealed class StutteringJudgeRoleTests : DiagnosticTestBase
 		vote.PrivateInstruction.Should().Be(
 			GameStrings.VoteStartsModeratorInstruction);
 		builder.GetGameState()!.GameHistoryLog.Should().NotContain(entry =>
-			entry is StutteringJudgeConsecutiveVoteCommittedLogEntry);
+				entry is OneUseRolePowerDayActionCommittedLogEntry);
 		MarkTestCompleted();
 	}
 
@@ -805,6 +804,24 @@ public sealed class StutteringJudgeRoleTests : DiagnosticTestBase
 		var payload = RecoveryPayloadTestDriver
 			.Parse(builder.GetGameState()!.Serialize())
 			.RewriteLatestStutteringJudgeAction(DayPowerType.Unknown)
+			.Serialize();
+		var service = new GameService();
+
+		var act = () => service.RehydrateSession(payload);
+
+		act.Should().Throw<InvalidOperationException>()
+			.WithMessage("*structurally invalid*");
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void Rehydrate_RejectsTargetedStutteringJudgeCommit()
+	{
+		var (builder, _, _, _) = CreateGameAtFirstDay();
+		CommitConsecutiveVoteBeforeResult(builder);
+		var payload = RecoveryPayloadTestDriver
+			.Parse(builder.GetGameState()!.Serialize())
+			.TargetLatestStutteringJudgeAction()
 			.Serialize();
 		var service = new GameService();
 

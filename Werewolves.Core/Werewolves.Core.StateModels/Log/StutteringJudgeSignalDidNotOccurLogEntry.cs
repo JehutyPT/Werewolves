@@ -6,7 +6,8 @@ namespace Werewolves.Core.StateModels.Log;
 /// Records an accepted negative observation without spending the Judge's power.
 /// </summary>
 public sealed record StutteringJudgeSignalDidNotOccurLogEntry
-	: GameLogEntryBase
+	: GameLogEntryBase,
+		IGameFactLogEntry
 {
 	public required Guid JudgePlayerId { get; init; }
 
