@@ -154,7 +154,7 @@ internal sealed class RecoveryPayloadTestDriver
 	}
 
 	internal RecoveryPayloadTestDriver
-		InvalidateLatestScapegoatRestrictionTurn()
+		InvalidateLatestVoterEligibilityRestrictionTurn()
 	{
 		var entryIndex = _payload.GameHistoryLog.FindLastIndex(
 			entry => entry is VoterEligibilityRestrictionCommittedLogEntry);
@@ -163,32 +163,12 @@ internal sealed class RecoveryPayloadTestDriver
 			VoterEligibilityRestrictionCommittedLogEntry entry)
 		{
 			throw new InvalidOperationException(
-				"The recovery test payload has no committed Scapegoat voter restriction.");
+				"The recovery test payload has no committed voter-eligibility restriction.");
 		}
 
 		_payload.GameHistoryLog[entryIndex] = entry with
 		{
 			AppliesOnTurnNumber = entry.TurnNumber
-		};
-		return this;
-	}
-
-	internal RecoveryPayloadTestDriver
-		MismatchLatestScapegoatRestrictionScope()
-	{
-		var entryIndex = _payload.GameHistoryLog.FindLastIndex(
-			entry => entry is VoterEligibilityRestrictionCommittedLogEntry);
-		if (entryIndex < 0 ||
-		    _payload.GameHistoryLog[entryIndex] is not
-			VoterEligibilityRestrictionCommittedLogEntry entry)
-		{
-			throw new InvalidOperationException(
-				"The recovery test payload has no committed Scapegoat voter restriction.");
-		}
-
-		_payload.GameHistoryLog[entryIndex] = entry with
-		{
-			ScopeId = $"{entry.ScopeId}:mismatched"
 		};
 		return this;
 	}

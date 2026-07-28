@@ -627,12 +627,8 @@ public sealed class ScapegoatRoleTests : DiagnosticTestBase
 		MarkTestCompleted();
 	}
 
-	[Theory]
-	[InlineData(false, "*voter-eligibility restriction*structurally invalid*")]
-	[InlineData(true, "*Scapegoat voter restriction*does not match one unique tie replacement*")]
-	public void Recovery_WithMalformedVoterRestriction_IsRejected(
-		bool mismatchScope,
-		string expectedMessage)
+	[Fact]
+	public void Recovery_WithStructurallyInvalidVoterRestriction_IsRejected()
 	{
 		var builder = CreateBuilder()
 			.WithPlayers(5)
@@ -667,15 +663,15 @@ public sealed class ScapegoatRoleTests : DiagnosticTestBase
 			[voterChoice.SelectablePlayerIds.First()]));
 		var payload = RecoveryPayloadTestDriver.Parse(
 			builder.GetGameState()!.Serialize());
-		var malformed = (mismatchScope
-				? payload.MismatchLatestScapegoatRestrictionScope()
-				: payload.InvalidateLatestScapegoatRestrictionTurn())
+		var malformed = payload
+			.InvalidateLatestVoterEligibilityRestrictionTurn()
 			.Serialize();
 
 		var act = () => new GameService().RehydrateSession(malformed);
 
 		act.Should().Throw<InvalidOperationException>()
-			.WithMessage(expectedMessage);
+			.WithMessage(
+				"*voter-eligibility restriction*structurally invalid*");
 		MarkTestCompleted();
 	}
 

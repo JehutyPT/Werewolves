@@ -1,7 +1,5 @@
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
-using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
 
 namespace Werewolves.Core.StateModels.Serialization;
@@ -45,18 +43,6 @@ public class GameLogEntryConverter : JsonConverter<GameLogEntryBase>
     private static readonly Dictionary<Type, string> ReverseTypeMap =
         TypeMap.ToDictionary(kvp => kvp.Value, kvp => kvp.Key);
 
-    private static readonly Dictionary<string, Type> LegacyTypeMap = new()
-    {
-        ["ScapegoatVoterRestrictionAnnouncementAcknowledgedLogEntry"] =
-            typeof(VoterEligibilityRestrictionAnnouncementAcknowledgedLogEntry),
-        ["ScapegoatVoterRestrictionCommittedLogEntry"] =
-            typeof(VoterEligibilityRestrictionCommittedLogEntry),
-        ["ScapegoatVoterRestrictionExpiredLogEntry"] =
-            typeof(VoterEligibilityRestrictionExpiredLogEntry),
-        ["StutteringJudgeConsecutiveVoteCommittedLogEntry"] =
-            typeof(OneUseRolePowerDayActionCommittedLogEntry)
-    };
-
     public override GameLogEntryBase? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         if (reader.TokenType != JsonTokenType.StartObject)
@@ -73,28 +59,13 @@ public class GameLogEntryConverter : JsonConverter<GameLogEntryBase>
         }
 
         var typeName = typeProperty.GetString();
-        if (typeName == null ||
-            !TypeMap.TryGetValue(typeName, out var targetType) &&
-            !LegacyTypeMap.TryGetValue(typeName, out targetType))
+        if (typeName == null || !TypeMap.TryGetValue(typeName, out var targetType))
         {
             throw new JsonException($"Unknown type discriminator: {typeName}");
         }
 
         // Create a new options instance without this converter to avoid infinite recursion
         var innerOptions = CreateOptionsWithoutThisConverter(options);
-
-        if (typeName == "ScapegoatVoterRestrictionCommittedLogEntry")
-        {
-            var migrated = JsonNode.Parse(root.GetRawText())!.AsObject();
-            migrated[nameof(
-                VoterEligibilityRestrictionCommittedLogEntry.SourceRole)] =
-                JsonSerializer.SerializeToNode(
-                    MainRoleType.Scapegoat,
-                    innerOptions);
-            return (GameLogEntryBase?)migrated.Deserialize(
-                targetType,
-                innerOptions);
-        }
 
         return (GameLogEntryBase?)JsonSerializer.Deserialize(
             root.GetRawText(),

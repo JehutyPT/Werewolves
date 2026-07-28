@@ -19,10 +19,7 @@ internal enum DaySubPhaseStage
 	Debate,
 	RequestVote,
 	HandleVoteResponse,
-	    ResolveEliminationCascade,
-	    VoteOutcomeNavigation,
-	    ExpireVoterEligibilityRestriction,
-	    [Obsolete(
-		    "Retained only to parse recovery snapshots written before the generic Day Vote rule migration.")]
-	    ExpireScapegoatVoterRestriction = ExpireVoterEligibilityRestriction
-	}
+	ResolveEliminationCascade,
+	VoteOutcomeNavigation,
+	ExpireVoterEligibilityRestriction
+}
