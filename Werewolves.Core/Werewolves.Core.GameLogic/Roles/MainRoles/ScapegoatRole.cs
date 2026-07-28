@@ -353,11 +353,17 @@ internal sealed class ScapegoatRole
 				"The Scapegoat can replace only a tied Day Vote.");
 		}
 
-		session.RecordScapegoatTieReplacement(
-			scapegoatPlayerId,
-			vote.VoteOrdinal,
-			vote.LogIndex,
-			CreateScopeId(session, vote.VoteOrdinal));
+		session.CommitGameFact(context =>
+			new ScapegoatTieReplacementLogEntry
+			{
+				Timestamp = context.Timestamp,
+				TurnNumber = context.TurnNumber,
+				CurrentPhase = context.CurrentPhase,
+				ScapegoatPlayerId = scapegoatPlayerId,
+				VoteOrdinal = vote.VoteOrdinal,
+				VoteLogIndex = vote.LogIndex,
+				ScopeId = CreateScopeId(session, vote.VoteOrdinal)
+			});
 	}
 
 	private static EliminationCascadeSeed CreateCascadeSeed(GameSession session)
@@ -393,7 +399,7 @@ internal sealed class ScapegoatRole
 			GameSessionQueries.GetCurrentScapegoatTieReplacement(session)
 			?? throw new InvalidOperationException(
 				"The Scapegoat voter restriction requires a tie replacement fact.");
-		var restriction = GameSessionQueries.GetScapegoatVoterRestriction(
+		var restriction = DayVoteRules.GetVoterEligibilityRestriction(
 			session,
 			replacement.ScopeId);
 		if (restriction == null)
@@ -418,15 +424,16 @@ internal sealed class ScapegoatRole
 			}
 
 			var announcementInstructionId = Guid.NewGuid();
-			session.CommitScapegoatVoterRestriction(
+			DayVoteRules.CommitVoterEligibilityRestriction(
+				session,
 				replacement.ScopeId,
-				replacement.ScapegoatPlayerId,
+				MainRoleType.Scapegoat,
 				selection.SelectablePlayerIds,
 				selected,
 				session.TurnNumber + 1,
 				announcementInstructionId);
 			restriction =
-				GameSessionQueries.GetScapegoatVoterRestriction(
+				DayVoteRules.GetVoterEligibilityRestriction(
 					session,
 					replacement.ScopeId)
 				?? throw new InvalidOperationException(
@@ -435,8 +442,8 @@ internal sealed class ScapegoatRole
 				CreatePermittedVoterAnnouncement(session, restriction));
 		}
 
-		if (GameSessionQueries
-		    .IsScapegoatVoterRestrictionAnnouncementAcknowledged(
+		if (DayVoteRules
+		    .IsVoterEligibilityRestrictionAnnouncementAcknowledged(
 			    session,
 			    restriction.ScopeId,
 			    restriction.AnnouncementInstructionId))
@@ -456,7 +463,8 @@ internal sealed class ScapegoatRole
 				"The Scapegoat permitted-voter announcement acknowledgment is stale or mismatched.");
 		}
 
-		session.AcknowledgeScapegoatVoterRestrictionAnnouncement(
+		DayVoteRules.AcknowledgeVoterEligibilityRestrictionAnnouncement(
+			session,
 			restriction.ScopeId,
 			restriction.AnnouncementInstructionId);
 		return EliminationCascadePostCommitInteractionResult.Complete();
@@ -480,7 +488,7 @@ internal sealed class ScapegoatRole
 
 	private static ModeratorInstruction CreatePermittedVoterAnnouncement(
 		GameSession session,
-		ScapegoatVoterRestrictionCommittedLogEntry restriction)
+		VoterEligibilityRestrictionCommittedLogEntry restriction)
 	{
 		var selectedNames = string.Join(
 			Environment.NewLine,

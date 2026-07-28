@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
@@ -42,6 +41,12 @@ public interface ISubPhaseManagerKey { }
 /// Used to grant IHookSubPhaseStage access to updating game hook listener and listener state
 /// </summary>
 public interface IHookSubPhaseKey{}
+
+internal readonly record struct GameFactContext(
+	DateTimeOffset Timestamp,
+	int TurnNumber,
+	GamePhase CurrentPhase);
+
 /// <summary>
 /// Represents the tracked state of a single ongoing game.
 /// This class encapsulates all game state and provides a controlled API for state mutations.
@@ -217,7 +222,31 @@ internal class GameSession : IGameSession
 
 	#region Internal Command API
 
-	internal void PerformNightActionNoTarget(NightActionType type) 
+	internal void CommitGameFact<TEntry>(
+		Func<GameFactContext, TEntry> entryFactory)
+		where TEntry : GameLogEntryBase, IGameFactLogEntry
+	{
+		ArgumentNullException.ThrowIfNull(entryFactory);
+
+		var context = new GameFactContext(
+			DateTimeOffset.UtcNow,
+			TurnNumber,
+			_gameSessionKernel.PhaseStateCache.GetCurrentPhase());
+		var entry = entryFactory(context)
+			?? throw new InvalidOperationException(
+				"The game fact factory returned no log entry.");
+		if (entry.Timestamp != context.Timestamp ||
+		    entry.TurnNumber != context.TurnNumber ||
+		    entry.CurrentPhase != context.CurrentPhase)
+		{
+			throw new InvalidOperationException(
+				"Game facts must use the session-provided timestamp, turn, and phase.");
+		}
+
+		_gameSessionKernel.AddEntryAndUpdateState(entry);
+	}
+
+	internal void PerformNightActionNoTarget(NightActionType type)
         => PerformNightActionCore(type, null);
 
     internal void PerformNightAction(NightActionType type, Guid targetId) 
@@ -458,79 +487,6 @@ internal class GameSession : IGameSession
         _gameSessionKernel.AddEntryAndUpdateState(entry);
     }
 
-    internal void RecordScapegoatTieReplacement(
-        Guid scapegoatPlayerId,
-        int voteOrdinal,
-        int voteLogIndex,
-        string scopeId)
-    {
-        var entry = new ScapegoatTieReplacementLogEntry
-        {
-            Timestamp = DateTimeOffset.UtcNow,
-            TurnNumber = TurnNumber,
-            CurrentPhase = _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
-            ScapegoatPlayerId = scapegoatPlayerId,
-            VoteOrdinal = voteOrdinal,
-            VoteLogIndex = voteLogIndex,
-            ScopeId = scopeId
-        };
-
-        _gameSessionKernel.AddEntryAndUpdateState(entry);
-    }
-
-    internal void CommitScapegoatVoterRestriction(
-        string scopeId,
-        Guid scapegoatPlayerId,
-        IReadOnlyCollection<Guid> candidatePlayerIds,
-        IReadOnlyCollection<Guid> permittedVoterIds,
-        int appliesOnTurnNumber,
-        Guid announcementInstructionId)
-    {
-        var entry = new ScapegoatVoterRestrictionCommittedLogEntry
-        {
-            Timestamp = DateTimeOffset.UtcNow,
-            TurnNumber = TurnNumber,
-            CurrentPhase = _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
-            ScopeId = scopeId,
-            ScapegoatPlayerId = scapegoatPlayerId,
-            CandidatePlayerIds = candidatePlayerIds.ToImmutableArray(),
-            PermittedVoterIds = permittedVoterIds.ToImmutableArray(),
-            AppliesOnTurnNumber = appliesOnTurnNumber,
-            AnnouncementInstructionId = announcementInstructionId
-        };
-
-        _gameSessionKernel.AddEntryAndUpdateState(entry);
-    }
-
-    internal void AcknowledgeScapegoatVoterRestrictionAnnouncement(
-        string scopeId,
-        Guid announcementInstructionId)
-    {
-        var entry =
-            new ScapegoatVoterRestrictionAnnouncementAcknowledgedLogEntry
-            {
-                Timestamp = DateTimeOffset.UtcNow,
-                TurnNumber = TurnNumber,
-                CurrentPhase =
-                    _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
-                ScopeId = scopeId,
-                AnnouncementInstructionId = announcementInstructionId
-            };
-        _gameSessionKernel.AddEntryAndUpdateState(entry);
-    }
-
-    internal void ExpireScapegoatVoterRestriction(string scopeId)
-    {
-        var entry = new ScapegoatVoterRestrictionExpiredLogEntry
-        {
-            Timestamp = DateTimeOffset.UtcNow,
-            TurnNumber = TurnNumber,
-            CurrentPhase = _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
-            ScopeId = scopeId
-        };
-        _gameSessionKernel.AddEntryAndUpdateState(entry);
-    }
-
     internal void TransitionMainPhase(GamePhase newPhase)
     {
         var oldPhase = GetCurrentPhase();
@@ -579,70 +535,6 @@ internal class GameSession : IGameSession
 
 		_gameSessionKernel.AddEntryAndUpdateState(entry);
 	}
-
-	internal void RecordStutteringJudgeSignalEstablished(Guid judgePlayerId)
-	{
-		if (judgePlayerId == Guid.Empty)
-		{
-			throw new ArgumentException(
-				"The Stuttering Judge holder identity is required.",
-				nameof(judgePlayerId));
-		}
-
-		_gameSessionKernel.AddEntryAndUpdateState(
-			new StutteringJudgeSignalEstablishedLogEntry
-			{
-				Timestamp = DateTimeOffset.UtcNow,
-				TurnNumber = TurnNumber,
-				CurrentPhase =
-					_gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
-				JudgePlayerId = judgePlayerId
-			});
-	}
-
-	internal void RecordStutteringJudgeSignalDidNotOccur(Guid judgePlayerId)
-	{
-		if (judgePlayerId == Guid.Empty)
-		{
-			throw new ArgumentException(
-				"The Stuttering Judge holder identity is required.",
-				nameof(judgePlayerId));
-		}
-
-		_gameSessionKernel.AddEntryAndUpdateState(
-			new StutteringJudgeSignalDidNotOccurLogEntry
-			{
-				Timestamp = DateTimeOffset.UtcNow,
-				TurnNumber = TurnNumber,
-				CurrentPhase =
-					_gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
-				JudgePlayerId = judgePlayerId
-			});
-	}
-
-	internal void CommitStutteringJudgeConsecutiveVote(
-		OneUseRolePowerResourceIdentity resourceIdentity)
-	{
-		resourceIdentity.EnforceValidity();
-		if (resourceIdentity.SourceRole != MainRoleType.StutteringJudge)
-		{
-			throw new InvalidOperationException(
-				"The Consecutive Vote resource must belong to the Stuttering Judge.");
-		}
-
-			var entry = new StutteringJudgeConsecutiveVoteCommittedLogEntry
-			{
-			Timestamp = DateTimeOffset.UtcNow,
-			TurnNumber = TurnNumber,
-			CurrentPhase =
-				_gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
-				ActionType = DayPowerType.JudgeExtraVote,
-				TargetIds = null,
-				ResourceIdentity = resourceIdentity
-			};
-			entry.EnforceValidity();
-			_gameSessionKernel.AddEntryAndUpdateState(entry);
-		}
 
 		#endregion
 

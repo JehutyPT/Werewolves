@@ -85,10 +85,10 @@ internal sealed class RecoveryPayloadTestDriver
 	{
 		var entryIndex = _payload.GameHistoryLog.FindLastIndex(
 			entry => entry is
-				StutteringJudgeConsecutiveVoteCommittedLogEntry);
+				OneUseRolePowerDayActionCommittedLogEntry);
 		if (entryIndex < 0 ||
 		    _payload.GameHistoryLog[entryIndex] is not
-			    StutteringJudgeConsecutiveVoteCommittedLogEntry entry)
+			OneUseRolePowerDayActionCommittedLogEntry entry)
 		{
 			throw new InvalidOperationException(
 				"The recovery test payload has no committed Stuttering Judge vote.");
@@ -101,10 +101,32 @@ internal sealed class RecoveryPayloadTestDriver
 		return this;
 	}
 
+	internal RecoveryPayloadTestDriver TargetLatestStutteringJudgeAction()
+	{
+		var entryIndex = _payload.GameHistoryLog.FindLastIndex(
+			entry => entry is OneUseRolePowerDayActionCommittedLogEntry);
+		if (entryIndex < 0 ||
+		    _payload.GameHistoryLog[entryIndex] is not
+			    OneUseRolePowerDayActionCommittedLogEntry entry)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no committed Stuttering Judge vote.");
+		}
+
+		var targetId = _payload.Players
+			.Select(player => player.Id)
+			.First(id => id != entry.ResourceIdentity.ActingPlayerId);
+		_payload.GameHistoryLog[entryIndex] = entry with
+		{
+			TargetIds = [targetId]
+		};
+		return this;
+	}
+
 	internal RecoveryPayloadTestDriver AddCrossTypeDuplicateOfStutteringJudgeResource()
 	{
 		var judgeCommit = _payload.GameHistoryLog
-			.OfType<StutteringJudgeConsecutiveVoteCommittedLogEntry>()
+			.OfType<OneUseRolePowerDayActionCommittedLogEntry>()
 			.LastOrDefault()
 			?? throw new InvalidOperationException(
 				"The recovery test payload has no committed Stuttering Judge vote.");
@@ -132,41 +154,21 @@ internal sealed class RecoveryPayloadTestDriver
 	}
 
 	internal RecoveryPayloadTestDriver
-		InvalidateLatestScapegoatRestrictionTurn()
+		InvalidateLatestVoterEligibilityRestrictionTurn()
 	{
 		var entryIndex = _payload.GameHistoryLog.FindLastIndex(
-			entry => entry is ScapegoatVoterRestrictionCommittedLogEntry);
+			entry => entry is VoterEligibilityRestrictionCommittedLogEntry);
 		if (entryIndex < 0 ||
 		    _payload.GameHistoryLog[entryIndex] is not
-			    ScapegoatVoterRestrictionCommittedLogEntry entry)
+			VoterEligibilityRestrictionCommittedLogEntry entry)
 		{
 			throw new InvalidOperationException(
-				"The recovery test payload has no committed Scapegoat voter restriction.");
+				"The recovery test payload has no committed voter-eligibility restriction.");
 		}
 
 		_payload.GameHistoryLog[entryIndex] = entry with
 		{
 			AppliesOnTurnNumber = entry.TurnNumber
-		};
-		return this;
-	}
-
-	internal RecoveryPayloadTestDriver
-		MismatchLatestScapegoatRestrictionScope()
-	{
-		var entryIndex = _payload.GameHistoryLog.FindLastIndex(
-			entry => entry is ScapegoatVoterRestrictionCommittedLogEntry);
-		if (entryIndex < 0 ||
-		    _payload.GameHistoryLog[entryIndex] is not
-			    ScapegoatVoterRestrictionCommittedLogEntry entry)
-		{
-			throw new InvalidOperationException(
-				"The recovery test payload has no committed Scapegoat voter restriction.");
-		}
-
-		_payload.GameHistoryLog[entryIndex] = entry with
-		{
-			ScopeId = $"{entry.ScopeId}:mismatched"
 		};
 		return this;
 	}

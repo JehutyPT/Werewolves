@@ -27,11 +27,11 @@ public class GameLogEntryConverter : JsonConverter<GameLogEntryBase>
         ["RoleIdentificationLogEntry"] = typeof(RoleIdentificationLogEntry),
 	        ["RoleRevealLogEntry"] = typeof(RoleRevealLogEntry),
 	        ["ScapegoatTieReplacementLogEntry"] = typeof(ScapegoatTieReplacementLogEntry),
-	        ["ScapegoatVoterRestrictionAnnouncementAcknowledgedLogEntry"] = typeof(ScapegoatVoterRestrictionAnnouncementAcknowledgedLogEntry),
-	        ["ScapegoatVoterRestrictionCommittedLogEntry"] = typeof(ScapegoatVoterRestrictionCommittedLogEntry),
-	        ["ScapegoatVoterRestrictionExpiredLogEntry"] = typeof(ScapegoatVoterRestrictionExpiredLogEntry),
+	        ["VoterEligibilityRestrictionAnnouncementAcknowledgedLogEntry"] = typeof(VoterEligibilityRestrictionAnnouncementAcknowledgedLogEntry),
+	        ["VoterEligibilityRestrictionCommittedLogEntry"] = typeof(VoterEligibilityRestrictionCommittedLogEntry),
+	        ["VoterEligibilityRestrictionExpiredLogEntry"] = typeof(VoterEligibilityRestrictionExpiredLogEntry),
 	        ["StatusEffectLogEntry"] = typeof(StatusEffectLogEntry),
-	        ["StutteringJudgeConsecutiveVoteCommittedLogEntry"] = typeof(StutteringJudgeConsecutiveVoteCommittedLogEntry),
+	        ["OneUseRolePowerDayActionCommittedLogEntry"] = typeof(OneUseRolePowerDayActionCommittedLogEntry),
 	        ["StutteringJudgeSignalDidNotOccurLogEntry"] = typeof(StutteringJudgeSignalDidNotOccurLogEntry),
 	        ["StutteringJudgeSignalEstablishedLogEntry"] = typeof(StutteringJudgeSignalEstablishedLogEntry),
 	        ["VillagerVillagerPublicFromDealLogEntry"] = typeof(VillagerVillagerPublicFromDealLogEntry),
@@ -40,7 +40,7 @@ public class GameLogEntryConverter : JsonConverter<GameLogEntryBase>
 	        ["VotingRightChangedLogEntry"] = typeof(VotingRightChangedLogEntry),
 	    };
 
-    private static readonly Dictionary<Type, string> ReverseTypeMap = 
+    private static readonly Dictionary<Type, string> ReverseTypeMap =
         TypeMap.ToDictionary(kvp => kvp.Value, kvp => kvp.Key);
 
     public override GameLogEntryBase? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
@@ -66,8 +66,11 @@ public class GameLogEntryConverter : JsonConverter<GameLogEntryBase>
 
         // Create a new options instance without this converter to avoid infinite recursion
         var innerOptions = CreateOptionsWithoutThisConverter(options);
-        
-        return (GameLogEntryBase?)JsonSerializer.Deserialize(root.GetRawText(), targetType, innerOptions);
+
+        return (GameLogEntryBase?)JsonSerializer.Deserialize(
+            root.GetRawText(),
+            targetType,
+            innerOptions);
     }
 
     public override void Write(Utf8JsonWriter writer, GameLogEntryBase value, JsonSerializerOptions options)

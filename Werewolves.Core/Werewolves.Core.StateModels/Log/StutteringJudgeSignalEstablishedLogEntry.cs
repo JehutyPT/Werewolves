@@ -6,7 +6,9 @@ namespace Werewolves.Core.StateModels.Log;
 /// Records only that the private Stuttering Judge signal was established.
 /// The signal itself is a physical-table fact and is never persisted.
 /// </summary>
-public sealed record StutteringJudgeSignalEstablishedLogEntry : GameLogEntryBase
+public sealed record StutteringJudgeSignalEstablishedLogEntry
+	: GameLogEntryBase,
+		IGameFactLogEntry
 {
 	public required Guid JudgePlayerId { get; init; }
 

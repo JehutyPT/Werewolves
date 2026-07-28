@@ -99,30 +99,12 @@ internal static class GameSessionQueries
             .ToArray();
     }
 
-    internal static bool WasDayAbilityTriggeredThisTurn(IGameSession session, DayPowerType powerType)
-        => FindLogEntries<DayActionLogEntry>(
-                session,
-                NumberRangeConstraint.Exact(session.TurnNumber),
-                filter: log => log.ActionType == powerType)
-            .Any();
-
     internal static bool HasPlayerBeenVotedForPreviously(IGameSession session, Guid playerId)
         => FindLogEntries<VoteOutcomeReportedLogEntry>(
                 session,
                 NumberRangeConstraint.Range(1, session.TurnNumber - 1),
                 filter: log => log.ReportedOutcomePlayerId == playerId)
             .Any();
-
-    internal static bool ShouldVoteRepeat(IGameSession session)
-    {
-        var hasJudgeVoted = WasDayAbilityTriggeredThisTurn(session, DayPowerType.JudgeExtraVote);
-        var currentTurnVoteCount = FindLogEntries<VoteOutcomeReportedLogEntry>(
-                session,
-                NumberRangeConstraint.Exact(session.TurnNumber))
-            .Count();
-
-        return hasJudgeVoted && currentTurnVoteCount == 1;
-    }
 
     internal static bool HasStutteringJudgeSignalBeenEstablished(
         IGameSession session) =>
@@ -143,10 +125,14 @@ internal static class GameSessionQueries
                    currentTurn,
                    GamePhase.Day)
                .Any() ||
-               FindLogEntries<StutteringJudgeConsecutiveVoteCommittedLogEntry>(
+               FindLogEntries<OneUseRolePowerDayActionCommittedLogEntry>(
                    session,
                    currentTurn,
-                   GamePhase.Day)
+                   GamePhase.Day,
+                   entry =>
+                       entry.ActionType == DayPowerType.JudgeExtraVote &&
+                       entry.ResourceIdentity.SourceRole ==
+                       MainRoleType.StutteringJudge)
                .Any();
     }
 
@@ -295,53 +281,6 @@ internal static class GameSessionQueries
                 entry => entry.VoteOrdinal == vote.Value.VoteOrdinal &&
                          entry.VoteLogIndex == vote.Value.LogIndex)
             .SingleOrDefault();
-    }
-
-    internal static ScapegoatVoterRestrictionCommittedLogEntry?
-        GetScapegoatVoterRestriction(
-            IGameSession session,
-            string scopeId) =>
-        session.GameHistoryLog
-            .OfType<ScapegoatVoterRestrictionCommittedLogEntry>()
-            .SingleOrDefault(entry => entry.ScopeId == scopeId);
-
-    internal static bool IsScapegoatVoterRestrictionAnnouncementAcknowledged(
-        IGameSession session,
-        string scopeId,
-        Guid announcementInstructionId) =>
-        session.GameHistoryLog
-            .OfType<
-                ScapegoatVoterRestrictionAnnouncementAcknowledgedLogEntry>()
-            .Any(entry =>
-                entry.ScopeId == scopeId &&
-                entry.AnnouncementInstructionId == announcementInstructionId);
-
-    internal static ScapegoatVoterRestrictionCommittedLogEntry?
-        GetActiveScapegoatVoterRestriction(IGameSession session) =>
-        session.GameHistoryLog
-            .OfType<ScapegoatVoterRestrictionCommittedLogEntry>()
-            .SingleOrDefault(entry =>
-                entry.AppliesOnTurnNumber == session.TurnNumber &&
-                !session.GameHistoryLog
-                    .OfType<ScapegoatVoterRestrictionExpiredLogEntry>()
-                    .Any(expiry => expiry.ScopeId == entry.ScopeId));
-
-    internal static IReadOnlyList<IPlayer> GetEffectiveDayVoters(
-        IGameSession session)
-    {
-        var eligible = session.GetPlayers()
-            .Where(player =>
-                player.State.Health == PlayerHealth.Alive &&
-                player.State.HasVotingRight);
-        var restriction = GetActiveScapegoatVoterRestriction(session);
-        if (restriction != null)
-        {
-            var permittedIds = restriction.PermittedVoterIds.ToHashSet();
-            eligible = eligible.Where(player =>
-                permittedIds.Contains(player.Id));
-        }
-
-        return eligible.ToArray();
     }
 
     internal static EliminationCascadeBatchResolvedLogEntry?

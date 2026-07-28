@@ -19,7 +19,7 @@ internal enum DaySubPhaseStage
 	Debate,
 	RequestVote,
 	HandleVoteResponse,
-    ResolveEliminationCascade,
-    VoteOutcomeNavigation,
-    ExpireScapegoatVoterRestriction
+	ResolveEliminationCascade,
+	VoteOutcomeNavigation,
+	ExpireVoterEligibilityRestriction
 }

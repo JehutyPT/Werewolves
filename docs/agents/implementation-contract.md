@@ -157,6 +157,10 @@ unblocked. Closing or removing the last blocker never adds it.
 
 - **All user-facing UI text must be in Portuguese.** State this explicitly in
   Outcome or Acceptance criteria when a slice adds visible UI.
+- **Do not preserve pre-release compatibility.** Until the first full release,
+  remove obsolete code, serialized aliases, migrations, and their compatibility
+  tests instead of retaining old behavior. Add compatibility only when the user
+  explicitly changes this policy.
 - **Cite ADRs.** If `docs/adr/` covers an affected area, cite the decision in
   Dependency assumptions or Scope boundaries.
 - **Use the domain glossary.** Phrase contracts in `CONTEXT.md` terminology:

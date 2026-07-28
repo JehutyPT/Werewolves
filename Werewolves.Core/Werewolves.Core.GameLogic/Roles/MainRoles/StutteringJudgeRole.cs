@@ -2,8 +2,10 @@ using Werewolves.Core.GameLogic.Models.GameHookListeners;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
 using Werewolves.Core.GameLogic.Queries;
 using Werewolves.Core.GameLogic.RolePowers;
+using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Resources;
@@ -203,7 +205,7 @@ internal sealed class StutteringJudgeRole
 		var judge = GetAliveRolePlayers(session)?.SingleOrDefault()
 			?? throw new InvalidOperationException(
 				"No living Stuttering Judge is available to complete signal setup.");
-		session.RecordStutteringJudgeSignalEstablished(judge.Id);
+		RecordSignalEstablished(session, judge.Id);
 		return HookListenerActionResult.Complete(
 			StutteringJudgeRoleState.NightComplete);
 	}
@@ -274,7 +276,7 @@ internal sealed class StutteringJudgeRole
 			    selectedOptionId,
 			    StutteringJudgeSignalOptionIds.DidNotOccur))
 		{
-			session.RecordStutteringJudgeSignalDidNotOccur(judge.Id);
+			RecordSignalDidNotOccur(session, judge.Id);
 			return HookListenerActionResult.Complete(
 				StutteringJudgeRoleState.DayComplete);
 		}
@@ -287,7 +289,9 @@ internal sealed class StutteringJudgeRole
 				"The Stuttering Judge signal option is unknown.");
 		}
 
-		session.CommitStutteringJudgeConsecutiveVote(
+		DayVoteRules.CommitOneUseDayAction(
+			session,
+			DayPowerType.JudgeExtraVote,
 			CreateResourceIdentity(judge));
 		return HookListenerActionResult.Complete(
 			StutteringJudgeRoleState.DayComplete);
@@ -338,6 +342,46 @@ internal sealed class StutteringJudgeRole
 		instance.Id,
 		instance.Origin,
 		ConsecutiveVoteResourceId);
+
+	private static void RecordSignalEstablished(
+		GameSession session,
+		Guid judgePlayerId)
+	{
+		EnsureJudgePlayerId(judgePlayerId);
+		session.CommitGameFact(context =>
+			new StutteringJudgeSignalEstablishedLogEntry
+			{
+				Timestamp = context.Timestamp,
+				TurnNumber = context.TurnNumber,
+				CurrentPhase = context.CurrentPhase,
+				JudgePlayerId = judgePlayerId
+			});
+	}
+
+	private static void RecordSignalDidNotOccur(
+		GameSession session,
+		Guid judgePlayerId)
+	{
+		EnsureJudgePlayerId(judgePlayerId);
+		session.CommitGameFact(context =>
+			new StutteringJudgeSignalDidNotOccurLogEntry
+			{
+				Timestamp = context.Timestamp,
+				TurnNumber = context.TurnNumber,
+				CurrentPhase = context.CurrentPhase,
+				JudgePlayerId = judgePlayerId
+			});
+	}
+
+	private static void EnsureJudgePlayerId(Guid judgePlayerId)
+	{
+		if (judgePlayerId == Guid.Empty)
+		{
+			throw new ArgumentException(
+				"The Stuttering Judge holder identity is required.",
+				nameof(judgePlayerId));
+		}
+	}
 
 	private static bool HasEstablishedSignal(GameSession session) =>
 		GameSessionQueries.HasStutteringJudgeSignalBeenEstablished(session);
