@@ -18,17 +18,21 @@ The difficulty rarely lies in one rule on its own. It lies in remembering how ma
 
 ## Where the companion joins the table
 
-The companion belongs to the Moderator alone. The players do not pass the phone around or enter their own actions, because the social game remains entirely between the people in the room. Instead, the Moderator records the seating order and chooses which roles are in play before the first night begins. The physical cards still decide who holds each role, and those assignments remain secret; the companion learns them only when the Moderator does.
+The companion belongs to the Moderator alone. The players do not pass the phone around or enter their own actions, because the social game remains entirely between the people in the room. Instead, the Moderator begins by recording the seating order, giving the companion the shape of the circle gathered around the table.
 
-<!-- Future screenshot: show the English player-roster screen with a representative table already seated. Let the image arrive here as the first glimpse of the real interface, followed later by the role-selection screen rather than presenting both as an isolated gallery. -->
+![The player roster, arranged in seating order](docs/images/readme/moderator-roster.jpg)
+
+With that circle in place, the Moderator chooses which roles are in play before the first night begins. The physical cards still decide who holds each role, and those assignments remain secret; the companion learns them only when the Moderator does.
+
+![Role selection for the game about to begin](docs/images/readme/role-selection.jpg)
 
 Once the game is underway, the companion follows the same rhythm as the Moderator. It brings forward the next instruction, distinguishes what should be announced from what should remain private, and asks only for the decision needed to continue. As the night unfolds, it carries those answers into the rules of the game, keeps track of changing roles and player states, and preserves the chain of events so the Moderator does not have to reconstruct it from memory at dawn.
 
-<!-- Future screenshot: show an English Night-phase action screen at a moment that demonstrates the read–act–respond rhythm without exposing debug-only controls. -->
+![A Night-phase instruction separating the public announcement from the Moderator’s private guidance](docs/images/readme/night-guidance.jpg)
 
 Daylight asks for a different kind of attention. The conversation belongs to the players again, so the companion recedes and becomes a reference: a place to check who is still alive, what the village has learned, and which consequences are still in effect. Because the vote itself stays at the table, the Moderator records its outcome only after the players have decided, allowing the companion to carry the game towards the next night—or towards the final reveal.
 
-<!-- Future screenshot: show the English game overview during a calm daytime moment, choosing a state that complements the Night screenshot rather than repeating it. -->
+![The game overview keeping the state of the village close at hand](docs/images/readme/game-overview.jpg)
 
 ## The table stays in charge
 

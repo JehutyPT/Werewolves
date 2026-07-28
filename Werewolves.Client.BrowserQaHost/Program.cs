@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Werewolves.Client.BrowserQaHost;
 using Werewolves.Client.BrowserQaHost.Components;
 
-BrowserQaHostCulture.UsePortuguese();
+BrowserQaHostCulture.Use(Environment.GetEnvironmentVariable(BrowserQaHostCulture.EnvironmentVariableName));
 
 var builder = WebApplication.CreateBuilder(args);
 
