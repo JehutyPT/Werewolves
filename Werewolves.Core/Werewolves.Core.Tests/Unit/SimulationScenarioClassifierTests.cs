@@ -48,7 +48,7 @@ public class SimulationScenarioClassifierTests
 	}
 
 	[Fact]
-	public void Classify_TwoSisters_IsCurrentSafetyOnlyAndRejectedByLegacyRoleGate()
+	public void Classify_TwoSisters_IsSafetyScreeningOnly()
 	{
 		var scenario = new SimulationScenario(
 			5,
@@ -66,9 +66,6 @@ public class SimulationScenarioClassifierTests
 		var probability = SimulationScenarioClassifier.Classify(
 			scenario,
 			SimulatorCapability.FullProbability);
-		var legacy = SimulationScenarioClassifier.Classify(
-			scenario,
-			SimulatorProfile.LegacyCore);
 
 		safety.AppSupport!.IsSupported.Should().BeTrue();
 		safety.SimulatorSupport!.IsSupported.Should().BeTrue();
@@ -76,9 +73,6 @@ public class SimulationScenarioClassifierTests
 			.Be(new SimulatorProfileIdentity("safety-screening", "8"));
 		probability.SimulatorSupport!.IsSupported.Should().BeFalse();
 		probability.SimulatorSupport.UnsupportedRoles.Should()
-			.Equal(MainRoleType.TwoSisters);
-		legacy.SimulatorSupport!.IsSupported.Should().BeFalse();
-		legacy.SimulatorSupport.UnsupportedRoles.Should()
 			.Equal(MainRoleType.TwoSisters);
 	}
 
@@ -148,7 +142,7 @@ public class SimulationScenarioClassifierTests
 	}
 
 	[Fact]
-	public void Classify_ThreeBrothers_IsCurrentSafetyOnlyAndRejectedByLegacyRoleGate()
+	public void Classify_ThreeBrothers_IsSafetyScreeningOnly()
 	{
 		var scenario = new SimulationScenario(
 			6,
@@ -167,9 +161,6 @@ public class SimulationScenarioClassifierTests
 		var probability = SimulationScenarioClassifier.Classify(
 			scenario,
 			SimulatorCapability.FullProbability);
-		var legacy = SimulationScenarioClassifier.Classify(
-			scenario,
-			SimulatorProfile.LegacyCore);
 
 		safety.AppSupport!.IsSupported.Should().BeTrue();
 		safety.SimulatorSupport!.IsSupported.Should().BeTrue();
@@ -178,13 +169,10 @@ public class SimulationScenarioClassifierTests
 		probability.SimulatorSupport!.IsSupported.Should().BeFalse();
 		probability.SimulatorSupport.UnsupportedRoles.Should()
 			.Equal(MainRoleType.ThreeBrothers);
-		legacy.SimulatorSupport!.IsSupported.Should().BeFalse();
-		legacy.SimulatorSupport.UnsupportedRoles.Should()
-			.Equal(MainRoleType.ThreeBrothers);
 	}
 
 	[Fact]
-	public void Classify_Witch_IsCurrentSafetyOnlyAndRejectedByFrozenProfiles()
+	public void Classify_Witch_IsSafetyScreeningOnly()
 	{
 		var scenario = new SimulationScenario(
 			5,
@@ -202,9 +190,6 @@ public class SimulationScenarioClassifierTests
 		var probability = SimulationScenarioClassifier.Classify(
 			scenario,
 			SimulatorCapability.FullProbability);
-		var legacy = SimulationScenarioClassifier.Classify(
-			scenario,
-			SimulatorProfile.LegacyCore);
 
 		safety.AppSupport!.IsSupported.Should().BeTrue();
 		safety.SimulatorSupport!.IsSupported.Should().BeTrue();
@@ -213,13 +198,10 @@ public class SimulationScenarioClassifierTests
 		probability.SimulatorSupport!.IsSupported.Should().BeFalse();
 		probability.SimulatorSupport.UnsupportedRoles.Should()
 			.Equal(MainRoleType.Witch);
-		legacy.SimulatorSupport!.IsSupported.Should().BeFalse();
-		legacy.SimulatorSupport.UnsupportedRoles.Should()
-			.Equal(MainRoleType.Witch);
 	}
 
 	[Fact]
-	public void Classify_Hunter_IsCurrentSafetyOnlyAndRejectedByFrozenProfiles()
+	public void Classify_Hunter_IsSafetyScreeningOnly()
 	{
 		var scenario = new SimulationScenario(
 			5,
@@ -237,9 +219,6 @@ public class SimulationScenarioClassifierTests
 		var probability = SimulationScenarioClassifier.Classify(
 			scenario,
 			SimulatorCapability.FullProbability);
-		var legacy = SimulationScenarioClassifier.Classify(
-			scenario,
-			SimulatorProfile.LegacyCore);
 
 		safety.AppSupport!.IsSupported.Should().BeTrue();
 		safety.SimulatorSupport!.IsSupported.Should().BeTrue();
@@ -248,13 +227,10 @@ public class SimulationScenarioClassifierTests
 		probability.SimulatorSupport!.IsSupported.Should().BeFalse();
 		probability.SimulatorSupport.UnsupportedRoles.Should()
 			.Equal(MainRoleType.Hunter);
-		legacy.SimulatorSupport!.IsSupported.Should().BeFalse();
-		legacy.SimulatorSupport.UnsupportedRoles.Should()
-			.Equal(MainRoleType.Hunter);
 	}
 
 	[Fact]
-	public void Classify_StutteringJudge_IsCurrentSafetyOnlyAndRejectedByFrozenProfiles()
+	public void Classify_StutteringJudge_IsSafetyScreeningOnly()
 	{
 		var scenario = new SimulationScenario(
 			5,
@@ -272,9 +248,6 @@ public class SimulationScenarioClassifierTests
 		var probability = SimulationScenarioClassifier.Classify(
 			scenario,
 			SimulatorCapability.FullProbability);
-		var legacy = SimulationScenarioClassifier.Classify(
-			scenario,
-			SimulatorProfile.LegacyCore);
 
 		safety.AppSupport!.IsSupported.Should().BeTrue();
 		safety.SimulatorSupport!.IsSupported.Should().BeTrue();
@@ -283,13 +256,10 @@ public class SimulationScenarioClassifierTests
 		probability.SimulatorSupport!.IsSupported.Should().BeFalse();
 		probability.SimulatorSupport.UnsupportedRoles.Should()
 			.Equal(MainRoleType.StutteringJudge);
-		legacy.SimulatorSupport!.IsSupported.Should().BeFalse();
-		legacy.SimulatorSupport.UnsupportedRoles.Should()
-			.Equal(MainRoleType.StutteringJudge);
 	}
 
 	[Fact]
-	public void Classify_Scapegoat_IsCurrentSafetyOnlyAndRejectedByFrozenProfiles()
+	public void Classify_Scapegoat_IsSafetyScreeningOnly()
 	{
 		var scenario = new SimulationScenario(
 			5,
@@ -307,9 +277,6 @@ public class SimulationScenarioClassifierTests
 		var probability = SimulationScenarioClassifier.Classify(
 			scenario,
 			SimulatorCapability.FullProbability);
-		var legacy = SimulationScenarioClassifier.Classify(
-			scenario,
-			SimulatorProfile.LegacyCore);
 
 		safety.AppSupport!.IsSupported.Should().BeTrue();
 		safety.SimulatorSupport!.IsSupported.Should().BeTrue();
@@ -317,9 +284,6 @@ public class SimulationScenarioClassifierTests
 			.Be(new SimulatorProfileIdentity("safety-screening", "8"));
 		probability.SimulatorSupport!.IsSupported.Should().BeFalse();
 		probability.SimulatorSupport.UnsupportedRoles.Should()
-			.Equal(MainRoleType.Scapegoat);
-		legacy.SimulatorSupport!.IsSupported.Should().BeFalse();
-		legacy.SimulatorSupport.UnsupportedRoles.Should()
 			.Equal(MainRoleType.Scapegoat);
 	}
 }

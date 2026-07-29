@@ -21,7 +21,7 @@ public class RoleSelectionEvaluationTests
 	[Fact]
 	public void SupportedSetup_RendersPendingSummaryAfterRoleGroupsAndKeepsStartActivatable()
 	{
-		using var context = CreateContext(new NeverCompletingByteSource());
+		using var context = CreateContext(evaluator: new ControlledEvaluator());
 		SeedValidLobby(context.Services.GetRequiredService<LobbySetupState>());
 
 		var cut = context.RenderModeratorComponent<RoleSelectionPage>();
@@ -45,8 +45,7 @@ public class RoleSelectionEvaluationTests
 	{
 		var evaluator = new ControlledEvaluator();
 		using var context = CreateContext(
-			EmptyTerminalLobbyCacheByteSource.Instance,
-			evaluator,
+			evaluator: evaluator,
 			depth: LobbyEvaluationDepth.DegenerateScreeningOnly,
 			capability: SimulatorCapability.SafetyScreening);
 		SeedValidLobby(context.Services.GetRequiredService<LobbySetupState>());
@@ -75,8 +74,7 @@ public class RoleSelectionEvaluationTests
 	{
 		var evaluator = new CompletingEvaluator();
 		using var context = CreateContext(
-			EmptyTerminalLobbyCacheByteSource.Instance,
-			evaluator,
+			evaluator: evaluator,
 			depth: LobbyEvaluationDepth.DegenerateScreeningOnly,
 			capability: SimulatorCapability.SafetyScreening);
 		SeedValidLobby(context.Services.GetRequiredService<LobbySetupState>());
@@ -114,7 +112,7 @@ public class RoleSelectionEvaluationTests
 	[Fact]
 	public async Task StartHandler_RechecksOrdinaryValidationBeforeConsultingTheLiveGate()
 	{
-		using var context = CreateContext(new NeverCompletingByteSource());
+		using var context = CreateContext(evaluator: new ControlledEvaluator());
 		var lobby = context.Services.GetRequiredService<LobbySetupState>();
 		SeedValidLobby(lobby);
 		var starts = 0;
@@ -144,7 +142,7 @@ public class RoleSelectionEvaluationTests
 			new SingleFactionGameResult(Faction.Werewolf),
 			AlreadyDecidedReason.WerewolfControlShortcut);
 		using var context = CreateContext(
-			new ImmediateByteSource(record),
+			new SeededLocalStore(record),
 			depth: LobbyEvaluationDepth.DegenerateScreeningOnly,
 			capability: SimulatorCapability.SafetyScreening);
 		SeedValidLobby(context.Services.GetRequiredService<LobbySetupState>(), villagers: 2, werewolves: 3);
@@ -182,7 +180,7 @@ public class RoleSelectionEvaluationTests
 				new(werewolf, 1, VictoryCheckWindow.PreNight, 250, 1_000)
 			]);
 		using var context = CreateContext(
-			new ImmediateByteSource(record),
+			new SeededLocalStore(record),
 			depth: LobbyEvaluationDepth.DegenerateScreeningOnly,
 			capability: SimulatorCapability.SafetyScreening);
 		SeedValidLobby(context.Services.GetRequiredService<LobbySetupState>());
@@ -203,49 +201,6 @@ public class RoleSelectionEvaluationTests
 	}
 
 	[Fact]
-	public void DegenerateScreeningOnly_CachedProbabilityRendersNoInsightsAndPermitsOneRealStart()
-	{
-		var villager = new SingleFactionGameResult(Faction.Villager);
-		var werewolf = new SingleFactionGameResult(Faction.Werewolf);
-		var record = new ProbabilityTerminalCacheRecord(
-			CreateIdentity(profile: SimulatorProfile.LegacyCore),
-			[
-				new(villager, 7_000, 10_000),
-				new(werewolf, 3_000, 10_000),
-				new(new NoWinnerGameResult(), 0, 10_000)
-			],
-			[
-				new(villager, 1, VictoryCheckWindow.Dawn, 7_000, 10_000),
-				new(werewolf, 2, VictoryCheckWindow.PreNight, 3_000, 10_000)
-			]);
-		using var context = CreateContext(
-			new ImmediateByteSource(record),
-			depth: LobbyEvaluationDepth.DegenerateScreeningOnly,
-			capability: SimulatorCapability.SafetyScreening);
-		SeedValidLobby(context.Services.GetRequiredService<LobbySetupState>());
-		var cut = context.RenderModeratorComponent<Routes>();
-		cut.FindAll("button")
-			.Single(button => button.TextContent.Contains(ClientStrings.LobbyRoster_ContinueToRolesButton))
-			.Click();
-		cut.WaitForAssertion(() => context.Services.GetRequiredService<LobbyEvaluationCoordinator>()
-			.State.Kind.Should().Be(LobbyEvaluationStateKind.ScreeningPassed));
-
-		cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationPanel)).Should().BeEmpty();
-		cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationDisclosure)).Should().BeEmpty();
-		cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationRetry)).Should().BeEmpty();
-		cut.Markup.Should().NotContain(ClientStrings.LobbyEvaluation_Probability);
-
-		cut.Find(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Click();
-
-		cut.WaitForAssertion(() =>
-		{
-			context.Services.GetRequiredService<GameClientManager>().HasActiveSession.Should().BeTrue();
-			cut.FindAll(TestId(ModeratorUiTestIds.DashboardShell)).Should().ContainSingle();
-			cut.FindAll(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Should().BeEmpty();
-		});
-	}
-
-	[Fact]
 	public void ProbabilityStartAttempt_AtomicallyPermitsExactlyOneRealGameStartAndRouteTransition()
 	{
 		var villager = new SingleFactionGameResult(Faction.Villager);
@@ -263,7 +218,7 @@ public class RoleSelectionEvaluationTests
 				new(werewolf, 2, VictoryCheckWindow.PreNight, 3_000, 10_000)
 			]);
 		using var context = CreateContext(
-			new ImmediateByteSource(record),
+			new SeededLocalStore(record),
 			depth: LobbyEvaluationDepth.FullProbability,
 			capability: SimulatorCapability.FullProbability);
 		SeedValidLobby(context.Services.GetRequiredService<LobbySetupState>());
@@ -299,9 +254,7 @@ public class RoleSelectionEvaluationTests
 				RulesValid: true,
 				AppSupported: true,
 				SimulatorSupported: false);
-		using var context = CreateContext(
-			EmptyTerminalLobbyCacheByteSource.Instance,
-			classify: classify);
+		using var context = CreateContext(classify: classify);
 		SeedValidLobby(context.Services.GetRequiredService<LobbySetupState>());
 		var starts = 0;
 		var cut = context.RenderModeratorComponent<RoleSelectionPage>(parameters => parameters
@@ -319,7 +272,6 @@ public class RoleSelectionEvaluationTests
 	public void DegenerateScreeningOnly_SimulatorUnavailableStaysRenderlessAndAllowsStart()
 	{
 		using var context = CreateContext(
-			EmptyTerminalLobbyCacheByteSource.Instance,
 			classify: (_, _) => new(
 				RulesValid: true,
 				AppSupported: true,
@@ -344,7 +296,6 @@ public class RoleSelectionEvaluationTests
 	public void DegenerateScreeningOnly_EvaluationFailureStaysRenderlessAndAllowsNextStartAttempt()
 	{
 		using var context = CreateContext(
-			EmptyTerminalLobbyCacheByteSource.Instance,
 			depth: LobbyEvaluationDepth.DegenerateScreeningOnly,
 			capability: SimulatorCapability.SafetyScreening);
 		SeedValidLobby(context.Services.GetRequiredService<LobbySetupState>());
@@ -370,8 +321,7 @@ public class RoleSelectionEvaluationTests
 	{
 		var evaluator = new RetrySequenceEvaluator();
 		using var context = CreateContext(
-			EmptyTerminalLobbyCacheByteSource.Instance,
-			evaluator,
+			evaluator: evaluator,
 			depth: LobbyEvaluationDepth.FullProbability,
 			capability: SimulatorCapability.FullProbability);
 		SeedValidLobby(context.Services.GetRequiredService<LobbySetupState>());
@@ -414,8 +364,7 @@ public class RoleSelectionEvaluationTests
 	{
 		var evaluator = new RetrySequenceEvaluator();
 		using var context = CreateContext(
-			EmptyTerminalLobbyCacheByteSource.Instance,
-			evaluator,
+			evaluator: evaluator,
 			depth: LobbyEvaluationDepth.FullProbability,
 			capability: SimulatorCapability.FullProbability);
 		var lobby = context.Services.GetRequiredService<LobbySetupState>();
@@ -448,7 +397,7 @@ public class RoleSelectionEvaluationTests
 			new SingleFactionGameResult(Faction.Werewolf),
 			AlreadyDecidedReason.WerewolfControlShortcut);
 		using var context = CreateContext(
-			new ImmediateByteSource(oldRecord),
+			new SeededLocalStore(oldRecord),
 			timeProvider: new ManualTimeProvider());
 		var lobby = context.Services.GetRequiredService<LobbySetupState>();
 		SeedValidLobby(lobby, villagers: 2, werewolves: 3);
@@ -479,8 +428,7 @@ public class RoleSelectionEvaluationTests
 		var evaluator = new LateCompletionEvaluator();
 		var time = new ManualTimeProvider();
 		using var context = CreateContext(
-			EmptyTerminalLobbyCacheByteSource.Instance,
-			evaluator,
+			evaluator: evaluator,
 			timeProvider: time,
 			depth: LobbyEvaluationDepth.FullProbability,
 			capability: SimulatorCapability.FullProbability);
@@ -509,7 +457,7 @@ public class RoleSelectionEvaluationTests
 	[Fact]
 	public void Disposal_UnsubscribesFromCoordinatorStateChangesWithoutDisposingIt()
 	{
-		using var context = CreateContext(new NeverCompletingByteSource());
+		using var context = CreateContext(evaluator: new ControlledEvaluator());
 		var lobby = context.Services.GetRequiredService<LobbySetupState>();
 		SeedValidLobby(lobby);
 		var coordinator = context.Services.GetRequiredService<LobbyEvaluationCoordinator>();
@@ -526,7 +474,7 @@ public class RoleSelectionEvaluationTests
 	}
 
 	private static ModeratorComponentTestContext CreateContext(
-		ITerminalLobbyCacheByteSource bundled,
+		ILocalTerminalLobbyCacheStore? localStore = null,
 		ILobbyTerminalEvaluator? evaluator = null,
 		Func<SimulationScenario, SimulatorCapability, LobbyScenarioSupport>? classify = null,
 		TimeProvider? timeProvider = null,
@@ -537,8 +485,8 @@ public class RoleSelectionEvaluationTests
 			capability ?? SimulatorCapability.FullProbability,
 			depth);
 		var context = new ModeratorComponentTestContext();
-		context.Services.AddSingleton(bundled);
-		context.Services.AddSingleton<ILocalTerminalLobbyCacheStore, InMemoryTerminalLobbyCacheStore>();
+		context.Services.AddSingleton<ILocalTerminalLobbyCacheStore>(
+			localStore ?? new InMemoryTerminalLobbyCacheStore());
 		context.Services.AddSingleton<ILobbyTerminalEvaluator>(
 			evaluator ?? DisabledLobbyTerminalEvaluator.Instance);
 		context.Services.AddSingleton(timeProvider ?? TimeProvider.System);
@@ -546,7 +494,6 @@ public class RoleSelectionEvaluationTests
 		{
 			context.Services.AddSingleton(sp => new LobbyEvaluationCoordinator(
 				sp.GetRequiredService<LobbySetupState>(),
-				sp.GetRequiredService<ITerminalLobbyCacheByteSource>(),
 				sp.GetRequiredService<ILocalTerminalLobbyCacheStore>(),
 				sp.GetRequiredService<ILobbyTerminalEvaluator>(),
 				settings,
@@ -556,7 +503,6 @@ public class RoleSelectionEvaluationTests
 		{
 			context.Services.AddSingleton(sp => new LobbyEvaluationCoordinator(
 				sp.GetRequiredService<LobbySetupState>(),
-				sp.GetRequiredService<ITerminalLobbyCacheByteSource>(),
 				sp.GetRequiredService<ILocalTerminalLobbyCacheStore>(),
 				sp.GetRequiredService<ILobbyTerminalEvaluator>(),
 				settings,
@@ -599,30 +545,36 @@ public class RoleSelectionEvaluationTests
 
 	private static string TestId(string value) => $"[data-testid='{value}']";
 
-	private sealed class NeverCompletingByteSource : ITerminalLobbyCacheByteSource
+	private sealed class SeededLocalStore : ILocalTerminalLobbyCacheStore
 	{
-		public async ValueTask<ReadOnlyMemory<byte>?> ReadAsync(
-			string logicalName,
-			CancellationToken cancellationToken = default)
-		{
-			await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
-			return null;
-		}
-	}
+		private readonly InMemoryTerminalLobbyCacheStore _store = new();
 
-	private sealed class ImmediateByteSource : ITerminalLobbyCacheByteSource
-	{
-		private readonly ReadOnlyMemory<byte> _bytes;
-
-		public ImmediateByteSource(TerminalLobbyCacheRecord record)
+		public SeededLocalStore(TerminalLobbyCacheRecord record)
 		{
-			_bytes = TerminalLobbyCache.Write(TerminalLobbyCache.CreateDocument([record]));
+			var bytes = TerminalLobbyCache.Write(TerminalLobbyCache.CreateDocument([record]));
+			var staged = _store.StageWriteAsync(bytes).GetAwaiter().GetResult();
+			try
+			{
+				staged.TryCommit(commit =>
+				{
+					commit();
+					return true;
+				});
+			}
+			finally
+			{
+				staged.DisposeAsync().GetAwaiter().GetResult();
+			}
 		}
 
 		public ValueTask<ReadOnlyMemory<byte>?> ReadAsync(
-			string logicalName,
 			CancellationToken cancellationToken = default) =>
-			ValueTask.FromResult<ReadOnlyMemory<byte>?>(_bytes);
+			_store.ReadAsync(cancellationToken);
+
+		public ValueTask<ILocalTerminalLobbyCacheWrite> StageWriteAsync(
+			ReadOnlyMemory<byte> bytes,
+			CancellationToken cancellationToken = default) =>
+			_store.StageWriteAsync(bytes, cancellationToken);
 	}
 
 	private sealed class ControlledEvaluator : ILobbyTerminalEvaluator

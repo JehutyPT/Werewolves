@@ -47,24 +47,6 @@ public class TerminalLobbyCacheAdapterTests
 	}
 
 	[Fact]
-	public async Task MauiByteSource_ForwardsExactLogicalNameAndPreservesBytes()
-	{
-		string? opened = null;
-		var expected = "semantic-cache"u8.ToArray();
-		var source = new MauiTerminalLobbyCacheByteSource((name, token) =>
-		{
-			token.ThrowIfCancellationRequested();
-			opened = name;
-			return Task.FromResult<Stream>(new MemoryStream(expected));
-		});
-
-		var actual = await source.ReadAsync(LobbyEvaluationCoordinator.BundledCacheLogicalName);
-
-		opened.Should().Be("terminal-lobby-cache.json");
-		actual!.Value.ToArray().Should().Equal(expected);
-	}
-
-	[Fact]
 	public async Task FileStore_ReplacesCommittedBytesAndCleansStaleTemporaryArtifacts()
 	{
 		var directory = NewTemporaryDirectory();

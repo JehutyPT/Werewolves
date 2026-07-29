@@ -43,13 +43,13 @@ public class ModeratorDecisionStrategySemanticTraceTests
 		var assignmentResponse = fixture.Strategy.CreateResponse(assignRoles, fixture.Session);
 
 		fixture.StartState.RoleAssignments.Select(assignment => assignment.Role).Should().Equal(
-			MainRoleType.WildChild,
+			MainRoleType.Seer,
 			MainRoleType.SimpleWerewolf,
+			MainRoleType.WildChild,
 			MainRoleType.SimpleVillager,
-			MainRoleType.SimpleVillager,
-			MainRoleType.Seer);
-		ToSeatNumbers(identificationResponse.SelectedPlayerIds!, players).Should().Equal(5);
-		ToSeatNumbers(selectionResponse.SelectedPlayerIds!, players).Should().Equal(2, 5);
+			MainRoleType.SimpleVillager);
+		ToSeatNumbers(identificationResponse.SelectedPlayerIds!, players).Should().Equal(1);
+		ToSeatNumbers(selectionResponse.SelectedPlayerIds!, players).Should().Equal(1, 3);
 		assignmentResponse.AssignedPlayerRoles.Should().ContainKey(players[1].Id)
 			.WhoseValue.Should().Be(MainRoleType.SimpleWerewolf);
 		assignmentResponse.AssignedPlayerRoles.Should().ContainKey(players[3].Id)
@@ -57,7 +57,7 @@ public class ModeratorDecisionStrategySemanticTraceTests
 	}
 
 	[Fact]
-	public void BaselineRandom_ProductionCursor_WithTie_PreservesLiteralSemanticTrace()
+	public void BaselineRandom_ProductionCursor_WithOptionalVote_PreservesLiteralSemanticTrace()
 	{
 		var fixture = CreateFixture(runNumber: 4);
 		var players = fixture.Session.GetPlayers().ToArray();
@@ -65,7 +65,7 @@ public class ModeratorDecisionStrategySemanticTraceTests
 			ModeratorInstructionSemantic.RecordDayVote,
 			players.Select(player => player.Id).ToHashSet(),
 			NumberRangeConstraint.SingleOptional,
-			privateInstruction: nameof(BaselineRandom_ProductionCursor_WithTie_PreservesLiteralSemanticTrace));
+			privateInstruction: nameof(BaselineRandom_ProductionCursor_WithOptionalVote_PreservesLiteralSemanticTrace));
 
 		var continueResponse = fixture.Strategy.CreateResponse(fixture.StartInstruction, fixture.Session);
 		var voteResponse = fixture.Strategy.CreateResponse(vote, fixture.Session);
@@ -77,7 +77,7 @@ public class ModeratorDecisionStrategySemanticTraceTests
 		};
 		trace.Should().Equal(
 			ExpectedInputType.Continue.ToString(),
-			"Vote:Tie");
+			"Vote:Target");
 		continueResponse.InstructionId.Should().Be(fixture.StartInstruction.InstructionId);
 		voteResponse.InstructionId.Should().Be(vote.InstructionId);
 	}
@@ -162,7 +162,7 @@ public class ModeratorDecisionStrategySemanticTraceTests
 		var material = new RunSeedMaterial(
 			new SimulationCompatibilityIdentity(
 				scenario.ToCanonical(),
-				SimulatorProfile.LegacyCore.Identity),
+				SimulatorCapability.FullProbability.Identity),
 			BaselineRandomDecisionStrategy.Identity,
 			runNumber);
 		var random = new DeterministicRandomSource(material);
@@ -177,7 +177,7 @@ public class ModeratorDecisionStrategySemanticTraceTests
 			new BaselineRandomDecisionStrategy(
 				material,
 				startState,
-				SimulatorProfile.LegacyCore.HeadlessResponsePolicy,
+				SimulatorCapability.FullProbability.HeadlessResponsePolicy,
 				random),
 			builder.GetGameState()!,
 			startInstruction,

@@ -28,13 +28,6 @@ public sealed record LobbyEvaluationSettings
 	}
 }
 
-public interface ITerminalLobbyCacheByteSource
-{
-	ValueTask<ReadOnlyMemory<byte>?> ReadAsync(
-		string logicalName,
-		CancellationToken cancellationToken = default);
-}
-
 public interface ILocalTerminalLobbyCacheStore
 {
 	ValueTask<ReadOnlyMemory<byte>?> ReadAsync(
@@ -57,23 +50,6 @@ public interface ILobbyTerminalEvaluator
 		SimulatorCapability capability,
 		LobbyEvaluationDepth depth,
 		CancellationToken cancellationToken = default);
-}
-
-public sealed class EmptyTerminalLobbyCacheByteSource : ITerminalLobbyCacheByteSource
-{
-	public static EmptyTerminalLobbyCacheByteSource Instance { get; } = new();
-
-	private EmptyTerminalLobbyCacheByteSource()
-	{
-	}
-
-	public ValueTask<ReadOnlyMemory<byte>?> ReadAsync(
-		string logicalName,
-		CancellationToken cancellationToken = default)
-	{
-		cancellationToken.ThrowIfCancellationRequested();
-		return ValueTask.FromResult<ReadOnlyMemory<byte>?>(null);
-	}
 }
 
 public sealed class InMemoryTerminalLobbyCacheStore : ILocalTerminalLobbyCacheStore

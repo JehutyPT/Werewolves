@@ -8,7 +8,7 @@ Selecting an offer commits a private one-for-one physical exchange and Permanent
 
 A successful `Offer1`, `Offer2`, or `Decline` response creates a stable recovery checkpoint atomically with the committed response, resulting card zones, current Role and fresh state, and the pending public sleep instruction before Core returns success. This is the narrow Thief-specific amendment to ADR-0002 required by the accepted recovery contract: a pre-commit pending choice may be shown again after recovery, but a committed response, exchange, or decline may not be replayed.
 
-These decisions define the target live and simulator contract; they do not claim that current UI, Core, simulator, or cache APIs already implement it. The partition, branch policy, and exchange semantics change legacy Thief setup and headless behavior, so legacy Thief cache evidence is incompatible with the existing compatibility bridge rather than silently reused.
+These decisions define the target live and simulator contract; they do not claim that current UI, Core, simulator, or cache APIs already implement it. The partition, branch policy, and exchange semantics require fresh current-capability evidence; no pre-release Thief cache evidence is reused.
 
 ## Considered options
 

@@ -147,24 +147,16 @@ A Simulation Scenario supported by the full-probability capability.
 _Avoid_: Safety-Screening-Supported Simulation Scenario, current production support
 
 **Cacheable Simulation Scenario**:
-A Simulation Scenario eligible for a stored evaluation record under a named capability.
-_Avoid_: Role Composition, capability-supported
-
-**Bundled Simulator Cache**:
-A collection of precomputed lobby evaluations distributed with the product.
-_Avoid_: Offline cache (ambiguous with on-device fallback), simulator log
+A Simulation Scenario eligible for a stored terminal evaluation under its exact named and versioned Simulator Capability.
+_Avoid_: Role Composition, capability-supported, cross-capability record
 
 **Local Fallback Cache Record**:
-A terminal lobby evaluation stored on the Moderator's device.
+A terminal lobby evaluation stored on the Moderator's device and valid only for its exact Simulator Capability identity.
 _Avoid_: Local simulation evidence, replay cache, transcript cache
-
-**Build-Time Cache Generation**:
-The production of Bundled Simulator Cache artifacts outside the running product.
-_Avoid_: Offline generation (ambiguous), on-device generation
 
 **On-Device Fallback Generation**:
 A local safety evaluation performed on the Moderator's device.
-_Avoid_: Normal pre-game simulation, build-time cache generation
+_Avoid_: Normal pre-game simulation, cache migration
 
 **Minimum Viable Role Composition**:
 The smallest Role Composition treated as a meaningful Game Session.

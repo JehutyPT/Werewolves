@@ -88,9 +88,11 @@ public static partial class TerminalLobbyCache
 		bool degenerate)
 	{
 		ArgumentNullException.ThrowIfNull(evidence);
+		var producer = ResolveProducerProfile(identity.Profile, probabilityRecord: !degenerate);
 		if (!evidence.CanonicalScenario.Equals(identity.Scenario)
 			|| !evidence.SimulatorProfile.Equals(identity.Profile)
-			|| !evidence.DecisionStrategy.Equals(BaselineRandomDecisionStrategy.Identity)
+			|| !evidence.DecisionStrategy.Equals(
+				producer.HeadlessResponsePolicy.StrategyIdentity)
 			|| evidence.IncompleteRunCount != 0)
 		{
 			throw new ArgumentException(

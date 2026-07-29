@@ -28,13 +28,10 @@ public static class BrowserQaHostServiceCollectionExtensions
 				SimulatorCapability.SafetyScreening,
 				LobbyEvaluationDepth.DegenerateScreeningOnly));
 		services.TryAddSingleton<TimeProvider>(_ => TimeProvider.System);
-		services.TryAddScoped<ITerminalLobbyCacheByteSource, BrowserQaScenarioTerminalLobbyCacheByteSource>();
-		services.TryAddScoped<ILocalTerminalLobbyCacheStore, InMemoryTerminalLobbyCacheStore>();
-		services.TryAddScoped<ILobbyTerminalEvaluator>(
-			_ => DisabledLobbyTerminalEvaluator.Instance);
+		services.TryAddScoped<ILocalTerminalLobbyCacheStore, BrowserQaScenarioTerminalLobbyCacheStore>();
+		services.TryAddScoped<ILobbyTerminalEvaluator, BrowserQaScreeningPassedLobbyTerminalEvaluator>();
 		services.TryAddScoped<LobbyEvaluationCoordinator>(sp => new LobbyEvaluationCoordinator(
 			sp.GetRequiredService<LobbySetupState>(),
-			sp.GetRequiredService<ITerminalLobbyCacheByteSource>(),
 			sp.GetRequiredService<ILocalTerminalLobbyCacheStore>(),
 			sp.GetRequiredService<ILobbyTerminalEvaluator>(),
 			sp.GetRequiredService<LobbyEvaluationSettings>(),

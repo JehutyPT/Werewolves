@@ -48,24 +48,11 @@ public sealed class TerminalLobbyEvaluator
 		int,
 		CancellationToken,
 		SimulationBatchSourceEvidence> _executeBatch;
-	private readonly Func<
-		SimulationScenario,
-		SimulationCompatibilityIdentity,
-		int,
-		CancellationToken,
-		SimulationBatchSourceEvidence> _executeLegacyBatch;
 
 	public TerminalLobbyEvaluator()
 	{
 		var executor = new SimulationExecutor();
 		_executeBatch = executor.ExecuteBatch;
-		_executeLegacyBatch = (scenario, identity, count, cancellationToken) =>
-			executor.ExecuteBatchLegacy(
-				scenario,
-				SimulatorProfile.LegacyCore,
-				identity,
-				count,
-				cancellationToken);
 	}
 
 	internal TerminalLobbyEvaluator(
@@ -78,13 +65,6 @@ public sealed class TerminalLobbyEvaluator
 			SimulationBatchSourceEvidence> executeBatch)
 	{
 		_executeBatch = executeBatch ?? throw new ArgumentNullException(nameof(executeBatch));
-		_executeLegacyBatch = (scenario, identity, count, cancellationToken) =>
-			_executeBatch(
-				scenario,
-				SimulatorCapability.FullProbability,
-				identity,
-				count,
-				cancellationToken);
 	}
 
 	internal TerminalLobbyEvaluator(
@@ -95,24 +75,9 @@ public sealed class TerminalLobbyEvaluator
 			CancellationToken,
 			SimulationBatchSourceEvidence> executeBatch)
 	{
-		_executeLegacyBatch = executeBatch ?? throw new ArgumentNullException(nameof(executeBatch));
+		ArgumentNullException.ThrowIfNull(executeBatch);
 		_executeBatch = (scenario, _, identity, count, cancellationToken) =>
-			_executeLegacyBatch(scenario, identity, count, cancellationToken);
-	}
-
-	internal LobbyEvaluationResult EvaluateLegacy(
-		SimulationScenario scenario,
-		SimulatorProfile legacyProfile,
-		LobbyEvaluationDepth depth,
-		CancellationToken cancellationToken = default)
-	{
-		ArgumentNullException.ThrowIfNull(legacyProfile);
-		return EvaluateCore(
-			scenario,
-			legacyProfile,
-			capability: null,
-			depth,
-			cancellationToken);
+			executeBatch(scenario, identity, count, cancellationToken);
 	}
 
 	public LobbyEvaluationResult Evaluate(
@@ -130,13 +95,12 @@ public sealed class TerminalLobbyEvaluator
 				nameof(depth));
 		}
 
-		return EvaluateCore(scenario, capability, capability, depth, cancellationToken);
+		return EvaluateCore(scenario, capability, depth, cancellationToken);
 	}
 
 	private LobbyEvaluationResult EvaluateCore(
 		SimulationScenario scenario,
-		SimulatorProfile profile,
-		SimulatorCapability? capability,
+		SimulatorCapability capability,
 		LobbyEvaluationDepth depth,
 		CancellationToken cancellationToken)
 	{
@@ -146,7 +110,7 @@ public sealed class TerminalLobbyEvaluator
 			throw new ArgumentOutOfRangeException(nameof(depth));
 		}
 		cancellationToken.ThrowIfCancellationRequested();
-		var classification = SimulationScenarioClassifier.Classify(scenario, profile);
+		var classification = SimulationScenarioClassifier.Classify(scenario, capability);
 		cancellationToken.ThrowIfCancellationRequested();
 		if (!classification.RulesValidity.IsValid)
 		{
@@ -255,7 +219,7 @@ public sealed class TerminalLobbyEvaluator
 
 	private bool TryExecuteBatch(
 		SimulationScenario scenario,
-		SimulatorCapability? capability,
+		SimulatorCapability capability,
 		SimulationCompatibilityIdentity identity,
 		int attemptCount,
 		CancellationToken cancellationToken,
@@ -263,9 +227,12 @@ public sealed class TerminalLobbyEvaluator
 	{
 		try
 		{
-			evidence = capability is null
-				? _executeLegacyBatch(scenario, identity, attemptCount, cancellationToken)
-				: _executeBatch(scenario, capability, identity, attemptCount, cancellationToken);
+			evidence = _executeBatch(
+				scenario,
+				capability,
+				identity,
+				attemptCount,
+				cancellationToken);
 			cancellationToken.ThrowIfCancellationRequested();
 			return true;
 		}
