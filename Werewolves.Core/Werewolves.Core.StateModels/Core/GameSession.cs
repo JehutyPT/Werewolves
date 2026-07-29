@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
@@ -130,9 +129,6 @@ internal class GameSession : IGameSession
 		_gameSessionKernel.CaptureRecoveryBoundary(
             acceptedObservationRecoveryCursor,
             domainRecoveryCursor);
-
-    internal void RefreshFactionFactsInStableRecoveryBoundary() =>
-        _gameSessionKernel.RefreshFactionFactsAtStableRecoveryBoundary();
 
     internal void RestoreTransientContinuation(
         IGameFlowManagerKey key,
@@ -295,151 +291,6 @@ internal class GameSession : IGameSession
 
 	#region Internal Command API
 
-	internal InitialBeneficiaryClosureReadiness
-		GetInitialBeneficiaryClosureReadiness(
-			InitialBeneficiaryClosureRequest request)
-	{
-		ArgumentNullException.ThrowIfNull(request);
-		if (HasCommittedInitialBeneficiaryClosure())
-		{
-			return InitialBeneficiaryClosureReadiness.AlreadyCommitted;
-		}
-
-		return TryBuildInitialBeneficiaryClosureFacts(request, out _)
-			? InitialBeneficiaryClosureReadiness.Ready
-			: InitialBeneficiaryClosureReadiness.Incomplete;
-	}
-
-	internal InitialBeneficiaryClosureResult
-		TryCommitInitialBeneficiaryClosure(
-			InitialBeneficiaryClosureRequest request)
-	{
-		ArgumentNullException.ThrowIfNull(request);
-		if (HasCommittedInitialBeneficiaryClosure())
-		{
-			return InitialBeneficiaryClosureResult.AlreadyCommitted;
-		}
-
-		if (!TryBuildInitialBeneficiaryClosureFacts(
-			request,
-			out var facts))
-		{
-			return InitialBeneficiaryClosureResult.Incomplete;
-		}
-
-		CommitFactionFactBatch(context => new FactionFactsCommittedLogEntry
-		{
-			Timestamp = context.Timestamp,
-			TurnNumber = context.TurnNumber,
-			CurrentPhase = context.CurrentPhase,
-			Source = new FactionFactSource(
-				FactionFactSourceKind.InitialBeneficiaryClosure,
-				FactionFactSourceIdentifiers.InitialBeneficiaryClosure),
-			Facts = facts
-		});
-		return InitialBeneficiaryClosureResult.Committed;
-	}
-
-	private bool HasCommittedInitialBeneficiaryClosure() =>
-		GameHistoryLog
-			.OfType<FactionFactsCommittedLogEntry>()
-			.Any(entry =>
-				entry.Source.Kind ==
-				FactionFactSourceKind.InitialBeneficiaryClosure);
-
-	private bool TryBuildInitialBeneficiaryClosureFacts(
-		InitialBeneficiaryClosureRequest request,
-		out ImmutableArray<FactionFact> closureFacts)
-	{
-		closureFacts = [];
-		var currentBoundary = new FactionFactEffectiveBoundary(
-			TurnNumber,
-			GetCurrentPhase(),
-			int.MaxValue);
-		if (FactionFactProjection.CompareBoundaries(
-			request.InitialAgentGroupBoundary,
-			currentBoundary) > 0)
-		{
-			throw new InvalidOperationException(
-				"Initial Beneficiary Closure cannot use a future boundary.");
-		}
-
-		if (request.ApplicableExceptionPrerequisites.Any(
-				prerequisite => !prerequisite.IsComplete)
-			|| request.DeferredResults.Any(result => !result.IsComplete))
-		{
-			return false;
-		}
-
-		var playerIds = GetPlayers()
-			.Select(player => player.Id)
-			.ToArray();
-		var history = GameHistoryLog
-			.OfType<FactionFactsCommittedLogEntry>()
-			.ToArray();
-		var projectionAtGroupBoundary = FactionFactProjection.Create(
-			history,
-			playerIds,
-			request.InitialAgentGroupBoundary);
-		if (playerIds.Any(playerId =>
-			projectionAtGroupBoundary.Agents[playerId][Faction.Werewolf] ==
-			FactionAgentKnowledge.Unknown))
-		{
-			return false;
-		}
-
-		var facts = new List<FactionFact>();
-		foreach (var playerId in playerIds)
-		{
-			if (projectionAtGroupBoundary.Beneficiaries[playerId].IsKnown)
-			{
-				continue;
-			}
-
-			var faction =
-				projectionAtGroupBoundary.Agents[playerId][Faction.Werewolf] ==
-				FactionAgentKnowledge.KnownAgent
-					? Faction.Werewolf
-					: Faction.Villager;
-			facts.Add(FactionFact.Beneficiary(
-				playerId,
-				faction,
-				request.InitialAgentGroupBoundary));
-		}
-
-		var players = playerIds.ToHashSet();
-		var existingFacts = history
-			.SelectMany(entry => entry.Facts)
-			.ToHashSet();
-		foreach (var deferredFact in request.DeferredResults
-			.SelectMany(result => result.Facts))
-		{
-			if (!players.Contains(deferredFact.PlayerId))
-			{
-				throw new InvalidOperationException(
-					"Initial Beneficiary Closure references a Player outside the Game Session.");
-			}
-
-			if (!existingFacts.Contains(deferredFact))
-			{
-				facts.Add(deferredFact);
-			}
-		}
-
-		var seatingOrder = playerIds
-			.Select((playerId, index) => (playerId, index))
-			.ToDictionary(pair => pair.playerId, pair => pair.index);
-		closureFacts = facts
-			.OrderBy(
-				fact => fact.EffectiveBoundary,
-				Comparer<FactionFactEffectiveBoundary>.Create(
-					FactionFactProjection.CompareBoundaries))
-			.ThenBy(fact => seatingOrder[fact.PlayerId])
-			.ThenBy(fact => fact.BeneficiaryPrecedence)
-			.ToImmutableArray();
-		return true;
-	}
-
 	internal void CommitGameFact<TEntry>(
 		Func<GameFactContext, TEntry> entryFactory)
 		where TEntry : GameLogEntryBase, IGameFactLogEntry
@@ -448,53 +299,6 @@ internal class GameSession : IGameSession
 	internal void CommitFactionFactBatch(
 		Func<GameFactContext, FactionFactsCommittedLogEntry> entryFactory) =>
 		CommitSessionEntry(entryFactory, "Faction fact batch");
-
-	internal void CommitWildChildFactionTransition(
-		IReadOnlyCollection<Guid> wildChildPlayerIds)
-	{
-		ArgumentNullException.ThrowIfNull(wildChildPlayerIds);
-		var playerIds = wildChildPlayerIds.ToArray();
-		if (playerIds.Length == 0
-			|| playerIds.Any(playerId => playerId == Guid.Empty)
-			|| playerIds.Distinct().Count() != playerIds.Length)
-		{
-			throw new ArgumentException(
-				"Wild Child Faction transitions require unique Players.",
-				nameof(wildChildPlayerIds));
-		}
-
-		CommitFactionFactBatch(context =>
-		{
-			var boundary = new FactionFactEffectiveBoundary(
-				context.TurnNumber,
-				context.CurrentPhase,
-				GameHistoryLog.Count());
-			var facts = playerIds
-				.SelectMany(playerId => new[]
-				{
-					FactionFact.Beneficiary(
-						playerId,
-						Faction.Werewolf,
-						boundary),
-					FactionFact.Agent(
-						playerId,
-						Faction.Werewolf,
-						FactionAgentKnowledge.KnownAgent,
-						boundary)
-				})
-				.ToImmutableArray();
-			return new FactionFactsCommittedLogEntry
-			{
-				Timestamp = context.Timestamp,
-				TurnNumber = context.TurnNumber,
-				CurrentPhase = context.CurrentPhase,
-				Source = new FactionFactSource(
-					FactionFactSourceKind.ExplicitTransition,
-					FactionFactSourceIdentifiers.WildChildModelEliminated),
-				Facts = facts
-			};
-		});
-	}
 
 	private void CommitSessionEntry<TEntry>(
 		Func<GameFactContext, TEntry> entryFactory,

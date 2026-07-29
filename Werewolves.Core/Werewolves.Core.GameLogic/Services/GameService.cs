@@ -28,6 +28,9 @@ namespace Werewolves.Core.GameLogic.Services;
 /// </summary>
 public class GameService
 {
+	private const string SimulationStartStateFactionFactSourceIdentifier =
+		"simulation-start-state";
+
 	// Simple in-memory storage for game sessions. Replaceable with DI.
 	private readonly ConcurrentDictionary<Guid, GameSession> _sessions = new();
 	private readonly RoleAdmissionCatalog _roleAdmissions;
@@ -99,7 +102,7 @@ public class GameService
         return session.Id;
 	}
 
-    public void CommitScheduledFactionObservation(
+    internal void CommitScheduledFactionObservation(
         Guid gameId,
         string observationIdentifier,
         IReadOnlyCollection<FactionFact> facts) =>
@@ -109,7 +112,7 @@ public class GameService
             observationIdentifier,
             facts);
 
-    public void CommitExplicitFactionTransition(
+    internal void CommitExplicitFactionTransition(
         Guid gameId,
         string transitionIdentifier,
         IReadOnlyCollection<FactionFact> facts) =>
@@ -119,30 +122,26 @@ public class GameService
             transitionIdentifier,
             facts);
 
-    public InitialBeneficiaryClosureReadiness
+    internal InitialBeneficiaryClosureReadiness
         GetInitialBeneficiaryClosureReadiness(
             Guid gameId,
             InitialBeneficiaryClosureRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        return GetRequiredSession(gameId)
-            .GetInitialBeneficiaryClosureReadiness(request);
+        return InitialBeneficiaryClosureRules.GetReadiness(
+            GetRequiredSession(gameId),
+            request);
     }
 
-    public InitialBeneficiaryClosureResult
+    internal InitialBeneficiaryClosureResult
         TryCommitInitialBeneficiaryClosure(
             Guid gameId,
             InitialBeneficiaryClosureRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        var session = GetRequiredSession(gameId);
-        var result = session.TryCommitInitialBeneficiaryClosure(request);
-        if (result == InitialBeneficiaryClosureResult.Committed)
-        {
-            session.RefreshFactionFactsInStableRecoveryBoundary();
-        }
-
-        return result;
+        return InitialBeneficiaryClosureRules.TryCommit(
+            GetRequiredSession(gameId),
+            request);
     }
 
     private void CommitNamedFactionFacts(
@@ -164,7 +163,6 @@ public class GameService
             Source = source,
             Facts = immutableFacts
         });
-        session.RefreshFactionFactsInStableRecoveryBoundary();
     }
 
     private GameSession GetRequiredSession(Guid gameId)
@@ -264,11 +262,10 @@ public class GameService
                 CurrentPhase = context.CurrentPhase,
                 Source = new FactionFactSource(
                     FactionFactSourceKind.SimulationStartState,
-                    FactionFactSourceIdentifiers.SimulationStartState),
+                    SimulationStartStateFactionFactSourceIdentifier),
                 Facts = facts
             };
         });
-        session.RefreshFactionFactsInStableRecoveryBoundary();
     }
 
     private void SeedActiveRoleListeners(GameSession session)

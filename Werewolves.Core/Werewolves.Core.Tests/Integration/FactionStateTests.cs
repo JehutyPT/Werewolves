@@ -56,6 +56,37 @@ public class FactionStateTests
 	}
 
 	[Fact]
+	public void PublicAgentQueries_DistinguishUnknownFromKnownEmpty()
+	{
+		var (session, service) = StartLiveSession();
+		var players = session.GetPlayers().ToArray();
+
+		session.TryGetKnownFactionAgents(
+				Faction.Werewolf,
+				out var unknownAgents)
+			.Should().BeFalse();
+		unknownAgents.Should().BeEmpty();
+
+		service.CommitScheduledFactionObservation(
+			session.Id,
+			"known-empty-werewolf-agent-observation",
+			players.Select(player => FactionFact.Agent(
+					player.Id,
+					Faction.Werewolf,
+					FactionAgentKnowledge.KnownNonAgent,
+					Boundary(order: 10)))
+				.ToArray());
+
+		session.TryGetKnownFactionAgents(
+				Faction.Werewolf,
+				out var knownAgents)
+			.Should().BeTrue();
+		knownAgents.Should().BeEmpty();
+		session.RequireKnownFactionAgents(Faction.Werewolf)
+			.Should().BeEmpty();
+	}
+
+	[Fact]
 	public void RequiredFactionGuards_WhenFactsAreUnknown_AreNeutralExactNoOps()
 	{
 		var (session, _) = StartLiveSession();
@@ -352,12 +383,23 @@ public class FactionStateTests
 	}
 
 	[Fact]
-	public void FactionState_SerializeAndRehydrateTwice_PreservesCurrentProjectionAndHistory()
+	public void FactionState_BecomesDurableOnlyAtAnOrdinaryStableBoundary()
 	{
 		var service = new GameService();
 		var start = service.StartNewGame(CreateConfig());
 		var session = service.GetGameStateView(start.GameGuid)!;
 		var players = session.GetPlayers().ToArray();
+		var nightStart = service.ProcessInstruction(
+				session.Id,
+				start.CreateResponse())
+			.ModeratorInstruction.Should()
+			.BeOfType<ConfirmationInstruction>().Subject;
+		var identifyWerewolf = service.ProcessInstruction(
+				session.Id,
+				nightStart.CreateResponse())
+			.ModeratorInstruction.Should()
+			.BeOfType<SelectPlayersInstruction>().Subject;
+		var preFactionBoundary = session.Serialize();
 		var groupBoundary = Boundary(order: 10);
 		SeedCompleteWerewolfAgentGroup(session, service, groupBoundary);
 		var closureRequest = ClosureRequest(groupBoundary);
@@ -375,6 +417,14 @@ public class FactionStateTests
 					Boundary(order: 20))
 			]);
 
+		session.Serialize().Should().Be(preFactionBoundary);
+		var afterOrdinaryBoundary = service.ProcessInstruction(
+			session.Id,
+			identifyWerewolf.CreateResponse([players[0].Id]));
+		afterOrdinaryBoundary.IsSuccess.Should().BeTrue();
+		var expectedPendingInstruction =
+			afterOrdinaryBoundary.ModeratorInstruction.Should()
+				.BeOfType<SelectPlayersInstruction>().Subject;
 		var serialized = session.Serialize();
 		var recoveredService = new GameService();
 		var recoveredId = recoveredService.RehydrateSession(serialized);
@@ -411,14 +461,20 @@ public class FactionStateTests
 			.Should().Be(
 				InitialBeneficiaryClosureReadiness.AlreadyCommitted);
 
-		twiceRecoveredService.ProcessInstruction(
-				twiceRecoveredId,
-				start.CreateResponse())
-			.IsSuccess.Should().BeTrue();
+		var recoveredPending = twiceRecoveredService
+			.GetCurrentInstruction(twiceRecoveredId);
+		var recoveredInstruction = recoveredPending.Should()
+			.BeOfType<SelectPlayersInstruction>().Subject;
+		recoveredInstruction.InstructionId.Should()
+			.Be(expectedPendingInstruction.InstructionId);
+		recoveredInstruction.Semantic.Should()
+			.Be(expectedPendingInstruction.Semantic);
+		recoveredInstruction.SelectablePlayerIds.Should()
+			.Equal(expectedPendingInstruction.SelectablePlayerIds);
 	}
 
 	[Fact]
-	public void InitialClosure_RefreshesOnlyFactionDataInsideExistingRecoveryBoundary()
+	public void InitialClosure_DoesNotPatchAnInFlightRecoveryBoundary()
 	{
 		var service = new GameService();
 		var start = service.StartNewGame(new GameSessionConfig(
@@ -447,21 +503,26 @@ public class FactionStateTests
 				identifyWildChild.CreateResponse([players[0].Id]))
 			.ModeratorInstruction.Should()
 			.BeOfType<SelectPlayersInstruction>().Subject;
-		var boundary = Boundary(order: 10);
-		SeedCompleteWerewolfAgentGroup(session, service, boundary);
+		var stableBoundaryBeforeFactionFacts = session.Serialize();
 		var nonFactionStateBefore = CaptureNonFactionState(session);
-		var nonFactionHistoryBefore = session.GameHistoryLog
-			.Where(entry => entry is not FactionFactsCommittedLogEntry)
-			.ToArray();
+		var nonFactionHistoryBefore = session.GameHistoryLog.ToArray();
 		var turnBefore = session.TurnNumber;
 		var phaseBefore = session.GetCurrentPhase();
+		var boundary = Boundary(order: 10);
+		SeedCompleteWerewolfAgentGroup(session, service, boundary);
 
 		service.TryCommitInitialBeneficiaryClosure(
 				session.Id,
 				ClosureRequest(boundary))
 			.Should().Be(InitialBeneficiaryClosureResult.Committed);
+		session.GameHistoryLog
+			.OfType<FactionFactsCommittedLogEntry>()
+			.Should().HaveCount(2);
+		session.Serialize().Should().Be(stableBoundaryBeforeFactionFacts);
+
 		var recoveredService = new GameService();
-		var recoveredId = recoveredService.RehydrateSession(session.Serialize());
+		var recoveredId = recoveredService.RehydrateSession(
+			stableBoundaryBeforeFactionFacts);
 		var recovered = recoveredService.GetGameStateView(recoveredId)!;
 		var recoveredInstruction = recoveredService
 			.GetCurrentInstruction(recoveredId)
@@ -475,10 +536,19 @@ public class FactionStateTests
 		CaptureNonFactionState(recovered).Should()
 			.Equal(nonFactionStateBefore);
 		recovered.GameHistoryLog
-			.Where(entry => entry is not FactionFactsCommittedLogEntry)
 			.Should().BeEquivalentTo(
 				nonFactionHistoryBefore,
 				options => options.WithStrictOrdering());
+		recovered.GameHistoryLog
+			.OfType<FactionFactsCommittedLogEntry>()
+			.Should().BeEmpty();
+		foreach (var player in recovered.GetPlayers())
+		{
+			recovered.GetFactionBeneficiaryKnowledge(player.Id).Should()
+				.Be(FactionBeneficiaryKnowledge.Unknown);
+			recovered.GetFactionAgentKnowledge(player.Id, Faction.Werewolf)
+				.Should().Be(FactionAgentKnowledge.Unknown);
+		}
 		recovered.GameHistoryLog
 			.OfType<VictoryConditionMetLogEntry>()
 			.Should().BeEmpty();

@@ -1,5 +1,4 @@
 using FluentAssertions;
-using Werewolves.Core.GameLogic.Roles.MainRoles;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
@@ -446,9 +445,8 @@ public class StatusEffectsTests : DiagnosticTestBase
         var players = builder.GetGameState()!.GetPlayers().ToArray();
         var wildChild = players[0];
         var model = players[1];
+        var werewolf = players[2];
         builder
-            .ArrangeKnownRole(wildChild.Id, MainRoleType.WildChild)
-            .ArrangeNightAction(NightActionType.WildChildModel, model.Id)
             .ArrangeExplicitFactionTransition(
                 "dominant-beneficiary",
                 FactionFact.Beneficiary(
@@ -458,13 +456,46 @@ public class StatusEffectsTests : DiagnosticTestBase
                         turnNumber: 1,
                         GamePhase.Night,
                         order: 0),
-                    beneficiaryPrecedence: 1))
-            .ArrangeEliminatedPlayer(model.Id);
+                    beneficiaryPrecedence: 1));
 
-        new WildChildRole().Advance(
-            (GameSession)builder.GetGameState()!,
-            [model.Id],
-            new ModeratorResponse());
+        builder.ConfirmGameStart();
+        builder.ConfirmNightStart();
+        var wildChildIdentifyInstruction =
+            InstructionAssert.ExpectType<SelectPlayersInstruction>(
+                builder.GetCurrentInstruction(),
+                CoreTestReferences.InstructionContexts.WildChildIdentification);
+        var afterWildChildIdentify = builder.Process(
+            wildChildIdentifyInstruction.CreateResponse([wildChild.Id]));
+        var modelSelectionInstruction =
+            InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+                afterWildChildIdentify,
+                CoreTestReferences.InstructionContexts.WildChildModelSelection);
+        var afterModelSelection = builder.Process(
+            modelSelectionInstruction.CreateResponse([model.Id]));
+        var wildChildSleepInstruction =
+            InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+                afterModelSelection,
+                CoreTestReferences.InstructionContexts.WildChildSleepConfirmation);
+        builder.Process(wildChildSleepInstruction.CreateResponse());
+
+        var afterWerewolfSleep = builder.CompleteWerewolfNightAction(
+            new HashSet<Guid> { werewolf.Id },
+            model.Id);
+        var nightEndInstruction =
+            InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+                afterWerewolfSleep,
+                CoreTestReferences.InstructionContexts.NightEndConfirmation);
+        var afterNightEnd = builder.Process(nightEndInstruction.CreateResponse());
+        var roleRevealInstruction =
+            InstructionAssert.ExpectSuccessWithType<AssignRolesInstruction>(
+                afterNightEnd,
+                CoreTestReferences.InstructionContexts.RoleRevealForEliminatedModel);
+
+        builder.Process(roleRevealInstruction.CreateResponse(
+            new Dictionary<Guid, MainRoleType>
+            {
+                { model.Id, MainRoleType.SimpleVillager }
+            }));
 
         var session = builder.GetGameState()!;
         session.GetPlayerState(wildChild.Id).MainRole.Should()
@@ -502,18 +533,47 @@ public class StatusEffectsTests : DiagnosticTestBase
         var players = builder.GetGameState()!.GetPlayers().ToArray();
         var wildChild = players[0];
         var model = players[1];
-        builder
-            .ArrangeKnownRole(wildChild.Id, MainRoleType.WildChild)
-            .ArrangeNightAction(NightActionType.WildChildModel, model.Id)
-            .ArrangeEliminatedPlayer(wildChild.Id)
-            .ArrangeEliminatedPlayer(model.Id);
+        var werewolf = players[2];
 
-        var act = () => new WildChildRole().Advance(
-            (GameSession)builder.GetGameState()!,
-            [model.Id],
-            new ModeratorResponse());
+        builder.ConfirmGameStart();
+        builder.ConfirmNightStart();
+        var wildChildIdentifyInstruction =
+            InstructionAssert.ExpectType<SelectPlayersInstruction>(
+                builder.GetCurrentInstruction(),
+                CoreTestReferences.InstructionContexts.WildChildIdentification);
+        var afterWildChildIdentify = builder.Process(
+            wildChildIdentifyInstruction.CreateResponse([wildChild.Id]));
+        var modelSelectionInstruction =
+            InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+                afterWildChildIdentify,
+                CoreTestReferences.InstructionContexts.WildChildModelSelection);
+        var afterModelSelection = builder.Process(
+            modelSelectionInstruction.CreateResponse([model.Id]));
+        var wildChildSleepInstruction =
+            InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+                afterModelSelection,
+                CoreTestReferences.InstructionContexts.WildChildSleepConfirmation);
+        builder.Process(wildChildSleepInstruction.CreateResponse());
+        builder.ArrangeEliminatedPlayer(wildChild.Id);
 
-        act.Should().NotThrow();
+        var afterWerewolfSleep = builder.CompleteWerewolfNightAction(
+            new HashSet<Guid> { werewolf.Id },
+            model.Id);
+        var nightEndInstruction =
+            InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+                afterWerewolfSleep,
+                CoreTestReferences.InstructionContexts.NightEndConfirmation);
+        var afterNightEnd = builder.Process(nightEndInstruction.CreateResponse());
+        var roleRevealInstruction =
+            InstructionAssert.ExpectSuccessWithType<AssignRolesInstruction>(
+                afterNightEnd,
+                CoreTestReferences.InstructionContexts.RoleRevealForEliminatedModel);
+        builder.Process(roleRevealInstruction.CreateResponse(
+            new Dictionary<Guid, MainRoleType>
+            {
+                { model.Id, MainRoleType.SimpleVillager }
+            }));
+
         var session = builder.GetGameState()!;
         session.GameHistoryLog
             .OfType<FactionFactsCommittedLogEntry>()

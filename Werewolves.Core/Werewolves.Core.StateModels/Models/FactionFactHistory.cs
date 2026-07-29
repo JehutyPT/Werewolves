@@ -176,12 +176,3 @@ public sealed record FactionFact
 			effectiveBoundary,
 			beneficiaryPrecedence: null);
 }
-
-internal static class FactionFactSourceIdentifiers
-{
-	internal const string InitialBeneficiaryClosure =
-		"initial-beneficiary-closure";
-	internal const string SimulationStartState = "simulation-start-state";
-	internal const string WildChildModelEliminated =
-		"wild-child-model-eliminated";
-}

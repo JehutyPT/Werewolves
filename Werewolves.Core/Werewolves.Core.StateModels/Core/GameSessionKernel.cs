@@ -187,73 +187,7 @@ namespace Werewolves.Core.StateModels.Core
 				_recoveryBoundary = candidateBoundary;
 			}
 
-			internal void RefreshFactionFactsAtStableRecoveryBoundary()
-			{
-				var boundary = _recoveryBoundary
-					?? throw new InvalidOperationException(
-						"A stable recovery boundary is required.");
-				var currentFactionEntries = _gameHistoryLog
-					.GetAllLogEntries()
-					.OfType<FactionFactsCommittedLogEntry>()
-					.ToArray();
-				var persistedFactionEntries = boundary.GameHistoryLog
-					.OfType<FactionFactsCommittedLogEntry>()
-					.ToArray();
-				if (currentFactionEntries.Length < persistedFactionEntries.Length
-					|| !currentFactionEntries
-						.Take(persistedFactionEntries.Length)
-						.SequenceEqual(persistedFactionEntries))
-				{
-					throw new InvalidOperationException(
-						"Faction history diverged from the stable recovery boundary.");
-				}
-
-				var newFactionEntries = currentFactionEntries
-					.Skip(persistedFactionEntries.Length)
-					.ToArray();
-				var boundaryPhase = boundary.PhaseStateCache.CurrentPhase;
-				if (newFactionEntries.Any(entry =>
-					entry.TurnNumber > boundary.TurnNumber
-					|| entry.TurnNumber == boundary.TurnNumber
-					&& FactionFactProjection.PhaseOrder(entry.CurrentPhase) >
-						FactionFactProjection.PhaseOrder(boundaryPhase)))
-				{
-					throw new InvalidOperationException(
-						"Faction facts cannot advance a stable recovery boundary.");
-				}
-
-				var projection = FactionFactProjection.Create(
-					currentFactionEntries,
-					boundary.SeatingOrder);
-				var playerDtos = boundary.Players.ToDictionary(player => player.Id);
-				if (playerDtos.Count != boundary.SeatingOrder.Count
-					|| boundary.SeatingOrder.Any(playerId =>
-						!playerDtos.ContainsKey(playerId)))
-				{
-					throw new InvalidOperationException(
-						"The stable recovery boundary has invalid Player identity.");
-				}
-
-				var factionState = boundary.SeatingOrder.ToDictionary(
-					playerId => playerId,
-					playerId => (
-						projection.Beneficiaries[playerId],
-						Agents:
-							Enum.GetValues<Faction>().ToDictionary(
-								faction => faction,
-								faction => projection.Agents[playerId][faction])));
-				boundary.GameHistoryLog =
-					[.. boundary.GameHistoryLog, .. newFactionEntries];
-				boundary.FactionFactSchemaVersion =
-					FactionFactSchema.CurrentVersion;
-				foreach (var (playerId, state) in factionState)
-				{
-					playerDtos[playerId].FactionBeneficiary = state.Item1;
-					playerDtos[playerId].FactionAgentKnowledge = state.Agents;
-				}
-			}
-
-		private GameSessionDto CreateDto()
+			private GameSessionDto CreateDto()
 		{
 			return new GameSessionDto
 			{
