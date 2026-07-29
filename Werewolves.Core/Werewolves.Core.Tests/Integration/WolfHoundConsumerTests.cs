@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
+using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Resources;
 using Werewolves.Core.Tests.Helpers;
@@ -79,6 +80,10 @@ public sealed class WolfHoundConsumerTests : DiagnosticTestBase
 		var secondVictim = players[4];
 		var werewolfAgents = new[] { wolfHound.Id, werewolf.Id };
 		ChooseWerewolfAlignment(builder, wolfHound.Id);
+		var firstNightIdentificationCount = builder.GetGameState()!.GameHistoryLog
+			.OfType<RoleIdentificationLogEntry>()
+			.Count(entry => entry.Role == MainRoleType.WolfHound);
+		firstNightIdentificationCount.Should().Be(1);
 
 		var finishFirstNight =
 			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
@@ -100,6 +105,10 @@ public sealed class WolfHoundConsumerTests : DiagnosticTestBase
 				builder.ConfirmNightStart());
 		wake.Semantic.Should().Be(ModeratorInstructionSemantic.WakeRole);
 		wake.AffectedPlayerIds.Should().BeEquivalentTo(werewolfAgents);
+		builder.GetGameState()!.GameHistoryLog
+			.OfType<RoleIdentificationLogEntry>()
+			.Count(entry => entry.Role == MainRoleType.WolfHound)
+			.Should().Be(firstNightIdentificationCount);
 		builder.GetGameState()!.GetPlayerState(wolfHound.Id)
 			.Health.Should().Be(PlayerHealth.Alive);
 
