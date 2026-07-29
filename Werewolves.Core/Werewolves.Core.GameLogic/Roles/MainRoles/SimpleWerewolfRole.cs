@@ -39,38 +39,6 @@ internal class SimpleWerewolfRole : StandardNightRoleHookListener
         return ExecuteCore(session, input);
     }
 
-    public override bool TryResolvePendingInstructionContinuation(
-        GameHook hook,
-        GameSession session,
-        ModeratorInstruction pendingInstruction,
-        out string listenerState)
-    {
-        listenerState = string.Empty;
-        if (hook != GameHook.NightMainActionLoop ||
-            pendingInstruction is not ConfirmationInstruction
-            {
-                Semantic: ModeratorInstructionSemantic.PutRoleToSleep
-            } ||
-            !TryGetKnownLivingWerewolfAgents(session, out var agents) ||
-            agents.Count == 0 ||
-            GetLivingKnownNonAgents(session).Count != 0)
-        {
-            return false;
-        }
-
-        var affectedPlayerIds =
-            pendingInstruction.AffectedPlayerIds?.ToHashSet();
-        if (affectedPlayerIds == null ||
-            !affectedPlayerIds.SetEquals(
-                agents.Select(player => player.Id)))
-        {
-            return false;
-        }
-
-        listenerState = ReadyToSleepStateEnum.ToString();
-        return true;
-    }
-
     protected override List<RoleStateMachineStage> DefineStateMachineStages()
     {
         var stages = base.DefineStateMachineStages();
@@ -122,25 +90,17 @@ internal class SimpleWerewolfRole : StandardNightRoleHookListener
         GameSession session,
         ModeratorResponse input)
     {
+        FactionFactEffectiveBoundary? observationBoundary = null;
         if (!TryGetKnownLivingWerewolfAgents(session, out _))
         {
-            var boundary = CommitWerewolfAgentGroupObservation(session, input);
-            TryCommitInitialBeneficiaryClosure(session, boundary);
-        }
-        else
-        {
-            TryCommitInitialBeneficiaryClosure(session);
+            observationBoundary =
+                CommitWerewolfAgentGroupObservation(session, input);
         }
 
-        return HandleNightPowerUse(session, input);
+        var result = HandleNightPowerUse(session, input);
+        TryCommitInitialBeneficiaryClosure(session, observationBoundary);
+        return result;
     }
-
-    protected override HookListenerActionResult HandleNightPowerUse(
-        GameSession session,
-        ModeratorResponse input) =>
-        GetLivingKnownNonAgents(session).Count == 0
-            ? PrepareSleepInstruction(session)
-            : base.HandleNightPowerUse(session, input);
 
     protected override ModeratorInstruction GenerateTargetSelectionInstruction(GameSession session, ModeratorResponse input)
     {

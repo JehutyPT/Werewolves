@@ -549,19 +549,6 @@ internal static class GameFlowManager
 	            return true;
 	        }
 
-            if (startingInstruction is ConfirmationInstruction
-                {
-                    Semantic: ModeratorInstructionSemantic.WakeRole
-                } &&
-                nextInstructionToSend is ConfirmationInstruction
-                {
-                    Semantic: ModeratorInstructionSemantic.PutRoleToSleep
-                } &&
-                session.GetCurrentListener() == Listener(SimpleWerewolf))
-            {
-                return true;
-            }
-
 	        if (nextInstructionToSend.Semantic ==
 	            ModeratorInstructionSemantic.ObserveStutteringJudgeSignal)
 	        {

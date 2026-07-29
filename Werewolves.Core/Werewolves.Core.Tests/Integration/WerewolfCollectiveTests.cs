@@ -146,7 +146,7 @@ public sealed class WerewolfCollectiveTests
 	}
 
 	[Fact]
-	public void NoLivingKnownNonAgent_SleepsWithoutVictimSelectorOrNightAction()
+	public void KnownNonemptyAgentGroup_WithoutLivingKnownNonAgent_FailsSideEffectFree()
 	{
 		var builder = GameTestBuilder.Create()
 			.WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: false);
@@ -158,18 +158,19 @@ public sealed class WerewolfCollectiveTests
 		var wake =
 			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
 				StartNight(builder));
-		var afterWake = builder.Process(wake.CreateResponse());
+		var session = builder.GetGameState()!;
+		var historyCount = session.GameHistoryLog.Count();
 
-		var sleep =
-			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
-				afterWake);
-		sleep.Semantic.Should().Be(
-			ModeratorInstructionSemantic.PutRoleToSleep);
-		sleep.AffectedPlayerIds.Should().BeEquivalentTo(allLivingPlayerIds);
-		builder.GetGameState()!.GameHistoryLog
+		var act = () => builder.Process(wake.CreateResponse());
+
+		act.Should().Throw<InvalidOperationException>();
+		session.GameHistoryLog.Should().HaveCount(historyCount);
+		session.GameHistoryLog
 			.OfType<NightActionLogEntry>()
 			.Should().NotContain(entry =>
 				entry.ActionType == NightActionType.WerewolfVictimSelection);
+		builder.GetCurrentInstruction()!.InstructionId.Should().Be(
+			wake.InstructionId);
 	}
 
 	[Fact]
