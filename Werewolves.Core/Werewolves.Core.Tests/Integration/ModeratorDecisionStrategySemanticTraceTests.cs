@@ -83,42 +83,65 @@ public class ModeratorDecisionStrategySemanticTraceTests
 	}
 
 	[Fact]
-	public void BaselineRandom_WerewolfFactionAgentGroupObservation_UsesCurrentLivingSelectableAgentsWithoutAdvancingCursor()
+	public void BaselineRandom_WerewolfFactionAgentGroupObservation_UsesHiddenCurrentLivingSelectableAgentsWithoutAdvancingCursor()
 	{
 		var observedFixture = CreateFixture(runNumber: 11);
 		var replayFixture = CreateFixture(runNumber: 11);
 		var players = observedFixture.Session.GetPlayers().ToArray();
 		var replayPlayers = replayFixture.Session.GetPlayers().ToArray();
-		observedFixture.Builder.GameService.CommitScheduledFactionObservation(
+		var initialAgentSeats = observedFixture.StartState.FactionFacts
+			.Where(facts =>
+				facts.GetAgentKnowledge(Faction.Werewolf) ==
+				FactionAgentKnowledge.KnownAgent)
+			.Select(facts => facts.SeatNumber)
+			.ToArray();
+		var transitionedSeats = observedFixture.StartState.FactionFacts
+			.Where(facts =>
+				facts.GetAgentKnowledge(Faction.Werewolf) ==
+				FactionAgentKnowledge.KnownNonAgent)
+			.Take(2)
+			.Select(facts => facts.SeatNumber)
+			.ToArray();
+		observedFixture.Builder.GameService.CommitExplicitFactionTransition(
 			observedFixture.Session.Id,
-			"current-werewolf-agent-group",
-			players.Select((player, index) => FactionFact.Agent(
-					player.Id,
+			"current-werewolf-agent-transition",
+			transitionedSeats
+				.Select(seatNumber => FactionFact.Agent(
+					players[seatNumber - 1].Id,
 					Faction.Werewolf,
-					index < 3
-						? FactionAgentKnowledge.KnownAgent
-						: FactionAgentKnowledge.KnownNonAgent,
+					FactionAgentKnowledge.KnownAgent,
 					new FactionFactEffectiveBoundary(1, GamePhase.Night, 10)))
 				.ToArray());
-		observedFixture.Builder.ArrangeEliminatedPlayer(players[0].Id);
+		observedFixture.Builder.ArrangeEliminatedPlayer(
+			players[transitionedSeats[1] - 1].Id);
 		var observation = new SelectPlayersInstruction(
 			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup,
-			[players[0].Id, players[2].Id, players[3].Id],
+			players.Select(player => player.Id).ToHashSet(),
 			NumberRangeConstraint.AtLeast(1),
 			privateInstruction:
-				nameof(BaselineRandom_WerewolfFactionAgentGroupObservation_UsesCurrentLivingSelectableAgentsWithoutAdvancingCursor));
+				nameof(BaselineRandom_WerewolfFactionAgentGroupObservation_UsesHiddenCurrentLivingSelectableAgentsWithoutAdvancingCursor));
 		var choiceAfterObservation = new SelectPlayersInstruction(
 			ModeratorInstructionSemantic.SelectWerewolfVictim,
 			players.Skip(1).Select(player => player.Id).ToHashSet(),
 			NumberRangeConstraint.Exact(2),
 			privateInstruction:
-				nameof(BaselineRandom_WerewolfFactionAgentGroupObservation_UsesCurrentLivingSelectableAgentsWithoutAdvancingCursor));
+				nameof(BaselineRandom_WerewolfFactionAgentGroupObservation_UsesHiddenCurrentLivingSelectableAgentsWithoutAdvancingCursor));
 		var replayChoice = new SelectPlayersInstruction(
 			ModeratorInstructionSemantic.SelectWerewolfVictim,
 			replayPlayers.Skip(1).Select(player => player.Id).ToHashSet(),
 			NumberRangeConstraint.Exact(2),
 			privateInstruction:
-				nameof(BaselineRandom_WerewolfFactionAgentGroupObservation_UsesCurrentLivingSelectableAgentsWithoutAdvancingCursor));
+				nameof(BaselineRandom_WerewolfFactionAgentGroupObservation_UsesHiddenCurrentLivingSelectableAgentsWithoutAdvancingCursor));
+
+		observedFixture.Session.TryGetKnownFactionAgents(
+				Faction.Werewolf,
+				out var partialAgents)
+			.Should().BeFalse();
+		partialAgents.Should().BeEmpty();
+		observedFixture.Session.GetFactionAgentKnowledge(
+				players[initialAgentSeats[0] - 1].Id,
+				Faction.Werewolf)
+			.Should().Be(FactionAgentKnowledge.Unknown);
 
 		var observationResponse = observedFixture.Strategy.CreateResponse(
 			observation,
@@ -130,7 +153,8 @@ public class ModeratorDecisionStrategySemanticTraceTests
 			replayChoice,
 			replayFixture.Session);
 
-		observationResponse.SelectedPlayerIds.Should().Equal(players[2].Id);
+		ToSeatNumbers(observationResponse.SelectedPlayerIds!, players).Should()
+			.Equal(initialAgentSeats.Append(transitionedSeats[0]).Order());
 		ToSeatNumbers(responseAfterObservation.SelectedPlayerIds!, players).Should()
 			.Equal(ToSeatNumbers(replayResponse.SelectedPlayerIds!, replayPlayers));
 	}

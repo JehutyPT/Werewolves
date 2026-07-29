@@ -345,19 +345,50 @@ public sealed class PendingInstructionRecoveryTests
     }
 
     [Fact]
-    public void KnownWerewolfAgentWake_WithoutLegalVictim_DoubleRehydrationContinuesAtCursorlessSleep()
+    public void KnownWerewolfAgentWake_WithoutLegalVictim_DoubleRehydrationReplaysWake()
     {
         var builder = GameTestBuilder.Create()
-            .WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);
+            .WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: false);
 
         builder.StartGame();
         var players = builder.GetGameState()!.GetPlayers().ToArray();
-        var werewolfAgentIds = players
-            .Select(player => player.Id)
-            .ToHashSet();
-        ArrangeKnownWerewolfAgentGroup(builder, werewolfAgentIds);
         builder.ConfirmGameStart();
-        var wake = builder.ConfirmNightStart()
+        builder.ConfirmNightStart();
+        var finishNight = builder.CompleteWerewolfNightAction(
+                [players[0].Id],
+                players[1].Id)
+            .ModeratorInstruction.Should()
+            .BeOfType<ConfirmationInstruction>().Subject;
+        finishNight.Semantic.Should().Be(
+            ModeratorInstructionSemantic.FinishNightActions);
+        builder.Process(finishNight.CreateResponse())
+            .IsSuccess.Should().BeTrue();
+        builder.CompleteDawnPhase(new Dictionary<Guid, MainRoleType>
+        {
+            [players[1].Id] = MainRoleType.SimpleVillager
+        }).IsSuccess.Should().BeTrue();
+
+        var session = builder.GetGameState()!;
+        var transitionBoundary = new FactionFactEffectiveBoundary(
+            session.TurnNumber,
+            session.GetCurrentPhase(),
+            session.GameHistoryLog.Count());
+        builder.ArrangeExplicitFactionTransition(
+            "test-all-living-players-become-werewolf-agents",
+            session.GetPlayers()
+                .Where(player => player.State.Health == PlayerHealth.Alive)
+                .Select(player => FactionFact.Agent(
+                    player.Id,
+                    Faction.Werewolf,
+                    FactionAgentKnowledge.KnownAgent,
+                    transitionBoundary))
+                .ToArray());
+        var expectedNightStart = builder.CompleteDayPhaseWithTie()
+            .ModeratorInstruction.Should()
+            .BeOfType<ConfirmationInstruction>().Subject;
+        expectedNightStart.Semantic.Should().Be(
+            ModeratorInstructionSemantic.StartNight);
+        var wake = builder.Process(expectedNightStart.CreateResponse())
             .ModeratorInstruction.Should()
             .BeOfType<ConfirmationInstruction>().Subject;
         wake.Semantic.Should().Be(ModeratorInstructionSemantic.WakeRole);
@@ -374,15 +405,15 @@ public sealed class PendingInstructionRecoveryTests
         var secondService = new GameService();
         var secondGameId = secondService.RehydrateSession(firstRecovered.Serialize());
         var secondRecovered = secondService.GetGameStateView(secondGameId)!;
-        var secondSleep = secondService.GetCurrentInstruction(secondGameId)
+        var replayedNightStart = secondService.GetCurrentInstruction(secondGameId)
             .Should().BeOfType<ConfirmationInstruction>().Subject;
 
         using (new AssertionScope())
         {
-            secondSleep.InstructionId.Should().Be(expectedSleep.InstructionId);
-            secondSleep.Semantic.Should().Be(expectedSleep.Semantic);
-            secondSleep.AffectedPlayerIds.Should()
-                .BeEquivalentTo(expectedSleep.AffectedPlayerIds);
+            replayedNightStart.InstructionId.Should().Be(
+                expectedNightStart.InstructionId);
+            replayedNightStart.Semantic.Should().Be(
+                ModeratorInstructionSemantic.StartNight);
             secondRecovered.GameHistoryLog
                 .OfType<FactionFactsCommittedLogEntry>()
                 .Count(entry =>
@@ -397,31 +428,43 @@ public sealed class PendingInstructionRecoveryTests
                 .Should().Be(1);
             secondRecovered.GameHistoryLog
                 .OfType<FactionFactsCommittedLogEntry>()
-                .Should().NotContain(entry =>
+                .Count(entry =>
                     entry.Source.Kind ==
-                    FactionFactSourceKind.ScheduledObservation);
+                    FactionFactSourceKind.ScheduledObservation)
+                .Should().Be(1);
             secondRecovered.GameHistoryLog.OfType<NightActionLogEntry>()
-                .Should().NotContain(entry =>
+                .Count(entry =>
                     entry.ActionType ==
-                    NightActionType.WerewolfVictimSelection);
+                    NightActionType.WerewolfVictimSelection)
+                .Should().Be(1);
         }
 
-        Action replayWake = () =>
-            secondService.ProcessInstruction(
+        var secondWake = secondService.ProcessInstruction(
                 secondGameId,
-                wake.CreateResponse());
-        replayWake.Should().Throw<InvalidOperationException>();
+                replayedNightStart.CreateResponse())
+            .ModeratorInstruction.Should()
+            .BeOfType<ConfirmationInstruction>().Subject;
+        secondWake.Semantic.Should().Be(ModeratorInstructionSemantic.WakeRole);
+        secondWake.PublicAnnouncement.Should().Be(wake.PublicAnnouncement);
+
+        var replayedSleep = secondService.ProcessInstruction(
+            secondGameId,
+            secondWake.CreateResponse())
+            .ModeratorInstruction.Should()
+            .BeOfType<ConfirmationInstruction>().Subject;
+        replayedSleep.Semantic.Should().Be(
+            ModeratorInstructionSemantic.PutRoleToSleep);
+        replayedSleep.PublicAnnouncement.Should().Be(
+            expectedSleep.PublicAnnouncement);
 
         var continued = secondService.ProcessInstruction(
             secondGameId,
-            secondSleep.CreateResponse());
+            replayedSleep.CreateResponse());
 
         continued.IsSuccess.Should().BeTrue();
-        var seerIdentification = continued.ModeratorInstruction.Should()
-            .BeOfType<SelectPlayersInstruction>().Subject;
-        seerIdentification.Semantic.Should().Be(
-            ModeratorInstructionSemantic.IdentifyRoleHolders);
-        seerIdentification.RoleIdentification.Should().Be(MainRoleType.Seer);
+        continued.ModeratorInstruction.Should()
+            .BeOfType<ConfirmationInstruction>().Which.Semantic.Should().Be(
+                ModeratorInstructionSemantic.FinishNightActions);
         secondRecovered.GameHistoryLog
             .OfType<FactionFactsCommittedLogEntry>()
             .Count(entry =>
@@ -429,9 +472,10 @@ public sealed class PendingInstructionRecoveryTests
                 FactionFactSourceKind.InitialBeneficiaryClosure)
             .Should().Be(1);
         secondRecovered.GameHistoryLog.OfType<NightActionLogEntry>()
-            .Should().NotContain(entry =>
+            .Count(entry =>
                 entry.ActionType ==
-                NightActionType.WerewolfVictimSelection);
+                NightActionType.WerewolfVictimSelection)
+            .Should().Be(1);
     }
 
     [Fact]
@@ -820,26 +864,4 @@ public sealed class PendingInstructionRecoveryTests
         return result.ModeratorInstruction.Should().BeOfType<TInstruction>().Subject;
     }
 
-    private static void ArrangeKnownWerewolfAgentGroup(
-        GameTestBuilder builder,
-        IReadOnlySet<Guid> werewolfAgentIds)
-    {
-        var session = builder.GetGameState()!;
-        var boundary = new FactionFactEffectiveBoundary(
-            session.TurnNumber,
-            session.GetCurrentPhase(),
-            session.GameHistoryLog.Count());
-        var facts = session.GetPlayers()
-            .Select(player => FactionFact.Agent(
-                player.Id,
-                Faction.Werewolf,
-                werewolfAgentIds.Contains(player.Id)
-                    ? FactionAgentKnowledge.KnownAgent
-                    : FactionAgentKnowledge.KnownNonAgent,
-                boundary))
-            .ToArray();
-        builder.ArrangeExplicitFactionTransition(
-            "test-known-werewolf-agent-group-recovery",
-            facts);
-    }
 }

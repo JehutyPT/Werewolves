@@ -152,14 +152,19 @@ public sealed class BaselineRandomDecisionStrategy : IModeratorDecisionStrategy
 		return instruction.CreateResponse(selectedPlayerIds);
 	}
 
-	private static ModeratorResponse CreateLivingFactionAgentGroupResponse(
+	private ModeratorResponse CreateLivingFactionAgentGroupResponse(
 		SelectPlayersInstruction instruction,
 		IGameSession session)
 	{
-		var selectedPlayerIds = session
-			.RequireKnownFactionAgents(Faction.Werewolf)
+		var players = GetPlayersMatchingStartState(session);
+		var effectiveAgentKnowledgeByPlayerId =
+			CreateEffectiveWerewolfAgentKnowledgeByPlayerId(players);
+		var selectedPlayerIds = players
 			.Where(player => player.State.Health == PlayerHealth.Alive)
 			.Where(player => instruction.SelectablePlayerIds.Contains(player.Id))
+			.Where(player =>
+				effectiveAgentKnowledgeByPlayerId[player.Id] ==
+				FactionAgentKnowledge.KnownAgent)
 			.Select(player => player.Id)
 			.ToHashSet();
 		return instruction.CreateResponse(selectedPlayerIds);
@@ -244,6 +249,20 @@ public sealed class BaselineRandomDecisionStrategy : IModeratorDecisionStrategy
 			assignment => players[assignment.SeatNumber - 1].Id,
 			assignment => players[assignment.SeatNumber - 1].State.CurrentRole
 				?? assignment.Role);
+
+	private Dictionary<Guid, FactionAgentKnowledge>
+		CreateEffectiveWerewolfAgentKnowledgeByPlayerId(
+			IReadOnlyList<IPlayer> players) =>
+		_startState.FactionFacts.ToDictionary(
+			facts => players[facts.SeatNumber - 1].Id,
+			facts =>
+			{
+				var currentKnowledge = players[facts.SeatNumber - 1].State
+					.GetFactionAgentKnowledge(Faction.Werewolf);
+				return currentKnowledge == FactionAgentKnowledge.Unknown
+					? facts.GetAgentKnowledge(Faction.Werewolf)
+					: currentKnowledge;
+			});
 
 	private ModeratorResponse CreateOptionSelectionResponse(SelectOptionsInstruction instruction)
 	{

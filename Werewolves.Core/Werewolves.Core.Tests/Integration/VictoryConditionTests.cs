@@ -2,6 +2,7 @@ using FluentAssertions;
 using Werewolves.Core.GameLogic.Models.StateMachine;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
+using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.Tests.Helpers;
 using Xunit;
@@ -438,6 +439,48 @@ public class VictoryConditionTests : DiagnosticTestBase
     #endregion
 
     #region VC-020 to VC-022: Victory Timing
+
+    [Fact]
+    public void IncompleteBeneficiaryClosure_AtVictoryCheckWindow_ThrowsInvariantFailure()
+    {
+        var builder = CreateBuilder()
+            .WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: false);
+        builder.StartGame();
+        var session = builder.GetGameState()!;
+        var players = session.GetPlayers().ToArray();
+        builder.ArrangeEliminatedPlayer(players[0].Id);
+        var boundary = new FactionFactEffectiveBoundary(
+            session.TurnNumber,
+            session.GetCurrentPhase(),
+            session.GameHistoryLog.Count());
+        builder.ArrangeExplicitFactionTransition(
+            "test-incomplete-closure-before-victory",
+            players
+                .Skip(1)
+                .Select(player => FactionFact.Agent(
+                    player.Id,
+                    Faction.Werewolf,
+                    FactionAgentKnowledge.KnownNonAgent,
+                    boundary))
+                .ToArray());
+        builder.ConfirmGameStart();
+
+        var finishNight = builder.ConfirmNightStart()
+            .ModeratorInstruction.Should()
+            .BeOfType<ConfirmationInstruction>().Subject;
+        finishNight.Semantic.Should().Be(
+            ModeratorInstructionSemantic.FinishNightActions);
+        session.GetFactionBeneficiaryKnowledge(players[1].Id)
+            .IsKnown.Should().BeFalse();
+        var reachVictoryCheckWindow = () =>
+            builder.Process(finishNight.CreateResponse());
+
+        reachVictoryCheckWindow.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("Required Faction facts are not ready.");
+
+        MarkTestCompleted();
+    }
 
     /// <summary>
     /// VC-020: Victory condition is checked and detected at dawn (before Day phase starts).

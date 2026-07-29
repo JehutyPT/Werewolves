@@ -549,19 +549,6 @@ internal static class GameFlowManager
 	            return true;
 	        }
 
-            if (startingInstruction is ConfirmationInstruction
-                {
-                    Semantic: ModeratorInstructionSemantic.WakeRole
-                } &&
-                nextInstructionToSend is ConfirmationInstruction
-                {
-                    Semantic: ModeratorInstructionSemantic.PutRoleToSleep
-                } &&
-                session.GetCurrentListener() == Listener(SimpleWerewolf))
-            {
-                return true;
-            }
-
 	        if (nextInstructionToSend.Semantic ==
 	            ModeratorInstructionSemantic.ObserveStutteringJudgeSignal)
 	        {
@@ -1049,17 +1036,13 @@ internal static class GameFlowManager
     {
         var livingBeneficiaries = session.GetPlayers()
             .WithHealth(PlayerHealth.Alive)
-            .Select(player => session.GetFactionBeneficiaryKnowledge(player.Id))
+            .Select(player => session.RequireKnownFactionBeneficiary(player.Id))
             .ToArray();
-        if (livingBeneficiaries.Any(knowledge => !knowledge.IsKnown))
-        {
-            return null;
-        }
 
         var aliveWerewolves = livingBeneficiaries.Count(
-            knowledge => knowledge.Faction == Faction.Werewolf);
+            faction => faction == Faction.Werewolf);
         int aliveNonWerewolves = livingBeneficiaries.Count(
-            knowledge => knowledge.Faction == Faction.Villager);
+            faction => faction == Faction.Villager);
 
 		// Villager win
 		if (aliveWerewolves == 0 && aliveNonWerewolves > 0)
