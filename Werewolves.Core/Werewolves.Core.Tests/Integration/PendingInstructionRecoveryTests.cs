@@ -345,7 +345,7 @@ public sealed class PendingInstructionRecoveryTests
     }
 
     [Fact]
-    public void KnownWerewolfAgentWake_WithoutLegalVictim_DoubleRehydrationReplaysWake()
+    public void KnownWerewolfAgentWake_WithoutLegalVictim_DoubleRehydrationResumesAtSleep()
     {
         var builder = GameTestBuilder.Create()
             .WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: false);
@@ -405,15 +405,17 @@ public sealed class PendingInstructionRecoveryTests
         var secondService = new GameService();
         var secondGameId = secondService.RehydrateSession(firstRecovered.Serialize());
         var secondRecovered = secondService.GetGameStateView(secondGameId)!;
-        var replayedNightStart = secondService.GetCurrentInstruction(secondGameId)
+        var secondSleep = secondService.GetCurrentInstruction(secondGameId)
             .Should().BeOfType<ConfirmationInstruction>().Subject;
 
         using (new AssertionScope())
         {
-            replayedNightStart.InstructionId.Should().Be(
-                expectedNightStart.InstructionId);
-            replayedNightStart.Semantic.Should().Be(
-                ModeratorInstructionSemantic.StartNight);
+            secondSleep.InstructionId.Should().Be(expectedSleep.InstructionId);
+            secondSleep.Semantic.Should().Be(expectedSleep.Semantic);
+            secondSleep.PublicAnnouncement.Should().Be(
+                expectedSleep.PublicAnnouncement);
+            secondSleep.AffectedPlayerIds.Should()
+                .BeEquivalentTo(expectedSleep.AffectedPlayerIds);
             secondRecovered.GameHistoryLog
                 .OfType<FactionFactsCommittedLogEntry>()
                 .Count(entry =>
@@ -439,27 +441,9 @@ public sealed class PendingInstructionRecoveryTests
                 .Should().Be(1);
         }
 
-        var secondWake = secondService.ProcessInstruction(
-                secondGameId,
-                replayedNightStart.CreateResponse())
-            .ModeratorInstruction.Should()
-            .BeOfType<ConfirmationInstruction>().Subject;
-        secondWake.Semantic.Should().Be(ModeratorInstructionSemantic.WakeRole);
-        secondWake.PublicAnnouncement.Should().Be(wake.PublicAnnouncement);
-
-        var replayedSleep = secondService.ProcessInstruction(
-            secondGameId,
-            secondWake.CreateResponse())
-            .ModeratorInstruction.Should()
-            .BeOfType<ConfirmationInstruction>().Subject;
-        replayedSleep.Semantic.Should().Be(
-            ModeratorInstructionSemantic.PutRoleToSleep);
-        replayedSleep.PublicAnnouncement.Should().Be(
-            expectedSleep.PublicAnnouncement);
-
         var continued = secondService.ProcessInstruction(
             secondGameId,
-            replayedSleep.CreateResponse());
+            secondSleep.CreateResponse());
 
         continued.IsSuccess.Should().BeTrue();
         continued.ModeratorInstruction.Should()

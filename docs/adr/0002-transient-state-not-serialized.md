@@ -30,6 +30,12 @@ A non-empty accepted One-Use Resource response becomes durable before Core retur
 
 Rehydration validates that the cursor matches the latest atomic resource commit and the exact id, semantic, and concrete response shape of the pending instruction, then reconstructs only the transient listener continuation needed to consume that instruction. A resource cursor supersedes an earlier accepted-observation cursor. It never serializes listener state. Declines, omitted opportunities, wake confirmations, and sleep confirmations remain ordinary replayable phase-tail work.
 
+## Amendment: Simple Werewolf automatic no-target recovery boundary
+
+One exception applies only when `SimpleWerewolf` consumes a public `WakeRole` confirmation and immediately emits `PutRoleToSleep` because its known, non-empty living Werewolf Agent group has no living known Non-Agent target. That automatic victim-selection omission advances the stable recovery boundary at the public sleep instruction, and the existing cursorless pending-instruction continuation restores the first remaining stage from there.
+
+This exception adds no cursor, log entry, marker, schema field, or generalized wake/sleep checkpoint. Every other wake confirmation, sleep confirmation, decline, and omitted opportunity remains ordinary replayable phase-tail work.
+
 ## Amendment: elimination cascade recovery boundaries
 
 An accepted elimination Role Reveal, a settled elimination batch, a completed elimination reaction, and a fully drained elimination cascade may each advance the stable boundary together with the exact next pending instruction. `EliminationCascadeBatchResolvedLogEntry` records the scoped requested and actually committed eliminations, including a zero-commit Vote interception. `EliminationCascadeReactionCompletedLogEntry` identifies the cascade scope, stable reaction ID, ordered triggering batch, and exact child eliminations admitted by that reaction. `EliminationCascadeCompletedLogEntry` identifies a scope that has completely drained.
