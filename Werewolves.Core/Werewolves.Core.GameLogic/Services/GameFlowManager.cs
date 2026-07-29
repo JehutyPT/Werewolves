@@ -39,6 +39,7 @@ internal static class GameFlowManager
     private enum AcceptedObservationInstructionShape
     {
         PlayerSelection,
+        OptionSelection,
         Confirmation
     }
 
@@ -53,6 +54,8 @@ internal static class GameFlowManager
             {
                 AcceptedObservationInstructionShape.PlayerSelection =>
                     instruction?.GetType() == typeof(SelectPlayersInstruction),
+                AcceptedObservationInstructionShape.OptionSelection =>
+                    instruction?.GetType() == typeof(SelectOptionsInstruction),
                 AcceptedObservationInstructionShape.Confirmation =>
                     instruction?.GetType() == typeof(ConfirmationInstruction),
                 _ => false
@@ -689,6 +692,7 @@ internal static class GameFlowManager
             ModeratorInstructionSemantic.AnnounceScapegoatPermittedVoters or
             ModeratorInstructionSemantic.EstablishStutteringJudgeSignal or
             ModeratorInstructionSemantic.ObserveStutteringJudgeSignal or
+            ModeratorInstructionSemantic.ChooseWolfHoundAlignment or
             ModeratorInstructionSemantic.AnnounceDawnVictims or
             ModeratorInstructionSemantic.AssignDawnVictimRoles or
             ModeratorInstructionSemantic.AssignDayVoteTargetRole or
@@ -910,6 +914,12 @@ internal static class GameFlowManager
                     Listener(WildChild),
                     StandardNightRoleState.AwaitingTargetSelection.ToString(),
                     AcceptedObservationInstructionShape.PlayerSelection),
+            (WolfHound, ModeratorInstructionSemantic.ChooseWolfHoundAlignment) =>
+                new(
+                    NightMainActionLoop.ToString(),
+                    Listener(WolfHound),
+                    WolfHoundRoleState.AwaitingAlignmentChoice.ToString(),
+                    AcceptedObservationInstructionShape.OptionSelection),
             (SimpleWerewolf, ModeratorInstructionSemantic.SelectWerewolfVictim) =>
                 new(
                     NightMainActionLoop.ToString(),

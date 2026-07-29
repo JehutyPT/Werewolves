@@ -48,16 +48,17 @@ public class SimulatorProfileTests
 			.Append(ModeratorInstructionSemantic.ObserveScapegoatHolderForTie)
 			.Append(ModeratorInstructionSemantic.RevealScapegoatForTie)
 			.Append(ModeratorInstructionSemantic.SelectScapegoatPermittedVoters)
-			.Append(ModeratorInstructionSemantic.AnnounceScapegoatPermittedVoters);
+			.Append(ModeratorInstructionSemantic.AnnounceScapegoatPermittedVoters)
+			.Append(ModeratorInstructionSemantic.ChooseWolfHoundAlignment);
 		var safety = SimulatorCapability.SafetyScreening;
 		var probability = SimulatorCapability.FullProbability;
 
-		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "10"));
+		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "11"));
 		probability.Identity.Should().Be(new SimulatorProfileIdentity("full-probability", "3"));
 		BaselineRandomDecisionStrategy.Identity.Should()
 			.Be(new DecisionStrategyIdentity("baseline-random", "3-splitmix64"));
 		BaselineRandomDecisionStrategy.SafetyScreeningIdentity.Should()
-			.Be(new DecisionStrategyIdentity("baseline-random", "4-splitmix64"));
+			.Be(new DecisionStrategyIdentity("baseline-random", "5-splitmix64"));
 		safety.SupportedRoles.Should().Equal(
 			MainRoleType.SimpleWerewolf,
 			MainRoleType.Seer,
@@ -69,7 +70,8 @@ public class SimulatorProfileTests
 			MainRoleType.Witch,
 			MainRoleType.Hunter,
 			MainRoleType.StutteringJudge,
-			MainRoleType.Scapegoat);
+			MainRoleType.Scapegoat,
+			MainRoleType.WolfHound);
 		probability.SupportedRoles.Should().Equal(
 			MainRoleType.SimpleWerewolf,
 			MainRoleType.Seer,

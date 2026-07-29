@@ -986,6 +986,55 @@ public class LobbyEvaluationCoordinatorTests
 		local.Writes.Should().BeEmpty();
 	}
 
+	[Theory]
+	[InlineData("safety-screening@10")]
+	[InlineData("core-simulator@1")]
+	[InlineData("foreign-simulator@1")]
+	public async Task NonCurrentSafetyLocalRecord_IsAMissBeforeBoundedFallback(
+		string rejectedProfile)
+	{
+		var lobby = CreateLobby(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager);
+		var scenario = lobby.CreateSimulationScenario();
+		var consumerIdentity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+		var currentRecord = new DegenerateTerminalCacheRecord(
+			consumerIdentity,
+			AggregateRows(1_000, 750, 250),
+			AggregateCells(1_000, 750, 250, turnOneOnly: true));
+		var nonCurrentBytes = Encoding.UTF8.GetBytes(
+			Encoding.UTF8.GetString(DocumentBytes(currentRecord)).Replace(
+				SimulatorCapability.SafetyScreening.Identity.ToString(),
+				rejectedProfile,
+				StringComparison.Ordinal));
+		var local = new RecordingLocalStore(nonCurrentBytes);
+		var evaluator = new RecordingEvaluator(new ScreeningPassedLobbyEvaluation());
+		var clock = new ManualTimeProvider();
+		using var coordinator = new LobbyEvaluationCoordinator(
+			lobby,
+			local,
+			evaluator,
+			new LobbyEvaluationSettings(
+				SimulatorCapability.SafetyScreening,
+				LobbyEvaluationDepth.DegenerateScreeningOnly),
+			clock);
+
+		coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.Pending);
+		coordinator.TryRequestLobbyExit().Should().BeFalse();
+		await WaitForStateAsync(coordinator, LobbyEvaluationStateKind.ScreeningPassed);
+
+		coordinator.State.Identity.Should().Be(consumerIdentity);
+		evaluator.CallCount.Should().Be(1);
+		evaluator.Capabilities.Should().Equal(SimulatorCapability.SafetyScreening);
+		evaluator.Depths.Should().Equal(LobbyEvaluationDepth.DegenerateScreeningOnly);
+		local.Writes.Should().BeEmpty();
+	}
+
 	[Fact]
 	public async Task SuccessfulFallback_PreservesRecordsFromOtherCurrentProducerProfiles()
 	{

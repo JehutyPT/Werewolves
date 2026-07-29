@@ -137,7 +137,8 @@ public sealed class SimulatorCapability : SimulatorProfile
 		new(MainRoleType.Witch, Faction.Villager),
 		new(MainRoleType.Hunter, Faction.Villager),
 		new(MainRoleType.StutteringJudge, Faction.Villager),
-		new(MainRoleType.Scapegoat, Faction.Villager)
+		new(MainRoleType.Scapegoat, Faction.Villager),
+		new(MainRoleType.WolfHound, Faction.Villager)
 	];
 
 	private static readonly SimulatorProfileRoleDescriptor[] FullProbabilityRoleDescriptors =
@@ -155,7 +156,7 @@ public sealed class SimulatorCapability : SimulatorProfile
 		SimulatorCapabilityRegistry.Production.FullProbability;
 
 	internal static SimulatorCapability CreateSafetyScreening() => new(
-			new SimulatorProfileIdentity("safety-screening", "10"),
+			new SimulatorProfileIdentity("safety-screening", "11"),
 		SafetyScreeningRoleDescriptors,
 		headlessResponsePolicy: new HeadlessResponsePolicy(
 			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
@@ -193,7 +194,8 @@ public sealed class SimulatorCapability : SimulatorProfile
 				ModeratorInstructionSemantic.ObserveScapegoatHolderForTie,
 				ModeratorInstructionSemantic.RevealScapegoatForTie,
 				ModeratorInstructionSemantic.SelectScapegoatPermittedVoters,
-				ModeratorInstructionSemantic.AnnounceScapegoatPermittedVoters
+				ModeratorInstructionSemantic.AnnounceScapegoatPermittedVoters,
+				ModeratorInstructionSemantic.ChooseWolfHoundAlignment
 			]),
 		supportsActorSetupCards: false,
 		supportedRuleStates: [SimulationRuleState.Default]);
