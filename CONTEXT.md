@@ -202,6 +202,10 @@ _Avoid_: Team member, ally, operative
 The Faction Beneficiary and Faction Agent facts legitimately known about a Player.
 _Avoid_: Default team, inferred allegiance, assumed Villager
 
+**Initial Beneficiary Closure**:
+The one-time Night 1 rules boundary at which complete committed Faction evidence establishes every still-unknown initial Faction Beneficiary atomically before a dependent rule consumes it.
+_Avoid_: Default assignment, inferred allegiance, correction pass
+
 **Permanent Role Swap**:
 A Role replacement that lasts for the rest of the Game Session without replacing the Player.
 _Avoid_: Transformation (too broad), conversion (ambiguous with infection)
