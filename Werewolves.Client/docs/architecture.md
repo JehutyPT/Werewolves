@@ -150,7 +150,8 @@
 *   The production client retains two pre-game safety gates: deterministic Already-Decided Role Composition detection and 1,000-run Degenerate Simulation Scenario screening.
 *   Either safety classification blocks lobby exit and explains the actionable setup problem to the Moderator.
 *   Under ADR-0013, production stops after the 1,000-run degenerate-screening gate. It neither requests the 10,000-run probability batch nor presents Game Result Frequency or Ended-By-Turn Frequency.
-*   The full probability path and cached probability payloads remain dormant for possible future work; they are not deleted or interpreted as current balance guidance. Under ADR-0016, a legacy `core-simulator@1` probability record may establish safety only through the explicit bridge when the scenario lies in the intersection of that legacy producer/profile and the current `safety-screening@<version>` capability; new safety-only Roles and changed semantics cannot use it.
+*   Production consults only local terminal records whose complete identity exactly matches the requested current capability. A missing, stale, or foreign record starts bounded on-device evaluation.
+*   The full probability path remains dormant for possible future work; it is not deleted or interpreted as current balance guidance. Production packages no simulator cache, and pre-release `core-simulator@1` records never project into Safety Screening.
 
 ## 9. Lifecycle
 

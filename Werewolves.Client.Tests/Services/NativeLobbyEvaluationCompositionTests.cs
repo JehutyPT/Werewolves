@@ -30,8 +30,6 @@ public class NativeLobbyEvaluationCompositionTests
 		await using var provider = services.BuildServiceProvider(
 			new ServiceProviderOptions { ValidateOnBuild = true, ValidateScopes = true });
 
-		provider.GetRequiredService<ITerminalLobbyCacheByteSource>()
-			.Should().BeOfType<MauiTerminalLobbyCacheByteSource>();
 		provider.GetRequiredService<ILocalTerminalLobbyCacheStore>()
 			.Should().BeOfType<FileTerminalLobbyCacheStore>();
 		var settings = provider.GetRequiredService<LobbyEvaluationSettings>();

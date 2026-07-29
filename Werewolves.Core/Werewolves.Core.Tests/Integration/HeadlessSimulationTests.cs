@@ -126,7 +126,7 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 		var material = new RunSeedMaterial(
 			new SimulationCompatibilityIdentity(
 				scenario.ToCanonical(),
-				SimulatorProfile.LegacyCore.Identity),
+				SimulatorCapability.FullProbability.Identity),
 			BaselineRandomDecisionStrategy.Identity,
 			runNumber: 3);
 		var startState = SimulationStartStateDeriver.Derive(material);
@@ -679,7 +679,7 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 	[Fact]
 	public void BaselineRandomDecisionStrategy_WithKnownOptionalChoiceSeed_ReturnsEmptyValidResponse()
 	{
-		var material = CreateRunSeedMaterial(runNumber: 0);
+		var material = CreateRunSeedMaterial(runNumber: 1);
 		var startState = SimulationStartStateDeriver.Derive(material);
 		var config = startState.CreateGameSessionConfig();
 		var builder = CreateBuilder()
@@ -833,7 +833,7 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 		return new RunSeedMaterial(
 			new SimulationCompatibilityIdentity(
 				scenario.ToCanonical(),
-				SimulatorProfile.LegacyCore.Identity),
+				SimulatorCapability.FullProbability.Identity),
 			BaselineRandomDecisionStrategy.Identity,
 			runNumber);
 	}

@@ -51,27 +51,12 @@ public sealed class SimulationExecutor
 		long runNumber,
 		CancellationToken cancellationToken = default)
 	{
-		ArgumentNullException.ThrowIfNull(capability);
-		return Execute(
-			scenario,
-			(SimulatorProfile)capability,
-			compatibilityIdentity,
-			runNumber,
-			cancellationToken);
-	}
-
-	private SimulationRun Execute(
-		SimulationScenario scenario,
-		SimulatorProfile profile,
-		SimulationCompatibilityIdentity compatibilityIdentity,
-		long runNumber,
-		CancellationToken cancellationToken = default)
-	{
 		ArgumentNullException.ThrowIfNull(scenario);
+		ArgumentNullException.ThrowIfNull(capability);
 		ArgumentNullException.ThrowIfNull(compatibilityIdentity);
 		ArgumentOutOfRangeException.ThrowIfNegative(runNumber);
-		EnsureSupportedMatchingInput(scenario, profile, compatibilityIdentity);
-		return ExecuteValidated(profile, compatibilityIdentity, runNumber, cancellationToken);
+		EnsureSupportedMatchingInput(scenario, capability, compatibilityIdentity);
+		return ExecuteValidated(capability, compatibilityIdentity, runNumber, cancellationToken);
 	}
 
 	public SimulationBatchSourceEvidence ExecuteBatch(
@@ -88,23 +73,6 @@ public sealed class SimulationExecutor
 			degreeOfParallelism: 1,
 			cancellationToken);
 
-	internal SimulationBatchSourceEvidence ExecuteBatchLegacy(
-		SimulationScenario scenario,
-		SimulatorProfile legacyProfile,
-		SimulationCompatibilityIdentity compatibilityIdentity,
-		int runCount,
-		CancellationToken cancellationToken = default)
-	{
-		ArgumentNullException.ThrowIfNull(legacyProfile);
-		return ExecuteBatch(
-			scenario,
-			legacyProfile,
-			compatibilityIdentity,
-			runCount,
-			degreeOfParallelism: 1,
-			cancellationToken);
-	}
-
 	internal SimulationBatchSourceEvidence ExecuteBatch(
 		SimulationScenario scenario,
 		SimulatorCapability capability,
@@ -113,47 +81,12 @@ public sealed class SimulationExecutor
 		int degreeOfParallelism,
 		CancellationToken cancellationToken = default)
 	{
-		ArgumentNullException.ThrowIfNull(capability);
-		return ExecuteBatch(
-			scenario,
-			(SimulatorProfile)capability,
-			compatibilityIdentity,
-			runCount,
-			degreeOfParallelism,
-			cancellationToken);
-	}
-
-	internal SimulationBatchSourceEvidence ExecuteBatchLegacy(
-		SimulationScenario scenario,
-		SimulatorProfile legacyProfile,
-		SimulationCompatibilityIdentity compatibilityIdentity,
-		int runCount,
-		int degreeOfParallelism,
-		CancellationToken cancellationToken = default)
-	{
-		ArgumentNullException.ThrowIfNull(legacyProfile);
-		return ExecuteBatch(
-			scenario,
-			legacyProfile,
-			compatibilityIdentity,
-			runCount,
-			degreeOfParallelism,
-			cancellationToken);
-	}
-
-	private SimulationBatchSourceEvidence ExecuteBatch(
-		SimulationScenario scenario,
-		SimulatorProfile profile,
-		SimulationCompatibilityIdentity compatibilityIdentity,
-		int runCount,
-		int degreeOfParallelism,
-		CancellationToken cancellationToken = default)
-	{
 		ArgumentNullException.ThrowIfNull(scenario);
+		ArgumentNullException.ThrowIfNull(capability);
 		ArgumentNullException.ThrowIfNull(compatibilityIdentity);
 		ArgumentOutOfRangeException.ThrowIfNegative(runCount);
 		ArgumentOutOfRangeException.ThrowIfNegativeOrZero(degreeOfParallelism);
-		EnsureSupportedMatchingInput(scenario, profile, compatibilityIdentity);
+		EnsureSupportedMatchingInput(scenario, capability, compatibilityIdentity);
 		cancellationToken.ThrowIfCancellationRequested();
 
 		var records = new SimulationRun[runCount];
@@ -171,7 +104,7 @@ public sealed class SimulationExecutor
 			}
 
 			records[runNumber] = ExecuteValidated(
-				profile,
+				capability,
 				compatibilityIdentity,
 				runNumber,
 				cancellationToken);
@@ -180,12 +113,12 @@ public sealed class SimulationExecutor
 		return new SimulationBatchSourceEvidence(
 			scenario.ToCanonical(),
 			compatibilityIdentity.Profile,
-			profile.HeadlessResponsePolicy.StrategyIdentity,
+			capability.HeadlessResponsePolicy.StrategyIdentity,
 			records);
 	}
 
 	private SimulationRun ExecuteValidated(
-		SimulatorProfile profile,
+		SimulatorCapability capability,
 		SimulationCompatibilityIdentity compatibilityIdentity,
 		long runNumber,
 		CancellationToken cancellationToken)
@@ -193,7 +126,7 @@ public sealed class SimulationExecutor
 		cancellationToken.ThrowIfCancellationRequested();
 		var material = new RunSeedMaterial(
 			compatibilityIdentity,
-			profile.HeadlessResponsePolicy.StrategyIdentity,
+			capability.HeadlessResponsePolicy.StrategyIdentity,
 			runNumber);
 		try
 		{
@@ -204,7 +137,7 @@ public sealed class SimulationExecutor
 			var strategy = new BaselineRandomDecisionStrategy(
 				material,
 				startState,
-				profile.HeadlessResponsePolicy,
+				capability.HeadlessResponsePolicy,
 				random);
 			var driver = _driverFactory(strategy);
 			var execution = driver.CompleteGameSession(
@@ -231,10 +164,10 @@ public sealed class SimulationExecutor
 
 	private static void EnsureSupportedMatchingInput(
 		SimulationScenario scenario,
-		SimulatorProfile profile,
+		SimulatorCapability capability,
 		SimulationCompatibilityIdentity compatibilityIdentity)
 	{
-		var classification = SimulationScenarioClassifier.Classify(scenario, profile);
+		var classification = SimulationScenarioClassifier.Classify(scenario, capability);
 		if (classification.SimulatorSupport is not { IsSupported: true } simulatorSupport)
 		{
 			throw new ArgumentException(

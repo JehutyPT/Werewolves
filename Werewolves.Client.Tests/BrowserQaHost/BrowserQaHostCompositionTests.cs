@@ -26,22 +26,20 @@ namespace Werewolves.Client.Tests.BrowserQaHost;
 public class BrowserQaHostCompositionTests
 {
 	[Fact]
-	public async Task BrowserComposition_UsesBoundedSemanticCacheFixtureWithoutLiveFallback()
+	public async Task BrowserComposition_ProbabilityScenario_UsesDeterministicScreeningEvaluatorWithoutLocalCache()
 	{
-		using var context = new BunitContext();
-		var evaluator = new CountingEvaluator();
-		var source = new SemanticFixtureByteSource();
-		var local = new InMemoryTerminalLobbyCacheStore();
-		context.Services.AddScoped<ITerminalLobbyCacheByteSource>(_ => source);
-		context.Services.AddScoped<ILocalTerminalLobbyCacheStore>(_ => local);
-		context.Services.AddScoped<ILobbyTerminalEvaluator>(_ => evaluator);
-		context.Services.AddBrowserQaHostModeratorServices();
+		using var context = CreateBrowserQaHostContext(BrowserQaScenario.Probability);
+		var local = context.Services.GetRequiredService<ILocalTerminalLobbyCacheStore>();
+		var localBytes = await local.ReadAsync();
+
+		local.Should().BeOfType<BrowserQaScenarioTerminalLobbyCacheStore>();
+		localBytes.Should().BeNull();
+		context.Services.GetRequiredService<ILobbyTerminalEvaluator>()
+			.Should().BeOfType<BrowserQaScreeningPassedLobbyTerminalEvaluator>();
 
 		var coordinator = context.Services.GetRequiredService<LobbyEvaluationCoordinator>();
 		await WaitForStateAsync(coordinator, LobbyEvaluationStateKind.ScreeningPassed);
 
-		source.LogicalNames.Should().Equal("terminal-lobby-cache.json");
-		evaluator.CallCount.Should().Be(0);
 		coordinator.Capability.Should().Be(SimulatorCapability.SafetyScreening);
 		coordinator.Depth.Should().Be(LobbyEvaluationDepth.DegenerateScreeningOnly);
 		coordinator.State.Identity.Should().Be(new SimulationCompatibilityIdentity(
@@ -50,8 +48,31 @@ public class BrowserQaHostCompositionTests
 				.ToCanonical(),
 			SimulatorCapability.SafetyScreening.Identity));
 		coordinator.State.Probability.Should().BeNull();
+	}
+
+	[Fact]
+	public async Task BrowserComposition_DegenerateScenario_UsesExactCurrentSafetyScreeningLocalCache()
+	{
+		using var context = CreateBrowserQaHostContext(BrowserQaScenario.Degenerate);
+		var lobby = context.Services.GetRequiredService<LobbySetupState>();
+		var expectedIdentity = new SimulationCompatibilityIdentity(
+			lobby.CreateSimulationScenario().ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+		var local = context.Services.GetRequiredService<ILocalTerminalLobbyCacheStore>();
 		var localBytes = await local.ReadAsync();
-		(localBytes is null || localBytes.Value.IsEmpty).Should().BeTrue();
+
+		local.Should().BeOfType<BrowserQaScenarioTerminalLobbyCacheStore>();
+		localBytes.Should().NotBeNull();
+		var read = TerminalLobbyCache.ReadDocument(localBytes!.Value.Span);
+		read.IsUsable.Should().BeTrue();
+		TerminalLobbyCache.TryGet(read.Document!, expectedIdentity, out var record).Should().BeTrue();
+		record.Should().BeOfType<DegenerateTerminalCacheRecord>();
+		record!.CompatibilityIdentity.Should().Be(expectedIdentity);
+
+		var coordinator = context.Services.GetRequiredService<LobbyEvaluationCoordinator>();
+		await WaitForStateAsync(coordinator, LobbyEvaluationStateKind.Degenerate);
+
+		coordinator.State.Identity.Should().Be(expectedIdentity);
 	}
 
 	[Fact]
@@ -73,12 +94,10 @@ public class BrowserQaHostCompositionTests
 			.Should().Be(LobbyEvaluationDepth.DegenerateScreeningOnly);
 		context.Services.GetRequiredService<LobbyEvaluationSettings>().Capability
 			.Should().Be(SimulatorCapability.SafetyScreening);
-		context.Services.GetRequiredService<ITerminalLobbyCacheByteSource>()
-			.Should().BeOfType<BrowserQaScenarioTerminalLobbyCacheByteSource>();
 		context.Services.GetRequiredService<ILocalTerminalLobbyCacheStore>()
-			.Should().BeOfType<InMemoryTerminalLobbyCacheStore>();
+			.Should().BeOfType<BrowserQaScenarioTerminalLobbyCacheStore>();
 		context.Services.GetRequiredService<ILobbyTerminalEvaluator>()
-			.Should().BeSameAs(DisabledLobbyTerminalEvaluator.Instance);
+			.Should().BeOfType<BrowserQaScreeningPassedLobbyTerminalEvaluator>();
 
 		var audio = context.Services.GetRequiredService<IInstructionAudioPlayback>();
 		await audio.SetMutedAsync(true, instruction: null);
@@ -276,51 +295,4 @@ public class BrowserQaHostCompositionTests
 		return completion.Task.WaitAsync(TimeSpan.FromSeconds(5));
 	}
 
-	private sealed class SemanticFixtureByteSource : ITerminalLobbyCacheByteSource
-	{
-		public List<string> LogicalNames { get; } = [];
-
-		public ValueTask<ReadOnlyMemory<byte>?> ReadAsync(
-			string logicalName,
-			CancellationToken cancellationToken = default)
-		{
-			LogicalNames.Add(logicalName);
-			var scenario = new SimulationScenario(
-				BrowserQaFixtures.DefaultPlayerNames.Count,
-				BrowserQaFixtures.DefaultRoles);
-			var identity = new SimulationCompatibilityIdentity(
-				scenario.ToCanonical(),
-				SimulatorProfile.LegacyCore.Identity);
-			var record = new ProbabilityTerminalCacheRecord(
-				identity,
-				[
-					new(new SingleFactionGameResult(Faction.Villager), 7_000, 10_000),
-					new(new SingleFactionGameResult(Faction.Werewolf), 3_000, 10_000),
-					new(new NoWinnerGameResult(), 0, 10_000)
-				],
-				[
-					new(new SingleFactionGameResult(Faction.Villager), 1,
-						VictoryCheckWindow.Dawn, 7_000, 10_000),
-					new(new SingleFactionGameResult(Faction.Werewolf), 2,
-						VictoryCheckWindow.PreNight, 3_000, 10_000)
-				]);
-			return ValueTask.FromResult<ReadOnlyMemory<byte>?>(
-				TerminalLobbyCache.Write(TerminalLobbyCache.CreateDocument([record])));
-		}
-	}
-
-	private sealed class CountingEvaluator : ILobbyTerminalEvaluator
-	{
-		public int CallCount { get; private set; }
-
-		public Task<LobbyEvaluationResult> EvaluateAsync(
-			SimulationScenario scenario,
-			SimulatorCapability capability,
-			LobbyEvaluationDepth depth,
-			CancellationToken cancellationToken = default)
-		{
-			CallCount++;
-			return Task.FromResult<LobbyEvaluationResult>(new CouldNotEvaluateLobbyEvaluation());
-		}
-	}
 }

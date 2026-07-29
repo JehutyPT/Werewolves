@@ -30,13 +30,11 @@ public sealed class ModeratorComponentTestContext : BunitContext
 		Services.AddSingleton<LobbySetupMetadata>(sp =>
 			sp.GetRequiredService<GameService>().GetLobbySetupMetadata());
 		Services.AddSingleton<LobbySetupState>();
-		Services.AddSingleton<ITerminalLobbyCacheByteSource>(_ => EmptyTerminalLobbyCacheByteSource.Instance);
 		Services.AddSingleton<ILocalTerminalLobbyCacheStore, InMemoryTerminalLobbyCacheStore>();
 		Services.AddSingleton<ILobbyTerminalEvaluator>(_ => DisabledLobbyTerminalEvaluator.Instance);
 		Services.AddSingleton(TimeProvider.System);
 		Services.AddSingleton(sp => new LobbyEvaluationCoordinator(
 			sp.GetRequiredService<LobbySetupState>(),
-			sp.GetRequiredService<ITerminalLobbyCacheByteSource>(),
 			sp.GetRequiredService<ILocalTerminalLobbyCacheStore>(),
 			sp.GetRequiredService<ILobbyTerminalEvaluator>(),
 			new LobbyEvaluationSettings(

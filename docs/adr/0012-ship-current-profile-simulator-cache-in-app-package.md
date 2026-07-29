@@ -1,4 +1,11 @@
-# Ship the current-profile simulator cache in the app package
+---
+status: superseded
+superseded_by: ADR-0018
+---
+
+# [Superseded] Ship the current-profile simulator cache in the app package
+
+This pre-release decision is retained as history only. [ADR-0018](./0018-production-cache-uses-current-local-records-only.md) removes the packaged cache and does not preserve a compatibility bridge.
 
 The measured `core-simulator@1` Bundled Simulator Cache contains 1,664 terminal lobby evaluations and is 2,337,001 canonical bytes. Ship this current-profile artifact as one root MAUI asset inside the app package so cache-first lobby evaluation is deterministic and available without a network dependency; do not add a remote manifest, downloader, or update protocol for this delivery.
 

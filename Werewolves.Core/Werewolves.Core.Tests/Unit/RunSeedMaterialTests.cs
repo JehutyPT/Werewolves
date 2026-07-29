@@ -24,7 +24,7 @@ public class RunSeedMaterialTests
 		var material = new RunSeedMaterial(
 			new SimulationCompatibilityIdentity(
 				scenario.ToCanonical(),
-				SimulatorProfile.LegacyCore.Identity),
+				SimulatorCapability.FullProbability.Identity),
 			BaselineRandomDecisionStrategy.Identity,
 			runNumber: 7);
 
@@ -32,7 +32,7 @@ public class RunSeedMaterialTests
 		var parsed = RunSeedMaterial.Parse(serialized);
 
 		serialized.Should().Be(
-			"profile=core-simulator@1|players=5|roles=[Seer=1,SimpleVillager=3,SimpleWerewolf=1]|actor=[]|rules=[]|strategy=baseline-random@1-splitmix64|run=7");
+			"profile=full-probability@1|players=5|roles=[Seer=1,SimpleVillager=3,SimpleWerewolf=1]|actor=[]|rules=[]|strategy=baseline-random@1-splitmix64|run=7");
 		parsed.Should().Be(material);
 		parsed.CompatibilityIdentity.Should().Be(material.CompatibilityIdentity);
 		parsed.DecisionStrategyIdentity.Should().Be(material.DecisionStrategyIdentity);
@@ -53,7 +53,7 @@ public class RunSeedMaterialTests
 			]);
 		var identity = new SimulationCompatibilityIdentity(
 			scenario.ToCanonical(),
-			SimulatorProfile.LegacyCore.Identity);
+			SimulatorCapability.FullProbability.Identity);
 		var material = new RunSeedMaterial(
 			identity,
 			BaselineRandomDecisionStrategy.Identity,
@@ -117,7 +117,7 @@ public class RunSeedMaterialTests
 			]);
 		var identity = new SimulationCompatibilityIdentity(
 			scenario.ToCanonical(),
-			SimulatorProfile.LegacyCore.Identity);
+			SimulatorCapability.FullProbability.Identity);
 		var material = new RunSeedMaterial(
 			identity,
 			BaselineRandomDecisionStrategy.Identity,
@@ -137,7 +137,7 @@ public class RunSeedMaterialTests
 							MainRoleType.SimpleVillager,
 							MainRoleType.SimpleVillager
 						]).ToCanonical(),
-					SimulatorProfile.LegacyCore.Identity),
+					SimulatorCapability.FullProbability.Identity),
 				BaselineRandomDecisionStrategy.Identity,
 				7),
 			new RunSeedMaterial(
@@ -151,7 +151,7 @@ public class RunSeedMaterialTests
 							MainRoleType.SimpleVillager,
 							MainRoleType.SimpleVillager
 						]).ToCanonical(),
-					SimulatorProfile.LegacyCore.Identity),
+					SimulatorCapability.FullProbability.Identity),
 				BaselineRandomDecisionStrategy.Identity,
 				7),
 			new RunSeedMaterial(
@@ -161,7 +161,7 @@ public class RunSeedMaterialTests
 						scenario.RoleCompositionCards,
 						new ActorSetupCards(
 							[MainRoleType.Cupid, MainRoleType.Defender, MainRoleType.Elder])).ToCanonical(),
-					SimulatorProfile.LegacyCore.Identity),
+					SimulatorCapability.FullProbability.Identity),
 				BaselineRandomDecisionStrategy.Identity,
 				7),
 			new RunSeedMaterial(
@@ -170,7 +170,7 @@ public class RunSeedMaterialTests
 						5,
 						scenario.RoleCompositionCards,
 						ruleState: new SimulationRuleState(NewMoonEnabled: true)).ToCanonical(),
-					SimulatorProfile.LegacyCore.Identity),
+					SimulatorCapability.FullProbability.Identity),
 				BaselineRandomDecisionStrategy.Identity,
 				7),
 			new RunSeedMaterial(
@@ -182,7 +182,7 @@ public class RunSeedMaterialTests
 			new RunSeedMaterial(
 				new SimulationCompatibilityIdentity(
 					scenario.ToCanonical(),
-					new SimulatorProfileIdentity("core-simulator", "2")),
+					new SimulatorProfileIdentity("full-probability", "2")),
 				BaselineRandomDecisionStrategy.Identity,
 				7),
 			new RunSeedMaterial(
@@ -197,7 +197,7 @@ public class RunSeedMaterialTests
 		};
 
 		DeterministicRandomSource.DeriveNumericSeed(material)
-			.Should().Be(6_703_387_641_252_472_950UL);
+			.Should().Be(11_268_766_652_743_107_163UL);
 		materials.Select(DeterministicRandomSource.DeriveNumericSeed)
 			.Should().OnlyHaveUniqueItems();
 	}

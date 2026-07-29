@@ -5,46 +5,9 @@ namespace Werewolves.Core.GameLogic.Simulation;
 
 public class SimulatorProfile
 {
-	private static readonly SimulatorProfileRoleDescriptor[] LegacyRoleDescriptors =
-	[
-		new(MainRoleType.SimpleWerewolf, Faction.Werewolf),
-		new(MainRoleType.Seer, Faction.Villager),
-		new(MainRoleType.WildChild, Faction.Villager),
-		new(MainRoleType.SimpleVillager, Faction.Villager)
-	];
-
 	private readonly IReadOnlyDictionary<MainRoleType, Faction> _beneficiaryFactions;
 	private readonly SharedVictoryGameResult[] _sharedVictoryCapabilities;
 	private readonly SimulationRuleState[] _supportedRuleStates;
-
-	public static SimulatorProfile LegacyCore { get; } = new(
-		new SimulatorProfileIdentity("core-simulator", "1"),
-		LegacyRoleDescriptors,
-		sharedVictoryCapabilities: [],
-		headlessResponsePolicy: new HeadlessResponsePolicy(
-			BaselineRandomDecisionStrategy.Identity,
-			[
-				ModeratorInstructionSemantic.StartGame,
-				ModeratorInstructionSemantic.FinishedGame,
-				ModeratorInstructionSemantic.StartNight,
-				ModeratorInstructionSemantic.FinishNightActions,
-				ModeratorInstructionSemantic.WakeRole,
-				ModeratorInstructionSemantic.IdentifyRoleHolders,
-				ModeratorInstructionSemantic.PutRoleToSleep,
-				ModeratorInstructionSemantic.SelectWerewolfVictim,
-				ModeratorInstructionSemantic.SelectSeerTarget,
-				ModeratorInstructionSemantic.RevealSeerResult,
-				ModeratorInstructionSemantic.SelectWildChildModel,
-				ModeratorInstructionSemantic.AnnounceDawnVictims,
-				ModeratorInstructionSemantic.AssignDawnVictimRoles,
-				ModeratorInstructionSemantic.StartDayDebate,
-				ModeratorInstructionSemantic.RecordDayVote,
-				ModeratorInstructionSemantic.AssignDayVoteTargetRole,
-				ModeratorInstructionSemantic.AnnounceLynchingImmunity,
-				ModeratorInstructionSemantic.AnnounceDayElimination
-			]),
-		supportsActorSetupCards: false,
-		supportedRuleStates: [SimulationRuleState.Default]);
 
 	public SimulatorProfileIdentity Identity { get; }
 
@@ -103,23 +66,6 @@ public class SimulatorProfile
 
 	public bool SupportsRuleState(SimulationRuleState ruleState) =>
 		_supportedRuleStates.Contains(ruleState);
-
-	internal bool HasSameCompatibilitySemanticsAs(SimulatorProfile other)
-	{
-		ArgumentNullException.ThrowIfNull(other);
-
-		return _beneficiaryFactions.Count == other._beneficiaryFactions.Count
-			&& _beneficiaryFactions.All(pair =>
-				other._beneficiaryFactions.TryGetValue(pair.Key, out var faction)
-				&& faction == pair.Value)
-			&& SupportsActorSetupCards == other.SupportsActorSetupCards
-			&& _supportedRuleStates.ToHashSet().SetEquals(other._supportedRuleStates)
-			&& _sharedVictoryCapabilities.ToHashSet().SetEquals(other._sharedVictoryCapabilities)
-			&& HeadlessResponsePolicy.StrategyIdentity.Equals(
-				other.HeadlessResponsePolicy.StrategyIdentity)
-			&& HeadlessResponsePolicy.AdmittedSemantics.SetEquals(
-				other.HeadlessResponsePolicy.AdmittedSemantics);
-	}
 
 	internal static HeadlessResponsePolicy CreateBaselinePolicy() => new(
 		BaselineRandomDecisionStrategy.Identity,

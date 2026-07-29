@@ -181,11 +181,7 @@ public static partial class TerminalLobbyCache
 	{
 		ArgumentNullException.ThrowIfNull(identity);
 		SimulatorProfile producer;
-		if (identity.Equals(SimulatorProfile.LegacyCore.Identity))
-		{
-			producer = SimulatorProfile.LegacyCore;
-		}
-		else if (identity.Equals(SimulatorCapability.SafetyScreening.Identity))
+		if (identity.Equals(SimulatorCapability.SafetyScreening.Identity))
 		{
 			if (probabilityRecord)
 			{
