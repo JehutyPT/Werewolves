@@ -36,6 +36,16 @@ This document records short, stable domain facts that can be asserted without ca
 
 - Each Player has exactly one Faction Beneficiary at a time.
 - A Faction fact may be used only when known; unknown facts are never defaulted or inferred from remaining cards.
+- Faction Agent Group Observation establishes Agent membership, not a Faction Beneficiary.
+- Initial Beneficiary Closure applies only after the committed determining inputs for every applicable initial non-Villager or Agent-with-different-Beneficiary exception are available.
+- Initial Beneficiary Closure places explicit facts and transitions at their effective historical boundaries before filling residual candidates, evaluates deferred rules at their own boundaries, and atomically appends only newly entailed residual and deferred facts.
+- Every fact in the Initial Beneficiary Closure batch retains its effective historical boundary. Previously committed explicit facts are neither rewritten nor re-appended; projecting all committed facts in effective-boundary order yields the final Known Faction State.
+- With complete prerequisites, closure uses Werewolf Beneficiary candidates for unresolved observed initial Agents and Villager candidates for every other unresolved Player; incomplete prerequisites commit none of those residual or deferred facts.
+- Initial Beneficiary Closure never creates a provisional Known fact or a later correction.
+- A Game Session commits Initial Beneficiary Closure at most once; later Beneficiary-changing transitions never reopen it.
+- An incomplete closure prerequisite set makes the readiness check a no-op; reaching a Beneficiary-dependent consumer while it remains incomplete is an invariant failure.
+- A deferred Beneficiary-dependent rule is evaluated against the state effective at its original rules boundary, not against later Night 1 state.
+- A Role Composition from which another initial closure exception is reachable is not App-Supported until that Role's establishment path is available.
 - A Player can act as a Faction Agent for one Faction while benefiting from another.
 - Infection preserves Role identity, changes the Player's Faction Beneficiary to Werewolf unless an explicit precedence rule applies, and grants Werewolf Faction Agent status.
 - A Permanent Role Swap changes the Player's Faction Beneficiary to the new Role's default Faction unless an explicit precedence rule applies.

@@ -30,6 +30,15 @@ When a Role specialization is silent, the shared interaction rules apply.
 - When the app knows that no living Player can answer a scheduled Night Role call, it omits that entire call. This rule does not suppress public reveals, Elimination reactions, automatic consequences, or other non-Night exchanges. An unknown participant set is not treated as empty.
 - An explicitly named identification-only slot occurs at its stated time and is omitted when the required identity is already known.
 
+### Initial Beneficiary Closure
+
+- Faction Agent Group Observation commits Agent membership only; it does not commit a Faction Beneficiary or exact Role.
+- After all applicable Night 1 observations, choices, and automatic transitions that can establish or override an initial Beneficiary have committed, the app performs Initial Beneficiary Closure automatically before any Beneficiary-dependent interaction or consequence.
+- Closure creates no Moderator Instruction, Moderator Response, Continue acknowledgment, or separate recovery checkpoint. It never asks the Moderator to confirm a derived Beneficiary.
+- An incomplete prerequisite set makes the automatic closure readiness check a no-op and commits no residual or deferred Beneficiary facts. Independent canonical interaction may continue, but the app cannot enter a Beneficiary-dependent consumer while a required fact remains unresolved; reaching one is an invariant failure. Neither case creates a gameplay choice or acquisition exchange.
+- The Moderator Response or automatic transition that supplies the final prerequisite commits that prerequisite, one closure batch containing only newly entailed residual and deferred facts that retain their effective historical boundaries, and the next Pending Instruction at one ordinary stable boundary. Previously committed explicit facts are neither rewritten nor re-appended. Rehydration observes either the pre-closure state, from which the readiness check may run again, or the complete post-closure projection; it never exposes a partial result, a provisional Beneficiary, or a correction path.
+- Candidate calculations and private Faction facts never appear in public-table copy, public history, or validation errors. Only final legitimately Known facts may appear on Moderator-only surfaces.
+
 ### Pre-game configuration
 
 - The Moderator commits the Role Composition, Deal Pool, and any Thief Offer Cards before the Physical Deal.
@@ -147,6 +156,7 @@ These sections state only the observable differences from the shared interaction
 ### Wolf Hound
 
 - On Night 1, perform Role Identification if needed, wake the Player, record the private Villager-or-Werewolf choice, and return the Player to sleep.
+- The accepted identification and choice establish the pre-choice Villager Beneficiary through Cupid's earlier boundary and the selected branch transition at the Wolf Hound call; Initial Beneficiary Closure preserves both effective times.
 - A later Character Card reveal discloses Wolf Hound but not the private choice.
 
 ### Accursed Wolf-Father
@@ -180,7 +190,8 @@ These sections state only the observable differences from the shared interaction
 
 ### White Werewolf
 
-- On Night 1, privately identify White Werewolf only if the holder is unknown; no solo attack occurs.
+- On Night 1, privately identify White Werewolf only if the holder is unknown, at its ordinary relative slot after Accursed Wolf-Father and before Big Bad Wolf; no solo attack occurs.
+- The committed identification establishes the Agent-with-different-Beneficiary exception used by Initial Beneficiary Closure. Collective-group membership alone never establishes a Werewolf Beneficiary for White Werewolf.
 - On each even-numbered Night, wake the holder and record either one other living Werewolf Faction Agent target or a permitted decline.
 - Odd Nights have no solo call.
 
@@ -212,7 +223,7 @@ These sections state only the observable differences from the shared interaction
 
 - Wake Cupid and record exactly two distinct living Players chosen as Lovers; Cupid may be one.
 - Privately wake or tap the pair, guide them to recognize one another, and return them to sleep. The pair remains private.
-- The [canonical Cupid rule](../domain/game-rules.md#the-villagers) owns relationship classification. That classification adds no Moderator prompt.
+- The pair selection and physical recognition commit at Cupid's ordinary call even when classification remains pending. The [canonical Cupid rule](../domain/game-rules.md#the-villagers) owns relationship classification; Initial Beneficiary Closure commits that classification without another Moderator Response.
 
 ### Thief
 
@@ -220,6 +231,7 @@ These sections state only the observable differences from the shared interaction
 - On Night 1, publicly call Thief, perform Role Identification for the one Player who woke, and show that Player the two committed offers.
 - Record the chosen offer or a decline. Decline is unavailable when both offers are hard-aligned Werewolf Roles.
 - A chosen offer immediately becomes the Player's owned Character Card and current Role. The original Thief card and unchosen offer become face-down Set-Aside Character Cards.
+- A committed choice or decline resolves the offer-dependent Initial Beneficiary Closure branch. The acquired Role and Beneficiary are effective immediately; unchosen Set-Aside offers are no longer closure prerequisites.
 - Continue only through Night 1 calls still ahead. The acquired holder is not identified again, but all remaining genuine Role behavior still occurs.
 - A legal decline keeps the Thief card and Role and moves both offers face-down to the Set-Aside zone.
 - The offers, choice, resulting card zones, and current Role remain private. Return the Thief Player to sleep after the choice.
@@ -228,6 +240,7 @@ These sections state only the observable differences from the shared interaction
 
 - Angel has no identification call or strategy choice.
 - A qualifying Elimination reveals Angel before its outcome matters.
+- A Role Composition from which Angel is reachable is not App-Supported until the Angel delivery supplies a legitimate private establishment path for the holder and Beneficiary exception before Initial Beneficiary Closure. A qualifying-Elimination reveal does not satisfy that requirement for a Game Session in which Angel is not Eliminated.
 - If Angel has not won by the Dawn Victory Check Window that resolves Night 2, the app changes the current Role to Simple Villager without a physical card action, Player notification, acknowledgment, or response.
 
 ### Devoted Servant
