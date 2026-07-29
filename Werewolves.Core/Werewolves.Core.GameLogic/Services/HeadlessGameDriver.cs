@@ -1,8 +1,10 @@
 using Werewolves.Core.GameLogic.Interfaces;
 using Werewolves.Core.GameLogic.Models;
+using Werewolves.Core.GameLogic.Simulation;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
+using Werewolves.Core.StateModels.Models.Simulation;
 
 namespace Werewolves.Core.GameLogic.Services;
 
@@ -32,12 +34,38 @@ public sealed class HeadlessGameDriver
 	internal HeadlessGameExecution CompleteGameSession(
 		GameSessionConfig config,
 		CancellationToken cancellationToken,
+		Action? betweenInstructions = null) =>
+		CompleteGameSession(
+			config,
+			factionFacts: null,
+			cancellationToken,
+			betweenInstructions);
+
+	internal HeadlessGameExecution CompleteGameSession(
+		SimulationStartState startState,
+		CancellationToken cancellationToken,
 		Action? betweenInstructions = null)
+	{
+		ArgumentNullException.ThrowIfNull(startState);
+		return CompleteGameSession(
+			startState.CreateGameSessionConfig(),
+			startState.FactionFacts,
+			cancellationToken,
+			betweenInstructions);
+	}
+
+	private HeadlessGameExecution CompleteGameSession(
+		GameSessionConfig config,
+		IReadOnlyList<SimulationPlayerFactionFacts>? factionFacts,
+		CancellationToken cancellationToken,
+		Action? betweenInstructions)
 	{
 		ArgumentNullException.ThrowIfNull(config);
 		cancellationToken.ThrowIfCancellationRequested();
 		var gameService = new GameService();
-		var startInstruction = gameService.StartNewGame(config);
+		var startInstruction = factionFacts is null
+			? gameService.StartNewGame(config)
+			: gameService.StartNewSimulationGame(config, factionFacts);
 		ModeratorInstruction instruction = startInstruction;
 		var gameId = startInstruction.GameGuid;
 		var processedInstructionCount = 0;

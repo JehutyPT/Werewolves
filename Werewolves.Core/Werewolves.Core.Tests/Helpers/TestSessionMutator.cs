@@ -1,6 +1,7 @@
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
+using Werewolves.Core.StateModels.Models;
 
 namespace Werewolves.Core.Tests.Helpers;
 
@@ -80,6 +81,22 @@ internal class TestSessionMutator : ISessionMutator
             CurrentTurnNumber++;
     }
 
+    public void ApplyFactionFacts(FactionFactsCommittedLogEntry entry)
+    {
+        var projection = FactionFactProjection.Create(
+            _appliedEntries
+                .OfType<FactionFactsCommittedLogEntry>()
+                .Append(entry),
+            _states.Keys.ToArray());
+
+        foreach (var playerId in _states.Keys)
+        {
+            _states[playerId].ReplaceFactionProjection(
+                projection.Beneficiaries[playerId],
+                projection.Agents[playerId]);
+        }
+    }
+
     public void AddLogEntry<T>(T entry) where T : GameLogEntryBase
     {
         _appliedEntries.Add(entry);
@@ -97,6 +114,13 @@ internal class TestSessionMutator : ISessionMutator
 /// </summary>
 internal class TestPlayerState : IPlayerState
 {
+    private readonly Dictionary<Faction, FactionAgentKnowledge>
+        _factionAgentKnowledge = Enum
+            .GetValues<Faction>()
+            .ToDictionary(
+                faction => faction,
+                _ => FactionAgentKnowledge.Unknown);
+
     public MainRoleType? CurrentRole { get; set; }
     public MainRoleType? MainRole
     {
@@ -108,7 +132,23 @@ internal class TestPlayerState : IPlayerState
     public MainRoleType? PubliclyRevealedRole { get; set; }
     public PlayerHealth Health { get; set; } = PlayerHealth.Alive;
     public bool HasVotingRight { get; set; } = true;
+    public FactionBeneficiaryKnowledge FactionBeneficiary { get; private set; } =
+        FactionBeneficiaryKnowledge.Unknown;
     internal StatusEffectTypes ActiveEffects { get; set; } = StatusEffectTypes.None;
+
+    public FactionAgentKnowledge GetFactionAgentKnowledge(Faction faction) =>
+        _factionAgentKnowledge[faction];
+
+    internal void ReplaceFactionProjection(
+        FactionBeneficiaryKnowledge beneficiary,
+        IReadOnlyDictionary<Faction, FactionAgentKnowledge> agents)
+    {
+        FactionBeneficiary = beneficiary;
+        foreach (var faction in Enum.GetValues<Faction>())
+        {
+            _factionAgentKnowledge[faction] = agents[faction];
+        }
+    }
 
     public List<StatusEffectTypes> GetActiveStatusEffects()
     {

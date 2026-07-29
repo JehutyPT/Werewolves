@@ -6,6 +6,7 @@ using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Log;
+using Werewolves.Core.StateModels.Models;
 using Xunit;
 using PlayerNames = Werewolves.Client.Tests.Helpers.ClientTestReferences.PlayerNames;
 
@@ -119,10 +120,42 @@ public class DashboardStatsSnapshotTests
 
 		public IEnumerable<IPlayer> GetPlayers() => players;
 
+		public FactionBeneficiaryKnowledge GetFactionBeneficiaryKnowledge(Guid playerId) =>
+			GetPlayerState(playerId).FactionBeneficiary;
+
+		public FactionAgentKnowledge GetFactionAgentKnowledge(Guid playerId, Faction faction) =>
+			GetPlayerState(playerId).GetFactionAgentKnowledge(faction);
+
+		public bool TryGetKnownFactionAgents(Faction faction, out IReadOnlyList<IPlayer> agents)
+		{
+			if (!Enum.IsDefined(faction))
+			{
+				throw new ArgumentOutOfRangeException(nameof(faction));
+			}
+
+			agents = [];
+			return false;
+		}
+
+		public Faction RequireKnownFactionBeneficiary(Guid playerId)
+		{
+			_ = GetFactionBeneficiaryKnowledge(playerId);
+			throw FactionFactsNotReady();
+		}
+
+		public IReadOnlyList<IPlayer> RequireKnownFactionAgents(Faction faction)
+		{
+			_ = TryGetKnownFactionAgents(faction, out _);
+			throw FactionFactsNotReady();
+		}
+
 		public int RoleInPlayCount(MainRoleType type) =>
 			players.Count(player => player.State.CurrentRole == type);
 
 		public string Serialize() => throw new NotSupportedException();
+
+		private static InvalidOperationException FactionFactsNotReady() =>
+			new("Required Faction facts are not ready.");
 	}
 
 	private sealed class FakePlayer : IPlayer

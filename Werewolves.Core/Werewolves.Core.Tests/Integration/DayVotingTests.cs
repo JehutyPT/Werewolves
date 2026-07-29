@@ -288,7 +288,7 @@ public class DayVotingTests : DiagnosticTestBase
     }
 
     [Fact]
-    public void VoteOutcome_StaleModeratorKnowledge_RequiresCurrentRoleRevealAtomically()
+    public void VoteOutcome_WildChildFactionTransition_RevealsPreservedRoleAtomically()
     {
         var builder = CreateBuilder()
             .WithPlayers(
@@ -351,7 +351,7 @@ public class DayVotingTests : DiagnosticTestBase
 
         var session = builder.GetGameState()!;
         var wildChildState = session.GetPlayerState(wildChildId);
-        wildChildState.CurrentRole.Should().Be(MainRoleType.SimpleWerewolf);
+        wildChildState.CurrentRole.Should().Be(MainRoleType.WildChild);
         wildChildState.ModeratorKnownRole.Should().Be(MainRoleType.WildChild);
         session.GameHistoryLog
             .OfType<StatusEffectLogEntry>()
@@ -361,41 +361,25 @@ public class DayVotingTests : DiagnosticTestBase
                 entry.IsActive);
         session.GameHistoryLog
             .OfType<AssignRoleLogEntry>()
-            .Should().ContainSingle(entry =>
+            .Should().NotContain(entry =>
                 entry.PlayerIds.SetEquals(new[] { wildChildId }) &&
                 entry.AssignedMainRole == MainRoleType.SimpleWerewolf);
+        session.RequireKnownFactionBeneficiary(wildChildId).Should()
+            .Be(Faction.Werewolf);
+        session.GetFactionAgentKnowledge(wildChildId, Faction.Werewolf)
+            .Should().Be(FactionAgentKnowledge.KnownAgent);
 
         var debate = afterModelReveal.ModeratorInstruction.Should()
             .BeOfType<ConfirmationInstruction>().Subject;
         var vote = builder.Process(debate.CreateResponse())
             .ModeratorInstruction.Should()
             .BeOfType<SelectPlayersInstruction>().Subject;
-        var assignment = builder.Process(
+        var reveal = builder.Process(
                 vote.CreateResponse([wildChildId]))
             .ModeratorInstruction.Should()
-            .BeOfType<AssignRolesInstruction>().Subject;
-
-        assignment.PlayersForAssignment.Should().Equal(wildChildId);
-        assignment.RolesForAssignment.Should().Contain(
-            MainRoleType.SimpleWerewolf);
+            .BeOfType<ConfirmationInstruction>().Subject;
         wildChildState.Health.Should().Be(PlayerHealth.Alive);
 
-        var beforeInvalidReveal = PublicGameSessionSnapshot.Capture(builder);
-        var invalidResponse = new ModeratorResponse
-        {
-            InstructionId = assignment.InstructionId,
-            Type = ExpectedInputType.AssignPlayerRoles,
-            AssignedPlayerRoles = new Dictionary<Guid, MainRoleType>
-            {
-                [wildChildId] = MainRoleType.WildChild
-            }
-        };
-        var invalidReveal = () => builder.Process(invalidResponse);
-
-        invalidReveal.Should().Throw<InvalidOperationException>();
-        PublicGameSessionSnapshot.Capture(builder).Should().BeEquivalentTo(
-            beforeInvalidReveal,
-            options => options.WithStrictOrdering());
         session.GameHistoryLog
             .OfType<StatusEffectLogEntry>()
             .Should().ContainSingle(entry =>
@@ -404,22 +388,19 @@ public class DayVotingTests : DiagnosticTestBase
                 entry.IsActive);
         session.GameHistoryLog
             .OfType<AssignRoleLogEntry>()
-            .Should().ContainSingle(entry =>
+            .Should().NotContain(entry =>
                 entry.PlayerIds.SetEquals(new[] { wildChildId }) &&
                 entry.AssignedMainRole == MainRoleType.SimpleWerewolf);
 
-        var afterReveal = builder.Process(assignment.CreateResponse(new()
-        {
-            [wildChildId] = MainRoleType.SimpleWerewolf
-        }));
+        var afterReveal = builder.Process(reveal.CreateResponse());
 
         afterReveal.ModeratorInstruction.Should()
             .BeOfType<ConfirmationInstruction>();
-        wildChildState.CurrentRole.Should().Be(MainRoleType.SimpleWerewolf);
+        wildChildState.CurrentRole.Should().Be(MainRoleType.WildChild);
         wildChildState.ModeratorKnownRole.Should().Be(
-            MainRoleType.SimpleWerewolf);
+            MainRoleType.WildChild);
         wildChildState.PubliclyRevealedRole.Should().Be(
-            MainRoleType.SimpleWerewolf);
+            MainRoleType.WildChild);
         wildChildState.Health.Should().Be(PlayerHealth.Dead);
         session.GameHistoryLog
             .OfType<RoleRevealLogEntry>()
@@ -427,8 +408,8 @@ public class DayVotingTests : DiagnosticTestBase
             .ContainSingle(entry =>
                 entry.RevealedRoles.Count == 1 &&
                 entry.RevealedRoles.ContainsKey(wildChildId) &&
-                entry.RevealedRoles.GetValueOrDefault(
-                    wildChildId) == MainRoleType.SimpleWerewolf);
+                    entry.RevealedRoles.GetValueOrDefault(
+                    wildChildId) == MainRoleType.WildChild);
         session.GameHistoryLog
             .OfType<PlayerEliminatedLogEntry>()
             .Should().ContainSingle(entry =>

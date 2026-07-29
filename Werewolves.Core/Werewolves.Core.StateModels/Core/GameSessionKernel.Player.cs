@@ -1,4 +1,5 @@
 ﻿using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Models;
 
 namespace Werewolves.Core.StateModels.Core;
 
@@ -18,10 +19,22 @@ public interface IPlayerState
 	public MainRoleType? CurrentRole { get; }
 	public MainRoleType? MainRole { get; }
 	public MainRoleType? PhysicalCharacterCardRole { get; }
-		public MainRoleType? ModeratorKnownRole { get; }
-		public MainRoleType? PubliclyRevealedRole { get; }
-		public PlayerHealth Health { get; }
-		public bool HasVotingRight { get; }
+	public MainRoleType? ModeratorKnownRole { get; }
+	public MainRoleType? PubliclyRevealedRole { get; }
+	public PlayerHealth Health { get; }
+	public bool HasVotingRight { get; }
+	public FactionBeneficiaryKnowledge FactionBeneficiary =>
+		FactionBeneficiaryKnowledge.Unknown;
+
+	public FactionAgentKnowledge GetFactionAgentKnowledge(Faction faction)
+	{
+		if (!Enum.IsDefined(faction))
+		{
+			throw new ArgumentOutOfRangeException(nameof(faction));
+		}
+
+		return FactionAgentKnowledge.Unknown;
+	}
 	
 	/// <summary>
 	/// Returns a list of all currently active status effects for this player.
@@ -112,6 +125,13 @@ internal partial class GameSessionKernel
 	/// </summary>
 	private class PlayerState : IPlayerState
 	{
+		private readonly Dictionary<Faction, FactionAgentKnowledge>
+			_factionAgentKnowledge = Enum
+				.GetValues<Faction>()
+				.ToDictionary(
+					faction => faction,
+					_ => FactionAgentKnowledge.Unknown);
+
 		public MainRoleType? CurrentRole { get; internal set; }
 
 		public MainRoleType? MainRole
@@ -126,8 +146,42 @@ internal partial class GameSessionKernel
 
 		public MainRoleType? PubliclyRevealedRole { get; internal set; }
 
-			public PlayerHealth Health { get; internal set; } = PlayerHealth.Alive;
-			public bool HasVotingRight { get; internal set; } = true;
+		public PlayerHealth Health { get; internal set; } = PlayerHealth.Alive;
+		public bool HasVotingRight { get; internal set; } = true;
+		public FactionBeneficiaryKnowledge FactionBeneficiary { get; internal set; } =
+			FactionBeneficiaryKnowledge.Unknown;
+
+		public FactionAgentKnowledge GetFactionAgentKnowledge(Faction faction)
+		{
+			if (!Enum.IsDefined(faction))
+			{
+				throw new ArgumentOutOfRangeException(nameof(faction));
+			}
+
+			return _factionAgentKnowledge[faction];
+		}
+
+		internal void ReplaceFactionProjection(
+			FactionBeneficiaryKnowledge beneficiary,
+			IReadOnlyDictionary<Faction, FactionAgentKnowledge> agents)
+		{
+			ArgumentNullException.ThrowIfNull(beneficiary);
+			ArgumentNullException.ThrowIfNull(agents);
+
+			var factions = Enum.GetValues<Faction>();
+			if (agents.Count != factions.Length
+				|| factions.Any(faction => !agents.TryGetValue(faction, out var knowledge)
+					|| !Enum.IsDefined(knowledge)))
+			{
+				throw new InvalidOperationException("The faction-agent projection is invalid.");
+			}
+
+			FactionBeneficiary = beneficiary;
+			foreach (var faction in factions)
+			{
+				_factionAgentKnowledge[faction] = agents[faction];
+			}
+		}
 
 		/// <summary>
 		/// Internal flags field for all status effects - not exposed on interface.

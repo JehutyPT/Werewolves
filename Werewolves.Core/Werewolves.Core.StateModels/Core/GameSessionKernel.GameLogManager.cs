@@ -10,6 +10,21 @@ internal sealed partial class GameSessionKernel
     {
         private readonly List<GameLogEntryBase> _logEntries = new();
 
+        internal void PreflightLogEntry(
+            GameLogEntryBase entry,
+            IReadOnlyCollection<Guid> playerIds)
+        {
+            ArgumentNullException.ThrowIfNull(entry);
+            ArgumentNullException.ThrowIfNull(playerIds);
+
+            entry.EnforceValidity();
+            ValidateOneUseResourceCommit(entry);
+            ValidateEliminationCascadeBatchResolution(entry);
+            ValidateEliminationCascadeCompletion(entry);
+            ValidateEliminationCascadeReactionCompletion(entry);
+            ValidateFactionFacts(entry, playerIds);
+        }
+
         internal void AddLogEntry(SessionMutator.IStateMutatorKey key, GameLogEntryBase entry)
         {
             entry.EnforceValidity();
@@ -17,6 +32,7 @@ internal sealed partial class GameSessionKernel
             ValidateEliminationCascadeBatchResolution(entry);
             ValidateEliminationCascadeCompletion(entry);
             ValidateEliminationCascadeReactionCompletion(entry);
+            ValidateFactionFacts(entry, playerIds: null);
             _logEntries.Add(entry);
         }
 
@@ -24,14 +40,61 @@ internal sealed partial class GameSessionKernel
         /// Restores a log entry from deserialization without requiring a mutator key.
         /// This is only used during deserialization when rebuilding the log history.
         /// </summary>
-        internal void RestoreLogEntry(GameLogEntryBase entry)
+        internal void RestoreLogEntry(
+            GameLogEntryBase entry,
+            IReadOnlyCollection<Guid> playerIds)
         {
-            entry.EnforceValidity();
-            ValidateOneUseResourceCommit(entry);
-            ValidateEliminationCascadeBatchResolution(entry);
-            ValidateEliminationCascadeCompletion(entry);
-            ValidateEliminationCascadeReactionCompletion(entry);
+            PreflightLogEntry(entry, playerIds);
             _logEntries.Add(entry);
+        }
+
+        private void ValidateFactionFacts(
+            GameLogEntryBase entry,
+            IReadOnlyCollection<Guid>? playerIds)
+        {
+            if (entry is not FactionFactsCommittedLogEntry commit)
+            {
+                return;
+            }
+
+            if (playerIds != null
+                && commit.Facts.Any(fact => !playerIds.Contains(fact.PlayerId)))
+            {
+                throw new InvalidOperationException(
+                    "Faction history references a Player outside the Game Session.");
+            }
+
+            var existingCommits = _logEntries
+                .OfType<FactionFactsCommittedLogEntry>()
+                .ToArray();
+
+            if (existingCommits.Any(existing => existing.HasSameBatch(commit)))
+            {
+                throw new InvalidOperationException(
+                    "The Faction fact batch is already committed.");
+            }
+
+            if (commit.Source.Kind is
+                    FactionFactSourceKind.InitialBeneficiaryClosure or
+                    FactionFactSourceKind.SimulationStartState
+                && existingCommits.Any(existing =>
+                    existing.Source.Kind == commit.Source.Kind))
+            {
+                throw new InvalidOperationException(
+                    "The one-time Faction fact source is already committed.");
+            }
+
+            var existingBoundaryKeys = existingCommits
+                .SelectMany(existing => existing.Facts)
+                .Select(FactionFactProjection.FactBoundaryKey)
+                .ToHashSet();
+            if (commit.Facts
+                .Select(FactionFactProjection.FactBoundaryKey)
+                .Any(existingBoundaryKeys.Contains))
+            {
+                throw new InvalidOperationException(
+                    "Faction history already contains a fact at this boundary.");
+            }
         }
 
         private void ValidateOneUseResourceCommit(GameLogEntryBase entry)

@@ -308,6 +308,18 @@ public class GameTestBuilder
 		return this;
 	}
 
+	internal GameTestBuilder ArrangeExplicitFactionTransition(
+		string transitionIdentifier,
+		params FactionFact[] facts)
+	{
+		EnsureGameStarted();
+		_gameService.CommitExplicitFactionTransition(
+			_gameId,
+			transitionIdentifier,
+			facts);
+		return this;
+	}
+
 	internal GameTestBuilder ArrangeNightAction(
 		NightActionType actionType,
 		Guid targetId)

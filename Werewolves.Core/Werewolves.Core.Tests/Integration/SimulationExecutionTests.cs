@@ -56,7 +56,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 				"1"),
 			[
 				new(role, Faction.Villager),
-				new(MainRoleType.SimpleWerewolf, Faction.Werewolf),
+				new(MainRoleType.SimpleWerewolf, Faction.Werewolf, Faction.Werewolf),
 				new(MainRoleType.SimpleVillager, Faction.Villager)
 			],
 			headlessResponsePolicy: new HeadlessResponsePolicy(
@@ -282,6 +282,86 @@ public class SimulationExecutionTests : DiagnosticTestBase
 	}
 
 	[Fact]
+	public void Execute_WhenDerivationRequiresUnknownLiveFactionFacts_ReturnsExactIncompleteAndEvaluationCannotComplete()
+	{
+		const long runNumber = 37;
+		MainRoleType[] roles =
+		[
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.Seer,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager
+		];
+		var scenario = new SimulationScenario(roles.Length, roles);
+		var identity = CreateIdentity(scenario);
+		var service = new GameService();
+		var start = service.StartNewGame(new GameSessionConfig(
+			["Ana", "Bruno", "Carla", "Diana", "Eva"],
+			roles.ToList()));
+		var liveSession = service.GetGameStateView(start.GameGuid)!;
+		var livePlayer = liveSession.GetPlayers().First();
+		var driverFactoryCalls = 0;
+		var executor = new SimulationExecutor(
+			(material, capability, _) =>
+			{
+				liveSession.RequireKnownFactionBeneficiary(livePlayer.Id);
+				return SimulationStartStateDeriver.Derive(material, capability);
+			},
+			strategy =>
+			{
+				driverFactoryCalls++;
+				return new HeadlessGameDriver(strategy);
+			},
+			SimulationExecutor.AdaptTerminalEvidence);
+		var expectedMaterial = new RunSeedMaterial(
+			identity,
+			BaselineRandomDecisionStrategy.Identity,
+			runNumber);
+
+		liveSession.GetFactionBeneficiaryKnowledge(livePlayer.Id).Should()
+			.Be(FactionBeneficiaryKnowledge.Unknown);
+		var requireLiveFact = () =>
+			liveSession.RequireKnownFactionBeneficiary(livePlayer.Id);
+		requireLiveFact.Should()
+			.ThrowExactly<InvalidOperationException>()
+			.WithMessage("Required Faction facts are not ready.");
+		new SimulationExecutor().Execute(
+				scenario,
+				SimulatorCapability.FullProbability,
+				identity,
+				runNumber: 0)
+			.Should().BeOfType<CompletedSimulationRun>();
+
+		var run = executor.Execute(
+			scenario,
+			SimulatorCapability.FullProbability,
+			identity,
+			runNumber);
+
+		run.Should().Be(new IncompleteSimulationRun(expectedMaterial));
+		driverFactoryCalls.Should().Be(0);
+
+		var evaluator = new TerminalLobbyEvaluator(
+			(batchScenario, batchCapability, batchIdentity, count, cancellationToken) =>
+				executor.ExecuteBatch(
+					batchScenario,
+					batchCapability,
+					batchIdentity,
+					count,
+					cancellationToken));
+
+		var evaluation = evaluator.Evaluate(
+			scenario,
+			SimulatorCapability.FullProbability,
+			LobbyEvaluationDepth.DegenerateScreeningOnly);
+
+		evaluation.Should().BeOfType<CouldNotEvaluateLobbyEvaluation>();
+		driverFactoryCalls.Should().Be(0);
+		MarkTestCompleted();
+	}
+
+	[Fact]
 	public void Execute_WithVillagerVillager_UsesSafetyCapabilityAndCompletesDeterministicReplay()
 	{
 		var scenario = new SimulationScenario(
@@ -311,7 +391,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 
 		first.Should().BeOfType<CompletedSimulationRun>();
 		first.RunSeedMaterial.CompatibilityIdentity.Profile.Should()
-			.Be(new SimulatorProfileIdentity("safety-screening", "8"));
+			.Be(new SimulatorProfileIdentity("safety-screening", "9"));
 		replay.Should().Be(first);
 		MarkTestCompleted();
 	}
@@ -387,10 +467,10 @@ public class SimulationExecutionTests : DiagnosticTestBase
 		cancellation.Cancel();
 		var derivationCount = 0;
 		var executor = new SimulationExecutor(
-			(material, _) =>
+			(material, capability, _) =>
 			{
 				derivationCount++;
-				return SimulationStartStateDeriver.Derive(material);
+				return SimulationStartStateDeriver.Derive(material, capability);
 			},
 			strategy => new HeadlessGameDriver(strategy),
 			SimulationExecutor.AdaptTerminalEvidence);
@@ -418,10 +498,10 @@ public class SimulationExecutionTests : DiagnosticTestBase
 		cancellation.Cancel();
 		var derivationCount = 0;
 		var executor = new SimulationExecutor(
-			(material, _) =>
+			(material, capability, _) =>
 			{
 				derivationCount++;
-				return SimulationStartStateDeriver.Derive(material);
+				return SimulationStartStateDeriver.Derive(material, capability);
 			},
 			strategy => new HeadlessGameDriver(strategy),
 			SimulationExecutor.AdaptTerminalEvidence);
@@ -503,10 +583,10 @@ public class SimulationExecutionTests : DiagnosticTestBase
 	{
 		var derivationCount = 0;
 		var executor = new SimulationExecutor(
-			(material, _) =>
+			(material, capability, _) =>
 			{
 				derivationCount++;
-				return SimulationStartStateDeriver.Derive(material);
+				return SimulationStartStateDeriver.Derive(material, capability);
 			},
 			strategy => new HeadlessGameDriver(strategy),
 			SimulationExecutor.AdaptTerminalEvidence);
@@ -588,7 +668,11 @@ public class SimulationExecutionTests : DiagnosticTestBase
 		var executors = new[]
 		{
 			new SimulationExecutor(
-				(_, _) => throw new InvalidOperationException(),
+				(_, _, _) => throw new InvalidOperationException(),
+				strategy => new HeadlessGameDriver(strategy),
+				SimulationExecutor.AdaptTerminalEvidence),
+			new SimulationExecutor(
+				(_, _, _) => throw new OperationCanceledException(),
 				strategy => new HeadlessGameDriver(strategy),
 				SimulationExecutor.AdaptTerminalEvidence),
 			new SimulationExecutor(

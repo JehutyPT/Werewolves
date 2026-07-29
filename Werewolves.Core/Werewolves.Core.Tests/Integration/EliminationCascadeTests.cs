@@ -950,7 +950,11 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 			reactionVictimId);
 		var interrupted = builder.GetGameState()!;
 		interrupted.GetPlayerState(wildChildId).CurrentRole.Should().Be(
-			MainRoleType.SimpleWerewolf);
+			MainRoleType.WildChild);
+		interrupted.GetFactionBeneficiaryKnowledge(wildChildId).Should().Be(
+			FactionBeneficiaryKnowledge.Known(Faction.Werewolf));
+		interrupted.GetFactionAgentKnowledge(wildChildId, Faction.Werewolf)
+			.Should().Be(FactionAgentKnowledge.KnownAgent);
 		interrupted.GameHistoryLog
 			.OfType<StatusEffectLogEntry>()
 			.Should().ContainSingle(entry =>
@@ -959,9 +963,7 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 				entry.IsActive);
 		interrupted.GameHistoryLog
 			.OfType<AssignRoleLogEntry>()
-			.Should().ContainSingle(entry =>
-				entry.PlayerIds.Contains(wildChildId) &&
-				entry.AssignedMainRole == MainRoleType.SimpleWerewolf);
+			.Should().NotContain(entry => entry.PlayerIds.Contains(wildChildId));
 
 		var recoveredReaction = new SingleWaveReaction();
 		recoveredReaction.Configure(modelId, reactionVictimId);
@@ -988,6 +990,12 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 			}));
 
 		var recovered = recoveredService.GetGameStateView(recoveredGameId)!;
+		recovered.GetPlayerState(wildChildId).CurrentRole.Should().Be(
+			MainRoleType.WildChild);
+		recovered.GetFactionBeneficiaryKnowledge(wildChildId).Should().Be(
+			FactionBeneficiaryKnowledge.Known(Faction.Werewolf));
+		recovered.GetFactionAgentKnowledge(wildChildId, Faction.Werewolf)
+			.Should().Be(FactionAgentKnowledge.KnownAgent);
 		recovered.GameHistoryLog
 			.OfType<StatusEffectLogEntry>()
 			.Should().ContainSingle(entry =>
@@ -996,9 +1004,7 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 				entry.IsActive);
 		recovered.GameHistoryLog
 			.OfType<AssignRoleLogEntry>()
-			.Should().ContainSingle(entry =>
-				entry.PlayerIds.Contains(wildChildId) &&
-				entry.AssignedMainRole == MainRoleType.SimpleWerewolf);
+			.Should().NotContain(entry => entry.PlayerIds.Contains(wildChildId));
 		recovered.GameHistoryLog
 			.OfType<PlayerEliminatedLogEntry>()
 			.Should().ContainSingle(entry =>

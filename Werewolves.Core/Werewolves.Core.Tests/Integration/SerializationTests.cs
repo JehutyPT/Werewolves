@@ -961,7 +961,7 @@ public class SerializationTests : DiagnosticTestBase
             ]
         };
 
-        return JsonSerializer.Serialize(dto, RecoverySerializationOptions);
+        return SerializeWithCurrentFactionShape(dto);
     }
 
     private static string CreateStableDayVoteBoundaryJson(
@@ -1055,6 +1055,21 @@ public class SerializationTests : DiagnosticTestBase
                 }
             ]
         };
+
+        return SerializeWithCurrentFactionShape(dto);
+    }
+
+    private static string SerializeWithCurrentFactionShape(GameSessionDto dto)
+    {
+        dto.FactionFactSchemaVersion = FactionFactSchema.CurrentVersion;
+        foreach (var player in dto.Players)
+        {
+            player.FactionBeneficiary = FactionBeneficiaryKnowledge.Unknown;
+            player.FactionAgentKnowledge = Enum.GetValues<Faction>()
+                .ToDictionary(
+                    faction => faction,
+                    _ => FactionAgentKnowledge.Unknown);
+        }
 
         return JsonSerializer.Serialize(dto, RecoverySerializationOptions);
     }

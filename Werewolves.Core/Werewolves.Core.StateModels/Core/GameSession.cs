@@ -14,6 +14,16 @@ public interface IGameSession
     public IPlayer GetPlayer(Guid playerId);
     public IPlayerState GetPlayerState(Guid playerId);
     public IEnumerable<IPlayer> GetPlayers();
+    public FactionBeneficiaryKnowledge GetFactionBeneficiaryKnowledge(
+        Guid playerId);
+    public FactionAgentKnowledge GetFactionAgentKnowledge(
+        Guid playerId,
+        Faction faction);
+    public bool TryGetKnownFactionAgents(
+        Faction faction,
+        out IReadOnlyList<IPlayer> agents);
+    public Faction RequireKnownFactionBeneficiary(Guid playerId);
+    public IReadOnlyList<IPlayer> RequireKnownFactionAgents(Faction faction);
     public int RoleInPlayCount(MainRoleType type);
 
     /// <summary>
@@ -207,6 +217,62 @@ internal class GameSession : IGameSession
 
     public IEnumerable<IPlayer> GetPlayers() => _gameSessionKernel.GetIPlayers();
 
+    public FactionBeneficiaryKnowledge GetFactionBeneficiaryKnowledge(
+        Guid playerId) =>
+        GetPlayerState(playerId).FactionBeneficiary;
+
+    public FactionAgentKnowledge GetFactionAgentKnowledge(
+        Guid playerId,
+        Faction faction) =>
+        GetPlayerState(playerId).GetFactionAgentKnowledge(faction);
+
+    public bool TryGetKnownFactionAgents(
+        Faction faction,
+        out IReadOnlyList<IPlayer> agents)
+    {
+        if (!Enum.IsDefined(faction))
+        {
+            throw new ArgumentOutOfRangeException(nameof(faction));
+        }
+
+        var players = GetPlayers().ToArray();
+        if (players.Any(player =>
+            player.State.GetFactionAgentKnowledge(faction) ==
+            FactionAgentKnowledge.Unknown))
+        {
+            agents = Array.Empty<IPlayer>();
+            return false;
+        }
+
+        agents = Array.AsReadOnly(players
+            .Where(player =>
+                player.State.GetFactionAgentKnowledge(faction) ==
+                FactionAgentKnowledge.KnownAgent)
+            .ToArray());
+        return true;
+    }
+
+    public Faction RequireKnownFactionBeneficiary(Guid playerId)
+    {
+        var knowledge = GetFactionBeneficiaryKnowledge(playerId);
+        if (!knowledge.IsKnown)
+        {
+            throw FactionFactsNotReady();
+        }
+
+        return knowledge.Faction!.Value;
+    }
+
+    public IReadOnlyList<IPlayer> RequireKnownFactionAgents(Faction faction)
+    {
+        if (!TryGetKnownFactionAgents(faction, out var agents))
+        {
+            throw FactionFactsNotReady();
+        }
+
+        return agents;
+    }
+
     public int RoleInPlayCount(MainRoleType type) => _gameSessionKernel.GetRolesInPlay().Count(r => r == type);
     
     /// <summary>
@@ -220,11 +286,24 @@ internal class GameSession : IGameSession
 
     #endregion
 
+    private static InvalidOperationException FactionFactsNotReady() =>
+        new("Required Faction facts are not ready.");
+
 	#region Internal Command API
 
 	internal void CommitGameFact<TEntry>(
 		Func<GameFactContext, TEntry> entryFactory)
 		where TEntry : GameLogEntryBase, IGameFactLogEntry
+		=> CommitSessionEntry(entryFactory, "game fact");
+
+	internal void CommitFactionFactBatch(
+		Func<GameFactContext, FactionFactsCommittedLogEntry> entryFactory) =>
+		CommitSessionEntry(entryFactory, "Faction fact batch");
+
+	private void CommitSessionEntry<TEntry>(
+		Func<GameFactContext, TEntry> entryFactory,
+		string entryDescription)
+		where TEntry : GameLogEntryBase
 	{
 		ArgumentNullException.ThrowIfNull(entryFactory);
 
@@ -234,13 +313,13 @@ internal class GameSession : IGameSession
 			_gameSessionKernel.PhaseStateCache.GetCurrentPhase());
 		var entry = entryFactory(context)
 			?? throw new InvalidOperationException(
-				"The game fact factory returned no log entry.");
+				$"The {entryDescription} factory returned no log entry.");
 		if (entry.Timestamp != context.Timestamp ||
 		    entry.TurnNumber != context.TurnNumber ||
 		    entry.CurrentPhase != context.CurrentPhase)
 		{
 			throw new InvalidOperationException(
-				"Game facts must use the session-provided timestamp, turn, and phase.");
+				$"The {entryDescription} must use the session-provided timestamp, turn, and phase.");
 		}
 
 		_gameSessionKernel.AddEntryAndUpdateState(entry);

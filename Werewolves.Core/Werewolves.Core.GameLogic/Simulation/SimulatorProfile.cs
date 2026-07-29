@@ -6,6 +6,7 @@ namespace Werewolves.Core.GameLogic.Simulation;
 public class SimulatorProfile
 {
 	private readonly IReadOnlyDictionary<MainRoleType, Faction> _beneficiaryFactions;
+	private readonly IReadOnlyDictionary<MainRoleType, IReadOnlySet<Faction>> _agentFactions;
 	private readonly SharedVictoryGameResult[] _sharedVictoryCapabilities;
 	private readonly SimulationRuleState[] _supportedRuleStates;
 
@@ -33,6 +34,9 @@ public class SimulatorProfile
 		_beneficiaryFactions = snapshot.ToDictionary(
 			descriptor => descriptor.Role,
 			descriptor => descriptor.BeneficiaryFaction);
+		_agentFactions = snapshot.ToDictionary(
+			descriptor => descriptor.Role,
+			descriptor => descriptor.AgentFactions);
 		SupportedRoles = Array.AsReadOnly(snapshot.Select(descriptor => descriptor.Role).ToArray());
 		_sharedVictoryCapabilities = (sharedVictoryCapabilities ?? [])
 			.Distinct()
@@ -51,6 +55,20 @@ public class SimulatorProfile
 
 	internal bool TryGetBeneficiaryFaction(MainRoleType role, out Faction faction) =>
 		_beneficiaryFactions.TryGetValue(role, out faction);
+
+	internal bool IsFactionAgent(MainRoleType role, Faction faction)
+	{
+		if (!Enum.IsDefined(faction))
+		{
+			throw new ArgumentOutOfRangeException(nameof(faction));
+		}
+		if (!_agentFactions.TryGetValue(role, out var factions))
+		{
+			throw new ArgumentOutOfRangeException(nameof(role));
+		}
+
+		return factions.Contains(faction);
+	}
 
 	internal GameResult[] CreatePossibleGameResults(IEnumerable<Faction> possibleFactions)
 	{
@@ -72,15 +90,44 @@ public class SimulatorProfile
 		BaselineRandomDecisionStrategy.Policy.AdmittedSemantics);
 }
 
-internal sealed record SimulatorProfileRoleDescriptor(
-	MainRoleType Role,
-	Faction BeneficiaryFaction);
+internal sealed class SimulatorProfileRoleDescriptor
+{
+	internal MainRoleType Role { get; }
+
+	internal Faction BeneficiaryFaction { get; }
+
+	internal IReadOnlySet<Faction> AgentFactions { get; }
+
+	internal SimulatorProfileRoleDescriptor(
+		MainRoleType role,
+		Faction beneficiaryFaction,
+		params Faction[] agentFactions)
+	{
+		if (!Enum.IsDefined(role))
+		{
+			throw new ArgumentOutOfRangeException(nameof(role));
+		}
+		if (!Enum.IsDefined(beneficiaryFaction))
+		{
+			throw new ArgumentOutOfRangeException(nameof(beneficiaryFaction));
+		}
+		ArgumentNullException.ThrowIfNull(agentFactions);
+		if (agentFactions.Any(faction => !Enum.IsDefined(faction)))
+		{
+			throw new ArgumentOutOfRangeException(nameof(agentFactions));
+		}
+
+		Role = role;
+		BeneficiaryFaction = beneficiaryFaction;
+		AgentFactions = agentFactions.ToHashSet();
+	}
+}
 
 public sealed class SimulatorCapability : SimulatorProfile
 {
 	private static readonly SimulatorProfileRoleDescriptor[] SafetyScreeningRoleDescriptors =
 	[
-		new(MainRoleType.SimpleWerewolf, Faction.Werewolf),
+		new(MainRoleType.SimpleWerewolf, Faction.Werewolf, Faction.Werewolf),
 		new(MainRoleType.Seer, Faction.Villager),
 		new(MainRoleType.WildChild, Faction.Villager),
 		new(MainRoleType.SimpleVillager, Faction.Villager),
@@ -95,7 +142,7 @@ public sealed class SimulatorCapability : SimulatorProfile
 
 	private static readonly SimulatorProfileRoleDescriptor[] FullProbabilityRoleDescriptors =
 	[
-		new(MainRoleType.SimpleWerewolf, Faction.Werewolf),
+		new(MainRoleType.SimpleWerewolf, Faction.Werewolf, Faction.Werewolf),
 		new(MainRoleType.Seer, Faction.Villager),
 		new(MainRoleType.WildChild, Faction.Villager),
 		new(MainRoleType.SimpleVillager, Faction.Villager)
@@ -108,7 +155,7 @@ public sealed class SimulatorCapability : SimulatorProfile
 		SimulatorCapabilityRegistry.Production.FullProbability;
 
 	internal static SimulatorCapability CreateSafetyScreening() => new(
-		new SimulatorProfileIdentity("safety-screening", "8"),
+			new SimulatorProfileIdentity("safety-screening", "9"),
 		SafetyScreeningRoleDescriptors,
 		headlessResponsePolicy: new HeadlessResponsePolicy(
 			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
@@ -151,7 +198,7 @@ public sealed class SimulatorCapability : SimulatorProfile
 		supportedRuleStates: [SimulationRuleState.Default]);
 
 	internal static SimulatorCapability CreateFullProbability() => new(
-		new SimulatorProfileIdentity("full-probability", "1"),
+			new SimulatorProfileIdentity("full-probability", "2"),
 		FullProbabilityRoleDescriptors,
 		headlessResponsePolicy: new HeadlessResponsePolicy(
 			BaselineRandomDecisionStrategy.Identity,

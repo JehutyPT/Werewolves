@@ -1,3 +1,4 @@
+using System.Text;
 using FluentAssertions;
 using Werewolves.Client.Services;
 using Werewolves.Client.Tests.Helpers;
@@ -600,6 +601,50 @@ public class LobbyEvaluationCoordinatorTests
 		var written = TerminalLobbyCache.ReadDocument(local.Writes.Single());
 		written.IsUsable.Should().BeTrue();
 		written.Document!.Records.Should().ContainSingle();
+	}
+
+	[Fact]
+	public async Task StaleProfileLocalDocument_IsMissAndAcceleratedFallbackPersistsOnlyCurrentCanonicalRecord()
+	{
+		var lobby = CreateLobby(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager);
+		var currentRecord = AlreadyDecidedRecord(lobby.CreateSimulationScenario());
+		var staleBytes = Encoding.UTF8.GetBytes(
+			Encoding.UTF8.GetString(DocumentBytes(currentRecord)).Replace(
+				"full-probability@2",
+				"full-probability@1",
+				StringComparison.Ordinal));
+		var local = new RecordingLocalStore(staleBytes);
+		var evaluator = new RecordingEvaluator(new AlreadyDecidedTerminalEvaluation(
+			new SingleFactionGameResult(Faction.Werewolf),
+			AlreadyDecidedReason.WerewolfControlShortcut));
+		var clock = new ManualTimeProvider();
+		using var coordinator = new LobbyEvaluationCoordinator(
+			lobby,
+			local,
+			evaluator,
+			FullProbabilitySettings,
+			clock);
+
+		coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.Pending);
+		coordinator.TryRequestLobbyExit().Should().BeFalse();
+		await WaitForStateAsync(coordinator, LobbyEvaluationStateKind.AlreadyDecided);
+
+		evaluator.CallCount.Should().Be(1);
+		evaluator.Capabilities.Should().Equal(SimulatorCapability.FullProbability);
+		evaluator.Depths.Should().Equal(LobbyEvaluationDepth.FullProbability);
+		var writtenBytes = local.Writes.Should().ContainSingle().Subject;
+		var written = TerminalLobbyCache.ReadDocument(writtenBytes);
+		written.IsUsable.Should().BeTrue();
+		written.Document!.Records.Should().ContainSingle()
+			.Which.CompatibilityIdentity.Should().Be(currentRecord.CompatibilityIdentity);
+		Encoding.UTF8.GetString(writtenBytes).Should()
+			.Contain("full-probability@2")
+			.And.NotContain("full-probability@1");
 	}
 
 	[Theory]
