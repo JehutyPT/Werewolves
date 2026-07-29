@@ -83,11 +83,15 @@ public class VictoryConditionTests : DiagnosticTestBase
             CoreTestReferences.InstructionContexts.VoteSelection);
         var afterVote = builder.Process(voteInstruction.CreateResponse([werewolf.Id]));
 
-        // Publicly reveal the role already known from the night wake.
-        var roleRevealInstruction = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+        // Assign the exact role before publicly revealing it.
+        var roleRevealInstruction = InstructionAssert.ExpectSuccessWithType<AssignRolesInstruction>(
             afterVote,
             CoreTestReferences.InstructionContexts.RoleAssignmentAfterLynch);
-        var afterRoleReveal = builder.Process(roleRevealInstruction.CreateResponse());
+        roleRevealInstruction.PlayersForAssignment.Should().Equal(werewolf.Id);
+        var afterRoleReveal = builder.Process(roleRevealInstruction.CreateResponse(new()
+        {
+            [werewolf.Id] = MainRoleType.SimpleWerewolf
+        }));
 
         // Confirm the death announcement.
         var deathAnnouncementInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
@@ -549,10 +553,14 @@ public class VictoryConditionTests : DiagnosticTestBase
             CoreTestReferences.InstructionContexts.VoteSelection);
         var afterVote = builder.Process(voteInstruction.CreateResponse([werewolf.Id]));
 
-        var roleRevealInstruction = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+        var roleRevealInstruction = InstructionAssert.ExpectSuccessWithType<AssignRolesInstruction>(
             afterVote,
             CoreTestReferences.InstructionContexts.RoleAssignmentAfterLynch);
-        var afterRoleReveal = builder.Process(roleRevealInstruction.CreateResponse());
+        roleRevealInstruction.PlayersForAssignment.Should().Equal(werewolf.Id);
+        var afterRoleReveal = builder.Process(roleRevealInstruction.CreateResponse(new()
+        {
+            [werewolf.Id] = MainRoleType.SimpleWerewolf
+        }));
         var deathAnnouncementInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             afterRoleReveal.ModeratorInstruction,
             CoreTestReferences.InstructionContexts.DeathAnnouncementConfirmation);

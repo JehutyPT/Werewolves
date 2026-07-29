@@ -65,11 +65,11 @@ public sealed class StutteringJudgeRoleTests : DiagnosticTestBase
 		builder.GetGameState()!.GameHistoryLog
 			.OfType<StutteringJudgeSignalEstablishedLogEntry>()
 			.Should().ContainSingle(entry => entry.JudgePlayerId == judge.Id);
-		var werewolfIdentification =
+		var werewolfObservation =
 			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
 				afterSetup);
-		werewolfIdentification.RoleIdentification.Should().Be(
-			MainRoleType.SimpleWerewolf);
+		werewolfObservation.Semantic.Should().Be(
+			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
 		MarkTestCompleted();
 	}
 
@@ -137,7 +137,7 @@ public sealed class StutteringJudgeRoleTests : DiagnosticTestBase
 		var afterSetup = firstService.ProcessInstruction(
 			gameId,
 			recoveredSetup.CreateResponse());
-		var werewolfIdentification =
+		var werewolfObservation =
 			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
 				afterSetup);
 		var firstRecovered = firstService.GetGameStateView(gameId)!;
@@ -147,14 +147,16 @@ public sealed class StutteringJudgeRoleTests : DiagnosticTestBase
 
 		var secondService = new GameService();
 		var secondId = secondService.RehydrateSession(firstRecovered.Serialize());
-		var recoveredWerewolf =
+		var recoveredWerewolfObservation =
 			InstructionAssert.ExpectType<SelectPlayersInstruction>(
 				secondService.GetCurrentInstruction(secondId));
 
-		recoveredWerewolf.InstructionId.Should().Be(
-			werewolfIdentification.InstructionId);
-		recoveredWerewolf.RoleIdentification.Should().Be(
-			MainRoleType.SimpleWerewolf);
+		recoveredWerewolfObservation.InstructionId.Should().Be(
+			werewolfObservation.InstructionId);
+		recoveredWerewolfObservation.Semantic.Should().Be(
+			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
+		recoveredWerewolfObservation.SelectablePlayerIds.Should().BeEquivalentTo(
+			werewolfObservation.SelectablePlayerIds);
 		secondService.GetGameStateView(secondId)!.GameHistoryLog
 			.OfType<StutteringJudgeSignalEstablishedLogEntry>()
 			.Should().ContainSingle();

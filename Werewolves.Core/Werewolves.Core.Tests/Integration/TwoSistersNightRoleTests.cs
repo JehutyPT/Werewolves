@@ -339,8 +339,9 @@ public sealed class TwoSistersNightRoleTests : DiagnosticTestBase
 				instruction.Semantic == ModeratorInstructionSemantic.WakeRole);
 
 		nextRole.PublicAnnouncement.Should().Be(
-			GameStrings.RoleWakesUp.Format(
-				MainRoleType.SimpleWerewolf.GetPublicName()));
+			GameStrings.RoleHoldersWakeUp.Format(
+				GameStrings.WerewolvesGroupName));
+		nextRole.AffectedPlayerIds.Should().Equal(fixture.WerewolfId);
 		policy.ObservedAttempts.Should().HaveCount(4);
 		policy.ObservedAttempts.Skip(2)
 			.Select(attempt => attempt.ActingPlayer.Id).Should()
@@ -374,8 +375,9 @@ public sealed class TwoSistersNightRoleTests : DiagnosticTestBase
 
 		nextRole.Semantic.Should().Be(ModeratorInstructionSemantic.WakeRole);
 		nextRole.PublicAnnouncement.Should().Be(
-			GameStrings.RoleWakesUp.Format(
-				MainRoleType.SimpleWerewolf.GetPublicName()));
+			GameStrings.RoleHoldersWakeUp.Format(
+				GameStrings.WerewolvesGroupName));
+		nextRole.AffectedPlayerIds.Should().Equal(fixture.WerewolfId);
 		policy.ObservedAttempts.Should().HaveCount(2);
 		MarkTestCompleted();
 	}
@@ -394,12 +396,13 @@ public sealed class TwoSistersNightRoleTests : DiagnosticTestBase
 		builder.ConfirmGameStart();
 
 		var afterNightStart = builder.ConfirmNightStart();
-		var nextRoleIdentification =
+		var nextSlot =
 			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
 				afterNightStart);
 
-		nextRoleIdentification.RoleIdentification.Should()
-			.Be(MainRoleType.SimpleWerewolf);
+		nextSlot.Semantic.Should().Be(
+			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
+		nextSlot.RoleIdentification.Should().BeNull();
 		policy.ObservedAttempts.Select(attempt => attempt.ActingPlayer.Id).Should()
 			.Equal(sisters.Select(player => player.Id).Order());
 		MarkTestCompleted();
@@ -523,6 +526,13 @@ public sealed class TwoSistersNightRoleTests : DiagnosticTestBase
 			{
 				ConfirmationInstruction confirmation =>
 					confirmation.CreateResponse(),
+				SelectPlayersInstruction
+				{
+					Semantic:
+						ModeratorInstructionSemantic
+							.ObserveWerewolfFactionAgentGroup
+				} observation =>
+					observation.CreateResponse([fixture.WerewolfId]),
 				SelectPlayersInstruction
 				{
 					RoleIdentification: MainRoleType.TwoSisters

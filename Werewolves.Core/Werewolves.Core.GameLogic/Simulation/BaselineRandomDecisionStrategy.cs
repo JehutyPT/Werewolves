@@ -14,10 +14,10 @@ public sealed class BaselineRandomDecisionStrategy : IModeratorDecisionStrategy
 	private readonly HeadlessResponsePolicy _policy;
 
 	public static DecisionStrategyIdentity Identity { get; } =
-		new("baseline-random", "1-splitmix64");
+		new("baseline-random", "3-splitmix64");
 
 	public static DecisionStrategyIdentity SafetyScreeningIdentity { get; } =
-		new("baseline-random", "2-splitmix64");
+		new("baseline-random", "4-splitmix64");
 
 	public static HeadlessResponsePolicy Policy { get; } = new(
 		Identity,
@@ -28,6 +28,7 @@ public sealed class BaselineRandomDecisionStrategy : IModeratorDecisionStrategy
 			ModeratorInstructionSemantic.FinishNightActions,
 			ModeratorInstructionSemantic.WakeRole,
 			ModeratorInstructionSemantic.IdentifyRoleHolders,
+			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup,
 			ModeratorInstructionSemantic.PutRoleToSleep,
 			ModeratorInstructionSemantic.SelectWerewolfVictim,
 			ModeratorInstructionSemantic.SelectSeerTarget,
@@ -106,6 +107,11 @@ public sealed class BaselineRandomDecisionStrategy : IModeratorDecisionStrategy
 				CreateRoleIdentificationResponse(selectPlayers, session),
 			SelectPlayersInstruction
 			{
+				Semantic: ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup
+			} selectPlayers =>
+				CreateLivingFactionAgentGroupResponse(selectPlayers, session),
+			SelectPlayersInstruction
+			{
 				Semantic: ModeratorInstructionSemantic.ObserveVillagerVillagerFromDeal
 			} selectPlayers =>
 				CreateSeededRoleHolderResponse(
@@ -141,6 +147,19 @@ public sealed class BaselineRandomDecisionStrategy : IModeratorDecisionStrategy
 			.Where(player => instruction.SelectablePlayerIds.Contains(player.Id))
 			.Where(player =>
 				effectiveRolesByPlayerId[player.Id] == instruction.RoleIdentification!.Value)
+			.Select(player => player.Id)
+			.ToHashSet();
+		return instruction.CreateResponse(selectedPlayerIds);
+	}
+
+	private static ModeratorResponse CreateLivingFactionAgentGroupResponse(
+		SelectPlayersInstruction instruction,
+		IGameSession session)
+	{
+		var selectedPlayerIds = session
+			.RequireKnownFactionAgents(Faction.Werewolf)
+			.Where(player => player.State.Health == PlayerHealth.Alive)
+			.Where(player => instruction.SelectablePlayerIds.Contains(player.Id))
 			.Select(player => player.Id)
 			.ToHashSet();
 		return instruction.CreateResponse(selectedPlayerIds);

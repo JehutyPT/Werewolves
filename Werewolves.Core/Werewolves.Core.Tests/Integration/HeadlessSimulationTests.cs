@@ -56,7 +56,7 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 	public void BaselineRandomPolicy_DeclaresStableIdentityAndExactInstructionSemantics()
 	{
 		BaselineRandomDecisionStrategy.Policy.StrategyIdentity.ToString()
-			.Should().Be("baseline-random@1-splitmix64");
+			.Should().Be("baseline-random@3-splitmix64");
 		BaselineRandomDecisionStrategy.Policy.AdmittedSemantics.Should().BeEquivalentTo(
 		[
 			ModeratorInstructionSemantic.StartGame,
@@ -65,6 +65,7 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 			ModeratorInstructionSemantic.FinishNightActions,
 			ModeratorInstructionSemantic.WakeRole,
 			ModeratorInstructionSemantic.IdentifyRoleHolders,
+			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup,
 			ModeratorInstructionSemantic.PutRoleToSleep,
 			ModeratorInstructionSemantic.SelectWerewolfVictim,
 			ModeratorInstructionSemantic.SelectSeerTarget,
@@ -679,7 +680,7 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 	[Fact]
 	public void BaselineRandomDecisionStrategy_WithKnownOptionalChoiceSeed_ReturnsEmptyValidResponse()
 	{
-		var material = CreateRunSeedMaterial(runNumber: 2);
+		var material = CreateRunSeedMaterial(runNumber: 1);
 		var startState = SimulationStartStateDeriver.Derive(material);
 		var config = startState.CreateGameSessionConfig();
 		var builder = CreateBuilder()

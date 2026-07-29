@@ -13,6 +13,9 @@ public enum FactionFactSourceKind
 
 public sealed record FactionFactSource
 {
+	internal const string WerewolfFactionAgentGroupObservationIdentifier =
+		"werewolf-faction-agent-group-observation";
+
 	[JsonConstructor]
 	public FactionFactSource(FactionFactSourceKind kind, string identifier)
 	{

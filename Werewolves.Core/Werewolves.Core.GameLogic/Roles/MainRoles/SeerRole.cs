@@ -83,7 +83,9 @@ internal class SeerRole : ImmediateFeedbackNightRoleHookListener
 		var targetId = input.SelectedPlayerIds!.First();
         var targetPlayer = session.GetPlayer(targetId);
 
-        bool targetWakesWithWerewolves = targetPlayer.State.Team == Team.Werewolves;
+        bool targetWakesWithWerewolves =
+            session.GetFactionAgentKnowledge(targetId, Faction.Werewolf) ==
+            FactionAgentKnowledge.KnownAgent;
 
         var privateFeedback = (targetWakesWithWerewolves
             ? GameStrings.SeerResultWerewolfTeam

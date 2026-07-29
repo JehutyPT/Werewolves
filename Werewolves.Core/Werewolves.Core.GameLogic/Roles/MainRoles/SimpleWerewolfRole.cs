@@ -1,6 +1,11 @@
+using System.Collections.Immutable;
 using Werewolves.Core.GameLogic.Models.GameHookListeners;
+using Werewolves.Core.GameLogic.Models.InternalMessages;
+using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Extensions;
+using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Resources;
@@ -13,23 +18,148 @@ namespace Werewolves.Core.GameLogic.Roles.MainRoles;
 /// </summary>
 internal class SimpleWerewolfRole : StandardNightRoleHookListener
 {
-    
     internal override string PublicName => GameStrings.SimpleWerewolfRoleName;
     public override ListenerIdentifier Id => ListenerIdentifier.Listener(MainRoleType.SimpleWerewolf);
     protected override bool HasNightPowers => true;
 
-    protected override ModeratorInstruction GenerateTargetSelectionInstruction(GameSession session, ModeratorResponse input)
+    public override HookListenerActionResult Execute(
+        GameSession session,
+        ModeratorResponse input)
     {
-        var werewolves = GetAliveRolePlayers(session);
-        if (werewolves == null || !werewolves.Any())
+        if (GetCurrentListenerState(session) == null &&
+            TryGetKnownLivingWerewolfAgents(session, out var agents) &&
+            agents.Count == 0)
         {
-            throw new InvalidOperationException("No alive werewolves found for target selection.");
+            TryCommitInitialBeneficiaryClosure(session);
+            return HookListenerActionResult.Skip();
         }
 
-        var potentialTargets = GetPotentialTargets(session, false);
+        // This listener is the established Werewolf-faction anchor. Its execution
+        // depends on current Faction Agent facts, not exact Simple Werewolf holders.
+        return ExecuteCore(session, input);
+    }
+
+    public override bool TryResolvePendingInstructionContinuation(
+        GameHook hook,
+        GameSession session,
+        ModeratorInstruction pendingInstruction,
+        out string listenerState)
+    {
+        listenerState = string.Empty;
+        if (hook != GameHook.NightMainActionLoop ||
+            pendingInstruction is not ConfirmationInstruction
+            {
+                Semantic: ModeratorInstructionSemantic.PutRoleToSleep
+            } ||
+            !TryGetKnownLivingWerewolfAgents(session, out var agents) ||
+            agents.Count == 0 ||
+            GetLivingKnownNonAgents(session).Count != 0)
+        {
+            return false;
+        }
+
+        var affectedPlayerIds =
+            pendingInstruction.AffectedPlayerIds?.ToHashSet();
+        if (affectedPlayerIds == null ||
+            !affectedPlayerIds.SetEquals(
+                agents.Select(player => player.Id)))
+        {
+            return false;
+        }
+
+        listenerState = ReadyToSleepStateEnum.ToString();
+        return true;
+    }
+
+    protected override List<RoleStateMachineStage> DefineStateMachineStages()
+    {
+        var stages = base.DefineStateMachineStages();
+        stages.Add(CreateStage(
+            GameHook.NightMainActionLoop,
+            WokenUpStateEnum,
+            [AwaitingTargetSelectionEnum, ReadyToSleepStateEnum],
+            HandleNightPowerUse_AndId,
+            shouldOverwriteStartStage: true));
+        return stages;
+    }
+
+    protected override HookListenerActionResult HandleRoleWakeupAndId(
+        GameSession session,
+        ModeratorResponse input)
+    {
+        if (!TryGetKnownLivingWerewolfAgents(session, out var agents))
+        {
+            var livingPlayerIds = GetLivingPlayers(session)
+                .Select(player => player.Id)
+                .ToHashSet();
+            return HookListenerActionResult.NeedInput(
+                new SelectPlayersInstruction(
+                    ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup,
+                    selectablePlayerIds: livingPlayerIds,
+                    countConstraint: NumberRangeConstraint.AtLeast(1),
+                    publicAnnouncement: GameStrings.RoleHoldersWakeUp.Format(
+                        GameStrings.WerewolvesGroupName),
+                    privateInstruction:
+                        GameStrings.WerewolfFactionAgentObservationPrompt),
+                WokenUpStateEnum);
+        }
+
+        if (agents.Count == 0)
+        {
+            return HookListenerActionResult.Complete(AsleepStateEnum);
+        }
+
+        return HookListenerActionResult.NeedInput(
+            new ConfirmationInstruction(
+                ModeratorInstructionSemantic.WakeRole,
+                GameStrings.RoleHoldersWakeUp.Format(
+                    GameStrings.WerewolvesGroupName),
+                affectedPlayerIds: agents.Select(player => player.Id).ToArray()),
+            WokenUpStateEnum);
+    }
+
+    protected override HookListenerActionResult HandleNightPowerUse_AndId(
+        GameSession session,
+        ModeratorResponse input)
+    {
+        if (!TryGetKnownLivingWerewolfAgents(session, out _))
+        {
+            var boundary = CommitWerewolfAgentGroupObservation(session, input);
+            TryCommitInitialBeneficiaryClosure(session, boundary);
+        }
+        else
+        {
+            TryCommitInitialBeneficiaryClosure(session);
+        }
+
+        return HandleNightPowerUse(session, input);
+    }
+
+    protected override HookListenerActionResult HandleNightPowerUse(
+        GameSession session,
+        ModeratorResponse input) =>
+        GetLivingKnownNonAgents(session).Count == 0
+            ? PrepareSleepInstruction(session)
+            : base.HandleNightPowerUse(session, input);
+
+    protected override ModeratorInstruction GenerateTargetSelectionInstruction(GameSession session, ModeratorResponse input)
+    {
+        if (!TryGetKnownLivingWerewolfAgents(session, out var werewolves) ||
+            werewolves.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "Werewolf victim selection requires a known, nonempty living Agent group.");
+        }
+
+        var potentialTargets = GetLivingKnownNonAgents(session);
+        if (potentialTargets.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "Werewolf victim selection requires a living known non-Agent.");
+        }
 
         return new SelectPlayersInstruction(
-			ModeratorInstructionSemantic.SelectWerewolfVictim,
+            ModeratorInstructionSemantic.SelectWerewolfVictim,
             publicAnnouncement: GameStrings.WerewolvesChooseVictimPrompt,
             selectablePlayerIds: potentialTargets,
             affectedPlayerIds: werewolves.Select(w => w.Id).ToList(),
@@ -39,8 +169,212 @@ internal class SimpleWerewolfRole : StandardNightRoleHookListener
 
     protected override void ProcessTargetSelectionNoFeedback(GameSession session, ModeratorResponse input)
     {
-        var victimId = input.SelectedPlayerIds!.First();
+        if (input.SelectedPlayerIds is not { Count: 1 })
+        {
+            throw new InvalidOperationException(
+                "Werewolf victim selection requires exactly one Player.");
+        }
+
+        var victimId = input.SelectedPlayerIds.Single();
+        if (!GetLivingKnownNonAgents(session).Contains(victimId))
+        {
+            throw new InvalidOperationException(
+                "The Werewolf victim must be a living known non-Agent.");
+        }
 
         session.PerformNightAction(NightActionType.WerewolfVictimSelection, victimId);
+    }
+
+    protected override HookListenerActionResult PrepareSleepInstruction(
+        GameSession session)
+    {
+        if (!TryGetKnownLivingWerewolfAgents(session, out var werewolves) ||
+            werewolves.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "Werewolf sleep requires a known, nonempty living Agent group.");
+        }
+
+        return HookListenerActionResult.NeedInput(
+            new ConfirmationInstruction(
+                ModeratorInstructionSemantic.PutRoleToSleep,
+                GameStrings.RoleHoldersGoToSleep.Format(
+                    GameStrings.WerewolvesGroupName),
+                affectedPlayerIds: werewolves
+                    .Select(player => player.Id)
+                    .ToArray()),
+            ReadyToSleepStateEnum);
+    }
+
+    private static IReadOnlyList<IPlayer> GetLivingPlayers(GameSession session) =>
+        session.GetPlayers()
+            .WithHealth(PlayerHealth.Alive)
+            .ToArray();
+
+    private static bool TryGetKnownLivingWerewolfAgents(
+        GameSession session,
+        out IReadOnlyList<IPlayer> agents)
+    {
+        var livingPlayers = GetLivingPlayers(session);
+        if (livingPlayers.Any(player =>
+                session.GetFactionAgentKnowledge(
+                    player.Id,
+                    Faction.Werewolf) == FactionAgentKnowledge.Unknown))
+        {
+            agents = [];
+            return false;
+        }
+
+        agents = livingPlayers
+            .Where(player =>
+                session.GetFactionAgentKnowledge(
+                    player.Id,
+                    Faction.Werewolf) == FactionAgentKnowledge.KnownAgent)
+            .ToArray();
+        return true;
+    }
+
+    private static HashSet<Guid> GetLivingKnownNonAgents(GameSession session) =>
+        GetLivingPlayers(session)
+            .Where(player =>
+                session.GetFactionAgentKnowledge(
+                    player.Id,
+                    Faction.Werewolf) ==
+                FactionAgentKnowledge.KnownNonAgent)
+            .Select(player => player.Id)
+            .ToHashSet();
+
+    private static FactionFactEffectiveBoundary
+        CommitWerewolfAgentGroupObservation(
+            GameSession session,
+            ModeratorResponse input)
+    {
+        if (input.SelectedPlayerIds is not { Count: > 0 } selectedPlayerIds)
+        {
+            throw new InvalidOperationException(
+                "Werewolf Agent-group observation requires a nonempty Player selection.");
+        }
+
+        var livingPlayers = GetLivingPlayers(session);
+        var livingPlayerIds = livingPlayers
+            .Select(player => player.Id)
+            .ToHashSet();
+        var observedAgentIds = selectedPlayerIds.ToHashSet();
+        if (!observedAgentIds.IsSubsetOf(livingPlayerIds))
+        {
+            throw new InvalidOperationException(
+                "Werewolf Agent-group observation may select only living Players.");
+        }
+
+        var contradictedKnownFact = livingPlayers.Any(player =>
+        {
+            var knowledge = session.GetFactionAgentKnowledge(
+                player.Id,
+                Faction.Werewolf);
+            return knowledge == FactionAgentKnowledge.KnownAgent &&
+                   !observedAgentIds.Contains(player.Id) ||
+                   knowledge == FactionAgentKnowledge.KnownNonAgent &&
+                   observedAgentIds.Contains(player.Id);
+        });
+        if (contradictedKnownFact)
+        {
+            throw new InvalidOperationException(
+                "Werewolf Agent-group observation contradicts committed Faction facts.");
+        }
+
+        FactionFactEffectiveBoundary? committedBoundary = null;
+        session.CommitFactionFactBatch(context =>
+        {
+            committedBoundary = new FactionFactEffectiveBoundary(
+                context.TurnNumber,
+                context.CurrentPhase,
+                session.GameHistoryLog.Count());
+            var facts = livingPlayers
+                .Select(player => FactionFact.Agent(
+                    player.Id,
+                    Faction.Werewolf,
+                    observedAgentIds.Contains(player.Id)
+                        ? FactionAgentKnowledge.KnownAgent
+                        : FactionAgentKnowledge.KnownNonAgent,
+                    committedBoundary))
+                .ToImmutableArray();
+            return new FactionFactsCommittedLogEntry
+            {
+                Timestamp = context.Timestamp,
+                TurnNumber = context.TurnNumber,
+                CurrentPhase = context.CurrentPhase,
+                Source = new FactionFactSource(
+                    FactionFactSourceKind.ScheduledObservation,
+                    FactionFactSource
+                        .WerewolfFactionAgentGroupObservationIdentifier),
+                Facts = facts
+            };
+        });
+
+        return committedBoundary ??
+               throw new InvalidOperationException(
+                   "Werewolf Agent-group observation did not establish a boundary.");
+    }
+
+    private static void TryCommitInitialBeneficiaryClosure(
+        GameSession session,
+        FactionFactEffectiveBoundary? initialAgentGroupBoundary = null)
+    {
+        if (session.TurnNumber != 1)
+        {
+            return;
+        }
+
+        initialAgentGroupBoundary ??=
+            FindInitialCompleteWerewolfAgentGroupBoundary(session);
+        if (initialAgentGroupBoundary == null)
+        {
+            return;
+        }
+
+        _ = InitialBeneficiaryClosureRules.TryCommit(
+            session,
+            new InitialBeneficiaryClosureRequest(
+                initialAgentGroupBoundary,
+                applicableExceptionPrerequisites: [],
+                deferredResults: []));
+    }
+
+    private static FactionFactEffectiveBoundary?
+        FindInitialCompleteWerewolfAgentGroupBoundary(GameSession session)
+    {
+        var playerIds = session.GetPlayers()
+            .Select(player => player.Id)
+            .ToArray();
+        var history = session.GameHistoryLog
+            .OfType<FactionFactsCommittedLogEntry>()
+            .ToArray();
+        var candidateBoundaries = history
+            .SelectMany(entry => entry.Facts)
+            .Where(fact =>
+                fact.Type == FactionFactType.Agent &&
+                fact.Faction == Faction.Werewolf)
+            .Select(fact => fact.EffectiveBoundary)
+            .Distinct()
+            .OrderBy(
+                boundary => boundary,
+                Comparer<FactionFactEffectiveBoundary>.Create(
+                    FactionFactProjection.CompareBoundaries));
+
+        foreach (var boundary in candidateBoundaries)
+        {
+            var projection = FactionFactProjection.Create(
+                history,
+                playerIds,
+                boundary);
+            if (playerIds.All(playerId =>
+                    projection.Agents[playerId][Faction.Werewolf] !=
+                    FactionAgentKnowledge.Unknown))
+            {
+                return boundary;
+            }
+        }
+
+        return null;
     }
 }

@@ -18,7 +18,8 @@ namespace Werewolves.Core.Tests.Helpers;
 public class NightActionInputs
 {
     /// <summary>
-    /// Werewolf action: IDs of werewolf players to identify.
+    /// Werewolf action: IDs of the Werewolf Faction Agents to observe when
+    /// the complete living group is not yet known.
     /// </summary>
     public HashSet<Guid>? WerewolfIds { get; init; }
 
@@ -320,6 +321,44 @@ public class GameTestBuilder
 		return this;
 	}
 
+	internal GameTestBuilder ArrangeKnownWerewolfFactionAgentGroup(
+		params Guid[] agentIds)
+	{
+		EnsureGameStarted();
+		var session = GetGameState()
+			?? throw new InvalidOperationException(
+				CoreTestReferences.ExceptionMessages.GameMustBeStartedFirst);
+		var playerIds = session.GetPlayers()
+			.Select(player => player.Id)
+			.ToHashSet();
+		var knownAgentIds = agentIds.ToHashSet();
+		if (knownAgentIds.Count != agentIds.Length ||
+		    !knownAgentIds.IsSubsetOf(playerIds))
+		{
+			throw new ArgumentException(
+				"Werewolf Faction Agents must be distinct Players in the Game Session.",
+				nameof(agentIds));
+		}
+
+		var boundary = new FactionFactEffectiveBoundary(
+			session.TurnNumber,
+			session.GetCurrentPhase(),
+			session.GameHistoryLog.Count());
+		var facts = playerIds
+			.Select(playerId => FactionFact.Agent(
+				playerId,
+				Faction.Werewolf,
+				knownAgentIds.Contains(playerId)
+					? FactionAgentKnowledge.KnownAgent
+					: FactionAgentKnowledge.KnownNonAgent,
+				boundary))
+			.ToArray();
+
+		return ArrangeExplicitFactionTransition(
+			"test-known-werewolf-faction-agent-group",
+			facts);
+	}
+
 	internal GameTestBuilder ArrangeNightAction(
 		NightActionType actionType,
 		Guid targetId)
@@ -427,25 +466,21 @@ public class GameTestBuilder
     }
 
     /// <summary>
-    /// Completes the werewolf night action sequence: identify → select victim → confirm sleep.
+    /// Completes the Werewolf collective Night Action sequence:
+    /// observe or wake the Agent group → select victim → confirm sleep.
     /// </summary>
-    /// <param name="werewolfIds">The IDs of all werewolf players to identify.</param>
+    /// <param name="werewolfIds">The IDs of all living Werewolf Faction Agents.</param>
     /// <param name="victimId">The ID of the player to select as the victim.</param>
     /// <returns>The result of the final sleep confirmation.</returns>
     public ProcessResult CompleteWerewolfNightAction(HashSet<Guid> werewolfIds, Guid victimId)
     {
         EnsureGameStarted();
 
-        // Identify werewolves
-        var identifyInstruction = InstructionAssert.ExpectType<SelectPlayersInstruction>(
-            GetCurrentInstruction(),
-            CoreTestReferences.InstructionContexts.WerewolfIdentification);
-        var identifyResponse = identifyInstruction.CreateResponse(werewolfIds);
-        var afterIdentify = Process(identifyResponse);
+        var afterWake = CompleteWerewolfWakeOrObservation(werewolfIds);
 
         // Select victim
         var victimInstruction = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
-            afterIdentify,
+            afterWake,
             CoreTestReferences.InstructionContexts.WerewolfVictimSelection);
         var victimResponse = victimInstruction.CreateResponse([victimId]);
         var afterVictim = Process(victimResponse);
@@ -460,7 +495,8 @@ public class GameTestBuilder
 
     /// <summary>
     /// Completes the werewolf night action sequence for Night 2+: wakeup → select victim → confirm sleep.
-    /// Unlike CompleteWerewolfNightAction, this does not expect identification (already done on Night 1).
+    /// Unlike CompleteWerewolfNightAction, this requires the complete living
+    /// Agent group to have been observed already.
     /// </summary>
     /// <param name="victimId">The ID of the player to select as the victim.</param>
     /// <returns>The result of the final sleep confirmation.</returns>
@@ -468,10 +504,16 @@ public class GameTestBuilder
     {
         EnsureGameStarted();
 
-        // Confirm wake up (no identification needed after Night 1)
+        // Confirm wake up (the complete Agent group is already known)
         var wakeupInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             GetCurrentInstruction(),
             CoreTestReferences.InstructionContexts.WerewolfWakeConfirmation);
+        if (wakeupInstruction.Semantic != ModeratorInstructionSemantic.WakeRole)
+        {
+            throw new AssertionException(
+                $"Expected {ModeratorInstructionSemantic.WakeRole}, but received {wakeupInstruction.Semantic}.");
+        }
+
         var afterWakeup = Process(wakeupInstruction.CreateResponse());
 
         // Select victim
@@ -619,6 +661,31 @@ public class GameTestBuilder
             return ProcessResult.Success(GetCurrentInstruction()!);
 
         return CompleteWerewolfNightAction(inputs.WerewolfIds, inputs.WerewolfVictimId.Value);
+    }
+
+    private ProcessResult CompleteWerewolfWakeOrObservation(
+        HashSet<Guid> werewolfAgentIds)
+    {
+        return GetCurrentInstruction() switch
+        {
+            SelectPlayersInstruction
+            {
+                Semantic:
+                    ModeratorInstructionSemantic
+                        .ObserveWerewolfFactionAgentGroup
+            } observation =>
+                Process(observation.CreateResponse(werewolfAgentIds)),
+            ConfirmationInstruction
+            {
+                Semantic: ModeratorInstructionSemantic.WakeRole
+            } wake =>
+                Process(wake.CreateResponse()),
+            null => throw new InvalidOperationException(
+                "No current instruction is available for the Werewolf collective wake."),
+            var instruction => throw new AssertionException(
+                $"Expected a Werewolf collective wake or Agent-group observation, but received " +
+                $"{instruction.GetType().Name} ({instruction.Semantic}).")
+        };
     }
 
     /// <summary>

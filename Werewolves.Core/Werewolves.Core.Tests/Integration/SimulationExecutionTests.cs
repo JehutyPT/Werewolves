@@ -391,7 +391,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 
 		first.Should().BeOfType<CompletedSimulationRun>();
 		first.RunSeedMaterial.CompatibilityIdentity.Profile.Should()
-			.Be(new SimulatorProfileIdentity("safety-screening", "9"));
+			.Be(new SimulatorProfileIdentity("safety-screening", "10"));
 		replay.Should().Be(first);
 		MarkTestCompleted();
 	}

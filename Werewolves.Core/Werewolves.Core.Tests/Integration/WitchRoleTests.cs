@@ -324,6 +324,9 @@ public sealed class WitchRoleTests : DiagnosticTestBase
 	{
 		var policy = new SequenceAvailabilityPolicy(true);
 		var (builder, players) = CreateStartedWitchGame(policy);
+		ArrangeKnownWerewolfAgentGroup(
+			builder,
+			new HashSet<Guid> { players[0].Id });
 		builder
 			.ArrangeKnownRole(players[0].Id, MainRoleType.SimpleWerewolf)
 			.ArrangeEliminatedPlayer(players[0].Id)
@@ -353,6 +356,9 @@ public sealed class WitchRoleTests : DiagnosticTestBase
 	{
 		var policy = new SequenceAvailabilityPolicy();
 		var (builder, players) = CreateStartedWitchGame(policy);
+		ArrangeKnownWerewolfAgentGroup(
+			builder,
+			new HashSet<Guid> { players[0].Id });
 		builder
 			.ArrangeKnownRole(players[0].Id, MainRoleType.SimpleWerewolf)
 			.ArrangeEliminatedPlayer(players[0].Id)
@@ -948,6 +954,29 @@ public sealed class WitchRoleTests : DiagnosticTestBase
 				MainRoleType.SimpleVillager);
 		builder.StartGame();
 		return (builder, builder.GetGameState()!.GetPlayers().ToArray());
+	}
+
+	private static void ArrangeKnownWerewolfAgentGroup(
+		GameTestBuilder builder,
+		IReadOnlySet<Guid> werewolfAgentIds)
+	{
+		var session = builder.GetGameState()!;
+		var boundary = new FactionFactEffectiveBoundary(
+			session.TurnNumber,
+			session.GetCurrentPhase(),
+			session.GameHistoryLog.Count());
+		var facts = session.GetPlayers()
+			.Select(player => FactionFact.Agent(
+				player.Id,
+				Faction.Werewolf,
+				werewolfAgentIds.Contains(player.Id)
+					? FactionAgentKnowledge.KnownAgent
+					: FactionAgentKnowledge.KnownNonAgent,
+				boundary))
+			.ToArray();
+		builder.ArrangeExplicitFactionTransition(
+			"witch-test-known-werewolf-agent-group",
+			facts);
 	}
 
 	private static void AssertPotionAttempt(

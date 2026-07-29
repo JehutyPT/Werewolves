@@ -39,5 +39,6 @@ public enum ModeratorInstructionSemantic
 	ObserveScapegoatHolderForTie = 31,
 	RevealScapegoatForTie = 32,
 	SelectScapegoatPermittedVoters = 33,
-	AnnounceScapegoatPermittedVoters = 34
+	AnnounceScapegoatPermittedVoters = 34,
+	ObserveWerewolfFactionAgentGroup = 35
 }

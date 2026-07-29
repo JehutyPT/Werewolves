@@ -314,7 +314,7 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 	}
 
 	[Fact]
-	public void Evaluate_StutteringJudgePolicyMissingSignalObservation_UsesOneRealIncompleteScreeningBatch()
+	public void Evaluate_StutteringJudgePolicyMissingSignalObservation_UsesOneRealScreeningBatchWithOnlyIncompleteRuns()
 	{
 		var scenario = Scenario(
 			MainRoleType.SimpleWerewolf,
@@ -354,7 +354,7 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 		screening.IncompleteRunCount.Should()
 			.BeGreaterThan(0);
 		screening.CompletedRunCount.Should()
-			.BeGreaterThan(0);
+			.Be(0);
 		screening.Records.Select(record => record.RunSeedMaterial).Should().Equal(
 			Enumerable.Range(0, TerminalLobbyEvaluator.ScreeningAttemptCount)
 				.Select(attempt => new RunSeedMaterial(

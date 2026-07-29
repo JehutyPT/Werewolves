@@ -131,10 +131,10 @@ public class InputValidationTests : DiagnosticTestBase
         // Confirm night starts
         ConfirmNightStart(builder);
 
-        // Get the SelectPlayersInstruction (werewolf identification) with Single constraint
-        var selectInstruction = InstructionAssert.ExpectType<SelectPlayersInstruction>(
-            builder.GetCurrentInstruction(),
-            CoreTestReferences.InstructionContexts.WerewolfIdentificationInstruction);
+        var players = builder.GetGameState()!.GetPlayers().ToArray();
+        var selectInstruction = ObserveWerewolfAgentGroupAndGetVictimSelection(
+            builder,
+            [players[0].Id]);
 
         // Verify the instruction requires exactly one selection
         selectInstruction.CountConstraint.Should().Be(NumberRangeConstraint.Single);
@@ -167,19 +167,17 @@ public class InputValidationTests : DiagnosticTestBase
         // Confirm night starts
         ConfirmNightStart(builder);
 
-        // Get the SelectPlayersInstruction (werewolf identification) with Single constraint
-        var selectInstruction = InstructionAssert.ExpectType<SelectPlayersInstruction>(
-            builder.GetCurrentInstruction(),
-            CoreTestReferences.InstructionContexts.WerewolfIdentificationInstruction);
+        var gameState = builder.GetGameState()!;
+        var players = gameState.GetPlayers().ToList();
+        var selectInstruction = ObserveWerewolfAgentGroupAndGetVictimSelection(
+            builder,
+            [players[0].Id]);
 
         // Verify the instruction requires exactly one selection
         selectInstruction.CountConstraint.Should().Be(NumberRangeConstraint.Single);
 
-        var gameState = builder.GetGameState()!;
-        var players = gameState.GetPlayers().ToList();
-
         // Act - Attempt to create response with two players when only one is expected
-        Action act = () => selectInstruction.CreateResponse([players[0].Id, players[1].Id]);
+        Action act = () => selectInstruction.CreateResponse([players[1].Id, players[2].Id]);
 
         // Assert - Should throw an exception for constraint violation
         act.Should().Throw<InvalidOperationException>()
@@ -284,6 +282,28 @@ public class InputValidationTests : DiagnosticTestBase
             CoreTestReferences.InstructionContexts.NightStartConfirmation);
         var response = nightStartInstruction.CreateResponse();
         builder.Process(response);
+    }
+
+    private static SelectPlayersInstruction
+        ObserveWerewolfAgentGroupAndGetVictimSelection(
+            GameTestBuilder builder,
+            HashSet<Guid> werewolfAgentIds)
+    {
+        var observation = InstructionAssert.ExpectType<SelectPlayersInstruction>(
+            builder.GetCurrentInstruction(),
+            "Werewolf Faction Agent-group observation");
+        observation.Semantic.Should().Be(
+            ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
+
+        var afterObservation = builder.Process(
+            observation.CreateResponse(werewolfAgentIds));
+        var victimSelection =
+            InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+                afterObservation,
+                CoreTestReferences.InstructionContexts.WerewolfVictimSelection);
+        victimSelection.Semantic.Should().Be(
+            ModeratorInstructionSemantic.SelectWerewolfVictim);
+        return victimSelection;
     }
 
     #endregion
