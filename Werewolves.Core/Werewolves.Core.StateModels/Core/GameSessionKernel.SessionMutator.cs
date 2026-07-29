@@ -23,6 +23,8 @@ public interface ISessionMutator
 	/// <param name="isActive">True to add the effect, false to remove it.</param>
 	void SetStatusEffect(Guid playerId, StatusEffectTypes effect, bool isActive);
 	
+	void ApplyFactionFacts(FactionFactsCommittedLogEntry entry);
+
 	void AddLogEntry<T>(T entry) where T : GameLogEntryBase;
 }
 
@@ -85,6 +87,25 @@ internal partial class GameSessionKernel
 			else
 			{
 				playerState.RemoveEffect(effect);
+			}
+		}
+
+		public void ApplyFactionFacts(FactionFactsCommittedLogEntry entry)
+		{
+			ArgumentNullException.ThrowIfNull(entry);
+
+			var projection = FactionFactProjection.Create(
+				kernel._gameHistoryLog
+					.GetAllLogEntries()
+					.OfType<FactionFactsCommittedLogEntry>()
+					.Append(entry),
+				kernel._playerSeatingOrder);
+
+			foreach (var playerId in kernel._playerSeatingOrder)
+			{
+				GetMutablePlayerState(playerId).ReplaceFactionProjection(
+					projection.Beneficiaries[playerId],
+					projection.Agents[playerId]);
 			}
 		}
 

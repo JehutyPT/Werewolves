@@ -83,11 +83,16 @@ internal class WildChildRole :
             .WithHealth(PlayerHealth.Alive)
             .Where(player => !player.State.HasStatusEffect(StatusEffectTypes.WildChildChanged))
             .ToList();
+        if (wildChildrenToTransform.Count == 0)
+        {
+            return;
+        }
 
+        session.CommitWildChildFactionTransition(
+            wildChildrenToTransform.Select(player => player.Id).ToArray());
         foreach (var wildChild in wildChildrenToTransform)
         {
             session.ApplyStatusEffect(StatusEffectTypes.WildChildChanged, wildChild.Id);
-            session.AssignRole(wildChild.Id, MainRoleType.SimpleWerewolf);
         }
 
     }

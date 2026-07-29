@@ -6,6 +6,7 @@
 // For Debug.Fail
 
 using System.Collections.Concurrent;
+using System.Collections.Immutable;
 using Werewolves.Core.GameLogic.Models.EliminationCascades;
 using Werewolves.Core.GameLogic.Models;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
@@ -13,8 +14,10 @@ using Werewolves.Core.GameLogic.RolePowers;
 using Werewolves.Core.GameLogic.Roles;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
+using Werewolves.Core.StateModels.Models.Simulation;
 using Werewolves.Core.StateModels.Resources;
 using static Werewolves.Core.StateModels.Enums.ExpectedInputType;
 
@@ -59,7 +62,16 @@ public class GameService
     public StartGameConfirmationInstruction StartNewGame(
         GameSessionConfig config) => StartNewGameCore(
             config,
-            stateChangeObserver: null);
+            stateChangeObserver: null,
+            factionFacts: null);
+
+    internal StartGameConfirmationInstruction StartNewSimulationGame(
+        GameSessionConfig config,
+        IReadOnlyList<SimulationPlayerFactionFacts> factionFacts) =>
+        StartNewGameCore(
+            config,
+            stateChangeObserver: null,
+            factionFacts);
 
     // Overload to accept state change observer for test suite diagnostics
     internal StartGameConfirmationInstruction StartNewGameWithObserver(
@@ -68,7 +80,8 @@ public class GameService
         List<string>? eventCardIdsInDeck = null,
         IStateChangeObserver? stateChangeObserver = null) => StartNewGameCore(
             new GameSessionConfig(playerNamesInOrder, rolesInPlay),
-            stateChangeObserver);
+            stateChangeObserver,
+            factionFacts: null);
 
     /// <summary>
     /// Restores a game session from its serialized representation and adds it to the active session collection.
@@ -86,6 +99,85 @@ public class GameService
         return session.Id;
 	}
 
+    public void CommitScheduledFactionObservation(
+        Guid gameId,
+        string observationIdentifier,
+        IReadOnlyCollection<FactionFact> facts) =>
+        CommitNamedFactionFacts(
+            gameId,
+            FactionFactSourceKind.ScheduledObservation,
+            observationIdentifier,
+            facts);
+
+    public void CommitExplicitFactionTransition(
+        Guid gameId,
+        string transitionIdentifier,
+        IReadOnlyCollection<FactionFact> facts) =>
+        CommitNamedFactionFacts(
+            gameId,
+            FactionFactSourceKind.ExplicitTransition,
+            transitionIdentifier,
+            facts);
+
+    public InitialBeneficiaryClosureReadiness
+        GetInitialBeneficiaryClosureReadiness(
+            Guid gameId,
+            InitialBeneficiaryClosureRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return GetRequiredSession(gameId)
+            .GetInitialBeneficiaryClosureReadiness(request);
+    }
+
+    public InitialBeneficiaryClosureResult
+        TryCommitInitialBeneficiaryClosure(
+            Guid gameId,
+            InitialBeneficiaryClosureRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var session = GetRequiredSession(gameId);
+        var result = session.TryCommitInitialBeneficiaryClosure(request);
+        if (result == InitialBeneficiaryClosureResult.Committed)
+        {
+            session.RefreshFactionFactsInStableRecoveryBoundary();
+        }
+
+        return result;
+    }
+
+    private void CommitNamedFactionFacts(
+        Guid gameId,
+        FactionFactSourceKind sourceKind,
+        string sourceIdentifier,
+        IReadOnlyCollection<FactionFact> facts)
+    {
+        ArgumentNullException.ThrowIfNull(facts);
+        var source = new FactionFactSource(sourceKind, sourceIdentifier);
+        var session = GetRequiredSession(gameId);
+
+        var immutableFacts = facts.ToImmutableArray();
+        session.CommitFactionFactBatch(context => new FactionFactsCommittedLogEntry
+        {
+            Timestamp = context.Timestamp,
+            TurnNumber = context.TurnNumber,
+            CurrentPhase = context.CurrentPhase,
+            Source = source,
+            Facts = immutableFacts
+        });
+        session.RefreshFactionFactsInStableRecoveryBoundary();
+    }
+
+    private GameSession GetRequiredSession(Guid gameId)
+    {
+        if (_sessions.TryGetValue(gameId, out var session))
+        {
+            return session;
+        }
+
+        throw new InvalidOperationException(
+            "The Game Session is not available.");
+    }
+
 	/// <summary>
 	/// Starts a new game session.
 	/// </summary>
@@ -94,10 +186,23 @@ public class GameService
 	/// <param name="eventCardIdsInDeck">Optional list of event card IDs included.</param>
 	/// <param name="stateChangeObserver">Optional observer for state change diagnostics.</param>
 	/// <returns>The unique ID for the newly created game session.</returns>
-	private StartGameConfirmationInstruction StartNewGameCore(
-        GameSessionConfig config, IStateChangeObserver? stateChangeObserver)
+    private StartGameConfirmationInstruction StartNewGameCore(
+        GameSessionConfig config,
+        IStateChangeObserver? stateChangeObserver,
+        IReadOnlyList<SimulationPlayerFactionFacts>? factionFacts)
     {
+        ArgumentNullException.ThrowIfNull(config);
 	    EnforceRolesAreSupported(config.Roles);
+        if (factionFacts != null
+            && (factionFacts.Count != config.Players.Count
+                || !factionFacts
+                    .Select(facts => facts.SeatNumber)
+                    .SequenceEqual(Enumerable.Range(1, config.Players.Count))))
+        {
+            throw new ArgumentException(
+                "Simulation Faction facts must cover every Player seat in order.",
+                nameof(factionFacts));
+        }
 
         // 1. Generate the game ID
         var gameId = Guid.NewGuid();
@@ -107,6 +212,10 @@ public class GameService
         
         // 3. Create the session with both the ID and instruction
         var session = new GameSession(gameId, initialInstruction, config, stateChangeObserver);
+        if (factionFacts != null)
+        {
+            SeedSimulationFactionFacts(session, factionFacts);
+        }
         SeedActiveRoleListeners(session);
         ConfigureEliminationCascadeReactions(session);
         
@@ -115,6 +224,51 @@ public class GameService
         
         // 5. Return the same instruction that was passed to the session
         return initialInstruction;
+    }
+
+    private static void SeedSimulationFactionFacts(
+        GameSession session,
+        IReadOnlyList<SimulationPlayerFactionFacts> factionFacts)
+    {
+        var players = session.GetPlayers().ToArray();
+        session.CommitFactionFactBatch(context =>
+        {
+            var boundary = new FactionFactEffectiveBoundary(
+                context.TurnNumber,
+                context.CurrentPhase,
+                order: 0);
+            var facts = factionFacts
+                .SelectMany(seed =>
+                {
+                    var playerId = players[seed.SeatNumber - 1].Id;
+                    return new[]
+                        {
+                            FactionFact.Beneficiary(
+                                playerId,
+                                seed.Beneficiary.Faction!.Value,
+                                boundary)
+                        }
+                        .Concat(Enum.GetValues<Faction>().Select(faction =>
+                            FactionFact.Agent(
+                                playerId,
+                                faction,
+                                seed.GetAgentKnowledge(faction),
+                                boundary)));
+                })
+                .ToImmutableArray();
+
+            return new FactionFactsCommittedLogEntry
+            {
+                Timestamp = context.Timestamp,
+                TurnNumber = context.TurnNumber,
+                CurrentPhase = context.CurrentPhase,
+                Source = new FactionFactSource(
+                    FactionFactSourceKind.SimulationStartState,
+                    FactionFactSourceIdentifiers.SimulationStartState),
+                Facts = facts
+            };
+        });
+        session.RefreshFactionFactsInStableRecoveryBoundary();
     }
 
     private void SeedActiveRoleListeners(GameSession session)

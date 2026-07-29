@@ -679,7 +679,7 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 	[Fact]
 	public void BaselineRandomDecisionStrategy_WithKnownOptionalChoiceSeed_ReturnsEmptyValidResponse()
 	{
-		var material = CreateRunSeedMaterial(runNumber: 1);
+		var material = CreateRunSeedMaterial(runNumber: 2);
 		var startState = SimulationStartStateDeriver.Derive(material);
 		var config = startState.CreateGameSessionConfig();
 		var builder = CreateBuilder()

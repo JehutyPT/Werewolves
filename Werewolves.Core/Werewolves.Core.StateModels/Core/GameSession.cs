@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
@@ -14,6 +15,16 @@ public interface IGameSession
     public IPlayer GetPlayer(Guid playerId);
     public IPlayerState GetPlayerState(Guid playerId);
     public IEnumerable<IPlayer> GetPlayers();
+    public FactionBeneficiaryKnowledge GetFactionBeneficiaryKnowledge(
+        Guid playerId);
+    public FactionAgentKnowledge GetFactionAgentKnowledge(
+        Guid playerId,
+        Faction faction);
+    public bool TryGetKnownFactionAgents(
+        Faction faction,
+        out IReadOnlyList<IPlayer> agents);
+    public Faction RequireKnownFactionBeneficiary(Guid playerId);
+    public IReadOnlyList<IPlayer> RequireKnownFactionAgents(Faction faction);
     public int RoleInPlayCount(MainRoleType type);
 
     /// <summary>
@@ -120,6 +131,9 @@ internal class GameSession : IGameSession
             acceptedObservationRecoveryCursor,
             domainRecoveryCursor);
 
+    internal void RefreshFactionFactsInStableRecoveryBoundary() =>
+        _gameSessionKernel.RefreshFactionFactsAtStableRecoveryBoundary();
+
     internal void RestoreTransientContinuation(
         IGameFlowManagerKey key,
         string activeSubPhaseStage,
@@ -207,6 +221,62 @@ internal class GameSession : IGameSession
 
     public IEnumerable<IPlayer> GetPlayers() => _gameSessionKernel.GetIPlayers();
 
+    public FactionBeneficiaryKnowledge GetFactionBeneficiaryKnowledge(
+        Guid playerId) =>
+        GetPlayerState(playerId).FactionBeneficiary;
+
+    public FactionAgentKnowledge GetFactionAgentKnowledge(
+        Guid playerId,
+        Faction faction) =>
+        GetPlayerState(playerId).GetFactionAgentKnowledge(faction);
+
+    public bool TryGetKnownFactionAgents(
+        Faction faction,
+        out IReadOnlyList<IPlayer> agents)
+    {
+        if (!Enum.IsDefined(faction))
+        {
+            throw new ArgumentOutOfRangeException(nameof(faction));
+        }
+
+        var players = GetPlayers().ToArray();
+        if (players.Any(player =>
+            player.State.GetFactionAgentKnowledge(faction) ==
+            FactionAgentKnowledge.Unknown))
+        {
+            agents = Array.Empty<IPlayer>();
+            return false;
+        }
+
+        agents = Array.AsReadOnly(players
+            .Where(player =>
+                player.State.GetFactionAgentKnowledge(faction) ==
+                FactionAgentKnowledge.KnownAgent)
+            .ToArray());
+        return true;
+    }
+
+    public Faction RequireKnownFactionBeneficiary(Guid playerId)
+    {
+        var knowledge = GetFactionBeneficiaryKnowledge(playerId);
+        if (!knowledge.IsKnown)
+        {
+            throw FactionFactsNotReady();
+        }
+
+        return knowledge.Faction!.Value;
+    }
+
+    public IReadOnlyList<IPlayer> RequireKnownFactionAgents(Faction faction)
+    {
+        if (!TryGetKnownFactionAgents(faction, out var agents))
+        {
+            throw FactionFactsNotReady();
+        }
+
+        return agents;
+    }
+
     public int RoleInPlayCount(MainRoleType type) => _gameSessionKernel.GetRolesInPlay().Count(r => r == type);
     
     /// <summary>
@@ -220,11 +290,216 @@ internal class GameSession : IGameSession
 
     #endregion
 
+    private static InvalidOperationException FactionFactsNotReady() =>
+        new("Required Faction facts are not ready.");
+
 	#region Internal Command API
+
+	internal InitialBeneficiaryClosureReadiness
+		GetInitialBeneficiaryClosureReadiness(
+			InitialBeneficiaryClosureRequest request)
+	{
+		ArgumentNullException.ThrowIfNull(request);
+		if (HasCommittedInitialBeneficiaryClosure())
+		{
+			return InitialBeneficiaryClosureReadiness.AlreadyCommitted;
+		}
+
+		return TryBuildInitialBeneficiaryClosureFacts(request, out _)
+			? InitialBeneficiaryClosureReadiness.Ready
+			: InitialBeneficiaryClosureReadiness.Incomplete;
+	}
+
+	internal InitialBeneficiaryClosureResult
+		TryCommitInitialBeneficiaryClosure(
+			InitialBeneficiaryClosureRequest request)
+	{
+		ArgumentNullException.ThrowIfNull(request);
+		if (HasCommittedInitialBeneficiaryClosure())
+		{
+			return InitialBeneficiaryClosureResult.AlreadyCommitted;
+		}
+
+		if (!TryBuildInitialBeneficiaryClosureFacts(
+			request,
+			out var facts))
+		{
+			return InitialBeneficiaryClosureResult.Incomplete;
+		}
+
+		CommitFactionFactBatch(context => new FactionFactsCommittedLogEntry
+		{
+			Timestamp = context.Timestamp,
+			TurnNumber = context.TurnNumber,
+			CurrentPhase = context.CurrentPhase,
+			Source = new FactionFactSource(
+				FactionFactSourceKind.InitialBeneficiaryClosure,
+				FactionFactSourceIdentifiers.InitialBeneficiaryClosure),
+			Facts = facts
+		});
+		return InitialBeneficiaryClosureResult.Committed;
+	}
+
+	private bool HasCommittedInitialBeneficiaryClosure() =>
+		GameHistoryLog
+			.OfType<FactionFactsCommittedLogEntry>()
+			.Any(entry =>
+				entry.Source.Kind ==
+				FactionFactSourceKind.InitialBeneficiaryClosure);
+
+	private bool TryBuildInitialBeneficiaryClosureFacts(
+		InitialBeneficiaryClosureRequest request,
+		out ImmutableArray<FactionFact> closureFacts)
+	{
+		closureFacts = [];
+		var currentBoundary = new FactionFactEffectiveBoundary(
+			TurnNumber,
+			GetCurrentPhase(),
+			int.MaxValue);
+		if (FactionFactProjection.CompareBoundaries(
+			request.InitialAgentGroupBoundary,
+			currentBoundary) > 0)
+		{
+			throw new InvalidOperationException(
+				"Initial Beneficiary Closure cannot use a future boundary.");
+		}
+
+		if (request.ApplicableExceptionPrerequisites.Any(
+				prerequisite => !prerequisite.IsComplete)
+			|| request.DeferredResults.Any(result => !result.IsComplete))
+		{
+			return false;
+		}
+
+		var playerIds = GetPlayers()
+			.Select(player => player.Id)
+			.ToArray();
+		var history = GameHistoryLog
+			.OfType<FactionFactsCommittedLogEntry>()
+			.ToArray();
+		var projectionAtGroupBoundary = FactionFactProjection.Create(
+			history,
+			playerIds,
+			request.InitialAgentGroupBoundary);
+		if (playerIds.Any(playerId =>
+			projectionAtGroupBoundary.Agents[playerId][Faction.Werewolf] ==
+			FactionAgentKnowledge.Unknown))
+		{
+			return false;
+		}
+
+		var facts = new List<FactionFact>();
+		foreach (var playerId in playerIds)
+		{
+			if (projectionAtGroupBoundary.Beneficiaries[playerId].IsKnown)
+			{
+				continue;
+			}
+
+			var faction =
+				projectionAtGroupBoundary.Agents[playerId][Faction.Werewolf] ==
+				FactionAgentKnowledge.KnownAgent
+					? Faction.Werewolf
+					: Faction.Villager;
+			facts.Add(FactionFact.Beneficiary(
+				playerId,
+				faction,
+				request.InitialAgentGroupBoundary));
+		}
+
+		var players = playerIds.ToHashSet();
+		var existingFacts = history
+			.SelectMany(entry => entry.Facts)
+			.ToHashSet();
+		foreach (var deferredFact in request.DeferredResults
+			.SelectMany(result => result.Facts))
+		{
+			if (!players.Contains(deferredFact.PlayerId))
+			{
+				throw new InvalidOperationException(
+					"Initial Beneficiary Closure references a Player outside the Game Session.");
+			}
+
+			if (!existingFacts.Contains(deferredFact))
+			{
+				facts.Add(deferredFact);
+			}
+		}
+
+		var seatingOrder = playerIds
+			.Select((playerId, index) => (playerId, index))
+			.ToDictionary(pair => pair.playerId, pair => pair.index);
+		closureFacts = facts
+			.OrderBy(
+				fact => fact.EffectiveBoundary,
+				Comparer<FactionFactEffectiveBoundary>.Create(
+					FactionFactProjection.CompareBoundaries))
+			.ThenBy(fact => seatingOrder[fact.PlayerId])
+			.ThenBy(fact => fact.BeneficiaryPrecedence)
+			.ToImmutableArray();
+		return true;
+	}
 
 	internal void CommitGameFact<TEntry>(
 		Func<GameFactContext, TEntry> entryFactory)
 		where TEntry : GameLogEntryBase, IGameFactLogEntry
+		=> CommitSessionEntry(entryFactory, "game fact");
+
+	internal void CommitFactionFactBatch(
+		Func<GameFactContext, FactionFactsCommittedLogEntry> entryFactory) =>
+		CommitSessionEntry(entryFactory, "Faction fact batch");
+
+	internal void CommitWildChildFactionTransition(
+		IReadOnlyCollection<Guid> wildChildPlayerIds)
+	{
+		ArgumentNullException.ThrowIfNull(wildChildPlayerIds);
+		var playerIds = wildChildPlayerIds.ToArray();
+		if (playerIds.Length == 0
+			|| playerIds.Any(playerId => playerId == Guid.Empty)
+			|| playerIds.Distinct().Count() != playerIds.Length)
+		{
+			throw new ArgumentException(
+				"Wild Child Faction transitions require unique Players.",
+				nameof(wildChildPlayerIds));
+		}
+
+		CommitFactionFactBatch(context =>
+		{
+			var boundary = new FactionFactEffectiveBoundary(
+				context.TurnNumber,
+				context.CurrentPhase,
+				GameHistoryLog.Count());
+			var facts = playerIds
+				.SelectMany(playerId => new[]
+				{
+					FactionFact.Beneficiary(
+						playerId,
+						Faction.Werewolf,
+						boundary),
+					FactionFact.Agent(
+						playerId,
+						Faction.Werewolf,
+						FactionAgentKnowledge.KnownAgent,
+						boundary)
+				})
+				.ToImmutableArray();
+			return new FactionFactsCommittedLogEntry
+			{
+				Timestamp = context.Timestamp,
+				TurnNumber = context.TurnNumber,
+				CurrentPhase = context.CurrentPhase,
+				Source = new FactionFactSource(
+					FactionFactSourceKind.ExplicitTransition,
+					FactionFactSourceIdentifiers.WildChildModelEliminated),
+				Facts = facts
+			};
+		});
+	}
+
+	private void CommitSessionEntry<TEntry>(
+		Func<GameFactContext, TEntry> entryFactory,
+		string entryDescription)
+		where TEntry : GameLogEntryBase
 	{
 		ArgumentNullException.ThrowIfNull(entryFactory);
 
@@ -234,13 +509,13 @@ internal class GameSession : IGameSession
 			_gameSessionKernel.PhaseStateCache.GetCurrentPhase());
 		var entry = entryFactory(context)
 			?? throw new InvalidOperationException(
-				"The game fact factory returned no log entry.");
+				$"The {entryDescription} factory returned no log entry.");
 		if (entry.Timestamp != context.Timestamp ||
 		    entry.TurnNumber != context.TurnNumber ||
 		    entry.CurrentPhase != context.CurrentPhase)
 		{
 			throw new InvalidOperationException(
-				"Game facts must use the session-provided timestamp, turn, and phase.");
+				$"The {entryDescription} must use the session-provided timestamp, turn, and phase.");
 		}
 
 		_gameSessionKernel.AddEntryAndUpdateState(entry);

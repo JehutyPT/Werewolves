@@ -19,6 +19,7 @@ internal class GameSessionDto
     public List<PlayerDto> Players { get; set; } = new();
     public int TurnNumber { get; set; }
     public int RoleFactSchemaVersion { get; set; }
+    public int FactionFactSchemaVersion { get; set; }
 
     // True for the ADR-0002 payload shape that preserves a committed boundary cursor.
     public bool IsStableRecoveryBoundary { get; set; }
@@ -47,6 +48,11 @@ internal static class RoleFactSchema
     public const int CurrentVersion = 1;
 }
 
+internal static class FactionFactSchema
+{
+    public const int CurrentVersion = 1;
+}
+
 /// <summary>
 /// Data Transfer Object for serializing Player state.
 /// </summary>
@@ -61,6 +67,9 @@ internal class PlayerDto
     public StatusEffectTypes ActiveEffects { get; set; }
     public PlayerHealth Health { get; set; }
     public bool? HasVotingRight { get; set; }
+    public FactionBeneficiaryKnowledge? FactionBeneficiary { get; set; }
+    public Dictionary<Faction, FactionAgentKnowledge>? FactionAgentKnowledge
+        { get; set; }
 }
 
 /// <summary>

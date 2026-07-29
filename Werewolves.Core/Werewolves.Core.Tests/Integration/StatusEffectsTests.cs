@@ -1,6 +1,10 @@
 using FluentAssertions;
+using Werewolves.Core.GameLogic.Roles.MainRoles;
+using Werewolves.Core.GameLogic.Services;
+using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
+using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.Tests.Helpers;
 using Xunit;
@@ -280,10 +284,10 @@ public class StatusEffectsTests : DiagnosticTestBase
     }
 
     /// <summary>
-    /// SE-012b: Wild Child transformation is composed by the listener as separate log entries.
+    /// SE-012b: Wild Child transformation preserves Role and commits one Faction batch.
     /// </summary>
     [Fact]
-    public void WildChildModelEliminated_AppliesStatusEffectAndAssignsWerewolfRole()
+    public void WildChildModelEliminated_PreservesRoleAndCommitsAtomicFactionTransition()
     {
         // Arrange
         var builder = CreateBuilder()
@@ -347,7 +351,7 @@ public class StatusEffectsTests : DiagnosticTestBase
         roleRevealInstruction.PlayersForAssignment.Should().Equal(roleModel.Id);
 
         // Act
-        builder.Process(roleRevealInstruction.CreateResponse(new Dictionary<Guid, MainRoleType>
+        var afterTransformation = builder.Process(roleRevealInstruction.CreateResponse(new Dictionary<Guid, MainRoleType>
         {
             { roleModel.Id, MainRoleType.SimpleVillager }
         }));
@@ -356,7 +360,11 @@ public class StatusEffectsTests : DiagnosticTestBase
         var gameState = builder.GetGameState()!;
         var wildChildState = gameState.GetPlayerState(wildChild.Id);
         wildChildState.HasStatusEffect(StatusEffectTypes.WildChildChanged).Should().BeTrue();
-        wildChildState.MainRole.Should().Be(MainRoleType.SimpleWerewolf);
+        wildChildState.MainRole.Should().Be(MainRoleType.WildChild);
+        gameState.RequireKnownFactionBeneficiary(wildChild.Id).Should()
+            .Be(Faction.Werewolf);
+        gameState.GetFactionAgentKnowledge(wildChild.Id, Faction.Werewolf)
+            .Should().Be(FactionAgentKnowledge.KnownAgent);
 
         gameState.GameHistoryLog
             .OfType<StatusEffectLogEntry>()
@@ -368,9 +376,152 @@ public class StatusEffectsTests : DiagnosticTestBase
         gameState.GameHistoryLog
             .OfType<AssignRoleLogEntry>()
             .Should()
-            .ContainSingle(entry =>
+            .NotContain(entry =>
                 entry.PlayerIds.SetEquals(new[] { wildChild.Id }) &&
                 entry.AssignedMainRole == MainRoleType.SimpleWerewolf);
+
+        var transition = gameState.GameHistoryLog
+            .OfType<FactionFactsCommittedLogEntry>()
+            .Single(entry =>
+                entry.Source.Kind == FactionFactSourceKind.ExplicitTransition &&
+                entry.Source.Identifier == "wild-child-model-eliminated");
+        transition.Facts.Should().HaveCount(2);
+        transition.Facts.Should().ContainSingle(fact =>
+            fact.PlayerId == wildChild.Id &&
+            fact.Type == FactionFactType.Beneficiary &&
+            fact.Faction == Faction.Werewolf);
+        transition.Facts.Should().ContainSingle(fact =>
+            fact.PlayerId == wildChild.Id &&
+            fact.Type == FactionFactType.Agent &&
+            fact.Faction == Faction.Werewolf &&
+            fact.AgentKnowledge == FactionAgentKnowledge.KnownAgent);
+
+        var recoveredService = new GameService();
+        var recoveredId = recoveredService.RehydrateSession(
+            gameState.Serialize());
+        var recovered = recoveredService.GetGameStateView(recoveredId)!;
+        recovered.GetPlayerState(wildChild.Id).MainRole.Should()
+            .Be(MainRoleType.WildChild);
+        recovered.RequireKnownFactionBeneficiary(wildChild.Id).Should()
+            .Be(Faction.Werewolf);
+        recovered.GetFactionAgentKnowledge(wildChild.Id, Faction.Werewolf)
+            .Should().Be(FactionAgentKnowledge.KnownAgent);
+        recovered.GameHistoryLog
+            .OfType<FactionFactsCommittedLogEntry>()
+            .Should().ContainSingle(entry =>
+                entry.Source.Identifier == "wild-child-model-eliminated");
+
+        var recoveredPending = recoveredService.GetCurrentInstruction(recoveredId)
+            .Should().BeOfType<ConfirmationInstruction>().Subject;
+        recoveredPending.InstructionId.Should().Be(
+            afterTransformation.ModeratorInstruction!.InstructionId);
+        recoveredService.ProcessInstruction(
+            recoveredId,
+            recoveredPending.CreateResponse());
+        recovered.GameHistoryLog
+            .OfType<FactionFactsCommittedLogEntry>()
+            .Should().ContainSingle(entry =>
+                entry.Source.Identifier == "wild-child-model-eliminated");
+
+        MarkTestCompleted();
+    }
+
+    [Fact]
+    public void WildChildTransition_DominantBeneficiaryBlocksOnlyBeneficiaryFact()
+    {
+        var builder = CreateBuilder()
+            .WithPlayers(
+                "Wild Child",
+                "Role Model",
+                "Werewolf",
+                "Villager A",
+                "Villager B")
+            .WithRoles(
+                MainRoleType.WildChild,
+                MainRoleType.SimpleWerewolf,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager);
+        builder.StartGame();
+        var players = builder.GetGameState()!.GetPlayers().ToArray();
+        var wildChild = players[0];
+        var model = players[1];
+        builder
+            .ArrangeKnownRole(wildChild.Id, MainRoleType.WildChild)
+            .ArrangeNightAction(NightActionType.WildChildModel, model.Id)
+            .ArrangeExplicitFactionTransition(
+                "dominant-beneficiary",
+                FactionFact.Beneficiary(
+                    wildChild.Id,
+                    Faction.Villager,
+                    new FactionFactEffectiveBoundary(
+                        turnNumber: 1,
+                        GamePhase.Night,
+                        order: 0),
+                    beneficiaryPrecedence: 1))
+            .ArrangeEliminatedPlayer(model.Id);
+
+        new WildChildRole().Advance(
+            (GameSession)builder.GetGameState()!,
+            [model.Id],
+            new ModeratorResponse());
+
+        var session = builder.GetGameState()!;
+        session.GetPlayerState(wildChild.Id).MainRole.Should()
+            .Be(MainRoleType.WildChild);
+        session.RequireKnownFactionBeneficiary(wildChild.Id).Should()
+            .Be(Faction.Villager);
+        session.GetFactionAgentKnowledge(wildChild.Id, Faction.Werewolf)
+            .Should().Be(FactionAgentKnowledge.KnownAgent);
+        session.GameHistoryLog
+            .OfType<FactionFactsCommittedLogEntry>()
+            .Should().ContainSingle(entry =>
+                entry.Source.Identifier == "wild-child-model-eliminated" &&
+                entry.Facts.Length == 2);
+
+        MarkTestCompleted();
+    }
+
+    [Fact]
+    public void WildChildTransition_NoEligibleAliveWildChild_IsNoOp()
+    {
+        var builder = CreateBuilder()
+            .WithPlayers(
+                "Wild Child",
+                "Role Model",
+                "Werewolf",
+                "Villager A",
+                "Villager B")
+            .WithRoles(
+                MainRoleType.WildChild,
+                MainRoleType.SimpleWerewolf,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager);
+        builder.StartGame();
+        var players = builder.GetGameState()!.GetPlayers().ToArray();
+        var wildChild = players[0];
+        var model = players[1];
+        builder
+            .ArrangeKnownRole(wildChild.Id, MainRoleType.WildChild)
+            .ArrangeNightAction(NightActionType.WildChildModel, model.Id)
+            .ArrangeEliminatedPlayer(wildChild.Id)
+            .ArrangeEliminatedPlayer(model.Id);
+
+        var act = () => new WildChildRole().Advance(
+            (GameSession)builder.GetGameState()!,
+            [model.Id],
+            new ModeratorResponse());
+
+        act.Should().NotThrow();
+        var session = builder.GetGameState()!;
+        session.GameHistoryLog
+            .OfType<FactionFactsCommittedLogEntry>()
+            .Should().NotContain(entry =>
+                entry.Source.Identifier == "wild-child-model-eliminated");
+        session.GetPlayerState(wildChild.Id)
+            .HasStatusEffect(StatusEffectTypes.WildChildChanged)
+            .Should().BeFalse();
 
         MarkTestCompleted();
     }

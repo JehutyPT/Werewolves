@@ -128,9 +128,15 @@ public sealed class PendingInstructionRecoveryTests
         using (new AssertionScope())
         {
             recoveredSession.GetPlayerState(wildChildId).MainRole.Should()
-                .Be(MainRoleType.SimpleWerewolf);
+                .Be(MainRoleType.WildChild);
             recoveredSession.GetPlayerState(wildChildId)
                 .HasStatusEffect(StatusEffectTypes.WildChildChanged).Should().BeTrue();
+            recoveredSession.RequireKnownFactionBeneficiary(wildChildId)
+                .Should().Be(Faction.Werewolf);
+            recoveredSession.GetFactionAgentKnowledge(
+                    wildChildId,
+                    Faction.Werewolf)
+                .Should().Be(FactionAgentKnowledge.KnownAgent);
             recoveredSession.GetPlayerState(werewolfId).MainRole.Should()
                 .Be(MainRoleType.SimpleWerewolf);
             recoveredSession.GetPlayerState(seerId).MainRole.Should()

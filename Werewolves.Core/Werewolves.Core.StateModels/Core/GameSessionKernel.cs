@@ -81,10 +81,11 @@ namespace Werewolves.Core.StateModels.Core
 			CaptureRecoveryBoundary();
 		}
 
-		internal void AddEntryAndUpdateState(GameLogEntryBase entry)
-		{
-			entry.Apply(new SessionMutator(this));
-		}
+			internal void AddEntryAndUpdateState(GameLogEntryBase entry)
+			{
+				_gameHistoryLog.PreflightLogEntry(entry, _players.Keys);
+				entry.Apply(new SessionMutator(this));
+			}
 
 		internal void TransitionSubPhase(Enum subPhase)
 		{
@@ -166,9 +167,9 @@ namespace Werewolves.Core.StateModels.Core
 			return JsonSerializer.Serialize(_recoveryBoundary ?? CreateDto(), SerializationOptions);
 		}
 
-		internal void CaptureRecoveryBoundary(
-			AcceptedObservationRecoveryCursor? acceptedObservationRecoveryCursor = null,
-			DomainRecoveryCursor? domainRecoveryCursor = null)
+			internal void CaptureRecoveryBoundary(
+				AcceptedObservationRecoveryCursor? acceptedObservationRecoveryCursor = null,
+				DomainRecoveryCursor? domainRecoveryCursor = null)
 		{
 			var candidateBoundary = CreateDto();
 			candidateBoundary.AcceptedObservationRecoveryCursor =
@@ -183,17 +184,84 @@ namespace Werewolves.Core.StateModels.Core
 
 			_acceptedObservationRecoveryCursor = acceptedObservationRecoveryCursor;
 			_domainRecoveryCursor = domainRecoveryCursor;
-			_recoveryBoundary = candidateBoundary;
-		}
+				_recoveryBoundary = candidateBoundary;
+			}
+
+			internal void RefreshFactionFactsAtStableRecoveryBoundary()
+			{
+				var boundary = _recoveryBoundary
+					?? throw new InvalidOperationException(
+						"A stable recovery boundary is required.");
+				var currentFactionEntries = _gameHistoryLog
+					.GetAllLogEntries()
+					.OfType<FactionFactsCommittedLogEntry>()
+					.ToArray();
+				var persistedFactionEntries = boundary.GameHistoryLog
+					.OfType<FactionFactsCommittedLogEntry>()
+					.ToArray();
+				if (currentFactionEntries.Length < persistedFactionEntries.Length
+					|| !currentFactionEntries
+						.Take(persistedFactionEntries.Length)
+						.SequenceEqual(persistedFactionEntries))
+				{
+					throw new InvalidOperationException(
+						"Faction history diverged from the stable recovery boundary.");
+				}
+
+				var newFactionEntries = currentFactionEntries
+					.Skip(persistedFactionEntries.Length)
+					.ToArray();
+				var boundaryPhase = boundary.PhaseStateCache.CurrentPhase;
+				if (newFactionEntries.Any(entry =>
+					entry.TurnNumber > boundary.TurnNumber
+					|| entry.TurnNumber == boundary.TurnNumber
+					&& FactionFactProjection.PhaseOrder(entry.CurrentPhase) >
+						FactionFactProjection.PhaseOrder(boundaryPhase)))
+				{
+					throw new InvalidOperationException(
+						"Faction facts cannot advance a stable recovery boundary.");
+				}
+
+				var projection = FactionFactProjection.Create(
+					currentFactionEntries,
+					boundary.SeatingOrder);
+				var playerDtos = boundary.Players.ToDictionary(player => player.Id);
+				if (playerDtos.Count != boundary.SeatingOrder.Count
+					|| boundary.SeatingOrder.Any(playerId =>
+						!playerDtos.ContainsKey(playerId)))
+				{
+					throw new InvalidOperationException(
+						"The stable recovery boundary has invalid Player identity.");
+				}
+
+				var factionState = boundary.SeatingOrder.ToDictionary(
+					playerId => playerId,
+					playerId => (
+						projection.Beneficiaries[playerId],
+						Agents:
+							Enum.GetValues<Faction>().ToDictionary(
+								faction => faction,
+								faction => projection.Agents[playerId][faction])));
+				boundary.GameHistoryLog =
+					[.. boundary.GameHistoryLog, .. newFactionEntries];
+				boundary.FactionFactSchemaVersion =
+					FactionFactSchema.CurrentVersion;
+				foreach (var (playerId, state) in factionState)
+				{
+					playerDtos[playerId].FactionBeneficiary = state.Item1;
+					playerDtos[playerId].FactionAgentKnowledge = state.Agents;
+				}
+			}
 
 		private GameSessionDto CreateDto()
 		{
 			return new GameSessionDto
 			{
 				Id = Id,
-				TurnNumber = _turnNumber,
-				RoleFactSchemaVersion = RoleFactSchema.CurrentVersion,
-				IsStableRecoveryBoundary = true,
+					TurnNumber = _turnNumber,
+					RoleFactSchemaVersion = RoleFactSchema.CurrentVersion,
+					FactionFactSchemaVersion = FactionFactSchema.CurrentVersion,
+					IsStableRecoveryBoundary = true,
 				SeatingOrder = _playerSeatingOrder.ToList(),
 				RolesInPlay = _rolesInPlay.ToList(),
 				PendingInstruction = _pendingModeratorInstruction,
@@ -210,10 +278,16 @@ namespace Werewolves.Core.StateModels.Core
 					PhysicalCharacterCardRole = p.State.PhysicalCharacterCardRole,
 					ModeratorKnownRole = p.State.ModeratorKnownRole,
 						PubliclyRevealedRole = p.State.PubliclyRevealedRole,
-						ActiveEffects = ((PlayerState)p.State).ActiveEffects,
-						Health = p.State.Health,
-						HasVotingRight = p.State.HasVotingRight
-					}).ToList()
+							ActiveEffects = ((PlayerState)p.State).ActiveEffects,
+							Health = p.State.Health,
+							HasVotingRight = p.State.HasVotingRight,
+							FactionBeneficiary = p.State.FactionBeneficiary,
+							FactionAgentKnowledge = Enum.GetValues<Faction>()
+								.ToDictionary(
+									faction => faction,
+									faction => p.State
+										.GetFactionAgentKnowledge(faction))
+						}).ToList()
 			};
 		}
 
@@ -234,8 +308,9 @@ namespace Werewolves.Core.StateModels.Core
 			_turnNumber = dto.TurnNumber;
 			_playerSeatingOrder = dto.SeatingOrder;
 			_rolesInPlay = dto.RolesInPlay;
-			_pendingModeratorInstruction = RestorePendingInstructionSemantic(dto);
-			ValidateRoleFactSchemaVersion(dto.RoleFactSchemaVersion);
+				_pendingModeratorInstruction = RestorePendingInstructionSemantic(dto);
+				ValidateRoleFactSchemaVersion(dto.RoleFactSchemaVersion);
+				ValidateFactionFactSchemaVersion(dto.FactionFactSchemaVersion);
 			_acceptedObservationRecoveryCursor =
 				ValidateAcceptedObservationRecoveryCursor(
 					dto,
@@ -261,19 +336,76 @@ namespace Werewolves.Core.StateModels.Core
 					mutableState.ActiveEffects = playerDto.ActiveEffects;
 					mutableState.Health = playerDto.Health;
 					mutableState.HasVotingRight = playerDto.HasVotingRight ?? true;
+					var (beneficiary, agents) =
+						ValidatePlayerFactionState(playerDto);
+					mutableState.ReplaceFactionProjection(
+						beneficiary,
+						agents);
 					_players.Add(player.Id, player);
 			}
 
 			// Restore log entries (already deserialized, just store them)
 			foreach (var entry in dto.GameHistoryLog)
 			{
-				_gameHistoryLog.RestoreLogEntry(entry);
+					_gameHistoryLog.RestoreLogEntry(entry, _players.Keys);
+				}
+
+				ValidateFactionProjectionMatchesHistory();
+
+				_recoveryBoundary = CreateDto();
 			}
 
-			_recoveryBoundary = CreateDto();
-		}
+			private static (
+				FactionBeneficiaryKnowledge Beneficiary,
+				IReadOnlyDictionary<Faction, FactionAgentKnowledge> Agents)
+				ValidatePlayerFactionState(PlayerDto playerDto)
+			{
+				var beneficiary = playerDto.FactionBeneficiary
+					?? throw new InvalidOperationException(
+						"Current Faction state is missing.");
+				var agents = playerDto.FactionAgentKnowledge
+					?? throw new InvalidOperationException(
+						"Current Faction state is missing.");
+				var factions = Enum.GetValues<Faction>();
+				if (agents.Count != factions.Length
+					|| agents.Keys.Any(faction => !Enum.IsDefined(faction))
+					|| factions.Any(faction =>
+						!agents.TryGetValue(faction, out var knowledge)
+						|| !Enum.IsDefined(knowledge)))
+				{
+					throw new InvalidOperationException(
+						"Current Faction state is structurally invalid.");
+				}
 
-		private static void ValidateRoleFactSchemaVersion(int version)
+				return (
+					beneficiary,
+					new Dictionary<Faction, FactionAgentKnowledge>(agents));
+			}
+
+			private void ValidateFactionProjectionMatchesHistory()
+			{
+				var projection = FactionFactProjection.Create(
+					_gameHistoryLog
+						.GetAllLogEntries()
+						.OfType<FactionFactsCommittedLogEntry>(),
+					_playerSeatingOrder);
+				foreach (var playerId in _playerSeatingOrder)
+				{
+					var state = GetPlayer(playerId).GetMutableState(
+						new DeserializationKey());
+					if (state.FactionBeneficiary !=
+							projection.Beneficiaries[playerId]
+						|| Enum.GetValues<Faction>().Any(faction =>
+							state.GetFactionAgentKnowledge(faction) !=
+							projection.Agents[playerId][faction]))
+					{
+						throw new InvalidOperationException(
+							"Current Faction state does not match committed history.");
+					}
+				}
+			}
+
+			private static void ValidateRoleFactSchemaVersion(int version)
 		{
 			if (version is not
 				RoleFactSchema.LegacyVersion and not
@@ -281,6 +413,15 @@ namespace Werewolves.Core.StateModels.Core
 			{
 				throw new InvalidOperationException(
 					$"Unsupported Role fact schema version '{version}'.");
+			}
+		}
+
+		private static void ValidateFactionFactSchemaVersion(int version)
+		{
+			if (version != FactionFactSchema.CurrentVersion)
+			{
+				throw new InvalidOperationException(
+					$"Unsupported Faction fact schema version '{version}'.");
 			}
 		}
 

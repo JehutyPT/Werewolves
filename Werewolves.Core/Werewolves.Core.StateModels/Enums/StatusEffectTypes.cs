@@ -17,7 +17,7 @@ public enum StatusEffectTypes
     // Persistent conditions (non-hookable)
     ElderProtectionLost = 1 << 0,      // Elder's extra life has been used
     LycanthropyInfection = 1 << 1,     // Player has been infected by the wolf father
-    WildChildChanged = 1 << 2,         // Wild Child has changed their role
+    WildChildChanged = 1 << 2,         // Wild Child has changed Faction allegiance
     LynchingImmunityUsed = 1 << 3,     // Village Idiot has used their immunity
     
     // Hookable status effects (formerly SecondaryRoleType)

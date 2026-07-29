@@ -15,7 +15,7 @@ internal enum SimulationExecutionCheckpoint
 
 public sealed class SimulationExecutor
 {
-	private readonly Func<RunSeedMaterial, DeterministicRandomSource, SimulationStartState> _startStateDeriver;
+	private readonly Func<RunSeedMaterial, SimulatorCapability, DeterministicRandomSource, SimulationStartState> _startStateDeriver;
 	private readonly Func<IModeratorDecisionStrategy, HeadlessGameDriver> _driverFactory;
 	private readonly Func<RunSeedMaterial, IReadOnlyList<GameLogEntryBase>, SimulationRun> _terminalAdapter;
 	private readonly Action<SimulationExecutionCheckpoint, long>? _checkpoint;
@@ -30,7 +30,7 @@ public sealed class SimulationExecutor
 	}
 
 	internal SimulationExecutor(
-		Func<RunSeedMaterial, DeterministicRandomSource, SimulationStartState> startStateDeriver,
+		Func<RunSeedMaterial, SimulatorCapability, DeterministicRandomSource, SimulationStartState> startStateDeriver,
 		Func<IModeratorDecisionStrategy, HeadlessGameDriver> driverFactory,
 		Func<RunSeedMaterial, IReadOnlyList<GameLogEntryBase>, SimulationRun> terminalAdapter,
 		Action<SimulationExecutionCheckpoint, long>? checkpoint = null)
@@ -133,7 +133,7 @@ public sealed class SimulationExecutor
 			_checkpoint?.Invoke(SimulationExecutionCheckpoint.BeforeStartStateDerivation, runNumber);
 			cancellationToken.ThrowIfCancellationRequested();
 			var random = new DeterministicRandomSource(material);
-			var startState = _startStateDeriver(material, random);
+			var startState = _startStateDeriver(material, capability, random);
 			var strategy = new BaselineRandomDecisionStrategy(
 				material,
 				startState,
@@ -141,7 +141,7 @@ public sealed class SimulationExecutor
 				random);
 			var driver = _driverFactory(strategy);
 			var execution = driver.CompleteGameSession(
-				startState.CreateGameSessionConfig(),
+				startState,
 				cancellationToken,
 				() =>
 				{
@@ -153,6 +153,7 @@ public sealed class SimulationExecutor
 			return _terminalAdapter(material, history);
 		}
 		catch (OperationCanceledException)
+			when (cancellationToken.IsCancellationRequested)
 		{
 			throw;
 		}

@@ -32,7 +32,7 @@ public class RunSeedMaterialTests
 		var parsed = RunSeedMaterial.Parse(serialized);
 
 		serialized.Should().Be(
-			"profile=full-probability@1|players=5|roles=[Seer=1,SimpleVillager=3,SimpleWerewolf=1]|actor=[]|rules=[]|strategy=baseline-random@1-splitmix64|run=7");
+			"profile=full-probability@2|players=5|roles=[Seer=1,SimpleVillager=3,SimpleWerewolf=1]|actor=[]|rules=[]|strategy=baseline-random@1-splitmix64|run=7");
 		parsed.Should().Be(material);
 		parsed.CompatibilityIdentity.Should().Be(material.CompatibilityIdentity);
 		parsed.DecisionStrategyIdentity.Should().Be(material.DecisionStrategyIdentity);
@@ -59,17 +59,89 @@ public class RunSeedMaterialTests
 			BaselineRandomDecisionStrategy.Identity,
 			runNumber: 19);
 
-		var first = SimulationStartStateDeriver.Derive(material);
-		var replay = SimulationStartStateDeriver.Derive(RunSeedMaterial.Parse(material.ToString()));
+		var first = SimulationStartStateDeriver.Derive(
+			material,
+			SimulatorCapability.FullProbability);
+		var replay = SimulationStartStateDeriver.Derive(
+			RunSeedMaterial.Parse(material.ToString()),
+			SimulatorCapability.FullProbability);
 
 		first.PlayerCount.Should().Be(5);
 		first.CanonicalScenario.Should().Be(scenario.ToCanonical());
 		first.CompatibilityIdentity.Should().Be(identity);
+		first.Should().Be(replay);
+		first.GetHashCode().Should().Be(replay.GetHashCode());
 		first.RoleAssignments.Should().Equal(replay.RoleAssignments);
+		first.FactionFacts.Should().Equal(replay.FactionFacts);
 		first.RoleAssignments.Select(assignment => assignment.SeatNumber)
+			.Should().Equal(1, 2, 3, 4, 5);
+		first.FactionFacts.Select(facts => facts.SeatNumber)
 			.Should().Equal(1, 2, 3, 4, 5);
 		first.RoleAssignments.Select(assignment => assignment.Role)
 			.Should().BeEquivalentTo(scenario.RoleCompositionCards);
+		first.FactionFacts.Should().OnlyContain(facts =>
+			facts.Beneficiary.IsKnown &&
+			Enum.GetValues<Faction>().All(faction =>
+				facts.GetAgentKnowledge(faction) !=
+					FactionAgentKnowledge.Unknown));
+
+		var factsBySeat = first.FactionFacts.ToDictionary(facts => facts.SeatNumber);
+		foreach (var assignment in first.RoleAssignments)
+		{
+			var facts = factsBySeat[assignment.SeatNumber];
+			var isWerewolf = assignment.Role == MainRoleType.SimpleWerewolf;
+			facts.Beneficiary.Faction.Should().Be(
+				isWerewolf ? Faction.Werewolf : Faction.Villager);
+			facts.GetAgentKnowledge(Faction.Werewolf).Should().Be(
+				isWerewolf
+					? FactionAgentKnowledge.KnownAgent
+					: FactionAgentKnowledge.KnownNonAgent);
+			facts.GetAgentKnowledge(Faction.Villager).Should().Be(
+				FactionAgentKnowledge.KnownNonAgent);
+		}
+	}
+
+	[Fact]
+	public void SimulationPlayerFactionFacts_RequiresCompleteKnownFactsAndSnapshotsAgents()
+	{
+		var agents = Enum.GetValues<Faction>().ToDictionary(
+			faction => faction,
+			_ => FactionAgentKnowledge.KnownNonAgent);
+		var facts = new SimulationPlayerFactionFacts(
+			seatNumber: 1,
+			FactionBeneficiaryKnowledge.Known(Faction.Villager),
+			agents);
+
+		agents[Faction.Werewolf] = FactionAgentKnowledge.Unknown;
+
+		facts.GetAgentKnowledge(Faction.Werewolf).Should().Be(
+			FactionAgentKnowledge.KnownNonAgent);
+		Action unknownBeneficiary = () => new SimulationPlayerFactionFacts(
+			1,
+			FactionBeneficiaryKnowledge.Unknown,
+			Enum.GetValues<Faction>().ToDictionary(
+				faction => faction,
+				_ => FactionAgentKnowledge.KnownNonAgent));
+		Action incompleteAgents = () => new SimulationPlayerFactionFacts(
+			1,
+			FactionBeneficiaryKnowledge.Known(Faction.Villager),
+			new Dictionary<Faction, FactionAgentKnowledge>
+			{
+				[Faction.Werewolf] = FactionAgentKnowledge.KnownNonAgent
+			});
+		Action unknownAgent = () => new SimulationPlayerFactionFacts(
+			1,
+			FactionBeneficiaryKnowledge.Known(Faction.Villager),
+			Enum.GetValues<Faction>().ToDictionary(
+				faction => faction,
+				_ => FactionAgentKnowledge.Unknown));
+
+		unknownBeneficiary.Should().Throw<ArgumentException>()
+			.WithParameterName("beneficiary");
+		incompleteAgents.Should().Throw<ArgumentException>()
+			.WithParameterName("agents");
+		unknownAgent.Should().Throw<ArgumentException>()
+			.WithParameterName("agents");
 	}
 
 	[Fact]
@@ -182,7 +254,7 @@ public class RunSeedMaterialTests
 			new RunSeedMaterial(
 				new SimulationCompatibilityIdentity(
 					scenario.ToCanonical(),
-					new SimulatorProfileIdentity("full-probability", "2")),
+					new SimulatorProfileIdentity("full-probability", "3")),
 				BaselineRandomDecisionStrategy.Identity,
 				7),
 			new RunSeedMaterial(
@@ -197,7 +269,7 @@ public class RunSeedMaterialTests
 		};
 
 		DeterministicRandomSource.DeriveNumericSeed(material)
-			.Should().Be(11_268_766_652_743_107_163UL);
+			.Should().Be(12_756_212_200_798_595_487UL);
 		materials.Select(DeterministicRandomSource.DeriveNumericSeed)
 			.Should().OnlyHaveUniqueItems();
 	}
