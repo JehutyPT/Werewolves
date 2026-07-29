@@ -39,6 +39,18 @@ internal sealed class WolfHoundRole : NightRoleHookListener<WolfHoundRoleState>
 
 	protected override bool HasNightPowers => false;
 
+	public override HookListenerActionResult Execute(
+		GameSession session,
+		ModeratorResponse input)
+	{
+		if (session.TurnNumber != 1)
+		{
+			return HookListenerActionResult.Skip();
+		}
+
+		return base.Execute(session, input);
+	}
+
 	protected override HookListenerActionResult HandleRoleWakeupAndId(
 		GameSession session,
 		ModeratorResponse input)

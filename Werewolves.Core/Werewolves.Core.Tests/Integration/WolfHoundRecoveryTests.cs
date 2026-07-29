@@ -1,5 +1,6 @@
 using FluentAssertions;
 using FluentAssertions.Execution;
+using System.Text.Json.Nodes;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
@@ -183,6 +184,45 @@ public sealed class WolfHoundRecoveryTests
 		continued.IsSuccess.Should().BeTrue();
 		freshService.GetCurrentInstruction(recoveredGameId)!
 			.InstructionId.Should().NotBe(recoveredSleep.InstructionId);
+	}
+
+	[Fact]
+	public void LaterNight_UnknownHolderIsSkippedWithoutIdentification()
+	{
+		var builder = GameTestBuilder.Create()
+			.WithPlayers(5)
+			.WithRoles(
+				MainRoleType.WolfHound,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		builder.ConfirmGameStart();
+		var payload = JsonNode.Parse(builder.GetGameState()!.Serialize())!
+			.AsObject();
+		payload["TurnNumber"] = 2;
+		var freshService = new GameService();
+		var recoveredGameId = freshService.RehydrateSession(
+			payload.ToJsonString());
+		var recoveredSession =
+			freshService.GetGameStateView(recoveredGameId)!;
+		var nightStart = freshService.GetCurrentInstruction(recoveredGameId)
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+
+		var afterNightStart = freshService.ProcessInstruction(
+			recoveredGameId,
+			nightStart.CreateResponse());
+
+		var werewolfObservation = afterNightStart.ModeratorInstruction.Should()
+			.BeOfType<SelectPlayersInstruction>().Subject;
+		werewolfObservation.Semantic.Should().Be(
+			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
+		werewolfObservation.RoleIdentification.Should().BeNull();
+		recoveredSession.GameHistoryLog
+			.OfType<RoleIdentificationLogEntry>()
+			.Should().NotContain(entry =>
+				entry.Role == MainRoleType.WolfHound);
 	}
 
 	private static (
