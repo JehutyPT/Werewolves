@@ -394,19 +394,14 @@ public class FactionStateTests
 				start.CreateResponse())
 			.ModeratorInstruction.Should()
 			.BeOfType<ConfirmationInstruction>().Subject;
-		var identifyWerewolf = service.ProcessInstruction(
+		var observeWerewolfAgents = service.ProcessInstruction(
 				session.Id,
 				nightStart.CreateResponse())
 			.ModeratorInstruction.Should()
 			.BeOfType<SelectPlayersInstruction>().Subject;
+		observeWerewolfAgents.Semantic.Should().Be(
+			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
 		var preFactionBoundary = session.Serialize();
-		var groupBoundary = Boundary(order: 10);
-		SeedCompleteWerewolfAgentGroup(session, service, groupBoundary);
-		var closureRequest = ClosureRequest(groupBoundary);
-		service.TryCommitInitialBeneficiaryClosure(
-				session.Id,
-				closureRequest)
-			.Should().Be(InitialBeneficiaryClosureResult.Committed);
 		service.CommitExplicitFactionTransition(
 			session.Id,
 			"post-closure-transition",
@@ -420,11 +415,27 @@ public class FactionStateTests
 		session.Serialize().Should().Be(preFactionBoundary);
 		var afterOrdinaryBoundary = service.ProcessInstruction(
 			session.Id,
-			identifyWerewolf.CreateResponse([players[0].Id]));
+			observeWerewolfAgents.CreateResponse([players[0].Id]));
 		afterOrdinaryBoundary.IsSuccess.Should().BeTrue();
 		var expectedPendingInstruction =
 			afterOrdinaryBoundary.ModeratorInstruction.Should()
 				.BeOfType<SelectPlayersInstruction>().Subject;
+		expectedPendingInstruction.Semantic.Should()
+			.Be(ModeratorInstructionSemantic.SelectWerewolfVictim);
+		var groupObservation = session.GameHistoryLog
+			.OfType<FactionFactsCommittedLogEntry>()
+			.Should().ContainSingle(entry =>
+				entry.Source.Kind ==
+					FactionFactSourceKind.ScheduledObservation &&
+				entry.Source.Identifier ==
+					FactionFactSource
+						.WerewolfFactionAgentGroupObservationIdentifier)
+			.Subject;
+		var groupBoundary = groupObservation.Facts
+			.Select(fact => fact.EffectiveBoundary)
+			.Distinct()
+			.Should().ContainSingle().Subject;
+		var closureRequest = ClosureRequest(groupBoundary);
 		var serialized = session.Serialize();
 		var recoveredService = new GameService();
 		var recoveredId = recoveredService.RehydrateSession(serialized);
@@ -451,9 +462,9 @@ public class FactionStateTests
 			.OfType<FactionFactsCommittedLogEntry>()
 			.Select(entry => entry.Source.Kind)
 			.Should().Equal(
+				FactionFactSourceKind.ExplicitTransition,
 				FactionFactSourceKind.ScheduledObservation,
-				FactionFactSourceKind.InitialBeneficiaryClosure,
-				FactionFactSourceKind.ExplicitTransition);
+				FactionFactSourceKind.InitialBeneficiaryClosure);
 		twiceRecoveredService
 			.GetInitialBeneficiaryClosureReadiness(
 				twiceRecoveredId,

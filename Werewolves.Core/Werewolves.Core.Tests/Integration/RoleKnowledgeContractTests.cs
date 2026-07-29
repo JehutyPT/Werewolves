@@ -55,21 +55,30 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
         builder.ConfirmNightStart();
 
         var session = builder.GetGameState()!;
-        var holder = session.GetPlayers().First();
+        var players = session.GetPlayers().ToArray();
+        var werewolfAgent = players[0];
+        var holder = players[1];
+        var werewolfVictim = players[4];
+        builder.CompleteWerewolfNightAction(
+            [werewolfAgent.Id],
+            werewolfVictim.Id);
+
         var identification = builder.GetCurrentInstruction()
             .Should().BeOfType<SelectPlayersInstruction>().Subject;
-        identification.RoleIdentification.Should().Be(MainRoleType.SimpleWerewolf);
+        identification.Semantic.Should()
+            .Be(ModeratorInstructionSemantic.IdentifyRoleHolders);
+        identification.RoleIdentification.Should().Be(MainRoleType.Seer);
 
         var result = builder.Process(identification.CreateResponse([holder.Id]));
 
         result.IsSuccess.Should().BeTrue();
-        holder.State.CurrentRole.Should().Be(MainRoleType.SimpleWerewolf);
-        holder.State.ModeratorKnownRole.Should().Be(MainRoleType.SimpleWerewolf);
+        holder.State.CurrentRole.Should().Be(MainRoleType.Seer);
+        holder.State.ModeratorKnownRole.Should().Be(MainRoleType.Seer);
         holder.State.PhysicalCharacterCardRole.Should().BeNull();
         holder.State.PubliclyRevealedRole.Should().BeNull();
         session.GameHistoryLog.OfType<RoleIdentificationLogEntry>()
             .Should().ContainSingle(entry =>
-                entry.Role == MainRoleType.SimpleWerewolf &&
+                entry.Role == MainRoleType.Seer &&
                 entry.PlayerIds.SetEquals(new[] { holder.Id }));
         session.GameHistoryLog.OfType<AssignRoleLogEntry>().Should().BeEmpty();
 
@@ -86,10 +95,19 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
         builder.ConfirmGameStart();
         builder.ConfirmNightStart();
         var players = builder.GetGameState()!.GetPlayers().ToArray();
-        var holder = players[0];
+        var werewolfAgent = players[0];
+        var holder = players[1];
+        var werewolfVictim = players[4];
         var target = players[2];
+        builder.CompleteWerewolfNightAction(
+            [werewolfAgent.Id],
+            werewolfVictim.Id);
+
         var identification = builder.GetCurrentInstruction()
             .Should().BeOfType<SelectPlayersInstruction>().Subject;
+        identification.Semantic.Should()
+            .Be(ModeratorInstructionSemantic.IdentifyRoleHolders);
+        identification.RoleIdentification.Should().Be(MainRoleType.Seer);
         var acceptedIdentification = identification.CreateResponse([holder.Id]);
         var afterIdentification = builder.Process(acceptedIdentification);
         var expectedNext = afterIdentification.ModeratorInstruction
@@ -101,12 +119,12 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
         var recoveredNext = recoveredService.GetCurrentInstruction(recoveredId)
             .Should().BeOfType<SelectPlayersInstruction>().Subject;
 
-        recovered.GetPlayerState(holder.Id).CurrentRole.Should().Be(MainRoleType.SimpleWerewolf);
-        recovered.GetPlayerState(holder.Id).ModeratorKnownRole.Should().Be(MainRoleType.SimpleWerewolf);
+        recovered.GetPlayerState(holder.Id).CurrentRole.Should().Be(MainRoleType.Seer);
+        recovered.GetPlayerState(holder.Id).ModeratorKnownRole.Should().Be(MainRoleType.Seer);
         recovered.GetPlayerState(holder.Id).PubliclyRevealedRole.Should().BeNull();
         recovered.GameHistoryLog.OfType<RoleIdentificationLogEntry>().Should()
             .ContainSingle(entry =>
-                entry.Role == MainRoleType.SimpleWerewolf &&
+                entry.Role == MainRoleType.Seer &&
                 entry.PlayerIds.SetEquals(new[] { holder.Id }));
         recoveredNext.InstructionId.Should().Be(expectedNext.InstructionId);
         recoveredNext.SelectablePlayerIds.Should().BeEquivalentTo(expectedNext.SelectablePlayerIds);
@@ -125,7 +143,7 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
         continued.ModeratorInstruction.Should().BeOfType<ConfirmationInstruction>();
         recovered.GameHistoryLog.OfType<NightActionLogEntry>().Should()
             .ContainSingle(entry =>
-                entry.ActionType == NightActionType.WerewolfVictimSelection &&
+                entry.ActionType == NightActionType.SeerCheck &&
                 entry.TargetIds!.SequenceEqual(new[] { target.Id }));
 
         MarkTestCompleted();

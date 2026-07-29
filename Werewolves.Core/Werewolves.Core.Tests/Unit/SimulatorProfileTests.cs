@@ -19,6 +19,7 @@ public class SimulatorProfileTests
 			ModeratorInstructionSemantic.FinishNightActions,
 			ModeratorInstructionSemantic.WakeRole,
 			ModeratorInstructionSemantic.IdentifyRoleHolders,
+			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup,
 			ModeratorInstructionSemantic.PutRoleToSleep,
 			ModeratorInstructionSemantic.SelectWerewolfVictim,
 			ModeratorInstructionSemantic.SelectSeerTarget,
@@ -51,12 +52,12 @@ public class SimulatorProfileTests
 		var safety = SimulatorCapability.SafetyScreening;
 		var probability = SimulatorCapability.FullProbability;
 
-		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "9"));
-		probability.Identity.Should().Be(new SimulatorProfileIdentity("full-probability", "2"));
+		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "10"));
+		probability.Identity.Should().Be(new SimulatorProfileIdentity("full-probability", "3"));
 		BaselineRandomDecisionStrategy.Identity.Should()
-			.Be(new DecisionStrategyIdentity("baseline-random", "1-splitmix64"));
+			.Be(new DecisionStrategyIdentity("baseline-random", "3-splitmix64"));
 		BaselineRandomDecisionStrategy.SafetyScreeningIdentity.Should()
-			.Be(new DecisionStrategyIdentity("baseline-random", "2-splitmix64"));
+			.Be(new DecisionStrategyIdentity("baseline-random", "4-splitmix64"));
 		safety.SupportedRoles.Should().Equal(
 			MainRoleType.SimpleWerewolf,
 			MainRoleType.Seer,
@@ -141,13 +142,13 @@ public class SimulatorProfileTests
 			new SimulatorProfileIdentity("alternate-simulator", "1"));
 		var differentVersion = new SimulationCompatibilityIdentity(
 			scenario,
-			new SimulatorProfileIdentity("full-probability", "3"));
+			new SimulatorProfileIdentity("full-probability", "4"));
 
 		var serialized = current.ToString();
 		var parsed = SimulationCompatibilityIdentity.Parse(serialized);
 
 		serialized.Should().Be(
-			"profile=full-probability@2|players=5|roles=[Seer=1,SimpleVillager=2,SimpleWerewolf=1,WildChild=1]|actor=[]|rules=[]");
+			"profile=full-probability@3|players=5|roles=[Seer=1,SimpleVillager=2,SimpleWerewolf=1,WildChild=1]|actor=[]|rules=[]");
 		parsed.Should().Be(current);
 		differentProfile.Should().NotBe(current);
 		differentVersion.Should().NotBe(current);

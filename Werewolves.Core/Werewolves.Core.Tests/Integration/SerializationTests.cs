@@ -286,7 +286,7 @@ public class SerializationTests : DiagnosticTestBase
     [Fact]
     public void Serialize_GameHistoryLog_PreservesAllEntryTypes()
     {
-        // Arrange - Complete a night action to get private identification and action events.
+        // Arrange - Complete a night action to get faction observation and action events.
         var builder = CreateBuilder()
             .WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);
         builder.StartGame();
@@ -300,7 +300,7 @@ public class SerializationTests : DiagnosticTestBase
         // Confirm night start
         builder.ConfirmNightStart();
 
-        // Complete werewolf identification and victim selection
+        // Complete Werewolf Agent-group observation and victim selection
         var inputs = new NightActionInputs
         {
             WerewolfIds = [werewolfPlayer.Id],
@@ -328,7 +328,17 @@ public class SerializationTests : DiagnosticTestBase
         rehydratedEntryTypes.Should().BeEquivalentTo(originalEntryTypes);
 
         // Verify specific entries exist
-        rehydratedSession.GameHistoryLog.OfType<RoleIdentificationLogEntry>().Should().NotBeEmpty();
+        rehydratedSession.GameHistoryLog
+            .OfType<FactionFactsCommittedLogEntry>()
+            .Should().ContainSingle(entry =>
+                entry.Source.Kind ==
+                    FactionFactSourceKind.ScheduledObservation &&
+                entry.Source.Identifier ==
+                    FactionFactSource
+                        .WerewolfFactionAgentGroupObservationIdentifier &&
+                entry.Facts.All(fact =>
+                    fact.Type == FactionFactType.Agent &&
+                    fact.Faction == Faction.Werewolf));
         rehydratedSession.GameHistoryLog.OfType<NightActionLogEntry>().Should().NotBeEmpty();
 
         MarkTestCompleted();

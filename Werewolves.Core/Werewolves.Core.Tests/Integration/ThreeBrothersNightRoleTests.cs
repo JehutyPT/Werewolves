@@ -152,10 +152,12 @@ public sealed class ThreeBrothersNightRoleTests : DiagnosticTestBase
 		}
 		else
 		{
-			var nextRole =
+			var nextSlot =
 				InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
 					afterNightStart);
-			nextRole.RoleIdentification.Should().Be(MainRoleType.SimpleWerewolf);
+			nextSlot.Semantic.Should().Be(
+				ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
+			nextSlot.RoleIdentification.Should().BeNull();
 		}
 
 		policy.ObservedAttempts.Select(attempt => attempt.ActingPlayer.Id).Should()
@@ -543,8 +545,9 @@ public sealed class ThreeBrothersNightRoleTests : DiagnosticTestBase
 
 		nextSlot.Semantic.Should().Be(ModeratorInstructionSemantic.WakeRole);
 		nextSlot.PublicAnnouncement.Should().Be(
-			GameStrings.RoleWakesUp.Format(
-				MainRoleType.SimpleWerewolf.GetPublicName()));
+			GameStrings.RoleHoldersWakeUp.Format(
+				GameStrings.WerewolvesGroupName));
+		nextSlot.AffectedPlayerIds.Should().Equal(fixture.WerewolfId);
 		MarkTestCompleted();
 	}
 
@@ -658,6 +661,13 @@ public sealed class ThreeBrothersNightRoleTests : DiagnosticTestBase
 			{
 				ConfirmationInstruction confirmation =>
 					confirmation.CreateResponse(),
+				SelectPlayersInstruction
+				{
+					Semantic:
+						ModeratorInstructionSemantic
+							.ObserveWerewolfFactionAgentGroup
+				} observation =>
+					observation.CreateResponse([fixture.WerewolfId]),
 				SelectPlayersInstruction
 				{
 					RoleIdentification: MainRoleType.TwoSisters

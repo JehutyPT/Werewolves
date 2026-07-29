@@ -155,7 +155,7 @@ public sealed class SimulatorCapability : SimulatorProfile
 		SimulatorCapabilityRegistry.Production.FullProbability;
 
 	internal static SimulatorCapability CreateSafetyScreening() => new(
-			new SimulatorProfileIdentity("safety-screening", "9"),
+			new SimulatorProfileIdentity("safety-screening", "10"),
 		SafetyScreeningRoleDescriptors,
 		headlessResponsePolicy: new HeadlessResponsePolicy(
 			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
@@ -166,6 +166,7 @@ public sealed class SimulatorCapability : SimulatorProfile
 				ModeratorInstructionSemantic.FinishNightActions,
 				ModeratorInstructionSemantic.WakeRole,
 				ModeratorInstructionSemantic.IdentifyRoleHolders,
+				ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup,
 				ModeratorInstructionSemantic.PutRoleToSleep,
 				ModeratorInstructionSemantic.SelectWerewolfVictim,
 				ModeratorInstructionSemantic.SelectSeerTarget,
@@ -198,7 +199,7 @@ public sealed class SimulatorCapability : SimulatorProfile
 		supportedRuleStates: [SimulationRuleState.Default]);
 
 	internal static SimulatorCapability CreateFullProbability() => new(
-			new SimulatorProfileIdentity("full-probability", "2"),
+			new SimulatorProfileIdentity("full-probability", "3"),
 		FullProbabilityRoleDescriptors,
 		headlessResponsePolicy: new HeadlessResponsePolicy(
 			BaselineRandomDecisionStrategy.Identity,
@@ -209,6 +210,7 @@ public sealed class SimulatorCapability : SimulatorProfile
 				ModeratorInstructionSemantic.FinishNightActions,
 				ModeratorInstructionSemantic.WakeRole,
 				ModeratorInstructionSemantic.IdentifyRoleHolders,
+				ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup,
 				ModeratorInstructionSemantic.PutRoleToSleep,
 				ModeratorInstructionSemantic.SelectWerewolfVictim,
 				ModeratorInstructionSemantic.SelectSeerTarget,

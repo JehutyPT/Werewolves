@@ -14,10 +14,10 @@ public sealed class BaselineRandomDecisionStrategy : IModeratorDecisionStrategy
 	private readonly HeadlessResponsePolicy _policy;
 
 	public static DecisionStrategyIdentity Identity { get; } =
-		new("baseline-random", "1-splitmix64");
+		new("baseline-random", "3-splitmix64");
 
 	public static DecisionStrategyIdentity SafetyScreeningIdentity { get; } =
-		new("baseline-random", "2-splitmix64");
+		new("baseline-random", "4-splitmix64");
 
 	public static HeadlessResponsePolicy Policy { get; } = new(
 		Identity,
@@ -28,6 +28,7 @@ public sealed class BaselineRandomDecisionStrategy : IModeratorDecisionStrategy
 			ModeratorInstructionSemantic.FinishNightActions,
 			ModeratorInstructionSemantic.WakeRole,
 			ModeratorInstructionSemantic.IdentifyRoleHolders,
+			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup,
 			ModeratorInstructionSemantic.PutRoleToSleep,
 			ModeratorInstructionSemantic.SelectWerewolfVictim,
 			ModeratorInstructionSemantic.SelectSeerTarget,
@@ -106,6 +107,11 @@ public sealed class BaselineRandomDecisionStrategy : IModeratorDecisionStrategy
 				CreateRoleIdentificationResponse(selectPlayers, session),
 			SelectPlayersInstruction
 			{
+				Semantic: ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup
+			} selectPlayers =>
+				CreateLivingFactionAgentGroupResponse(selectPlayers, session),
+			SelectPlayersInstruction
+			{
 				Semantic: ModeratorInstructionSemantic.ObserveVillagerVillagerFromDeal
 			} selectPlayers =>
 				CreateSeededRoleHolderResponse(
@@ -141,6 +147,24 @@ public sealed class BaselineRandomDecisionStrategy : IModeratorDecisionStrategy
 			.Where(player => instruction.SelectablePlayerIds.Contains(player.Id))
 			.Where(player =>
 				effectiveRolesByPlayerId[player.Id] == instruction.RoleIdentification!.Value)
+			.Select(player => player.Id)
+			.ToHashSet();
+		return instruction.CreateResponse(selectedPlayerIds);
+	}
+
+	private ModeratorResponse CreateLivingFactionAgentGroupResponse(
+		SelectPlayersInstruction instruction,
+		IGameSession session)
+	{
+		var players = GetPlayersMatchingStartState(session);
+		var effectiveAgentKnowledgeByPlayerId =
+			CreateEffectiveWerewolfAgentKnowledgeByPlayerId(players);
+		var selectedPlayerIds = players
+			.Where(player => player.State.Health == PlayerHealth.Alive)
+			.Where(player => instruction.SelectablePlayerIds.Contains(player.Id))
+			.Where(player =>
+				effectiveAgentKnowledgeByPlayerId[player.Id] ==
+				FactionAgentKnowledge.KnownAgent)
 			.Select(player => player.Id)
 			.ToHashSet();
 		return instruction.CreateResponse(selectedPlayerIds);
@@ -225,6 +249,20 @@ public sealed class BaselineRandomDecisionStrategy : IModeratorDecisionStrategy
 			assignment => players[assignment.SeatNumber - 1].Id,
 			assignment => players[assignment.SeatNumber - 1].State.CurrentRole
 				?? assignment.Role);
+
+	private Dictionary<Guid, FactionAgentKnowledge>
+		CreateEffectiveWerewolfAgentKnowledgeByPlayerId(
+			IReadOnlyList<IPlayer> players) =>
+		_startState.FactionFacts.ToDictionary(
+			facts => players[facts.SeatNumber - 1].Id,
+			facts =>
+			{
+				var currentKnowledge = players[facts.SeatNumber - 1].State
+					.GetFactionAgentKnowledge(Faction.Werewolf);
+				return currentKnowledge == FactionAgentKnowledge.Unknown
+					? facts.GetAgentKnowledge(Faction.Werewolf)
+					: currentKnowledge;
+			});
 
 	private ModeratorResponse CreateOptionSelectionResponse(SelectOptionsInstruction instruction)
 	{

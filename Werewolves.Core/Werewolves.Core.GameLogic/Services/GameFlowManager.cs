@@ -681,6 +681,7 @@ internal static class GameFlowManager
     private static bool IsAcceptedObservation(ModeratorInstruction? instruction)
         => instruction?.Semantic is
             ModeratorInstructionSemantic.IdentifyRoleHolders or
+            ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup or
             ModeratorInstructionSemantic.ObserveVillagerVillagerFromDeal or
             ModeratorInstructionSemantic.ObserveScapegoatHolderForTie or
             ModeratorInstructionSemantic.RevealScapegoatForTie or
@@ -703,13 +704,33 @@ internal static class GameFlowManager
             ModeratorInstruction? startingInstruction,
             ModeratorInstruction nextInstruction)
     {
-        if (startingInstruction is not SelectPlayersInstruction
+        ModeratorInstructionSemantic acceptedObservationSemantic;
+        MainRoleType observedRole;
+        switch (startingInstruction)
+        {
+            case SelectPlayersInstruction
             {
                 Semantic: ModeratorInstructionSemantic.IdentifyRoleHolders,
-                RoleIdentification: { } observedRole
-            })
-        {
-            return null;
+                RoleIdentification: { } identifiedRole
+            }:
+                acceptedObservationSemantic =
+                    ModeratorInstructionSemantic.IdentifyRoleHolders;
+                observedRole = identifiedRole;
+                break;
+            case SelectPlayersInstruction
+            {
+                Semantic:
+                    ModeratorInstructionSemantic
+                        .ObserveWerewolfFactionAgentGroup,
+                RoleIdentification: null
+            }:
+                acceptedObservationSemantic =
+                    ModeratorInstructionSemantic
+                        .ObserveWerewolfFactionAgentGroup;
+                observedRole = SimpleWerewolf;
+                break;
+            default:
+                return null;
         }
 
         var continuation = ResolveAcceptedObservationContinuation(
@@ -719,14 +740,13 @@ internal static class GameFlowManager
             !continuation.Value.Matches(nextInstruction))
         {
             throw new InvalidOperationException(
-                $"Unsupported Role Identification continuation '{observedRole}:{nextInstruction.Semantic}'.");
+                $"Unsupported accepted observation continuation '{acceptedObservationSemantic}:{observedRole}:{nextInstruction.Semantic}'.");
         }
 
         return new AcceptedObservationRecoveryCursor
         {
             Version = AcceptedObservationRecoveryCursor.CurrentVersion,
-            AcceptedObservationSemantic =
-                ModeratorInstructionSemantic.IdentifyRoleHolders,
+            AcceptedObservationSemantic = acceptedObservationSemantic,
             ObservedRole = observedRole,
             NextInstructionSemantic = nextInstruction.Semantic,
             NextInstructionId = nextInstruction.InstructionId
@@ -754,20 +774,25 @@ internal static class GameFlowManager
         var continuation = ResolveAcceptedObservationContinuation(
             cursor.ObservedRole,
             cursor.NextInstructionSemantic);
-        if (cursor.AcceptedObservationSemantic !=
+        var isSupportedAcceptedObservation =
+            cursor.AcceptedObservationSemantic ==
                 ModeratorInstructionSemantic.IdentifyRoleHolders ||
+            cursor.AcceptedObservationSemantic ==
+                ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup &&
+            cursor.ObservedRole == SimpleWerewolf;
+        if (!isSupportedAcceptedObservation ||
             session.GetCurrentPhase() != GamePhase.Night ||
             !IsNightStartSubPhase(session) ||
             continuation == null)
         {
             throw new InvalidOperationException(
-                $"Unsupported Role Identification continuation '{cursor.ObservedRole}:{cursor.NextInstructionSemantic}'.");
+                $"Unsupported accepted observation continuation '{cursor.AcceptedObservationSemantic}:{cursor.ObservedRole}:{cursor.NextInstructionSemantic}'.");
         }
 
         if (!continuation.Value.Matches(session.PendingModeratorInstruction))
         {
             throw new InvalidOperationException(
-                "The Pending Instruction does not match the accepted Role Identification continuation.");
+                "The Pending Instruction does not match the accepted observation continuation.");
         }
 
 	        session.RestoreTransientContinuation(
@@ -891,6 +916,12 @@ internal static class GameFlowManager
                     Listener(SimpleWerewolf),
                     StandardNightRoleState.AwaitingTargetSelection.ToString(),
                     AcceptedObservationInstructionShape.PlayerSelection),
+            (SimpleWerewolf, ModeratorInstructionSemantic.PutRoleToSleep) =>
+                new(
+                    NightMainActionLoop.ToString(),
+                    Listener(SimpleWerewolf),
+                    StandardNightRoleState.AwaitingSleepConfirmation.ToString(),
+                    AcceptedObservationInstructionShape.Confirmation),
             (Seer, ModeratorInstructionSemantic.SelectSeerTarget) =>
                 new(
                     NightMainActionLoop.ToString(),
@@ -1003,9 +1034,15 @@ internal static class GameFlowManager
 
     private static (Team WinningTeam, string Description)? CheckVictoryConditions(GameSession session)
     {
-        // Phase 1: Basic checks using assigned/revealed roles
-        var aliveWerewolves = session.GetPlayers().WithHealth(PlayerHealth.Alive).FromTeam(Team.Werewolves).Count();
-        int aliveNonWerewolves = session.GetPlayers().WithHealth(PlayerHealth.Alive).FromTeam(Team.Villagers).Count();
+        var livingBeneficiaries = session.GetPlayers()
+            .WithHealth(PlayerHealth.Alive)
+            .Select(player => session.RequireKnownFactionBeneficiary(player.Id))
+            .ToArray();
+
+        var aliveWerewolves = livingBeneficiaries.Count(
+            faction => faction == Faction.Werewolf);
+        int aliveNonWerewolves = livingBeneficiaries.Count(
+            faction => faction == Faction.Villager);
 
 		// Villager win
 		if (aliveWerewolves == 0 && aliveNonWerewolves > 0)

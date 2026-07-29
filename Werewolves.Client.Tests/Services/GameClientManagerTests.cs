@@ -253,7 +253,7 @@ public class GameClientManagerTests
 	}
 
 	[Fact]
-	public void ProcessInput_AcceptedRoleIdentification_PersistsFactWithoutLaterNightAction()
+	public void ProcessInput_AcceptedWerewolfAgentObservation_PersistsFactWithoutLaterNightAction()
 	{
 		using var saveDirectory = TemporaryDirectory.Create();
 		var manager = new GameClientManager(new GameService(), saveStore: new FileGameSessionSaveStore(saveDirectory.Path));
@@ -263,30 +263,45 @@ public class GameClientManagerTests
 		var players = manager.CurrentSession!.GetPlayers().ToList();
 
 		SelectCurrentPlayers(manager, [players[0].Id]);
-		var instructionAfterAcceptedIdentification = manager.CurrentInstruction!;
+		var instructionAfterAcceptedObservation = manager.CurrentInstruction!;
 		SelectCurrentPlayers(manager, [players[4].Id]);
 
-		manager.CurrentSession.GameHistoryLog.OfType<RoleIdentificationLogEntry>().Should().NotBeEmpty();
+		manager.CurrentSession.GameHistoryLog
+			.OfType<FactionFactsCommittedLogEntry>()
+			.Should().ContainSingle(entry =>
+				entry.Source.Kind == FactionFactSourceKind.ScheduledObservation);
+		manager.CurrentSession.GameHistoryLog.OfType<RoleIdentificationLogEntry>()
+			.Should().BeEmpty();
 		manager.CurrentSession.GameHistoryLog.OfType<NightActionLogEntry>().Should().NotBeEmpty();
 		var resumed = new GameClientManager(new GameService(), saveStore: new FileGameSessionSaveStore(saveDirectory.Path));
 		var savedSession = resumed.CurrentSession!;
 		savedSession.GetCurrentPhase().Should().Be(GamePhase.Night);
 		savedSession.TurnNumber.Should().Be(1);
-		savedSession.GameHistoryLog.OfType<RoleIdentificationLogEntry>()
+		var observationEntry = savedSession.GameHistoryLog
+			.OfType<FactionFactsCommittedLogEntry>()
 			.Should().ContainSingle(entry =>
-				entry.Role == MainRoleType.SimpleWerewolf &&
-				entry.PlayerIds.SetEquals(new[] { players[0].Id }));
+				entry.Source.Kind == FactionFactSourceKind.ScheduledObservation)
+			.Subject;
+		observationEntry.Facts.Should().ContainSingle(fact =>
+			fact.PlayerId == players[0].Id &&
+			fact.Type == FactionFactType.Agent &&
+			fact.Faction == Faction.Werewolf &&
+			fact.AgentKnowledge == FactionAgentKnowledge.KnownAgent);
 		savedSession.GameHistoryLog.OfType<NightActionLogEntry>().Should().BeEmpty();
 		savedSession.GetPlayer(players[0].Id).State.ModeratorKnownRole
-			.Should().Be(MainRoleType.SimpleWerewolf);
-		resumed.CurrentInstruction!.GetType().Should().Be(instructionAfterAcceptedIdentification.GetType());
-		resumed.CurrentInstruction.InstructionId.Should().Be(instructionAfterAcceptedIdentification.InstructionId);
-		resumed.CurrentInstruction.PublicAnnouncement.Should().Be(instructionAfterAcceptedIdentification.PublicAnnouncement);
-		resumed.CurrentInstruction.PrivateInstruction.Should().Be(instructionAfterAcceptedIdentification.PrivateInstruction);
+			.Should().BeNull();
+		savedSession.GetFactionAgentKnowledge(players[0].Id, Faction.Werewolf)
+			.Should().Be(FactionAgentKnowledge.KnownAgent);
+		savedSession.GetFactionAgentKnowledge(players[1].Id, Faction.Werewolf)
+			.Should().Be(FactionAgentKnowledge.KnownNonAgent);
+		resumed.CurrentInstruction!.GetType().Should().Be(instructionAfterAcceptedObservation.GetType());
+		resumed.CurrentInstruction.InstructionId.Should().Be(instructionAfterAcceptedObservation.InstructionId);
+		resumed.CurrentInstruction.PublicAnnouncement.Should().Be(instructionAfterAcceptedObservation.PublicAnnouncement);
+		resumed.CurrentInstruction.PrivateInstruction.Should().Be(instructionAfterAcceptedObservation.PrivateInstruction);
 
 		resumed.CurrentInstruction.Should().BeOfType<SelectPlayersInstruction>();
 		resumed.CurrentSession!.GameHistoryLog.OfType<RoleIdentificationLogEntry>()
-			.Should().ContainSingle();
+			.Should().BeEmpty();
 	}
 
 	[Fact]
@@ -501,25 +516,31 @@ public class GameClientManagerTests
 	}
 
 	[Fact]
-	public void CurrentRoster_UpdatesWhenRoleInformationChangesDuringNight()
+	public void CurrentRoster_PreservesUnknownExactRoleWhenFactionAgentKnowledgeChangesDuringNight()
 	{
 		var manager = new GameClientManager();
 		var startInstruction = StartSimpleGame(manager);
 		manager.ProcessInput(startInstruction.CreateResponse());
 		var nightStartInstruction = manager.CurrentInstruction.Should().BeOfType<ConfirmationInstruction>().Subject;
 		manager.ProcessInput(nightStartInstruction.CreateResponse());
-		var identifyWerewolfInstruction = manager.CurrentInstruction.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		var observeWerewolfAgentsInstruction = manager.CurrentInstruction.Should().BeOfType<SelectPlayersInstruction>().Subject;
 		var werewolf = manager.CurrentSession!.GetPlayers().First();
-		var werewolfRoleLabel = MainRoleType.SimpleWerewolf.GetPublicName();
 		var eventRosterSnapshots = new List<IReadOnlyList<DashboardRosterEntry>>();
 		manager.StateChanged += (_, _) => eventRosterSnapshots.Add(manager.CurrentRoster);
 
-		manager.ProcessInput(identifyWerewolfInstruction.CreateResponse([werewolf.Id]));
+		manager.ProcessInput(observeWerewolfAgentsInstruction.CreateResponse([werewolf.Id]));
 
-		manager.CurrentRoster[0].RoleLabel.Should().Be(werewolfRoleLabel);
-		manager.CurrentRoster[0].IsRoleKnown.Should().BeTrue();
+		var werewolfEntry = manager.CurrentRoster
+			.Single(entry => entry.PlayerId == werewolf.Id);
+		werewolfEntry.RoleLabel.Should().Be(DashboardRoster.UnknownRoleLabel);
+		werewolfEntry.IsRoleKnown.Should().BeFalse();
+		manager.CurrentSession.GetFactionAgentKnowledge(werewolf.Id, Faction.Werewolf)
+			.Should().Be(FactionAgentKnowledge.KnownAgent);
 		eventRosterSnapshots.Should().ContainSingle();
-		eventRosterSnapshots[0][0].RoleLabel.Should().Be(werewolfRoleLabel);
+		var eventWerewolfEntry = eventRosterSnapshots[0]
+			.Single(entry => entry.PlayerId == werewolf.Id);
+		eventWerewolfEntry.RoleLabel.Should().Be(DashboardRoster.UnknownRoleLabel);
+		eventWerewolfEntry.IsRoleKnown.Should().BeFalse();
 	}
 
 	[Fact]

@@ -534,6 +534,7 @@ public class StatusEffectsTests : DiagnosticTestBase
         var wildChild = players[0];
         var model = players[1];
         var werewolf = players[2];
+        builder.ArrangeKnownWerewolfFactionAgentGroup(werewolf.Id);
 
         builder.ConfirmGameStart();
         builder.ConfirmNightStart();

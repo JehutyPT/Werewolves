@@ -615,8 +615,8 @@ public class LobbyEvaluationCoordinatorTests
 		var currentRecord = AlreadyDecidedRecord(lobby.CreateSimulationScenario());
 		var staleBytes = Encoding.UTF8.GetBytes(
 			Encoding.UTF8.GetString(DocumentBytes(currentRecord)).Replace(
+				"full-probability@3",
 				"full-probability@2",
-				"full-probability@1",
 				StringComparison.Ordinal));
 		var local = new RecordingLocalStore(staleBytes);
 		var evaluator = new RecordingEvaluator(new AlreadyDecidedTerminalEvaluation(
@@ -643,8 +643,8 @@ public class LobbyEvaluationCoordinatorTests
 		written.Document!.Records.Should().ContainSingle()
 			.Which.CompatibilityIdentity.Should().Be(currentRecord.CompatibilityIdentity);
 		Encoding.UTF8.GetString(writtenBytes).Should()
-			.Contain("full-probability@2")
-			.And.NotContain("full-probability@1");
+			.Contain("full-probability@3")
+			.And.NotContain("full-probability@2");
 	}
 
 	[Theory]

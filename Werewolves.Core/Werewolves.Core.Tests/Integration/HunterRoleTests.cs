@@ -596,13 +596,13 @@ public sealed class HunterRoleTests(ITestOutputHelper output)
 
 		forcedReveal.PlayersForAssignment.Should().BeEquivalentTo(
 			players
-				.Where(player =>
-					player.Id != hunterId &&
-					player.Id != players[0].Id)
+				.Where(player => player.Id != hunterId)
 				.Select(player => player.Id));
 		var assignments = forcedReveal.PlayersForAssignment.ToDictionary(
 			playerId => playerId,
-			_ => MainRoleType.SimpleVillager);
+			playerId => playerId == players[0].Id
+				? MainRoleType.SimpleWerewolf
+				: MainRoleType.SimpleVillager);
 		var recoveredReaction =
 			new EliminateAllOtherLivingPlayersReaction();
 		recoveredReaction.Configure(hunterId);

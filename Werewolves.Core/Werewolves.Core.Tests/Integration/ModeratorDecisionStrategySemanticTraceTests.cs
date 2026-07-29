@@ -35,7 +35,7 @@ public class ModeratorDecisionStrategySemanticTraceTests
 		var assignRoles = new AssignRolesInstruction(
 			ModeratorInstructionSemantic.AssignDawnVictimRoles,
 			ImmutableHashSet.Create(players[1].Id, players[3].Id),
-			[MainRoleType.SimpleVillager, MainRoleType.Seer],
+			[MainRoleType.SimpleVillager, MainRoleType.SimpleWerewolf],
 			privateInstruction: nameof(BaselineRandom_ProductionCursor_PreservesLiteralUpstreamSemanticSequence));
 
 		var identificationResponse = fixture.Strategy.CreateResponse(identifySeer, fixture.Session);
@@ -43,17 +43,17 @@ public class ModeratorDecisionStrategySemanticTraceTests
 		var assignmentResponse = fixture.Strategy.CreateResponse(assignRoles, fixture.Session);
 
 		fixture.StartState.RoleAssignments.Select(assignment => assignment.Role).Should().Equal(
-			MainRoleType.SimpleWerewolf,
-			MainRoleType.SimpleVillager,
+			MainRoleType.WildChild,
 			MainRoleType.SimpleVillager,
 			MainRoleType.Seer,
-			MainRoleType.WildChild);
-		ToSeatNumbers(identificationResponse.SelectedPlayerIds!, players).Should().Equal(4);
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager);
+		ToSeatNumbers(identificationResponse.SelectedPlayerIds!, players).Should().Equal(3);
 		ToSeatNumbers(selectionResponse.SelectedPlayerIds!, players).Should().Equal(2, 4);
 		assignmentResponse.AssignedPlayerRoles.Should().ContainKey(players[1].Id)
 			.WhoseValue.Should().Be(MainRoleType.SimpleVillager);
 		assignmentResponse.AssignedPlayerRoles.Should().ContainKey(players[3].Id)
-			.WhoseValue.Should().Be(MainRoleType.Seer);
+			.WhoseValue.Should().Be(MainRoleType.SimpleWerewolf);
 	}
 
 	[Fact]
@@ -80,6 +80,83 @@ public class ModeratorDecisionStrategySemanticTraceTests
 			"Vote:Target");
 		continueResponse.InstructionId.Should().Be(fixture.StartInstruction.InstructionId);
 		voteResponse.InstructionId.Should().Be(vote.InstructionId);
+	}
+
+	[Fact]
+	public void BaselineRandom_WerewolfFactionAgentGroupObservation_UsesHiddenCurrentLivingSelectableAgentsWithoutAdvancingCursor()
+	{
+		var observedFixture = CreateFixture(runNumber: 11);
+		var replayFixture = CreateFixture(runNumber: 11);
+		var players = observedFixture.Session.GetPlayers().ToArray();
+		var replayPlayers = replayFixture.Session.GetPlayers().ToArray();
+		var initialAgentSeats = observedFixture.StartState.FactionFacts
+			.Where(facts =>
+				facts.GetAgentKnowledge(Faction.Werewolf) ==
+				FactionAgentKnowledge.KnownAgent)
+			.Select(facts => facts.SeatNumber)
+			.ToArray();
+		var transitionedSeats = observedFixture.StartState.FactionFacts
+			.Where(facts =>
+				facts.GetAgentKnowledge(Faction.Werewolf) ==
+				FactionAgentKnowledge.KnownNonAgent)
+			.Take(2)
+			.Select(facts => facts.SeatNumber)
+			.ToArray();
+		observedFixture.Builder.GameService.CommitExplicitFactionTransition(
+			observedFixture.Session.Id,
+			"current-werewolf-agent-transition",
+			transitionedSeats
+				.Select(seatNumber => FactionFact.Agent(
+					players[seatNumber - 1].Id,
+					Faction.Werewolf,
+					FactionAgentKnowledge.KnownAgent,
+					new FactionFactEffectiveBoundary(1, GamePhase.Night, 10)))
+				.ToArray());
+		observedFixture.Builder.ArrangeEliminatedPlayer(
+			players[transitionedSeats[1] - 1].Id);
+		var observation = new SelectPlayersInstruction(
+			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup,
+			players.Select(player => player.Id).ToHashSet(),
+			NumberRangeConstraint.AtLeast(1),
+			privateInstruction:
+				nameof(BaselineRandom_WerewolfFactionAgentGroupObservation_UsesHiddenCurrentLivingSelectableAgentsWithoutAdvancingCursor));
+		var choiceAfterObservation = new SelectPlayersInstruction(
+			ModeratorInstructionSemantic.SelectWerewolfVictim,
+			players.Skip(1).Select(player => player.Id).ToHashSet(),
+			NumberRangeConstraint.Exact(2),
+			privateInstruction:
+				nameof(BaselineRandom_WerewolfFactionAgentGroupObservation_UsesHiddenCurrentLivingSelectableAgentsWithoutAdvancingCursor));
+		var replayChoice = new SelectPlayersInstruction(
+			ModeratorInstructionSemantic.SelectWerewolfVictim,
+			replayPlayers.Skip(1).Select(player => player.Id).ToHashSet(),
+			NumberRangeConstraint.Exact(2),
+			privateInstruction:
+				nameof(BaselineRandom_WerewolfFactionAgentGroupObservation_UsesHiddenCurrentLivingSelectableAgentsWithoutAdvancingCursor));
+
+		observedFixture.Session.TryGetKnownFactionAgents(
+				Faction.Werewolf,
+				out var partialAgents)
+			.Should().BeFalse();
+		partialAgents.Should().BeEmpty();
+		observedFixture.Session.GetFactionAgentKnowledge(
+				players[initialAgentSeats[0] - 1].Id,
+				Faction.Werewolf)
+			.Should().Be(FactionAgentKnowledge.Unknown);
+
+		var observationResponse = observedFixture.Strategy.CreateResponse(
+			observation,
+			observedFixture.Session);
+		var responseAfterObservation = observedFixture.Strategy.CreateResponse(
+			choiceAfterObservation,
+			observedFixture.Session);
+		var replayResponse = replayFixture.Strategy.CreateResponse(
+			replayChoice,
+			replayFixture.Session);
+
+		ToSeatNumbers(observationResponse.SelectedPlayerIds!, players).Should()
+			.Equal(initialAgentSeats.Append(transitionedSeats[0]).Order());
+		ToSeatNumbers(responseAfterObservation.SelectedPlayerIds!, players).Should()
+			.Equal(ToSeatNumbers(replayResponse.SelectedPlayerIds!, replayPlayers));
 	}
 
 	[Fact]
@@ -181,14 +258,16 @@ public class ModeratorDecisionStrategySemanticTraceTests
 				random),
 			builder.GetGameState()!,
 			startInstruction,
-			startState);
+			startState,
+			builder);
 	}
 
 	private sealed record StrategyFixture(
 		BaselineRandomDecisionStrategy Strategy,
 		IGameSession Session,
 		StartGameConfirmationInstruction StartInstruction,
-		SimulationStartState StartState);
+		SimulationStartState StartState,
+		GameTestBuilder Builder);
 
 	private sealed record UnsupportedInstruction()
 		: ModeratorInstruction(

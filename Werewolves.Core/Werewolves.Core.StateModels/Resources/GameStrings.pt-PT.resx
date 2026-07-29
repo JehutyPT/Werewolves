@@ -501,6 +501,10 @@
     <value>{0}, acordem e comuniquem em silêncio.</value>
     <comment/>
   </data>
+  <data name="WerewolfFactionAgentObservationPrompt" xml:space="preserve">
+    <value>Selecione todos os jogadores vivos que agem atualmente pela fação dos Lobisomens.</value>
+    <comment/>
+  </data>
   <data name="RoleHoldersGoToSleep" xml:space="preserve">
     <value>{0} voltam a dormir.</value>
     <comment/>

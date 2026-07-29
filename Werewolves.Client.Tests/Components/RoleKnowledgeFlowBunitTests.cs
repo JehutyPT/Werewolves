@@ -8,6 +8,7 @@ using Werewolves.Client.Services;
 using Werewolves.Client.Tests.Helpers;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
+using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Resources;
 using Xunit;
@@ -177,7 +178,7 @@ public sealed class RoleKnowledgeFlowBunitTests
 	}
 
 	[Fact]
-	public void PrivateRoleIdentification_IsMarkedModeratorOnlyAndDoesNotIncreaseRevealedCount()
+	public void PrivateFactionAgentObservation_DoesNotRevealExactRoleOrIncreaseRevealedCount()
 	{
 		using var context = new ModeratorComponentTestContext();
 		var manager = context.Services.GetRequiredService<GameClientManager>();
@@ -197,16 +198,21 @@ public sealed class RoleKnowledgeFlowBunitTests
 		var identification = manager.CurrentInstruction
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
 		var holder = manager.CurrentSession!.GetPlayers().First();
+		identification.Semantic.Should().Be(
+			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
+		identification.RoleIdentification.Should().BeNull();
 
 		manager.ProcessInput(identification.CreateResponse([holder.Id]))
 			.IsSuccess.Should().BeTrue();
 
+		holder.State.ModeratorKnownRole.Should().BeNull();
+		manager.CurrentSession.GetFactionAgentKnowledge(holder.Id, Faction.Werewolf)
+			.Should().Be(FactionAgentKnowledge.KnownAgent);
 		var cut = context.RenderModeratorComponent<DashboardPage>();
 		var holderEntry = cut.FindAll("li")
 			.Single(entry => entry.TextContent.Contains(holder.Name, StringComparison.CurrentCulture));
-		holderEntry.TextContent.Should().Contain(identification.RoleIdentification!.Value.GetPublicName());
-		holderEntry.TextContent.Should().Contain(ClientStrings.Dashboard_RoleKnowledgePrivate);
-		cut.Markup.Should().Contain(ClientStrings.Dashboard_RoleKnowledgeUnknown);
+		holderEntry.TextContent.Should().Contain(DashboardRoster.UnknownRoleLabel);
+		holderEntry.TextContent.Should().Contain(ClientStrings.Dashboard_RoleKnowledgeUnknown);
 
 		var revealedLabel = cut.FindAll("span")
 			.Single(element => element.TextContent.Trim() == ClientStrings.Dashboard_RevealedStatLabel);
@@ -357,10 +363,12 @@ public sealed class RoleKnowledgeFlowBunitTests
 		var werewolf = players[0];
 		var witch = players[1];
 		var attackedPlayer = players[2];
-		var werewolfIdentification = manager.CurrentInstruction
+		var werewolfObservation = manager.CurrentInstruction
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
-		werewolfIdentification.RoleIdentification.Should().Be(MainRoleType.SimpleWerewolf);
-		manager.ProcessInput(werewolfIdentification.CreateResponse([werewolf.Id]))
+		werewolfObservation.Semantic.Should().Be(
+			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
+		werewolfObservation.RoleIdentification.Should().BeNull();
+		manager.ProcessInput(werewolfObservation.CreateResponse([werewolf.Id]))
 			.IsSuccess.Should().BeTrue();
 		var werewolfVictim = manager.CurrentInstruction
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
@@ -472,7 +480,8 @@ public sealed class RoleKnowledgeFlowBunitTests
 			{
 				SelectPlayersInstruction
 					{
-						RoleIdentification: MainRoleType.SimpleWerewolf
+						Semantic:
+							ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup
 					} instruction =>
 					manager.ProcessInput(instruction.CreateResponse([werewolfId])),
 				SelectPlayersInstruction

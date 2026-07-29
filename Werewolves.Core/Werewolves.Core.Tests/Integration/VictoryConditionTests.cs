@@ -2,6 +2,7 @@ using FluentAssertions;
 using Werewolves.Core.GameLogic.Models.StateMachine;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
+using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.Tests.Helpers;
 using Xunit;
@@ -83,11 +84,15 @@ public class VictoryConditionTests : DiagnosticTestBase
             CoreTestReferences.InstructionContexts.VoteSelection);
         var afterVote = builder.Process(voteInstruction.CreateResponse([werewolf.Id]));
 
-        // Publicly reveal the role already known from the night wake.
-        var roleRevealInstruction = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+        // Assign the exact role before publicly revealing it.
+        var roleRevealInstruction = InstructionAssert.ExpectSuccessWithType<AssignRolesInstruction>(
             afterVote,
             CoreTestReferences.InstructionContexts.RoleAssignmentAfterLynch);
-        var afterRoleReveal = builder.Process(roleRevealInstruction.CreateResponse());
+        roleRevealInstruction.PlayersForAssignment.Should().Equal(werewolf.Id);
+        var afterRoleReveal = builder.Process(roleRevealInstruction.CreateResponse(new()
+        {
+            [werewolf.Id] = MainRoleType.SimpleWerewolf
+        }));
 
         // Confirm the death announcement.
         var deathAnnouncementInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
@@ -435,6 +440,48 @@ public class VictoryConditionTests : DiagnosticTestBase
 
     #region VC-020 to VC-022: Victory Timing
 
+    [Fact]
+    public void IncompleteBeneficiaryClosure_AtVictoryCheckWindow_ThrowsInvariantFailure()
+    {
+        var builder = CreateBuilder()
+            .WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: false);
+        builder.StartGame();
+        var session = builder.GetGameState()!;
+        var players = session.GetPlayers().ToArray();
+        builder.ArrangeEliminatedPlayer(players[0].Id);
+        var boundary = new FactionFactEffectiveBoundary(
+            session.TurnNumber,
+            session.GetCurrentPhase(),
+            session.GameHistoryLog.Count());
+        builder.ArrangeExplicitFactionTransition(
+            "test-incomplete-closure-before-victory",
+            players
+                .Skip(1)
+                .Select(player => FactionFact.Agent(
+                    player.Id,
+                    Faction.Werewolf,
+                    FactionAgentKnowledge.KnownNonAgent,
+                    boundary))
+                .ToArray());
+        builder.ConfirmGameStart();
+
+        var finishNight = builder.ConfirmNightStart()
+            .ModeratorInstruction.Should()
+            .BeOfType<ConfirmationInstruction>().Subject;
+        finishNight.Semantic.Should().Be(
+            ModeratorInstructionSemantic.FinishNightActions);
+        session.GetFactionBeneficiaryKnowledge(players[1].Id)
+            .IsKnown.Should().BeFalse();
+        var reachVictoryCheckWindow = () =>
+            builder.Process(finishNight.CreateResponse());
+
+        reachVictoryCheckWindow.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("Required Faction facts are not ready.");
+
+        MarkTestCompleted();
+    }
+
     /// <summary>
     /// VC-020: Victory condition is checked and detected at dawn (before Day phase starts).
     /// </summary>
@@ -549,10 +596,14 @@ public class VictoryConditionTests : DiagnosticTestBase
             CoreTestReferences.InstructionContexts.VoteSelection);
         var afterVote = builder.Process(voteInstruction.CreateResponse([werewolf.Id]));
 
-        var roleRevealInstruction = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+        var roleRevealInstruction = InstructionAssert.ExpectSuccessWithType<AssignRolesInstruction>(
             afterVote,
             CoreTestReferences.InstructionContexts.RoleAssignmentAfterLynch);
-        var afterRoleReveal = builder.Process(roleRevealInstruction.CreateResponse());
+        roleRevealInstruction.PlayersForAssignment.Should().Equal(werewolf.Id);
+        var afterRoleReveal = builder.Process(roleRevealInstruction.CreateResponse(new()
+        {
+            [werewolf.Id] = MainRoleType.SimpleWerewolf
+        }));
         var deathAnnouncementInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             afterRoleReveal.ModeratorInstruction,
             CoreTestReferences.InstructionContexts.DeathAnnouncementConfirmation);

@@ -342,7 +342,7 @@ public sealed class ScapegoatFlowBunitTests
 				SelectPlayersInstruction
 				{
 					Semantic:
-					ModeratorInstructionSemantic.IdentifyRoleHolders
+					ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup
 				} identify =>
 					identify.CreateResponse(
 						identify.SelectablePlayerIds

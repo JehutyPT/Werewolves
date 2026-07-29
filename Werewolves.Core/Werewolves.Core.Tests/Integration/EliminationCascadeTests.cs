@@ -26,6 +26,7 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 		initialReveal.PlayersForAssignment.Should().BeEquivalentTo(
 			[players[2].Id, players[3].Id]);
 		initialReveal.RolesForAssignment.Should().Equal(
+			MainRoleType.SimpleWerewolf,
 			MainRoleType.SimpleVillager,
 			MainRoleType.SimpleVillager,
 			MainRoleType.SimpleVillager,
