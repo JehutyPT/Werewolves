@@ -3,6 +3,7 @@ using FluentAssertions.Execution;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
+using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.Tests.Helpers;
 using Xunit;
@@ -83,6 +84,7 @@ public sealed class WitchNightResolutionTests : DiagnosticTestBase
 			.Should().BeTrue();
 		elder.State.HasStatusEffect(StatusEffectTypes.LycanthropyInfection)
 			.Should().BeFalse();
+		AssertNoSuccessfulInfectionTransition(builder);
 		AssertNoDawnVictim(builder, elder.Id);
 		MarkTestCompleted();
 	}
@@ -105,6 +107,7 @@ public sealed class WitchNightResolutionTests : DiagnosticTestBase
 
 		elder.State.HasStatusEffect(StatusEffectTypes.LycanthropyInfection)
 			.Should().BeTrue();
+		AssertSuccessfulInfectionTransition(builder, elder.Id);
 		AssertNoDawnVictim(builder, elder.Id);
 		MarkTestCompleted();
 	}
@@ -178,7 +181,156 @@ public sealed class WitchNightResolutionTests : DiagnosticTestBase
 			.Should().Be(expectedInfection);
 		elder.State.HasStatusEffect(StatusEffectTypes.ElderProtectionLost)
 			.Should().BeTrue();
+		if (expectedInfection)
+		{
+			AssertSuccessfulInfectionTransition(builder, elder.Id);
+		}
+		else
+		{
+			AssertNoSuccessfulInfectionTransition(builder);
+		}
 		AssertNoDawnVictim(builder, elder.Id);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void Defender_DoesNotBlockSuccessfulInfectionOfOrdinaryVillager()
+	{
+		var (builder, target) = CreateScenario(MainRoleType.SimpleVillager);
+		var werewolf = builder.GetGameState()!.GetPlayers().First();
+		builder.ArrangeNightAction(
+			NightActionType.DefenderProtect,
+			target.Id);
+
+		CompleteNight(
+			builder,
+			werewolf,
+			target,
+			afterCollective => afterCollective.ArrangeNightAction(
+				NightActionType.AccursedWolfFatherInfection,
+				target.Id));
+
+		target.State.HasStatusEffect(StatusEffectTypes.LycanthropyInfection)
+			.Should().BeTrue();
+		AssertSuccessfulInfectionTransition(builder, target.Id);
+		AssertNoDawnVictim(builder, target.Id);
+		builder.GetGameState()!.GameHistoryLog
+			.OfType<NightActionLogEntry>()
+			.Should().ContainSingle(entry =>
+				entry.ActionType ==
+					NightActionType.WerewolfVictimSelection &&
+				entry.TargetIds!.SequenceEqual(new[] { target.Id }));
+		builder.GetGameState()!.GameHistoryLog
+			.OfType<FactionFactsCommittedLogEntry>()
+			.Count(entry =>
+				entry.Source.Kind ==
+					FactionFactSourceKind.InitialBeneficiaryClosure)
+			.Should().Be(1);
+		MarkTestCompleted();
+	}
+
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public void InvalidInfectionIntent_ThrowsBeforeDawnConsequences(
+		bool duplicateIntent)
+	{
+		var (builder, target) = CreateScenario(MainRoleType.SimpleVillager);
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		var werewolf = players[0];
+		var finishNight = PrepareNightResolution(
+			builder,
+			werewolf,
+			target,
+			afterCollective =>
+			{
+				afterCollective.ArrangeNightAction(
+					NightActionType.AccursedWolfFatherInfection,
+					duplicateIntent ? target.Id : players[2].Id);
+				if (duplicateIntent)
+				{
+					afterCollective.ArrangeNightAction(
+						NightActionType.AccursedWolfFatherInfection,
+						target.Id);
+				}
+			});
+
+		var act = () => builder.Process(finishNight.CreateResponse());
+
+		act.Should().Throw<InvalidOperationException>()
+			.WithMessage(
+				"*does not match one retained collective victim*");
+		builder.GetGameState()!.GetPlayers()
+			.Should().OnlyContain(player =>
+				!player.State.HasStatusEffect(
+					StatusEffectTypes.LycanthropyInfection));
+		AssertNoSuccessfulInfectionTransition(builder);
+		builder.GetGameState()!.GameHistoryLog
+			.OfType<DawnVictimDeterminedLogEntry>()
+			.Should().BeEmpty();
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void SuccessfulInfection_PreservesIdentityAndDominantBeneficiaryWhileAddingWerewolfAgency()
+	{
+		var (builder, target) = CreateScenario(MainRoleType.SimpleVillager);
+		var werewolf = builder.GetGameState()!.GetPlayers().First();
+		builder
+			.ArrangeKnownRole(target.Id, MainRoleType.SimpleVillager)
+			.ArrangeStatusEffect(target.Id, StatusEffectTypes.Charmed);
+		var sessionBefore = builder.GetGameState()!;
+		var boundary = new FactionFactEffectiveBoundary(
+			sessionBefore.TurnNumber,
+			sessionBefore.GetCurrentPhase(),
+			sessionBefore.GameHistoryLog.Count());
+		builder.ArrangeExplicitFactionTransition(
+			"dominant-villager-beneficiary",
+			FactionFact.Beneficiary(
+				target.Id,
+				Faction.Villager,
+				boundary,
+				beneficiaryPrecedence: 1));
+		var stateBefore = target.State;
+		var identityBefore = (
+			stateBefore.CurrentRole,
+			stateBefore.PhysicalCharacterCardRole,
+			stateBefore.ModeratorKnownRole,
+			stateBefore.PubliclyRevealedRole);
+
+		CompleteNight(
+			builder,
+			werewolf,
+			target,
+			afterCollective => afterCollective.ArrangeNightAction(
+				NightActionType.AccursedWolfFatherInfection,
+				target.Id));
+
+		var stateAfter = target.State;
+		(
+			stateAfter.CurrentRole,
+			stateAfter.PhysicalCharacterCardRole,
+			stateAfter.ModeratorKnownRole,
+			stateAfter.PubliclyRevealedRole)
+			.Should().Be(identityBefore);
+		stateAfter.HasStatusEffect(StatusEffectTypes.Charmed)
+			.Should().BeTrue();
+		stateAfter.HasStatusEffect(StatusEffectTypes.LycanthropyInfection)
+			.Should().BeTrue();
+		stateAfter.FactionBeneficiary.Should().Be(
+			FactionBeneficiaryKnowledge.Known(Faction.Villager));
+		stateAfter.GetFactionAgentKnowledge(Faction.Werewolf)
+			.Should().Be(FactionAgentKnowledge.KnownAgent);
+		AssertSuccessfulInfectionTransition(builder, target.Id);
+		var infectionBeneficiary = builder.GetGameState()!.GameHistoryLog
+			.OfType<FactionFactsCommittedLogEntry>()
+			.Single(entry =>
+				entry.Source.Identifier ==
+					"accursed-wolf-father-infection")
+			.Facts.Single(fact =>
+				fact.Type == FactionFactType.Beneficiary);
+		infectionBeneficiary.Faction.Should().Be(Faction.Werewolf);
+		infectionBeneficiary.BeneficiaryPrecedence.Should().Be(0);
 		MarkTestCompleted();
 	}
 
@@ -262,6 +414,7 @@ public sealed class WitchNightResolutionTests : DiagnosticTestBase
 			elder.State.HasStatusEffect(StatusEffectTypes.LycanthropyInfection)
 				.Should().BeFalse();
 		}
+		AssertNoSuccessfulInfectionTransition(builder);
 		AssertNoDawnVictim(builder, elder.Id);
 		MarkTestCompleted();
 	}
@@ -288,6 +441,7 @@ public sealed class WitchNightResolutionTests : DiagnosticTestBase
 			.Should().BeTrue();
 		elder.State.HasStatusEffect(StatusEffectTypes.LycanthropyInfection)
 			.Should().BeTrue();
+		AssertSuccessfulInfectionTransition(builder, elder.Id);
 		AssertNoDawnVictim(builder, elder.Id);
 		MarkTestCompleted();
 	}
@@ -384,6 +538,20 @@ public sealed class WitchNightResolutionTests : DiagnosticTestBase
 		IPlayer collectiveTarget,
 		Action<GameTestBuilder>? arrangeAfterCollective = null)
 	{
+		var finishNight = PrepareNightResolution(
+			builder,
+			werewolf,
+			collectiveTarget,
+			arrangeAfterCollective);
+		builder.Process(finishNight.CreateResponse());
+	}
+
+	private static ConfirmationInstruction PrepareNightResolution(
+		GameTestBuilder builder,
+		IPlayer werewolf,
+		IPlayer collectiveTarget,
+		Action<GameTestBuilder>? arrangeAfterCollective = null)
+	{
 		builder.ConfirmGameStart();
 		builder.ConfirmNightStart();
 		var identification = InstructionAssert.ExpectType<SelectPlayersInstruction>(
@@ -402,7 +570,7 @@ public sealed class WitchNightResolutionTests : DiagnosticTestBase
 				builder.Process(sleep.CreateResponse()));
 		finishNight.Semantic.Should().Be(
 			ModeratorInstructionSemantic.FinishNightActions);
-		builder.Process(finishNight.CreateResponse());
+		return finishNight;
 	}
 
 	private static void AssertDawnVictim(
@@ -421,4 +589,45 @@ public sealed class WitchNightResolutionTests : DiagnosticTestBase
 		builder.GetGameState()!.GameHistoryLog
 			.OfType<DawnVictimDeterminedLogEntry>()
 			.Should().NotContain(entry => entry.PlayerId == playerId);
+
+	private static void AssertSuccessfulInfectionTransition(
+		GameTestBuilder builder,
+		Guid playerId)
+	{
+		var transition = builder.GetGameState()!.GameHistoryLog
+			.OfType<FactionFactsCommittedLogEntry>()
+			.Where(entry =>
+				entry.Source.Kind ==
+					FactionFactSourceKind.ExplicitTransition &&
+				entry.Source.Identifier ==
+					"accursed-wolf-father-infection")
+			.Should().ContainSingle()
+			.Subject;
+		transition.CurrentPhase.Should().Be(GamePhase.Dawn);
+		transition.Facts.Should().HaveCount(2);
+		transition.Facts.Should().ContainSingle(fact =>
+			fact.PlayerId == playerId &&
+			fact.Type == FactionFactType.Beneficiary &&
+			fact.Faction == Faction.Werewolf);
+		transition.Facts.Should().ContainSingle(fact =>
+			fact.PlayerId == playerId &&
+			fact.Type == FactionFactType.Agent &&
+			fact.Faction == Faction.Werewolf &&
+			fact.AgentKnowledge ==
+				FactionAgentKnowledge.KnownAgent);
+		transition.Facts
+			.Select(fact => fact.EffectiveBoundary)
+			.Distinct()
+			.Should().ContainSingle();
+	}
+
+	private static void AssertNoSuccessfulInfectionTransition(
+		GameTestBuilder builder) =>
+		builder.GetGameState()!.GameHistoryLog
+			.OfType<FactionFactsCommittedLogEntry>()
+			.Should().NotContain(entry =>
+				entry.Source.Kind ==
+					FactionFactSourceKind.ExplicitTransition &&
+				entry.Source.Identifier ==
+					"accursed-wolf-father-infection");
 }

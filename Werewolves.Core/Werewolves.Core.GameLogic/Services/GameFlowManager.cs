@@ -646,21 +646,58 @@ internal static class GameFlowManager
             return null;
         }
 
-        var selectedPlayerIds = input.SelectedPlayerIds;
-        if (startingInstruction is not SelectPlayersInstruction ||
-            selectedPlayerIds is not { Count: 1 })
+        if (newCommittedEntries is not [var committedEntry] ||
+            committedEntry.TargetIds is not { Count: 1 })
         {
             throw new InvalidOperationException(
-                "A One-Use Resource commit must correlate to one accepted Player selection.");
+                "One accepted response must produce exactly one atomic One-Use Resource commit.");
         }
 
-        var committedTargetId = selectedPlayerIds.Single();
-        if (newCommittedEntries is not [var committedEntry] ||
-            committedEntry.TargetIds is not { Count: 1 } ||
-            committedEntry.TargetIds[0] != committedTargetId)
+        var committedTargetId = committedEntry.TargetIds[0];
+        switch (startingInstruction)
         {
-            throw new InvalidOperationException(
-                "The accepted One-Use Resource selection did not produce its atomic domain commit.");
+            case SelectPlayersInstruction
+                when input.SelectedPlayerIds is { Count: 1 } selectedPlayerIds &&
+                     selectedPlayerIds.Single() == committedTargetId:
+                break;
+            case SelectOptionsInstruction
+                {
+                    Semantic:
+                        ModeratorInstructionSemantic
+                            .ChooseAccursedWolfFatherInfection,
+                    SelectionRange: var selectionRange,
+                    Options: var options
+                }
+                when selectionRange == NumberRangeConstraint.Single &&
+                     options.Select(option => option.Id).SequenceEqual(
+                         [
+                             AccursedWolfFatherInfectionOptionIds.Infect,
+                             AccursedWolfFatherInfectionOptionIds.Decline
+                         ],
+                         StringComparer.Ordinal) &&
+                     input.SelectedOptionIds is { Count: 1 } selectedOptionIds &&
+                     StringComparer.Ordinal.Equals(
+                         selectedOptionIds.Single(),
+                         AccursedWolfFatherInfectionOptionIds.Infect):
+            {
+                var retainedVictimIds =
+                    GameSessionQueries.GetOrderedNightActionsThisNight(
+                            session,
+                            [NightActionType.WerewolfVictimSelection])
+                        .SelectMany(entry => entry.TargetIds ?? [])
+                        .ToArray();
+                if (retainedVictimIds is not [var retainedVictimId] ||
+                    retainedVictimId != committedTargetId)
+                {
+                    throw new InvalidOperationException(
+                        "The Accursed Wolf-Father commit must target the one retained collective victim.");
+                }
+
+                break;
+            }
+            default:
+                throw new InvalidOperationException(
+                    "A One-Use Resource commit must correlate to one accepted Player or semantic option selection.");
         }
 
         var resourceIdentity = committedEntry.ResourceIdentity;
@@ -899,6 +936,14 @@ internal static class GameFlowManager
                     Listener(Witch),
                     WitchRoleState.ReadyToSleep.ToString(),
                     AcceptedObservationInstructionShape.Confirmation),
+            (AccursedWolfFather,
+                NightActionType.AccursedWolfFatherInfection,
+                ModeratorInstructionSemantic.PutRoleToSleep) =>
+                new(
+                    NightMainActionLoop.ToString(),
+                    Listener(AccursedWolfFather),
+                    AccursedWolfFatherRoleState.ReadyToSleep.ToString(),
+                    AcceptedObservationInstructionShape.Confirmation),
             _ => null
         };
 
@@ -919,6 +964,13 @@ internal static class GameFlowManager
                     NightMainActionLoop.ToString(),
                     Listener(WolfHound),
                     WolfHoundRoleState.AwaitingAlignmentChoice.ToString(),
+                    AcceptedObservationInstructionShape.OptionSelection),
+            (AccursedWolfFather,
+                ModeratorInstructionSemantic.ChooseAccursedWolfFatherInfection) =>
+                new(
+                    NightMainActionLoop.ToString(),
+                    Listener(AccursedWolfFather),
+                    AccursedWolfFatherRoleState.AwaitingInfectionChoice.ToString(),
                     AcceptedObservationInstructionShape.OptionSelection),
             (SimpleWerewolf, ModeratorInstructionSemantic.SelectWerewolfVictim) =>
                 new(

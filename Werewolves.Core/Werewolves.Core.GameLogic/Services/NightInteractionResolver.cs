@@ -1,11 +1,16 @@
 using Werewolves.Core.GameLogic.Queries;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Log;
+using Werewolves.Core.StateModels.Models;
 
 namespace Werewolves.Core.GameLogic.Services;
 
 internal static class NightInteractionResolver
 {
+	private const string InfectionTransitionSourceIdentifier =
+		"accursed-wolf-father-infection";
+
 	private readonly record struct CommittedNightAttempt(
 		NightActionType ActionType,
 		Guid TargetId);
@@ -28,10 +33,34 @@ internal static class NightInteractionResolver
 	/// </summary>
 	public static void ResolveNightPhase(GameSession session)
 	{
-		var committedAttempts = GameSessionQueries
-			.GetOrderedNightActionsThisNight(
+		var nightActions =
+			GameSessionQueries.GetOrderedNightActionsThisNight(
 				session,
-				DawnResolutionActionTypes)
+				DawnResolutionActionTypes);
+		var infectionLogs = nightActions
+			.Where(entry =>
+				entry.ActionType ==
+					NightActionType.AccursedWolfFatherInfection)
+			.ToArray();
+		if (infectionLogs.Length > 0)
+		{
+			var collectiveLogs = nightActions
+				.Where(entry =>
+					entry.ActionType ==
+						NightActionType.WerewolfVictimSelection)
+				.ToArray();
+			if (infectionLogs is not [var infection] ||
+			    collectiveLogs is not [var collective] ||
+			    infection.TargetIds is not [var infectionTarget] ||
+			    collective.TargetIds is not [var collectiveTarget] ||
+			    infectionTarget != collectiveTarget)
+			{
+				throw new InvalidOperationException(
+					"The Accursed Wolf-Father infection intent does not match one retained collective victim.");
+			}
+		}
+
+		var committedAttempts = nightActions
 			.SelectMany(log =>
 				(log.TargetIds ?? []).Select(targetId =>
 					new CommittedNightAttempt(log.ActionType, targetId)))
@@ -70,11 +99,40 @@ internal static class NightInteractionResolver
 			}
 
 			if (isInfection)
-			{
-				session.ApplyStatusEffect(
-					StatusEffectTypes.LycanthropyInfection,
-					player.Id);
-			}
+				{
+					session.ApplyStatusEffect(
+						StatusEffectTypes.LycanthropyInfection,
+						player.Id);
+					session.CommitFactionFactBatch(context =>
+					{
+						var boundary = new FactionFactEffectiveBoundary(
+							context.TurnNumber,
+							context.CurrentPhase,
+							session.GameHistoryLog.Count());
+						return new FactionFactsCommittedLogEntry
+						{
+							Timestamp = context.Timestamp,
+							TurnNumber = context.TurnNumber,
+							CurrentPhase = context.CurrentPhase,
+							Source = new FactionFactSource(
+								FactionFactSourceKind.ExplicitTransition,
+								InfectionTransitionSourceIdentifier),
+							Facts =
+							[
+								FactionFact.Beneficiary(
+									player.Id,
+									Faction.Werewolf,
+									boundary,
+									beneficiaryPrecedence: 0),
+								FactionFact.Agent(
+									player.Id,
+									Faction.Werewolf,
+									FactionAgentKnowledge.KnownAgent,
+									boundary)
+							]
+						};
+					});
+				}
 			else
 			{
 				if (lethalPhysicalTargets.Add(player.Id))

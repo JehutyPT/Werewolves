@@ -491,8 +491,8 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 	}
 
 	[Theory]
-	[InlineData(0L, "wolf-hound-werewolves")]
-	[InlineData(1L, "wolf-hound-villagers")]
+	[InlineData(0L, "wolf-hound-villagers")]
+	[InlineData(1L, "wolf-hound-werewolves")]
 	public void BaselineRandomDecisionStrategy_WithWolfHoundAlignment_UsesGlobalDeterministicStreamWithoutHiddenTruth(
 		long runNumber,
 		string expectedOptionId)
@@ -565,9 +565,76 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 		selected.SelectedOptionIds.Should().BeSubsetOf(
 			optionInstruction.Options.Select(option => option.Id));
 		MarkTestCompleted();
-	}
+		}
 
-	[Fact]
+		[Theory]
+		[InlineData(
+			0L,
+			AccursedWolfFatherInfectionOptionIds.Infect)]
+		[InlineData(
+			3L,
+			AccursedWolfFatherInfectionOptionIds.Decline)]
+		public void BaselineRandomDecisionStrategy_WithAccursedWolfFatherInfection_CoversBothBranchesDeterministically(
+			long runNumber,
+			string expectedOptionId)
+		{
+			var scenario =
+				new StateModels.Models.Simulation.SimulationScenario(
+					5,
+					[
+						MainRoleType.SimpleWerewolf,
+						MainRoleType.AccursedWolfFather,
+						MainRoleType.SimpleVillager,
+						MainRoleType.SimpleVillager,
+						MainRoleType.SimpleVillager
+					]);
+			var material = new RunSeedMaterial(
+				new SimulationCompatibilityIdentity(
+					scenario.ToCanonical(),
+					SimulatorCapability.SafetyScreening.Identity),
+				BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
+				runNumber);
+			var optionInstruction = new SelectOptionsInstruction(
+				ModeratorInstructionSemantic
+					.ChooseAccursedWolfFatherInfection,
+				[
+					new ModeratorOption(
+						AccursedWolfFatherInfectionOptionIds.Infect,
+						GameStrings.AccursedWolfFatherInfectOption),
+					new ModeratorOption(
+						AccursedWolfFatherInfectionOptionIds.Decline,
+						GameStrings.DeclineOption)
+				],
+				NumberRangeConstraint.Single,
+				privateInstruction:
+					GameStrings.AccursedWolfFatherInfectionInstruction);
+			var random = new DeterministicRandomSource(material);
+			var startState = SimulationStartStateDeriver.Derive(
+				material,
+				SimulatorCapability.SafetyScreening,
+				random);
+			var config = startState.CreateGameSessionConfig();
+			var builder = CreateBuilder()
+				.WithPlayers(config.Players.ToArray())
+				.WithRoles(config.Roles.ToArray());
+			builder.StartGame();
+			var strategy = new BaselineRandomDecisionStrategy(
+				material,
+				startState,
+				SimulatorCapability.SafetyScreening.HeadlessResponsePolicy,
+				random);
+
+			var selected = strategy.CreateResponse(
+				optionInstruction,
+				builder.GetGameState()!);
+
+			selected.SelectedOptionIds.Should().Equal(expectedOptionId);
+			selected.InstructionId.Should().Be(
+				optionInstruction.InstructionId);
+			MarkTestCompleted();
+		}
+
+		[Fact]
 	public void BaselineRandomDecisionStrategy_WithStutteringJudgeInstructions_ReturnsLegalDeterministicResponses()
 	{
 		var scenario = new StateModels.Models.Simulation.SimulationScenario(

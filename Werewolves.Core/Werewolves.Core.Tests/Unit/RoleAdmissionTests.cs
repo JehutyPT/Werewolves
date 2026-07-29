@@ -138,7 +138,7 @@ public class RoleAdmissionTests
 	}
 
 	[Fact]
-	public void SupportedRoleCatalog_AdmitsTenActiveRolesAndBothVillagerRolesAsPassive()
+	public void SupportedRoleCatalog_AdmitsElevenActiveRolesAndBothVillagerRolesAsPassive()
 	{
 		var catalog = SupportedRoleCatalog.Admissions;
 
@@ -148,6 +148,7 @@ public class RoleAdmissionTests
 			MainRoleType.Seer,
 			MainRoleType.WildChild,
 			MainRoleType.WolfHound,
+			MainRoleType.AccursedWolfFather,
 			MainRoleType.TwoSisters,
 			MainRoleType.ThreeBrothers,
 			MainRoleType.Witch,
@@ -164,6 +165,7 @@ public class RoleAdmissionTests
 			         MainRoleType.Seer,
 			         MainRoleType.WildChild,
 			         MainRoleType.WolfHound,
+			         MainRoleType.AccursedWolfFather,
 			         MainRoleType.TwoSisters,
 			         MainRoleType.ThreeBrothers,
 			         MainRoleType.Witch,

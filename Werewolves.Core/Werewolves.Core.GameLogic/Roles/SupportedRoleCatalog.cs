@@ -39,11 +39,15 @@ public static class SupportedRoleCatalog
 			RoleAdmission.Active(
 				MainRoleType.WildChild,
 				() => new WildChildRole()),
-			RoleAdmission.Active(
-				MainRoleType.WolfHound,
-				() => new WolfHoundRole()),
-			RoleAdmission.Active(
-				MainRoleType.TwoSisters,
+				RoleAdmission.Active(
+					MainRoleType.WolfHound,
+					() => new WolfHoundRole()),
+				RoleAdmission.Active(
+					MainRoleType.AccursedWolfFather,
+					() => new AccursedWolfFatherRole(
+						rolePowerAvailabilityGateway)),
+				RoleAdmission.Active(
+					MainRoleType.TwoSisters,
 				() => new TwoSistersRole(rolePowerAvailabilityGateway)),
 			RoleAdmission.Active(
 				MainRoleType.ThreeBrothers,
