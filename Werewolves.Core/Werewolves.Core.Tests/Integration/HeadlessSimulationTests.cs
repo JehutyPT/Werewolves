@@ -490,6 +490,83 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 		MarkTestCompleted();
 	}
 
+	[Theory]
+	[InlineData(0L, "wolf-hound-werewolves")]
+	[InlineData(1L, "wolf-hound-villagers")]
+	public void BaselineRandomDecisionStrategy_WithWolfHoundAlignment_UsesGlobalDeterministicStreamWithoutHiddenTruth(
+		long runNumber,
+		string expectedOptionId)
+	{
+		var scenario = new StateModels.Models.Simulation.SimulationScenario(
+			5,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.WolfHound,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+		var material = new RunSeedMaterial(
+			new SimulationCompatibilityIdentity(
+				scenario.ToCanonical(),
+				SimulatorCapability.SafetyScreening.Identity),
+			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
+			runNumber);
+		var optionInstruction = new SelectOptionsInstruction(
+			ModeratorInstructionSemantic.ChooseWolfHoundAlignment,
+			[
+				new ModeratorOption(
+					WolfHoundAlignmentOptionIds.Villagers,
+					GameStrings.VillagersGroupName),
+				new ModeratorOption(
+					WolfHoundAlignmentOptionIds.Werewolves,
+					GameStrings.WerewolvesGroupName)
+			],
+			NumberRangeConstraint.Single,
+			privateInstruction: GameStrings.WolfHoundAlignmentInstruction);
+		var acknowledgment = new ConfirmationInstruction(
+			ModeratorInstructionSemantic.WakeRole,
+			privateInstruction: GameStrings.WolfHoundAlignmentInstruction);
+
+		ModeratorResponse Respond(bool acknowledgeFirst)
+		{
+			var random = new DeterministicRandomSource(material);
+			var startState = SimulationStartStateDeriver.Derive(
+				material,
+				SimulatorCapability.SafetyScreening,
+				random);
+			var config = startState.CreateGameSessionConfig();
+			var builder = CreateBuilder()
+				.WithPlayers(config.Players.ToArray())
+				.WithRoles(config.Roles.ToArray());
+			builder.StartGame();
+			var session = builder.GetGameState()!;
+			var strategy = new BaselineRandomDecisionStrategy(
+				material,
+				startState,
+				SimulatorCapability.SafetyScreening.HeadlessResponsePolicy,
+				random);
+			if (acknowledgeFirst)
+			{
+				strategy.CreateResponse(acknowledgment, session)
+					.Type.Should().Be(ExpectedInputType.Continue);
+			}
+
+			return strategy.CreateResponse(optionInstruction, session);
+		}
+
+		var selected = Respond(acknowledgeFirst: false);
+		var replay = Respond(acknowledgeFirst: false);
+		var selectedAfterAcknowledgment = Respond(acknowledgeFirst: true);
+
+		selected.SelectedOptionIds.Should().Equal(expectedOptionId);
+		replay.SelectedOptionIds.Should().Equal(expectedOptionId);
+		selectedAfterAcknowledgment.SelectedOptionIds.Should().Equal(expectedOptionId);
+		selected.SelectedOptionIds.Should().BeSubsetOf(
+			optionInstruction.Options.Select(option => option.Id));
+		MarkTestCompleted();
+	}
+
 	[Fact]
 	public void BaselineRandomDecisionStrategy_WithStutteringJudgeInstructions_ReturnsLegalDeterministicResponses()
 	{

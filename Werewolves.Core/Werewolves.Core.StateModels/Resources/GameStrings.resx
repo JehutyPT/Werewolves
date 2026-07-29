@@ -405,6 +405,10 @@
     <value>Cão-Lobo</value>
     <comment/>
   </data>
+  <data name="WolfHoundAlignmentInstruction" xml:space="preserve">
+    <value>Regista em privado a escolha final do Cão-Lobo: Aldeões ou Lobisomens.</value>
+    <comment/>
+  </data>
   <data name="AngelRoleName" xml:space="preserve">
     <value>Anjo</value>
     <comment/>

@@ -22,13 +22,15 @@ public class RuntimeFlowDefinitionTests
 	}
 
     [Fact]
-    public void FirstNightActions_ResolveWolfHoundBeforeBearTamerAndDefender()
+    public void FirstNightActions_ResolveWolfHoundAfterWildChildBeforeBearTamerDefenderAndCollectiveWerewolf()
 	{
 		var listeners = GameFlowManager.HookListeners[NightMainActionLoop];
 		var wolfHoundIndex = ListenerIndex(listeners, WolfHound);
 
+		ListenerIndex(listeners, WildChild).Should().BeLessThan(wolfHoundIndex);
 		wolfHoundIndex.Should().BeLessThan(ListenerIndex(listeners, BearTamer));
 		wolfHoundIndex.Should().BeLessThan(ListenerIndex(listeners, Defender));
+		wolfHoundIndex.Should().BeLessThan(ListenerIndex(listeners, SimpleWerewolf));
 	}
 
     [Fact]

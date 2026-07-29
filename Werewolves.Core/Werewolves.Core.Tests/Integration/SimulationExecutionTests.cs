@@ -109,6 +109,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 	[InlineData(MainRoleType.Witch, 1)]
 	[InlineData(MainRoleType.StutteringJudge, 1)]
 	[InlineData(MainRoleType.Scapegoat, 1)]
+	[InlineData(MainRoleType.WolfHound, 1)]
 	[InlineData(MainRoleType.TwoSisters, 2)]
 	[InlineData(MainRoleType.ThreeBrothers, 3)]
 	public void ExecuteBatch_WithCardinalityRoleHolders_SafetyRepresentativeCompletesAllOneThousandAttempts(
@@ -391,7 +392,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 
 		first.Should().BeOfType<CompletedSimulationRun>();
 		first.RunSeedMaterial.CompatibilityIdentity.Profile.Should()
-			.Be(new SimulatorProfileIdentity("safety-screening", "10"));
+			.Be(new SimulatorProfileIdentity("safety-screening", "11"));
 		replay.Should().Be(first);
 		MarkTestCompleted();
 	}

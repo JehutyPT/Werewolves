@@ -1,5 +1,6 @@
 using Bunit;
 using FluentAssertions;
+using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Werewolves.Client.Components.Game.Views;
 using Werewolves.Client.Components.Pages;
@@ -458,6 +459,147 @@ public sealed class RoleKnowledgeFlowBunitTests
 			.Contain(GameStrings.RoleGoesToSleepSingle.Format(GameStrings.WitchRoleName));
 		cut.FindAll(PrivateInstructionSelector).Should().BeEmpty();
 		cut.FindAll(PlayerOptionSelector).Should().BeEmpty();
+	}
+
+	[Fact]
+	public async Task WolfHoundNightFlow_RendersExactHolderPrivateAlignmentAndPublicSleepWithoutDisclosure()
+	{
+		var timing = new ControlledHoldButtonTiming();
+		using var context = new ModeratorComponentTestContext();
+		context.Services.AddSingleton<IHoldButtonTiming>(timing);
+		var manager = context.Services.GetRequiredService<GameClientManager>();
+		var start = manager.StartGame(
+			PlayerNames.DefaultFive,
+			[
+				MainRoleType.WolfHound,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+		manager.ProcessInput(start.CreateResponse()).IsSuccess.Should().BeTrue();
+		var startNight = manager.CurrentInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		manager.ProcessInput(startNight.CreateResponse()).IsSuccess.Should().BeTrue();
+
+		var wolfHound = manager.CurrentSession!.GetPlayers().First();
+		wolfHound.State.ModeratorKnownRole.Should().BeNull();
+		var identification = manager.CurrentInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		var wakeAnnouncement =
+			GameStrings.RoleWakesUp.Format(GameStrings.WolfHoundRoleName);
+		identification.Semantic.Should().Be(
+			ModeratorInstructionSemantic.IdentifyRoleHolders);
+		identification.RoleIdentification.Should().Be(MainRoleType.WolfHound);
+		identification.CountConstraint.Should().Be(NumberRangeConstraint.Single);
+		identification.PublicAnnouncement.Should().Be(wakeAnnouncement);
+
+		var dashboard = context.RenderModeratorComponent<DashboardPage>();
+		var publicWake = dashboard.Find(PublicInstructionSelector);
+		publicWake.TextContent.Should().Contain(wakeAnnouncement);
+		publicWake.TextContent.Should().NotContain(wolfHound.Name);
+		dashboard.Find(HoldButtonSelector)
+			.HasAttribute(Html.Attributes.Disabled).Should().BeTrue();
+		var holderOption = dashboard.FindAll(PlayerOptionSelector)
+			.Single(option => option.TextContent.Contains(
+				wolfHound.Name,
+				StringComparison.CurrentCulture));
+		holderOption.Click();
+		dashboard.Find(HoldButtonSelector)
+			.HasAttribute(Html.Attributes.Disabled).Should().BeFalse();
+		await RenderedHoldButtonDriver.CompleteHoldAsync(
+			dashboard,
+			dashboard.Find(HoldButtonSelector),
+			timing);
+
+		var alignment = manager.CurrentInstruction
+			.Should().BeOfType<SelectOptionsInstruction>().Subject;
+		alignment.Semantic.Should().Be(
+			ModeratorInstructionSemantic.ChooseWolfHoundAlignment);
+		alignment.PublicAnnouncement.Should().BeNull();
+		alignment.PrivateInstruction.Should().Be(
+			GameStrings.WolfHoundAlignmentInstruction);
+		alignment.SelectionRange.Should().Be(NumberRangeConstraint.Single);
+		alignment.Options.Select(option => (option.Id, option.Label)).Should().Equal(
+			(
+				WolfHoundAlignmentOptionIds.Villagers,
+				GameStrings.VillagersGroupName),
+			(
+				WolfHoundAlignmentOptionIds.Werewolves,
+				GameStrings.WerewolvesGroupName));
+
+		var responses = new List<ModeratorResponse>();
+		var alignmentView =
+			context.RenderModeratorComponent<InstructionRenderer>(parameters => parameters
+				.Add(component => component.Instruction, alignment)
+				.Add(component => component.Roster, manager.CurrentRoster)
+				.Add(
+					component => component.OnResponse,
+					EventCallback.Factory.Create<ModeratorResponse>(
+						this,
+						responses.Add)));
+		alignmentView.FindAll(PublicInstructionSelector).Should().BeEmpty();
+		alignmentView.Find(PrivateInstructionSelector).TextContent.Should()
+			.Contain(GameStrings.WolfHoundAlignmentInstruction);
+		alignmentView.Find(HoldButtonSelector)
+			.HasAttribute(Html.Attributes.Disabled).Should().BeTrue();
+		var villagersOption = alignmentView.FindAll(Html.Selectors.Button)
+			.Single(button =>
+				button.TextContent.Trim() == GameStrings.VillagersGroupName);
+		villagersOption.GetAttribute(Html.Attributes.AriaPressed)
+			.Should().Be(Html.AriaValues.False);
+		villagersOption.Click();
+		villagersOption = alignmentView.FindAll(Html.Selectors.Button)
+			.Single(button =>
+				button.TextContent.Trim() == GameStrings.VillagersGroupName);
+		villagersOption.GetAttribute(Html.Attributes.AriaPressed)
+			.Should().Be(Html.AriaValues.True);
+		alignmentView.Find(HoldButtonSelector)
+			.HasAttribute(Html.Attributes.Disabled).Should().BeFalse();
+		await RenderedHoldButtonDriver.CompleteHoldAsync(
+			alignmentView,
+			alignmentView.Find(HoldButtonSelector),
+			timing);
+
+		var response = responses.Should().ContainSingle().Subject;
+		response.Type.Should().Be(ExpectedInputType.OptionSelection);
+		response.InstructionId.Should().Be(alignment.InstructionId);
+		response.SelectedOptionIds.Should().Equal(
+			WolfHoundAlignmentOptionIds.Villagers);
+		manager.ProcessInput(response).IsSuccess.Should().BeTrue();
+
+		var sleep = manager.CurrentInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var sleepAnnouncement =
+			GameStrings.RoleGoesToSleepSingle.Format(GameStrings.WolfHoundRoleName);
+		sleep.Semantic.Should().Be(ModeratorInstructionSemantic.PutRoleToSleep);
+		sleep.PublicAnnouncement.Should().Be(sleepAnnouncement);
+		sleep.PrivateInstruction.Should().BeNull();
+
+		var sleepDashboard = context.RenderModeratorComponent<DashboardPage>();
+		var publicSleep = sleepDashboard.Find(PublicInstructionSelector);
+		publicSleep.TextContent.Should().Contain(sleepAnnouncement);
+		publicSleep.TextContent.Should().NotContain(GameStrings.VillagersGroupName);
+		publicSleep.TextContent.Should().NotContain(GameStrings.WerewolvesGroupName);
+		sleepDashboard.FindAll(PrivateInstructionSelector).Should().BeEmpty();
+		sleepDashboard.FindAll(PlayerOptionSelector).Should().BeEmpty();
+
+		var rosterProjection = manager.CurrentRoster
+			.Single(entry => entry.PlayerId == wolfHound.Id);
+		rosterProjection.RoleVisibility.Should().Be(
+			DashboardRoleVisibility.ModeratorPrivate);
+		rosterProjection.RoleLabel.Should().Be(GameStrings.WolfHoundRoleName);
+		rosterProjection.RoleVisibilityLabel.Should().Be(
+			ClientStrings.Dashboard_RoleKnowledgePrivate);
+		var wolfHoundRosterEntry = sleepDashboard.FindAll("li")
+			.Single(entry => entry.TextContent.Contains(
+				wolfHound.Name,
+				StringComparison.CurrentCulture));
+		wolfHoundRosterEntry.TextContent.Should()
+			.Contain(GameStrings.WolfHoundRoleName)
+			.And.Contain(ClientStrings.Dashboard_RoleKnowledgePrivate)
+			.And.NotContain(GameStrings.VillagersGroupName)
+			.And.NotContain(GameStrings.WerewolvesGroupName);
 	}
 
 	private static void AdvanceToFirstDayDebate(
