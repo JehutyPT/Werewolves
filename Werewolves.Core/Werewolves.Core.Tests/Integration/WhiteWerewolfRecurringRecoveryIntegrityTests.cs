@@ -61,14 +61,49 @@ public sealed class WhiteWerewolfRecurringRecoveryIntegrityTests
 		rehydrate.Should().Throw<InvalidOperationException>();
 	}
 
-	private static string CreateCommittedAttack()
+	[Fact]
+	public void CommittedAttack_CursorlessBoundaryRetargetedToLivingSeerIsRejected()
+	{
+		var committedAttack = CreateCommittedAttack(out var seerId);
+		var tampered = RecoveryPayloadTestDriver
+			.Parse(committedAttack)
+			.RemoveDomainRecoveryCursor()
+			.RewritePendingConfirmationAffectedPlayer(seerId)
+			.Serialize();
+		var service = new GameService();
+
+		Action rehydrate = () => service.RehydrateSession(tampered);
+
+		rehydrate.Should().Throw<InvalidOperationException>();
+	}
+
+	[Fact]
+	public void CommittedAttack_CursorlessBoundaryWithWakeSemanticIsRejected()
+	{
+		var tampered = RecoveryPayloadTestDriver
+			.Parse(CreateCommittedAttack())
+			.RemoveDomainRecoveryCursor()
+			.RewritePendingConfirmationSemantic(
+				ModeratorInstructionSemantic.WakeRole)
+			.Serialize();
+		var service = new GameService();
+
+		Action rehydrate = () => service.RehydrateSession(tampered);
+
+		rehydrate.Should().Throw<InvalidOperationException>();
+	}
+
+	private static string CreateCommittedAttack() =>
+		CreateCommittedAttack(out _);
+
+	private static string CreateCommittedAttack(out Guid seerId)
 	{
 		var builder = GameTestBuilder.Create()
 			.WithPlayers(7)
 			.WithRoles(
 				MainRoleType.SimpleWerewolf,
 				MainRoleType.WhiteWerewolf,
-				MainRoleType.SimpleVillager,
+				MainRoleType.Seer,
 				MainRoleType.SimpleVillager,
 				MainRoleType.SimpleVillager,
 				MainRoleType.SimpleVillager,
@@ -76,6 +111,7 @@ public sealed class WhiteWerewolfRecurringRecoveryIntegrityTests
 		builder.StartGame();
 		var players = builder.GetGameState()!.GetPlayers().ToArray();
 		var whiteWerewolf = players[1];
+		seerId = players[2].Id;
 		builder.ArrangeKnownRole(
 			whiteWerewolf.Id,
 			MainRoleType.WhiteWerewolf);
@@ -86,7 +122,9 @@ public sealed class WhiteWerewolfRecurringRecoveryIntegrityTests
 		builder.CompleteNightPhase(new NightActionInputs
 		{
 			WerewolfIds = [players[0].Id, whiteWerewolf.Id],
-			WerewolfVictimId = players[4].Id
+			WerewolfVictimId = players[4].Id,
+			SeerId = seerId,
+			SeerTargetId = players[3].Id
 		}).IsSuccess.Should().BeTrue();
 		builder.CompleteDawnPhase(new Dictionary<Guid, MainRoleType>
 		{
