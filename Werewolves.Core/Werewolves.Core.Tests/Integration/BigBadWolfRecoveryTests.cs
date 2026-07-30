@@ -1,6 +1,7 @@
 using FluentAssertions;
 using FluentAssertions.Execution;
 using Werewolves.Core.GameLogic.Services;
+using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models.Instructions;
@@ -168,6 +169,36 @@ public sealed class BigBadWolfRecoveryTests
 
         rehydrate.Should().Throw<InvalidOperationException>()
             .WithMessage("*collective victim*");
+    }
+
+    [Fact]
+    public void CommittedTarget_SemanticallyWrongRecurringCursorPassesKernelStructureButRoleOwnerRejectsIt()
+    {
+        var (
+            builder,
+            holderId,
+            _,
+            additionalVictimId,
+            identification) = CreateGameAtIdentification();
+        var targetSelection = builder.Process(
+                identification.CreateResponse([holderId]))
+            .ModeratorInstruction.Should()
+            .BeOfType<SelectPlayersInstruction>().Subject;
+        builder.Process(
+                targetSelection.CreateResponse([additionalVictimId]))
+            .IsSuccess.Should().BeTrue();
+        var tampered = RecoveryPayloadTestDriver
+            .Parse(builder.GetGameState()!.Serialize())
+            .RewriteRecurringCursorSourceRole(MainRoleType.Seer)
+            .Serialize();
+
+        Action deserializeStateModels = () => _ = new GameSession(tampered);
+        Action rehydrateThroughRoleOwner = () =>
+            new GameService().RehydrateSession(tampered);
+
+        deserializeStateModels.Should().NotThrow();
+        rehydrateThroughRoleOwner.Should().Throw<InvalidOperationException>()
+            .WithMessage("*Big Bad Wolf recovery cursor*");
     }
 
     [Fact]

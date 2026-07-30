@@ -145,6 +145,146 @@ public class SimulationExecutionTests : DiagnosticTestBase
 	}
 
 	[Fact]
+	public void SafetyRunZero_BigBadWolfAvailableWithTarget_RecordsMandatorySelectionTrace()
+	{
+		var fixture = CreateSafetyRunZeroBigBadWolfTrace();
+		RespondToCurrentInstruction(fixture.Builder, fixture.Recorder);
+		RespondToCurrentInstruction(fixture.Builder, fixture.Recorder);
+		RespondToCurrentInstruction(fixture.Builder, fixture.Recorder);
+		RespondToCurrentInstruction(fixture.Builder, fixture.Recorder);
+		RespondToCurrentInstruction(fixture.Builder, fixture.Recorder);
+		RespondToCurrentInstruction(fixture.Builder, fixture.Recorder);
+		RespondToCurrentInstruction(fixture.Builder, fixture.Recorder);
+		var finishNight = RespondToCurrentInstruction(
+			fixture.Builder,
+			fixture.Recorder);
+
+		finishNight.Semantic.Should().Be(
+			ModeratorInstructionSemantic.FinishNightActions);
+		var selectionTrace = fixture.Recorder.Observations.Should()
+			.ContainSingle(observation =>
+				observation.Instruction.Semantic ==
+				ModeratorInstructionSemantic.SelectBigBadWolfTarget)
+			.Subject;
+		var selection = selectionTrace.Instruction.Should()
+			.BeOfType<SelectPlayersInstruction>()
+			.Subject;
+		selection.CountConstraint.Should().Be(NumberRangeConstraint.Single);
+		selection.AffectedPlayerIds.Should().Equal(fixture.BigBadWolf.Id);
+		selection.SelectablePlayerIds.Should().NotBeEmpty();
+		selectionTrace.Response.InstructionId.Should().Be(
+			selection.InstructionId);
+		selectionTrace.Response.Type.Should().Be(
+			ExpectedInputType.PlayerSelection);
+		selectionTrace.Response.SelectedPlayerIds.Should().ContainSingle();
+		var selectedTarget = selectionTrace.Response.SelectedPlayerIds!.Single();
+		selection.SelectablePlayerIds.Should().Contain(selectedTarget);
+		fixture.Builder.GetGameState()!.GameHistoryLog
+			.OfType<NightActionLogEntry>()
+			.Should().ContainSingle(entry =>
+				entry.ActionType ==
+				NightActionType.BigBadWolfVictimSelection &&
+				entry.TargetIds!.SequenceEqual(new[] { selectedTarget }));
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void SafetyRunZero_BigBadWolfWithoutLegalTarget_OmitsSelectorAndHandlesSleepContinue()
+	{
+		var fixture = CreateSafetyRunZeroBigBadWolfTrace();
+		var collectiveVictim = fixture.KnownNonAgents[0];
+		foreach (var eliminatedPlayer in fixture.KnownNonAgents.Skip(1))
+		{
+			fixture.Builder.ArrangeEliminatedPlayer(eliminatedPlayer.Id);
+		}
+
+		RespondToCurrentInstruction(fixture.Builder, fixture.Recorder);
+		RespondToCurrentInstruction(fixture.Builder, fixture.Recorder);
+		RespondToCurrentInstruction(fixture.Builder, fixture.Recorder);
+		RespondToCurrentInstruction(fixture.Builder, fixture.Recorder);
+		RespondToCurrentInstruction(fixture.Builder, fixture.Recorder);
+		var sleep = RespondToCurrentInstruction(
+			fixture.Builder,
+			fixture.Recorder);
+		var finishNight = RespondToCurrentInstruction(
+			fixture.Builder,
+			fixture.Recorder);
+
+		sleep.Semantic.Should().Be(
+			ModeratorInstructionSemantic.PutRoleToSleep);
+		sleep.AffectedPlayerIds.Should().Equal(fixture.BigBadWolf.Id);
+		finishNight.Semantic.Should().Be(
+			ModeratorInstructionSemantic.FinishNightActions);
+		fixture.Recorder.Observations.Should().NotContain(observation =>
+			observation.Instruction.Semantic ==
+			ModeratorInstructionSemantic.SelectBigBadWolfTarget);
+		var sleepTrace = fixture.Recorder.Observations.Should()
+			.ContainSingle(observation =>
+				observation.Instruction.Semantic ==
+					ModeratorInstructionSemantic.PutRoleToSleep &&
+				observation.Instruction.AffectedPlayerIds != null &&
+				observation.Instruction.AffectedPlayerIds.Count == 1 &&
+				observation.Instruction.AffectedPlayerIds[0] ==
+					fixture.BigBadWolf.Id)
+			.Subject;
+		sleepTrace.Response.InstructionId.Should().Be(
+			sleepTrace.Instruction.InstructionId);
+		sleepTrace.Response.Type.Should().Be(ExpectedInputType.Continue);
+		fixture.Recorder.Observations.Should().Contain(observation =>
+			observation.Instruction.Semantic ==
+				ModeratorInstructionSemantic.SelectWerewolfVictim &&
+			observation.Response.SelectedPlayerIds!.SetEquals(
+				new[] { collectiveVictim.Id }));
+		fixture.Builder.GetGameState()!.GameHistoryLog
+			.OfType<NightActionLogEntry>()
+			.Should().NotContain(entry =>
+				entry.ActionType ==
+				NightActionType.BigBadWolfVictimSelection);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void SafetyRunZero_EliminatedKnownAgent_OmitsEntireBigBadWolfCall()
+	{
+		var fixture = CreateSafetyRunZeroBigBadWolfTrace();
+		var eliminatedKnownAgent = fixture.KnownNonAgents[0];
+		fixture.Builder.ArrangeKnownWerewolfFactionAgentGroup(
+			fixture.SimpleWerewolf.Id,
+			fixture.BigBadWolf.Id,
+			eliminatedKnownAgent.Id);
+		fixture.Builder.ArrangeEliminatedPlayer(eliminatedKnownAgent.Id);
+
+		RespondToCurrentInstruction(fixture.Builder, fixture.Recorder);
+		RespondToCurrentInstruction(fixture.Builder, fixture.Recorder);
+		RespondToCurrentInstruction(fixture.Builder, fixture.Recorder);
+		RespondToCurrentInstruction(fixture.Builder, fixture.Recorder);
+		var finishNight = RespondToCurrentInstruction(
+			fixture.Builder,
+			fixture.Recorder);
+
+		finishNight.Semantic.Should().Be(
+			ModeratorInstructionSemantic.FinishNightActions);
+		fixture.Recorder.Observations.Should().NotContain(observation =>
+			observation.Instruction.Semantic ==
+			ModeratorInstructionSemantic.SelectBigBadWolfTarget);
+		fixture.Recorder.Observations.Should().NotContain(observation =>
+			(observation.Instruction.Semantic ==
+				ModeratorInstructionSemantic.WakeRole ||
+			 observation.Instruction.Semantic ==
+				ModeratorInstructionSemantic.PutRoleToSleep) &&
+			observation.Instruction.AffectedPlayerIds != null &&
+			observation.Instruction.AffectedPlayerIds.Count == 1 &&
+			observation.Instruction.AffectedPlayerIds[0] ==
+				fixture.BigBadWolf.Id);
+		fixture.Builder.GetGameState()!.GameHistoryLog
+			.OfType<NightActionLogEntry>()
+			.Should().NotContain(entry =>
+				entry.ActionType ==
+				NightActionType.BigBadWolfVictimSelection);
+		MarkTestCompleted();
+	}
+
+	[Fact]
 	public void ExecuteBatch_WithFrozenFullProbabilityFourRoleScenario_CompletesWithoutSafetyOnlySemantics()
 	{
 		var scenario = new SimulationScenario(
@@ -893,6 +1033,88 @@ public class SimulationExecutionTests : DiagnosticTestBase
 		}
 	}
 
+	private (
+		GameTestBuilder Builder,
+		RecordingDecisionStrategy Recorder,
+		IPlayer SimpleWerewolf,
+		IPlayer BigBadWolf,
+		IPlayer[] KnownNonAgents)
+		CreateSafetyRunZeroBigBadWolfTrace()
+	{
+		MainRoleType[] roles =
+		[
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.BigBadWolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager
+		];
+		var scenario = new SimulationScenario(roles.Length, roles);
+		var identity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+		var material = new RunSeedMaterial(
+			identity,
+			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
+			runNumber: 0);
+		var random = new DeterministicRandomSource(material);
+		var startState = SimulationStartStateDeriver.Derive(
+			material,
+			SimulatorCapability.SafetyScreening,
+			random);
+		var config = startState.CreateGameSessionConfig();
+		var builder = CreateBuilder()
+			.WithPlayers(config.Players.ToArray())
+			.WithRoles(config.Roles.ToArray());
+		builder.StartGame();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		var simpleWerewolf = players[
+			startState.RoleAssignments.Single(assignment =>
+				assignment.Role == MainRoleType.SimpleWerewolf).SeatNumber - 1];
+		var bigBadWolf = players[
+			startState.RoleAssignments.Single(assignment =>
+				assignment.Role == MainRoleType.BigBadWolf).SeatNumber - 1];
+		var knownNonAgents = startState.FactionFacts
+			.Where(facts =>
+				facts.GetAgentKnowledge(Faction.Werewolf) ==
+				FactionAgentKnowledge.KnownNonAgent)
+			.Select(facts => players[facts.SeatNumber - 1])
+			.ToArray();
+		builder.ArrangeKnownRole(bigBadWolf.Id, MainRoleType.BigBadWolf);
+		builder.ArrangeKnownWerewolfFactionAgentGroup(
+			simpleWerewolf.Id,
+			bigBadWolf.Id);
+		var recorder = new RecordingDecisionStrategy(
+			new BaselineRandomDecisionStrategy(
+				material,
+				startState,
+				SimulatorCapability.SafetyScreening.HeadlessResponsePolicy,
+				random));
+		return (
+			builder,
+			recorder,
+			simpleWerewolf,
+			bigBadWolf,
+			knownNonAgents);
+	}
+
+	private static ModeratorInstruction RespondToCurrentInstruction(
+		GameTestBuilder builder,
+		RecordingDecisionStrategy recorder)
+	{
+		var instruction = builder.GetCurrentInstruction();
+		instruction.Should().NotBeNull();
+		var response = recorder.CreateResponse(
+			instruction!,
+			builder.GetGameState()!);
+		var result = builder.Process(response);
+		result.IsSuccess.Should().BeTrue();
+		result.ModeratorInstruction.Should().NotBeNull();
+		return result.ModeratorInstruction!;
+	}
+
 	private sealed class RecordingDecisionStrategy : IModeratorDecisionStrategy
 	{
 		private readonly IModeratorDecisionStrategy _inner;
@@ -904,13 +1126,18 @@ public class SimulationExecutionTests : DiagnosticTestBase
 		}
 
 		internal List<ModeratorInstructionSemantic> ObservedSemantics { get; } = [];
+		internal List<(
+			ModeratorInstruction Instruction,
+			ModeratorResponse Response)> Observations { get; } = [];
 
 		public ModeratorResponse CreateResponse(
 			ModeratorInstruction instruction,
 			IGameSession session)
 		{
 			ObservedSemantics.Add(instruction.Semantic);
-			return _inner.CreateResponse(instruction, session);
+			var response = _inner.CreateResponse(instruction, session);
+			Observations.Add((instruction, response));
+			return response;
 		}
 	}
 

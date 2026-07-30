@@ -585,23 +585,15 @@ namespace Werewolves.Core.StateModels.Core
 			if (cursor.Kind !=
 				    DomainRecoveryCursorKind
 					    .RecurringNativeRolePowerCommit ||
-			    cursor.SourceRole != MainRoleType.BigBadWolf ||
-			    cursor.CommittedActionType !=
-				    NightActionType.BigBadWolfVictimSelection ||
+			    cursor.SourceRole is not { } sourceRole ||
+			    !Enum.IsDefined(sourceRole) ||
 			    cursor.ActingPlayerId == Guid.Empty ||
 			    string.IsNullOrWhiteSpace(
 				    cursor.SourcePowerIdentifier) ||
 			    cursor.PowerInstanceId != cursor.ActingPlayerId ||
 			    cursor.PowerInstanceOrigin !=
 				    RolePowerInstanceOrigin.Native ||
-			    cursor.OneUseResourceId != Guid.Empty ||
-			    pendingModeratorInstruction is not
-				    ConfirmationInstruction
-				    {
-					    Semantic:
-						    ModeratorInstructionSemantic
-							    .PutRoleToSleep
-				    })
+			    cursor.OneUseResourceId != Guid.Empty)
 			{
 				throw new InvalidOperationException(
 					"The domain recovery cursor is structurally invalid.");

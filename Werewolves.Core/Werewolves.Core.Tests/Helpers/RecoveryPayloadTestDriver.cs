@@ -138,6 +138,13 @@ internal sealed class RecoveryPayloadTestDriver
 		return this;
 	}
 
+	internal RecoveryPayloadTestDriver RewriteRecurringCursorSourceRole(
+		MainRoleType sourceRole)
+	{
+		RequireDomainCursor().SourceRole = sourceRole;
+		return this;
+	}
+
 	internal RecoveryPayloadTestDriver RewriteLatestStutteringJudgeAction(
 		DayPowerType actionType)
 	{
