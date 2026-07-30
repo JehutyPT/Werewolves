@@ -523,11 +523,8 @@ namespace Werewolves.Core.StateModels.Core
 			if (cursor.Kind !=
 				    DomainRecoveryCursorKind
 					    .RecurringNativeRolePowerCommit ||
-			    cursor.SourceRole is not { } sourceRole ||
-			    !Enum.IsDefined(sourceRole) ||
-			    cursor.ActingPlayerId == Guid.Empty ||
-			    string.IsNullOrWhiteSpace(
-				    cursor.SourcePowerIdentifier) ||
+			    cursor.PowerIdentity is not { } cursorPowerIdentity ||
+			    !cursorPowerIdentity.IsValid ||
 			    cursor.PowerInstanceId != cursor.ActingPlayerId ||
 			    cursor.PowerInstanceOrigin !=
 				    RolePowerInstanceOrigin.Native ||
@@ -538,13 +535,12 @@ namespace Werewolves.Core.StateModels.Core
 			}
 
 			var recurringEntry = dto.GameHistoryLog
-				.OfType<NightActionLogEntry>()
-				.LastOrDefault(entry =>
-					entry.GetType() ==
-					typeof(NightActionLogEntry));
+				.OfType<RecurringRolePowerCommittedLogEntry>()
+				.LastOrDefault();
 			if (recurringEntry == null ||
 			    recurringEntry.ActionType !=
 				    cursor.CommittedActionType ||
+			    recurringEntry.PowerIdentity != cursorPowerIdentity ||
 			    recurringEntry.TargetIds is not { Count: 1 } ||
 			    recurringEntry.TargetIds[0] !=
 				    cursor.CommittedTargetId)

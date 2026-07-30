@@ -579,9 +579,7 @@ internal static class GameFlowManager
             return true;
         }
 
-        if (startingInstruction?.Semantic ==
-                ModeratorInstructionSemantic.SelectBigBadWolfTarget &&
-            HasNewBigBadWolfRecurringCommit(session, startingLogCount))
+        if (HasNewRecurringRolePowerCommit(session, startingLogCount))
         {
             return true;
         }
@@ -624,16 +622,13 @@ internal static class GameFlowManager
             .OfType<OneUseRolePowerCommittedLogEntry>()
             .Any();
 
-    private static bool HasNewBigBadWolfRecurringCommit(
+    private static bool HasNewRecurringRolePowerCommit(
         GameSession session,
         int startingLogCount) =>
         session.GameHistoryLog
             .Skip(startingLogCount)
-            .OfType<NightActionLogEntry>()
-            .Any(entry =>
-                entry.GetType() == typeof(NightActionLogEntry) &&
-                entry.ActionType ==
-                NightActionType.BigBadWolfVictimSelection);
+            .OfType<RecurringRolePowerCommittedLogEntry>()
+            .Any();
 
 	private static bool HasNewEliminationCascadeReactionCompletion(
 		GameSession session,
@@ -672,11 +667,7 @@ internal static class GameFlowManager
             .ToArray();
         var newRecurringEntries = session.GameHistoryLog
             .Skip(startingLogCount)
-            .OfType<NightActionLogEntry>()
-            .Where(entry =>
-                entry.GetType() == typeof(NightActionLogEntry) &&
-                entry.ActionType ==
-                NightActionType.BigBadWolfVictimSelection)
+            .OfType<RecurringRolePowerCommittedLogEntry>()
             .ToArray();
         if (newCommittedEntries.Length > 0 &&
             newRecurringEntries.Length > 0)
@@ -696,33 +687,49 @@ internal static class GameFlowManager
                 recurringEntry.TargetIds is not [var recurringTargetId])
             {
                 throw new InvalidOperationException(
-                    "One accepted Big Bad Wolf response must produce exactly one recurring native Role Power commit.");
+                    "One accepted response must produce exactly one recurring Role Power commit.");
             }
 
-            if (!BigBadWolfRole.TryValidateCommittedRecoveryBoundary(
-                    session,
-                    startingInstruction,
-                    input,
-                    recurringEntry,
-                    nextInstruction,
-                    out var actingPlayerId))
+            var recurringCommitCorrelated =
+                recurringEntry.SourceRole switch
+                {
+                    MainRoleType.BigBadWolf =>
+                        BigBadWolfRole.TryValidateCommittedRecoveryBoundary(
+                            session,
+                            startingInstruction,
+                            input,
+                            recurringEntry,
+                            nextInstruction,
+                            out _),
+                    MainRoleType.Defender =>
+                        DefenderRole.TryValidateCommittedRecoveryBoundary(
+                            session,
+                            startingInstruction,
+                            input,
+                            recurringEntry,
+                            nextInstruction),
+                    _ => false
+                };
+            if (!recurringCommitCorrelated)
             {
                 throw new InvalidOperationException(
                     "The recurring native Role Power commit has no owning Role recovery contract.");
             }
 
+            var powerIdentity = recurringEntry.PowerIdentity;
             return new DomainRecoveryCursor
             {
                 Version = DomainRecoveryCursor.CurrentVersion,
                 Kind =
                     DomainRecoveryCursorKind.RecurringNativeRolePowerCommit,
-                SourceRole = BigBadWolf,
+                SourceRole = powerIdentity.SourceRole,
                 CommittedActionType = recurringEntry.ActionType,
-                ActingPlayerId = actingPlayerId,
+                ActingPlayerId = powerIdentity.ActingPlayerId,
                 SourcePowerIdentifier =
-                    BigBadWolfRole.AdditionalVictimPowerIdentifier.Value,
-                PowerInstanceId = actingPlayerId,
-                PowerInstanceOrigin = RolePowerInstanceOrigin.Native,
+                    powerIdentity.SourcePowerIdentifier,
+                PowerInstanceId = powerIdentity.PowerInstanceId,
+                PowerInstanceOrigin =
+                    powerIdentity.PowerInstanceOrigin,
                 OneUseResourceId = Guid.Empty,
                 CommittedTargetId = recurringTargetId,
                 NextInstructionSemantic = nextInstruction.Semantic,
@@ -1184,7 +1191,20 @@ internal static class GameFlowManager
         if (cursor.Kind ==
             DomainRecoveryCursorKind.RecurringNativeRolePowerCommit)
         {
-            BigBadWolfRole.ValidateRecurringRecoveryCursorIdentity(cursor);
+            switch (sourceRole)
+            {
+                case MainRoleType.BigBadWolf:
+                    BigBadWolfRole.ValidateRecurringRecoveryCursorIdentity(
+                        cursor);
+                    break;
+                case MainRoleType.Defender:
+                    DefenderRole.ValidateRecurringRecoveryCursorIdentity(
+                        cursor);
+                    break;
+                default:
+                    throw new InvalidOperationException(
+                        $"Unsupported recurring Role Power continuation '{sourceRole}'.");
+            }
         }
 
         var pendingInstruction = session.PendingModeratorInstruction

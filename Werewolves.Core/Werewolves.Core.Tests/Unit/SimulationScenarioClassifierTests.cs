@@ -70,7 +70,7 @@ public class SimulationScenarioClassifierTests
 		safety.AppSupport!.IsSupported.Should().BeTrue();
 		safety.SimulatorSupport!.IsSupported.Should().BeTrue();
 		safety.Cacheability!.CompatibilityIdentity.Profile.Should()
-			.Be(new SimulatorProfileIdentity("safety-screening", "15"));
+			.Be(new SimulatorProfileIdentity("safety-screening", "16"));
 		probability.SimulatorSupport!.IsSupported.Should().BeFalse();
 		probability.SimulatorSupport.UnsupportedRoles.Should()
 			.Equal(MainRoleType.TwoSisters);
@@ -131,7 +131,7 @@ public class SimulationScenarioClassifierTests
 				result.IsSupported &&
 				result.Capability == SimulatorCapability.SafetyScreening);
 		safety.Cacheability!.CompatibilityIdentity.Profile.Should()
-	            .Be(new SimulatorProfileIdentity("safety-screening", "15"));
+			.Be(new SimulatorProfileIdentity("safety-screening", "16"));
 		probability.SimulatorSupport.Should().Match<SimulatorSupportResult>(
 			result =>
 				!result.IsSupported &&
@@ -165,7 +165,7 @@ public class SimulationScenarioClassifierTests
 		safety.AppSupport!.IsSupported.Should().BeTrue();
 		safety.SimulatorSupport!.IsSupported.Should().BeTrue();
 		safety.Cacheability!.CompatibilityIdentity.Profile.Should()
-	            .Be(new SimulatorProfileIdentity("safety-screening", "15"));
+			.Be(new SimulatorProfileIdentity("safety-screening", "16"));
 		probability.SimulatorSupport!.IsSupported.Should().BeFalse();
 		probability.SimulatorSupport.UnsupportedRoles.Should()
 			.Equal(MainRoleType.ThreeBrothers);
@@ -194,7 +194,7 @@ public class SimulationScenarioClassifierTests
 		safety.AppSupport!.IsSupported.Should().BeTrue();
 		safety.SimulatorSupport!.IsSupported.Should().BeTrue();
 		safety.Cacheability!.CompatibilityIdentity.Profile.Should()
-	            .Be(new SimulatorProfileIdentity("safety-screening", "15"));
+			.Be(new SimulatorProfileIdentity("safety-screening", "16"));
 		probability.SimulatorSupport!.IsSupported.Should().BeFalse();
 		probability.SimulatorSupport.UnsupportedRoles.Should()
 			.Equal(MainRoleType.Witch);
@@ -223,7 +223,7 @@ public class SimulationScenarioClassifierTests
 		safety.AppSupport!.IsSupported.Should().BeTrue();
 		safety.SimulatorSupport!.IsSupported.Should().BeTrue();
 		safety.Cacheability!.CompatibilityIdentity.Profile.Should()
-	            .Be(new SimulatorProfileIdentity("safety-screening", "15"));
+			.Be(new SimulatorProfileIdentity("safety-screening", "16"));
 		probability.SimulatorSupport!.IsSupported.Should().BeFalse();
 		probability.SimulatorSupport.UnsupportedRoles.Should()
 			.Equal(MainRoleType.Hunter);
@@ -252,7 +252,7 @@ public class SimulationScenarioClassifierTests
 		safety.AppSupport!.IsSupported.Should().BeTrue();
 		safety.SimulatorSupport!.IsSupported.Should().BeTrue();
 		safety.Cacheability!.CompatibilityIdentity.Profile.Should()
-	            .Be(new SimulatorProfileIdentity("safety-screening", "15"));
+			.Be(new SimulatorProfileIdentity("safety-screening", "16"));
 		probability.SimulatorSupport!.IsSupported.Should().BeFalse();
 		probability.SimulatorSupport.UnsupportedRoles.Should()
 			.Equal(MainRoleType.StutteringJudge);
@@ -281,7 +281,7 @@ public class SimulationScenarioClassifierTests
 		safety.AppSupport!.IsSupported.Should().BeTrue();
 		safety.SimulatorSupport!.IsSupported.Should().BeTrue();
 		safety.Cacheability!.CompatibilityIdentity.Profile.Should()
-	            .Be(new SimulatorProfileIdentity("safety-screening", "15"));
+			.Be(new SimulatorProfileIdentity("safety-screening", "16"));
 		probability.SimulatorSupport!.IsSupported.Should().BeFalse();
 		probability.SimulatorSupport.UnsupportedRoles.Should()
 			.Equal(MainRoleType.Scapegoat);
@@ -310,7 +310,7 @@ public class SimulationScenarioClassifierTests
 		safety.AppSupport!.IsSupported.Should().BeTrue();
 		safety.SimulatorSupport!.IsSupported.Should().BeTrue();
 		safety.Cacheability!.CompatibilityIdentity.Profile.Should()
-	            .Be(new SimulatorProfileIdentity("safety-screening", "15"));
+			.Be(new SimulatorProfileIdentity("safety-screening", "16"));
 		probability.SimulatorSupport!.IsSupported.Should().BeFalse();
 		probability.SimulatorSupport.UnsupportedRoles.Should()
 			.Equal(MainRoleType.WolfHound);
@@ -339,7 +339,7 @@ public class SimulationScenarioClassifierTests
 		safety.AppSupport!.IsSupported.Should().BeTrue();
 		safety.SimulatorSupport!.IsSupported.Should().BeTrue();
 		safety.Cacheability!.CompatibilityIdentity.Profile.Should()
-	            .Be(new SimulatorProfileIdentity("safety-screening", "15"));
+			.Be(new SimulatorProfileIdentity("safety-screening", "16"));
 		probability.SimulatorSupport!.IsSupported.Should().BeFalse();
 		probability.SimulatorSupport.UnsupportedRoles.Should()
 			.Equal(MainRoleType.AccursedWolfFather);
@@ -368,7 +368,7 @@ public class SimulationScenarioClassifierTests
 		safety.AppSupport!.IsSupported.Should().BeTrue();
 		safety.SimulatorSupport!.IsSupported.Should().BeTrue();
 		safety.Cacheability!.CompatibilityIdentity.Profile.Should()
-	        .Be(new SimulatorProfileIdentity("safety-screening", "15"));
+			.Be(new SimulatorProfileIdentity("safety-screening", "16"));
 		probability.SimulatorSupport!.IsSupported.Should().BeFalse();
 		probability.SimulatorSupport.UnsupportedRoles.Should()
 			.Equal(MainRoleType.BigBadWolf);
@@ -397,9 +397,38 @@ public class SimulationScenarioClassifierTests
 	    safety.AppSupport!.IsSupported.Should().BeTrue();
 	    safety.SimulatorSupport!.IsSupported.Should().BeTrue();
 	    safety.Cacheability!.CompatibilityIdentity.Profile.Should()
-	        .Be(new SimulatorProfileIdentity("safety-screening", "15"));
+	        .Be(new SimulatorProfileIdentity("safety-screening", "16"));
 	    probability.SimulatorSupport!.IsSupported.Should().BeFalse();
 	    probability.SimulatorSupport.UnsupportedRoles.Should()
 	        .Equal(MainRoleType.LittleGirl);
+	}
+
+	[Fact]
+	public void Classify_Defender_IsSafetyScreeningOnly()
+	{
+		var scenario = new SimulationScenario(
+			5,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Defender,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+
+		var safety = SimulationScenarioClassifier.Classify(
+			scenario,
+			SimulatorCapability.SafetyScreening);
+		var probability = SimulationScenarioClassifier.Classify(
+			scenario,
+			SimulatorCapability.FullProbability);
+
+		safety.AppSupport!.IsSupported.Should().BeTrue();
+		safety.SimulatorSupport!.IsSupported.Should().BeTrue();
+		safety.Cacheability!.CompatibilityIdentity.Profile.Should()
+			.Be(new SimulatorProfileIdentity("safety-screening", "16"));
+		probability.SimulatorSupport!.IsSupported.Should().BeFalse();
+		probability.SimulatorSupport.UnsupportedRoles.Should()
+			.Equal(MainRoleType.Defender);
 	}
 }

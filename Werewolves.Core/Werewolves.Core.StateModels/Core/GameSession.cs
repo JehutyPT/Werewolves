@@ -389,6 +389,40 @@ internal class GameSession : IGameSession
 		_gameSessionKernel.AddEntryAndUpdateState(entry);
 	}
 
+	internal void CommitRecurringRolePowerNightAction(
+		NightActionType actionType,
+		Guid targetId,
+		RolePowerInstanceIdentity powerIdentity)
+	{
+		if (actionType == NightActionType.Unknown)
+		{
+			throw new ArgumentOutOfRangeException(nameof(actionType));
+		}
+
+		if (targetId == Guid.Empty)
+		{
+			throw new ArgumentException(
+				"Recurring Role Power commits require a concrete target identity.");
+		}
+
+		powerIdentity.EnforceValidity();
+		var entry = new RecurringRolePowerCommittedLogEntry
+		{
+			Timestamp = DateTimeOffset.UtcNow,
+			TurnNumber = TurnNumber,
+			CurrentPhase = _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+			ActionType = actionType,
+			TargetIds = [targetId],
+			ActingPlayerId = powerIdentity.ActingPlayerId,
+			SourceRole = powerIdentity.SourceRole,
+			SourcePowerIdentifier = powerIdentity.SourcePowerIdentifier,
+			PowerInstanceId = powerIdentity.PowerInstanceId,
+			PowerInstanceOrigin = powerIdentity.PowerInstanceOrigin
+		};
+
+		_gameSessionKernel.AddEntryAndUpdateState(entry);
+	}
+
 	    internal void EliminatePlayer(Guid playerId, EliminationReason reason)
 	    {
         var entry = new PlayerEliminatedLogEntry

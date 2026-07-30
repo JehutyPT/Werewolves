@@ -52,16 +52,17 @@ public class SimulatorProfileTests
 			.Append(ModeratorInstructionSemantic.ChooseWolfHoundAlignment)
 			.Append(ModeratorInstructionSemantic
 				.ChooseAccursedWolfFatherInfection)
-			.Append(ModeratorInstructionSemantic.SelectBigBadWolfTarget);
+			.Append(ModeratorInstructionSemantic.SelectBigBadWolfTarget)
+			.Append(ModeratorInstructionSemantic.SelectDefenderTarget);
 		var safety = SimulatorCapability.SafetyScreening;
 		var probability = SimulatorCapability.FullProbability;
 
-		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "15"));
+		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "16"));
 		probability.Identity.Should().Be(new SimulatorProfileIdentity("full-probability", "4"));
 		BaselineRandomDecisionStrategy.Identity.Should()
 			.Be(new DecisionStrategyIdentity("baseline-random", "3-splitmix64"));
 		BaselineRandomDecisionStrategy.SafetyScreeningIdentity.Should()
-			.Be(new DecisionStrategyIdentity("baseline-random", "7-splitmix64"));
+			.Be(new DecisionStrategyIdentity("baseline-random", "8-splitmix64"));
 		safety.SupportedRoles.Should().Equal(
 			MainRoleType.SimpleWerewolf,
 			MainRoleType.BigBadWolf,
@@ -74,6 +75,7 @@ public class SimulatorProfileTests
 			MainRoleType.Witch,
 			MainRoleType.Hunter,
 	        MainRoleType.LittleGirl,
+			MainRoleType.Defender,
 			MainRoleType.StutteringJudge,
 			MainRoleType.Scapegoat,
 			MainRoleType.WolfHound,
@@ -111,6 +113,15 @@ public class SimulatorProfileTests
 	            MainRoleType.LittleGirl,
 	            Faction.Werewolf)
 	        .Should().BeFalse();
+		safety.TryGetBeneficiaryFaction(
+				MainRoleType.Defender,
+				out var defenderBeneficiary)
+			.Should().BeTrue();
+		defenderBeneficiary.Should().Be(Faction.Villager);
+		safety.IsFactionAgent(
+				MainRoleType.Defender,
+				Faction.Werewolf)
+			.Should().BeFalse();
 		safety.SupportsActorSetupCards.Should().BeFalse();
 		probability.SupportsActorSetupCards.Should().BeFalse();
 		safety.SupportsRuleState(SimulationRuleState.Default).Should().BeTrue();

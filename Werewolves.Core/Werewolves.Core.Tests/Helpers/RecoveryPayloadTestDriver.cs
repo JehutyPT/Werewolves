@@ -122,12 +122,10 @@ internal sealed class RecoveryPayloadTestDriver
 
 		RequireDomainCursor().CommittedTargetId = targetId;
 		var entryIndex = _payload.GameHistoryLog.FindLastIndex(
-			entry => entry.GetType() == typeof(NightActionLogEntry) &&
-			         ((NightActionLogEntry)entry).ActionType ==
-			         NightActionType.BigBadWolfVictimSelection);
+			entry => entry is RecurringRolePowerCommittedLogEntry);
 		if (entryIndex < 0 ||
 		    _payload.GameHistoryLog[entryIndex] is not
-			    NightActionLogEntry entry)
+			    RecurringRolePowerCommittedLogEntry entry)
 		{
 			throw new InvalidOperationException(
 				"The recovery test payload has no committed recurring Night action.");
@@ -144,6 +142,99 @@ internal sealed class RecoveryPayloadTestDriver
 		MainRoleType sourceRole)
 	{
 		RequireDomainCursor().SourceRole = sourceRole;
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver RewriteRecurringActorAndCursor(
+		Guid actingPlayerId)
+	{
+		RequireDomainCursor().ActingPlayerId = actingPlayerId;
+		RewriteLatestRecurringEntry(entry => entry with
+		{
+			ActingPlayerId = actingPlayerId
+		});
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver RewriteRecurringSourceRoleAndCursor(
+		MainRoleType sourceRole)
+	{
+		RequireDomainCursor().SourceRole = sourceRole;
+		RewriteLatestRecurringEntry(entry => entry with
+		{
+			SourceRole = sourceRole
+		});
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver RewriteRecurringPowerAndCursor(
+		string sourcePowerIdentifier)
+	{
+		RequireDomainCursor().SourcePowerIdentifier =
+			sourcePowerIdentifier;
+		RewriteLatestRecurringEntry(entry => entry with
+		{
+			SourcePowerIdentifier = sourcePowerIdentifier
+		});
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver RewriteRecurringInstanceAndCursor(
+		Guid powerInstanceId)
+	{
+		RequireDomainCursor().PowerInstanceId = powerInstanceId;
+		RewriteLatestRecurringEntry(entry => entry with
+		{
+			PowerInstanceId = powerInstanceId
+		});
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver RewriteRecurringOriginAndCursor(
+		RolePowerInstanceOrigin powerInstanceOrigin)
+	{
+		RequireDomainCursor().PowerInstanceOrigin = powerInstanceOrigin;
+		RewriteLatestRecurringEntry(entry => entry with
+		{
+			PowerInstanceOrigin = powerInstanceOrigin
+		});
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver RewriteRecurringActionAndCursor(
+		NightActionType actionType)
+	{
+		RequireDomainCursor().CommittedActionType = actionType;
+		RewriteLatestRecurringEntry(entry => entry with
+		{
+			ActionType = actionType
+		});
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver RewriteRecurringNextSemantic(
+		ModeratorInstructionSemantic semantic)
+	{
+		RequireDomainCursor().NextInstructionSemantic = semantic;
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver
+		RewritePendingConfirmationAffectedPlayer(Guid playerId)
+	{
+		if (_payload.PendingInstruction is not
+		    ConfirmationInstruction pending)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no pending confirmation.");
+		}
+
+		_payload.PendingInstruction = new ConfirmationInstruction(
+			pending.Semantic,
+			pending.PublicAnnouncement,
+			pending.PrivateInstruction,
+			[playerId],
+			pending.InstructionId);
 		return this;
 	}
 
@@ -305,6 +396,24 @@ internal sealed class RecoveryPayloadTestDriver
 
 	internal string Serialize() =>
 		JsonSerializer.Serialize(_payload, SerializationOptions);
+
+	private void RewriteLatestRecurringEntry(
+		Func<
+			RecurringRolePowerCommittedLogEntry,
+			RecurringRolePowerCommittedLogEntry> rewrite)
+	{
+		var entryIndex = _payload.GameHistoryLog.FindLastIndex(
+			entry => entry is RecurringRolePowerCommittedLogEntry);
+		if (entryIndex < 0 ||
+		    _payload.GameHistoryLog[entryIndex] is not
+			    RecurringRolePowerCommittedLogEntry entry)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no committed recurring Night action.");
+		}
+
+		_payload.GameHistoryLog[entryIndex] = rewrite(entry);
+	}
 
 	private DomainRecoveryCursor RequireDomainCursor() =>
 		_payload.DomainRecoveryCursor

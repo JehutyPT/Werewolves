@@ -213,7 +213,7 @@ public sealed class BigBadWolfRecoveryTests
     }
 
     [Fact]
-    public void CommittedTarget_SemanticallyWrongRecurringCursorPassesKernelStructureButRoleOwnerRejectsIt()
+    public void CommittedTarget_SemanticallyWrongRecurringCursorIsRejectedAgainstOwnedCommit()
     {
         var (
             builder,
@@ -234,12 +234,9 @@ public sealed class BigBadWolfRecoveryTests
             .Serialize();
 
         Action deserializeStateModels = () => _ = new GameSession(tampered);
-        Action rehydrateThroughRoleOwner = () =>
-            new GameService().RehydrateSession(tampered);
 
-        deserializeStateModels.Should().NotThrow();
-        rehydrateThroughRoleOwner.Should().Throw<InvalidOperationException>()
-            .WithMessage("*Big Bad Wolf recovery cursor*");
+        deserializeStateModels.Should().Throw<InvalidOperationException>()
+            .WithMessage("*latest recurring native Role Power action*");
     }
 
     [Fact]

@@ -115,8 +115,7 @@ internal sealed class BigBadWolfRole
             GameSessionQueries.GetOrderedNightActionsThisNight(
                     session,
                     [NightActionType.BigBadWolfVictimSelection])
-                .Where(entry =>
-                    entry.GetType() == typeof(NightActionLogEntry))
+                .OfType<RecurringRolePowerCommittedLogEntry>()
                 .ToArray();
         if (committedActions.Length == 0)
         {
@@ -139,13 +138,12 @@ internal sealed class BigBadWolfRole
         GameSession session,
         ModeratorInstruction? startingInstruction,
         ModeratorResponse input,
-        NightActionLogEntry committedEntry,
+        RecurringRolePowerCommittedLogEntry committedEntry,
         ModeratorInstruction nextInstruction,
         out Guid actingPlayerId)
     {
         actingPlayerId = Guid.Empty;
-        if (committedEntry.GetType() != typeof(NightActionLogEntry) ||
-            committedEntry.ActionType !=
+        if (committedEntry.ActionType !=
             NightActionType.BigBadWolfVictimSelection)
         {
             return false;
@@ -176,7 +174,13 @@ internal sealed class BigBadWolfRole
                 "The Big Bad Wolf commit must correlate to its accepted target and exact sleep continuation.");
         }
 
-        actingPlayerId = affectedPlayerIds.Single();
+        actingPlayerId = committedEntry.ActingPlayerId;
+        if (actingPlayerId != affectedPlayerIds.Single())
+        {
+            throw new InvalidOperationException(
+                "The Big Bad Wolf commit does not belong to the instructed Role holder.");
+        }
+
         var holder = session.GetPlayer(actingPlayerId);
         if (holder.State.Health != PlayerHealth.Alive ||
             holder.State.MainRole != MainRoleType.BigBadWolf)
@@ -350,9 +354,20 @@ internal sealed class BigBadWolfRole
                 "The Big Bad Wolf target must be a living known non-Agent other than the collective victim.");
         }
 
-        session.PerformNightAction(
+        var holder = GetHolder(session);
+        var powerInstance = RolePowerInstance.CreateNative(
+            holder,
+            MainRoleType.BigBadWolf,
+            AdditionalVictimPower);
+        session.CommitRecurringRolePowerNightAction(
             NightActionType.BigBadWolfVictimSelection,
-            targetId);
+            targetId,
+            new RolePowerInstanceIdentity(
+                holder.Id,
+                MainRoleType.BigBadWolf,
+                AdditionalVictimPower.Identifier.Value,
+                powerInstance.Id,
+                powerInstance.Origin));
         return PrepareSleepInstruction(session);
     }
 
@@ -401,15 +416,22 @@ internal sealed class BigBadWolfRole
 
     private static void ValidateCommittedAdditionalVictim(
         GameSession session,
-        NightActionLogEntry committedEntry)
+        RecurringRolePowerCommittedLogEntry committedEntry)
     {
-        if (committedEntry.GetType() != typeof(NightActionLogEntry) ||
-            committedEntry.ActionType !=
-            NightActionType.BigBadWolfVictimSelection ||
-            committedEntry.TargetIds is not [var committedTargetId])
+        if (committedEntry.ActionType !=
+                NightActionType.BigBadWolfVictimSelection ||
+            committedEntry.TargetIds is not [var committedTargetId] ||
+            committedEntry.SourceRole != MainRoleType.BigBadWolf ||
+            !StringComparer.Ordinal.Equals(
+                committedEntry.SourcePowerIdentifier,
+                AdditionalVictimPowerIdentifier.Value) ||
+            committedEntry.PowerInstanceId !=
+                committedEntry.ActingPlayerId ||
+            committedEntry.PowerInstanceOrigin !=
+                RolePowerInstanceOrigin.Native)
         {
             throw new InvalidOperationException(
-                "The Big Bad Wolf recovery boundary requires one generic additional-victim action.");
+                "The Big Bad Wolf recovery boundary requires one owned recurring additional-victim action.");
         }
 
         if (!TryGetRetainedVictimId(session, out var retainedVictimId))
