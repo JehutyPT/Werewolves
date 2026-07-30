@@ -38,6 +38,16 @@ public class NightActionInputs
     /// </summary>
     public Guid? SeerTargetId { get; init; }
 
+    /// <summary>
+    /// Accursed Wolf-Father action: ID of the role holder to identify.
+    /// </summary>
+    public Guid? AccursedWolfFatherId { get; init; }
+
+    /// <summary>
+    /// Accursed Wolf-Father action: whether to infect the retained collective victim.
+    /// </summary>
+    public bool? AccursedWolfFatherInfectsVictim { get; init; }
+
     // Future roles can add their inputs here, e.g.:
     // public Guid? WitchHealTargetId { get; init; }
     // public Guid? WitchPoisonTargetId { get; init; }
@@ -572,6 +582,101 @@ public class GameTestBuilder
     }
 
     /// <summary>
+    /// Completes the Accursed Wolf-Father night action sequence:
+    /// identify and wake → choose whether to infect → confirm sleep.
+    /// </summary>
+    /// <param name="accursedWolfFatherId">The ID of the Accursed Wolf-Father player.</param>
+    /// <param name="infectsVictim">Whether to infect the retained collective victim.</param>
+    /// <returns>The result of the final sleep confirmation.</returns>
+    public ProcessResult CompleteAccursedWolfFatherNightAction(
+        Guid accursedWolfFatherId,
+        bool infectsVictim)
+    {
+        EnsureGameStarted();
+
+        ProcessResult afterWake;
+        switch (GetCurrentInstruction())
+        {
+            case SelectPlayersInstruction
+            {
+                Semantic: ModeratorInstructionSemantic.IdentifyRoleHolders,
+                RoleIdentification: MainRoleType.AccursedWolfFather
+            } identify:
+            {
+                var afterIdentify = Process(
+                    identify.CreateResponse([accursedWolfFatherId]));
+                if (afterIdentify.ModeratorInstruction is SelectOptionsInstruction
+                    {
+                        Semantic:
+                            ModeratorInstructionSemantic
+                                .ChooseAccursedWolfFatherInfection
+                    })
+                {
+                    afterWake = afterIdentify;
+                    break;
+                }
+
+                var wake = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+                    afterIdentify,
+                    "Accursed Wolf-Father wake confirmation");
+                if (wake.Semantic != ModeratorInstructionSemantic.WakeRole ||
+                    wake.AffectedPlayerIds is not [var affectedPlayerId] ||
+                    affectedPlayerId != accursedWolfFatherId)
+                {
+                    throw new AssertionException(
+                        "Expected the identified Accursed Wolf-Father to receive the wake confirmation.");
+                }
+
+                afterWake = Process(wake.CreateResponse());
+                break;
+            }
+            case ConfirmationInstruction
+            {
+                Semantic: ModeratorInstructionSemantic.WakeRole,
+                AffectedPlayerIds: [var affectedPlayerId]
+            } wake when affectedPlayerId == accursedWolfFatherId:
+                afterWake = Process(wake.CreateResponse());
+                break;
+            case null:
+                throw new InvalidOperationException(
+                    "No current instruction is available for the Accursed Wolf-Father wake.");
+            case var instruction:
+                throw new AssertionException(
+                    $"Expected an Accursed Wolf-Father identification or wake instruction, but received " +
+                    $"{instruction.GetType().Name} ({instruction.Semantic}).");
+        }
+
+        var choice = InstructionAssert.ExpectSuccessWithType<SelectOptionsInstruction>(
+            afterWake,
+            "Accursed Wolf-Father infection choice");
+        if (choice.Semantic !=
+            ModeratorInstructionSemantic.ChooseAccursedWolfFatherInfection)
+        {
+            throw new AssertionException(
+                $"Expected {ModeratorInstructionSemantic.ChooseAccursedWolfFatherInfection}, " +
+                $"but received {choice.Semantic}.");
+        }
+
+        var optionId = infectsVictim
+            ? AccursedWolfFatherInfectionOptionIds.Infect
+            : AccursedWolfFatherInfectionOptionIds.Decline;
+        var afterChoice = Process(choice.CreateResponse(optionId));
+
+        var sleep = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+            afterChoice,
+            "Accursed Wolf-Father sleep confirmation");
+        if (sleep.Semantic != ModeratorInstructionSemantic.PutRoleToSleep ||
+            sleep.AffectedPlayerIds is not [var sleepingPlayerId] ||
+            sleepingPlayerId != accursedWolfFatherId)
+        {
+            throw new AssertionException(
+                "Expected the Accursed Wolf-Father to receive the sleep confirmation.");
+        }
+
+        return Process(sleep.CreateResponse());
+    }
+
+    /// <summary>
     /// Completes a full night phase by iterating through roles in the order defined by HookListeners[NightMainActionLoop].
     /// This includes confirming the night-end instruction that transitions to Dawn.
     /// </summary>
@@ -607,6 +712,8 @@ public class GameTestBuilder
             {
                 MainRoleType.SimpleWerewolf => HandleWerewolfNightAction(inputs),
                 MainRoleType.Seer => HandleSeerNightAction(inputs),
+                MainRoleType.AccursedWolfFather =>
+                    HandleAccursedWolfFatherNightAction(inputs),
                 // Future roles can be added here as they're implemented:
                 // MainRoleType.Witch => HandleWitchNightAction(inputs),
                 // MainRoleType.Defender => HandleDefenderNightAction(inputs),
@@ -697,6 +804,22 @@ public class GameTestBuilder
             return ProcessResult.Success(GetCurrentInstruction()!);
 
         return CompleteSeerNightAction(inputs.SeerId.Value, inputs.SeerTargetId.Value);
+    }
+
+    /// <summary>
+    /// Handles the Accursed Wolf-Father night action if inputs are provided.
+    /// </summary>
+    private ProcessResult HandleAccursedWolfFatherNightAction(NightActionInputs inputs)
+    {
+        if (inputs.AccursedWolfFatherId == null ||
+            inputs.AccursedWolfFatherInfectsVictim == null)
+        {
+            return ProcessResult.Success(GetCurrentInstruction()!);
+        }
+
+        return CompleteAccursedWolfFatherNightAction(
+            inputs.AccursedWolfFatherId.Value,
+            inputs.AccursedWolfFatherInfectsVictim.Value);
     }
 
     #endregion

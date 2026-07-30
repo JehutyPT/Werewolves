@@ -35,6 +35,7 @@ public sealed class RoleKnowledgeFlowBunitTests
 	[InlineData(MainRoleType.Hunter)]
 	[InlineData(MainRoleType.StutteringJudge)]
 	[InlineData(MainRoleType.Scapegoat)]
+	[InlineData(MainRoleType.AccursedWolfFather)]
 	public void SingleOptionalRoleLobby_UsesCatalogMetadataAsPortugueseToggle(
 		MainRoleType role)
 	{
@@ -48,6 +49,8 @@ public sealed class RoleKnowledgeFlowBunitTests
 			MainRoleType.Hunter => GameStrings.HunterRoleName,
 			MainRoleType.StutteringJudge => GameStrings.StutteringJudgeRoleName,
 			MainRoleType.Scapegoat => GameStrings.ScapegoatRoleName,
+			MainRoleType.AccursedWolfFather =>
+				GameStrings.AccursedWolfFatherRoleName,
 			_ => throw new InvalidOperationException(
 				$"Unexpected Single-Optional Role {role}.")
 		};
@@ -600,6 +603,184 @@ public sealed class RoleKnowledgeFlowBunitTests
 			.And.Contain(ClientStrings.Dashboard_RoleKnowledgePrivate)
 			.And.NotContain(GameStrings.VillagersGroupName)
 			.And.NotContain(GameStrings.WerewolvesGroupName);
+	}
+
+	[Fact]
+	public async Task AccursedWolfFatherNightFlow_RendersPrivateInfectionChoiceWithGenericDeliberateHoldAndPublicSleep()
+	{
+		var timing = new ControlledHoldButtonTiming();
+		using var context = new ModeratorComponentTestContext();
+		context.Services.AddSingleton<IHoldButtonTiming>(timing);
+		var manager = context.Services.GetRequiredService<GameClientManager>();
+		var start = manager.StartGame(
+			PlayerNames.DefaultFive,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.AccursedWolfFather,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+		manager.ProcessInput(start.CreateResponse()).IsSuccess.Should().BeTrue();
+		var startNight = manager.CurrentInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		manager.ProcessInput(startNight.CreateResponse()).IsSuccess.Should().BeTrue();
+
+		var players = manager.CurrentSession!.GetPlayers().ToArray();
+		var werewolf = players[0];
+		var accursedWolfFather = players[1];
+		var victim = players[3];
+		var factionObservation = manager.CurrentInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		factionObservation.Semantic.Should().Be(
+			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
+		factionObservation.RoleIdentification.Should().BeNull();
+		manager.ProcessInput(
+				factionObservation.CreateResponse(
+					[werewolf.Id, accursedWolfFather.Id]))
+			.IsSuccess.Should().BeTrue();
+		var victimSelection = manager.CurrentInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		victimSelection.Semantic.Should().Be(
+			ModeratorInstructionSemantic.SelectWerewolfVictim);
+		manager.ProcessInput(victimSelection.CreateResponse([victim.Id]))
+			.IsSuccess.Should().BeTrue();
+		var collectiveSleep = manager.CurrentInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		manager.ProcessInput(collectiveSleep.CreateResponse())
+			.IsSuccess.Should().BeTrue();
+
+		accursedWolfFather.State.ModeratorKnownRole.Should().BeNull();
+		var identification = manager.CurrentInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		var wakeAnnouncement = GameStrings.RoleWakesUp.Format(
+			GameStrings.AccursedWolfFatherRoleName);
+		identification.Semantic.Should().Be(
+			ModeratorInstructionSemantic.IdentifyRoleHolders);
+		identification.RoleIdentification.Should().Be(
+			MainRoleType.AccursedWolfFather);
+		identification.CountConstraint.Should().Be(NumberRangeConstraint.Single);
+		identification.PublicAnnouncement.Should().Be(wakeAnnouncement);
+
+		var dashboard = context.RenderModeratorComponent<DashboardPage>();
+		var publicWake = dashboard.Find(PublicInstructionSelector);
+		publicWake.TextContent.Should().Contain(wakeAnnouncement);
+		publicWake.TextContent.Should().NotContain(accursedWolfFather.Name);
+		dashboard.Find(HoldButtonSelector)
+			.HasAttribute(Html.Attributes.Disabled).Should().BeTrue();
+		var holderOption = dashboard.FindAll(PlayerOptionSelector)
+			.Single(option => option.TextContent.Contains(
+				accursedWolfFather.Name,
+				StringComparison.CurrentCulture));
+		holderOption.Click();
+		dashboard.Find(HoldButtonSelector)
+			.HasAttribute(Html.Attributes.Disabled).Should().BeFalse();
+		await RenderedHoldButtonDriver.CompleteHoldAsync(
+			dashboard,
+			dashboard.Find(HoldButtonSelector),
+			timing);
+
+		var infectionChoice = manager.CurrentInstruction
+			.Should().BeOfType<SelectOptionsInstruction>().Subject;
+		var privateInstruction =
+			GameStrings.AccursedWolfFatherInfectionInstruction.Format(
+				victim.Name);
+		infectionChoice.Semantic.Should().Be(
+			ModeratorInstructionSemantic.ChooseAccursedWolfFatherInfection);
+		infectionChoice.PublicAnnouncement.Should().BeNull();
+		infectionChoice.PrivateInstruction.Should().Be(privateInstruction);
+		infectionChoice.AffectedPlayerIds.Should().Equal(
+			accursedWolfFather.Id);
+		infectionChoice.SelectionRange.Should().Be(NumberRangeConstraint.Single);
+		infectionChoice.Options.Select(option => (option.Id, option.Label))
+			.Should().Equal(
+				(
+					AccursedWolfFatherInfectionOptionIds.Infect,
+					GameStrings.AccursedWolfFatherInfectOption),
+				(
+					AccursedWolfFatherInfectionOptionIds.Decline,
+					GameStrings.DeclineOption));
+
+		var responses = new List<ModeratorResponse>();
+		var choiceView =
+			context.RenderModeratorComponent<InstructionRenderer>(parameters =>
+				parameters
+					.Add(component => component.Instruction, infectionChoice)
+					.Add(component => component.Roster, manager.CurrentRoster)
+					.Add(
+						component => component.OnResponse,
+						EventCallback.Factory.Create<ModeratorResponse>(
+							this,
+							responses.Add)));
+		choiceView.FindAll(PublicInstructionSelector).Should().BeEmpty();
+		choiceView.Find(PrivateInstructionSelector).TextContent.Should()
+			.Contain(privateInstruction);
+		var infectOption = choiceView.FindAll(Html.Selectors.Button)
+			.Single(button =>
+				button.TextContent.Trim() ==
+				GameStrings.AccursedWolfFatherInfectOption);
+		var declineOption = choiceView.FindAll(Html.Selectors.Button)
+			.Single(button =>
+				button.TextContent.Trim() == GameStrings.DeclineOption);
+		infectOption.GetAttribute(Html.Attributes.AriaPressed)
+			.Should().Be(Html.AriaValues.False);
+		declineOption.GetAttribute(Html.Attributes.AriaPressed)
+			.Should().Be(Html.AriaValues.False);
+		choiceView.Find(HoldButtonSelector)
+			.HasAttribute(Html.Attributes.Disabled).Should().BeTrue();
+
+		infectOption.Click();
+		infectOption = choiceView.FindAll(Html.Selectors.Button)
+			.Single(button =>
+				button.TextContent.Trim() ==
+				GameStrings.AccursedWolfFatherInfectOption);
+		infectOption.GetAttribute(Html.Attributes.AriaPressed)
+			.Should().Be(Html.AriaValues.True);
+		choiceView.Find(HoldButtonSelector)
+			.HasAttribute(Html.Attributes.Disabled).Should().BeFalse();
+
+		var holdButton = choiceView.Find(HoldButtonSelector);
+		var canceledHoldTask =
+			RenderedHoldButtonDriver.StartHoldAsync(holdButton);
+		await RenderedHoldButtonDriver.FlushAsync(choiceView);
+		timing.AdvanceBy(TimeSpan.FromMilliseconds(200));
+		await RenderedHoldButtonDriver.LeaveHoldAsync(holdButton);
+		await canceledHoldTask;
+		timing.AdvanceBy(
+			RenderedHoldButtonDriver.HoldDuration +
+			RenderedHoldButtonDriver.SuccessFlashDuration);
+		await RenderedHoldButtonDriver.FlushAsync(choiceView);
+		responses.Should().BeEmpty();
+
+		await RenderedHoldButtonDriver.CompleteHoldAsync(
+			choiceView,
+			choiceView.Find(HoldButtonSelector),
+			timing);
+		var response = responses.Should().ContainSingle().Subject;
+		response.Type.Should().Be(ExpectedInputType.OptionSelection);
+		response.InstructionId.Should().Be(infectionChoice.InstructionId);
+		response.SelectedOptionIds.Should().Equal(
+			AccursedWolfFatherInfectionOptionIds.Infect);
+		manager.ProcessInput(response).IsSuccess.Should().BeTrue();
+
+		var sleep = manager.CurrentInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var sleepAnnouncement = GameStrings.RoleGoesToSleepSingle.Format(
+			GameStrings.AccursedWolfFatherRoleName);
+		sleep.Semantic.Should().Be(ModeratorInstructionSemantic.PutRoleToSleep);
+		sleep.PublicAnnouncement.Should().Be(sleepAnnouncement);
+		sleep.PrivateInstruction.Should().BeNull();
+
+		var sleepDashboard =
+			context.RenderModeratorComponent<DashboardPage>();
+		var publicSleep = sleepDashboard.Find(PublicInstructionSelector);
+		publicSleep.TextContent.Should().Contain(sleepAnnouncement);
+		publicSleep.TextContent.Should().NotContain(victim.Name);
+		publicSleep.TextContent.Should().NotContain(
+			GameStrings.AccursedWolfFatherInfectOption);
+		publicSleep.TextContent.Should().NotContain(GameStrings.DeclineOption);
+		sleepDashboard.FindAll(PrivateInstructionSelector).Should().BeEmpty();
+		sleepDashboard.FindAll(PlayerOptionSelector).Should().BeEmpty();
 	}
 
 	private static void AdvanceToFirstDayDebate(

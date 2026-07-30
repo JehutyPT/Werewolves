@@ -646,21 +646,28 @@ internal static class GameFlowManager
             return null;
         }
 
-        var selectedPlayerIds = input.SelectedPlayerIds;
-        if (startingInstruction is not SelectPlayersInstruction ||
-            selectedPlayerIds is not { Count: 1 })
+        if (newCommittedEntries is not [var committedEntry] ||
+            committedEntry.TargetIds is not { Count: 1 })
         {
             throw new InvalidOperationException(
-                "A One-Use Resource commit must correlate to one accepted Player selection.");
+                "One accepted response must produce exactly one atomic One-Use Resource commit.");
         }
 
-        var committedTargetId = selectedPlayerIds.Single();
-        if (newCommittedEntries is not [var committedEntry] ||
-            committedEntry.TargetIds is not { Count: 1 } ||
-            committedEntry.TargetIds[0] != committedTargetId)
+        var committedTargetId = committedEntry.TargetIds[0];
+        var roleOwnedCommitCorrelated =
+            AccursedWolfFatherRole.TryValidateCommittedRecoveryBoundary(
+                session,
+                startingInstruction,
+                input,
+                committedEntry);
+        if (!roleOwnedCommitCorrelated &&
+            (startingInstruction is not SelectPlayersInstruction ||
+             input.SelectedPlayerIds is not
+                 { Count: 1 } selectedPlayerIds ||
+             selectedPlayerIds.Single() != committedTargetId))
         {
             throw new InvalidOperationException(
-                "The accepted One-Use Resource selection did not produce its atomic domain commit.");
+                "A One-Use Resource commit must correlate to one accepted Player or semantic option selection.");
         }
 
         var resourceIdentity = committedEntry.ResourceIdentity;
@@ -764,7 +771,7 @@ internal static class GameFlowManager
         var domainCursor = session.GetDomainRecoveryCursor(Key);
         if (domainCursor != null)
         {
-            RestoreDomainContinuation(session, domainCursor);
+            RestoreDomainContinuation(session, domainCursor, admissions);
             return;
         }
 
@@ -834,19 +841,50 @@ internal static class GameFlowManager
 
     private static void RestoreDomainContinuation(
         GameSession session,
-        DomainRecoveryCursor cursor)
+        DomainRecoveryCursor cursor,
+        IRoleAdmissionSource admissions)
     {
         var resourceIdentity = cursor.ResourceIdentity
             ?? throw new InvalidOperationException(
                 "The domain recovery cursor is structurally invalid.");
+
+        if (cursor.Kind != DomainRecoveryCursorKind.OneUseRolePowerCommit ||
+            session.GetCurrentPhase() != GamePhase.Night ||
+            !IsNightStartSubPhase(session))
+        {
+            throw new InvalidOperationException(
+                $"Unsupported domain continuation '{resourceIdentity.SourceRole}:{cursor.CommittedActionType}:{cursor.NextInstructionSemantic}'.");
+        }
+
+        var pendingInstruction = session.PendingModeratorInstruction
+            ?? throw new InvalidOperationException(
+                "The committed domain continuation requires one Pending Instruction.");
+        var listenerContinuation = ResolvePendingInstructionContinuation(
+            session,
+            pendingInstruction,
+            admissions);
+        if (listenerContinuation != null)
+        {
+            if (listenerContinuation.Value.Listener !=
+                Listener(resourceIdentity.SourceRole))
+            {
+                throw new InvalidOperationException(
+                    "The committed domain continuation resolved to a different listener.");
+            }
+
+            session.RestoreTransientContinuation(
+                Key,
+                listenerContinuation.Value.ActiveSubPhaseStage,
+                listenerContinuation.Value.Listener,
+                listenerContinuation.Value.ListenerState);
+            return;
+        }
+
         var continuation = ResolveDomainContinuation(
             resourceIdentity.SourceRole,
             cursor.CommittedActionType,
             cursor.NextInstructionSemantic);
-        if (cursor.Kind != DomainRecoveryCursorKind.OneUseRolePowerCommit ||
-            session.GetCurrentPhase() != GamePhase.Night ||
-            !IsNightStartSubPhase(session) ||
-            continuation == null)
+        if (continuation == null)
         {
             throw new InvalidOperationException(
                 $"Unsupported domain continuation '{resourceIdentity.SourceRole}:{cursor.CommittedActionType}:{cursor.NextInstructionSemantic}'.");
@@ -919,6 +957,13 @@ internal static class GameFlowManager
                     NightMainActionLoop.ToString(),
                     Listener(WolfHound),
                     WolfHoundRoleState.AwaitingAlignmentChoice.ToString(),
+                    AcceptedObservationInstructionShape.OptionSelection),
+            (AccursedWolfFather,
+                ModeratorInstructionSemantic.ChooseAccursedWolfFatherInfection) =>
+                new(
+                    NightMainActionLoop.ToString(),
+                    Listener(AccursedWolfFather),
+                    AccursedWolfFatherRoleState.AwaitingInfectionChoice.ToString(),
                     AcceptedObservationInstructionShape.OptionSelection),
             (SimpleWerewolf, ModeratorInstructionSemantic.SelectWerewolfVictim) =>
                 new(

@@ -385,6 +385,14 @@
     <value>Infecto-Pai dos Lobos</value>
     <comment/>
   </data>
+  <data name="AccursedWolfFatherInfectionInstruction" xml:space="preserve">
+    <value>Regista em privado se o Infecto-Pai dos Lobos infeta {0} ou recusa.</value>
+    <comment/>
+  </data>
+  <data name="AccursedWolfFatherInfectOption" xml:space="preserve">
+    <value>Infetar a vítima</value>
+    <comment/>
+  </data>
   <data name="WhiteWerewolfRoleName" xml:space="preserve">
     <value>Lobisomem Branco</value>
     <comment/>

@@ -49,16 +49,18 @@ public class SimulatorProfileTests
 			.Append(ModeratorInstructionSemantic.RevealScapegoatForTie)
 			.Append(ModeratorInstructionSemantic.SelectScapegoatPermittedVoters)
 			.Append(ModeratorInstructionSemantic.AnnounceScapegoatPermittedVoters)
-			.Append(ModeratorInstructionSemantic.ChooseWolfHoundAlignment);
+			.Append(ModeratorInstructionSemantic.ChooseWolfHoundAlignment)
+			.Append(ModeratorInstructionSemantic
+				.ChooseAccursedWolfFatherInfection);
 		var safety = SimulatorCapability.SafetyScreening;
 		var probability = SimulatorCapability.FullProbability;
 
-		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "11"));
+		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "12"));
 		probability.Identity.Should().Be(new SimulatorProfileIdentity("full-probability", "3"));
 		BaselineRandomDecisionStrategy.Identity.Should()
 			.Be(new DecisionStrategyIdentity("baseline-random", "3-splitmix64"));
 		BaselineRandomDecisionStrategy.SafetyScreeningIdentity.Should()
-			.Be(new DecisionStrategyIdentity("baseline-random", "5-splitmix64"));
+			.Be(new DecisionStrategyIdentity("baseline-random", "6-splitmix64"));
 		safety.SupportedRoles.Should().Equal(
 			MainRoleType.SimpleWerewolf,
 			MainRoleType.Seer,
@@ -71,13 +73,23 @@ public class SimulatorProfileTests
 			MainRoleType.Hunter,
 			MainRoleType.StutteringJudge,
 			MainRoleType.Scapegoat,
-			MainRoleType.WolfHound);
+			MainRoleType.WolfHound,
+			MainRoleType.AccursedWolfFather);
 		probability.SupportedRoles.Should().Equal(
 			MainRoleType.SimpleWerewolf,
 			MainRoleType.Seer,
 			MainRoleType.WildChild,
 			MainRoleType.SimpleVillager);
 		probability.SupportedRoles.Should().NotBeSameAs(safety.SupportedRoles);
+		safety.TryGetBeneficiaryFaction(
+				MainRoleType.AccursedWolfFather,
+				out var accursedBeneficiary)
+			.Should().BeTrue();
+		accursedBeneficiary.Should().Be(Faction.Werewolf);
+		safety.IsFactionAgent(
+				MainRoleType.AccursedWolfFather,
+				Faction.Werewolf)
+			.Should().BeTrue();
 		safety.SupportsActorSetupCards.Should().BeFalse();
 		probability.SupportsActorSetupCards.Should().BeFalse();
 		safety.SupportsRuleState(SimulationRuleState.Default).Should().BeTrue();

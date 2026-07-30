@@ -135,10 +135,14 @@ public sealed class SimulatorCapability : SimulatorProfile
 		new(MainRoleType.TwoSisters, Faction.Villager),
 		new(MainRoleType.ThreeBrothers, Faction.Villager),
 		new(MainRoleType.Witch, Faction.Villager),
-		new(MainRoleType.Hunter, Faction.Villager),
-		new(MainRoleType.StutteringJudge, Faction.Villager),
-		new(MainRoleType.Scapegoat, Faction.Villager),
-		new(MainRoleType.WolfHound, Faction.Villager)
+			new(MainRoleType.Hunter, Faction.Villager),
+			new(MainRoleType.StutteringJudge, Faction.Villager),
+			new(MainRoleType.Scapegoat, Faction.Villager),
+			new(MainRoleType.WolfHound, Faction.Villager),
+			new(
+				MainRoleType.AccursedWolfFather,
+				Faction.Werewolf,
+				Faction.Werewolf)
 	];
 
 	private static readonly SimulatorProfileRoleDescriptor[] FullProbabilityRoleDescriptors =
@@ -156,7 +160,7 @@ public sealed class SimulatorCapability : SimulatorProfile
 		SimulatorCapabilityRegistry.Production.FullProbability;
 
 	internal static SimulatorCapability CreateSafetyScreening() => new(
-			new SimulatorProfileIdentity("safety-screening", "11"),
+			new SimulatorProfileIdentity("safety-screening", "12"),
 		SafetyScreeningRoleDescriptors,
 		headlessResponsePolicy: new HeadlessResponsePolicy(
 			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
@@ -193,10 +197,12 @@ public sealed class SimulatorCapability : SimulatorProfile
 				ModeratorInstructionSemantic.ObserveStutteringJudgeSignal,
 				ModeratorInstructionSemantic.ObserveScapegoatHolderForTie,
 				ModeratorInstructionSemantic.RevealScapegoatForTie,
-				ModeratorInstructionSemantic.SelectScapegoatPermittedVoters,
-				ModeratorInstructionSemantic.AnnounceScapegoatPermittedVoters,
-				ModeratorInstructionSemantic.ChooseWolfHoundAlignment
-			]),
+					ModeratorInstructionSemantic.SelectScapegoatPermittedVoters,
+					ModeratorInstructionSemantic.AnnounceScapegoatPermittedVoters,
+					ModeratorInstructionSemantic.ChooseWolfHoundAlignment,
+					ModeratorInstructionSemantic
+						.ChooseAccursedWolfFatherInfection
+				]),
 		supportsActorSetupCards: false,
 		supportedRuleStates: [SimulationRuleState.Default]);
 

@@ -41,5 +41,6 @@ public enum ModeratorInstructionSemantic
 	SelectScapegoatPermittedVoters = 33,
 	AnnounceScapegoatPermittedVoters = 34,
 	ObserveWerewolfFactionAgentGroup = 35,
-	ChooseWolfHoundAlignment = 36
+	ChooseWolfHoundAlignment = 36,
+	ChooseAccursedWolfFatherInfection = 37
 }

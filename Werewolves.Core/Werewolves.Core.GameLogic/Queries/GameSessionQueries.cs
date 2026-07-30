@@ -78,6 +78,40 @@ internal static class GameSessionQueries
                 log => actionTypes.Contains(log.ActionType))
             .ToArray();
 
+    internal static bool TryGetRetainedWerewolfVictimThisNight(
+        IGameSession session,
+        out Guid victimId)
+    {
+        var collectiveActions = GetOrderedNightActionsThisNight(
+            session,
+            [NightActionType.WerewolfVictimSelection]);
+        if (collectiveActions is [var collectiveAction] &&
+            collectiveAction.TargetIds is [var retainedVictimId] &&
+            retainedVictimId != Guid.Empty)
+        {
+            victimId = retainedVictimId;
+            return true;
+        }
+
+        victimId = Guid.Empty;
+        return false;
+    }
+
+    internal static int GetCommittedLogIndex(
+        IGameSession session,
+        GameLogEntryBase committedEntry)
+    {
+        var matchingIndexes = session.GameHistoryLog
+            .Select((entry, index) => (Entry: entry, Index: index))
+            .Where(item => ReferenceEquals(item.Entry, committedEntry))
+            .Select(item => item.Index)
+            .ToArray();
+        return matchingIndexes is [var index]
+            ? index
+            : throw new InvalidOperationException(
+                "The committed Game Log entry must occur exactly once in the Session history.");
+    }
+
     internal static IReadOnlyList<IPlayer> GetPhysicalAttackTargetsThisNight(
         IGameSession session)
     {

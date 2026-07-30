@@ -80,6 +80,34 @@ internal sealed class RecoveryPayloadTestDriver
 		return this;
 	}
 
+	internal RecoveryPayloadTestDriver RetargetLatestOneUseActionAndCursor(
+		Guid targetId)
+	{
+		if (targetId == Guid.Empty)
+		{
+			throw new ArgumentException(
+				"A recovery test target cannot be empty.",
+				nameof(targetId));
+		}
+
+		RequireDomainCursor().CommittedTargetId = targetId;
+		var entryIndex = _payload.GameHistoryLog.FindLastIndex(
+			entry => entry is OneUseRolePowerCommittedLogEntry);
+		if (entryIndex < 0 ||
+		    _payload.GameHistoryLog[entryIndex] is not
+			    OneUseRolePowerCommittedLogEntry entry)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no committed One-Use Resource action.");
+		}
+
+		_payload.GameHistoryLog[entryIndex] = entry with
+		{
+			TargetIds = [targetId]
+		};
+		return this;
+	}
+
 	internal RecoveryPayloadTestDriver RewriteLatestStutteringJudgeAction(
 		DayPowerType actionType)
 	{

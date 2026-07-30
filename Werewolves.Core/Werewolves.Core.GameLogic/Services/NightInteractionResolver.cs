@@ -1,6 +1,9 @@
 using Werewolves.Core.GameLogic.Queries;
+using Werewolves.Core.GameLogic.Roles.MainRoles;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Log;
+using Werewolves.Core.StateModels.Models;
 
 namespace Werewolves.Core.GameLogic.Services;
 
@@ -28,10 +31,38 @@ internal static class NightInteractionResolver
 	/// </summary>
 	public static void ResolveNightPhase(GameSession session)
 	{
-		var committedAttempts = GameSessionQueries
-			.GetOrderedNightActionsThisNight(
+		var nightActions =
+			GameSessionQueries.GetOrderedNightActionsThisNight(
 				session,
-				DawnResolutionActionTypes)
+				DawnResolutionActionTypes);
+			var infectionLogs = nightActions
+				.Where(entry =>
+					entry.ActionType ==
+						NightActionType.AccursedWolfFatherInfection)
+				.ToArray();
+			FactionFactEffectiveBoundary? infectionEffectiveBoundary = null;
+			if (infectionLogs.Length > 0)
+			{
+				if (infectionLogs is not [var infection] ||
+				    infection.TargetIds is not [var infectionTarget] ||
+				    !GameSessionQueries.TryGetRetainedWerewolfVictimThisNight(
+					    session,
+					    out var retainedVictimId) ||
+				    infectionTarget != retainedVictimId)
+				{
+					throw new InvalidOperationException(
+						"The Accursed Wolf-Father infection intent does not match one retained collective victim.");
+				}
+
+				infectionEffectiveBoundary = new FactionFactEffectiveBoundary(
+					infection.TurnNumber,
+					infection.CurrentPhase,
+					GameSessionQueries.GetCommittedLogIndex(
+						session,
+						infection));
+			}
+
+		var committedAttempts = nightActions
 			.SelectMany(log =>
 				(log.TargetIds ?? []).Select(targetId =>
 					new CommittedNightAttempt(log.ActionType, targetId)))
@@ -69,12 +100,41 @@ internal static class NightInteractionResolver
 				return;
 			}
 
-			if (isInfection)
-			{
-				session.ApplyStatusEffect(
-					StatusEffectTypes.LycanthropyInfection,
-					player.Id);
-			}
+				if (isInfection)
+				{
+					var boundary = infectionEffectiveBoundary
+						?? throw new InvalidOperationException(
+							"The Accursed Wolf-Father infection requires its historical effective boundary.");
+					session.ApplyStatusEffect(
+						StatusEffectTypes.LycanthropyInfection,
+						player.Id);
+					session.CommitFactionFactBatch(context =>
+					{
+						return new FactionFactsCommittedLogEntry
+						{
+							Timestamp = context.Timestamp,
+							TurnNumber = context.TurnNumber,
+							CurrentPhase = context.CurrentPhase,
+							Source = new FactionFactSource(
+								FactionFactSourceKind.ExplicitTransition,
+								AccursedWolfFatherRole
+									.InfectionPowerIdentifier.Value),
+							Facts =
+							[
+								FactionFact.Beneficiary(
+									player.Id,
+									Faction.Werewolf,
+									boundary,
+									beneficiaryPrecedence: 0),
+								FactionFact.Agent(
+									player.Id,
+									Faction.Werewolf,
+									FactionAgentKnowledge.KnownAgent,
+									boundary)
+							]
+						};
+					});
+				}
 			else
 			{
 				if (lethalPhysicalTargets.Add(player.Id))
