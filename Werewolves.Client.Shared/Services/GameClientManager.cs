@@ -71,6 +71,11 @@ public sealed class GameClientManager
 
 	public void ClearSession()
 	{
+		if (ActiveGameId is { } gameId)
+		{
+			_gameService.DiscardSession(gameId);
+		}
+
 		ActiveGameId = null;
 		CurrentSession = null;
 		CurrentInstruction = null;

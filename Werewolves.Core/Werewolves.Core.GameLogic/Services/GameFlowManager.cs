@@ -28,6 +28,9 @@ using static Werewolves.Core.StateModels.Models.ListenerIdentifier;
 
 namespace Werewolves.Core.GameLogic.Services;
 
+internal sealed class VictoryFactsNotReadyException()
+    : InvalidOperationException("Required Faction facts are not ready.");
+
 /// <summary>
 /// Holds the state machine configuration and provides access to phase definitions.
 /// </summary>
@@ -1204,7 +1207,7 @@ internal static class GameFlowManager
     {
         if (!InitialBeneficiaryClosureRules.HasCommitted(session))
         {
-            throw new InvalidOperationException("Required Faction facts are not ready.");
+            throw new VictoryFactsNotReadyException();
         }
 
         var livingBeneficiaries = session.GetPlayers()

@@ -159,7 +159,7 @@ This document records settled rule interactions that are too subtle for `docs/do
 
 ## Victory Timing and Outcomes
 
-- Win conditions are evaluated only during **Victory Check Windows**: at Dawn after Night eliminations and related cascades are resolved, and before the next Night after Day vote resolution and related cascades are resolved. The pre-Night Victory Check Window is not a separate Dusk Phase.
+- Win conditions are evaluated only during **Victory Check Windows**: at Dawn after Night Eliminations, their related cascades, and all resulting Dawn reactions are resolved, and before the next Night after Day vote resolution and related cascades are resolved. The pre-Night Victory Check Window is not a separate Dusk Phase.
 - During one **Victory Check Window**, all win-condition predicates are evaluated against the same resolved Game Session state. If multiple Factions' predicates are true, the Game Session ends with a **Shared Victory Outcome** rather than applying a priority order.
 - Angel's transient Faction can win if the Angel is Eliminated by the first Vote of Day 1 or during Night 1 or Night 2. Elimination by a **Consecutive Vote** on Day 1 does not qualify. That eligibility remains active through the Dawn **Victory Check Window** that resolves Night 2. If Angel has not won by then, the transient Faction expires immediately after that window and the Angel becomes a Simple Villager.
 - A **No-Winner Outcome** occurs only when no Faction win condition is true in the **Victory Check Window** and every Player is Eliminated.

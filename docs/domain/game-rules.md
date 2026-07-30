@@ -25,7 +25,7 @@ In the current ruleset, each Player has exactly one Faction Beneficiary at a tim
 
 The Game Session alternates between Night Phase and Day Phase.
 
-Win conditions are evaluated during Victory Check Windows: after Night Eliminations and related cascades resolve at Dawn, and after Day Vote resolution and related cascades resolve before the village returns to sleep. The pre-Night Victory Check Window is not a separate phase.
+Win conditions are evaluated during Victory Check Windows: after Night Eliminations, their related cascades, and all resulting Dawn reactions resolve, and after Day Vote resolution and related cascades resolve before the village returns to sleep. The pre-Night Victory Check Window is not a separate phase.
 
 ### Night Phase
 
@@ -200,11 +200,12 @@ Win conditions are evaluated during Victory Check Windows: after Night Eliminati
 1.  Village Wakes
 2.  **(If using New Moon Events, after Day 1)** Draw and resolve New Moon Event card.
 3.  Victims are revealed (unless Burial active, potential modification by Miracle).
-4.  Resolve the Dawn Victory Check Window.
-5.  Bear Tamer's grunt (if triggered).
-6.  Medium chosen by Gypsy performs action (if Spiritualism card drawn).
-7.  Town Crier makes announcement (if applicable).
-8.  Debate (subject to Eclipse, Good Manners, Not Me - Nor Wolf).
-9.  Resolve the first Vote. If it fixes a Vote Target, run any pre-reveal intervention before target-dependent resolution, then complete the Vote and its Elimination Cascade. Replacement New Moon Vote procedures retain their separately defined behavior.
-10. If a rule requires a Consecutive Vote, resolve it independently through the same sequence using its own result, without another Debate or an intervening Victory Check Window.
-11. Resolve the pre-Night Victory Check Window. On Day 1, only Elimination by the first Vote qualifies the Angel; Elimination by a Consecutive Vote does not.
+4.  Resolve the complete Dawn Elimination Cascades.
+5.  Resolve every resulting Dawn reaction, including Bear Tamer's grunt (if triggered) and the Moderator's confirmation.
+6.  Resolve the Dawn Victory Check Window.
+7.  Medium chosen by Gypsy performs action (if Spiritualism card drawn).
+8.  Town Crier makes announcement (if applicable).
+9.  Debate (subject to Eclipse, Good Manners, Not Me - Nor Wolf).
+10. Resolve the first Vote. If it fixes a Vote Target, run any pre-reveal intervention before target-dependent resolution, then complete the Vote and its Elimination Cascade. Replacement New Moon Vote procedures retain their separately defined behavior.
+11. If a rule requires a Consecutive Vote, resolve it independently through the same sequence using its own result, without another Debate or an intervening Victory Check Window.
+12. Resolve the pre-Night Victory Check Window. On Day 1, only Elimination by the first Vote qualifies the Angel; Elimination by a Consecutive Vote does not.

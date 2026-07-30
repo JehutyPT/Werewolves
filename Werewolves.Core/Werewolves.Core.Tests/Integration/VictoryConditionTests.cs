@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Werewolves.Core.GameLogic.Models.StateMachine;
+using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
@@ -478,14 +479,79 @@ public class VictoryConditionTests : DiagnosticTestBase
             ModeratorInstructionSemantic.FinishNightActions);
         session.GetFactionBeneficiaryKnowledge(players[1].Id)
             .IsKnown.Should().BeFalse();
-        var reachVictoryCheckWindow = () =>
-            builder.Process(finishNight.CreateResponse());
+        var response = finishNight.CreateResponse();
+        var stableBefore = session.Serialize();
+        var phaseBefore = session.GetCurrentPhase();
+        var historyCountBefore = session.GameHistoryLog.Count();
+        var transitionCountBefore = session.GameHistoryLog
+            .OfType<PhaseTransitionLogEntry>()
+            .Count();
+        var reachVictoryCheckWindow = () => builder.Process(response);
 
         reachVictoryCheckWindow.Should()
             .Throw<InvalidOperationException>()
             .WithMessage("Required Faction facts are not ready.");
 
+        AssertCoherentGuardFailure(
+            builder.GameService,
+            builder.GameId,
+            finishNight.InstructionId,
+            stableBefore,
+            phaseBefore,
+            historyCountBefore,
+            transitionCountBefore);
+        reachVictoryCheckWindow.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("Required Faction facts are not ready.");
+        AssertCoherentGuardFailure(
+            builder.GameService,
+            builder.GameId,
+            finishNight.InstructionId,
+            stableBefore,
+            phaseBefore,
+            historyCountBefore,
+            transitionCountBefore);
+
+        var replayService = new GameService();
+        var replayGameId = replayService.RehydrateSession(stableBefore);
+        var replay = () => replayService.ProcessInstruction(
+            replayGameId,
+            response);
+        replay.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("Required Faction facts are not ready.");
+        AssertCoherentGuardFailure(
+            replayService,
+            replayGameId,
+            finishNight.InstructionId,
+            stableBefore,
+            phaseBefore,
+            historyCountBefore,
+            transitionCountBefore);
+
         MarkTestCompleted();
+    }
+
+    private static void AssertCoherentGuardFailure(
+        GameService service,
+        Guid gameId,
+        Guid expectedInstructionId,
+        string expectedStableState,
+        GamePhase expectedPhase,
+        int expectedHistoryCount,
+        int expectedTransitionCount)
+    {
+        var state = service.GetGameStateView(gameId);
+        state.Should().NotBeNull();
+        state!.GetCurrentPhase().Should().Be(expectedPhase);
+        state.Serialize().Should().Be(expectedStableState);
+        state.GameHistoryLog.Should().HaveCount(expectedHistoryCount);
+        state.GameHistoryLog.OfType<PhaseTransitionLogEntry>()
+            .Should().HaveCount(expectedTransitionCount);
+        state.GameHistoryLog.OfType<VictoryConditionMetLogEntry>()
+            .Should().BeEmpty();
+        service.GetCurrentInstruction(gameId)!.InstructionId
+            .Should().Be(expectedInstructionId);
     }
 
     /// <summary>

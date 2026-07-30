@@ -206,15 +206,24 @@ public class GameClientManagerTests
 			.BeOfType<FinishedGameConfirmationInstruction>().Subject;
 		File.Exists(saveFilePath).Should().BeTrue();
 
+		var resumedService = new GameService();
 		var resumed = new GameClientManager(
-			new GameService(),
+			resumedService,
 			saveStore: new FileGameSessionSaveStore(saveDirectory.Path));
 		var resumedFinished = resumed.CurrentInstruction.Should()
 			.BeOfType<FinishedGameConfirmationInstruction>().Subject;
 		resumedFinished.GameResult.Should().Be(finished.GameResult);
 		resumedFinished.VictoryCheckWindow.Should().Be(finished.VictoryCheckWindow);
+		resumed.ActiveGameId.Should().HaveValue();
+		var resumedGameId = resumed.ActiveGameId!.Value;
+		var terminalSession = resumed.CurrentSession!;
+		var terminalSnapshot = terminalSession.Serialize();
+		resumedService.GetGameStateView(resumedGameId).Should().BeSameAs(terminalSession);
 
 		resumed.ClearSession();
+
+		resumedService.GetGameStateView(resumedGameId).Should().BeNull();
+		terminalSession.Serialize().Should().Be(terminalSnapshot);
 		File.Exists(saveFilePath).Should().BeFalse();
 	}
 

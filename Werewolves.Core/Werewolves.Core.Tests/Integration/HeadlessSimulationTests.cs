@@ -916,8 +916,9 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 		result.IsFinished.Should().BeTrue();
 		result.TurnCount.Should().BeGreaterThan(0);
 		result.ProcessedInstructionCount.Should().BeGreaterThan(0);
-		result.GameResult.Should().NotBeNull();
-		Enum.IsDefined(result.VictoryCheckWindow).Should().BeTrue();
+		result.GameResult.Should().Be(
+			new SingleFactionGameResult(Faction.Villager));
+		result.VictoryCheckWindow.Should().Be(VictoryCheckWindow.PreNight);
 		MarkTestCompleted();
 	}
 

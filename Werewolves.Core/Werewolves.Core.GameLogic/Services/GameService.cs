@@ -93,11 +93,7 @@ public class GameService
     /// <returns>The unique ID of the rehydrated game session.</returns>
     public Guid RehydrateSession(string serializedSession)
     {
-        var session = new GameSession(serializedSession);
-        DayVoteRules.EnforceValidHistory(session);
-        SeedActiveRoleListeners(session);
-        ConfigureEliminationCascadeReactions(session);
-        GameFlowManager.RestoreDurableContinuation(session, _roleAdmissions);
+        var session = CreateRehydratedSession(serializedSession);
         _sessions.TryAdd(session.Id, session);
         return session.Id;
 	}
@@ -339,6 +335,9 @@ public class GameService
         return null; // Or throw GameNotFoundException
     }
 
+    public bool DiscardSession(Guid gameId) =>
+        _sessions.TryRemove(gameId, out _);
+
     /// <summary>
     /// Gets a view of the current game state.
     /// Basic implementation returns the session object itself (consider a DTO later).
@@ -375,13 +374,31 @@ public class GameService
 
         EnsureResponseMatchesPendingInstruction(pendingInstruction, input);
 
-		var result = GameFlowManager.HandleInput(session, input);
-
-		return result;
+        var recoverySnapshot = session.Serialize();
+        try
+        {
+            return GameFlowManager.HandleInput(session, input);
+        }
+        catch (VictoryFactsNotReadyException)
+        {
+            var recoveredSession = CreateRehydratedSession(recoverySnapshot);
+            _sessions.TryUpdate(gameId, recoveredSession, session);
+            throw;
+        }
 	}
 
 	// --- Helper Methods ---
 	#region Helpers
+
+    private GameSession CreateRehydratedSession(string serializedSession)
+    {
+        var session = new GameSession(serializedSession);
+        DayVoteRules.EnforceValidHistory(session);
+        SeedActiveRoleListeners(session);
+        ConfigureEliminationCascadeReactions(session);
+        GameFlowManager.RestoreDurableContinuation(session, _roleAdmissions);
+        return session;
+    }
 
 	private static void EnforceRolesAreSupported(IReadOnlyCollection<MainRoleType> roles)
 	{
