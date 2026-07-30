@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Werewolves.Core.GameLogic.Models.StateMachine;
 using Werewolves.Core.GameLogic.Services;
+using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
@@ -495,6 +496,7 @@ public class VictoryConditionTests : DiagnosticTestBase
         AssertCoherentGuardFailure(
             builder.GameService,
             builder.GameId,
+            session,
             finishNight.InstructionId,
             stableBefore,
             phaseBefore,
@@ -506,6 +508,7 @@ public class VictoryConditionTests : DiagnosticTestBase
         AssertCoherentGuardFailure(
             builder.GameService,
             builder.GameId,
+            session,
             finishNight.InstructionId,
             stableBefore,
             phaseBefore,
@@ -514,6 +517,7 @@ public class VictoryConditionTests : DiagnosticTestBase
 
         var replayService = new GameService();
         var replayGameId = replayService.RehydrateSession(stableBefore);
+        var replayState = replayService.GetGameStateView(replayGameId)!;
         var replay = () => replayService.ProcessInstruction(
             replayGameId,
             response);
@@ -523,6 +527,102 @@ public class VictoryConditionTests : DiagnosticTestBase
         AssertCoherentGuardFailure(
             replayService,
             replayGameId,
+            replayState,
+            finishNight.InstructionId,
+            stableBefore,
+            phaseBefore,
+            historyCountBefore,
+            transitionCountBefore);
+
+        MarkTestCompleted();
+    }
+
+    [Fact]
+    public void CommittedClosureWithUnknownBeneficiary_AtVictoryCheckWindow_ThrowsWithoutMutation()
+    {
+        var builder = CreateBuilder()
+            .WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: false);
+        builder.StartGame();
+        var session = builder.GetGameState()!;
+        var mutableSession = (GameSession)session;
+        var players = session.GetPlayers().ToArray();
+        builder.ArrangeEliminatedPlayer(players[0].Id);
+        var boundary = new FactionFactEffectiveBoundary(
+            session.TurnNumber,
+            session.GetCurrentPhase(),
+            session.GameHistoryLog.Count());
+        builder.ArrangeExplicitFactionTransition(
+            "test-committed-closure-with-unknown-beneficiary",
+            players
+                .Skip(1)
+                .Select(player => FactionFact.Agent(
+                    player.Id,
+                    Faction.Werewolf,
+                    FactionAgentKnowledge.KnownNonAgent,
+                    boundary))
+                .ToArray());
+        mutableSession.CommitFactionFactBatch(context =>
+            new FactionFactsCommittedLogEntry
+            {
+                Timestamp = context.Timestamp,
+                TurnNumber = context.TurnNumber,
+                CurrentPhase = context.CurrentPhase,
+                Source = new FactionFactSource(
+                    FactionFactSourceKind.InitialBeneficiaryClosure,
+                    "test-committed-closure-marker"),
+                Facts =
+                [
+                    .. players
+                        .Skip(2)
+                        .Select(player => FactionFact.Beneficiary(
+                            player.Id,
+                            Faction.Villager,
+                            boundary))
+                ]
+            });
+        builder.ConfirmGameStart();
+
+        var finishNight = builder.ConfirmNightStart()
+            .ModeratorInstruction.Should()
+            .BeOfType<ConfirmationInstruction>().Subject;
+        finishNight.Semantic.Should().Be(
+            ModeratorInstructionSemantic.FinishNightActions);
+        session.GetFactionBeneficiaryKnowledge(players[1].Id)
+            .IsKnown.Should().BeFalse();
+        players
+            .Skip(1)
+            .Count(player => !session
+                .GetFactionBeneficiaryKnowledge(player.Id)
+                .IsKnown)
+            .Should().Be(1);
+        var response = finishNight.CreateResponse();
+        var stableBefore = session.Serialize();
+        var phaseBefore = session.GetCurrentPhase();
+        var historyCountBefore = session.GameHistoryLog.Count();
+        var transitionCountBefore = session.GameHistoryLog
+            .OfType<PhaseTransitionLogEntry>()
+            .Count();
+        var reachVictoryCheckWindow = () => builder.Process(response);
+
+        reachVictoryCheckWindow.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("Required Faction facts are not ready.");
+        AssertCoherentGuardFailure(
+            builder.GameService,
+            builder.GameId,
+            session,
+            finishNight.InstructionId,
+            stableBefore,
+            phaseBefore,
+            historyCountBefore,
+            transitionCountBefore);
+        reachVictoryCheckWindow.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("Required Faction facts are not ready.");
+        AssertCoherentGuardFailure(
+            builder.GameService,
+            builder.GameId,
+            session,
             finishNight.InstructionId,
             stableBefore,
             phaseBefore,
@@ -535,6 +635,7 @@ public class VictoryConditionTests : DiagnosticTestBase
     private static void AssertCoherentGuardFailure(
         GameService service,
         Guid gameId,
+        IGameSession expectedState,
         Guid expectedInstructionId,
         string expectedStableState,
         GamePhase expectedPhase,
@@ -543,6 +644,7 @@ public class VictoryConditionTests : DiagnosticTestBase
     {
         var state = service.GetGameStateView(gameId);
         state.Should().NotBeNull();
+        state.Should().BeSameAs(expectedState);
         state!.GetCurrentPhase().Should().Be(expectedPhase);
         state.Serialize().Should().Be(expectedStableState);
         state.GameHistoryLog.Should().HaveCount(expectedHistoryCount);

@@ -28,9 +28,6 @@ using static Werewolves.Core.StateModels.Models.ListenerIdentifier;
 
 namespace Werewolves.Core.GameLogic.Services;
 
-internal sealed class VictoryFactsNotReadyException()
-    : InvalidOperationException("Required Faction facts are not ready.");
-
 /// <summary>
 /// Holds the state machine configuration and provides access to phase definitions.
 /// </summary>
@@ -209,6 +206,9 @@ internal static class GameFlowManager
                     subPhaseStages:
                     [
                         HookStage(DawnMainActionLoop),
+                        LogicStage(
+                            DawnSubPhaseStage.EnsureVictoryFactsReady,
+                            EnsureVictoryFactsReady),
                         NavigationEndStageSilent(GamePhase.Day)
                     ],
                     possibleNextMainPhaseTransitions:
@@ -297,6 +297,9 @@ internal static class GameFlowManager
 	                                .ExpireVoterEligibilityRestriction,
 	                            DayPhaseHandlers
 	                                .ExpireVoterEligibilityRestriction),
+	                        LogicStage(
+	                            DaySubPhaseStage.EnsureVictoryFactsReady,
+	                            EnsureVictoryFactsReady),
 	                        NavigationEndStageSilent(GamePhase.Night)
                     ],
                     possibleNextMainPhaseTransitions:
@@ -1203,17 +1206,30 @@ internal static class GameFlowManager
         return result;
     }
 
-    private static GameResult? CheckVictoryConditions(GameSession session)
+    private static void EnsureVictoryFactsReady(
+        GameSession session,
+        ModeratorResponse _) =>
+        RequireLivingFactionBeneficiaries(session);
+
+    private static Faction[] RequireLivingFactionBeneficiaries(
+        GameSession session)
     {
         if (!InitialBeneficiaryClosureRules.HasCommitted(session))
         {
-            throw new VictoryFactsNotReadyException();
+            throw new InvalidOperationException(
+                "Required Faction facts are not ready.");
         }
 
-        var livingBeneficiaries = session.GetPlayers()
+        return session.GetPlayers()
             .WithHealth(PlayerHealth.Alive)
             .Select(player => session.RequireKnownFactionBeneficiary(player.Id))
             .ToArray();
+    }
+
+    private static GameResult? CheckVictoryConditions(GameSession session)
+    {
+        var livingBeneficiaries =
+            RequireLivingFactionBeneficiaries(session);
 
         var aliveWerewolves = livingBeneficiaries.Count(
             faction => faction == Faction.Werewolf);

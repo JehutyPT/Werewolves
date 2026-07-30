@@ -1,6 +1,6 @@
 # Victory Check Windows are resolution boundaries
 
-Win conditions are evaluated only during Victory Check Windows. A Victory Check Window occurs after Night resolution, related cascades, and all resulting Dawn reactions are complete, and before the next Night after Day vote resolution and related cascades are complete. The latter boundary may be called "dusk" conversationally, but it is not a separate app phase.
+Win conditions are evaluated only during Victory Check Windows. A Victory Check Window occurs after Night resolution, related cascades, and the Dawn Main Action Loop (Bear Tamer, Gypsy, then Town Crier) are complete, and before the next Night after Day vote resolution and related cascades are complete. The latter boundary may be called "dusk" conversationally, but it is not a separate app phase.
 
 Within one Victory Check Window, all win-condition predicates are evaluated against the same resolved Game Session state before deciding the Game Session Outcome. If multiple Factions' predicates are true in the same window, the Game Session ends with a Shared Victory Outcome. A No-Winner Outcome is considered only when no Faction win condition is true and every Player is Eliminated.
 

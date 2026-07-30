@@ -93,7 +93,11 @@ public class GameService
     /// <returns>The unique ID of the rehydrated game session.</returns>
     public Guid RehydrateSession(string serializedSession)
     {
-        var session = CreateRehydratedSession(serializedSession);
+        var session = new GameSession(serializedSession);
+        DayVoteRules.EnforceValidHistory(session);
+        SeedActiveRoleListeners(session);
+        ConfigureEliminationCascadeReactions(session);
+        GameFlowManager.RestoreDurableContinuation(session, _roleAdmissions);
         _sessions.TryAdd(session.Id, session);
         return session.Id;
 	}
@@ -374,31 +378,11 @@ public class GameService
 
         EnsureResponseMatchesPendingInstruction(pendingInstruction, input);
 
-        var recoverySnapshot = session.Serialize();
-        try
-        {
-            return GameFlowManager.HandleInput(session, input);
-        }
-        catch (VictoryFactsNotReadyException)
-        {
-            var recoveredSession = CreateRehydratedSession(recoverySnapshot);
-            _sessions.TryUpdate(gameId, recoveredSession, session);
-            throw;
-        }
+		return GameFlowManager.HandleInput(session, input);
 	}
 
 	// --- Helper Methods ---
 	#region Helpers
-
-    private GameSession CreateRehydratedSession(string serializedSession)
-    {
-        var session = new GameSession(serializedSession);
-        DayVoteRules.EnforceValidHistory(session);
-        SeedActiveRoleListeners(session);
-        ConfigureEliminationCascadeReactions(session);
-        GameFlowManager.RestoreDurableContinuation(session, _roleAdmissions);
-        return session;
-    }
 
 	private static void EnforceRolesAreSupported(IReadOnlyCollection<MainRoleType> roles)
 	{

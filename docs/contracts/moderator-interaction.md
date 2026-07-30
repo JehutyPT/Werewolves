@@ -198,9 +198,10 @@ These sections state only the observable differences from the shared interaction
 ### Bear Tamer
 
 - Perform Role Identification for Bear Tamer before the first Dawn evaluation only if the holder is unknown.
-- After Dawn victims, their complete Elimination Cascades, and all resulting Dawn reactions resolve, the app checks the holder's Living Neighbors before the Dawn Victory Check Window.
+- After Dawn victims and their complete Elimination Cascades resolve, the app begins the Dawn Main Action Loop by checking the holder's Living Neighbors.
 - When the condition is true, the app tells the Moderator to grunt publicly and waits for confirmation. Otherwise no Bear Tamer instruction appears.
-- The Dawn Victory Check Window begins only after that confirmation or silent Bear Tamer completion.
+- Gypsy and then Town Crier complete their Dawn actions after that confirmation or silent Bear Tamer completion.
+- The Dawn Victory Check Window begins only after the entire Dawn Main Action Loop completes.
 
 ### Fox
 

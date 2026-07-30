@@ -1,7 +1,9 @@
+using System.Collections.Immutable;
 using FluentAssertions;
 using Werewolves.Client.Services;
 using Werewolves.Client.Tests.Helpers;
 using Werewolves.Core.GameLogic.Services;
+using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Log;
@@ -56,6 +58,90 @@ public class GameClientManagerTests
 		manager.CurrentInstruction.Should().NotBe(startInstruction);
 		manager.CurrentPhase.Should().Be(GamePhase.Night);
 		manager.TurnNumber.Should().Be(1);
+	}
+
+	[Fact]
+	public void ProcessInput_WhenVictoryFactsAreNotReady_PreservesPublishedSessionReference()
+	{
+		var service = new GameService();
+		var manager = new GameClientManager(service);
+		var startInstruction = manager.StartGame(
+			PlayerNames.DefaultFive,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+		var publishedSession = manager.CurrentSession!;
+		var mutableSession = (GameSession)publishedSession;
+		var players = publishedSession.GetPlayers().ToArray();
+		mutableSession.EliminatePlayer(
+			players[0].Id,
+			EliminationReason.EventElimination);
+		var boundary = new FactionFactEffectiveBoundary(
+			publishedSession.TurnNumber,
+			publishedSession.GetCurrentPhase(),
+			publishedSession.GameHistoryLog.Count());
+		mutableSession.CommitFactionFactBatch(context =>
+			new FactionFactsCommittedLogEntry
+			{
+				Timestamp = context.Timestamp,
+				TurnNumber = context.TurnNumber,
+				CurrentPhase = context.CurrentPhase,
+				Source = new FactionFactSource(
+					FactionFactSourceKind.ExplicitTransition,
+					"test-client-incomplete-closure"),
+				Facts = players
+					.Skip(1)
+					.Select(player => FactionFact.Agent(
+						player.Id,
+						Faction.Werewolf,
+						FactionAgentKnowledge.KnownNonAgent,
+						boundary))
+					.ToImmutableArray()
+			});
+		manager.ProcessInput(startInstruction.CreateResponse());
+		var startNight = manager.CurrentInstruction.Should()
+			.BeOfType<ConfirmationInstruction>().Subject;
+		var finishNight = manager.ProcessInput(startNight.CreateResponse())
+			.ModeratorInstruction.Should()
+			.BeOfType<ConfirmationInstruction>().Subject;
+		finishNight.Semantic.Should().Be(
+			ModeratorInstructionSemantic.FinishNightActions);
+		var gameId = manager.ActiveGameId!.Value;
+		var stableBefore = publishedSession.Serialize();
+		var phaseBefore = publishedSession.GetCurrentPhase();
+		var historyCountBefore = publishedSession.GameHistoryLog.Count();
+		var transitionCountBefore = publishedSession.GameHistoryLog
+			.OfType<PhaseTransitionLogEntry>()
+			.Count();
+		var response = finishNight.CreateResponse();
+		var reachVictoryCheckWindow = () => manager.ProcessInput(response);
+
+		reachVictoryCheckWindow.Should()
+			.Throw<InvalidOperationException>()
+			.WithMessage("Required Faction facts are not ready.");
+		AssertPublishedSessionRemainsCoherent();
+		reachVictoryCheckWindow.Should()
+			.Throw<InvalidOperationException>()
+			.WithMessage("Required Faction facts are not ready.");
+		AssertPublishedSessionRemainsCoherent();
+
+		void AssertPublishedSessionRemainsCoherent()
+		{
+			manager.CurrentSession.Should().BeSameAs(publishedSession);
+			service.GetGameStateView(gameId).Should().BeSameAs(publishedSession);
+			manager.CurrentPhase.Should().Be(phaseBefore);
+			publishedSession.Serialize().Should().Be(stableBefore);
+			publishedSession.GameHistoryLog.Should().HaveCount(historyCountBefore);
+			publishedSession.GameHistoryLog.OfType<PhaseTransitionLogEntry>()
+				.Should().HaveCount(transitionCountBefore);
+			service.GetCurrentInstruction(gameId)!.InstructionId
+				.Should().Be(finishNight.InstructionId);
+			manager.CurrentInstruction.Should().BeSameAs(finishNight);
+		}
 	}
 
 	[Fact]
