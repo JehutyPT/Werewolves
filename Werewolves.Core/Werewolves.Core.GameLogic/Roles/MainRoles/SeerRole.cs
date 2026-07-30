@@ -32,6 +32,48 @@ internal class SeerRole : ImmediateFeedbackNightRoleHookListener
     internal override string PublicName => GameStrings.SeerRoleName;
     protected override bool HasNightPowers => true;
 
+	public override bool TryResolvePendingInstructionContinuation(
+		GameHook hook,
+		GameSession session,
+		ModeratorInstruction pendingInstruction,
+		out string listenerState)
+	{
+		listenerState = string.Empty;
+		if (hook == GameHook.NightMainActionLoop &&
+		    HasExpectedAffectedRoleHolders(session, pendingInstruction))
+		{
+			switch (pendingInstruction)
+			{
+				case SelectPlayersInstruction
+				{
+					Semantic:
+						ModeratorInstructionSemantic.SelectSeerTarget
+				}:
+					listenerState =
+						ImmediateFeedbackNightRoleState
+							.AwaitingTargetSelection
+							.ToString();
+					return true;
+				case ConfirmationInstruction
+				{
+					Semantic:
+						ModeratorInstructionSemantic.PutRoleToSleep
+				}:
+					listenerState =
+						ImmediateFeedbackNightRoleState
+							.AwaitingSleepConfirmation
+							.ToString();
+					return true;
+			}
+		}
+
+		return base.TryResolvePendingInstructionContinuation(
+			hook,
+			session,
+			pendingInstruction,
+			out listenerState);
+	}
+
 	protected override HookListenerActionResult HandleTargetSelectionRequest(
 		GameSession session,
 		ModeratorResponse input)

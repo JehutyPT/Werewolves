@@ -98,6 +98,28 @@ internal sealed class StutteringJudgeRole
 		out string listenerState)
 	{
 		listenerState = string.Empty;
+		if (hook == GameHook.NightMainActionLoop)
+		{
+			if (pendingInstruction is ConfirmationInstruction
+			    {
+				    Semantic:
+					    ModeratorInstructionSemantic
+						    .EstablishStutteringJudgeSignal
+			    } &&
+			    HasExpectedAffectedRoleHolders(session, pendingInstruction))
+			{
+				listenerState =
+					StutteringJudgeRoleState.AwaitingSignalSetup.ToString();
+				return true;
+			}
+
+			return base.TryResolvePendingInstructionContinuation(
+				hook,
+				session,
+				pendingInstruction,
+				out listenerState);
+		}
+
 		if (hook != GameHook.OnVoteConducted ||
 		    pendingInstruction.Semantic !=
 			    ModeratorInstructionSemantic.ObserveStutteringJudgeSignal)
@@ -385,4 +407,19 @@ internal sealed class StutteringJudgeRole
 
 	private static bool HasEstablishedSignal(GameSession session) =>
 		GameSessionQueries.HasStutteringJudgeSignalBeenEstablished(session);
+
+	internal static bool HasValidEstablishedSignal(GameSession session)
+	{
+		var judges = session.GetPlayers()
+			.Where(player =>
+				player.State.Health == PlayerHealth.Alive &&
+				player.State.CurrentRole == MainRoleType.StutteringJudge)
+			.ToArray();
+		var entries = session.GameHistoryLog
+			.OfType<StutteringJudgeSignalEstablishedLogEntry>()
+			.ToArray();
+		return judges is [var judge] &&
+		       entries is [var entry] &&
+		       entry.JudgePlayerId == judge.Id;
+	}
 }

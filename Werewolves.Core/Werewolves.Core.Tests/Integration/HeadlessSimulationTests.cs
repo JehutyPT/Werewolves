@@ -162,6 +162,59 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 	}
 
 	[Fact]
+	public void BaselineRandomDecisionStrategy_WithActualLittleGirlIdentificationSlot_UsesSeededHolder()
+	{
+		var scenario = new StateModels.Models.Simulation.SimulationScenario(
+			5,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.LittleGirl,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+		var material = new RunSeedMaterial(
+			new SimulationCompatibilityIdentity(
+				scenario.ToCanonical(),
+				SimulatorCapability.SafetyScreening.Identity),
+			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
+			runNumber: 17);
+		var startState = SimulationStartStateDeriver.Derive(
+			material,
+			SimulatorCapability.SafetyScreening);
+		var config = startState.CreateGameSessionConfig();
+		var builder = CreateBuilder()
+			.WithPlayers(config.Players.ToArray())
+			.WithRoles(config.Roles.ToArray());
+		builder.StartGame();
+		builder.ConfirmGameStart();
+		var identification =
+			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+				builder.ConfirmNightStart());
+		var session = builder.GetGameState()!;
+		var players = session.GetPlayers().ToArray();
+		var seededHolderSeat = startState.RoleAssignments
+			.Single(assignment => assignment.Role == MainRoleType.LittleGirl)
+			.SeatNumber;
+		var strategy = new BaselineRandomDecisionStrategy(
+			material,
+			startState,
+			SimulatorCapability.SafetyScreening.HeadlessResponsePolicy);
+
+		var response = strategy.CreateResponse(identification, session);
+		var accepted = builder.Process(response);
+
+		identification.Semantic.Should()
+			.Be(ModeratorInstructionSemantic.IdentifyRoleHolders);
+		identification.RoleIdentification.Should().Be(MainRoleType.LittleGirl);
+		identification.CountConstraint.Should().BeEquivalentTo(
+			NumberRangeConstraint.Single);
+		response.SelectedPlayerIds.Should().Equal(players[seededHolderSeat - 1].Id);
+		accepted.IsSuccess.Should().BeTrue();
+		MarkTestCompleted();
+	}
+
+	[Fact]
 	public void BaselineRandomDecisionStrategy_WithVillagerVillagerDealObservation_UsesSeededHolder()
 	{
 		var scenario = new StateModels.Models.Simulation.SimulationScenario(
@@ -492,7 +545,7 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 
 	[Theory]
 	[InlineData(0L, "wolf-hound-werewolves")]
-	[InlineData(1L, "wolf-hound-villagers")]
+	[InlineData(2L, "wolf-hound-villagers")]
 	public void BaselineRandomDecisionStrategy_WithWolfHoundAlignment_UsesGlobalDeterministicStreamWithoutHiddenTruth(
 		long runNumber,
 		string expectedOptionId)
@@ -572,7 +625,7 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 			0L,
 			AccursedWolfFatherInfectionOptionIds.Infect)]
 		[InlineData(
-			4L,
+	    2L,
 			AccursedWolfFatherInfectionOptionIds.Decline)]
 		public void BaselineRandomDecisionStrategy_WithAccursedWolfFatherInfection_CoversBothBranchesDeterministically(
 			long runNumber,

@@ -409,6 +409,8 @@ namespace Werewolves.Core.StateModels.Core
 
 			if (!Enum.IsDefined(cursor.AcceptedObservationSemantic) ||
 				!Enum.IsDefined(cursor.ObservedRole) ||
+				(cursor.ContinuationRole.HasValue &&
+				 !Enum.IsDefined(cursor.ContinuationRole.Value)) ||
 				!Enum.IsDefined(cursor.NextInstructionSemantic) ||
 				cursor.NextInstructionSemantic ==
 					ModeratorInstructionSemantic.Unspecified ||
@@ -418,25 +420,8 @@ namespace Werewolves.Core.StateModels.Core
 					"The accepted observation recovery cursor is structurally invalid.");
 			}
 
-			var isSupportedAcceptedObservation =
-				cursor.AcceptedObservationSemantic ==
-					ModeratorInstructionSemantic.IdentifyRoleHolders ||
-				cursor.AcceptedObservationSemantic ==
-					ModeratorInstructionSemantic
-						.ObserveWerewolfFactionAgentGroup &&
-				cursor.ObservedRole == MainRoleType.SimpleWerewolf;
-			if (!isSupportedAcceptedObservation)
-			{
-				throw new InvalidOperationException(
-					$"Unsupported accepted observation semantic '{cursor.AcceptedObservationSemantic}'.");
-			}
-
 			if (pendingModeratorInstruction == null ||
-				pendingModeratorInstruction.InstructionId != cursor.NextInstructionId ||
-				pendingModeratorInstruction is SelectPlayersInstruction
-				{
-					RoleIdentification: not null
-				})
+				pendingModeratorInstruction.InstructionId != cursor.NextInstructionId)
 			{
 				throw new InvalidOperationException(
 					"The accepted observation recovery cursor does not match its Pending Instruction.");
@@ -446,54 +431,6 @@ namespace Werewolves.Core.StateModels.Core
 			{
 				throw new InvalidOperationException(
 					"The Pending Instruction Semantic does not match the accepted observation recovery cursor.");
-			}
-
-			var observedPlayerIds =
-				pendingModeratorInstruction.AffectedPlayerIds?.ToHashSet();
-			var matchesCommittedObservation =
-				observedPlayerIds != null &&
-				(cursor.AcceptedObservationSemantic ==
-					ModeratorInstructionSemantic.IdentifyRoleHolders
-					? dto.GameHistoryLog
-						.OfType<RoleIdentificationLogEntry>()
-						.Any(entry =>
-							entry.Role == cursor.ObservedRole &&
-							entry.PlayerIds.SetEquals(observedPlayerIds))
-					: dto.GameHistoryLog
-						.OfType<FactionFactsCommittedLogEntry>()
-						.Any(entry =>
-						{
-							var livingPlayerIds = dto.Players
-								.Where(player =>
-									player.Health == PlayerHealth.Alive)
-								.Select(player => player.Id)
-								.ToHashSet();
-								return entry.Source.Kind ==
-										FactionFactSourceKind.ScheduledObservation &&
-									entry.Source.Identifier ==
-										FactionFactSource
-											.WerewolfFactionAgentGroupObservationIdentifier &&
-									entry.Facts.Length == livingPlayerIds.Count &&
-								entry.Facts.All(fact =>
-									fact.Type == FactionFactType.Agent &&
-									fact.Faction == Faction.Werewolf &&
-									livingPlayerIds.Contains(fact.PlayerId)) &&
-								entry.Facts
-									.Select(fact => fact.PlayerId)
-									.ToHashSet()
-									.SetEquals(livingPlayerIds) &&
-								entry.Facts
-									.Where(fact =>
-										fact.AgentKnowledge ==
-										FactionAgentKnowledge.KnownAgent)
-									.Select(fact => fact.PlayerId)
-									.ToHashSet()
-									.SetEquals(observedPlayerIds);
-						}));
-			if (!matchesCommittedObservation)
-			{
-				throw new InvalidOperationException(
-					"The accepted observation recovery cursor does not match its committed observation.");
 			}
 
 			return cursor;

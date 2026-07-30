@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
@@ -205,6 +206,24 @@ internal class GameSession : IGameSession
 		return instance;
 	}
 
+
+	internal bool TryGetExistingListener<T>(
+		ListenerIdentifier id,
+		[NotNullWhen(true)] out T? listener)
+		where T : class
+	{
+		if (_gameSessionKernel.ListenerInstanceCache.TryGetValue(
+				id,
+				out var existing) &&
+			existing is T typedListener)
+		{
+			listener = typedListener;
+			return true;
+		}
+
+		listener = null;
+		return false;
+	}
     #endregion
 
 

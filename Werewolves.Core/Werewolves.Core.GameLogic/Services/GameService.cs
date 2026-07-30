@@ -378,7 +378,7 @@ public class GameService
 
         EnsureResponseMatchesPendingInstruction(pendingInstruction, input);
 
-		return GameFlowManager.HandleInput(session, input);
+		return GameFlowManager.HandleInput(session, input, _roleAdmissions);
 	}
 
 	// --- Helper Methods ---

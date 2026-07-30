@@ -79,6 +79,9 @@
   <data name="HunterRoleName" xml:space="preserve">
     <value>Hunter</value>
   </data>
+  <data name="LittleGirlRoleName" xml:space="preserve">
+    <value>Little Girl</value>
+  </data>
   <data name="StutteringJudgeRoleName" xml:space="preserve">
     <value>Stuttering Judge</value>
   </data>
@@ -108,5 +111,11 @@
   </data>
   <data name="NewMoonGroupName" xml:space="preserve">
     <value>New Moon</value>
+  </data>
+  <data name="LittleGirlOpeningGuidance" xml:space="preserve">
+    <value>Little Girl, you may now discreetly peek at the Werewolves.</value>
+  </data>
+  <data name="LittleGirlClosingGuidance" xml:space="preserve">
+    <value>Little Girl, stop peeking and close your eyes.</value>
   </data>
 </root>

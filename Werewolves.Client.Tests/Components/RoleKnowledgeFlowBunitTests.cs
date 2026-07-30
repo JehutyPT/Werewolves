@@ -31,6 +31,7 @@ public sealed class RoleKnowledgeFlowBunitTests
 
 	[Theory]
 	[InlineData(MainRoleType.VillagerVillager)]
+	[InlineData(MainRoleType.LittleGirl)]
 	[InlineData(MainRoleType.Witch)]
 	[InlineData(MainRoleType.Hunter)]
 	[InlineData(MainRoleType.StutteringJudge)]
@@ -46,6 +47,7 @@ public sealed class RoleKnowledgeFlowBunitTests
 		var expectedDisplayName = role switch
 		{
 			MainRoleType.VillagerVillager => GameStrings.VillagerVillagerRoleName,
+			MainRoleType.LittleGirl => GameStrings.LittleGirlRoleName,
 			MainRoleType.Witch => GameStrings.WitchRoleName,
 			MainRoleType.Hunter => GameStrings.HunterRoleName,
 			MainRoleType.StutteringJudge => GameStrings.StutteringJudgeRoleName,
@@ -76,6 +78,106 @@ public sealed class RoleKnowledgeFlowBunitTests
 		toggle.Click();
 
 		lobby.GetRoleCount(role).Should().Be(0);
+	}
+
+	[Fact]
+	public async Task LittleGirlUnknownWerewolfCollective_RendersGuidanceWithoutAddingControls()
+	{
+		var timing = new ControlledHoldButtonTiming();
+		using var context = new ModeratorComponentTestContext();
+		context.Services.AddSingleton<IHoldButtonTiming>(timing);
+		var manager = context.Services.GetRequiredService<GameClientManager>();
+		var start = manager.StartGame(
+			PlayerNames.DefaultFive,
+			[
+				MainRoleType.LittleGirl,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+		manager.ProcessInput(start.CreateResponse()).IsSuccess.Should().BeTrue();
+		var startNight = manager.CurrentInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		manager.ProcessInput(startNight.CreateResponse()).IsSuccess.Should().BeTrue();
+
+		var players = manager.CurrentSession!.GetPlayers().ToArray();
+		var littleGirl = players[0];
+		var werewolf = players[1];
+		var victim = players[2];
+		var identification = manager.CurrentInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		identification.RoleIdentification.Should().Be(MainRoleType.LittleGirl);
+		manager.ProcessInput(identification.CreateResponse([littleGirl.Id]))
+			.IsSuccess.Should().BeTrue();
+
+		var observation = manager.CurrentInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		var wakeAnnouncement = GameStrings.RoleHoldersWakeUp.Format(
+			GameStrings.WerewolvesGroupName);
+		observation.Semantic.Should().Be(
+			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
+		observation.PublicAnnouncement.Should().Be(wakeAnnouncement);
+		observation.PrivateInstruction.Should()
+			.Contain(GameStrings.WerewolfFactionAgentObservationPrompt)
+			.And.Contain(GameStrings.LittleGirlOpeningGuidance);
+		observation.CountConstraint.Should().Be(
+			NumberRangeConstraint.AtLeast(1));
+		observation.AffectedPlayerIds.Should().BeNull();
+
+		var dashboard = context.RenderModeratorComponent<DashboardPage>();
+		dashboard.Find(PublicInstructionSelector).TextContent.Should()
+			.Contain(wakeAnnouncement);
+		dashboard.Find(PrivateInstructionSelector).Click();
+		dashboard.Find(PrivateInstructionSelector).TextContent.Should()
+			.Contain(GameStrings.WerewolfFactionAgentObservationPrompt)
+			.And.Contain(GameStrings.LittleGirlOpeningGuidance);
+		var playerOptions = dashboard.FindAll(PlayerOptionSelector);
+		playerOptions.Should().HaveCount(players.Length);
+		dashboard.FindAll(HoldButtonSelector).Should().ContainSingle();
+		var observationHold = dashboard.Find(HoldButtonSelector);
+		observationHold.HasAttribute(Html.Attributes.Disabled).Should().BeTrue();
+
+		playerOptions
+			.Single(option => option.TextContent.Contains(
+				werewolf.Name,
+				StringComparison.CurrentCulture))
+			.Click();
+		observationHold = dashboard.Find(HoldButtonSelector);
+		observationHold.HasAttribute(Html.Attributes.Disabled).Should().BeFalse();
+		await RenderedHoldButtonDriver.CompleteHoldAsync(
+			dashboard,
+			observationHold,
+			timing);
+
+		var victimSelection = manager.CurrentInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		victimSelection.Semantic.Should().Be(
+			ModeratorInstructionSemantic.SelectWerewolfVictim);
+		manager.ProcessInput(victimSelection.CreateResponse([victim.Id]))
+			.IsSuccess.Should().BeTrue();
+
+		var sleep = manager.CurrentInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var sleepAnnouncement = GameStrings.RoleHoldersGoToSleep.Format(
+			GameStrings.WerewolvesGroupName);
+		sleep.Semantic.Should().Be(ModeratorInstructionSemantic.PutRoleToSleep);
+		sleep.PublicAnnouncement.Should().Be(sleepAnnouncement);
+		sleep.PrivateInstruction.Should().Be(GameStrings.LittleGirlClosingGuidance);
+		sleep.AffectedPlayerIds.Should().Equal(werewolf.Id);
+		sleep.AffectedPlayerIds.Should().NotContain(littleGirl.Id);
+
+		var sleepDashboard = context.RenderModeratorComponent<DashboardPage>();
+		sleepDashboard.Find(PublicInstructionSelector).TextContent.Should()
+			.Contain(sleepAnnouncement);
+		sleepDashboard.Find(PrivateInstructionSelector).Click();
+		sleepDashboard.Find(PrivateInstructionSelector).TextContent.Should()
+			.Contain(GameStrings.LittleGirlClosingGuidance);
+		sleepDashboard.FindAll(PlayerOptionSelector).Should().BeEmpty();
+		var sleepHolds = sleepDashboard.FindAll(HoldButtonSelector);
+		sleepHolds.Should().ContainSingle();
+		sleepHolds.Single().TextContent.Should()
+			.Contain(ClientStrings.Dashboard_ContinueButton);
 	}
 
 	[Theory]

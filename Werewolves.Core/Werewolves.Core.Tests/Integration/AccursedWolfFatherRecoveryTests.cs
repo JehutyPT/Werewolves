@@ -166,6 +166,42 @@ public sealed class AccursedWolfFatherRecoveryTests
 	}
 
 	[Fact]
+	public void LoneWerewolfAgentConfirmedInfection_FreshServiceRestoresExactSleepWithoutAmbiguousListenerResolution()
+	{
+		var (builder, holderId, victimId, identification) =
+			CreateGameAtIdentification(loneWerewolfAgent: true);
+		var choice = builder.Process(
+				identification.CreateResponse([holderId]))
+			.ModeratorInstruction.Should()
+			.BeOfType<SelectOptionsInstruction>().Subject;
+		var expectedSleep = builder.Process(
+				choice.CreateResponse(
+					AccursedWolfFatherInfectionOptionIds.Infect))
+			.ModeratorInstruction.Should()
+			.BeOfType<ConfirmationInstruction>().Subject;
+		var freshService = new GameService();
+
+		var recoveredGameId = freshService.RehydrateSession(
+			builder.GetGameState()!.Serialize());
+		var recoveredSleep = freshService
+			.GetCurrentInstruction(recoveredGameId)
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+
+		AssertEquivalentInstruction(recoveredSleep, expectedSleep);
+		freshService.GetGameStateView(recoveredGameId)!
+			.GameHistoryLog
+			.OfType<OneUseRolePowerCommittedLogEntry>()
+			.Should().ContainSingle(entry =>
+				entry.ActionType ==
+					NightActionType.AccursedWolfFatherInfection &&
+				entry.TargetIds!.SequenceEqual(new[] { victimId }));
+		freshService.ProcessInstruction(
+				recoveredGameId,
+				recoveredSleep.CreateResponse())
+			.IsSuccess.Should().BeTrue();
+	}
+
+	[Fact]
 	public void ConfirmedInfection_FreshServiceRejectsCursorAndCommitRetargetedAwayFromCollectiveVictim()
 	{
 		var (builder, holderId, victimId, identification) =
@@ -255,28 +291,45 @@ public sealed class AccursedWolfFatherRecoveryTests
 		Guid HolderId,
 		Guid VictimId,
 		SelectPlayersInstruction Identification)
-		CreateGameAtIdentification()
+		CreateGameAtIdentification(bool loneWerewolfAgent = false)
 	{
-		var builder = GameTestBuilder.Create()
-			.WithPlayers(7)
-			.WithRoles(
+		MainRoleType[] roles = loneWerewolfAgent
+			?
+			[
+				MainRoleType.AccursedWolfFather,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]
+			:
+			[
 				MainRoleType.SimpleWerewolf,
 				MainRoleType.AccursedWolfFather,
 				MainRoleType.SimpleVillager,
 				MainRoleType.SimpleVillager,
 				MainRoleType.SimpleVillager,
 				MainRoleType.SimpleVillager,
-				MainRoleType.SimpleVillager);
+				MainRoleType.SimpleVillager
+			];
+		var builder = GameTestBuilder.Create()
+			.WithPlayers(7)
+			.WithRoles(roles);
 		builder.StartGame();
 		builder.ConfirmGameStart();
 		builder.ConfirmNightStart();
 		var players = builder.GetGameState()!.GetPlayers().ToArray();
-		var holderId = players[1].Id;
+		var holderId = players[loneWerewolfAgent ? 0 : 1].Id;
 		var victimId = players[6].Id;
+		HashSet<Guid> werewolfAgentIds = loneWerewolfAgent
+			? [holderId]
+			: [players[0].Id, holderId];
 		var identification =
 			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
 				builder.CompleteWerewolfNightAction(
-					[players[0].Id, holderId],
+					werewolfAgentIds,
 					victimId));
 
 		identification.Semantic.Should().Be(

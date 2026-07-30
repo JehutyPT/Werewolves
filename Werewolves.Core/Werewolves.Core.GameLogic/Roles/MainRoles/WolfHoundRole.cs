@@ -82,11 +82,28 @@ internal sealed class WolfHoundRole : NightRoleHookListener<WolfHoundRoleState>
 		out string listenerState)
 	{
 		listenerState = string.Empty;
+		if (hook == GameHook.NightMainActionLoop &&
+		    pendingInstruction is SelectOptionsInstruction
+		    {
+			    Semantic:
+				    ModeratorInstructionSemantic.ChooseWolfHoundAlignment
+		    } &&
+		    HasExpectedAffectedRoleHolders(session, pendingInstruction))
+		{
+			listenerState =
+				WolfHoundRoleState.AwaitingAlignmentChoice.ToString();
+			return true;
+		}
+
 		if (hook != GameHook.NightMainActionLoop ||
 		    pendingInstruction.Semantic !=
 			    ModeratorInstructionSemantic.PutRoleToSleep)
 		{
-			return false;
+			return base.TryResolvePendingInstructionContinuation(
+				hook,
+				session,
+				pendingInstruction,
+				out listenerState);
 		}
 
 		var wolfHound = GetAliveRolePlayers(session)?.SingleOrDefault();
@@ -253,7 +270,7 @@ internal sealed class WolfHoundRole : NightRoleHookListener<WolfHoundRoleState>
 			.OfType<FactionFactsCommittedLogEntry>()
 			.Any(IsAlignmentChoice);
 
-	private static bool HasValidCommittedAlignment(
+	internal static bool HasValidCommittedAlignment(
 		GameSession session,
 		Guid wolfHoundPlayerId)
 	{

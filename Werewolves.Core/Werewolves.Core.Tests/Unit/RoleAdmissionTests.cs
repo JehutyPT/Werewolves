@@ -138,13 +138,14 @@ public class RoleAdmissionTests
 	}
 
 	[Fact]
-	public void SupportedRoleCatalog_AdmitsTwelveActiveRolesAndBothVillagerRolesAsPassive()
+	public void SupportedRoleCatalog_AdmitsThirteenActiveRolesAndBothVillagerRolesAsPassive()
 	{
 		var catalog = SupportedRoleCatalog.Admissions;
 
 		catalog.Roles.Should().BeEquivalentTo(
 		[
 				MainRoleType.SimpleWerewolf,
+				MainRoleType.LittleGirl,
 				MainRoleType.Seer,
 				MainRoleType.BigBadWolf,
 				MainRoleType.WildChild,
@@ -163,6 +164,7 @@ public class RoleAdmissionTests
 		foreach (var activeRole in new[]
 		         {
 				         MainRoleType.SimpleWerewolf,
+				         MainRoleType.LittleGirl,
 				         MainRoleType.Seer,
 				         MainRoleType.BigBadWolf,
 				         MainRoleType.WildChild,

@@ -4,6 +4,7 @@ using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Models;
+using Werewolves.Core.StateModels.Models.Instructions;
 using static Werewolves.Core.GameLogic.Models.InternalMessages.StayInSubPhaseHandlerResult;
 
 namespace Werewolves.Core.GameLogic.Models.StateMachine;
@@ -171,21 +172,28 @@ internal sealed class HookSubPhaseStage : SubPhaseStage
             ModeratorInstruction pendingInstruction,
             IRoleAdmissionSource admissions)
     {
+        if (pendingInstruction is ConfirmationInstruction
+            {
+                Semantic: ModeratorInstructionSemantic.WakeRole
+            })
+        {
+            // Wake instructions deliberately carry no Role identity in the generic
+            // cadence, so only a durable cursor may resolve them to one listener.
+            return null;
+        }
+
         PendingHookListenerContinuation? resolved = null;
         foreach (var (hook, listeners) in GameFlowManager.HookListeners)
         {
             foreach (var listenerId in listeners)
             {
-                var listenerState =
-                    RoleListenerDispatch.ResolvePendingInstructionContinuation(
-                        listenerId,
-                        hook,
-                        admissions,
-                        (id, factory) =>
-                            session.GetOrCreateListener(id, factory),
-                        session,
-                        pendingInstruction);
-                if (listenerState == null)
+                var continuation = ResolvePendingInstructionContinuation(
+                    listenerId,
+                    hook,
+                    session,
+                    pendingInstruction,
+                    admissions);
+                if (continuation == null)
                 {
                     continue;
                 }
@@ -196,14 +204,36 @@ internal sealed class HookSubPhaseStage : SubPhaseStage
                         $"Pending instruction '{pendingInstruction.Semantic}' has multiple listener continuations.");
                 }
 
-                resolved = new PendingHookListenerContinuation(
-                    hook.ToString(),
-                    listenerId,
-                    listenerState);
+                resolved = continuation;
             }
         }
 
         return resolved;
+    }
+
+    internal static PendingHookListenerContinuation?
+        ResolvePendingInstructionContinuation(
+            ListenerIdentifier listenerId,
+            GameHook hook,
+            GameSession session,
+            ModeratorInstruction pendingInstruction,
+            IRoleAdmissionSource admissions)
+    {
+        var listenerState =
+            RoleListenerDispatch.ResolvePendingInstructionContinuation(
+                listenerId,
+                hook,
+                admissions,
+                (id, factory) =>
+                    session.GetOrCreateListener(id, factory),
+                session,
+                pendingInstruction);
+        return listenerState == null
+            ? null
+            : new PendingHookListenerContinuation(
+                hook.ToString(),
+                listenerId,
+                listenerState);
     }
 
     private HookSubPhaseStage(GameHook hook) : base(hook)

@@ -529,6 +529,14 @@
     <value>Selecione todos os jogadores vivos que agem atualmente pela fação dos Lobisomens.</value>
     <comment/>
   </data>
+  <data name="LittleGirlOpeningGuidance" xml:space="preserve">
+    <value>Menina, podes agora espreitar discretamente os Lobisomens.</value>
+    <comment/>
+  </data>
+  <data name="LittleGirlClosingGuidance" xml:space="preserve">
+    <value>Menina, deixa de espreitar e fecha os olhos.</value>
+    <comment/>
+  </data>
   <data name="RoleHoldersGoToSleep" xml:space="preserve">
     <value>{0} voltam a dormir.</value>
     <comment/>

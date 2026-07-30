@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using Werewolves.Core.GameLogic.Models.GameHookListeners;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
+using Werewolves.Core.GameLogic.RolePowers;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
@@ -18,6 +19,16 @@ namespace Werewolves.Core.GameLogic.Roles.MainRoles;
 /// </summary>
 internal class SimpleWerewolfRole : StandardNightRoleHookListener
 {
+	private readonly RolePowerAvailabilityGateway _availabilityGateway;
+	private bool? _littleGirlGuidanceAllowed;
+
+	internal SimpleWerewolfRole(
+		RolePowerAvailabilityGateway availabilityGateway)
+	{
+		ArgumentNullException.ThrowIfNull(availabilityGateway);
+		_availabilityGateway = availabilityGateway;
+	}
+
     internal override string PublicName => GameStrings.SimpleWerewolfRoleName;
     public override ListenerIdentifier Id => ListenerIdentifier.Listener(MainRoleType.SimpleWerewolf);
     protected override bool HasNightPowers => true;
@@ -39,6 +50,69 @@ internal class SimpleWerewolfRole : StandardNightRoleHookListener
         return ExecuteCore(session, input);
     }
 
+    public override bool TryResolvePendingInstructionContinuation(
+        GameHook hook,
+        GameSession session,
+        ModeratorInstruction pendingInstruction,
+        out string listenerState)
+    {
+        listenerState = string.Empty;
+        if (hook != GameHook.NightMainActionLoop)
+        {
+            return false;
+        }
+
+        switch (pendingInstruction)
+        {
+            case SelectPlayersInstruction
+            {
+                Semantic:
+                    ModeratorInstructionSemantic
+                        .ObserveWerewolfFactionAgentGroup,
+                RoleIdentification: null
+            } when !TryGetKnownLivingWerewolfAgents(session, out _):
+            case ConfirmationInstruction
+            {
+                Semantic: ModeratorInstructionSemantic.WakeRole
+            } when HasExpectedAffectedWerewolfAgents(
+                session,
+                pendingInstruction):
+                listenerState = WokenUpStateEnum.ToString();
+                return true;
+            case SelectPlayersInstruction
+            {
+                Semantic: ModeratorInstructionSemantic.SelectWerewolfVictim
+            } when HasExpectedAffectedWerewolfAgents(
+                session,
+                pendingInstruction):
+                listenerState = AwaitingTargetSelectionEnum.ToString();
+                return true;
+            case ConfirmationInstruction
+            {
+                Semantic: ModeratorInstructionSemantic.PutRoleToSleep
+            } when HasExpectedAffectedWerewolfAgents(
+                session,
+                pendingInstruction):
+                listenerState = ReadyToSleepStateEnum.ToString();
+                return true;
+        }
+
+        if (pendingInstruction.Semantic is
+            ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup or
+            ModeratorInstructionSemantic.WakeRole or
+            ModeratorInstructionSemantic.SelectWerewolfVictim or
+            ModeratorInstructionSemantic.PutRoleToSleep)
+        {
+            return false;
+        }
+
+        return base.TryResolvePendingInstructionContinuation(
+            hook,
+            session,
+            pendingInstruction,
+            out listenerState);
+    }
+
     protected override List<RoleStateMachineStage> DefineStateMachineStages()
     {
         var stages = base.DefineStateMachineStages();
@@ -55,11 +129,21 @@ internal class SimpleWerewolfRole : StandardNightRoleHookListener
         GameSession session,
         ModeratorResponse input)
     {
+		_littleGirlGuidanceAllowed =
+		    EvaluateLittleGirlGuidanceAvailability(session);
+
         if (!TryGetKnownLivingWerewolfAgents(session, out var agents))
         {
             var livingPlayerIds = GetLivingPlayers(session)
                 .Select(player => player.Id)
                 .ToHashSet();
+		    var privateInstruction =
+		        _littleGirlGuidanceAllowed == true
+		            ? string.Join(
+		                Environment.NewLine + Environment.NewLine,
+		                GameStrings.WerewolfFactionAgentObservationPrompt,
+		                GameStrings.LittleGirlOpeningGuidance)
+		            : GameStrings.WerewolfFactionAgentObservationPrompt;
             return HookListenerActionResult.NeedInput(
                 new SelectPlayersInstruction(
                     ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup,
@@ -67,8 +151,7 @@ internal class SimpleWerewolfRole : StandardNightRoleHookListener
                     countConstraint: NumberRangeConstraint.AtLeast(1),
                     publicAnnouncement: GameStrings.RoleHoldersWakeUp.Format(
                         GameStrings.WerewolvesGroupName),
-                    privateInstruction:
-                        GameStrings.WerewolfFactionAgentObservationPrompt),
+		            privateInstruction: privateInstruction),
                 WokenUpStateEnum);
         }
 
@@ -82,6 +165,9 @@ internal class SimpleWerewolfRole : StandardNightRoleHookListener
                 ModeratorInstructionSemantic.WakeRole,
                 GameStrings.RoleHoldersWakeUp.Format(
                     GameStrings.WerewolvesGroupName),
+		        privateInstruction: _littleGirlGuidanceAllowed == true
+		            ? GameStrings.LittleGirlOpeningGuidance
+		            : null,
                 affectedPlayerIds: agents.Select(player => player.Id).ToArray()),
             WokenUpStateEnum);
     }
@@ -160,11 +246,61 @@ internal class SimpleWerewolfRole : StandardNightRoleHookListener
                 ModeratorInstructionSemantic.PutRoleToSleep,
                 GameStrings.RoleHoldersGoToSleep.Format(
                     GameStrings.WerewolvesGroupName),
+		        privateInstruction: _littleGirlGuidanceAllowed == true
+		            ? GameStrings.LittleGirlClosingGuidance
+		            : null,
                 affectedPlayerIds: werewolves
                     .Select(player => player.Id)
                     .ToArray()),
             ReadyToSleepStateEnum);
     }
+
+	internal bool? LittleGirlGuidanceDecision =>
+		_littleGirlGuidanceAllowed;
+
+	internal void RestoreLittleGirlGuidanceDecision(bool? isAllowed) =>
+		_littleGirlGuidanceAllowed = isAllowed;
+
+	protected override HookListenerActionResult HandleAsleepConfirmation(
+		GameSession session,
+		ModeratorResponse input)
+	{
+		var result = base.HandleAsleepConfirmation(session, input);
+		_littleGirlGuidanceAllowed = null;
+		return result;
+	}
+
+	private bool? EvaluateLittleGirlGuidanceAvailability(GameSession session)
+	{
+		var livingHolders = session.GetPlayers()
+		    .WithHealth(PlayerHealth.Alive)
+		    .Where(player =>
+		        player.State.CurrentRole == MainRoleType.LittleGirl)
+		    .ToArray();
+		if (livingHolders.Length == 0)
+		{
+		    return null;
+		}
+
+		if (livingHolders.Length != 1)
+		{
+		    throw new InvalidOperationException(
+		        "Little Girl spying requires exactly one living current Role holder.");
+		}
+
+		var holder = livingHolders.Single();
+		var instance = RolePowerInstance.CreateNative(
+		    holder,
+		    MainRoleType.LittleGirl,
+		    LittleGirlRole.SpyingPower);
+		return _availabilityGateway.Evaluate(
+		        new RolePowerAttempt(
+		            holder,
+		            MainRoleType.LittleGirl,
+		            LittleGirlRole.SpyingPower,
+		            instance))
+		    .AvailabilityResult.IsAvailable;
+	}
 
     private static IReadOnlyList<IPlayer> GetLivingPlayers(GameSession session) =>
         session.GetPlayers()
@@ -193,6 +329,15 @@ internal class SimpleWerewolfRole : StandardNightRoleHookListener
             .ToArray();
         return true;
     }
+
+    private static bool HasExpectedAffectedWerewolfAgents(
+        GameSession session,
+        ModeratorInstruction pendingInstruction) =>
+        TryGetKnownLivingWerewolfAgents(session, out var agents) &&
+        agents.Count > 0 &&
+        pendingInstruction.AffectedPlayerIds is { } affectedPlayerIds &&
+        affectedPlayerIds.ToHashSet().SetEquals(
+            agents.Select(player => player.Id));
 
     private static HashSet<Guid> GetLivingKnownNonAgents(GameSession session) =>
         GetLivingPlayers(session)

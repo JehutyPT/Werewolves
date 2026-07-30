@@ -78,6 +78,19 @@ internal sealed class BigBadWolfRole
         out string listenerState)
     {
         listenerState = string.Empty;
+        if (hook == GameHook.NightMainActionLoop &&
+            pendingInstruction is SelectPlayersInstruction
+            {
+                Semantic:
+                    ModeratorInstructionSemantic.SelectBigBadWolfTarget
+            } &&
+            HasExpectedAffectedRoleHolders(session, pendingInstruction))
+        {
+            listenerState =
+                BigBadWolfRoleState.AwaitingTargetSelection.ToString();
+            return true;
+        }
+
         if (hook != GameHook.NightMainActionLoop ||
             pendingInstruction is not ConfirmationInstruction
             {
@@ -85,7 +98,11 @@ internal sealed class BigBadWolfRole
                 AffectedPlayerIds: { Count: 1 } affectedPlayerIds
             })
         {
-            return false;
+            return base.TryResolvePendingInstructionContinuation(
+                hook,
+                session,
+                pendingInstruction,
+                out listenerState);
         }
 
         var holder = GetAliveRolePlayers(session)?.SingleOrDefault();
@@ -103,7 +120,8 @@ internal sealed class BigBadWolfRole
                 .ToArray();
         if (committedActions.Length == 0)
         {
-            return false;
+            listenerState = BigBadWolfRoleState.ReadyToSleep.ToString();
+            return true;
         }
 
         if (committedActions is not [var committedAction])
