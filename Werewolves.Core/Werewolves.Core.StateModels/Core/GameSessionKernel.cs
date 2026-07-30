@@ -188,6 +188,29 @@ namespace Werewolves.Core.StateModels.Core
 				_recoveryBoundary = candidateBoundary;
 			}
 
+			internal void NormalizeLegacyRecurringRolePowerCommit(
+				NightActionType actionType,
+				Guid targetId,
+				RolePowerInstanceIdentity powerIdentity)
+			{
+				if (!Enum.IsDefined(actionType) ||
+				    actionType == NightActionType.Unknown ||
+				    targetId == Guid.Empty ||
+				    !powerIdentity.IsValid)
+				{
+					throw new InvalidOperationException(
+						"The legacy recurring Role Power normalization request is structurally invalid.");
+				}
+
+				_gameHistoryLog.NormalizeLegacyRecurringRolePowerCommit(
+					actionType,
+					targetId,
+					powerIdentity,
+					CurrentPhase,
+					TurnNumber);
+				_recoveryBoundary = CreateDto();
+			}
+
 			private GameSessionDto CreateDto()
 		{
 			return new GameSessionDto
@@ -523,11 +546,8 @@ namespace Werewolves.Core.StateModels.Core
 			if (cursor.Kind !=
 				    DomainRecoveryCursorKind
 					    .RecurringNativeRolePowerCommit ||
-			    cursor.SourceRole is not { } sourceRole ||
-			    !Enum.IsDefined(sourceRole) ||
-			    cursor.ActingPlayerId == Guid.Empty ||
-			    string.IsNullOrWhiteSpace(
-				    cursor.SourcePowerIdentifier) ||
+			    cursor.PowerIdentity is not { } cursorPowerIdentity ||
+			    !cursorPowerIdentity.IsValid ||
 			    cursor.PowerInstanceId != cursor.ActingPlayerId ||
 			    cursor.PowerInstanceOrigin !=
 				    RolePowerInstanceOrigin.Native ||
@@ -537,24 +557,51 @@ namespace Werewolves.Core.StateModels.Core
 					"The domain recovery cursor is structurally invalid.");
 			}
 
-			var recurringEntry = dto.GameHistoryLog
+			var latestActionEntry = dto.GameHistoryLog
 				.OfType<NightActionLogEntry>()
 				.LastOrDefault(entry =>
-					entry.GetType() ==
-					typeof(NightActionLogEntry));
-			if (recurringEntry == null ||
-			    recurringEntry.ActionType !=
-				    cursor.CommittedActionType ||
-			    recurringEntry.TargetIds is not { Count: 1 } ||
-			    recurringEntry.TargetIds[0] !=
-				    cursor.CommittedTargetId)
+					entry.ActionType == cursor.CommittedActionType);
+			var matchesRecurringCommit =
+				latestActionEntry is RecurringRolePowerCommittedLogEntry
+				{
+					CurrentPhase: GamePhase.Night,
+					TargetIds: { Count: 1 } targetIds
+				} recurringEntry &&
+				recurringEntry.TurnNumber == dto.TurnNumber &&
+				recurringEntry.PowerIdentity == cursorPowerIdentity &&
+				targetIds[0] == cursor.CommittedTargetId;
+			var matchesLegacyAction =
+				latestActionEntry?.GetType() ==
+					typeof(NightActionLogEntry) &&
+				latestActionEntry.CurrentPhase == GamePhase.Night &&
+				latestActionEntry.TurnNumber == dto.TurnNumber &&
+				latestActionEntry.TargetIds is
+					{ Count: 1 } legacyTargetIds &&
+				legacyTargetIds[0] == cursor.CommittedTargetId;
+			if (matchesLegacyAction &&
+			    (pendingModeratorInstruction?.AffectedPlayerIds is not
+				     { Count: 1 } ownerAffectedPlayerIds ||
+			     ownerAffectedPlayerIds[0] !=
+				     cursorPowerIdentity.ActingPlayerId))
+			{
+				throw new InvalidOperationException(
+					"The legacy recurring Role Power commit does not match its Pending Instruction owner.");
+			}
+
+			var matchesLegacyCommit =
+				matchesLegacyAction &&
+				pendingModeratorInstruction?.AffectedPlayerIds is
+					{ Count: 1 } legacyAffectedPlayerIds &&
+				legacyAffectedPlayerIds[0] ==
+					cursorPowerIdentity.ActingPlayerId;
+			if (!matchesRecurringCommit && !matchesLegacyCommit)
 			{
 				throw new InvalidOperationException(
 					"The domain recovery cursor does not match the latest recurring native Role Power action.");
 			}
 
 			return cursor;
-		}
+			}
 
 		/// <summary>
 		/// Special key used only during deserialization to access mutable state

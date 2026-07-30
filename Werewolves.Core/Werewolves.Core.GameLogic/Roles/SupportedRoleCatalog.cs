@@ -38,6 +38,9 @@ public static class SupportedRoleCatalog
 		        MainRoleType.LittleGirl,
 		        () => new LittleGirlRole()),
 			RoleAdmission.Active(
+				MainRoleType.Defender,
+				() => new DefenderRole(rolePowerAvailabilityGateway)),
+			RoleAdmission.Active(
 				MainRoleType.Seer,
 				() => new SeerRole(rolePowerAvailabilityGateway)),
 			RoleAdmission.Active(

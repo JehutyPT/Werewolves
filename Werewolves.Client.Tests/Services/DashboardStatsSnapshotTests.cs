@@ -99,6 +99,49 @@ public class DashboardStatsSnapshotTests
 			DashboardStatsSnapshot.EliminationReasonLabel(EliminationReason.DayVote));
 	}
 
+	[Fact]
+	public void FromSession_IgnoresModeratorPrivateDefenderCommit()
+	{
+		var defender = FakePlayer.Create(
+			PlayerNames.Ana,
+			MainRoleType.Defender,
+			moderatorKnownRole: MainRoleType.Defender);
+		var target = FakePlayer.Create(
+			PlayerNames.Bruno,
+			MainRoleType.SimpleVillager,
+			moderatorKnownRole: MainRoleType.SimpleVillager);
+		var session = new FakeGameSession(
+			[defender, target],
+			[
+				new RecurringRolePowerCommittedLogEntry
+				{
+					Timestamp = new DateTimeOffset(
+						2026,
+						5,
+						14,
+						21,
+						0,
+						0,
+						TimeSpan.Zero),
+					TurnNumber = 1,
+					CurrentPhase = GamePhase.Night,
+					ActionType = NightActionType.DefenderProtect,
+					TargetIds = [target.Id],
+					ActingPlayerId = defender.Id,
+					SourceRole = MainRoleType.Defender,
+					SourcePowerIdentifier = "defender-protection",
+					PowerInstanceId = defender.Id,
+					PowerInstanceOrigin = RolePowerInstanceOrigin.Native
+				}
+			]);
+
+		var snapshot = DashboardStatsSnapshot.FromSession(session);
+
+		snapshot.EliminationLog.Should().BeEmpty();
+		snapshot.RoleGroups.Should()
+			.OnlyContain(group => group.RemainingCount == 0);
+	}
+
 	private static string PhaseTurnLabel(GamePhase phase, int turnNumber) =>
 		string.Format(
 			CultureInfo.CurrentCulture,

@@ -128,6 +128,17 @@ internal sealed class DomainRecoveryCursor
                 powerInstanceOrigin,
                 OneUseResourceId)
             : null;
+
+    internal RolePowerInstanceIdentity? PowerIdentity =>
+        SourceRole is { } sourceRole &&
+        PowerInstanceOrigin is { } powerInstanceOrigin
+            ? new(
+                ActingPlayerId,
+                sourceRole,
+                SourcePowerIdentifier,
+                PowerInstanceId,
+                powerInstanceOrigin)
+            : null;
 }
 
 /// <summary>

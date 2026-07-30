@@ -113,6 +113,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 	[InlineData(MainRoleType.AccursedWolfFather, 1)]
 	[InlineData(MainRoleType.BigBadWolf, 1)]
 	[InlineData(MainRoleType.LittleGirl, 1)]
+	[InlineData(MainRoleType.Defender, 1)]
 	[InlineData(MainRoleType.TwoSisters, 2)]
 	[InlineData(MainRoleType.ThreeBrothers, 3)]
 	public void ExecuteBatch_WithCardinalityRoleHolders_SafetyRepresentativeCompletesAllOneThousandAttempts(
@@ -185,6 +186,73 @@ public class SimulationExecutionTests : DiagnosticTestBase
 			.Should().ContainSingle(entry =>
 				entry.ActionType ==
 				NightActionType.BigBadWolfVictimSelection &&
+				entry.TargetIds!.SequenceEqual(new[] { selectedTarget }));
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void SafetyRunZero_Defender_RecordsMandatorySelectionTrace()
+	{
+		MainRoleType[] roles =
+		[
+			MainRoleType.Defender,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager
+		];
+		var scenario = new SimulationScenario(roles.Length, roles);
+		var identity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+		var material = new RunSeedMaterial(
+			identity,
+			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
+			runNumber: 0);
+		var random = new DeterministicRandomSource(material);
+		var startState = SimulationStartStateDeriver.Derive(
+			material,
+			SimulatorCapability.SafetyScreening,
+			random);
+		var config = startState.CreateGameSessionConfig();
+		var builder = CreateBuilder()
+			.WithPlayers(config.Players.ToArray())
+			.WithRoles(config.Roles.ToArray());
+		builder.StartGame();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		var defender = players[
+			startState.RoleAssignments.Single(assignment =>
+				assignment.Role == MainRoleType.Defender).SeatNumber - 1];
+		var recorder = new RecordingDecisionStrategy(
+			new BaselineRandomDecisionStrategy(
+				material,
+				startState,
+				SimulatorCapability.SafetyScreening.HeadlessResponsePolicy,
+				random));
+
+		RespondToCurrentInstruction(builder, recorder);
+		RespondToCurrentInstruction(builder, recorder);
+		RespondToCurrentInstruction(builder, recorder);
+		RespondToCurrentInstruction(builder, recorder);
+
+		var selectionTrace = recorder.Observations.Should()
+			.ContainSingle(observation =>
+				observation.Instruction.Semantic ==
+				ModeratorInstructionSemantic.SelectDefenderTarget)
+			.Subject;
+		var selection = selectionTrace.Instruction.Should()
+			.BeOfType<SelectPlayersInstruction>()
+			.Subject;
+		selection.CountConstraint.Should().Be(NumberRangeConstraint.Single);
+		selection.AffectedPlayerIds.Should().Equal(defender.Id);
+		selectionTrace.Response.SelectedPlayerIds.Should().ContainSingle();
+		var selectedTarget = selectionTrace.Response.SelectedPlayerIds!.Single();
+		selection.SelectablePlayerIds.Should().Contain(selectedTarget);
+		builder.GetGameState()!.GameHistoryLog
+			.OfType<RecurringRolePowerCommittedLogEntry>()
+			.Should().ContainSingle(entry =>
+				entry.ActionType == NightActionType.DefenderProtect &&
+				entry.ActingPlayerId == defender.Id &&
 				entry.TargetIds!.SequenceEqual(new[] { selectedTarget }));
 		MarkTestCompleted();
 	}
@@ -325,7 +393,8 @@ public class SimulationExecutionTests : DiagnosticTestBase
 		{
 			ModeratorInstructionSemantic.ConductDayVote,
 			ModeratorInstructionSemantic.EstablishStutteringJudgeSignal,
-			ModeratorInstructionSemantic.ObserveStutteringJudgeSignal
+			ModeratorInstructionSemantic.ObserveStutteringJudgeSignal,
+			ModeratorInstructionSemantic.SelectDefenderTarget
 		};
 		recorders.SelectMany(recorder => recorder.ObservedSemantics)
 			.Should().NotContain(semantic => safetyOnlySemantics.Contains(semantic));
@@ -535,7 +604,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 
 		first.Should().BeOfType<CompletedSimulationRun>();
 		first.RunSeedMaterial.CompatibilityIdentity.Profile.Should()
-			.Be(new SimulatorProfileIdentity("safety-screening", "15"));
+			.Be(new SimulatorProfileIdentity("safety-screening", "16"));
 		replay.Should().Be(first);
 		MarkTestCompleted();
 	}

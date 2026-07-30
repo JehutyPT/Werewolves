@@ -38,6 +38,7 @@ public sealed class RoleKnowledgeFlowBunitTests
 	[InlineData(MainRoleType.Scapegoat)]
 	[InlineData(MainRoleType.AccursedWolfFather)]
 	[InlineData(MainRoleType.BigBadWolf)]
+	[InlineData(MainRoleType.Defender)]
 	public void SingleOptionalRoleLobby_UsesCatalogMetadataAsPortugueseToggle(
 		MainRoleType role)
 	{
@@ -54,7 +55,8 @@ public sealed class RoleKnowledgeFlowBunitTests
 			MainRoleType.Scapegoat => GameStrings.ScapegoatRoleName,
 			MainRoleType.AccursedWolfFather =>
 				GameStrings.AccursedWolfFatherRoleName,
-			MainRoleType.BigBadWolf => GameStrings.BigBadWolfRoleName,
+				MainRoleType.BigBadWolf => GameStrings.BigBadWolfRoleName,
+				MainRoleType.Defender => GameStrings.DefenderRoleName,
 			_ => throw new InvalidOperationException(
 				$"Unexpected Single-Optional Role {role}.")
 		};
@@ -707,6 +709,100 @@ public sealed class RoleKnowledgeFlowBunitTests
 			.And.Contain(ClientStrings.Dashboard_RoleKnowledgePrivate)
 			.And.NotContain(GameStrings.VillagersGroupName)
 			.And.NotContain(GameStrings.WerewolvesGroupName);
+	}
+
+	[Fact]
+	public async Task DefenderNightFlow_RendersPublicWakePrivateMandatoryTargetAndPublicSleep()
+	{
+		var timing = new ControlledHoldButtonTiming();
+		using var context = new ModeratorComponentTestContext();
+		context.Services.AddSingleton<IHoldButtonTiming>(timing);
+		var manager = context.Services.GetRequiredService<GameClientManager>();
+		var start = manager.StartGame(
+			PlayerNames.DefaultFive,
+			[
+				MainRoleType.Defender,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+		manager.ProcessInput(start.CreateResponse()).IsSuccess.Should().BeTrue();
+		var startNight = manager.CurrentInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		manager.ProcessInput(startNight.CreateResponse()).IsSuccess.Should().BeTrue();
+
+		var players = manager.CurrentSession!.GetPlayers().ToArray();
+		var defender = players[0];
+		var target = players[3];
+		var identification = manager.CurrentInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		var wakeAnnouncement = GameStrings.RoleWakesUp.Format(
+			GameStrings.DefenderRoleName);
+		identification.Semantic.Should().Be(
+			ModeratorInstructionSemantic.IdentifyRoleHolders);
+		identification.RoleIdentification.Should().Be(MainRoleType.Defender);
+		identification.PublicAnnouncement.Should().Be(wakeAnnouncement);
+
+		var dashboard = context.RenderModeratorComponent<DashboardPage>();
+		dashboard.Find(PublicInstructionSelector).TextContent.Should()
+			.Contain(wakeAnnouncement)
+			.And.NotContain(defender.Name);
+		var holderOption = dashboard.FindAll(PlayerOptionSelector)
+			.Single(option => option.TextContent.Contains(
+				defender.Name,
+				StringComparison.CurrentCulture));
+		holderOption.Click();
+		await RenderedHoldButtonDriver.CompleteHoldAsync(
+			dashboard,
+			dashboard.Find(HoldButtonSelector),
+			timing);
+
+		var targetSelection = manager.CurrentInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		targetSelection.Semantic.Should().Be(
+			ModeratorInstructionSemantic.SelectDefenderTarget);
+		targetSelection.PublicAnnouncement.Should().BeNull();
+		targetSelection.PrivateInstruction.Should().Be(
+			GameStrings.DefenderTargetSelectionInstruction);
+		targetSelection.AffectedPlayerIds.Should().Equal(defender.Id);
+		targetSelection.CountConstraint.Should().Be(
+			NumberRangeConstraint.Single);
+		targetSelection.EmptySelectionOptionLabel.Should().BeNull();
+		targetSelection.SelectablePlayerIds.Should().BeEquivalentTo(
+			players.Select(player => player.Id));
+		dashboard.FindAll(PublicInstructionSelector).Should().BeEmpty();
+		dashboard.Find(PrivateInstructionSelector).TextContent.Should()
+			.Contain(GameStrings.DefenderTargetSelectionInstruction);
+		dashboard.Find(HoldButtonSelector)
+			.HasAttribute(Html.Attributes.Disabled).Should().BeTrue();
+
+		var targetOption = dashboard.FindAll(PlayerOptionSelector)
+			.Single(option => option.TextContent.Contains(
+				target.Name,
+				StringComparison.CurrentCulture));
+		targetOption.Click();
+		dashboard.Find(HoldButtonSelector)
+			.HasAttribute(Html.Attributes.Disabled).Should().BeFalse();
+		await RenderedHoldButtonDriver.CompleteHoldAsync(
+			dashboard,
+			dashboard.Find(HoldButtonSelector),
+			timing);
+
+		var sleep = manager.CurrentInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var sleepAnnouncement = GameStrings.RoleGoesToSleepSingle.Format(
+			GameStrings.DefenderRoleName);
+		sleep.Semantic.Should().Be(
+			ModeratorInstructionSemantic.PutRoleToSleep);
+		sleep.PublicAnnouncement.Should().Be(sleepAnnouncement);
+		sleep.PrivateInstruction.Should().BeNull();
+		dashboard.Find(PublicInstructionSelector).TextContent.Should()
+			.Contain(sleepAnnouncement)
+			.And.NotContain(defender.Name)
+			.And.NotContain(target.Name);
+		dashboard.FindAll(PrivateInstructionSelector).Should().BeEmpty();
+		dashboard.FindAll(PlayerOptionSelector).Should().BeEmpty();
 	}
 
 	[Fact]

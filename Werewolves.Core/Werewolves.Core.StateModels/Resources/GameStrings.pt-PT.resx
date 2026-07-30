@@ -305,6 +305,10 @@
     <value>Protetor</value>
     <comment/>
   </data>
+  <data name="DefenderTargetSelectionInstruction" xml:space="preserve">
+    <value>Protetor, escolhe exatamente um jogador vivo para proteger esta noite.</value>
+    <comment/>
+  </data>
   <data name="ElderRoleName" xml:space="preserve">
     <value>Ancião</value>
     <comment/>

@@ -178,7 +178,7 @@ These sections state only the observable differences from the shared interaction
 
 ### Defender
 
-- Each active Night, wake Defender, record one Player chosen from the legal set, and return Defender to sleep.
+- Each active Night, wake Defender, record one living Player chosen from the legal set, and return Defender to sleep.
 - The app derives that legal set from the [canonical Defender rule](../domain/game-rules.md#the-villagers); the contract adds no separate eligibility rule.
 
 ### Village Idiot
