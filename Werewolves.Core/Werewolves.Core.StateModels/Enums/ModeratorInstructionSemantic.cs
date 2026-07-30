@@ -44,5 +44,6 @@ public enum ModeratorInstructionSemantic
 	ChooseWolfHoundAlignment = 36,
 	ChooseAccursedWolfFatherInfection = 37,
 	SelectBigBadWolfTarget = 38,
-	SelectDefenderTarget = 39
+	SelectDefenderTarget = 39,
+	SelectWhiteWerewolfTarget = 40
 }

@@ -708,6 +708,13 @@ internal static class GameFlowManager
                             input,
                             recurringEntry,
                             nextInstruction),
+                    MainRoleType.WhiteWerewolf =>
+                        WhiteWerewolfRole.TryValidateCommittedRecoveryBoundary(
+                            session,
+                            startingInstruction,
+                            input,
+                            recurringEntry,
+                            nextInstruction),
                     _ => false
                 };
             if (!recurringCommitCorrelated)
@@ -949,7 +956,11 @@ internal static class GameFlowManager
                 ModeratorInstructionSemantic.IdentifyRoleHolders =>
                     HasCommittedRoleIdentification(
                         session,
-                        cursor.ObservedRole),
+                        cursor.ObservedRole) &&
+                    (cursor.ObservedRole != WhiteWerewolf ||
+                     InitialBeneficiaryClosureRules
+                         .HasValidWhiteWerewolfAcceptedIdentificationClosure(
+                             session)),
                 ModeratorInstructionSemantic
                     .ObserveWerewolfFactionAgentGroup
                     when cursor.ObservedRole == SimpleWerewolf &&
@@ -1204,6 +1215,10 @@ internal static class GameFlowManager
                     DefenderRole.ValidateRecurringRecoveryCursorIdentity(
                         cursor);
                     break;
+                case MainRoleType.WhiteWerewolf:
+                    WhiteWerewolfRole.ValidateRecurringRecoveryCursorIdentity(
+                        cursor);
+                    break;
                 default:
                     throw new InvalidOperationException(
                         $"Unsupported recurring Role Power continuation '{sourceRole}'.");
@@ -1410,21 +1425,8 @@ internal static class GameFlowManager
         var livingBeneficiaries =
             RequireLivingFactionBeneficiaries(session);
 
-        var aliveWerewolves = livingBeneficiaries.Count(
-            faction => faction == Faction.Werewolf);
-        int aliveNonWerewolves = livingBeneficiaries.Count(
-            faction => faction == Faction.Villager);
-
-        var satisfied = new[]
-        {
-            (Faction: Faction.Villager,
-                IsSatisfied: aliveWerewolves == 0 && aliveNonWerewolves > 0),
-            (Faction: Faction.Werewolf,
-                IsSatisfied: aliveWerewolves >= aliveNonWerewolves && aliveWerewolves > 0)
-        };
         return GameResultSelection.Select(
-            satisfied.Where(result => result.IsSatisfied)
-                .Select(result => result.Faction),
+            FactionVictoryPredicates.Evaluate(livingBeneficiaries),
             allPlayersEliminated: livingBeneficiaries.Length == 0);
     }
 

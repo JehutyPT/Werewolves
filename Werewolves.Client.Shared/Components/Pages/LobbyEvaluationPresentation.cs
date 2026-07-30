@@ -87,6 +87,8 @@ public static class LobbyEvaluationPresentation
 			ClientStrings.LobbyEvaluation_ReasonWerewolfControl,
 		AlreadyDecidedReason.MultipleLobbyExitVictoryPredicatesSatisfied =>
 			ClientStrings.LobbyEvaluation_ReasonMultipleVictories,
+		AlreadyDecidedReason.WhiteWerewolfSoleSurvivor =>
+			ClientStrings.LobbyEvaluation_ReasonWhiteWerewolfSoleSurvivor,
 		_ => throw new ArgumentOutOfRangeException(nameof(reason))
 	};
 
@@ -112,6 +114,8 @@ public static class LobbyEvaluationPresentation
 	{
 		Faction.Villager => ClientStrings.LobbyEvaluation_FactionVillager,
 		Faction.Werewolf => ClientStrings.LobbyEvaluation_FactionWerewolf,
+		Faction.WhiteWerewolf =>
+			ClientStrings.LobbyEvaluation_FactionWhiteWerewolf,
 		_ => throw new ArgumentOutOfRangeException(nameof(faction))
 	};
 }

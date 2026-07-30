@@ -523,9 +523,9 @@ Polymorphic instruction system for communication TO the moderator. **Assembly Lo
 *   `PlayerHealth`: `Alive`, `Dead`. 
 *   `ExpectedInputType`: `None`, `PlayerSelection`, `AssignPlayerRoles`, `OptionSelection`, `Continue`, `FinishedGame`.
 
-### Team Enum
-*   `Team`: `Villagers`, `Werewolves`.
-    *   **Planned values (not yet implemented):** `Lovers`, `Solo_WhiteWerewolf`, `Solo_Piper`, `Solo_Angel`, `Solo_PrejudicedManipulator`.
+### Faction and Team Enums
+*   `Faction`: `Villager`, `Werewolf`, `WhiteWerewolf`. Faction facts use this enum independently for each Player's exclusive Beneficiary and operational Agent knowledge; White Werewolf is a White Werewolf Beneficiary and a Werewolf Agent.
+*   `Team`: `Villagers`, `Werewolves`. This legacy setup-alignment vocabulary does not substitute for Faction Beneficiary/Agent facts or typed victory results.
 
 ### Role Enums
 *   `MainRoleType`: Comprehensive list of all roles (Werewolves, Villagers, Ambiguous, Loners, New Moon).
@@ -639,21 +639,14 @@ This list covers the distinct, loggable events derived from the rules. Each entr
 
 # Victory Condition Checking:
  
-The `GameFlowManager` implements automatic victory condition checking to ensure games end appropriately when win conditions are met: 
+`GameFlowManager` evaluates victory at the existing Dawn and Pre-Night windows from one resolved snapshot of living Faction Beneficiaries:
  
-*   **Automatic Checking:** Victory conditions are automatically evaluated by `GameFlowManager.HandleInput` after specific resolution phases (`Dawn` and `Day`). This ensures immediate game termination when win conditions are achieved. 
-*   **Basic Victory Logic (Phase 1):** The current implementation checks fundamental win conditions: 
-    *   **Villager Win:** All werewolves eliminated and at least one non-werewolf player remains alive 
-    *   **Werewolf Win:** Werewolves equal or outnumber non-werewolves, with at least one Werewolf alive 
-*   **Victory Process:** When victory conditions are met: 
-    1. `GameFlowManager.CheckVictoryConditions` returns the winning team and description 
-    2. `VictoryConditionMetLogEntry` is logged with winning team and description 
-    3. Final game over instruction is generated and set as `PendingModeratorInstruction` 
-*   **Future Enhancements:** Later phases will expand victory checking to include: 
-    *   Lovers win conditions (both lovers alive as last players) 
-    *   Solo role win conditions (Angel, Piper, White Werewolf, Prejudiced Manipulator) 
-    *   Event-specific win conditions 
-    *   Complex role interactions (Charmed players, infected players, etc.) 
+*   **Villager:** At least one living Villager Beneficiary exists and every living Beneficiary is Villager.
+*   **Werewolf:** At least one living Werewolf Beneficiary exists and either no non-Werewolf Beneficiary remains, or every non-Werewolf Beneficiary is Villager and the Werewolves meet the existing control comparison. A living White Werewolf Beneficiary disables that shortcut.
+*   **White Werewolf:** Exactly one Player remains living and that Player is a White Werewolf Beneficiary.
+*   **Typed selection:** The shared predicate result set flows through `GameResultSelection`, producing a `SingleFactionGameResult`, order-independent `SharedVictoryGameResult`, `NoWinnerGameResult` when all Players are eliminated, or no terminal result.
+*   **Durable terminal boundary:** `VictoryConditionMetLogEntry` records the typed result and `VictoryCheckWindow`; the matching `FinishedGameConfirmationInstruction` is the terminal Pending Instruction and rehydrates without predicate reevaluation.
+*   **Future enhancements:** Later work may add Lovers, Angel, Piper, Prejudiced Manipulator, Event-specific, or other complex conditions through the same centralized predicate/selection vocabulary.
 
 ## Test Infrastructure
 

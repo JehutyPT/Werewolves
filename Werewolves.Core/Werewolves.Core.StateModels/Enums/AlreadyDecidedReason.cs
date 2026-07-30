@@ -5,5 +5,6 @@ public enum AlreadyDecidedReason
 	NoLobbyExitVictoryPredicateSatisfied,
 	NoWerewolfFactionBeneficiariesAtLobbyExit,
 	WerewolfControlShortcut,
-	MultipleLobbyExitVictoryPredicatesSatisfied
+	MultipleLobbyExitVictoryPredicatesSatisfied,
+	WhiteWerewolfSoleSurvivor
 }

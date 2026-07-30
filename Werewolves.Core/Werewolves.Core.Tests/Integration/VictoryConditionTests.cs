@@ -446,6 +446,213 @@ public class VictoryConditionTests : DiagnosticTestBase
 
     #endregion
 
+    [Fact]
+    public void SoleWhiteWerewolf_AtDawn_CommitsAndRehydratesTypedTerminalBoundary()
+    {
+        var builder = CreateBuilder()
+            .WithPlayers(5)
+            .WithRoles(
+                MainRoleType.WhiteWerewolf,
+                MainRoleType.SimpleWerewolf,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager);
+        builder.StartGame();
+        var session = builder.GetGameState()!;
+        var players = session.GetPlayers().ToArray();
+        var whiteWerewolf = players[0];
+        var simpleWerewolf = players[1];
+        var victim = players[2];
+        var alreadyEliminated = players.Skip(3).ToArray();
+
+        builder.ArrangeKnownRole(
+                whiteWerewolf.Id,
+                MainRoleType.WhiteWerewolf)
+            .ArrangeKnownRole(
+                simpleWerewolf.Id,
+                MainRoleType.SimpleWerewolf)
+            .ArrangeKnownWerewolfFactionAgentGroup(
+                whiteWerewolf.Id,
+                simpleWerewolf.Id);
+        var boundary = new FactionFactEffectiveBoundary(
+            session.TurnNumber,
+            session.GetCurrentPhase(),
+            session.GameHistoryLog.Count());
+        builder.ArrangeExplicitFactionTransition(
+            "test-white-werewolf-terminal-beneficiaries",
+            [
+                FactionFact.Beneficiary(
+                    whiteWerewolf.Id,
+                    Faction.WhiteWerewolf,
+                    boundary),
+                FactionFact.Beneficiary(
+                    simpleWerewolf.Id,
+                    Faction.Werewolf,
+                    boundary),
+                .. players.Skip(2).Select(player =>
+                    FactionFact.Beneficiary(
+                        player.Id,
+                        Faction.Villager,
+                        boundary))
+            ]);
+        builder.ArrangeEliminatedPlayer(simpleWerewolf.Id);
+        foreach (var player in alreadyEliminated)
+        {
+            builder.ArrangeEliminatedPlayer(player.Id);
+        }
+        builder.ConfirmGameStart();
+        builder.ConfirmNightStart();
+        builder.CompleteWerewolfNightAction(
+            [whiteWerewolf.Id],
+            victim.Id);
+
+        var nightEnd = InstructionAssert.ExpectType<ConfirmationInstruction>(
+            builder.GetCurrentInstruction(),
+            CoreTestReferences.InstructionContexts.NightEndConfirmation);
+        builder.Process(nightEnd.CreateResponse());
+        builder.CompleteDawnPhase(new Dictionary<Guid, MainRoleType>
+        {
+            [victim.Id] = MainRoleType.SimpleVillager
+        });
+
+        var finished = builder.GetCurrentInstruction().Should()
+            .BeOfType<FinishedGameConfirmationInstruction>().Subject;
+        finished.GameResult.Should().Be(
+            new SingleFactionGameResult(Faction.WhiteWerewolf));
+        finished.VictoryCheckWindow.Should().Be(VictoryCheckWindow.Dawn);
+        var terminalState = builder.GetGameState()!;
+        terminalState.GameHistoryLog
+            .OfType<VictoryConditionMetLogEntry>()
+            .Should().ContainSingle(entry =>
+                entry.GameResult.Equals(finished.GameResult) &&
+                entry.VictoryCheckWindow == VictoryCheckWindow.Dawn);
+
+        var recoveryService = new GameService();
+        var recoveredId = recoveryService.RehydrateSession(
+            terminalState.Serialize());
+        var recoveredFinished = recoveryService.GetCurrentInstruction(
+                recoveredId)
+            .Should().BeOfType<FinishedGameConfirmationInstruction>()
+            .Subject;
+
+        recoveredFinished.GameResult.Should().Be(finished.GameResult);
+        recoveredFinished.VictoryCheckWindow.Should().Be(
+            VictoryCheckWindow.Dawn);
+        recoveryService.GetGameStateView(recoveredId)!.GameHistoryLog
+            .OfType<VictoryConditionMetLogEntry>()
+            .Should().ContainSingle();
+
+        MarkTestCompleted();
+    }
+
+    [Fact]
+    public void SoleWhiteWerewolf_AtPreNight_CommitsTypedTerminalBoundary()
+    {
+        var builder = CreateBuilder()
+            .WithPlayers(5)
+            .WithRoles(
+                MainRoleType.WhiteWerewolf,
+                MainRoleType.SimpleWerewolf,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager);
+        builder.StartGame();
+        var session = builder.GetGameState()!;
+        var players = session.GetPlayers().ToArray();
+        var whiteWerewolf = players[0];
+        var simpleWerewolf = players[1];
+        var nightVictim = players[2];
+        var voteVictim = players[3];
+        var alreadyEliminated = players[4];
+
+        builder.ArrangeKnownRole(
+                whiteWerewolf.Id,
+                MainRoleType.WhiteWerewolf)
+            .ArrangeKnownRole(
+                simpleWerewolf.Id,
+                MainRoleType.SimpleWerewolf)
+            .ArrangeKnownWerewolfFactionAgentGroup(
+                whiteWerewolf.Id,
+                simpleWerewolf.Id);
+        var boundary = new FactionFactEffectiveBoundary(
+            session.TurnNumber,
+            session.GetCurrentPhase(),
+            session.GameHistoryLog.Count());
+        builder.ArrangeExplicitFactionTransition(
+            "test-white-werewolf-pre-night-beneficiaries",
+            [
+                FactionFact.Beneficiary(
+                    whiteWerewolf.Id,
+                    Faction.WhiteWerewolf,
+                    boundary),
+                FactionFact.Beneficiary(
+                    simpleWerewolf.Id,
+                    Faction.Werewolf,
+                    boundary),
+                .. players.Skip(2).Select(player =>
+                    FactionFact.Beneficiary(
+                        player.Id,
+                        Faction.Villager,
+                        boundary))
+            ]);
+        builder.ArrangeEliminatedPlayer(simpleWerewolf.Id);
+        builder.ArrangeEliminatedPlayer(alreadyEliminated.Id);
+        builder.ConfirmGameStart();
+        builder.ConfirmNightStart();
+        builder.CompleteWerewolfNightAction(
+            [whiteWerewolf.Id],
+            nightVictim.Id);
+        var nightEnd = InstructionAssert.ExpectType<ConfirmationInstruction>(
+            builder.GetCurrentInstruction(),
+            CoreTestReferences.InstructionContexts.NightEndConfirmation);
+        builder.Process(nightEnd.CreateResponse());
+        builder.CompleteDawnPhase(new Dictionary<Guid, MainRoleType>
+        {
+            [nightVictim.Id] = MainRoleType.SimpleVillager
+        });
+
+        builder.GetGameState()!.GetCurrentPhase().Should().Be(GamePhase.Day);
+        var debate = InstructionAssert.ExpectType<ConfirmationInstruction>(
+            builder.GetCurrentInstruction(),
+            CoreTestReferences.InstructionContexts.DebateConfirmation);
+        builder.Process(debate.CreateResponse());
+        var vote = InstructionAssert.ExpectType<SelectPlayersInstruction>(
+            builder.GetCurrentInstruction(),
+            CoreTestReferences.InstructionContexts.VoteSelection);
+        var afterVote = builder.Process(
+            vote.CreateResponse([voteVictim.Id]));
+        var roleReveal = InstructionAssert
+            .ExpectSuccessWithType<AssignRolesInstruction>(
+                afterVote,
+                CoreTestReferences.InstructionContexts.RoleAssignmentAfterLynch);
+        var afterRoleReveal = builder.Process(
+            roleReveal.CreateResponse(new()
+            {
+                [voteVictim.Id] = MainRoleType.SimpleVillager
+            }));
+        var announcement = InstructionAssert.ExpectType<
+            ConfirmationInstruction>(
+            afterRoleReveal.ModeratorInstruction,
+            CoreTestReferences.InstructionContexts
+                .DeathAnnouncementConfirmation);
+        var result = builder.Process(announcement.CreateResponse());
+
+        var finished = result.ModeratorInstruction.Should()
+            .BeOfType<FinishedGameConfirmationInstruction>().Subject;
+        finished.GameResult.Should().Be(
+            new SingleFactionGameResult(Faction.WhiteWerewolf));
+        finished.VictoryCheckWindow.Should().Be(
+            VictoryCheckWindow.PreNight);
+        builder.GetGameState()!.GameHistoryLog
+            .OfType<VictoryConditionMetLogEntry>()
+            .Should().ContainSingle(entry =>
+                entry.GameResult.Equals(finished.GameResult) &&
+                entry.VictoryCheckWindow ==
+                VictoryCheckWindow.PreNight);
+
+        MarkTestCompleted();
+    }
+
     #region VC-020 to VC-022: Victory Timing
 
     [Fact]

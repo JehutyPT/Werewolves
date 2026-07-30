@@ -103,6 +103,12 @@
   <data name="DefenderTargetSelectionInstruction" xml:space="preserve">
     <value>Defender, choose exactly one living player to protect tonight.</value>
   </data>
+  <data name="VictoryConditionWhiteWerewolfSoleSurvivor" xml:space="preserve">
+    <value>The White Werewolf is the only surviving player.</value>
+  </data>
+  <data name="WhiteWerewolfTargetSelectionInstruction" xml:space="preserve">
+    <value>White Werewolf, optionally choose one other living Werewolf Faction Agent for the solo attack.</value>
+  </data>
   <data name="VillagersGroupName" xml:space="preserve">
     <value>Villagers</value>
   </data>

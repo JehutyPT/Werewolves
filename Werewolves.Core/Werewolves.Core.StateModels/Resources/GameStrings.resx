@@ -193,6 +193,10 @@
     <value>Os lobisomens igualam ou superam os aldeões.</value>
     <comment/>
   </data>
+  <data name="VictoryConditionWhiteWerewolfSoleSurvivor" xml:space="preserve">
+    <value>O Lobisomem Branco é o único jogador sobrevivente.</value>
+    <comment/>
+  </data>
   <data name="VictoryConditionShared" xml:space="preserve">
     <value>Várias facções venceram em conjunto.</value>
     <comment/>
@@ -411,6 +415,10 @@
   </data>
   <data name="WhiteWerewolfRoleName" xml:space="preserve">
     <value>Lobisomem Branco</value>
+    <comment/>
+  </data>
+  <data name="WhiteWerewolfTargetSelectionInstruction" xml:space="preserve">
+    <value>Lobisomem Branco, escolhe opcionalmente outro Agente da Facção Lobisomem vivo para o ataque solitário.</value>
     <comment/>
   </data>
   <data name="ThiefRoleName" xml:space="preserve">

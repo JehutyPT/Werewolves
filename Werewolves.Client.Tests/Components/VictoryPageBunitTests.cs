@@ -20,7 +20,9 @@ public class VictoryPageBunitTests
 		GameResult[] results =
 		[
 			new SingleFactionGameResult(Faction.Villager),
-			new SharedVictoryGameResult([Faction.Villager, Faction.Werewolf]),
+			new SingleFactionGameResult(Faction.WhiteWerewolf),
+			new SharedVictoryGameResult(
+				[Faction.Villager, Faction.Werewolf, Faction.WhiteWerewolf]),
 			new NoWinnerGameResult()
 		];
 
