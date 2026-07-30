@@ -41,6 +41,14 @@ public class SimulationExecutionTests : DiagnosticTestBase
 		MainRoleType.WhiteWerewolf,
 		1,
 		ModeratorInstructionSemantic.SelectWhiteWerewolfTarget)]
+	[InlineData(
+		MainRoleType.Piper,
+		1,
+		ModeratorInstructionSemantic.SelectPiperTargets)]
+	[InlineData(
+		MainRoleType.Piper,
+		1,
+		ModeratorInstructionSemantic.RecognizeCharmedPlayers)]
 	public void Execute_WithRoleHolderSemanticMissingFromPolicy_ReturnsIncompleteEvidence(
 		MainRoleType role,
 		int roleHolderCardinality,
@@ -54,12 +62,17 @@ public class SimulationExecutionTests : DiagnosticTestBase
 		var scenario = new SimulationScenario(
 			roles.Length,
 			roles);
-		var roleDescriptor = role == MainRoleType.WhiteWerewolf
-			? new SimulatorProfileRoleDescriptor(
+		var roleDescriptor = role switch
+		{
+			MainRoleType.WhiteWerewolf => new SimulatorProfileRoleDescriptor(
 				role,
 				Faction.WhiteWerewolf,
-				Faction.Werewolf)
-			: new SimulatorProfileRoleDescriptor(role, Faction.Villager);
+				Faction.Werewolf),
+			MainRoleType.Piper => new SimulatorProfileRoleDescriptor(
+				role,
+				Faction.Piper),
+			_ => new SimulatorProfileRoleDescriptor(role, Faction.Villager)
+		};
 		var capability = new SimulatorCapability(
 			new SimulatorProfileIdentity(
 				$"test-{role}-missing-{missingSemantic}",
@@ -127,6 +140,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 	[InlineData(MainRoleType.TwoSisters, 2)]
 	[InlineData(MainRoleType.ThreeBrothers, 3)]
 	[InlineData(MainRoleType.WhiteWerewolf, 1)]
+	[InlineData(MainRoleType.Piper, 1)]
 	public void ExecuteBatch_WithCardinalityRoleHolders_SafetyRepresentativeCompletesAllOneThousandAttempts(
 		MainRoleType role,
 		int roleHolderCardinality)
@@ -158,6 +172,88 @@ public class SimulationExecutionTests : DiagnosticTestBase
 		batch.IncompleteRunCount.Should().Be(0);
 		batch.Records.Should().OnlyContain(run =>
 			run is CompletedSimulationRun);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void SafetyRunZero_Piper_RecordsSeededExactTargetAndRecognitionTrace()
+	{
+		MainRoleType[] roles =
+		[
+			MainRoleType.Piper,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager
+		];
+		var scenario = new SimulationScenario(roles.Length, roles);
+		var identity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+		var material = new RunSeedMaterial(
+			identity,
+			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
+			runNumber: 0);
+		var random = new DeterministicRandomSource(material);
+		var startState = SimulationStartStateDeriver.Derive(
+			material,
+			SimulatorCapability.SafetyScreening,
+			random);
+		var piperAssignment = startState.RoleAssignments.Single(assignment =>
+			assignment.Role == MainRoleType.Piper);
+		var piperFacts = startState.FactionFacts[piperAssignment.SeatNumber - 1];
+		piperFacts.Beneficiary.Should().Be(
+			FactionBeneficiaryKnowledge.Known(Faction.Piper));
+		piperFacts.Agents.Values.Should().OnlyContain(knowledge =>
+			knowledge == FactionAgentKnowledge.KnownNonAgent);
+		var recorder = new RecordingDecisionStrategy(
+			new BaselineRandomDecisionStrategy(
+				material,
+				startState,
+				SimulatorCapability.SafetyScreening.HeadlessResponsePolicy,
+				random));
+
+		var execution = new HeadlessGameDriver(recorder).CompleteGameSession(
+			startState,
+			CancellationToken.None);
+
+		var players = execution.Session.GetPlayers().ToArray();
+		var piper = players[piperAssignment.SeatNumber - 1];
+		var selectionTrace = recorder.Observations.First(observation =>
+			observation.Instruction.Semantic ==
+			ModeratorInstructionSemantic.SelectPiperTargets);
+		var selection = selectionTrace.Instruction.Should()
+			.BeOfType<SelectPlayersInstruction>()
+			.Subject;
+		selection.CountConstraint.Should().Be(NumberRangeConstraint.Exact(2));
+		selection.AffectedPlayerIds.Should().Equal(piper.Id);
+		selectionTrace.Response.Type.Should().Be(
+			ExpectedInputType.PlayerSelection);
+		selectionTrace.Response.SelectedPlayerIds.Should().HaveCount(2);
+		var selectedTargets = selectionTrace.Response.SelectedPlayerIds!;
+		selectedTargets.Should().BeSubsetOf(selection.SelectablePlayerIds);
+		selectedTargets.Should().OnlyContain(playerId =>
+			playerId != piper.Id);
+		execution.Session.GameHistoryLog
+			.OfType<RecurringRolePowerCommittedLogEntry>()
+			.Should().Contain(entry =>
+				entry.ActionType == NightActionType.PiperCharm &&
+				entry.ActingPlayerId == piper.Id &&
+				entry.TargetIds != null &&
+				entry.TargetIds.ToHashSet().SetEquals(selectedTargets));
+		selectedTargets.Should().OnlyContain(playerId =>
+			execution.Session.GetPlayerState(playerId)
+				.HasStatusEffect(StatusEffectTypes.Charmed));
+		var recognitionTrace = recorder.Observations.First(observation =>
+			observation.Instruction.Semantic ==
+			ModeratorInstructionSemantic.RecognizeCharmedPlayers);
+		recognitionTrace.Instruction.AffectedPlayerIds.Should()
+			.Contain(selectedTargets);
+		recognitionTrace.Response.Type.Should().Be(ExpectedInputType.Continue);
+		execution.FinalInstruction.Should()
+			.BeOfType<FinishedGameConfirmationInstruction>();
 		MarkTestCompleted();
 	}
 

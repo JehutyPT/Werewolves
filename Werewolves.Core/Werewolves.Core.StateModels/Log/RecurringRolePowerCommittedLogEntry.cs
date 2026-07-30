@@ -29,8 +29,9 @@ public sealed record RecurringRolePowerCommittedLogEntry
 	{
 		PowerIdentity.EnforceValidity();
 		if (ActionType == NightActionType.Unknown ||
-		    TargetIds is not [var targetId] ||
-		    targetId == Guid.Empty)
+		    TargetIds is not { Count: > 0 } ||
+		    TargetIds.Any(targetId => targetId == Guid.Empty) ||
+		    TargetIds.Distinct().Count() != TargetIds.Count)
 		{
 			throw new InvalidOperationException(
 				"The recurring Role Power commit is structurally invalid.");

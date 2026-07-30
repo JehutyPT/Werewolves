@@ -18,13 +18,16 @@ public class VictoryPageBunitTests
 	{
 		using var context = new ModeratorComponentTestContext();
 		GameResult[] results =
-		[
-			new SingleFactionGameResult(Faction.Villager),
-			new SingleFactionGameResult(Faction.WhiteWerewolf),
-			new SharedVictoryGameResult(
-				[Faction.Villager, Faction.Werewolf, Faction.WhiteWerewolf]),
-			new NoWinnerGameResult()
-		];
+			[
+				new SingleFactionGameResult(Faction.Villager),
+				new SingleFactionGameResult(Faction.WhiteWerewolf),
+				new SingleFactionGameResult(Faction.Piper),
+				new SharedVictoryGameResult(
+					[Faction.Villager, Faction.Werewolf, Faction.WhiteWerewolf]),
+				new SharedVictoryGameResult(
+					[Faction.Villager, Faction.Piper]),
+				new NoWinnerGameResult()
+			];
 
 		foreach (var result in results)
 		{

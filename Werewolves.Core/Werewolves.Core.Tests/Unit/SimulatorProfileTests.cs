@@ -54,16 +54,18 @@ public class SimulatorProfileTests
 				.ChooseAccursedWolfFatherInfection)
 			.Append(ModeratorInstructionSemantic.SelectBigBadWolfTarget)
 			.Append(ModeratorInstructionSemantic.SelectDefenderTarget)
-			.Append(ModeratorInstructionSemantic.SelectWhiteWerewolfTarget);
+			.Append(ModeratorInstructionSemantic.SelectWhiteWerewolfTarget)
+			.Append(ModeratorInstructionSemantic.SelectPiperTargets)
+			.Append(ModeratorInstructionSemantic.RecognizeCharmedPlayers);
 		var safety = SimulatorCapability.SafetyScreening;
 		var probability = SimulatorCapability.FullProbability;
 
-		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "17"));
+		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "18"));
 		probability.Identity.Should().Be(new SimulatorProfileIdentity("full-probability", "4"));
 		BaselineRandomDecisionStrategy.Identity.Should()
 			.Be(new DecisionStrategyIdentity("baseline-random", "3-splitmix64"));
 		BaselineRandomDecisionStrategy.SafetyScreeningIdentity.Should()
-			.Be(new DecisionStrategyIdentity("baseline-random", "9-splitmix64"));
+			.Be(new DecisionStrategyIdentity("baseline-random", "10-splitmix64"));
 		safety.SupportedRoles.Should().Equal(
 			MainRoleType.SimpleWerewolf,
 			MainRoleType.BigBadWolf,
@@ -81,7 +83,8 @@ public class SimulatorProfileTests
 			MainRoleType.Scapegoat,
 			MainRoleType.WolfHound,
 			MainRoleType.AccursedWolfFather,
-			MainRoleType.WhiteWerewolf);
+			MainRoleType.WhiteWerewolf,
+			MainRoleType.Piper);
 		probability.SupportedRoles.Should().Equal(
 			MainRoleType.SimpleWerewolf,
 			MainRoleType.Seer,
@@ -118,6 +121,15 @@ public class SimulatorProfileTests
 		safety.IsFactionAgent(
 				MainRoleType.WhiteWerewolf,
 				Faction.WhiteWerewolf)
+			.Should().BeFalse();
+		safety.TryGetBeneficiaryFaction(
+				MainRoleType.Piper,
+				out var piperBeneficiary)
+			.Should().BeTrue();
+		piperBeneficiary.Should().Be(Faction.Piper);
+		safety.IsFactionAgent(
+				MainRoleType.Piper,
+				Faction.Piper)
 			.Should().BeFalse();
 	    safety.TryGetBeneficiaryFaction(
 	            MainRoleType.LittleGirl,

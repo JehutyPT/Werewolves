@@ -1,4 +1,5 @@
 using Bunit;
+using AngleSharp.Dom;
 using FluentAssertions;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
@@ -1364,6 +1365,121 @@ public sealed class RoleKnowledgeFlowBunitTests
 		publicSleep.TextContent.Should().NotContain(GameStrings.DeclineOption);
 		sleepDashboard.FindAll(PrivateInstructionSelector).Should().BeEmpty();
 		sleepDashboard.FindAll(PlayerOptionSelector).Should().BeEmpty();
+	}
+
+	[Fact]
+	public async Task PiperNightFlow_UsesGenericExactTwoSelectionAndCombinedRecognitionContinue()
+	{
+		var timing = new ControlledHoldButtonTiming();
+		using var context = new ModeratorComponentTestContext();
+		context.Services.AddSingleton<IHoldButtonTiming>(timing);
+		var manager = context.Services.GetRequiredService<GameClientManager>();
+		var start = manager.StartGame(
+			Enumerable.Range(1, 6).Select(PlayerNames.GeneratedPlayer).ToArray(),
+			[
+				MainRoleType.Piper,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+		manager.ProcessInput(start.CreateResponse()).IsSuccess.Should().BeTrue();
+		var startNight = manager.CurrentInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		manager.ProcessInput(startNight.CreateResponse()).IsSuccess.Should().BeTrue();
+
+		var players = manager.CurrentSession!.GetPlayers().ToArray();
+		var piper = players[0];
+		var firstTarget = players[2];
+		var secondTarget = players[3];
+		var werewolfObservation = manager.CurrentInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		manager.ProcessInput(werewolfObservation.CreateResponse([players[1].Id]))
+			.IsSuccess.Should().BeTrue();
+		var victimSelection = manager.CurrentInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		manager.ProcessInput(victimSelection.CreateResponse([players[5].Id]))
+			.IsSuccess.Should().BeTrue();
+		var werewolfSleep = manager.CurrentInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		manager.ProcessInput(werewolfSleep.CreateResponse()).IsSuccess.Should().BeTrue();
+		var identification = manager.CurrentInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		identification.RoleIdentification.Should().Be(MainRoleType.Piper);
+		manager.ProcessInput(identification.CreateResponse([piper.Id]))
+			.IsSuccess.Should().BeTrue();
+		var wake = manager.CurrentInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		wake.Semantic.Should().Be(ModeratorInstructionSemantic.WakeRole);
+		manager.ProcessInput(wake.CreateResponse()).IsSuccess.Should().BeTrue();
+
+		var selection = manager.CurrentInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		selection.Semantic.Should().Be(
+			ModeratorInstructionSemantic.SelectPiperTargets);
+		selection.CountConstraint.Should().Be(NumberRangeConstraint.Exact(2));
+		selection.SelectablePlayerIds.Should().NotContain(piper.Id);
+		selection.AffectedPlayerIds.Should().Equal(piper.Id);
+		var dashboard = context.RenderModeratorComponent<DashboardPage>();
+		dashboard.Find(PrivateInstructionSelector).TextContent.Should()
+			.Contain(GameStrings.PiperTargetSelectionInstruction);
+		dashboard.Find(HoldButtonSelector)
+			.HasAttribute(Html.Attributes.Disabled).Should().BeTrue();
+
+		FindOption(firstTarget).Click();
+		dashboard.Find(HoldButtonSelector)
+			.HasAttribute(Html.Attributes.Disabled).Should().BeTrue();
+		FindOption(secondTarget).Click();
+		dashboard.Find(HoldButtonSelector)
+			.HasAttribute(Html.Attributes.Disabled).Should().BeFalse();
+		await RenderedHoldButtonDriver.CompleteHoldAsync(
+			dashboard,
+			dashboard.Find(HoldButtonSelector),
+			timing);
+
+		firstTarget.State.HasStatusEffect(StatusEffectTypes.Charmed).Should().BeTrue();
+		secondTarget.State.HasStatusEffect(StatusEffectTypes.Charmed).Should().BeTrue();
+		var sleep = manager.CurrentInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		sleep.Semantic.Should().Be(ModeratorInstructionSemantic.PutRoleToSleep);
+		await RenderedHoldButtonDriver.CompleteHoldAsync(
+			dashboard,
+			dashboard.Find(HoldButtonSelector),
+			timing);
+
+		var recognition = manager.CurrentInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		recognition.Semantic.Should().Be(
+			ModeratorInstructionSemantic.RecognizeCharmedPlayers);
+		recognition.AffectedPlayerIds.Should().Equal(
+			firstTarget.Id,
+			secondTarget.Id);
+		dashboard.Find(PublicInstructionSelector).TextContent.Should()
+			.Contain(GameStrings.PiperCharmedRecognitionAnnouncement);
+		dashboard.Find(PrivateInstructionSelector).TextContent.Should()
+			.Contain(GameStrings.PiperLivingCharmedRosterInstruction);
+		dashboard.Find(HoldButtonSelector).TextContent.Should()
+			.Contain(ClientStrings.Dashboard_ContinueButton);
+		var charmedRosterEntries = manager.CurrentRoster
+			.Where(entry => recognition.AffectedPlayerIds!.Contains(entry.PlayerId))
+			.ToArray();
+		charmedRosterEntries.Should().HaveCount(2);
+		charmedRosterEntries.Should().OnlyContain(entry =>
+			entry.StatusEffects.Contains(ClientStrings.StatusEffect_Charmed));
+
+		await RenderedHoldButtonDriver.CompleteHoldAsync(
+			dashboard,
+			dashboard.Find(HoldButtonSelector),
+			timing);
+		manager.CurrentInstruction!.Semantic.Should().NotBe(
+			ModeratorInstructionSemantic.RecognizeCharmedPlayers);
+
+		IElement FindOption(IPlayer player) =>
+			dashboard.FindAll(PlayerOptionSelector)
+				.Single(option => option.TextContent.Contains(
+					player.Name,
+					StringComparison.CurrentCulture));
 	}
 
 	private static IPlayer[] StartWhiteWerewolfGameAtFirstIdentification(

@@ -31,4 +31,19 @@ public class GameResultSelectionTests
 		GameResultSelection.Select([], allPlayersEliminated: false)
 			.Should().BeNull();
 	}
+
+	[Fact]
+	public void Select_WithPiperAndAnotherSatisfiedFaction_UsesSharedResultModel()
+	{
+		var forward = GameResultSelection.Select(
+			[Faction.Piper, Faction.Villager],
+			allPlayersEliminated: false);
+		var reverse = GameResultSelection.Select(
+			[Faction.Villager, Faction.Piper],
+			allPlayersEliminated: false);
+
+		forward.Should().Be(new SharedVictoryGameResult(
+			[Faction.Piper, Faction.Villager]));
+		reverse.Should().Be(forward);
+	}
 }

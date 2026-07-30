@@ -110,6 +110,19 @@ public class AlreadyDecidedRoleCompositionClassifierTests
 	}
 
 	[Fact]
+	public void Classify_WithPiperComposition_DoesNotInferDynamicCharmVictory()
+	{
+		var result = AlreadyDecidedRoleCompositionClassifier.Classify(
+			CanonicalRoleComposition.Create([MainRoleType.Piper]),
+			SimulatorCapability.SafetyScreening);
+
+		result.IsAlreadyDecided.Should().BeFalse();
+		result.GameResult.Should().BeNull();
+		result.Reason.Should().Be(
+			AlreadyDecidedReason.NoLobbyExitVictoryPredicateSatisfied);
+	}
+
+	[Fact]
 	public void Resolve_WithNoSatisfiedPredicates_ReturnsExplicitNotAlreadyDecided()
 	{
 		var result = AlreadyDecidedRoleCompositionClassifier.Resolve(

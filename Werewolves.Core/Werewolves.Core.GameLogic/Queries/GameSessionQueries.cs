@@ -155,9 +155,8 @@ internal static class GameSessionQueries
                 player.State.Health == PlayerHealth.Alive)
             .ToArray();
         return livingRoleHolders.Length == expectedLivingRoleHolderCount &&
-               livingRoleHolders.Count(player =>
-                   player.State.ModeratorKnownRole == role) ==
-               expectedLivingRoleHolderCount;
+               livingRoleHolders.All(player =>
+                   player.State.ModeratorKnownRole == role);
     }
 
     internal static int GetCommittedLogIndex(

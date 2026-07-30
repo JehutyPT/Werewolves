@@ -106,6 +106,9 @@
   <data name="VictoryConditionWhiteWerewolfSoleSurvivor" xml:space="preserve">
     <value>The White Werewolf is the only surviving player.</value>
   </data>
+  <data name="VictoryConditionPiperCharmedAll" xml:space="preserve">
+    <value>The Piper has charmed every other living player.</value>
+  </data>
   <data name="WhiteWerewolfTargetSelectionInstruction" xml:space="preserve">
     <value>White Werewolf, optionally choose one other living Werewolf Faction Agent for the solo attack.</value>
   </data>
@@ -129,5 +132,14 @@
   </data>
   <data name="LittleGirlClosingGuidance" xml:space="preserve">
     <value>Little Girl, stop peeking and close your eyes.</value>
+  </data>
+  <data name="PiperTargetSelectionInstruction" xml:space="preserve">
+    <value>Select the players the Piper charms.</value>
+  </data>
+  <data name="PiperCharmedRecognitionAnnouncement" xml:space="preserve">
+    <value>Charmed players, wake up, recognize one another, and return to sleep.</value>
+  </data>
+  <data name="PiperLivingCharmedRosterInstruction" xml:space="preserve">
+    <value>Confirm the current roster of living Charmed players.</value>
   </data>
 </root>

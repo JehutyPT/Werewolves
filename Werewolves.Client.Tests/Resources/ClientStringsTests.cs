@@ -29,6 +29,7 @@ public class ClientStringsTests
 		nameof(ClientStrings.LobbyEvaluation_FactionVillager),
 		nameof(ClientStrings.LobbyEvaluation_FactionWerewolf),
 		nameof(ClientStrings.LobbyEvaluation_FactionWhiteWerewolf),
+		nameof(ClientStrings.LobbyEvaluation_FactionPiper),
 		nameof(ClientStrings.LobbyEvaluation_FactionSeparator),
 		nameof(ClientStrings.LobbyEvaluation_ReasonNoWerewolfBeneficiaries),
 		nameof(ClientStrings.LobbyEvaluation_ReasonWerewolfControl),
