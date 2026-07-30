@@ -7,6 +7,8 @@ using Werewolves.Client.BrowserQaHost;
 using Werewolves.Client.Components.Pages;
 using Werewolves.Client.Services;
 using Werewolves.Client.Tests.Helpers;
+using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Models.Simulation;
 using Css = Werewolves.Client.Tests.Helpers.ClientTestReferences.Css;
 using PlatformChrome = Werewolves.Client.Tests.Helpers.ClientTestReferences.PlatformChrome;
 using Xunit;
@@ -115,7 +117,10 @@ public class DarkThemeTokenTests
 		AssertPageRendersInsideShell<VictoryPage>(
 			Css.Classes.AppShell,
 			parameters: parameters => parameters
-				.Add(component => component.VictoryDescription, "A aldeia venceu."));
+				.Add(component => component.GameResult,
+					new SingleFactionGameResult(Faction.Villager))
+				.Add(component => component.VictoryCheckWindow,
+					VictoryCheckWindow.Dawn));
 		AssertPageRendersInsideShell<BenchmarkPage>(Css.Classes.AppShell);
 		AssertPageRendersInsideShell<LabsPage>(Css.Classes.AppShell);
 		AssertPageRendersInsideShell<LabsUnifiedInstructionPrototype>(Css.Classes.DashboardShell);

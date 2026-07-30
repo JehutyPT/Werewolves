@@ -1,5 +1,7 @@
 @using Werewolves.Client.Components.Pages
 @using Werewolves.Core.StateModels.Models.Instructions
+@using Werewolves.Core.StateModels.Enums
+@using Werewolves.Core.StateModels.Models.Simulation
 @implements IDisposable
 @inject LobbySetupState Lobby
 @inject GameClientManager Game
@@ -19,7 +21,7 @@ else if (_currentStep == LobbyStep.Labs)
 }
 else if (_currentStep == LobbyStep.Victory)
 {
-	<VictoryPage VictoryDescription="@_victoryDescription" OnReturnToLobby="HandleReturnToLobby" />
+	<VictoryPage GameResult="_gameResult" VictoryCheckWindow="_victoryCheckWindow.GetValueOrDefault()" OnReturnToLobby="HandleReturnToLobby" />
 }
 else
 {
@@ -30,7 +32,8 @@ else
 
 @code {
 	private LobbyStep _currentStep = LobbyStep.Roster;
-	private string _victoryDescription = string.Empty;
+	private GameResult? _gameResult;
+	private VictoryCheckWindow? _victoryCheckWindow;
 
 	protected override void OnInitialized()
 	{
@@ -42,7 +45,8 @@ else
 	{
 		if (Game.CurrentInstruction is FinishedGameConfirmationInstruction finished)
 		{
-			_victoryDescription = finished.VictoryDescription;
+			_gameResult = finished.GameResult;
+			_victoryCheckWindow = finished.VictoryCheckWindow;
 			MoveTo(LobbyStep.Victory);
 			return;
 		}
@@ -83,7 +87,8 @@ else
 		if (_currentStep == LobbyStep.Dashboard &&
 			Game.CurrentInstruction is FinishedGameConfirmationInstruction finished)
 		{
-			_victoryDescription = finished.VictoryDescription;
+			_gameResult = finished.GameResult;
+			_victoryCheckWindow = finished.VictoryCheckWindow;
 			MoveTo(LobbyStep.Victory);
 			_ = InvokeAsync(StateHasChanged);
 		}

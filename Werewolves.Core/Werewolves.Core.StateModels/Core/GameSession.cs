@@ -1,6 +1,7 @@
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
+using Werewolves.Core.StateModels.Models.Simulation;
 using Werewolves.Core.StateModels.Serialization;
 
 namespace Werewolves.Core.StateModels.Core;
@@ -582,15 +583,17 @@ internal class GameSession : IGameSession
 
     }
 
-    internal void VictoryConditionMet(Team winningTeam, string description)
+    internal void VictoryConditionMet(
+        GameResult gameResult,
+        VictoryCheckWindow victoryCheckWindow)
     {
         var entry = new VictoryConditionMetLogEntry
         {
             Timestamp = DateTimeOffset.UtcNow,
             TurnNumber = TurnNumber,
             CurrentPhase = _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
-            WinningTeam = winningTeam,
-            ConditionDescription = description
+            GameResult = gameResult,
+            VictoryCheckWindow = victoryCheckWindow
         };
 
 		_gameSessionKernel.AddEntryAndUpdateState(entry);

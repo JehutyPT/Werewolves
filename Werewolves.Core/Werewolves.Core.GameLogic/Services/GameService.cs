@@ -339,6 +339,9 @@ public class GameService
         return null; // Or throw GameNotFoundException
     }
 
+    public bool DiscardSession(Guid gameId) =>
+        _sessions.TryRemove(gameId, out _);
+
     /// <summary>
     /// Gets a view of the current game state.
     /// Basic implementation returns the session object itself (consider a DTO later).
@@ -368,17 +371,14 @@ public class GameService
         var pendingInstruction = session.PendingModeratorInstruction
             ?? throw new InvalidOperationException("Internal error: No pending instruction available.");
 
+        if (pendingInstruction is FinishedGameConfirmationInstruction)
+        {
+            return ProcessResult.Failure(pendingInstruction);
+        }
+
         EnsureResponseMatchesPendingInstruction(pendingInstruction, input);
 
-        if (pendingInstruction is FinishedGameConfirmationInstruction)
-		{
-			_sessions.Remove(gameId, out _);
-            return new ProcessResult(true, null); // Game over, no further instructions
-		}
-
-		var result = GameFlowManager.HandleInput(session, input);
-
-		return result;
+		return GameFlowManager.HandleInput(session, input);
 	}
 
 	// --- Helper Methods ---

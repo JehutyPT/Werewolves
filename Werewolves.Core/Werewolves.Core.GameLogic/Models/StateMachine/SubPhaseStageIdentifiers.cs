@@ -11,7 +11,8 @@ internal enum NightSubPhaseStage
 internal enum DawnSubPhaseStage
 {
     CheckForVictims,
-    ResolveEliminationCascade
+    ResolveEliminationCascade,
+    EnsureVictoryFactsReady
 }
 
 internal enum DaySubPhaseStage
@@ -21,5 +22,6 @@ internal enum DaySubPhaseStage
 	HandleVoteResponse,
 	ResolveEliminationCascade,
 	VoteOutcomeNavigation,
-	ExpireVoterEligibilityRestriction
+	ExpireVoterEligibilityRestriction,
+	EnsureVictoryFactsReady
 }

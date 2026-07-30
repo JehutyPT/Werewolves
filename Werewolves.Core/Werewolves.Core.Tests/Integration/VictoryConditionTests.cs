@@ -1,9 +1,12 @@
 using FluentAssertions;
 using Werewolves.Core.GameLogic.Models.StateMachine;
+using Werewolves.Core.GameLogic.Services;
+using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
+using Werewolves.Core.StateModels.Models.Simulation;
 using Werewolves.Core.Tests.Helpers;
 using Xunit;
 using Xunit.Abstractions;
@@ -111,7 +114,8 @@ public class VictoryConditionTests : DiagnosticTestBase
             .SingleOrDefault();
 
         victoryLog.Should().NotBeNull();
-        victoryLog!.WinningTeam.Should().Be(Team.Villagers);
+        victoryLog!.GameResult.Should().Be(new SingleFactionGameResult(Faction.Villager));
+        victoryLog.VictoryCheckWindow.Should().Be(VictoryCheckWindow.PreNight);
 
         MarkTestCompleted();
     }
@@ -167,7 +171,8 @@ public class VictoryConditionTests : DiagnosticTestBase
             .SingleOrDefault();
 
         victoryLog.Should().NotBeNull();
-        victoryLog!.WinningTeam.Should().Be(Team.Werewolves);
+        victoryLog!.GameResult.Should().Be(new SingleFactionGameResult(Faction.Werewolf));
+        victoryLog.VictoryCheckWindow.Should().Be(VictoryCheckWindow.Dawn);
 
         MarkTestCompleted();
     }
@@ -221,7 +226,8 @@ public class VictoryConditionTests : DiagnosticTestBase
             .SingleOrDefault();
 
         victoryLog.Should().NotBeNull();
-        victoryLog!.WinningTeam.Should().Be(Team.Werewolves);
+        victoryLog!.GameResult.Should().Be(new SingleFactionGameResult(Faction.Werewolf));
+        victoryLog.VictoryCheckWindow.Should().Be(VictoryCheckWindow.Dawn);
 
         MarkTestCompleted();
     }
@@ -324,7 +330,8 @@ public class VictoryConditionTests : DiagnosticTestBase
             .SingleOrDefault();
 
         victoryLog.Should().NotBeNull();
-        victoryLog!.WinningTeam.Should().Be(Team.Werewolves);
+        victoryLog!.GameResult.Should().Be(new SingleFactionGameResult(Faction.Werewolf));
+        victoryLog.VictoryCheckWindow.Should().Be(VictoryCheckWindow.Dawn);
 
         MarkTestCompleted();
     }
@@ -431,7 +438,8 @@ public class VictoryConditionTests : DiagnosticTestBase
             .SingleOrDefault();
 
         victoryLog.Should().NotBeNull();
-        victoryLog!.WinningTeam.Should().Be(Team.Werewolves);
+        victoryLog!.GameResult.Should().Be(new SingleFactionGameResult(Faction.Werewolf));
+        victoryLog.VictoryCheckWindow.Should().Be(VictoryCheckWindow.Dawn);
 
         MarkTestCompleted();
     }
@@ -472,14 +480,305 @@ public class VictoryConditionTests : DiagnosticTestBase
             ModeratorInstructionSemantic.FinishNightActions);
         session.GetFactionBeneficiaryKnowledge(players[1].Id)
             .IsKnown.Should().BeFalse();
-        var reachVictoryCheckWindow = () =>
-            builder.Process(finishNight.CreateResponse());
+        var response = finishNight.CreateResponse();
+        var stableBefore = session.Serialize();
+        var phaseBefore = session.GetCurrentPhase();
+        var historyCountBefore = session.GameHistoryLog.Count();
+        var transitionCountBefore = session.GameHistoryLog
+            .OfType<PhaseTransitionLogEntry>()
+            .Count();
+        builder.ClearObserverLog();
+        var reachVictoryCheckWindow = () => builder.Process(response);
 
         reachVictoryCheckWindow.Should()
             .Throw<InvalidOperationException>()
             .WithMessage("Required Faction facts are not ready.");
 
+        AssertCoherentGuardFailure(
+            builder.GameService,
+            builder.GameId,
+            session,
+            finishNight.InstructionId,
+            stableBefore,
+            phaseBefore,
+            historyCountBefore,
+            transitionCountBefore);
+        builder.ObserverLog.Should().NotContain(
+            $"[SubPhaseStage] → {GameHook.DawnMainActionLoop}");
+        reachVictoryCheckWindow.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("Required Faction facts are not ready.");
+        AssertCoherentGuardFailure(
+            builder.GameService,
+            builder.GameId,
+            session,
+            finishNight.InstructionId,
+            stableBefore,
+            phaseBefore,
+            historyCountBefore,
+            transitionCountBefore);
+
+        var replayService = new GameService();
+        var replayGameId = replayService.RehydrateSession(stableBefore);
+        var replayState = replayService.GetGameStateView(replayGameId)!;
+        var replay = () => replayService.ProcessInstruction(
+            replayGameId,
+            response);
+        replay.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("Required Faction facts are not ready.");
+        AssertCoherentGuardFailure(
+            replayService,
+            replayGameId,
+            replayState,
+            finishNight.InstructionId,
+            stableBefore,
+            phaseBefore,
+            historyCountBefore,
+            transitionCountBefore);
+
         MarkTestCompleted();
+    }
+
+    [Fact]
+    public void IncompleteBeneficiaryClosure_AtPreNightWindow_DoesNotExpireVotingRestriction()
+    {
+        var builder = CreateBuilder()
+            .WithPlayers(6)
+            .WithRoles(
+                MainRoleType.SimpleWerewolf,
+                MainRoleType.Scapegoat,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager);
+        builder.StartGame();
+        builder.ConfirmGameStart();
+        var players = builder.GetGameState()!.GetPlayers().ToArray();
+        var werewolf = players[0];
+        var permittedWithoutVotingRight = players[2];
+        var unknownBeneficiary = players[3];
+        var secondNightVictim = players[4];
+        var firstDawnVictim = players[5];
+        builder.CompleteNightPhase([werewolf.Id], firstDawnVictim.Id);
+        builder.CompleteDawnPhase(new Dictionary<Guid, MainRoleType>
+        {
+            [firstDawnVictim.Id] = MainRoleType.SimpleVillager
+        });
+        var dayOneSession = (GameSession)builder.GetGameState()!;
+        var livingIds = dayOneSession.GetPlayers()
+            .Where(player => player.State.Health == PlayerHealth.Alive)
+            .Select(player => player.Id)
+            .ToArray();
+        foreach (var playerId in livingIds)
+        {
+            builder.ArrangeVotingRight(playerId, hasVotingRight: false);
+        }
+
+        var restrictionScope = "test-pre-night-readiness-restriction";
+        var announcementInstructionId = Guid.NewGuid();
+        DayVoteRules.CommitVoterEligibilityRestriction(
+            dayOneSession,
+            restrictionScope,
+            MainRoleType.Scapegoat,
+            livingIds,
+            [permittedWithoutVotingRight.Id],
+            dayOneSession.TurnNumber + 1,
+            announcementInstructionId);
+        DayVoteRules.AcknowledgeVoterEligibilityRestrictionAnnouncement(
+            dayOneSession,
+            restrictionScope,
+            announcementInstructionId);
+        var dayOneDebate =
+            InstructionAssert.ExpectType<ConfirmationInstruction>(
+                builder.GetCurrentInstruction());
+        var afterDayOneDebate = builder.Process(
+            dayOneDebate.CreateResponse());
+        afterDayOneDebate.ModeratorInstruction!.Semantic.Should().Be(
+            ModeratorInstructionSemantic.StartNight);
+        builder.ConfirmNightStart();
+        var afterWerewolves =
+            builder.CompleteWerewolfNightActionSubsequentNight(
+                secondNightVictim.Id);
+        var nightEnd =
+            InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+                afterWerewolves,
+                CoreTestReferences.InstructionContexts.NightEndConfirmation);
+        builder.Process(nightEnd.CreateResponse());
+        builder.CompleteDawnPhase(new Dictionary<Guid, MainRoleType>
+        {
+            [secondNightVictim.Id] = MainRoleType.SimpleVillager
+        });
+        var followingDayDebate =
+            InstructionAssert.ExpectType<ConfirmationInstruction>(
+                builder.GetCurrentInstruction());
+        var recoveryPayload = RecoveryPayloadTestDriver
+            .Parse(builder.GetGameState()!.Serialize())
+            .RemoveInitialBeneficiaryClosureFact(unknownBeneficiary.Id)
+            .Serialize();
+        var service = new GameService();
+        var gameId = service.RehydrateSession(recoveryPayload);
+        var session = service.GetGameStateView(gameId)!;
+        session.GetCurrentPhase().Should().Be(GamePhase.Day);
+        DayVoteRules.GetActiveVoterEligibilityRestriction(session)
+            .Should().NotBeNull();
+        var response = followingDayDebate.CreateResponse();
+        var stableBefore = session.Serialize();
+        var phaseBefore = session.GetCurrentPhase();
+        var historyCountBefore = session.GameHistoryLog.Count();
+        var transitionCountBefore = session.GameHistoryLog
+            .OfType<PhaseTransitionLogEntry>()
+            .Count();
+        var reachVictoryCheckWindow = () =>
+            service.ProcessInstruction(gameId, response);
+
+        reachVictoryCheckWindow.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("Required Faction facts are not ready.");
+        AssertRestrictionAndSessionRemainCoherent();
+        reachVictoryCheckWindow.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("Required Faction facts are not ready.");
+        AssertRestrictionAndSessionRemainCoherent();
+
+        MarkTestCompleted();
+
+        void AssertRestrictionAndSessionRemainCoherent()
+        {
+            AssertCoherentGuardFailure(
+                service,
+                gameId,
+                session,
+                followingDayDebate.InstructionId,
+                stableBefore,
+                phaseBefore,
+                historyCountBefore,
+                transitionCountBefore);
+            session.GameHistoryLog
+                .OfType<VoterEligibilityRestrictionExpiredLogEntry>()
+                .Should().BeEmpty();
+            DayVoteRules.GetActiveVoterEligibilityRestriction(session)
+                .Should().NotBeNull();
+        }
+    }
+
+    [Fact]
+    public void CommittedClosureWithUnknownBeneficiary_AtVictoryCheckWindow_ThrowsWithoutMutation()
+    {
+        var builder = CreateBuilder()
+            .WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: false);
+        builder.StartGame();
+        var session = builder.GetGameState()!;
+        var mutableSession = (GameSession)session;
+        var players = session.GetPlayers().ToArray();
+        builder.ArrangeEliminatedPlayer(players[0].Id);
+        var boundary = new FactionFactEffectiveBoundary(
+            session.TurnNumber,
+            session.GetCurrentPhase(),
+            session.GameHistoryLog.Count());
+        builder.ArrangeExplicitFactionTransition(
+            "test-committed-closure-with-unknown-beneficiary",
+            players
+                .Skip(1)
+                .Select(player => FactionFact.Agent(
+                    player.Id,
+                    Faction.Werewolf,
+                    FactionAgentKnowledge.KnownNonAgent,
+                    boundary))
+                .ToArray());
+        mutableSession.CommitFactionFactBatch(context =>
+            new FactionFactsCommittedLogEntry
+            {
+                Timestamp = context.Timestamp,
+                TurnNumber = context.TurnNumber,
+                CurrentPhase = context.CurrentPhase,
+                Source = new FactionFactSource(
+                    FactionFactSourceKind.InitialBeneficiaryClosure,
+                    "test-committed-closure-marker"),
+                Facts =
+                [
+                    .. players
+                        .Skip(2)
+                        .Select(player => FactionFact.Beneficiary(
+                            player.Id,
+                            Faction.Villager,
+                            boundary))
+                ]
+            });
+        builder.ConfirmGameStart();
+
+        var finishNight = builder.ConfirmNightStart()
+            .ModeratorInstruction.Should()
+            .BeOfType<ConfirmationInstruction>().Subject;
+        finishNight.Semantic.Should().Be(
+            ModeratorInstructionSemantic.FinishNightActions);
+        session.GetFactionBeneficiaryKnowledge(players[1].Id)
+            .IsKnown.Should().BeFalse();
+        players
+            .Skip(1)
+            .Count(player => !session
+                .GetFactionBeneficiaryKnowledge(player.Id)
+                .IsKnown)
+            .Should().Be(1);
+        var response = finishNight.CreateResponse();
+        var stableBefore = session.Serialize();
+        var phaseBefore = session.GetCurrentPhase();
+        var historyCountBefore = session.GameHistoryLog.Count();
+        var transitionCountBefore = session.GameHistoryLog
+            .OfType<PhaseTransitionLogEntry>()
+            .Count();
+        var reachVictoryCheckWindow = () => builder.Process(response);
+
+        reachVictoryCheckWindow.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("Required Faction facts are not ready.");
+        AssertCoherentGuardFailure(
+            builder.GameService,
+            builder.GameId,
+            session,
+            finishNight.InstructionId,
+            stableBefore,
+            phaseBefore,
+            historyCountBefore,
+            transitionCountBefore);
+        reachVictoryCheckWindow.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("Required Faction facts are not ready.");
+        AssertCoherentGuardFailure(
+            builder.GameService,
+            builder.GameId,
+            session,
+            finishNight.InstructionId,
+            stableBefore,
+            phaseBefore,
+            historyCountBefore,
+            transitionCountBefore);
+
+        MarkTestCompleted();
+    }
+
+    private static void AssertCoherentGuardFailure(
+        GameService service,
+        Guid gameId,
+        IGameSession expectedState,
+        Guid expectedInstructionId,
+        string expectedStableState,
+        GamePhase expectedPhase,
+        int expectedHistoryCount,
+        int expectedTransitionCount)
+    {
+        var state = service.GetGameStateView(gameId);
+        state.Should().NotBeNull();
+        state.Should().BeSameAs(expectedState);
+        state!.GetCurrentPhase().Should().Be(expectedPhase);
+        state.Serialize().Should().Be(expectedStableState);
+        state.GameHistoryLog.Should().HaveCount(expectedHistoryCount);
+        state.GameHistoryLog.OfType<PhaseTransitionLogEntry>()
+            .Should().HaveCount(expectedTransitionCount);
+        state.GameHistoryLog.OfType<VictoryConditionMetLogEntry>()
+            .Should().BeEmpty();
+        service.GetCurrentInstruction(gameId)!.InstructionId
+            .Should().Be(expectedInstructionId);
     }
 
     /// <summary>
@@ -522,7 +821,10 @@ public class VictoryConditionTests : DiagnosticTestBase
 
         // Assert - Game ends at dawn, never reaches Day phase
         var finalInstruction = builder.GetCurrentInstruction();
-        finalInstruction.Should().BeOfType<FinishedGameConfirmationInstruction>();
+        var finished = finalInstruction.Should()
+            .BeOfType<FinishedGameConfirmationInstruction>().Subject;
+        finished.GameResult.Should().Be(new SingleFactionGameResult(Faction.Werewolf));
+        finished.VictoryCheckWindow.Should().Be(VictoryCheckWindow.Dawn);
 
         // Verify victory detected at transition to Day phase (after dawn processing)
         var updatedState = builder.GetGameState()!;
@@ -538,8 +840,12 @@ public class VictoryConditionTests : DiagnosticTestBase
         dawnBoundaryEntries[0].Should().BeOfType<PhaseTransitionLogEntry>()
             .Which.CurrentPhase.Should().Be(GamePhase.Day);
         dawnBoundaryEntries[1].Should().BeSameAs(victoryLog);
-        builder.ObserverLog.Should().NotContain(
+        var boundaryTimeline = builder.ObserverLog.ToList();
+        var dawnFollowUpIndex = boundaryTimeline.IndexOf(
             $"[SubPhaseStage] → {GameHook.DawnMainActionLoop}");
+        var dayTransitionIndex = boundaryTimeline.IndexOf("[Phase] → Day");
+        dawnFollowUpIndex.Should().BeGreaterThanOrEqualTo(0);
+        dayTransitionIndex.Should().BeGreaterThan(dawnFollowUpIndex);
         builder.ObserverLog.Should().NotContain(
             $"[SubPhaseStage] → {DaySubPhaseStage.Debate}");
 
@@ -612,7 +918,10 @@ public class VictoryConditionTests : DiagnosticTestBase
 
         // Assert - Victory detected at Day phase
         var finalInstruction = result.ModeratorInstruction;
-        finalInstruction.Should().BeOfType<FinishedGameConfirmationInstruction>();
+        var finished = finalInstruction.Should()
+            .BeOfType<FinishedGameConfirmationInstruction>().Subject;
+        finished.GameResult.Should().Be(new SingleFactionGameResult(Faction.Villager));
+        finished.VictoryCheckWindow.Should().Be(VictoryCheckWindow.PreNight);
 
         var updatedState = builder.GetGameState()!;
         var victoryLog = updatedState.GameHistoryLog
@@ -687,9 +996,9 @@ public class VictoryConditionTests : DiagnosticTestBase
         var debateIndex = boundaryTimeline.IndexOf(
             $"[SubPhaseStage] → {DaySubPhaseStage.Debate}");
 
-        dayTransitionIndex.Should().BeGreaterThanOrEqualTo(0);
-        dawnFollowUpIndex.Should().BeGreaterThan(dayTransitionIndex);
-        debateIndex.Should().BeGreaterThan(dawnFollowUpIndex);
+        dawnFollowUpIndex.Should().BeGreaterThanOrEqualTo(0);
+        dayTransitionIndex.Should().BeGreaterThan(dawnFollowUpIndex);
+        debateIndex.Should().BeGreaterThan(dayTransitionIndex);
 
         MarkTestCompleted();
     }

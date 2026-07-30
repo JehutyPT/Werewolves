@@ -155,6 +155,7 @@ namespace Werewolves.Core.StateModels.Core
 		{
 			Converters =
 			{
+				new GameResultConverter(),
 				new GameLogEntryConverter(),
 				new ModeratorInstructionConverter(),
 				new JsonStringEnumConverter()

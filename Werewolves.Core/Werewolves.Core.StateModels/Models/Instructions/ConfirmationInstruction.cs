@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
+using Werewolves.Core.StateModels.Models.Simulation;
 using Werewolves.Core.StateModels.Resources;
 
 namespace Werewolves.Core.StateModels.Models.Instructions;
@@ -82,25 +83,51 @@ public record StartGameConfirmationInstruction : ConfirmationInstruction
     public void Deconstruct(out Guid GameGuid) => GameGuid = this.GameGuid;
 }
 
-public record FinishedGameConfirmationInstruction : ConfirmationInstruction
+public record FinishedGameConfirmationInstruction : ModeratorInstruction
 {
-    public string VictoryDescription { get; }
+    public GameResult GameResult { get; }
+    public VictoryCheckWindow VictoryCheckWindow { get; }
 
-    public FinishedGameConfirmationInstruction(string VictoryDescription)
-        : this(VictoryDescription, instructionId: default)
+    public FinishedGameConfirmationInstruction(
+        GameResult gameResult,
+        VictoryCheckWindow victoryCheckWindow)
+        : this(gameResult, victoryCheckWindow, instructionId: default)
     {
     }
 
     [JsonConstructor]
-    internal FinishedGameConfirmationInstruction(string VictoryDescription, Guid instructionId)
+    internal FinishedGameConfirmationInstruction(
+        GameResult gameResult,
+        VictoryCheckWindow victoryCheckWindow,
+        Guid instructionId)
         : base(
-			ModeratorInstructionSemantic.FinishedGame,
-            GameStrings.GameOverMessage.Format(VictoryDescription),
-            instructionId: instructionId)
+            publicAnnouncement: GameStrings.GameOverMessage.Format(
+                Describe(gameResult)),
+            instructionId: instructionId,
+            semantic: ModeratorInstructionSemantic.FinishedGame)
     {
-        this.VictoryDescription = VictoryDescription;
+        ArgumentNullException.ThrowIfNull(gameResult);
+        if (!Enum.IsDefined(victoryCheckWindow))
+        {
+            throw new ArgumentOutOfRangeException(nameof(victoryCheckWindow));
+        }
+
+        GameResult = gameResult;
+        VictoryCheckWindow = victoryCheckWindow;
     }
 
-    public void Deconstruct(out string VictoryDescription) =>
-        VictoryDescription = this.VictoryDescription;
+    private static string Describe(GameResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        return result switch
+        {
+            SingleFactionGameResult { Faction: Faction.Villager } =>
+                GameStrings.VictoryConditionAllWerewolvesEliminated,
+            SingleFactionGameResult { Faction: Faction.Werewolf } =>
+                GameStrings.VictoryConditionWerewolvesOutnumber,
+            SharedVictoryGameResult => GameStrings.VictoryConditionShared,
+            NoWinnerGameResult => GameStrings.VictoryConditionNoWinner,
+            _ => throw new ArgumentOutOfRangeException(nameof(result))
+        };
+    }
 }

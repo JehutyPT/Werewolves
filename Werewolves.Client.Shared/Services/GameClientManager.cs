@@ -71,6 +71,11 @@ public sealed class GameClientManager
 
 	public void ClearSession()
 	{
+		if (ActiveGameId is { } gameId)
+		{
+			_gameService.DiscardSession(gameId);
+		}
+
 		ActiveGameId = null;
 		CurrentSession = null;
 		CurrentInstruction = null;
@@ -91,7 +96,7 @@ public sealed class GameClientManager
 		{
 			RefreshCurrentState(result.ModeratorInstruction);
 			UpdateDebateTimer();
-			if (ShouldClearSaveAfterSuccessfulInput(result))
+			if (ShouldClearSaveAfterSuccessfulInput())
 			{
 				ClearSavedGame();
 				if (CurrentSession is null)
@@ -124,9 +129,7 @@ public sealed class GameClientManager
 		return PendingAudioReconciliation;
 	}
 
-	private bool ShouldClearSaveAfterSuccessfulInput(ProcessResult result) =>
-		result.ModeratorInstruction is FinishedGameConfirmationInstruction ||
-		CurrentInstruction is FinishedGameConfirmationInstruction ||
+	private bool ShouldClearSaveAfterSuccessfulInput() =>
 		CurrentSession is null;
 
 	private void UpdateDebateTimer()

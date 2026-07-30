@@ -56,8 +56,8 @@ public class SimulatorProfileTests
 		var safety = SimulatorCapability.SafetyScreening;
 		var probability = SimulatorCapability.FullProbability;
 
-		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "13"));
-		probability.Identity.Should().Be(new SimulatorProfileIdentity("full-probability", "3"));
+		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "14"));
+		probability.Identity.Should().Be(new SimulatorProfileIdentity("full-probability", "4"));
 		BaselineRandomDecisionStrategy.Identity.Should()
 			.Be(new DecisionStrategyIdentity("baseline-random", "3-splitmix64"));
 		BaselineRandomDecisionStrategy.SafetyScreeningIdentity.Should()
@@ -167,13 +167,13 @@ public class SimulatorProfileTests
 			new SimulatorProfileIdentity("alternate-simulator", "1"));
 		var differentVersion = new SimulationCompatibilityIdentity(
 			scenario,
-			new SimulatorProfileIdentity("full-probability", "4"));
+			new SimulatorProfileIdentity("full-probability", "3"));
 
 		var serialized = current.ToString();
 		var parsed = SimulationCompatibilityIdentity.Parse(serialized);
 
 		serialized.Should().Be(
-			"profile=full-probability@3|players=5|roles=[Seer=1,SimpleVillager=2,SimpleWerewolf=1,WildChild=1]|actor=[]|rules=[]");
+			"profile=full-probability@4|players=5|roles=[Seer=1,SimpleVillager=2,SimpleWerewolf=1,WildChild=1]|actor=[]|rules=[]");
 		parsed.Should().Be(current);
 		differentProfile.Should().NotBe(current);
 		differentVersion.Should().NotBe(current);

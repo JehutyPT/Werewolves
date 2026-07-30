@@ -7,6 +7,7 @@ using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
+using Werewolves.Core.StateModels.Models.Simulation;
 using Werewolves.Core.StateModels.Resources;
 using Werewolves.Core.Tests.Helpers;
 using Xunit;
@@ -629,10 +630,10 @@ public sealed class HunterRoleTests(ITestOutputHelper output)
 			recoveredGameId,
 			recoveredReveal.CreateResponse(assignments));
 
-		afterCascade.ModeratorInstruction.Should()
-			.NotBeOfType<SelectPlayersInstruction>();
-		afterCascade.ModeratorInstruction!.Semantic.Should().Be(
-			ModeratorInstructionSemantic.StartDayDebate);
+		var finished = afterCascade.ModeratorInstruction.Should()
+			.BeOfType<FinishedGameConfirmationInstruction>().Subject;
+		finished.GameResult.Should().BeOfType<NoWinnerGameResult>();
+		finished.VictoryCheckWindow.Should().Be(VictoryCheckWindow.Dawn);
 		zeroTargetPolicy.Attempts.Should().ContainSingle();
 		zeroTargetPolicy.Attempts.Single().SourcePower.Identifier.Should().Be(
 			new RolePowerIdentifier("hunter-final-shot"));

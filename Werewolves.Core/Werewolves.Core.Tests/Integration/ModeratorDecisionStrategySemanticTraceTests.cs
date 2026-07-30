@@ -35,7 +35,7 @@ public class ModeratorDecisionStrategySemanticTraceTests
 		var assignRoles = new AssignRolesInstruction(
 			ModeratorInstructionSemantic.AssignDawnVictimRoles,
 			ImmutableHashSet.Create(players[1].Id, players[3].Id),
-			[MainRoleType.SimpleVillager, MainRoleType.SimpleWerewolf],
+			[MainRoleType.WildChild, MainRoleType.SimpleVillager],
 			privateInstruction: nameof(BaselineRandom_ProductionCursor_PreservesLiteralUpstreamSemanticSequence));
 
 		var identificationResponse = fixture.Strategy.CreateResponse(identifySeer, fixture.Session);
@@ -43,17 +43,17 @@ public class ModeratorDecisionStrategySemanticTraceTests
 		var assignmentResponse = fixture.Strategy.CreateResponse(assignRoles, fixture.Session);
 
 		fixture.StartState.RoleAssignments.Select(assignment => assignment.Role).Should().Equal(
-			MainRoleType.WildChild,
 			MainRoleType.SimpleVillager,
+			MainRoleType.WildChild,
 			MainRoleType.Seer,
-			MainRoleType.SimpleWerewolf,
-			MainRoleType.SimpleVillager);
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleWerewolf);
 		ToSeatNumbers(identificationResponse.SelectedPlayerIds!, players).Should().Equal(3);
 		ToSeatNumbers(selectionResponse.SelectedPlayerIds!, players).Should().Equal(2, 4);
 		assignmentResponse.AssignedPlayerRoles.Should().ContainKey(players[1].Id)
-			.WhoseValue.Should().Be(MainRoleType.SimpleVillager);
+			.WhoseValue.Should().Be(MainRoleType.WildChild);
 		assignmentResponse.AssignedPlayerRoles.Should().ContainKey(players[3].Id)
-			.WhoseValue.Should().Be(MainRoleType.SimpleWerewolf);
+			.WhoseValue.Should().Be(MainRoleType.SimpleVillager);
 	}
 
 	[Fact]

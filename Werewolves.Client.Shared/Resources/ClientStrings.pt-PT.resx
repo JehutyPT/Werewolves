@@ -565,4 +565,10 @@
   <data name="Victory_ReturnToLobbyButton" xml:space="preserve">
     <value>Novo jogo</value>
   </data>
+  <data name="Victory_WindowDawn" xml:space="preserve">
+    <value>Vitória decidida ao amanhecer.</value>
+  </data>
+  <data name="Victory_WindowPreNight" xml:space="preserve">
+    <value>Vitória decidida antes da noite.</value>
+  </data>
 </root>

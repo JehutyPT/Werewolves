@@ -10,10 +10,12 @@ using System.Xml.Linq;
 using Werewolves.Client.BrowserQaHost;
 using Werewolves.Client.BrowserQaHost.Components;
 using Werewolves.Client.Components;
+using Werewolves.Client.Components.Pages;
 using Werewolves.Client.Resources;
 using Werewolves.Client.Services;
 using Werewolves.Client.Testing;
 using Werewolves.Client.Tests.Helpers;
+using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.GameLogic.Simulation;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Models.Instructions;
@@ -190,21 +192,48 @@ public class BrowserQaHostCompositionTests
 	}
 
 	[Fact]
-	public void BrowserQaRoot_WhenVictoryScenarioIsRequested_SeedsVictoryFlow()
+	public void Routes_WhenTerminalSaveIsRecovered_RendersTypedVictoryAndDismissesLocally()
 	{
-		using var context = CreateBrowserQaHostContext(BrowserQaScenario.Victory);
+		using var seedContext = CreateBrowserQaHostContext(BrowserQaScenario.Victory);
+		seedContext.Render<BrowserQaRoot>();
+		var saveStore = seedContext.Services
+			.GetRequiredService<IGameSessionSaveStore>();
+		var seededGame = seedContext.Services
+			.GetRequiredService<GameClientManager>();
+		var seededFinished = seededGame.CurrentInstruction.Should()
+			.BeOfType<FinishedGameConfirmationInstruction>().Subject;
+		saveStore.Load().Should().NotBeNullOrWhiteSpace();
 
-		var rendered = context.Render<BrowserQaRoot>();
+		var recoveredService = new GameService();
+		var recoveredGame = new GameClientManager(
+			recoveredService,
+			saveStore: saveStore);
+		recoveredGame.ActiveGameId.Should().HaveValue();
+		var recoveredGameId = recoveredGame.ActiveGameId!.Value;
+		var terminalSession = recoveredGame.CurrentSession!;
+		var terminalSnapshot = terminalSession.Serialize();
 
-		var game = context.Services.GetRequiredService<GameClientManager>();
-		game.CurrentInstruction.Should().BeOfType<FinishedGameConfirmationInstruction>();
+		using var context = new BunitContext();
+		BrowserQaHostCulture.UsePortuguese();
+		context.Services.AddBrowserQaHostModeratorServices();
+		context.Services.AddSingleton(recoveredGame);
+		var rendered = context.Render<Routes>();
+
+		var victoryPage = rendered.FindComponent<VictoryPage>();
+		victoryPage.Instance.GameResult.Should().Be(seededFinished.GameResult);
+		victoryPage.Instance.VictoryCheckWindow.Should()
+			.Be(seededFinished.VictoryCheckWindow);
 		RenderedText(rendered).Should().Contain(ClientStrings.Victory_Title);
 
 		FindButtonByText(rendered, ClientStrings.Victory_ReturnToLobbyButton).Click();
 
 		rendered.WaitForAssertion(() =>
 		{
-			game.HasActiveSession.Should().BeFalse();
+			recoveredGame.HasActiveSession.Should().BeFalse();
+			recoveredService.GetGameStateView(recoveredGameId).Should().BeNull();
+			saveStore.Load().Should().BeNull();
+			terminalSession.Serialize().Should().Be(terminalSnapshot);
+			rendered.FindComponent<LobbyRosterPage>().Should().NotBeNull();
 			RenderedText(rendered).Should().Contain(ClientStrings.LobbyRoster_Title);
 		});
 	}

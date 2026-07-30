@@ -212,30 +212,40 @@ public sealed class SimulationExecutor
 			return new IncompleteSimulationRun(material);
 		}
 
-		GameResult? gameResult = victory.WinningTeam switch
+		if (!Enum.IsDefined(victory.VictoryCheckWindow))
 		{
-			Team.Villagers => new SingleFactionGameResult(Faction.Villager),
-			Team.Werewolves => new SingleFactionGameResult(Faction.Werewolf),
-			_ => null
+			return new IncompleteSimulationRun(material);
+		}
+		var matchesBoundary = victory.VictoryCheckWindow switch
+		{
+			VictoryCheckWindow.Dawn =>
+				transition.PreviousPhase == GamePhase.Dawn &&
+				transition.CurrentPhase == GamePhase.Day,
+			VictoryCheckWindow.PreNight =>
+				transition.PreviousPhase == GamePhase.Day &&
+				transition.CurrentPhase == GamePhase.Night,
+			_ => false
 		};
-		if (gameResult is null)
+		if (!matchesBoundary)
 		{
 			return new IncompleteSimulationRun(material);
 		}
 
-		var (window, endingTurn) = (transition.PreviousPhase, transition.CurrentPhase) switch
+		var endingTurn = victory.VictoryCheckWindow switch
 		{
-			(GamePhase.Dawn, GamePhase.Day) =>
-				(VictoryCheckWindow.Dawn, transition.TurnNumber),
-			(GamePhase.Day, GamePhase.Night) =>
-				(VictoryCheckWindow.PreNight, transition.TurnNumber - 1),
-			_ => (default(VictoryCheckWindow), 0)
+			VictoryCheckWindow.Dawn => victory.TurnNumber,
+			VictoryCheckWindow.PreNight => victory.TurnNumber - 1,
+			_ => 0
 		};
 		if (endingTurn <= 0)
 		{
 			return new IncompleteSimulationRun(material);
 		}
 
-		return new CompletedSimulationRun(material, gameResult, endingTurn, window);
+		return new CompletedSimulationRun(
+			material,
+			victory.GameResult,
+			endingTurn,
+			victory.VictoryCheckWindow);
 	}
 }

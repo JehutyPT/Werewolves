@@ -1,7 +1,9 @@
+using System.Collections.Immutable;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
+using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Serialization;
 
@@ -235,6 +237,55 @@ internal sealed class RecoveryPayloadTestDriver
 		{
 			AppliesOnTurnNumber = entry.TurnNumber
 		};
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver RemoveInitialBeneficiaryClosureFact(
+		Guid playerId)
+	{
+		if (playerId == Guid.Empty)
+		{
+			throw new ArgumentException(
+				"A recovery test Player cannot be empty.",
+				nameof(playerId));
+		}
+
+		var entryIndex = _payload.GameHistoryLog.FindLastIndex(entry =>
+			entry is FactionFactsCommittedLogEntry facts &&
+			facts.Source.Kind ==
+				FactionFactSourceKind.InitialBeneficiaryClosure);
+		if (entryIndex < 0 ||
+		    _payload.GameHistoryLog[entryIndex] is not
+			    FactionFactsCommittedLogEntry entry)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no Initial Beneficiary Closure.");
+		}
+
+		var matchingFacts = entry.Facts
+			.Where(fact =>
+				fact.Type == FactionFactType.Beneficiary &&
+				fact.PlayerId == playerId)
+			.ToArray();
+		if (matchingFacts.Length != 1)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload must have exactly one matching Beneficiary fact.");
+		}
+
+		_payload.GameHistoryLog[entryIndex] = entry with
+		{
+			Facts = entry.Facts
+				.Where(fact =>
+					fact.Type != FactionFactType.Beneficiary ||
+					fact.PlayerId != playerId)
+				.ToImmutableArray()
+		};
+		var player = _payload.Players.SingleOrDefault(
+			candidate => candidate.Id == playerId)
+			?? throw new InvalidOperationException(
+				"The recovery test payload has no matching Player.");
+		player.FactionBeneficiary = FactionBeneficiaryKnowledge.Unknown;
 		return this;
 	}
 

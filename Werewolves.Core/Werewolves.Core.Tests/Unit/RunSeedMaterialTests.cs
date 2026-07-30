@@ -32,7 +32,7 @@ public class RunSeedMaterialTests
 		var parsed = RunSeedMaterial.Parse(serialized);
 
 		serialized.Should().Be(
-			"profile=full-probability@3|players=5|roles=[Seer=1,SimpleVillager=3,SimpleWerewolf=1]|actor=[]|rules=[]|strategy=baseline-random@3-splitmix64|run=7");
+			"profile=full-probability@4|players=5|roles=[Seer=1,SimpleVillager=3,SimpleWerewolf=1]|actor=[]|rules=[]|strategy=baseline-random@3-splitmix64|run=7");
 		parsed.Should().Be(material);
 		parsed.CompatibilityIdentity.Should().Be(material.CompatibilityIdentity);
 		parsed.DecisionStrategyIdentity.Should().Be(material.DecisionStrategyIdentity);
@@ -254,7 +254,7 @@ public class RunSeedMaterialTests
 			new RunSeedMaterial(
 				new SimulationCompatibilityIdentity(
 					scenario.ToCanonical(),
-					new SimulatorProfileIdentity("full-probability", "4")),
+					new SimulatorProfileIdentity("full-probability", "3")),
 				BaselineRandomDecisionStrategy.Identity,
 				7),
 			new RunSeedMaterial(
@@ -269,7 +269,7 @@ public class RunSeedMaterialTests
 		};
 
 		DeterministicRandomSource.DeriveNumericSeed(material)
-			.Should().Be(10_940_258_146_195_099_987UL);
+			.Should().Be(15_958_056_341_016_561_059UL);
 		materials.Select(DeterministicRandomSource.DeriveNumericSeed)
 			.Should().OnlyHaveUniqueItems();
 	}

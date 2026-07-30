@@ -534,7 +534,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 
 		first.Should().BeOfType<CompletedSimulationRun>();
 		first.RunSeedMaterial.CompatibilityIdentity.Profile.Should()
-			.Be(new SimulatorProfileIdentity("safety-screening", "13"));
+			.Be(new SimulatorProfileIdentity("safety-screening", "14"));
 		replay.Should().Be(first);
 		MarkTestCompleted();
 	}
@@ -880,7 +880,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 		GameLogEntryBase[] history =
 		[
 			CreateTransition(GamePhase.Dawn, GamePhase.Day, turnNumber: 2),
-			CreateVictory(Team.Werewolves, GamePhase.Day, turnNumber: 2)
+			CreateVictory(new SingleFactionGameResult(Faction.Werewolf), VictoryCheckWindow.Dawn, GamePhase.Day, turnNumber: 2)
 		];
 
 		var run = SimulationExecutor.AdaptTerminalEvidence(material, history);
@@ -902,7 +902,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 		GameLogEntryBase[] history =
 		[
 			CreateTransition(GamePhase.Day, GamePhase.Night, turnNumber: 2),
-			CreateVictory(Team.Villagers, GamePhase.Night, turnNumber: 2)
+			CreateVictory(new SingleFactionGameResult(Faction.Villager), VictoryCheckWindow.PreNight, GamePhase.Night, turnNumber: 2)
 		];
 
 		var run = SimulationExecutor.AdaptTerminalEvidence(material, history);
@@ -922,19 +922,19 @@ public class SimulationExecutionTests : DiagnosticTestBase
 			BaselineRandomDecisionStrategy.Identity,
 			runNumber: 37);
 		var validTransition = CreateTransition(GamePhase.Dawn, GamePhase.Day, turnNumber: 1);
-		var validVictory = CreateVictory(Team.Werewolves, GamePhase.Day, turnNumber: 1);
+		var validVictory = CreateVictory(new SingleFactionGameResult(Faction.Werewolf), VictoryCheckWindow.Dawn, GamePhase.Day, turnNumber: 1);
 		GameLogEntryBase[][] histories =
 		[
 			[],
 			[validTransition, validVictory, validVictory],
 			[
 				validTransition,
-				CreateVictory((Team)42, GamePhase.Day, turnNumber: 1)
+				CreateVictory(new SingleFactionGameResult(Faction.Werewolf), (VictoryCheckWindow)42, GamePhase.Day, turnNumber: 1)
 			],
 			[validVictory],
 			[
 				validTransition,
-				CreateVictory(Team.Werewolves, GamePhase.Night, turnNumber: 1)
+				CreateVictory(new SingleFactionGameResult(Faction.Werewolf), VictoryCheckWindow.Dawn, GamePhase.Night, turnNumber: 1)
 			],
 			[
 				CreateTransition(GamePhase.Day, GamePhase.Day, turnNumber: 1),
@@ -946,15 +946,15 @@ public class SimulationExecutionTests : DiagnosticTestBase
 			],
 			[
 				CreateTransition(GamePhase.Night, GamePhase.Night, turnNumber: 2),
-				CreateVictory(Team.Villagers, GamePhase.Night, turnNumber: 2)
+				CreateVictory(new SingleFactionGameResult(Faction.Villager), VictoryCheckWindow.PreNight, GamePhase.Night, turnNumber: 2)
 			],
 			[
 				CreateTransition(GamePhase.Dawn, GamePhase.Night, turnNumber: 2),
-				CreateVictory(Team.Villagers, GamePhase.Night, turnNumber: 2)
+				CreateVictory(new SingleFactionGameResult(Faction.Villager), VictoryCheckWindow.PreNight, GamePhase.Night, turnNumber: 2)
 			],
 			[
 				CreateTransition(GamePhase.Day, GamePhase.Night, turnNumber: 1),
-				CreateVictory(Team.Villagers, GamePhase.Night, turnNumber: 1)
+				CreateVictory(new SingleFactionGameResult(Faction.Villager), VictoryCheckWindow.PreNight, GamePhase.Night, turnNumber: 1)
 			]
 		];
 
@@ -1165,7 +1165,8 @@ public class SimulationExecutionTests : DiagnosticTestBase
 		};
 
 	private static VictoryConditionMetLogEntry CreateVictory(
-		Team team,
+		GameResult gameResult,
+		VictoryCheckWindow victoryCheckWindow,
 		GamePhase currentPhase,
 		int turnNumber) =>
 		new()
@@ -1173,6 +1174,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 			Timestamp = DateTimeOffset.UnixEpoch,
 			TurnNumber = turnNumber,
 			CurrentPhase = currentPhase,
-			WinningTeam = team
+			GameResult = gameResult,
+			VictoryCheckWindow = victoryCheckWindow
 		};
 }

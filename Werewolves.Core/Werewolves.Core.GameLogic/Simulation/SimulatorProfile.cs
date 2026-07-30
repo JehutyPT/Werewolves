@@ -161,7 +161,7 @@ public sealed class SimulatorCapability : SimulatorProfile
 		SimulatorCapabilityRegistry.Production.FullProbability;
 
 	internal static SimulatorCapability CreateSafetyScreening() => new(
-			new SimulatorProfileIdentity("safety-screening", "13"),
+			new SimulatorProfileIdentity("safety-screening", "14"),
 		SafetyScreeningRoleDescriptors,
 		headlessResponsePolicy: new HeadlessResponsePolicy(
 			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
@@ -209,7 +209,7 @@ public sealed class SimulatorCapability : SimulatorProfile
 		supportedRuleStates: [SimulationRuleState.Default]);
 
 	internal static SimulatorCapability CreateFullProbability() => new(
-			new SimulatorProfileIdentity("full-probability", "3"),
+			new SimulatorProfileIdentity("full-probability", "4"),
 		FullProbabilityRoleDescriptors,
 		headlessResponsePolicy: new HeadlessResponsePolicy(
 			BaselineRandomDecisionStrategy.Identity,

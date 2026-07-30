@@ -565,6 +565,12 @@
   <data name="Victory_ReturnToLobbyButton" xml:space="preserve">
     <value>New game</value>
   </data>
+  <data name="Victory_WindowDawn" xml:space="preserve">
+    <value>Victory decided at dawn.</value>
+  </data>
+  <data name="Victory_WindowPreNight" xml:space="preserve">
+    <value>Victory decided before night.</value>
+  </data>
   <data name="Dashboard_AbandonGameButton" xml:space="preserve">
     <value>Abandon game</value>
   </data>
