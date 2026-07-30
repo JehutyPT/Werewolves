@@ -521,16 +521,13 @@ namespace Werewolves.Core.StateModels.Core
 			}
 
 			if (cursor.Version != DomainRecoveryCursor.CurrentVersion ||
-			    cursor.Kind != DomainRecoveryCursorKind.OneUseRolePowerCommit)
+			    !Enum.IsDefined(cursor.Kind))
 			{
 				throw new InvalidOperationException(
 					$"Unsupported domain recovery cursor '{cursor.Kind}' version '{cursor.Version}'.");
 			}
 
-			var cursorResourceIdentity = cursor.ResourceIdentity;
-			if (!cursorResourceIdentity.HasValue ||
-			    !cursorResourceIdentity.Value.IsValid ||
-			    !Enum.IsDefined(cursor.CommittedActionType) ||
+			if (!Enum.IsDefined(cursor.CommittedActionType) ||
 			    cursor.CommittedActionType == NightActionType.Unknown ||
 			    cursor.CommittedTargetId == Guid.Empty ||
 			    !Enum.IsDefined(cursor.NextInstructionSemantic) ||
@@ -555,17 +552,67 @@ namespace Werewolves.Core.StateModels.Core
 					"The domain recovery cursor does not match its Pending Instruction.");
 			}
 
-			var committedEntry = dto.GameHistoryLog
-				.OfType<OneUseRolePowerCommittedLogEntry>()
-				.LastOrDefault();
-			if (committedEntry == null ||
-			    committedEntry.ActionType != cursor.CommittedActionType ||
-			    committedEntry.ResourceIdentity != cursorResourceIdentity.Value ||
-			    committedEntry.TargetIds is not { Count: 1 } ||
-			    committedEntry.TargetIds[0] != cursor.CommittedTargetId)
+			if (cursor.Kind ==
+			    DomainRecoveryCursorKind.OneUseRolePowerCommit)
+			{
+				var cursorResourceIdentity = cursor.ResourceIdentity;
+				if (!cursorResourceIdentity.HasValue ||
+				    !cursorResourceIdentity.Value.IsValid)
+				{
+					throw new InvalidOperationException(
+						"The domain recovery cursor is structurally invalid.");
+				}
+
+				var committedEntry = dto.GameHistoryLog
+					.OfType<OneUseRolePowerCommittedLogEntry>()
+					.LastOrDefault();
+				if (committedEntry == null ||
+				    committedEntry.ActionType !=
+					    cursor.CommittedActionType ||
+				    committedEntry.ResourceIdentity !=
+					    cursorResourceIdentity.Value ||
+				    committedEntry.TargetIds is not { Count: 1 } ||
+				    committedEntry.TargetIds[0] !=
+					    cursor.CommittedTargetId)
+				{
+					throw new InvalidOperationException(
+						"The domain recovery cursor does not match the latest committed One-Use Resource action.");
+				}
+
+				return cursor;
+			}
+
+			if (cursor.Kind !=
+				    DomainRecoveryCursorKind
+					    .RecurringNativeRolePowerCommit ||
+			    cursor.SourceRole is not { } sourceRole ||
+			    !Enum.IsDefined(sourceRole) ||
+			    cursor.ActingPlayerId == Guid.Empty ||
+			    string.IsNullOrWhiteSpace(
+				    cursor.SourcePowerIdentifier) ||
+			    cursor.PowerInstanceId != cursor.ActingPlayerId ||
+			    cursor.PowerInstanceOrigin !=
+				    RolePowerInstanceOrigin.Native ||
+			    cursor.OneUseResourceId != Guid.Empty)
 			{
 				throw new InvalidOperationException(
-					"The domain recovery cursor does not match the latest committed One-Use Resource action.");
+					"The domain recovery cursor is structurally invalid.");
+			}
+
+			var recurringEntry = dto.GameHistoryLog
+				.OfType<NightActionLogEntry>()
+				.LastOrDefault(entry =>
+					entry.GetType() ==
+					typeof(NightActionLogEntry));
+			if (recurringEntry == null ||
+			    recurringEntry.ActionType !=
+				    cursor.CommittedActionType ||
+			    recurringEntry.TargetIds is not { Count: 1 } ||
+			    recurringEntry.TargetIds[0] !=
+				    cursor.CommittedTargetId)
+			{
+				throw new InvalidOperationException(
+					"The domain recovery cursor does not match the latest recurring native Role Power action.");
 			}
 
 			return cursor;

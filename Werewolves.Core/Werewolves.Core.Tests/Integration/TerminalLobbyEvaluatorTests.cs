@@ -68,7 +68,7 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 			calls++;
 			throw new InvalidOperationException();
 		});
-		var scenario = Scenario(MainRoleType.BigBadWolf, MainRoleType.Seer,
+		var scenario = Scenario(MainRoleType.Cupid, MainRoleType.SimpleWerewolf,
 			MainRoleType.SimpleVillager, MainRoleType.SimpleVillager, MainRoleType.SimpleVillager);
 
 		var result = evaluator.Evaluate(
@@ -79,7 +79,7 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 		var stopped = result.Should().BeOfType<AppUnsupportedLobbyEvaluation>().Subject.AppSupport;
 		stopped.Scenario.Should().BeSameAs(scenario);
 		stopped.IsSupported.Should().BeFalse();
-		stopped.UnsupportedRoles.Should().Contain(MainRoleType.BigBadWolf);
+		stopped.UnsupportedRoles.Should().Contain(MainRoleType.Cupid);
 		calls.Should().Be(0);
 		MarkTestCompleted();
 	}
@@ -367,7 +367,7 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 	[Fact]
 	public void Evaluate_ScapegoatPolicyMissingHolderObservation_UsesFixedIncompleteRunAndSyntheticMixedBatch()
 	{
-		const long runNumber = 24;
+		const long runNumber = 2;
 		var scenario = Scenario(
 			MainRoleType.SimpleWerewolf,
 			MainRoleType.Scapegoat,

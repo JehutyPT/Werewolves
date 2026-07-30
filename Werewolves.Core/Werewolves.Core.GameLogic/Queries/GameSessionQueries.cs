@@ -97,6 +97,20 @@ internal static class GameSessionQueries
         return false;
     }
 
+    internal static bool HasEliminatedKnownWerewolfFactionAgent(
+        IGameSession session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        var players = session.GetPlayers().ToArray();
+        var projection = FactionFactProjection.Create(
+            session.GameHistoryLog.OfType<FactionFactsCommittedLogEntry>(),
+            players.Select(player => player.Id).ToArray());
+        return players.Any(player =>
+            player.State.Health == PlayerHealth.Dead &&
+            projection.Agents[player.Id][Faction.Werewolf] ==
+            FactionAgentKnowledge.KnownAgent);
+    }
+
     internal static int GetCommittedLogIndex(
         IGameSession session,
         GameLogEntryBase committedEntry)

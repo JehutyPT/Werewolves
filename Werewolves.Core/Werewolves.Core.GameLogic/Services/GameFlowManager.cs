@@ -568,6 +568,13 @@ internal static class GameFlowManager
             return true;
         }
 
+        if (startingInstruction?.Semantic ==
+                ModeratorInstructionSemantic.SelectBigBadWolfTarget &&
+            HasNewBigBadWolfRecurringCommit(session, startingLogCount))
+        {
+            return true;
+        }
+
 		if (HasNewEliminationCascadeReactionCompletion(
 			session,
 			startingLogCount))
@@ -606,6 +613,17 @@ internal static class GameFlowManager
             .OfType<OneUseRolePowerCommittedLogEntry>()
             .Any();
 
+    private static bool HasNewBigBadWolfRecurringCommit(
+        GameSession session,
+        int startingLogCount) =>
+        session.GameHistoryLog
+            .Skip(startingLogCount)
+            .OfType<NightActionLogEntry>()
+            .Any(entry =>
+                entry.GetType() == typeof(NightActionLogEntry) &&
+                entry.ActionType ==
+                NightActionType.BigBadWolfVictimSelection);
+
 	private static bool HasNewEliminationCascadeReactionCompletion(
 		GameSession session,
 		int startingLogCount) =>
@@ -641,9 +659,64 @@ internal static class GameFlowManager
             .Skip(startingLogCount)
             .OfType<OneUseRolePowerCommittedLogEntry>()
             .ToArray();
+        var newRecurringEntries = session.GameHistoryLog
+            .Skip(startingLogCount)
+            .OfType<NightActionLogEntry>()
+            .Where(entry =>
+                entry.GetType() == typeof(NightActionLogEntry) &&
+                entry.ActionType ==
+                NightActionType.BigBadWolfVictimSelection)
+            .ToArray();
+        if (newCommittedEntries.Length > 0 &&
+            newRecurringEntries.Length > 0)
+        {
+            throw new InvalidOperationException(
+                "One accepted response cannot produce multiple domain commits.");
+        }
+
         if (newCommittedEntries.Length == 0)
         {
-            return null;
+            if (newRecurringEntries.Length == 0)
+            {
+                return null;
+            }
+
+            if (newRecurringEntries is not [var recurringEntry] ||
+                recurringEntry.TargetIds is not [var recurringTargetId])
+            {
+                throw new InvalidOperationException(
+                    "One accepted Big Bad Wolf response must produce exactly one recurring native Role Power commit.");
+            }
+
+            if (!BigBadWolfRole.TryValidateCommittedRecoveryBoundary(
+                    session,
+                    startingInstruction,
+                    input,
+                    recurringEntry,
+                    nextInstruction,
+                    out var actingPlayerId))
+            {
+                throw new InvalidOperationException(
+                    "The recurring native Role Power commit has no owning Role recovery contract.");
+            }
+
+            return new DomainRecoveryCursor
+            {
+                Version = DomainRecoveryCursor.CurrentVersion,
+                Kind =
+                    DomainRecoveryCursorKind.RecurringNativeRolePowerCommit,
+                SourceRole = BigBadWolf,
+                CommittedActionType = recurringEntry.ActionType,
+                ActingPlayerId = actingPlayerId,
+                SourcePowerIdentifier =
+                    BigBadWolfRole.AdditionalVictimPowerIdentifier.Value,
+                PowerInstanceId = actingPlayerId,
+                PowerInstanceOrigin = RolePowerInstanceOrigin.Native,
+                OneUseResourceId = Guid.Empty,
+                CommittedTargetId = recurringTargetId,
+                NextInstructionSemantic = nextInstruction.Semantic,
+                NextInstructionId = nextInstruction.InstructionId
+            };
         }
 
         if (newCommittedEntries is not [var committedEntry] ||
@@ -844,16 +917,31 @@ internal static class GameFlowManager
         DomainRecoveryCursor cursor,
         IRoleAdmissionSource admissions)
     {
-        var resourceIdentity = cursor.ResourceIdentity
+        var sourceRole = cursor.SourceRole
             ?? throw new InvalidOperationException(
                 "The domain recovery cursor is structurally invalid.");
-
-        if (cursor.Kind != DomainRecoveryCursorKind.OneUseRolePowerCommit ||
+        if (cursor.Kind is not
+                (DomainRecoveryCursorKind.OneUseRolePowerCommit or
+                 DomainRecoveryCursorKind.RecurringNativeRolePowerCommit) ||
             session.GetCurrentPhase() != GamePhase.Night ||
             !IsNightStartSubPhase(session))
         {
             throw new InvalidOperationException(
-                $"Unsupported domain continuation '{resourceIdentity.SourceRole}:{cursor.CommittedActionType}:{cursor.NextInstructionSemantic}'.");
+                $"Unsupported domain continuation '{sourceRole}:{cursor.CommittedActionType}:{cursor.NextInstructionSemantic}'.");
+        }
+
+        if (cursor.Kind ==
+            DomainRecoveryCursorKind.OneUseRolePowerCommit &&
+            cursor.ResourceIdentity == null)
+        {
+            throw new InvalidOperationException(
+                "The domain recovery cursor is structurally invalid.");
+        }
+
+        if (cursor.Kind ==
+            DomainRecoveryCursorKind.RecurringNativeRolePowerCommit)
+        {
+            BigBadWolfRole.ValidateRecurringRecoveryCursorIdentity(cursor);
         }
 
         var pendingInstruction = session.PendingModeratorInstruction
@@ -866,7 +954,7 @@ internal static class GameFlowManager
         if (listenerContinuation != null)
         {
             if (listenerContinuation.Value.Listener !=
-                Listener(resourceIdentity.SourceRole))
+                Listener(sourceRole))
             {
                 throw new InvalidOperationException(
                     "The committed domain continuation resolved to a different listener.");
@@ -880,14 +968,21 @@ internal static class GameFlowManager
             return;
         }
 
+        if (cursor.Kind ==
+            DomainRecoveryCursorKind.RecurringNativeRolePowerCommit)
+        {
+            throw new InvalidOperationException(
+                $"Unsupported domain continuation '{sourceRole}:{cursor.CommittedActionType}:{cursor.NextInstructionSemantic}'.");
+        }
+
         var continuation = ResolveDomainContinuation(
-            resourceIdentity.SourceRole,
+            sourceRole,
             cursor.CommittedActionType,
             cursor.NextInstructionSemantic);
         if (continuation == null)
         {
             throw new InvalidOperationException(
-                $"Unsupported domain continuation '{resourceIdentity.SourceRole}:{cursor.CommittedActionType}:{cursor.NextInstructionSemantic}'.");
+                $"Unsupported domain continuation '{sourceRole}:{cursor.CommittedActionType}:{cursor.NextInstructionSemantic}'.");
         }
 
         if (!continuation.Value.Matches(session.PendingModeratorInstruction))
@@ -965,6 +1060,19 @@ internal static class GameFlowManager
                     Listener(AccursedWolfFather),
                     AccursedWolfFatherRoleState.AwaitingInfectionChoice.ToString(),
                     AcceptedObservationInstructionShape.OptionSelection),
+            (BigBadWolf,
+                ModeratorInstructionSemantic.SelectBigBadWolfTarget) =>
+                new(
+                    NightMainActionLoop.ToString(),
+                    Listener(BigBadWolf),
+                    BigBadWolfRoleState.AwaitingTargetSelection.ToString(),
+                    AcceptedObservationInstructionShape.PlayerSelection),
+            (BigBadWolf, ModeratorInstructionSemantic.PutRoleToSleep) =>
+                new(
+                    NightMainActionLoop.ToString(),
+                    Listener(BigBadWolf),
+                    BigBadWolfRoleState.ReadyToSleep.ToString(),
+                    AcceptedObservationInstructionShape.Confirmation),
             (SimpleWerewolf, ModeratorInstructionSemantic.SelectWerewolfVictim) =>
                 new(
                     NightMainActionLoop.ToString(),

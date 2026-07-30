@@ -91,6 +91,9 @@
   <data name="SimpleWerewolfRoleName" xml:space="preserve">
     <value>Werewolf</value>
   </data>
+  <data name="BigBadWolfTargetSelectionInstruction" xml:space="preserve">
+    <value>Big Bad Wolf, choose exactly one living player for the additional attack.</value>
+  </data>
   <data name="VillagersGroupName" xml:space="preserve">
     <value>Villagers</value>
   </data>

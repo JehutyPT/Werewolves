@@ -51,18 +51,20 @@ public class SimulatorProfileTests
 			.Append(ModeratorInstructionSemantic.AnnounceScapegoatPermittedVoters)
 			.Append(ModeratorInstructionSemantic.ChooseWolfHoundAlignment)
 			.Append(ModeratorInstructionSemantic
-				.ChooseAccursedWolfFatherInfection);
+				.ChooseAccursedWolfFatherInfection)
+			.Append(ModeratorInstructionSemantic.SelectBigBadWolfTarget);
 		var safety = SimulatorCapability.SafetyScreening;
 		var probability = SimulatorCapability.FullProbability;
 
-		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "12"));
+		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "13"));
 		probability.Identity.Should().Be(new SimulatorProfileIdentity("full-probability", "3"));
 		BaselineRandomDecisionStrategy.Identity.Should()
 			.Be(new DecisionStrategyIdentity("baseline-random", "3-splitmix64"));
 		BaselineRandomDecisionStrategy.SafetyScreeningIdentity.Should()
-			.Be(new DecisionStrategyIdentity("baseline-random", "6-splitmix64"));
+			.Be(new DecisionStrategyIdentity("baseline-random", "7-splitmix64"));
 		safety.SupportedRoles.Should().Equal(
 			MainRoleType.SimpleWerewolf,
+			MainRoleType.BigBadWolf,
 			MainRoleType.Seer,
 			MainRoleType.WildChild,
 			MainRoleType.SimpleVillager,
@@ -88,6 +90,15 @@ public class SimulatorProfileTests
 		accursedBeneficiary.Should().Be(Faction.Werewolf);
 		safety.IsFactionAgent(
 				MainRoleType.AccursedWolfFather,
+				Faction.Werewolf)
+			.Should().BeTrue();
+		safety.TryGetBeneficiaryFaction(
+				MainRoleType.BigBadWolf,
+				out var bigBadWolfBeneficiary)
+			.Should().BeTrue();
+		bigBadWolfBeneficiary.Should().Be(Faction.Werewolf);
+		safety.IsFactionAgent(
+				MainRoleType.BigBadWolf,
 				Faction.Werewolf)
 			.Should().BeTrue();
 		safety.SupportsActorSetupCards.Should().BeFalse();

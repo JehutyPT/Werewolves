@@ -37,6 +37,9 @@ public static class SupportedRoleCatalog
 				MainRoleType.Seer,
 				() => new SeerRole(rolePowerAvailabilityGateway)),
 			RoleAdmission.Active(
+				MainRoleType.BigBadWolf,
+				() => new BigBadWolfRole(rolePowerAvailabilityGateway)),
+			RoleAdmission.Active(
 				MainRoleType.WildChild,
 				() => new WildChildRole()),
 				RoleAdmission.Active(

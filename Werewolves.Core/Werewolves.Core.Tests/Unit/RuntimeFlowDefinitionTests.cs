@@ -40,8 +40,10 @@ public class RuntimeFlowDefinitionTests
 
 		ListenerIndex(listeners, AccursedWolfFather)
 			.Should().BeLessThan(ListenerIndex(listeners, WhiteWerewolf));
-		ListenerIndex(listeners, WhiteWerewolf)
-			.Should().BeLessThan(ListenerIndex(listeners, BigBadWolf));
+			ListenerIndex(listeners, WhiteWerewolf)
+				.Should().BeLessThan(ListenerIndex(listeners, BigBadWolf));
+			ListenerIndex(listeners, BigBadWolf)
+				.Should().BeLessThan(ListenerIndex(listeners, Seer));
     }
 
     [Fact]
