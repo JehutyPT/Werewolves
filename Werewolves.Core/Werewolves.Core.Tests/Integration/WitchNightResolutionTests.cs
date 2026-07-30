@@ -268,6 +268,72 @@ public sealed class WitchNightResolutionTests : DiagnosticTestBase
 		MarkTestCompleted();
 	}
 
+	[Fact]
+	public void PublicFlow_FreshElderInfectionHealedByWitchRestoresProtectionWithoutConversion()
+	{
+		var builder = CreateBuilder()
+			.WithPlayers(6)
+			.WithRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.AccursedWolfFather,
+				MainRoleType.Witch,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		var werewolf = players[0];
+		var wolfFather = players[1];
+		var witch = players[2];
+		var elder = players[3];
+		builder
+			.ArrangeKnownRole(witch.Id, MainRoleType.Witch)
+			.ArrangeCurrentRole(elder.Id, MainRoleType.Elder);
+
+		CompletePublicInfectionNight(
+			builder,
+			werewolf,
+			wolfFather,
+			elder,
+			witch);
+
+		using (new AssertionScope())
+		{
+			elder.State.HasStatusEffect(StatusEffectTypes.ElderProtectionLost)
+				.Should().BeFalse();
+			elder.State.HasStatusEffect(StatusEffectTypes.LycanthropyInfection)
+				.Should().BeFalse();
+		}
+		AssertNoSuccessfulInfectionTransition(builder);
+		AssertNoDawnVictim(builder, elder.Id);
+		builder.GetGameState()!.GameHistoryLog
+			.OfType<StatusEffectLogEntry>()
+			.Where(entry =>
+				entry.PlayerId == elder.Id &&
+				entry.EffectType == StatusEffectTypes.ElderProtectionLost)
+			.Select(entry => entry.IsActive)
+			.Should().Equal(true, false);
+		builder.GetGameState()!.GameHistoryLog
+			.OfType<StatusEffectLogEntry>()
+			.Should().NotContain(entry =>
+				entry.PlayerId == elder.Id &&
+				entry.EffectType == StatusEffectTypes.LycanthropyInfection);
+		builder.GetGameState()!.GameHistoryLog
+			.OfType<OneUseRolePowerCommittedLogEntry>()
+			.Should().ContainSingle(entry =>
+				entry.SourceRole == MainRoleType.AccursedWolfFather &&
+				entry.ActionType ==
+					NightActionType.AccursedWolfFatherInfection &&
+				entry.TargetIds!.SequenceEqual(new[] { elder.Id }));
+		builder.GetGameState()!.GameHistoryLog
+			.OfType<OneUseRolePowerCommittedLogEntry>()
+			.Should().ContainSingle(entry =>
+				entry.SourceRole == MainRoleType.Witch &&
+				entry.ActionType == NightActionType.WitchSave &&
+				entry.TargetIds!.SequenceEqual(new[] { elder.Id }));
+		MarkTestCompleted();
+	}
+
 	[Theory]
 	[InlineData(false)]
 	[InlineData(true)]

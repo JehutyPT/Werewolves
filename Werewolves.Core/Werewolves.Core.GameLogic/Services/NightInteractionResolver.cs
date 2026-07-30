@@ -1,4 +1,5 @@
 using Werewolves.Core.GameLogic.Queries;
+using Werewolves.Core.GameLogic.Roles.MainRoles;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
@@ -8,9 +9,6 @@ namespace Werewolves.Core.GameLogic.Services;
 
 internal static class NightInteractionResolver
 {
-	private const string InfectionTransitionSourceIdentifier =
-		"accursed-wolf-father-infection";
-
 	private readonly record struct CommittedNightAttempt(
 		NightActionType ActionType,
 		Guid TargetId);
@@ -119,7 +117,8 @@ internal static class NightInteractionResolver
 							CurrentPhase = context.CurrentPhase,
 							Source = new FactionFactSource(
 								FactionFactSourceKind.ExplicitTransition,
-								InfectionTransitionSourceIdentifier),
+								AccursedWolfFatherRole
+									.InfectionPowerIdentifier.Value),
 							Facts =
 							[
 								FactionFact.Beneficiary(

@@ -23,14 +23,14 @@ internal enum AccursedWolfFatherRoleState
 internal sealed class AccursedWolfFatherRole
 	: NightRoleHookListener<AccursedWolfFatherRoleState>
 {
-	private const string InfectionPowerIdentifier =
-		"accursed-wolf-father-infection";
-
 	private readonly RolePowerAvailabilityGateway _availabilityGateway;
 
 	private static readonly RolePowerDefinition InfectionPower = new(
-		new RolePowerIdentifier(InfectionPowerIdentifier),
+		new RolePowerIdentifier("accursed-wolf-father-infection"),
 		RolePowerCategory.Chosen);
+
+	internal static RolePowerIdentifier InfectionPowerIdentifier =>
+		InfectionPower.Identifier;
 
 	internal static readonly Guid InfectionResourceId =
 		Guid.Parse("a3d2e55e-0b97-4f4c-a38c-709c03ff1026");
@@ -80,6 +80,101 @@ internal sealed class AccursedWolfFatherRole
 		}
 
 		return base.Execute(session, input);
+	}
+
+	public override bool TryResolvePendingInstructionContinuation(
+		GameHook hook,
+		GameSession session,
+		ModeratorInstruction pendingInstruction,
+		out string listenerState)
+	{
+		listenerState = string.Empty;
+		if (hook != GameHook.NightMainActionLoop ||
+		    pendingInstruction.Semantic !=
+			    ModeratorInstructionSemantic.PutRoleToSleep)
+		{
+			return false;
+		}
+
+		var holder = GetAliveRolePlayers(session)?.SingleOrDefault();
+		if (holder == null ||
+		    pendingInstruction is not ConfirmationInstruction ||
+		    pendingInstruction.AffectedPlayerIds is not
+			    { Count: 1 } affectedPlayerIds ||
+		    affectedPlayerIds.Single() != holder.Id)
+		{
+			return false;
+		}
+
+		var committedInfections =
+			GameSessionQueries.GetOrderedNightActionsThisNight(
+					session,
+					[NightActionType.AccursedWolfFatherInfection])
+				.OfType<OneUseRolePowerCommittedLogEntry>()
+				.ToArray();
+		if (committedInfections.Length == 0)
+		{
+			return false;
+		}
+
+		if (committedInfections is not [var committedInfection])
+		{
+			throw new InvalidOperationException(
+				"The pending Accursed Wolf-Father sleep instruction has multiple infection commits.");
+		}
+
+		ValidateOwnedInfectionCommit(committedInfection);
+		if (committedInfection.ActingPlayerId != holder.Id)
+		{
+			throw new InvalidOperationException(
+				"The pending Accursed Wolf-Father sleep instruction does not belong to the living Role holder.");
+		}
+
+		ValidateRetainedVictim(session, committedInfection);
+		listenerState = AccursedWolfFatherRoleState.ReadyToSleep.ToString();
+		return true;
+	}
+
+	internal static bool TryValidateCommittedRecoveryBoundary(
+		GameSession session,
+		ModeratorInstruction? startingInstruction,
+		ModeratorResponse input,
+		OneUseRolePowerCommittedLogEntry committedEntry)
+	{
+		if (committedEntry.ActionType !=
+		    NightActionType.AccursedWolfFatherInfection)
+		{
+			return false;
+		}
+
+		ValidateOwnedInfectionCommit(committedEntry);
+		if (startingInstruction is not SelectOptionsInstruction
+		    {
+			    Semantic:
+				    ModeratorInstructionSemantic
+					    .ChooseAccursedWolfFatherInfection,
+			    SelectionRange: var selectionRange,
+			    Options: var options
+		    } ||
+		    selectionRange != NumberRangeConstraint.Single ||
+		    !options.Select(option => option.Id).SequenceEqual(
+			    [
+				    AccursedWolfFatherInfectionOptionIds.Infect,
+				    AccursedWolfFatherInfectionOptionIds.Decline
+			    ],
+			    StringComparer.Ordinal) ||
+		    input.SelectedOptionIds is not
+			    { Count: 1 } selectedOptionIds ||
+		    !StringComparer.Ordinal.Equals(
+			    selectedOptionIds.Single(),
+			    AccursedWolfFatherInfectionOptionIds.Infect))
+		{
+			throw new InvalidOperationException(
+				"The Accursed Wolf-Father commit must correlate to its accepted infection option.");
+		}
+
+		ValidateRetainedVictim(session, committedEntry);
+		return true;
 	}
 
 	protected override HookListenerActionResult HandleRoleWakeupAndId(
@@ -281,9 +376,41 @@ internal sealed class AccursedWolfFatherRole
 		return new OneUseRolePowerResourceIdentity(
 			holder.Id,
 			MainRoleType.AccursedWolfFather,
-			InfectionPowerIdentifier,
+			InfectionPowerIdentifier.Value,
 			instance.Id,
 			instance.Origin,
 			InfectionResourceId);
+	}
+
+	private static void ValidateOwnedInfectionCommit(
+		OneUseRolePowerCommittedLogEntry committedEntry)
+	{
+		var identity = committedEntry.ResourceIdentity;
+		if (identity.SourceRole != MainRoleType.AccursedWolfFather ||
+		    !StringComparer.Ordinal.Equals(
+			    identity.SourcePowerIdentifier,
+			    InfectionPowerIdentifier.Value) ||
+		    identity.OneUseResourceId != InfectionResourceId ||
+		    identity.PowerInstanceOrigin != RolePowerInstanceOrigin.Native ||
+		    identity.PowerInstanceId != identity.ActingPlayerId)
+		{
+			throw new InvalidOperationException(
+				"The Accursed Wolf-Father infection commit has an invalid Role Power identity.");
+		}
+	}
+
+	private static void ValidateRetainedVictim(
+		GameSession session,
+		OneUseRolePowerCommittedLogEntry committedEntry)
+	{
+		if (committedEntry.TargetIds is not [var committedTargetId] ||
+		    !GameSessionQueries.TryGetRetainedWerewolfVictimThisNight(
+			    session,
+			    out var retainedVictimId) ||
+		    retainedVictimId != committedTargetId)
+		{
+			throw new InvalidOperationException(
+				"The Accursed Wolf-Father commit must target the one retained collective victim.");
+		}
 	}
 }

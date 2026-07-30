@@ -654,46 +654,20 @@ internal static class GameFlowManager
         }
 
         var committedTargetId = committedEntry.TargetIds[0];
-        switch (startingInstruction)
+        var roleOwnedCommitCorrelated =
+            AccursedWolfFatherRole.TryValidateCommittedRecoveryBoundary(
+                session,
+                startingInstruction,
+                input,
+                committedEntry);
+        if (!roleOwnedCommitCorrelated &&
+            (startingInstruction is not SelectPlayersInstruction ||
+             input.SelectedPlayerIds is not
+                 { Count: 1 } selectedPlayerIds ||
+             selectedPlayerIds.Single() != committedTargetId))
         {
-            case SelectPlayersInstruction
-                when input.SelectedPlayerIds is { Count: 1 } selectedPlayerIds &&
-                     selectedPlayerIds.Single() == committedTargetId:
-                break;
-            case SelectOptionsInstruction
-                {
-                    Semantic:
-                        ModeratorInstructionSemantic
-                            .ChooseAccursedWolfFatherInfection,
-                    SelectionRange: var selectionRange,
-                    Options: var options
-                }
-                when selectionRange == NumberRangeConstraint.Single &&
-                     options.Select(option => option.Id).SequenceEqual(
-                         [
-                             AccursedWolfFatherInfectionOptionIds.Infect,
-                             AccursedWolfFatherInfectionOptionIds.Decline
-                         ],
-                         StringComparer.Ordinal) &&
-                     input.SelectedOptionIds is { Count: 1 } selectedOptionIds &&
-                     StringComparer.Ordinal.Equals(
-                         selectedOptionIds.Single(),
-                         AccursedWolfFatherInfectionOptionIds.Infect):
-            {
-                if (!GameSessionQueries.TryGetRetainedWerewolfVictimThisNight(
-                        session,
-                        out var retainedVictimId) ||
-                    retainedVictimId != committedTargetId)
-                {
-                    throw new InvalidOperationException(
-                        "The Accursed Wolf-Father commit must target the one retained collective victim.");
-                }
-
-                break;
-            }
-            default:
-                throw new InvalidOperationException(
-                    "A One-Use Resource commit must correlate to one accepted Player or semantic option selection.");
+            throw new InvalidOperationException(
+                "A One-Use Resource commit must correlate to one accepted Player or semantic option selection.");
         }
 
         var resourceIdentity = committedEntry.ResourceIdentity;
@@ -797,7 +771,7 @@ internal static class GameFlowManager
         var domainCursor = session.GetDomainRecoveryCursor(Key);
         if (domainCursor != null)
         {
-            RestoreDomainContinuation(session, domainCursor);
+            RestoreDomainContinuation(session, domainCursor, admissions);
             return;
         }
 
@@ -867,31 +841,50 @@ internal static class GameFlowManager
 
     private static void RestoreDomainContinuation(
         GameSession session,
-        DomainRecoveryCursor cursor)
+        DomainRecoveryCursor cursor,
+        IRoleAdmissionSource admissions)
     {
         var resourceIdentity = cursor.ResourceIdentity
             ?? throw new InvalidOperationException(
                 "The domain recovery cursor is structurally invalid.");
-        if (resourceIdentity.SourceRole == AccursedWolfFather &&
-            cursor.CommittedActionType ==
-                NightActionType.AccursedWolfFatherInfection &&
-            (!GameSessionQueries.TryGetRetainedWerewolfVictimThisNight(
-                 session,
-                 out var retainedVictimId) ||
-             retainedVictimId != cursor.CommittedTargetId))
+
+        if (cursor.Kind != DomainRecoveryCursorKind.OneUseRolePowerCommit ||
+            session.GetCurrentPhase() != GamePhase.Night ||
+            !IsNightStartSubPhase(session))
         {
             throw new InvalidOperationException(
-                "The Accursed Wolf-Father domain continuation must target the one retained collective victim.");
+                $"Unsupported domain continuation '{resourceIdentity.SourceRole}:{cursor.CommittedActionType}:{cursor.NextInstructionSemantic}'.");
+        }
+
+        var pendingInstruction = session.PendingModeratorInstruction
+            ?? throw new InvalidOperationException(
+                "The committed domain continuation requires one Pending Instruction.");
+        var listenerContinuation = ResolvePendingInstructionContinuation(
+            session,
+            pendingInstruction,
+            admissions);
+        if (listenerContinuation != null)
+        {
+            if (listenerContinuation.Value.Listener !=
+                Listener(resourceIdentity.SourceRole))
+            {
+                throw new InvalidOperationException(
+                    "The committed domain continuation resolved to a different listener.");
+            }
+
+            session.RestoreTransientContinuation(
+                Key,
+                listenerContinuation.Value.ActiveSubPhaseStage,
+                listenerContinuation.Value.Listener,
+                listenerContinuation.Value.ListenerState);
+            return;
         }
 
         var continuation = ResolveDomainContinuation(
             resourceIdentity.SourceRole,
             cursor.CommittedActionType,
             cursor.NextInstructionSemantic);
-        if (cursor.Kind != DomainRecoveryCursorKind.OneUseRolePowerCommit ||
-            session.GetCurrentPhase() != GamePhase.Night ||
-            !IsNightStartSubPhase(session) ||
-            continuation == null)
+        if (continuation == null)
         {
             throw new InvalidOperationException(
                 $"Unsupported domain continuation '{resourceIdentity.SourceRole}:{cursor.CommittedActionType}:{cursor.NextInstructionSemantic}'.");
@@ -943,14 +936,6 @@ internal static class GameFlowManager
                     NightMainActionLoop.ToString(),
                     Listener(Witch),
                     WitchRoleState.ReadyToSleep.ToString(),
-                    AcceptedObservationInstructionShape.Confirmation),
-            (AccursedWolfFather,
-                NightActionType.AccursedWolfFatherInfection,
-                ModeratorInstructionSemantic.PutRoleToSleep) =>
-                new(
-                    NightMainActionLoop.ToString(),
-                    Listener(AccursedWolfFather),
-                    AccursedWolfFatherRoleState.ReadyToSleep.ToString(),
                     AcceptedObservationInstructionShape.Confirmation),
             _ => null
         };
