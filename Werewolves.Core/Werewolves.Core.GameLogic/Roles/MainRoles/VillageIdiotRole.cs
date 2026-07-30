@@ -1,3 +1,4 @@
+using Werewolves.Core.GameLogic.Models.EliminationCascades;
 using Werewolves.Core.GameLogic.Models.GameHookListeners;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
 using Werewolves.Core.GameLogic.Queries;
@@ -12,7 +13,9 @@ using Werewolves.Core.StateModels.Resources;
 
 namespace Werewolves.Core.GameLogic.Roles.MainRoles;
 
-internal sealed class VillageIdiotRole : RoleHookListener
+internal sealed class VillageIdiotRole
+	: RoleHookListener,
+		IVoteEliminationInterceptor
 {
 	private static readonly RolePowerDefinition PardonPower = new(
 		new RolePowerIdentifier("village-idiot-pardon"),
@@ -35,7 +38,7 @@ internal sealed class VillageIdiotRole : RoleHookListener
 	public override ListenerIdentifier Id =>
 		ListenerIdentifier.Listener(MainRoleType.VillageIdiot);
 
-	internal bool TryCommitPardon(
+	public bool TryInterceptVoteElimination(
 		GameSession session,
 		IPlayer target,
 		out ConfirmationInstruction? consequence)
@@ -46,8 +49,7 @@ internal sealed class VillageIdiotRole : RoleHookListener
 
 		if (target.State.Health != PlayerHealth.Alive ||
 		    target.State.CurrentRole != MainRoleType.VillageIdiot ||
-		    target.State.DurableVotingPower != 1 ||
-		    !target.State.HasVotingRight)
+		    target.State.DurableVotingPower != 1)
 		{
 			return false;
 		}

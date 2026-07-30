@@ -193,6 +193,44 @@ public sealed class VillageIdiotRoleTests
 	}
 
 	[Fact]
+	public void TemporaryVotingRestriction_DoesNotSuppressFreshPardon()
+	{
+		var scenario = DayVoteScenario.Start();
+		scenario.Builder
+			.ArrangeKnownRole(
+				scenario.LivingTargetId,
+				MainRoleType.VillageIdiot)
+			.ArrangeVotingRight(
+				scenario.LivingTargetId,
+				hasVotingRight: false);
+
+		var reveal = scenario.Builder.Process(
+				scenario.Instruction.CreateResponse(
+					[scenario.LivingTargetId]))
+			.ModeratorInstruction.Should()
+			.BeOfType<ConfirmationInstruction>().Subject;
+		var pardon = scenario.Builder.Process(reveal.CreateResponse())
+			.ModeratorInstruction.Should()
+			.BeOfType<ConfirmationInstruction>().Subject;
+
+		pardon.Semantic.Should().Be(
+			ModeratorInstructionSemantic.AnnounceVillageIdiotPardon);
+		var session = scenario.Builder.GetGameState()!;
+		var state = session.GetPlayerState(scenario.LivingTargetId);
+		state.Health.Should().Be(PlayerHealth.Alive);
+		state.DurableVotingPower.Should().Be(0);
+		state.HasVotingRight.Should().BeFalse();
+		session.GameHistoryLog
+			.OfType<VillageIdiotPardonCommittedLogEntry>()
+			.Should().ContainSingle();
+		session.GameHistoryLog
+			.OfType<PlayerEliminatedLogEntry>()
+			.Should().NotContain(entry =>
+				entry.PlayerId == scenario.LivingTargetId &&
+				entry.Reason == EliminationReason.DayVote);
+	}
+
+	[Fact]
 	public void TiedVote_BypassesRevealAvailabilityAndPardon()
 	{
 		var policy = new DenyVillageIdiotPardonPolicy();

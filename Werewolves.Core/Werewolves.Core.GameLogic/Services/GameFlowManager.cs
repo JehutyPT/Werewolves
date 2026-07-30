@@ -388,20 +388,16 @@ internal static class GameFlowManager
         }
 
         var target = session.GetPlayer(voteElimination.PlayerId);
-        if (target.State.CurrentRole != MainRoleType.VillageIdiot)
+        if (target.State.CurrentRole is not { } currentRole ||
+            !session.TryGetExistingListener<IVoteEliminationInterceptor>(
+                Listener(currentRole),
+                out var interceptor) ||
+            !interceptor.TryInterceptVoteElimination(
+                session,
+                target,
+                out var consequence))
         {
             return EliminationBatchCommitDecision.Proceed(eliminations);
-        }
-
-        if (!session.TryGetExistingListener<VillageIdiotRole>(
-	            Listener(MainRoleType.VillageIdiot),
-	            out var villageIdiot) ||
-	        !villageIdiot.TryCommitPardon(
-		        session,
-		        target,
-		        out var consequence))
-        {
-	        return EliminationBatchCommitDecision.Proceed(eliminations);
         }
 
         return new EliminationBatchCommitDecision(
