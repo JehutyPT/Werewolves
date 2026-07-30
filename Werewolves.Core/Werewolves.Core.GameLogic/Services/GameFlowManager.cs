@@ -959,7 +959,7 @@ internal static class GameFlowManager
                         cursor.ObservedRole) &&
                     (cursor.ObservedRole != WhiteWerewolf ||
                      InitialBeneficiaryClosureRules
-                         .HasValidWhiteWerewolfAcceptedIdentificationClosure(
+                         .HasValidWhiteWerewolfInitialBeneficiaryClosure(
                              session)),
                 ModeratorInstructionSemantic
                     .ObserveWerewolfFactionAgentGroup
@@ -967,7 +967,14 @@ internal static class GameFlowManager
                          continuationRole == SimpleWerewolf =>
                     HasCommittedWerewolfAgentGroupObservation(
                         session,
-                        pendingInstruction),
+                        pendingInstruction) &&
+                    (session.RoleInPlayCount(WhiteWerewolf) == 0 ||
+                     !GameSessionQueries.IsCompleteLivingRoleHolderSetKnown(
+                         session,
+                         WhiteWerewolf) ||
+                     InitialBeneficiaryClosureRules
+                         .HasValidWhiteWerewolfInitialBeneficiaryClosure(
+                             session)),
                 ModeratorInstructionSemantic
                     .EstablishStutteringJudgeSignal
                     when cursor.ObservedRole == StutteringJudge =>

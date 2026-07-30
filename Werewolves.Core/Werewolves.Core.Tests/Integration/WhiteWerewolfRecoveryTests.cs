@@ -2,6 +2,7 @@ using FluentAssertions;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
+using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.Tests.Helpers;
 using Xunit;
@@ -52,7 +53,21 @@ public sealed class WhiteWerewolfRecoveryTests
 	}
 
 	[Fact]
-	public void AcceptedIdentification_MissingWhiteBeneficiaryClosureFactIsRejected()
+	public void AcceptedIdentification_PreKnownWhiteBeneficiaryRehydratesDownstreamRole()
+	{
+		var recovery = CreateAcceptedWhiteIdentificationRecovery(
+			preKnownWhiteBeneficiary: true);
+		var freshService = new GameService();
+
+		var recoveredGameId = freshService.RehydrateSession(
+			recovery.Builder.GetGameState()!.Serialize());
+
+		freshService.GetCurrentInstruction(recoveredGameId)
+			.Should().BeEquivalentTo(recovery.NextInstruction);
+	}
+
+	[Fact]
+	public void AcceptedAgentGroupObservation_MissingEntailedClosureFactIsRejected()
 	{
 		var builder = GameTestBuilder.Create()
 			.WithPlayers(7)
@@ -67,6 +82,98 @@ public sealed class WhiteWerewolfRecoveryTests
 		builder.StartGame();
 		var players = builder.GetGameState()!.GetPlayers().ToArray();
 		var whiteWerewolf = players[1];
+		builder.ArrangeKnownRole(
+			whiteWerewolf.Id,
+			MainRoleType.WhiteWerewolf);
+		builder.ConfirmGameStart();
+		builder.ConfirmNightStart();
+		var observation = builder.GetCurrentInstruction()
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		observation.Semantic.Should().Be(
+			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
+		var victimSelection = builder.Process(
+				observation.CreateResponse(
+					[players[0].Id, whiteWerewolf.Id, players[2].Id]))
+			.ModeratorInstruction.Should()
+			.BeOfType<SelectPlayersInstruction>().Subject;
+		victimSelection.Semantic.Should().Be(
+			ModeratorInstructionSemantic.SelectWerewolfVictim);
+		var tampered = RecoveryPayloadTestDriver
+			.Parse(builder.GetGameState()!.Serialize())
+			.RemoveInitialBeneficiaryClosureFact(whiteWerewolf.Id)
+			.Serialize();
+		var freshService = new GameService();
+
+		Action rehydrate = () => freshService.RehydrateSession(tampered);
+
+		rehydrate.Should().Throw<InvalidOperationException>();
+	}
+
+	[Fact]
+	public void AcceptedIdentification_CoherentlyRetargetedNonHolderClosureIsRejected()
+	{
+		var recovery = CreateAcceptedWhiteIdentificationRecovery(
+			preKnownWhiteBeneficiary: false);
+		var tampered = RecoveryPayloadTestDriver
+			.Parse(recovery.Builder.GetGameState()!.Serialize())
+			.SwapInitialBeneficiaryClosureAssignmentsAndCaches(
+				recovery.WerewolfId,
+				recovery.VillagerId)
+			.Serialize();
+		var freshService = new GameService();
+
+		Action rehydrate = () => freshService.RehydrateSession(tampered);
+
+		rehydrate.Should().Throw<InvalidOperationException>();
+	}
+
+	[Fact]
+	public void AcceptedIdentification_MissingWhiteBeneficiaryClosureFactIsRejected()
+	{
+		var recovery = CreateAcceptedWhiteIdentificationRecovery(
+			preKnownWhiteBeneficiary: false);
+		var tampered = RecoveryPayloadTestDriver
+			.Parse(recovery.Builder.GetGameState()!.Serialize())
+			.RemoveInitialBeneficiaryClosureFact(recovery.WhiteWerewolfId)
+			.Serialize();
+		var freshService = new GameService();
+
+		Action rehydrate = () => freshService.RehydrateSession(tampered);
+
+		rehydrate.Should().Throw<InvalidOperationException>();
+	}
+
+	private static AcceptedWhiteIdentificationRecovery
+		CreateAcceptedWhiteIdentificationRecovery(
+			bool preKnownWhiteBeneficiary)
+	{
+		var builder = GameTestBuilder.Create()
+			.WithPlayers(7)
+			.WithRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.WhiteWerewolf,
+				MainRoleType.BigBadWolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		var whiteWerewolf = players[1];
+		if (preKnownWhiteBeneficiary)
+		{
+			var session = builder.GetGameState()!;
+			builder.ArrangeExplicitFactionTransition(
+				"test-pre-known-white-beneficiary",
+				FactionFact.Beneficiary(
+					whiteWerewolf.Id,
+					Faction.WhiteWerewolf,
+					new FactionFactEffectiveBoundary(
+						session.TurnNumber,
+						session.GetCurrentPhase(),
+						session.GameHistoryLog.Count())));
+		}
+
 		var werewolfAgentIds = new HashSet<Guid>
 		{
 			players[0].Id,
@@ -90,15 +197,12 @@ public sealed class WhiteWerewolfRecoveryTests
 
 		nextInstruction.RoleIdentification.Should().Be(
 			MainRoleType.BigBadWolf);
-		var tampered = RecoveryPayloadTestDriver
-			.Parse(builder.GetGameState()!.Serialize())
-			.RemoveInitialBeneficiaryClosureFact(whiteWerewolf.Id)
-			.Serialize();
-		var freshService = new GameService();
-
-		Action rehydrate = () => freshService.RehydrateSession(tampered);
-
-		rehydrate.Should().Throw<InvalidOperationException>();
+		return new AcceptedWhiteIdentificationRecovery(
+			builder,
+			whiteWerewolf.Id,
+			players[0].Id,
+			players[3].Id,
+			nextInstruction);
 	}
 
 	private static (
@@ -154,4 +258,10 @@ public sealed class WhiteWerewolfRecoveryTests
 		return (builder, stableNightStart, targetSelection);
 	}
 
+	private sealed record AcceptedWhiteIdentificationRecovery(
+		GameTestBuilder Builder,
+		Guid WhiteWerewolfId,
+		Guid WerewolfId,
+		Guid VillagerId,
+		SelectPlayersInstruction NextInstruction);
 }

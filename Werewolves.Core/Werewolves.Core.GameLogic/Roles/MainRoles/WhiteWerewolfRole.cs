@@ -99,7 +99,7 @@ internal sealed class WhiteWerewolfRole
 	{
 		if (GetCurrentListenerState(session) == null &&
 		    session.TurnNumber > 1 &&
-		    session.TurnNumber % 2 != 0)
+		    !IsSoloAttackNight(session.TurnNumber))
 		{
 			return HookListenerActionResult.Skip();
 		}
@@ -231,7 +231,9 @@ internal sealed class WhiteWerewolfRole
 			    SoloAttackPowerIdentifier.Value) ||
 		    cursor.PowerInstanceId != cursor.ActingPlayerId ||
 		    cursor.PowerInstanceOrigin != RolePowerInstanceOrigin.Native ||
-		    cursor.OneUseResourceId != Guid.Empty)
+		    cursor.OneUseResourceId != Guid.Empty ||
+		    cursor.NextInstructionSemantic !=
+			    ModeratorInstructionSemantic.PutRoleToSleep)
 		{
 			throw new InvalidOperationException(
 				"The White Werewolf recovery cursor has an invalid recurring Role Power identity.");
@@ -306,7 +308,7 @@ internal sealed class WhiteWerewolfRole
 		GameSession session,
 		ModeratorResponse input)
 	{
-		if (session.TurnNumber == 1)
+		if (!IsSoloAttackNight(session.TurnNumber))
 		{
 			return HookListenerActionResult.Complete(
 				WhiteWerewolfRoleState.Asleep);
@@ -436,6 +438,9 @@ internal sealed class WhiteWerewolfRole
 				[NightActionType.WhiteWerewolfVictimSelection])
 			.OfType<RecurringRolePowerCommittedLogEntry>();
 
+	private static bool IsSoloAttackNight(int turnNumber) =>
+		turnNumber > 1 && turnNumber % 2 == 0;
+
 	private static void ValidateCommittedAttack(
 		GameSession session,
 		RecurringRolePowerCommittedLogEntry committedEntry)
@@ -453,7 +458,8 @@ internal sealed class WhiteWerewolfRole
 		    committedEntry.PowerInstanceOrigin !=
 			    RolePowerInstanceOrigin.Native ||
 		    committedEntry.CurrentPhase != GamePhase.Night ||
-		    committedEntry.TurnNumber != session.TurnNumber)
+		    committedEntry.TurnNumber != session.TurnNumber ||
+		    !IsSoloAttackNight(committedEntry.TurnNumber))
 		{
 			throw new InvalidOperationException(
 				"The White Werewolf recovery boundary requires one owned recurring solo-attack action.");
