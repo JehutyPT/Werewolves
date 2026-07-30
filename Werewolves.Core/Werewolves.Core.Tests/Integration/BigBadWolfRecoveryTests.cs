@@ -143,6 +143,47 @@ public sealed class BigBadWolfRecoveryTests
     }
 
     [Fact]
+    public void LoneWerewolfAgentCommittedTarget_FreshServiceRestoresExactSleepWithoutAmbiguousListenerResolution()
+    {
+        var (
+            builder,
+            holderId,
+            _,
+            additionalVictimId,
+            identification) = CreateGameAtIdentification(
+                loneWerewolfAgent: true);
+        var targetSelection = builder.Process(
+                identification.CreateResponse([holderId]))
+            .ModeratorInstruction.Should()
+            .BeOfType<SelectPlayersInstruction>().Subject;
+        var expectedSleep = builder.Process(
+                targetSelection.CreateResponse([additionalVictimId]))
+            .ModeratorInstruction.Should()
+            .BeOfType<ConfirmationInstruction>().Subject;
+        var freshService = new GameService();
+
+        var recoveredGameId = freshService.RehydrateSession(
+            builder.GetGameState()!.Serialize());
+        var recoveredSleep = freshService
+            .GetCurrentInstruction(recoveredGameId)
+            .Should().BeOfType<ConfirmationInstruction>().Subject;
+
+        AssertEquivalentInstruction(recoveredSleep, expectedSleep);
+        freshService.GetGameStateView(recoveredGameId)!
+            .GameHistoryLog
+            .OfType<NightActionLogEntry>()
+            .Should().ContainSingle(entry =>
+                entry.ActionType ==
+                    NightActionType.BigBadWolfVictimSelection &&
+                entry.TargetIds!.SequenceEqual(
+                    new[] { additionalVictimId }));
+        freshService.ProcessInstruction(
+                recoveredGameId,
+                recoveredSleep.CreateResponse())
+            .IsSuccess.Should().BeTrue();
+    }
+
+    [Fact]
     public void CommittedTarget_FreshServiceRejectsCursorAndActionRetargetedToCollectiveVictim()
     {
         var (
@@ -309,31 +350,48 @@ public sealed class BigBadWolfRecoveryTests
         Guid CollectiveVictimId,
         Guid AdditionalVictimId,
         SelectPlayersInstruction Identification)
-        CreateGameAtIdentification()
+        CreateGameAtIdentification(bool loneWerewolfAgent = false)
     {
-        var builder = GameTestBuilder.Create()
-            .WithPlayers(7)
-            .WithRoles(
+        MainRoleType[] roles = loneWerewolfAgent
+            ?
+            [
+                MainRoleType.BigBadWolf,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager
+            ]
+            :
+            [
                 MainRoleType.SimpleWerewolf,
                 MainRoleType.BigBadWolf,
                 MainRoleType.SimpleVillager,
                 MainRoleType.SimpleVillager,
                 MainRoleType.SimpleVillager,
                 MainRoleType.SimpleVillager,
-                MainRoleType.SimpleVillager);
+                MainRoleType.SimpleVillager
+            ];
+        var builder = GameTestBuilder.Create()
+            .WithPlayers(7)
+            .WithRoles(roles);
         builder.StartGame();
         var players = builder.GetGameState()!.GetPlayers().ToArray();
-        var holderId = players[1].Id;
+        var holderId = players[loneWerewolfAgent ? 0 : 1].Id;
         var collectiveVictimId = players[4].Id;
         var additionalVictimId = players[5].Id;
+        HashSet<Guid> werewolfAgentIds = loneWerewolfAgent
+            ? [holderId]
+            : [players[0].Id, holderId];
         builder.ArrangeKnownWerewolfFactionAgentGroup(
-            [players[0].Id, holderId]);
+            [.. werewolfAgentIds]);
         builder.ConfirmGameStart();
         builder.ConfirmNightStart();
         var identification =
             InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
                 builder.CompleteWerewolfNightAction(
-                    [players[0].Id, holderId],
+                    werewolfAgentIds,
                     collectiveVictimId));
 
         identification.Semantic.Should().Be(

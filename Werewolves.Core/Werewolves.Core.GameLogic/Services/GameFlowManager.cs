@@ -1201,6 +1201,8 @@ internal static class GameFlowManager
         }
 
         var listenerContinuation = ResolvePendingInstructionContinuation(
+            Listener(sourceRole),
+            NightMainActionLoop,
             session,
             pendingInstruction,
             admissions);
