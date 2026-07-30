@@ -39,6 +39,28 @@ public sealed class WhiteWerewolfRecurringRecoveryIntegrityTests
 		rehydrate.Should().Throw<InvalidOperationException>();
 	}
 
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public void CommittedAttack_CursorlessSleepBoundaryIsRejected(
+		bool downgradeCommitToLegacyNightAction)
+	{
+		var payload = RecoveryPayloadTestDriver
+			.Parse(CreateCommittedAttack())
+			.RemoveDomainRecoveryCursor();
+		if (downgradeCommitToLegacyNightAction)
+		{
+			payload.DowngradeLatestRecurringCommitToLegacyNightAction();
+		}
+
+		var tampered = payload.Serialize();
+		var service = new GameService();
+
+		Action rehydrate = () => service.RehydrateSession(tampered);
+
+		rehydrate.Should().Throw<InvalidOperationException>();
+	}
+
 	private static string CreateCommittedAttack()
 	{
 		var builder = GameTestBuilder.Create()

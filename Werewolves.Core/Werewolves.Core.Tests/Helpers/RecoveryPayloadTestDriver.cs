@@ -242,6 +242,12 @@ internal sealed class RecoveryPayloadTestDriver
 		return this;
 	}
 
+	internal RecoveryPayloadTestDriver RemoveDomainRecoveryCursor()
+	{
+		_payload.DomainRecoveryCursor = null;
+		return this;
+	}
+
 	internal RecoveryPayloadTestDriver
 		DowngradeLatestRecurringCommitToLegacyNightAction()
 	{

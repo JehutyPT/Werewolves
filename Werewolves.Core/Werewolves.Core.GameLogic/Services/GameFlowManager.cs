@@ -1164,6 +1164,14 @@ internal static class GameFlowManager
 			    return;
 		    }
 
+		    if (HasCursorlessWhiteWerewolfAttackBoundary(
+			        session,
+			        pendingInstruction))
+		    {
+			    throw new InvalidOperationException(
+				    "A committed White Werewolf attack requires its domain recovery cursor.");
+		    }
+
 		    var continuation = ResolvePendingInstructionContinuation(
 			    session,
 			    pendingInstruction,
@@ -1178,6 +1186,33 @@ internal static class GameFlowManager
 			    continuation.Value.ActiveSubPhaseStage,
 			    continuation.Value.Listener,
 			    continuation.Value.ListenerState);
+	    }
+
+	    private static bool HasCursorlessWhiteWerewolfAttackBoundary(
+		    GameSession session,
+		    ModeratorInstruction pendingInstruction)
+	    {
+		    if (session.GetCurrentPhase() != GamePhase.Night ||
+		        pendingInstruction is not ConfirmationInstruction
+		        {
+			        Semantic:
+				        ModeratorInstructionSemantic.PutRoleToSleep,
+			        AffectedPlayerIds: { Count: 1 } affectedPlayerIds
+		        })
+		    {
+			    return false;
+		    }
+
+		    var affectedPlayerId = affectedPlayerIds.Single();
+		    return session.GetPlayers().Any(player =>
+			           player.Id == affectedPlayerId &&
+			           player.State.Health == PlayerHealth.Alive &&
+			           player.State.CurrentRole ==
+			           MainRoleType.WhiteWerewolf) &&
+		           GameSessionQueries.GetOrderedNightActionsThisNight(
+				           session,
+				           [NightActionType.WhiteWerewolfVictimSelection])
+			           .Any();
 	    }
 
     private static void RestoreDomainContinuation(

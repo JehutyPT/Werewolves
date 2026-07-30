@@ -67,6 +67,80 @@ public sealed class WhiteWerewolfRecoveryTests
 	}
 
 	[Fact]
+	public void AcceptedAgentGroupObservation_KnownEmptyWhiteHolderSetRehydratesOneUnchangedClosureWithoutIdentification()
+	{
+		var builder = GameTestBuilder.Create()
+			.WithPlayers(7)
+			.WithRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.WhiteWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		var session = builder.GetGameState()!;
+		var players = session.GetPlayers().ToArray();
+		var whiteWerewolf = players[1];
+		builder.ArrangeKnownRole(
+			whiteWerewolf.Id,
+			MainRoleType.WhiteWerewolf);
+		builder.ArrangeEliminatedPlayer(whiteWerewolf.Id);
+		builder.ArrangeExplicitFactionTransition(
+			"test-dead-white-werewolf-agent",
+			FactionFact.Agent(
+				whiteWerewolf.Id,
+				Faction.Werewolf,
+				FactionAgentKnowledge.KnownAgent,
+				new FactionFactEffectiveBoundary(
+					session.TurnNumber,
+					session.GetCurrentPhase(),
+					session.GameHistoryLog.Count())));
+		session.RoleInPlayCount(MainRoleType.WhiteWerewolf).Should().Be(1);
+		builder.ConfirmGameStart();
+		builder.ConfirmNightStart();
+		var observation = builder.GetCurrentInstruction()
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+
+		var collectiveVictimSelection = builder.Process(
+				observation.CreateResponse([players[0].Id]))
+			.ModeratorInstruction.Should()
+			.BeOfType<SelectPlayersInstruction>().Subject;
+		var closure = session.GameHistoryLog
+			.OfType<FactionFactsCommittedLogEntry>()
+			.Should().ContainSingle(entry =>
+				entry.Source.Kind ==
+				FactionFactSourceKind.InitialBeneficiaryClosure)
+			.Subject;
+		var collectiveSleep = builder.Process(
+				collectiveVictimSelection.CreateResponse([players[3].Id]))
+			.ModeratorInstruction.Should()
+			.BeOfType<ConfirmationInstruction>().Subject;
+		var instructionAfterCollective = builder.Process(
+				collectiveSleep.CreateResponse())
+			.ModeratorInstruction.Should()
+			.BeOfType<ConfirmationInstruction>().Subject;
+		instructionAfterCollective.Semantic.Should().Be(
+			ModeratorInstructionSemantic.FinishNightActions);
+		var freshService = new GameService();
+
+		var recoveredGameId = freshService.RehydrateSession(session.Serialize());
+		var recoveredSession = freshService.GetGameStateView(recoveredGameId)!;
+
+		freshService.GetCurrentInstruction(recoveredGameId)
+			.Should().BeEquivalentTo(instructionAfterCollective);
+		recoveredSession.GameHistoryLog
+			.OfType<FactionFactsCommittedLogEntry>()
+			.Should().ContainSingle(entry =>
+				entry.Source.Kind ==
+				FactionFactSourceKind.InitialBeneficiaryClosure)
+			.Which.Should().BeEquivalentTo(
+				closure,
+				options => options.WithStrictOrdering());
+	}
+
+	[Fact]
 	public void AcceptedAgentGroupObservation_MissingEntailedClosureFactIsRejected()
 	{
 		var builder = GameTestBuilder.Create()

@@ -259,8 +259,7 @@ internal static class InitialBeneficiaryClosureRules
 				MainRoleType.WhiteWerewolf)
 			.Select(player => player.Id)
 			.ToArray();
-		if (livingWhiteWerewolfIds.Length == 0 ||
-		    !GameSessionQueries.IsCompleteLivingRoleHolderSetKnown(
+		if (!GameSessionQueries.IsCompleteLivingRoleHolderSetKnown(
 			    session,
 			    MainRoleType.WhiteWerewolf))
 		{
