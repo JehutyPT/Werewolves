@@ -205,10 +205,10 @@ internal static class GameFlowManager
                     subPhase: DawnSubPhases.Finalize,
                     subPhaseStages:
                     [
-                        HookStage(DawnMainActionLoop),
                         LogicStage(
                             DawnSubPhaseStage.EnsureVictoryFactsReady,
                             EnsureVictoryFactsReady),
+                        HookStage(DawnMainActionLoop),
                         NavigationEndStageSilent(GamePhase.Day)
                     ],
                     possibleNextMainPhaseTransitions:
@@ -293,13 +293,13 @@ internal static class GameFlowManager
 	                    subPhaseStages:
 	                    [
 	                        LogicStage(
+	                            DaySubPhaseStage.EnsureVictoryFactsReady,
+	                            EnsureVictoryFactsReady),
+	                        LogicStage(
 	                            DaySubPhaseStage
 	                                .ExpireVoterEligibilityRestriction,
 	                            DayPhaseHandlers
 	                                .ExpireVoterEligibilityRestriction),
-	                        LogicStage(
-	                            DaySubPhaseStage.EnsureVictoryFactsReady,
-	                            EnsureVictoryFactsReady),
 	                        NavigationEndStageSilent(GamePhase.Night)
                     ],
                     possibleNextMainPhaseTransitions:

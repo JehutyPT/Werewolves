@@ -487,6 +487,7 @@ public class VictoryConditionTests : DiagnosticTestBase
         var transitionCountBefore = session.GameHistoryLog
             .OfType<PhaseTransitionLogEntry>()
             .Count();
+        builder.ClearObserverLog();
         var reachVictoryCheckWindow = () => builder.Process(response);
 
         reachVictoryCheckWindow.Should()
@@ -502,6 +503,8 @@ public class VictoryConditionTests : DiagnosticTestBase
             phaseBefore,
             historyCountBefore,
             transitionCountBefore);
+        builder.ObserverLog.Should().NotContain(
+            $"[SubPhaseStage] → {GameHook.DawnMainActionLoop}");
         reachVictoryCheckWindow.Should()
             .Throw<InvalidOperationException>()
             .WithMessage("Required Faction facts are not ready.");
@@ -535,6 +538,128 @@ public class VictoryConditionTests : DiagnosticTestBase
             transitionCountBefore);
 
         MarkTestCompleted();
+    }
+
+    [Fact]
+    public void IncompleteBeneficiaryClosure_AtPreNightWindow_DoesNotExpireVotingRestriction()
+    {
+        var builder = CreateBuilder()
+            .WithPlayers(6)
+            .WithRoles(
+                MainRoleType.SimpleWerewolf,
+                MainRoleType.Scapegoat,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager);
+        builder.StartGame();
+        builder.ConfirmGameStart();
+        var players = builder.GetGameState()!.GetPlayers().ToArray();
+        var werewolf = players[0];
+        var permittedWithoutVotingRight = players[2];
+        var unknownBeneficiary = players[3];
+        var secondNightVictim = players[4];
+        var firstDawnVictim = players[5];
+        builder.CompleteNightPhase([werewolf.Id], firstDawnVictim.Id);
+        builder.CompleteDawnPhase(new Dictionary<Guid, MainRoleType>
+        {
+            [firstDawnVictim.Id] = MainRoleType.SimpleVillager
+        });
+        var dayOneSession = (GameSession)builder.GetGameState()!;
+        var livingIds = dayOneSession.GetPlayers()
+            .Where(player => player.State.Health == PlayerHealth.Alive)
+            .Select(player => player.Id)
+            .ToArray();
+        foreach (var playerId in livingIds)
+        {
+            builder.ArrangeVotingRight(playerId, hasVotingRight: false);
+        }
+
+        var restrictionScope = "test-pre-night-readiness-restriction";
+        var announcementInstructionId = Guid.NewGuid();
+        DayVoteRules.CommitVoterEligibilityRestriction(
+            dayOneSession,
+            restrictionScope,
+            MainRoleType.Scapegoat,
+            livingIds,
+            [permittedWithoutVotingRight.Id],
+            dayOneSession.TurnNumber + 1,
+            announcementInstructionId);
+        DayVoteRules.AcknowledgeVoterEligibilityRestrictionAnnouncement(
+            dayOneSession,
+            restrictionScope,
+            announcementInstructionId);
+        var dayOneDebate =
+            InstructionAssert.ExpectType<ConfirmationInstruction>(
+                builder.GetCurrentInstruction());
+        var afterDayOneDebate = builder.Process(
+            dayOneDebate.CreateResponse());
+        afterDayOneDebate.ModeratorInstruction!.Semantic.Should().Be(
+            ModeratorInstructionSemantic.StartNight);
+        builder.ConfirmNightStart();
+        var afterWerewolves =
+            builder.CompleteWerewolfNightActionSubsequentNight(
+                secondNightVictim.Id);
+        var nightEnd =
+            InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+                afterWerewolves,
+                CoreTestReferences.InstructionContexts.NightEndConfirmation);
+        builder.Process(nightEnd.CreateResponse());
+        builder.CompleteDawnPhase(new Dictionary<Guid, MainRoleType>
+        {
+            [secondNightVictim.Id] = MainRoleType.SimpleVillager
+        });
+        var followingDayDebate =
+            InstructionAssert.ExpectType<ConfirmationInstruction>(
+                builder.GetCurrentInstruction());
+        var recoveryPayload = RecoveryPayloadTestDriver
+            .Parse(builder.GetGameState()!.Serialize())
+            .RemoveInitialBeneficiaryClosureFact(unknownBeneficiary.Id)
+            .Serialize();
+        var service = new GameService();
+        var gameId = service.RehydrateSession(recoveryPayload);
+        var session = service.GetGameStateView(gameId)!;
+        session.GetCurrentPhase().Should().Be(GamePhase.Day);
+        DayVoteRules.GetActiveVoterEligibilityRestriction(session)
+            .Should().NotBeNull();
+        var response = followingDayDebate.CreateResponse();
+        var stableBefore = session.Serialize();
+        var phaseBefore = session.GetCurrentPhase();
+        var historyCountBefore = session.GameHistoryLog.Count();
+        var transitionCountBefore = session.GameHistoryLog
+            .OfType<PhaseTransitionLogEntry>()
+            .Count();
+        var reachVictoryCheckWindow = () =>
+            service.ProcessInstruction(gameId, response);
+
+        reachVictoryCheckWindow.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("Required Faction facts are not ready.");
+        AssertRestrictionAndSessionRemainCoherent();
+        reachVictoryCheckWindow.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("Required Faction facts are not ready.");
+        AssertRestrictionAndSessionRemainCoherent();
+
+        MarkTestCompleted();
+
+        void AssertRestrictionAndSessionRemainCoherent()
+        {
+            AssertCoherentGuardFailure(
+                service,
+                gameId,
+                session,
+                followingDayDebate.InstructionId,
+                stableBefore,
+                phaseBefore,
+                historyCountBefore,
+                transitionCountBefore);
+            session.GameHistoryLog
+                .OfType<VoterEligibilityRestrictionExpiredLogEntry>()
+                .Should().BeEmpty();
+            DayVoteRules.GetActiveVoterEligibilityRestriction(session)
+                .Should().NotBeNull();
+        }
     }
 
     [Fact]
