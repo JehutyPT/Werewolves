@@ -21,3 +21,4 @@ package-lock.json
 Werewolves.Client/nuget.config
 
 .codegraph/
+.lean-ctx/
