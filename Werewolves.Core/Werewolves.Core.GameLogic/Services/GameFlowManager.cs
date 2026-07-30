@@ -1188,6 +1188,9 @@ internal static class GameFlowManager
                 "The domain recovery cursor is structurally invalid.");
         }
 
+        var pendingInstruction = session.PendingModeratorInstruction
+            ?? throw new InvalidOperationException(
+                "The committed domain continuation requires one Pending Instruction.");
         if (cursor.Kind ==
             DomainRecoveryCursorKind.RecurringNativeRolePowerCommit)
         {
@@ -1205,11 +1208,35 @@ internal static class GameFlowManager
                     throw new InvalidOperationException(
                         $"Unsupported recurring Role Power continuation '{sourceRole}'.");
             }
+
+            var hasMatchingRecurringCommit = session.GameHistoryLog
+                .OfType<RecurringRolePowerCommittedLogEntry>()
+                .Any(entry =>
+                    entry.ActionType == cursor.CommittedActionType &&
+                    entry.PowerIdentity == cursor.PowerIdentity &&
+                    entry.CurrentPhase == GamePhase.Night &&
+                    entry.TurnNumber == session.TurnNumber &&
+                    entry.TargetIds is { Count: 1 } targetIds &&
+                    targetIds[0] == cursor.CommittedTargetId);
+            if (!hasMatchingRecurringCommit)
+            {
+                if (sourceRole != MainRoleType.BigBadWolf)
+                {
+                    throw new InvalidOperationException(
+                        "The domain recovery cursor does not match the latest recurring native Role Power action.");
+                }
+
+                BigBadWolfRole.ValidateLegacyRecurringRecoveryBoundary(
+                    cursor,
+                    pendingInstruction);
+                session.NormalizeLegacyRecurringRolePowerCommit(
+                    Key,
+                    cursor.CommittedActionType,
+                    cursor.CommittedTargetId,
+                    cursor.PowerIdentity!.Value);
+            }
         }
 
-        var pendingInstruction = session.PendingModeratorInstruction
-            ?? throw new InvalidOperationException(
-                "The committed domain continuation requires one Pending Instruction.");
         var configuredContinuation = ResolveDomainContinuation(
             sourceRole,
             cursor.CommittedActionType,

@@ -48,6 +48,55 @@ internal sealed partial class GameSessionKernel
             _logEntries.Add(entry);
         }
 
+        internal void NormalizeLegacyRecurringRolePowerCommit(
+            NightActionType actionType,
+            Guid targetId,
+            RolePowerInstanceIdentity powerIdentity,
+            GamePhase currentPhase,
+            int turnNumber)
+        {
+            var entryIndex = _logEntries.FindLastIndex(entry =>
+                entry is NightActionLogEntry nightAction &&
+                nightAction.ActionType == actionType);
+            if (entryIndex < 0 ||
+                _logEntries[entryIndex].GetType() !=
+                    typeof(NightActionLogEntry))
+            {
+                throw new InvalidOperationException(
+                    "The legacy recurring Role Power action is unavailable for normalization.");
+            }
+
+            var legacyEntry =
+                (NightActionLogEntry)_logEntries[entryIndex];
+            if (legacyEntry.CurrentPhase != currentPhase ||
+                legacyEntry.TurnNumber != turnNumber ||
+                legacyEntry.TargetIds is not [var legacyTargetId] ||
+                legacyTargetId != targetId)
+            {
+                throw new InvalidOperationException(
+                    "The legacy recurring Role Power action does not match the current recovery boundary.");
+            }
+
+            var normalizedEntry =
+                new RecurringRolePowerCommittedLogEntry
+                {
+                    Timestamp = legacyEntry.Timestamp,
+                    TurnNumber = legacyEntry.TurnNumber,
+                    CurrentPhase = legacyEntry.CurrentPhase,
+                    ActionType = legacyEntry.ActionType,
+                    TargetIds = legacyEntry.TargetIds,
+                    ActingPlayerId = powerIdentity.ActingPlayerId,
+                    SourceRole = powerIdentity.SourceRole,
+                    SourcePowerIdentifier =
+                        powerIdentity.SourcePowerIdentifier,
+                    PowerInstanceId = powerIdentity.PowerInstanceId,
+                    PowerInstanceOrigin =
+                        powerIdentity.PowerInstanceOrigin
+                };
+            normalizedEntry.EnforceValidity();
+            _logEntries[entryIndex] = normalizedEntry;
+        }
+
         private void ValidateFactionFacts(
             GameLogEntryBase entry,
             IReadOnlyCollection<Guid>? playerIds)

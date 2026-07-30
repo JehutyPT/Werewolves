@@ -217,7 +217,7 @@ public sealed class BigBadWolfRecoveryTests
         Action deserializeStateModels = () => _ = new GameSession(tampered);
 
         deserializeStateModels.Should().Throw<InvalidOperationException>()
-            .WithMessage("*legacy Big Bad Wolf*");
+            .WithMessage("*legacy recurring Role Power*");
     }
 
     [Fact]

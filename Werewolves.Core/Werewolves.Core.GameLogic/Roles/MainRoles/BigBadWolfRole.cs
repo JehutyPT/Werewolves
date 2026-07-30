@@ -215,6 +215,26 @@ internal sealed class BigBadWolfRole
         }
     }
 
+    internal static void ValidateLegacyRecurringRecoveryBoundary(
+        DomainRecoveryCursor cursor,
+        ModeratorInstruction pendingInstruction)
+    {
+        ArgumentNullException.ThrowIfNull(pendingInstruction);
+        ValidateRecurringRecoveryCursorIdentity(cursor);
+        if (cursor.NextInstructionSemantic !=
+                ModeratorInstructionSemantic.PutRoleToSleep ||
+            pendingInstruction is not ConfirmationInstruction
+            {
+                Semantic: ModeratorInstructionSemantic.PutRoleToSleep,
+                AffectedPlayerIds: { Count: 1 } affectedPlayerIds
+            } ||
+            affectedPlayerIds[0] != cursor.ActingPlayerId)
+        {
+            throw new InvalidOperationException(
+                "The legacy Big Bad Wolf recurring commit does not match its exact pending sleep instruction.");
+        }
+    }
+
     protected override HookListenerActionResult HandleRoleWakeupAndId(
         GameSession session,
         ModeratorResponse input)

@@ -132,6 +132,16 @@ internal class GameSession : IGameSession
             acceptedObservationRecoveryCursor,
             domainRecoveryCursor);
 
+    internal void NormalizeLegacyRecurringRolePowerCommit(
+        IGameFlowManagerKey key,
+        NightActionType actionType,
+        Guid targetId,
+        RolePowerInstanceIdentity powerIdentity) =>
+        _gameSessionKernel.NormalizeLegacyRecurringRolePowerCommit(
+            actionType,
+            targetId,
+            powerIdentity);
+
     internal void RestoreTransientContinuation(
         IGameFlowManagerKey key,
         string activeSubPhaseStage,
