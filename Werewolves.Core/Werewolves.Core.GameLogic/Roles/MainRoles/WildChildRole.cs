@@ -20,6 +20,32 @@ internal class WildChildRole :
     public override ListenerIdentifier Id => ListenerIdentifier.Listener(MainRoleType.WildChild);
     protected override bool HasNightPowers => false;
 
+    public override bool TryResolvePendingInstructionContinuation(
+        GameHook hook,
+        GameSession session,
+        ModeratorInstruction pendingInstruction,
+        out string listenerState)
+    {
+        listenerState = string.Empty;
+        if (hook == GameHook.NightMainActionLoop &&
+            pendingInstruction is SelectPlayersInstruction
+            {
+                Semantic: ModeratorInstructionSemantic.SelectWildChildModel
+            } &&
+            HasExpectedAffectedRoleHolders(session, pendingInstruction))
+        {
+            listenerState =
+                StandardNightRoleState.AwaitingTargetSelection.ToString();
+            return true;
+        }
+
+        return base.TryResolvePendingInstructionContinuation(
+            hook,
+            session,
+            pendingInstruction,
+            out listenerState);
+    }
+
     protected override List<RoleStateMachineStage> DefineStateMachineStages()
         => base.DefineStateMachineStages();
 

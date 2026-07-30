@@ -77,6 +77,53 @@ internal sealed class WitchRole : NightRoleHookListener<WitchRoleState>
 			WitchRoleState.Awake);
 	}
 
+	public override bool TryResolvePendingInstructionContinuation(
+		GameHook hook,
+		GameSession session,
+		ModeratorInstruction pendingInstruction,
+		out string listenerState)
+	{
+		listenerState = string.Empty;
+		if (hook == GameHook.NightMainActionLoop &&
+		    HasExpectedAffectedRoleHolders(session, pendingInstruction))
+		{
+			switch (pendingInstruction)
+			{
+				case SelectPlayersInstruction
+				{
+					Semantic:
+						ModeratorInstructionSemantic
+							.SelectWitchHealingTarget
+				}:
+					listenerState =
+						WitchRoleState.AwaitingHealingSelection.ToString();
+					return true;
+				case SelectPlayersInstruction
+				{
+					Semantic:
+						ModeratorInstructionSemantic
+							.SelectWitchPoisonTarget
+				}:
+					listenerState =
+						WitchRoleState.AwaitingPoisonSelection.ToString();
+					return true;
+				case ConfirmationInstruction
+				{
+					Semantic:
+						ModeratorInstructionSemantic.PutRoleToSleep
+				}:
+					listenerState = WitchRoleState.ReadyToSleep.ToString();
+					return true;
+			}
+		}
+
+		return base.TryResolvePendingInstructionContinuation(
+			hook,
+			session,
+			pendingInstruction,
+			out listenerState);
+	}
+
 	public override HookListenerActionResult Execute(
 		GameSession session,
 		ModeratorResponse input)

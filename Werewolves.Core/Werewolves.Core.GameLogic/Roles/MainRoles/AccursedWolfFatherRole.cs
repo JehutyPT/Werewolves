@@ -89,11 +89,31 @@ internal sealed class AccursedWolfFatherRole
 		out string listenerState)
 	{
 		listenerState = string.Empty;
+		if (hook == GameHook.NightMainActionLoop &&
+		    pendingInstruction is SelectOptionsInstruction
+		    {
+			    Semantic:
+				    ModeratorInstructionSemantic
+					    .ChooseAccursedWolfFatherInfection
+		    } &&
+		    HasExpectedAffectedRoleHolders(session, pendingInstruction))
+		{
+			listenerState =
+				AccursedWolfFatherRoleState
+					.AwaitingInfectionChoice
+					.ToString();
+			return true;
+		}
+
 		if (hook != GameHook.NightMainActionLoop ||
 		    pendingInstruction.Semantic !=
 			    ModeratorInstructionSemantic.PutRoleToSleep)
 		{
-			return false;
+			return base.TryResolvePendingInstructionContinuation(
+				hook,
+				session,
+				pendingInstruction,
+				out listenerState);
 		}
 
 		var holder = GetAliveRolePlayers(session)?.SingleOrDefault();

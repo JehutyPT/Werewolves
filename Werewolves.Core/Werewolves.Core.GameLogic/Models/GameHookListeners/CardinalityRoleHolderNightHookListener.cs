@@ -41,6 +41,58 @@ internal abstract class CardinalityRoleHolderNightHookListener
 	protected abstract RolePowerDefinition CommunicationPower { get; }
 	protected abstract bool HasCommunicationInterval(int turnNumber);
 
+	public override bool TryResolvePendingInstructionContinuation(
+		GameHook hook,
+		GameSession session,
+		ModeratorInstruction pendingInstruction,
+		out string listenerState)
+	{
+		listenerState = string.Empty;
+		if (hook != GameHook.NightMainActionLoop)
+		{
+			return false;
+		}
+
+		switch (pendingInstruction)
+		{
+			case SelectPlayersInstruction
+			{
+				Semantic: ModeratorInstructionSemantic.IdentifyRoleHolders,
+				RoleIdentification: { } role
+			} when role == (MainRoleType)Id:
+				listenerState =
+					CardinalityRoleHolderNightState.Identification.ToString();
+				return true;
+			case ConfirmationInstruction
+			{
+				Semantic: ModeratorInstructionSemantic.RecognizeRoleHolders
+			} when HasExpectedAffectedPlayers(session, pendingInstruction):
+				listenerState =
+					CardinalityRoleHolderNightState
+						.RecognitionConfirmation
+						.ToString();
+				return true;
+			case ConfirmationInstruction
+			{
+				Semantic: ModeratorInstructionSemantic.CommunicateAsRoleHolders
+			} when HasExpectedAffectedPlayers(session, pendingInstruction):
+				listenerState =
+					CardinalityRoleHolderNightState
+						.CommunicationConfirmation
+						.ToString();
+				return true;
+			case ConfirmationInstruction
+			{
+				Semantic: ModeratorInstructionSemantic.PutRoleToSleep
+			} when HasExpectedAffectedPlayers(session, pendingInstruction):
+				listenerState =
+					CardinalityRoleHolderNightState.SleepConfirmation.ToString();
+				return true;
+			default:
+				return false;
+		}
+	}
+
 	protected override List<RoleStateMachineStage> DefineStateMachineStages() =>
 	[
 		CreateStage(
@@ -198,6 +250,13 @@ internal abstract class CardinalityRoleHolderNightHookListener
 			.Where(player => player.State.CurrentRole == (MainRoleType)Id)
 			.OrderBy(player => player.Id)
 			.ToList();
+
+	private bool HasExpectedAffectedPlayers(
+		GameSession session,
+		ModeratorInstruction pendingInstruction) =>
+		pendingInstruction.AffectedPlayerIds is { } affectedPlayerIds &&
+		affectedPlayerIds.ToHashSet().SetEquals(
+			GetLivingCurrentRoleHolders(session).Select(player => player.Id));
 
 	private bool AreAllPowersAvailable(
 		IReadOnlyList<IPlayer> participants,

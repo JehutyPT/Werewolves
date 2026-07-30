@@ -50,6 +50,69 @@ internal class SimpleWerewolfRole : StandardNightRoleHookListener
         return ExecuteCore(session, input);
     }
 
+    public override bool TryResolvePendingInstructionContinuation(
+        GameHook hook,
+        GameSession session,
+        ModeratorInstruction pendingInstruction,
+        out string listenerState)
+    {
+        listenerState = string.Empty;
+        if (hook != GameHook.NightMainActionLoop)
+        {
+            return false;
+        }
+
+        switch (pendingInstruction)
+        {
+            case SelectPlayersInstruction
+            {
+                Semantic:
+                    ModeratorInstructionSemantic
+                        .ObserveWerewolfFactionAgentGroup,
+                RoleIdentification: null
+            } when !TryGetKnownLivingWerewolfAgents(session, out _):
+            case ConfirmationInstruction
+            {
+                Semantic: ModeratorInstructionSemantic.WakeRole
+            } when HasExpectedAffectedWerewolfAgents(
+                session,
+                pendingInstruction):
+                listenerState = WokenUpStateEnum.ToString();
+                return true;
+            case SelectPlayersInstruction
+            {
+                Semantic: ModeratorInstructionSemantic.SelectWerewolfVictim
+            } when HasExpectedAffectedWerewolfAgents(
+                session,
+                pendingInstruction):
+                listenerState = AwaitingTargetSelectionEnum.ToString();
+                return true;
+            case ConfirmationInstruction
+            {
+                Semantic: ModeratorInstructionSemantic.PutRoleToSleep
+            } when HasExpectedAffectedWerewolfAgents(
+                session,
+                pendingInstruction):
+                listenerState = ReadyToSleepStateEnum.ToString();
+                return true;
+        }
+
+        if (pendingInstruction.Semantic is
+            ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup or
+            ModeratorInstructionSemantic.WakeRole or
+            ModeratorInstructionSemantic.SelectWerewolfVictim or
+            ModeratorInstructionSemantic.PutRoleToSleep)
+        {
+            return false;
+        }
+
+        return base.TryResolvePendingInstructionContinuation(
+            hook,
+            session,
+            pendingInstruction,
+            out listenerState);
+    }
+
     protected override List<RoleStateMachineStage> DefineStateMachineStages()
     {
         var stages = base.DefineStateMachineStages();
@@ -266,6 +329,15 @@ internal class SimpleWerewolfRole : StandardNightRoleHookListener
             .ToArray();
         return true;
     }
+
+    private static bool HasExpectedAffectedWerewolfAgents(
+        GameSession session,
+        ModeratorInstruction pendingInstruction) =>
+        TryGetKnownLivingWerewolfAgents(session, out var agents) &&
+        agents.Count > 0 &&
+        pendingInstruction.AffectedPlayerIds is { } affectedPlayerIds &&
+        affectedPlayerIds.ToHashSet().SetEquals(
+            agents.Select(player => player.Id));
 
     private static HashSet<Guid> GetLivingKnownNonAgents(GameSession session) =>
         GetLivingPlayers(session)

@@ -386,6 +386,145 @@ public sealed class LittleGirlRoleTests : DiagnosticTestBase
 		MarkTestCompleted();
 	}
 
+	[Theory]
+	[InlineData(true, true)]
+	[InlineData(true, false)]
+	[InlineData(false, true)]
+	[InlineData(false, false)]
+	public void AcceptedStutteringJudgeSetup_EnteringWerewolfCollective_RetainsGuidanceWithoutReevaluation(
+		bool collectiveKnown,
+		bool spyingAllowed)
+	{
+		var originalPolicy = new RecordingPolicy(
+			spyingAllowed
+				? RolePowerAvailabilityResult.Allowed
+				: RolePowerAvailabilityResult.Denied);
+		var builder = CreateBuilder()
+			.WithRolePowerAvailabilityPolicy(originalPolicy)
+			.WithPlayers(
+				"Little Girl",
+				"Stuttering Judge",
+				"Werewolf",
+				"Villager A",
+				"Villager B")
+			.WithRoles(
+				MainRoleType.LittleGirl,
+				MainRoleType.StutteringJudge,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		if (collectiveKnown)
+		{
+			builder.ArrangeKnownWerewolfFactionAgentGroup(players[2].Id);
+		}
+
+		builder.ConfirmGameStart();
+		var littleGirlIdentification =
+			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+				builder.ConfirmNightStart());
+		var judgeIdentification =
+			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+				builder.Process(
+					littleGirlIdentification.CreateResponse([players[0].Id])));
+		var signalSetup =
+			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+				builder.Process(
+					judgeIdentification.CreateResponse([players[1].Id])));
+		var werewolfResult = builder.Process(signalSetup.CreateResponse());
+		ModeratorInstruction werewolfInstruction = collectiveKnown
+			? InstructionAssert
+				.ExpectSuccessWithType<ConfirmationInstruction>(
+					werewolfResult)
+			: InstructionAssert
+				.ExpectSuccessWithType<SelectPlayersInstruction>(
+					werewolfResult);
+
+		judgeIdentification.RoleIdentification.Should().Be(
+			MainRoleType.StutteringJudge);
+		signalSetup.Semantic.Should().Be(
+			ModeratorInstructionSemantic.EstablishStutteringJudgeSignal);
+		werewolfInstruction.Semantic.Should().Be(
+			collectiveKnown
+				? ModeratorInstructionSemantic.WakeRole
+				: ModeratorInstructionSemantic
+					.ObserveWerewolfFactionAgentGroup);
+		if (spyingAllowed)
+		{
+			werewolfInstruction.PrivateInstruction.Should().Contain(
+				GameStrings.LittleGirlOpeningGuidance);
+		}
+		else if (collectiveKnown)
+		{
+			werewolfInstruction.PrivateInstruction.Should().BeNull();
+		}
+		else
+		{
+			werewolfInstruction.PrivateInstruction.Should().Be(
+				GameStrings.WerewolfFactionAgentObservationPrompt);
+		}
+
+		if (collectiveKnown)
+		{
+			werewolfInstruction.AffectedPlayerIds.Should().Equal(
+				players[2].Id);
+		}
+		else
+		{
+			werewolfInstruction.AffectedPlayerIds.Should().BeNull();
+		}
+		originalPolicy.ObservedAttempts.Should().ContainSingle();
+		originalPolicy.ObservedAttempts.Single().SourceRole.Should().Be(
+			MainRoleType.LittleGirl);
+
+		var recoveredPolicy = new RecordingPolicy(
+			spyingAllowed
+				? RolePowerAvailabilityResult.Denied
+				: RolePowerAvailabilityResult.Allowed);
+		var recoveredService = new GameService(recoveredPolicy);
+		var recoveredGameId = recoveredService.RehydrateSession(
+			builder.GetGameState()!.Serialize());
+		var recoveredWerewolfInstruction =
+			recoveredService.GetCurrentInstruction(recoveredGameId)
+			?? throw new InvalidOperationException(
+				"Recovered Werewolf instruction is required.");
+
+		recoveredWerewolfInstruction.InstructionId.Should().Be(
+			werewolfInstruction.InstructionId);
+		recoveredWerewolfInstruction.PrivateInstruction.Should().Be(
+			werewolfInstruction.PrivateInstruction);
+		recoveredPolicy.ObservedAttempts.Should().BeEmpty();
+		var werewolfResponse = collectiveKnown
+			? InstructionAssert
+				.ExpectType<ConfirmationInstruction>(
+					recoveredWerewolfInstruction)
+				.CreateResponse()
+			: InstructionAssert
+				.ExpectType<SelectPlayersInstruction>(
+					recoveredWerewolfInstruction)
+				.CreateResponse([players[2].Id]);
+		var victimSelection =
+			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+				recoveredService.ProcessInstruction(
+					recoveredGameId,
+					werewolfResponse));
+		var sleep =
+			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+				recoveredService.ProcessInstruction(
+					recoveredGameId,
+					victimSelection.CreateResponse([players[3].Id])));
+
+		sleep.Semantic.Should().Be(ModeratorInstructionSemantic.PutRoleToSleep);
+		sleep.PrivateInstruction.Should().Be(
+			spyingAllowed
+				? GameStrings.LittleGirlClosingGuidance
+				: null);
+		sleep.AffectedPlayerIds.Should().Equal(players[2].Id);
+		recoveredPolicy.ObservedAttempts.Should().BeEmpty();
+		MarkTestCompleted();
+	}
+
 	[Fact]
 	public void KnownCollective_WhenSpyingIsDenied_PreservesWerewolfCadenceWithoutGuidance()
 	{
