@@ -1189,9 +1189,12 @@ internal static class GameFlowManager
 	    private static bool HasCursorlessWhiteWerewolfAttackBoundary(
 		    GameSession session) =>
 		    session.GetCurrentPhase() == GamePhase.Night &&
-		    GameSessionQueries.GetOrderedNightActionsThisNight(
-				    session,
-				    [NightActionType.WhiteWerewolfVictimSelection])
+		    GameSessionQueries.FindLogEntries<NightActionLogEntry>(
+			    session,
+			    NumberRangeConstraint.Exact(session.TurnNumber),
+			    filter: entry =>
+				    entry.ActionType ==
+				    NightActionType.WhiteWerewolfVictimSelection)
 			    .Any();
 
     private static void RestoreDomainContinuation(
