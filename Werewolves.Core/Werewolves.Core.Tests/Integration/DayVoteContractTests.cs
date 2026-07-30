@@ -1,5 +1,6 @@
 using FluentAssertions;
 using FluentAssertions.Execution;
+using Werewolves.Core.GameLogic.RolePowers;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
@@ -253,18 +254,27 @@ internal sealed record DayVoteScenario(
     Guid LivingTargetId,
     Guid EliminatedPlayerId)
 {
-    public static DayVoteScenario Start()
+    public static DayVoteScenario Start(
+        IRolePowerAvailabilityPolicy? rolePowerAvailabilityPolicy = null,
+        MainRoleType? livingTargetRole = null)
     {
         var builder = GameTestBuilder.Create()
-            .WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);
+            .WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true)
+            .WithOptionalRolePowerAvailabilityPolicy(
+                rolePowerAvailabilityPolicy);
         builder.StartGame();
-        builder.ConfirmGameStart();
 
         var players = builder.GetGameState()!.GetPlayers().ToArray();
         var werewolfId = players[0].Id;
         var seerId = players[1].Id;
         var nightVictimId = players[2].Id;
         var livingTargetId = players[3].Id;
+        if (livingTargetRole is { } role)
+        {
+            builder.ArrangeKnownRole(livingTargetId, role);
+        }
+
+        builder.ConfirmGameStart();
 
         builder.CompleteNightPhase(
             werewolfIds: [werewolfId],
@@ -374,7 +384,8 @@ internal sealed record PlayerSnapshot(
     string Name,
     MainRoleType? Role,
     PlayerHealth Health,
-    bool IsImmuneToLynching,
+    bool HasVotingRight,
+    int DurableVotingPower,
     IReadOnlyList<StatusEffectTypes> StatusEffects)
 {
     public static PlayerSnapshot Capture(IPlayer player)
@@ -383,7 +394,8 @@ internal sealed record PlayerSnapshot(
             player.Name,
             player.State.MainRole,
             player.State.Health,
-            player.State.IsImmuneToLynching,
+            player.State.HasVotingRight,
+            player.State.DurableVotingPower,
             player.State.GetActiveStatusEffects().Order().ToArray());
 }
 

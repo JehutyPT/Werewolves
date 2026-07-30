@@ -27,6 +27,7 @@ public sealed record DashboardRosterEntry(
 	public DashboardRoleVisibility RoleVisibility { get; init; } = DashboardRoleVisibility.Unknown;
 	public string RoleVisibilityLabel { get; init; } =
 		DashboardRoster.RoleVisibilityLabel(DashboardRoleVisibility.Unknown);
+	public string? VotingGuidanceLabel { get; init; }
 }
 
 public static class DashboardRoster
@@ -65,10 +66,11 @@ public static class DashboardRoster
 					statusEffects.Length == 0
 						? NoStatusEffectsLabel
 						: string.Join(ClientStrings.Common_ListSeparator, statusEffects))
-				{
-					RoleVisibility = roleVisibility,
-					RoleVisibilityLabel = RoleVisibilityLabel(roleVisibility)
-				};
+					{
+						RoleVisibility = roleVisibility,
+						RoleVisibilityLabel = RoleVisibilityLabel(roleVisibility),
+						VotingGuidanceLabel = VotingGuidanceLabel(player.State)
+					};
 			})
 			.ToArray();
 	}
@@ -91,12 +93,30 @@ public static class DashboardRoster
 		_ => ClientStrings.Dashboard_HealthUnknown
 	};
 
+	public static string? VotingGuidanceLabel(IPlayerState state)
+	{
+		ArgumentNullException.ThrowIfNull(state);
+
+		if (state.Health == PlayerHealth.Dead)
+		{
+			return null;
+		}
+
+		if (state.DurableVotingPower == 0)
+		{
+			return ClientStrings.Dashboard_VotingPowerLostPermanently;
+		}
+
+		return state.HasVotingRight
+			? null
+			: ClientStrings.Dashboard_VotingRightTemporarilyRestricted;
+	}
+
 	public static string StatusEffectLabel(StatusEffectTypes effect) => effect switch
 	{
 		StatusEffectTypes.ElderProtectionLost => ClientStrings.StatusEffect_ElderProtectionLost,
 		StatusEffectTypes.LycanthropyInfection => ClientStrings.StatusEffect_LycanthropyInfection,
 		StatusEffectTypes.WildChildChanged => ClientStrings.StatusEffect_WildChildChanged,
-		StatusEffectTypes.LynchingImmunityUsed => ClientStrings.StatusEffect_LynchingImmunityUsed,
 		StatusEffectTypes.Sheriff => ClientStrings.StatusEffect_Sheriff,
 		StatusEffectTypes.Lovers => ClientStrings.StatusEffect_Lovers,
 		StatusEffectTypes.Charmed => ClientStrings.StatusEffect_Charmed,

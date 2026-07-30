@@ -49,6 +49,8 @@ public class ClientStringsTests
 		nameof(ClientStrings.LobbyEvaluation_Blocked),
 		nameof(ClientStrings.Dashboard_NoSession),
 		nameof(ClientStrings.Dashboard_HealthDead),
+		"Dashboard_VotingPowerLostPermanently",
+		"Dashboard_VotingRightTemporarilyRestricted",
 		nameof(ClientStrings.Dashboard_RoleKnowledgeUnknown),
 		nameof(ClientStrings.Dashboard_RoleKnowledgePrivate),
 		nameof(ClientStrings.Dashboard_RoleKnowledgePublic),

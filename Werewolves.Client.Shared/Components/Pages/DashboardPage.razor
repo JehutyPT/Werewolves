@@ -52,27 +52,7 @@
 			<span>@PlayerCountLabel</span>
 		</div>
 
-		@if (RosterEntries.Count == 0)
-		{
-			<p class="ww-empty-state">@ClientStrings.Dashboard_EmptyRoster</p>
-		}
-		else
-		{
-			<ol class="ww-dashboard-roster">
-				@for (var index = 0; index < RosterEntries.Count; index++)
-				{
-					var player = RosterEntries[index];
-					<li class="ww-dashboard-player @(player.IsDead ? "ww-dashboard-player--dead" : "")" @key="player.PlayerId">
-						<span class="ww-seat-number">@player.SeatNumber</span>
-						<div class="ww-dashboard-player__main">
-							<span class="ww-player-name">@player.Name</span>
-							<span class="ww-dashboard-player__meta">@player.RoleLabel · @player.RoleVisibilityLabel · @player.HealthLabel</span>
-						</div>
-						<span class="ww-status-list">@StatusEffectsLabel(player)</span>
-					</li>
-				}
-			</ol>
-		}
+		<DashboardRosterView Roster="RosterEntries" />
 	</section>
 
 	<section class="ww-dashboard-panel ww-action-panel" style="@PanelStyle(DashboardTab.Action)" aria-hidden="@(_activeTab != DashboardTab.Action)">
@@ -273,8 +253,6 @@
 		GamePhase.Day => ClientStrings.Dashboard_PhaseDay,
 		_ => ClientStrings.Dashboard_PhaseFallback
 	};
-
-	private static string StatusEffectsLabel(DashboardRosterEntry player) => player.StatusEffectsLabel;
 
 	private static string KnownAliveRoleCountLabel(DashboardStatsSnapshot stats)
 	{

@@ -353,6 +353,10 @@
     <value>Idiota da Aldeia</value>
     <comment/>
   </data>
+  <data name="VillageIdiotPardonAnnouncement" xml:space="preserve">
+    <value>{0} é perdoado por ser o Idiota da Aldeia. Continua vivo, mas perde permanentemente o direito e o poder de voto.</value>
+    <comment/>
+  </data>
   <data name="TwoSistersRoleName" xml:space="preserve">
     <value>Duas Irmãs</value>
     <comment/>

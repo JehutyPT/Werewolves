@@ -247,8 +247,7 @@ public sealed class RolePowerAvailabilityTests
 		public MainRoleType? PubliclyRevealedRole => null;
 		public PlayerHealth Health => PlayerHealth.Alive;
 		public bool HasVotingRight => true;
-		public bool IsImmuneToLynching => false;
-		public string? LynchingImmunityAnnouncement => null;
+		public int DurableVotingPower => 1;
 		public List<StatusEffectTypes> GetActiveStatusEffects() => [];
 		public bool HasStatusEffect(StatusEffectTypes effect) => false;
 	}

@@ -258,6 +258,9 @@ public class EventSourcingTests : DiagnosticTestBase
             derived.Health.Should().Be(player.State.Health,
                 CoreTestReferences.AssertionReasons.PlayerHealthMismatch(player.Name));
 
+            // Durable voting power comparison
+            derived.DurableVotingPower.Should().Be(player.State.DurableVotingPower);
+
             // Status effects comparison
             var cachedEffects = player.State.GetActiveStatusEffects();
             var derivedEffects = derived.GetActiveStatusEffects();

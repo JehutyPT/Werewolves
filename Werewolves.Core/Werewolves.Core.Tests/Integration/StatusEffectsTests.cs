@@ -634,45 +634,4 @@ public class StatusEffectsTests : DiagnosticTestBase
 
     #endregion
 
-    #region SE-020 to SE-021: Village Idiot Immunity
-
-    /// <summary>
-    /// SE-020: VillageIdiot is immune to lynching before immunity is used.
-    /// </summary>
-    [Fact]
-    public void VillageIdiot_IsImmuneToLynching_BeforeImmunityUsed()
-    {
-        // Arrange
-        var testState = new TestPlayerState
-        {
-            MainRole = MainRoleType.VillageIdiot,
-            ActiveEffects = StatusEffectTypes.None
-        };
-
-        // Act & Assert
-        testState.IsImmuneToLynching.Should().BeTrue();
-
-        MarkTestCompleted();
-    }
-
-    /// <summary>
-    /// SE-021: VillageIdiot loses lynching immunity after LynchingImmunityUsed effect.
-    /// </summary>
-    [Fact]
-    public void VillageIdiot_LosesImmunity_AfterLynchingImmunityUsed()
-    {
-        // Arrange
-        var testState = new TestPlayerState
-        {
-            MainRole = MainRoleType.VillageIdiot,
-            ActiveEffects = StatusEffectTypes.LynchingImmunityUsed
-        };
-
-        // Act & Assert
-        testState.IsImmuneToLynching.Should().BeFalse();
-
-        MarkTestCompleted();
-    }
-
-    #endregion
 }

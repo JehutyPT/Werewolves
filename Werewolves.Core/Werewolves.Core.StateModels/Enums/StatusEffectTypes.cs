@@ -18,12 +18,11 @@ public enum StatusEffectTypes
     ElderProtectionLost = 1 << 0,      // Elder's extra life has been used
     LycanthropyInfection = 1 << 1,     // Player has been infected by the wolf father
     WildChildChanged = 1 << 2,         // Wild Child has changed Faction allegiance
-    LynchingImmunityUsed = 1 << 3,     // Village Idiot has used their immunity
-    
+
     // Hookable status effects (formerly SecondaryRoleType)
-    Sheriff = 1 << 4,                  // Player holds the Sheriff title
-    Lovers = 1 << 5,                   // Player is one of the Lovers
-    Charmed = 1 << 6,                  // Player has been charmed by the Piper
-    TownCrier = 1 << 7,                // Player is the Town Crier (New Moon)
-    Executioner = 1 << 8,              // Player is the Executioner (New Moon)
+    Sheriff = 1 << 3,                  // Player holds the Sheriff title
+    Lovers = 1 << 4,                   // Player is one of the Lovers
+    Charmed = 1 << 5,                  // Player has been charmed by the Piper
+    TownCrier = 1 << 6,                // Player is the Town Crier (New Moon)
+    Executioner = 1 << 7,              // Player is the Executioner (New Moon)
 }

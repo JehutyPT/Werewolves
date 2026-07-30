@@ -388,20 +388,21 @@ internal static class GameFlowManager
         }
 
         var target = session.GetPlayer(voteElimination.PlayerId);
-        if (!target.State.IsImmuneToLynching)
+        if (target.State.CurrentRole is not { } currentRole ||
+            !session.TryGetExistingListener<IVoteEliminationInterceptor>(
+                Listener(currentRole),
+                out var interceptor) ||
+            !interceptor.TryInterceptVoteElimination(
+                session,
+                target,
+                out var consequence))
         {
             return EliminationBatchCommitDecision.Proceed(eliminations);
         }
 
-        var immunityAnnouncement = target.State.LynchingImmunityAnnouncement!;
-        session.ApplyStatusEffect(
-            LynchingImmunityUsed,
-            voteElimination.PlayerId);
         return new EliminationBatchCommitDecision(
             Eliminations: [],
-            new ConfirmationInstruction(
-                ModeratorInstructionSemantic.AnnounceLynchingImmunity,
-                publicAnnouncement: immunityAnnouncement));
+            consequence);
     }
 
     private static ModeratorInstruction? CreateVoteEliminationAnnouncement(
@@ -569,10 +570,10 @@ internal static class GameFlowManager
 		        return true;
 	        }
 
-		if (IsEliminationCascadeReactionInput(nextInstructionToSend))
-		{
-			return true;
-		}
+			if (IsEliminationCascadeReactionInput(nextInstructionToSend))
+			{
+				return true;
+			}
 
         if (HasNewOneUseRolePowerCommit(session, startingLogCount))
         {
@@ -1453,7 +1454,8 @@ internal static class GameFlowManager
             .WithHealth(PlayerHealth.Alive)
             .Select(player => new LivingFactionBeneficiarySnapshot(
                 session.RequireKnownFactionBeneficiary(player.Id),
-                player.State.HasStatusEffect(StatusEffectTypes.Charmed)))
+                player.State.HasStatusEffect(StatusEffectTypes.Charmed),
+                player.State.DurableVotingPower))
             .ToArray();
     }
 

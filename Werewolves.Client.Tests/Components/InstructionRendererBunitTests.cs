@@ -65,6 +65,31 @@ public class InstructionRendererBunitTests
 	}
 
 	[Fact]
+	public void VillageIdiotPardonConsequence_RendersThroughGenericPortugueseConfirmation()
+	{
+		using var context = new ModeratorComponentTestContext();
+		var announcement = GameStrings.VillageIdiotPardonAnnouncement.Format(
+			PlayerNames.Ana);
+		var instruction = CreateConfirmationInstruction(
+			publicAnnouncement: announcement);
+
+		var cut = context.RenderModeratorComponent<InstructionRenderer>(
+			parameters => parameters.Add(
+				component => component.Instruction,
+				instruction));
+
+		cut.Find(PublicInstructionSelector).TextContent.Should()
+			.Contain(announcement);
+		cut.FindAll(PrivateInstructionSelector).Should().BeEmpty();
+		var actionZones = cut.FindAll(DashboardActionZoneSelector);
+		actionZones.Should().ContainSingle();
+		actionZones.Single().TextContent.Should()
+			.Contain(ClientStrings.Dashboard_ContinueButton);
+		actionZones.Single().QuerySelectorAll(HoldButtonSelector)
+			.Should().ContainSingle();
+	}
+
+	[Fact]
 	public void ConfirmationInstruction_WithPublicAndPrivateGuidance_InitiallyExpandsBothGuidanceBlocks()
 	{
 		using var context = new ModeratorComponentTestContext();

@@ -123,6 +123,24 @@ public class AlreadyDecidedRoleCompositionClassifierTests
 	}
 
 	[Fact]
+	public void Classify_WithOrdinaryVillagerAndFreshVillageIdiot_DoesNotInferWerewolfControl()
+	{
+		var result = AlreadyDecidedRoleCompositionClassifier.Classify(
+			CanonicalRoleComposition.Create(
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.VillageIdiot
+			]),
+			SimulatorCapability.SafetyScreening);
+
+		result.IsAlreadyDecided.Should().BeFalse();
+		result.GameResult.Should().BeNull();
+		result.Reason.Should().Be(
+			AlreadyDecidedReason.NoLobbyExitVictoryPredicateSatisfied);
+	}
+
+	[Fact]
 	public void Resolve_WithNoSatisfiedPredicates_ReturnsExplicitNotAlreadyDecided()
 	{
 		var result = AlreadyDecidedRoleCompositionClassifier.Resolve(

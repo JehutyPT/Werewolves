@@ -63,6 +63,12 @@ internal class TestSessionMutator : ISessionMutator
             state.HasVotingRight = hasVotingRight;
     }
 
+    public void SetDurableVotingPower(Guid playerId, int durableVotingPower)
+    {
+        if (_states.TryGetValue(playerId, out var state))
+            state.DurableVotingPower = durableVotingPower;
+    }
+
     public void SetStatusEffect(Guid playerId, StatusEffectTypes effect, bool active)
     {
         if (!_states.TryGetValue(playerId, out var state))
@@ -132,6 +138,7 @@ internal class TestPlayerState : IPlayerState
     public MainRoleType? PubliclyRevealedRole { get; set; }
     public PlayerHealth Health { get; set; } = PlayerHealth.Alive;
     public bool HasVotingRight { get; set; } = true;
+    public int DurableVotingPower { get; set; } = 1;
     public FactionBeneficiaryKnowledge FactionBeneficiary { get; private set; } =
         FactionBeneficiaryKnowledge.Unknown;
     internal StatusEffectTypes ActiveEffects { get; set; } = StatusEffectTypes.None;
@@ -173,7 +180,4 @@ internal class TestPlayerState : IPlayerState
             ? ActiveEffects == StatusEffectTypes.None
             : (ActiveEffects & effect) == effect;
 
-    public bool IsImmuneToLynching
-        => MainRole == MainRoleType.VillageIdiot &&
-           !HasStatusEffect(StatusEffectTypes.LynchingImmunityUsed);
 }

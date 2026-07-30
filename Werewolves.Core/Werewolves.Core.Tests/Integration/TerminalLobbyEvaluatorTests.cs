@@ -367,7 +367,7 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 	[Fact]
 	public void Evaluate_ScapegoatPolicyMissingHolderObservation_UsesFixedIncompleteRunAndSyntheticMixedBatch()
 	{
-		const long runNumber = 3;
+		const long runNumber = 2;
 		var scenario = Scenario(
 			MainRoleType.SimpleWerewolf,
 			MainRoleType.Scapegoat,
@@ -549,7 +549,7 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 				ModeratorInstructionSemantic.StartDayDebate,
 				ModeratorInstructionSemantic.RecordDayVote,
 				ModeratorInstructionSemantic.AssignDayVoteTargetRole,
-				ModeratorInstructionSemantic.AnnounceLynchingImmunity,
+		    ModeratorInstructionSemantic.AnnounceVillageIdiotPardon,
 				ModeratorInstructionSemantic.AnnounceDayElimination
 			]),
 		supportsActorSetupCards: false,

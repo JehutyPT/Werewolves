@@ -139,9 +139,10 @@ public sealed class SimulatorCapability : SimulatorProfile
 			new(MainRoleType.Hunter, Faction.Villager),
 			new(MainRoleType.LittleGirl, Faction.Villager),
 			new(MainRoleType.Defender, Faction.Villager),
-			new(MainRoleType.StutteringJudge, Faction.Villager),
-			new(MainRoleType.Scapegoat, Faction.Villager),
-			new(MainRoleType.WolfHound, Faction.Villager),
+				new(MainRoleType.StutteringJudge, Faction.Villager),
+				new(MainRoleType.Scapegoat, Faction.Villager),
+				new(MainRoleType.VillageIdiot, Faction.Villager),
+				new(MainRoleType.WolfHound, Faction.Villager),
 			new(
 				MainRoleType.AccursedWolfFather,
 				Faction.Werewolf,
@@ -168,7 +169,7 @@ public sealed class SimulatorCapability : SimulatorProfile
 		SimulatorCapabilityRegistry.Production.FullProbability;
 
 	internal static SimulatorCapability CreateSafetyScreening() => new(
-		new SimulatorProfileIdentity("safety-screening", "18"),
+			new SimulatorProfileIdentity("safety-screening", "19"),
 		SafetyScreeningRoleDescriptors,
 		headlessResponsePolicy: new HeadlessResponsePolicy(
 			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
@@ -195,7 +196,7 @@ public sealed class SimulatorCapability : SimulatorProfile
 				ModeratorInstructionSemantic.StartDayDebate,
 				ModeratorInstructionSemantic.RecordDayVote,
 				ModeratorInstructionSemantic.AssignDayVoteTargetRole,
-				ModeratorInstructionSemantic.AnnounceLynchingImmunity,
+		    ModeratorInstructionSemantic.AnnounceVillageIdiotPardon,
 				ModeratorInstructionSemantic.AnnounceDayElimination,
 				ModeratorInstructionSemantic.ConductDayVote,
 				ModeratorInstructionSemantic.ObserveVillagerVillagerFromDeal,
@@ -242,7 +243,7 @@ public sealed class SimulatorCapability : SimulatorProfile
 				ModeratorInstructionSemantic.StartDayDebate,
 				ModeratorInstructionSemantic.RecordDayVote,
 				ModeratorInstructionSemantic.AssignDayVoteTargetRole,
-				ModeratorInstructionSemantic.AnnounceLynchingImmunity,
+		    ModeratorInstructionSemantic.AnnounceVillageIdiotPardon,
 				ModeratorInstructionSemantic.AnnounceDayElimination
 			]),
 		supportsActorSetupCards: false,

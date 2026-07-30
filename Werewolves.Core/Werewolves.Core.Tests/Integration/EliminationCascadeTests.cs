@@ -1019,36 +1019,58 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 	}
 
 	[Fact]
-	public void VoteImmunityAnnouncement_RehydratesWithoutReapplyingOrEliminatingTarget()
+	public void VillageIdiotPardon_CommitsDurableVotingConsequencesExactlyOnce()
 	{
 		var scenario = DayVoteScenario.Start();
-		var builder = scenario.Builder.ArrangeCurrentRole(
+		var builder = scenario.Builder.ArrangeKnownRole(
 			scenario.LivingTargetId,
 			MainRoleType.VillageIdiot);
-		var reveal = builder.Process(
+		var beforeVote = builder.GetGameState()!
+			.GetPlayerState(scenario.LivingTargetId);
+		beforeVote.CurrentRole.Should().Be(MainRoleType.VillageIdiot);
+		beforeVote.ModeratorKnownRole.Should().Be(MainRoleType.VillageIdiot);
+		beforeVote.PubliclyRevealedRole.Should().BeNull();
+		beforeVote.DurableVotingPower.Should().Be(1);
+		beforeVote.HasVotingRight.Should().BeTrue();
+
+		var revealContinue = builder.Process(
 				scenario.Instruction.CreateResponse([scenario.LivingTargetId]))
 			.ModeratorInstruction.Should()
-			.BeOfType<AssignRolesInstruction>().Subject;
+			.BeOfType<ConfirmationInstruction>().Subject;
+		revealContinue.Semantic.Should().Be(
+			ModeratorInstructionSemantic.AssignDayVoteTargetRole);
+		revealContinue.AffectedPlayerIds.Should().Equal(
+			scenario.LivingTargetId);
+		var awaitingReveal = builder.GetGameState()!
+			.GetPlayerState(scenario.LivingTargetId);
+		awaitingReveal.PubliclyRevealedRole.Should().BeNull();
+		awaitingReveal.DurableVotingPower.Should().Be(1);
+		awaitingReveal.HasVotingRight.Should().BeTrue();
+		builder.GetGameState()!.GameHistoryLog
+			.OfType<VillageIdiotPardonCommittedLogEntry>()
+			.Should().BeEmpty();
+
 		var immunityAnnouncement = builder.Process(
-				reveal.CreateResponse(new()
-				{
-					[scenario.LivingTargetId] = MainRoleType.VillageIdiot
-				}))
+				revealContinue.CreateResponse())
 			.ModeratorInstruction.Should()
 			.BeOfType<ConfirmationInstruction>().Subject;
 
 		immunityAnnouncement.Semantic.Should().Be(
-			ModeratorInstructionSemantic.AnnounceLynchingImmunity);
+			ModeratorInstructionSemantic.AnnounceVillageIdiotPardon);
 		var interrupted = builder.GetGameState()!;
 		var immunityTurn = interrupted.TurnNumber;
-		interrupted.GetPlayerState(scenario.LivingTargetId).Health.Should().Be(
-			PlayerHealth.Alive);
+		var pardonedState = interrupted.GetPlayerState(scenario.LivingTargetId);
+		pardonedState.Health.Should().Be(PlayerHealth.Alive);
+		pardonedState.DurableVotingPower.Should().Be(0);
+		pardonedState.HasVotingRight.Should().BeFalse();
 		interrupted.GameHistoryLog
-			.OfType<StatusEffectLogEntry>()
+			.OfType<VillageIdiotPardonCommittedLogEntry>()
 			.Should().ContainSingle(entry =>
 				entry.PlayerId == scenario.LivingTargetId &&
-				entry.EffectType == StatusEffectTypes.LynchingImmunityUsed &&
-				entry.IsActive);
+				entry.ResourceIdentity.ActingPlayerId ==
+					scenario.LivingTargetId &&
+				entry.ResourceIdentity.SourceRole ==
+					MainRoleType.VillageIdiot);
 		interrupted.GameHistoryLog
 			.OfType<PlayerEliminatedLogEntry>()
 			.Should().NotContain(entry =>
@@ -1072,7 +1094,7 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 		recoveredAnnouncement.InstructionId.Should().Be(
 			immunityAnnouncement.InstructionId);
 		recoveredAnnouncement.Semantic.Should().Be(
-			ModeratorInstructionSemantic.AnnounceLynchingImmunity);
+			ModeratorInstructionSemantic.AnnounceVillageIdiotPardon);
 		var afterAnnouncement = recoveredService.ProcessInstruction(
 			recoveredGameId,
 			recoveredAnnouncement.CreateResponse());
@@ -1080,14 +1102,17 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 		afterAnnouncement.ModeratorInstruction!.Semantic.Should().Be(
 			ModeratorInstructionSemantic.StartNight);
 		var recovered = recoveredService.GetGameStateView(recoveredGameId)!;
-		recovered.GetPlayerState(scenario.LivingTargetId).Health.Should().Be(
-			PlayerHealth.Alive);
+		var recoveredState = recovered.GetPlayerState(
+			scenario.LivingTargetId);
+		recoveredState.Health.Should().Be(PlayerHealth.Alive);
+		recoveredState.PubliclyRevealedRole.Should().Be(
+			MainRoleType.VillageIdiot);
+		recoveredState.DurableVotingPower.Should().Be(0);
+		recoveredState.HasVotingRight.Should().BeFalse();
 		recovered.GameHistoryLog
-			.OfType<StatusEffectLogEntry>()
+			.OfType<VillageIdiotPardonCommittedLogEntry>()
 			.Should().ContainSingle(entry =>
-				entry.PlayerId == scenario.LivingTargetId &&
-				entry.EffectType == StatusEffectTypes.LynchingImmunityUsed &&
-				entry.IsActive);
+				entry.PlayerId == scenario.LivingTargetId);
 		recovered.GameHistoryLog
 			.OfType<PlayerEliminatedLogEntry>()
 			.Should().NotContain(entry =>
