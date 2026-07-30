@@ -28,7 +28,8 @@ public sealed class HeadlessGameDriver
 			IsFinished: true,
 			TurnCount: execution.Session.TurnNumber,
 			ProcessedInstructionCount: execution.ProcessedInstructionCount,
-			VictoryDescription: finishedInstruction.VictoryDescription);
+			GameResult: finishedInstruction.GameResult,
+			VictoryCheckWindow: finishedInstruction.VictoryCheckWindow);
 	}
 
 	internal HeadlessGameExecution CompleteGameSession(

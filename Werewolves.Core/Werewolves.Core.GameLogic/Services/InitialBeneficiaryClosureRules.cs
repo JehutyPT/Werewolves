@@ -178,7 +178,7 @@ internal static class InitialBeneficiaryClosureRules
 		return InitialBeneficiaryClosureResult.Committed;
 	}
 
-	private static bool HasCommitted(GameSession session) =>
+	internal static bool HasCommitted(GameSession session) =>
 		session.GameHistoryLog
 			.OfType<FactionFactsCommittedLogEntry>()
 			.Any(entry =>

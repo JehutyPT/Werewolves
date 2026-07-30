@@ -5,6 +5,7 @@ using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
+using Werewolves.Core.StateModels.Models.Simulation;
 using Werewolves.Core.StateModels.Serialization;
 using Xunit;
 
@@ -16,6 +17,7 @@ public class ModeratorInstructionIdentitySerializationTests
 	{
 		Converters =
 		{
+			new GameResultConverter(),
 			new ModeratorInstructionConverter(),
 			new JsonStringEnumConverter()
 		}
@@ -30,7 +32,9 @@ public class ModeratorInstructionIdentitySerializationTests
 			new ConfirmationInstruction(
 				privateInstruction: nameof(Converter_AllInstructionKinds_PreservesIdentity)),
 			new StartGameConfirmationInstruction(Guid.NewGuid()),
-			new FinishedGameConfirmationInstruction("Vitória"),
+			new FinishedGameConfirmationInstruction(
+				new SingleFactionGameResult(Faction.Villager),
+				VictoryCheckWindow.Dawn),
 			new SelectPlayersInstruction(
 				[playerId],
 				NumberRangeConstraint.Single,

@@ -12,6 +12,7 @@ using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
+using Werewolves.Core.StateModels.Models.Simulation;
 using Werewolves.Core.StateModels.Resources;
 using Werewolves.Core.StateModels.Serialization;
 using static Werewolves.Core.GameLogic.Models.InternalMessages.MainPhaseHandlerResult;
@@ -204,6 +205,7 @@ internal static class GameFlowManager
                     subPhase: DawnSubPhases.Finalize,
                     subPhaseStages:
                     [
+                        HookStage(DawnMainActionLoop),
                         NavigationEndStageSilent(GamePhase.Day)
                     ],
                     possibleNextMainPhaseTransitions:
@@ -221,7 +223,6 @@ internal static class GameFlowManager
                     subPhase: DaySubPhases.Debate,
                     subPhaseStages:
                     [
-                        HookStage(DawnMainActionLoop),
                         NavigationEndStage(DaySubPhaseStage.Debate, StartDebateAndGoToVoteType)
                     ],
                     possibleNextSubPhases:
@@ -1156,13 +1157,17 @@ internal static class GameFlowManager
 		// Check victory ONLY at the starting point of Day and Night phases
 		if (oldPhase != newPhase && newPhase is GamePhase.Day or GamePhase.Night)
         {
-            var victoryCheckResult = CheckVictoryConditions(session);
-            if (victoryCheckResult != null)
+            var window = newPhase == GamePhase.Day
+                ? VictoryCheckWindow.Dawn
+                : VictoryCheckWindow.PreNight;
+            var gameResult = CheckVictoryConditions(session);
+            if (gameResult != null)
             {
-                // Victory condition met!
-                session.VictoryConditionMet(victoryCheckResult.Value.WinningTeam, victoryCheckResult.Value.Description);
+                session.VictoryConditionMet(gameResult, window);
 
-                var finalInstruction = new FinishedGameConfirmationInstruction(victoryCheckResult.Value.Description);
+                var finalInstruction = new FinishedGameConfirmationInstruction(
+                    gameResult,
+                    window);
                 nextInstructionToSend = finalInstruction; // Override instruction
                 return true;
             }
@@ -1195,8 +1200,13 @@ internal static class GameFlowManager
         return result;
     }
 
-    private static (Team WinningTeam, string Description)? CheckVictoryConditions(GameSession session)
+    private static GameResult? CheckVictoryConditions(GameSession session)
     {
+        if (!InitialBeneficiaryClosureRules.HasCommitted(session))
+        {
+            throw new InvalidOperationException("Required Faction facts are not ready.");
+        }
+
         var livingBeneficiaries = session.GetPlayers()
             .WithHealth(PlayerHealth.Alive)
             .Select(player => session.RequireKnownFactionBeneficiary(player.Id))
@@ -1207,19 +1217,17 @@ internal static class GameFlowManager
         int aliveNonWerewolves = livingBeneficiaries.Count(
             faction => faction == Faction.Villager);
 
-		// Villager win
-		if (aliveWerewolves == 0 && aliveNonWerewolves > 0)
+        var satisfied = new[]
         {
-            return (Team.Villagers, GameStrings.VictoryConditionAllWerewolvesEliminated);
-        }
-
-        // Werewolf win
-        if (aliveWerewolves >= aliveNonWerewolves && aliveWerewolves > 0)
-        {
-            return (Team.Werewolves, GameStrings.VictoryConditionWerewolvesOutnumber);
-        }
-
-        return null;
+            (Faction: Faction.Villager,
+                IsSatisfied: aliveWerewolves == 0 && aliveNonWerewolves > 0),
+            (Faction: Faction.Werewolf,
+                IsSatisfied: aliveWerewolves >= aliveNonWerewolves && aliveWerewolves > 0)
+        };
+        return GameResultSelection.Select(
+            satisfied.Where(result => result.IsSatisfied)
+                .Select(result => result.Faction),
+            allPlayersEliminated: livingBeneficiaries.Length == 0);
     }
 
 	#endregion

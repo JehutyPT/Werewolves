@@ -193,6 +193,14 @@
     <value>Os lobisomens igualaram ou ultrapassaram o número de aldeões.</value>
     <comment/>
   </data>
+  <data name="VictoryConditionShared" xml:space="preserve">
+    <value>Várias facções venceram em conjunto.</value>
+    <comment/>
+  </data>
+  <data name="VictoryConditionNoWinner" xml:space="preserve">
+    <value>Nenhuma facção venceu.</value>
+    <comment/>
+  </data>
   <data name="DefaultLogValue" xml:space="preserve">
     <value>Desconhecido</value>
     <comment/>

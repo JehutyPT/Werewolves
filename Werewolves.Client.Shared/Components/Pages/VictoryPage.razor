@@ -3,7 +3,8 @@
 		<div>
 			<p class="ww-step-label">@ClientStrings.Victory_StepLabel</p>
 			<h1 id="victory-title">@ClientStrings.Victory_Title</h1>
-			<p class="ww-page-copy">@VictoryDescription</p>
+			<p class="ww-page-copy">@LobbyEvaluationPresentation.GameResultName(GameResult)</p>
+			<p class="ww-page-copy">@WindowLabel</p>
 		</div>
 	</section>
 
@@ -13,13 +14,25 @@
 </main>
 
 @using Werewolves.Client.Resources
+@using Werewolves.Core.StateModels.Enums
+@using Werewolves.Core.StateModels.Models.Simulation
 
 @code {
 	[Parameter, EditorRequired]
-	public string VictoryDescription { get; set; } = string.Empty;
+	public GameResult GameResult { get; set; } = null!;
+
+	[Parameter, EditorRequired]
+	public VictoryCheckWindow VictoryCheckWindow { get; set; }
 
 	[Parameter]
 	public EventCallback OnReturnToLobby { get; set; }
 
 	private Task ReturnToLobby() => OnReturnToLobby.InvokeAsync();
+
+	private string WindowLabel => VictoryCheckWindow switch
+	{
+		VictoryCheckWindow.Dawn => ClientStrings.Victory_WindowDawn,
+		VictoryCheckWindow.PreNight => ClientStrings.Victory_WindowPreNight,
+		_ => throw new ArgumentOutOfRangeException()
+	};
 }

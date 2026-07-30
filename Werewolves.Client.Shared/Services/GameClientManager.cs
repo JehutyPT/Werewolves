@@ -91,7 +91,7 @@ public sealed class GameClientManager
 		{
 			RefreshCurrentState(result.ModeratorInstruction);
 			UpdateDebateTimer();
-			if (ShouldClearSaveAfterSuccessfulInput(result))
+			if (ShouldClearSaveAfterSuccessfulInput())
 			{
 				ClearSavedGame();
 				if (CurrentSession is null)
@@ -124,9 +124,7 @@ public sealed class GameClientManager
 		return PendingAudioReconciliation;
 	}
 
-	private bool ShouldClearSaveAfterSuccessfulInput(ProcessResult result) =>
-		result.ModeratorInstruction is FinishedGameConfirmationInstruction ||
-		CurrentInstruction is FinishedGameConfirmationInstruction ||
+	private bool ShouldClearSaveAfterSuccessfulInput() =>
 		CurrentSession is null;
 
 	private void UpdateDebateTimer()

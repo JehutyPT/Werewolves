@@ -368,13 +368,12 @@ public class GameService
         var pendingInstruction = session.PendingModeratorInstruction
             ?? throw new InvalidOperationException("Internal error: No pending instruction available.");
 
-        EnsureResponseMatchesPendingInstruction(pendingInstruction, input);
-
         if (pendingInstruction is FinishedGameConfirmationInstruction)
-		{
-			_sessions.Remove(gameId, out _);
-            return new ProcessResult(true, null); // Game over, no further instructions
-		}
+        {
+            return ProcessResult.Failure(pendingInstruction);
+        }
+
+        EnsureResponseMatchesPendingInstruction(pendingInstruction, input);
 
 		var result = GameFlowManager.HandleInput(session, input);
 

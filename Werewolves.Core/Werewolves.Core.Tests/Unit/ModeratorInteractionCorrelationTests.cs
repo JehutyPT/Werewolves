@@ -4,6 +4,7 @@ using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
+using Werewolves.Core.StateModels.Models.Simulation;
 using Xunit;
 
 namespace Werewolves.Core.Tests.Unit;
@@ -56,7 +57,6 @@ public class ModeratorInteractionCorrelationTests
 		var confirmation = new ConfirmationInstruction(
 			privateInstruction: nameof(ResponseFactories_AllInstructionKinds_CarryTheirInstructionIdentity));
 		var start = new StartGameConfirmationInstruction(Guid.NewGuid());
-		var finished = new FinishedGameConfirmationInstruction("Vitória");
 		var playerSelection = new SelectPlayersInstruction(
 			[selectedPlayerId],
 			NumberRangeConstraint.Single,
@@ -74,7 +74,6 @@ public class ModeratorInteractionCorrelationTests
 		{
 			(confirmation, confirmation.CreateResponse()),
 			(start, start.CreateResponse()),
-			(finished, finished.CreateResponse()),
 			(playerSelection, playerSelection.CreateResponse([selectedPlayerId])),
 			(roleAssignment, roleAssignment.CreateResponse(new Dictionary<Guid, MainRoleType>
 			{
@@ -109,7 +108,9 @@ public class ModeratorInteractionCorrelationTests
 	[Fact]
 	public void ProcessInstruction_StaleFinishedGameResponse_DoesNotRemoveSession()
 	{
-		var finishedInstruction = new FinishedGameConfirmationInstruction("Vitória");
+		var finishedInstruction = new FinishedGameConfirmationInstruction(
+			new SingleFactionGameResult(Faction.Villager),
+			VictoryCheckWindow.Dawn);
 		var session = new GameSession(
 			Guid.NewGuid(),
 			finishedInstruction,
@@ -119,10 +120,9 @@ public class ModeratorInteractionCorrelationTests
 		var staleResponse = new ConfirmationInstruction(
 			privateInstruction: nameof(ProcessInstruction_StaleFinishedGameResponse_DoesNotRemoveSession))
 			.CreateResponse();
+		var serializedBefore = service.GetGameStateView(gameId)!.Serialize();
 
-		var act = () => service.ProcessInstruction(gameId, staleResponse);
-
-		act.Should().Throw<InvalidOperationException>();
+		service.ProcessInstruction(gameId, staleResponse).IsSuccess.Should().BeFalse();
 		service.GetGameStateView(gameId).Should().NotBeNull();
 		service.GetCurrentInstruction(gameId)!.InstructionId
 			.Should().Be(finishedInstruction.InstructionId);
@@ -135,13 +135,9 @@ public class ModeratorInteractionCorrelationTests
 		};
 		var malformedAct = () => service.ProcessInstruction(gameId, malformedMatchingResponse);
 
-		malformedAct.Should().Throw<InvalidOperationException>()
-			.WithMessage("*payload*");
+		malformedAct().IsSuccess.Should().BeFalse();
 		service.GetGameStateView(gameId).Should().NotBeNull();
-
-		service.ProcessInstruction(gameId, finishedInstruction.CreateResponse())
-			.IsSuccess.Should().BeTrue();
-		service.GetGameStateView(gameId).Should().BeNull();
+		service.GetGameStateView(gameId)!.Serialize().Should().Be(serializedBefore);
 	}
 
 	private static GameSessionConfig CreateConfig() => new(

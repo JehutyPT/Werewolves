@@ -194,7 +194,7 @@ public class GameClientManagerTests
 	}
 
 	[Fact]
-	public void ProcessInput_WhenVictoryInstructionIsReached_DeletesSaveFile()
+	public void ProcessInput_WhenVictoryInstructionIsReached_RetainsSaveUntilLocalDismissal()
 	{
 		using var saveDirectory = TemporaryDirectory.Create();
 		var saveFilePath = Path.Combine(saveDirectory.Path, FileGameSessionSaveStore.SaveFileName);
@@ -202,7 +202,19 @@ public class GameClientManagerTests
 
 		PlayToWerewolfVictoryAtDawn(manager);
 
-		manager.CurrentInstruction.Should().BeOfType<FinishedGameConfirmationInstruction>();
+		var finished = manager.CurrentInstruction.Should()
+			.BeOfType<FinishedGameConfirmationInstruction>().Subject;
+		File.Exists(saveFilePath).Should().BeTrue();
+
+		var resumed = new GameClientManager(
+			new GameService(),
+			saveStore: new FileGameSessionSaveStore(saveDirectory.Path));
+		var resumedFinished = resumed.CurrentInstruction.Should()
+			.BeOfType<FinishedGameConfirmationInstruction>().Subject;
+		resumedFinished.GameResult.Should().Be(finished.GameResult);
+		resumedFinished.VictoryCheckWindow.Should().Be(finished.VictoryCheckWindow);
+
+		resumed.ClearSession();
 		File.Exists(saveFilePath).Should().BeFalse();
 	}
 

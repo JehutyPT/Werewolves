@@ -4,6 +4,7 @@ using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
+using Werewolves.Core.StateModels.Models.Simulation;
 using Werewolves.Core.Tests.Helpers;
 using Xunit;
 using Xunit.Abstractions;
@@ -111,7 +112,8 @@ public class VictoryConditionTests : DiagnosticTestBase
             .SingleOrDefault();
 
         victoryLog.Should().NotBeNull();
-        victoryLog!.WinningTeam.Should().Be(Team.Villagers);
+        victoryLog!.GameResult.Should().Be(new SingleFactionGameResult(Faction.Villager));
+        victoryLog.VictoryCheckWindow.Should().Be(VictoryCheckWindow.PreNight);
 
         MarkTestCompleted();
     }
@@ -167,7 +169,8 @@ public class VictoryConditionTests : DiagnosticTestBase
             .SingleOrDefault();
 
         victoryLog.Should().NotBeNull();
-        victoryLog!.WinningTeam.Should().Be(Team.Werewolves);
+        victoryLog!.GameResult.Should().Be(new SingleFactionGameResult(Faction.Werewolf));
+        victoryLog.VictoryCheckWindow.Should().Be(VictoryCheckWindow.Dawn);
 
         MarkTestCompleted();
     }
@@ -221,7 +224,8 @@ public class VictoryConditionTests : DiagnosticTestBase
             .SingleOrDefault();
 
         victoryLog.Should().NotBeNull();
-        victoryLog!.WinningTeam.Should().Be(Team.Werewolves);
+        victoryLog!.GameResult.Should().Be(new SingleFactionGameResult(Faction.Werewolf));
+        victoryLog.VictoryCheckWindow.Should().Be(VictoryCheckWindow.Dawn);
 
         MarkTestCompleted();
     }
@@ -324,7 +328,8 @@ public class VictoryConditionTests : DiagnosticTestBase
             .SingleOrDefault();
 
         victoryLog.Should().NotBeNull();
-        victoryLog!.WinningTeam.Should().Be(Team.Werewolves);
+        victoryLog!.GameResult.Should().Be(new SingleFactionGameResult(Faction.Werewolf));
+        victoryLog.VictoryCheckWindow.Should().Be(VictoryCheckWindow.Dawn);
 
         MarkTestCompleted();
     }
@@ -431,7 +436,8 @@ public class VictoryConditionTests : DiagnosticTestBase
             .SingleOrDefault();
 
         victoryLog.Should().NotBeNull();
-        victoryLog!.WinningTeam.Should().Be(Team.Werewolves);
+        victoryLog!.GameResult.Should().Be(new SingleFactionGameResult(Faction.Werewolf));
+        victoryLog.VictoryCheckWindow.Should().Be(VictoryCheckWindow.Dawn);
 
         MarkTestCompleted();
     }
@@ -522,7 +528,10 @@ public class VictoryConditionTests : DiagnosticTestBase
 
         // Assert - Game ends at dawn, never reaches Day phase
         var finalInstruction = builder.GetCurrentInstruction();
-        finalInstruction.Should().BeOfType<FinishedGameConfirmationInstruction>();
+        var finished = finalInstruction.Should()
+            .BeOfType<FinishedGameConfirmationInstruction>().Subject;
+        finished.GameResult.Should().Be(new SingleFactionGameResult(Faction.Werewolf));
+        finished.VictoryCheckWindow.Should().Be(VictoryCheckWindow.Dawn);
 
         // Verify victory detected at transition to Day phase (after dawn processing)
         var updatedState = builder.GetGameState()!;
@@ -538,8 +547,12 @@ public class VictoryConditionTests : DiagnosticTestBase
         dawnBoundaryEntries[0].Should().BeOfType<PhaseTransitionLogEntry>()
             .Which.CurrentPhase.Should().Be(GamePhase.Day);
         dawnBoundaryEntries[1].Should().BeSameAs(victoryLog);
-        builder.ObserverLog.Should().NotContain(
+        var boundaryTimeline = builder.ObserverLog.ToList();
+        var dawnFollowUpIndex = boundaryTimeline.IndexOf(
             $"[SubPhaseStage] → {GameHook.DawnMainActionLoop}");
+        var dayTransitionIndex = boundaryTimeline.IndexOf("[Phase] → Day");
+        dawnFollowUpIndex.Should().BeGreaterThanOrEqualTo(0);
+        dayTransitionIndex.Should().BeGreaterThan(dawnFollowUpIndex);
         builder.ObserverLog.Should().NotContain(
             $"[SubPhaseStage] → {DaySubPhaseStage.Debate}");
 
@@ -612,7 +625,10 @@ public class VictoryConditionTests : DiagnosticTestBase
 
         // Assert - Victory detected at Day phase
         var finalInstruction = result.ModeratorInstruction;
-        finalInstruction.Should().BeOfType<FinishedGameConfirmationInstruction>();
+        var finished = finalInstruction.Should()
+            .BeOfType<FinishedGameConfirmationInstruction>().Subject;
+        finished.GameResult.Should().Be(new SingleFactionGameResult(Faction.Villager));
+        finished.VictoryCheckWindow.Should().Be(VictoryCheckWindow.PreNight);
 
         var updatedState = builder.GetGameState()!;
         var victoryLog = updatedState.GameHistoryLog
@@ -687,9 +703,9 @@ public class VictoryConditionTests : DiagnosticTestBase
         var debateIndex = boundaryTimeline.IndexOf(
             $"[SubPhaseStage] → {DaySubPhaseStage.Debate}");
 
-        dayTransitionIndex.Should().BeGreaterThanOrEqualTo(0);
-        dawnFollowUpIndex.Should().BeGreaterThan(dayTransitionIndex);
-        debateIndex.Should().BeGreaterThan(dawnFollowUpIndex);
+        dawnFollowUpIndex.Should().BeGreaterThanOrEqualTo(0);
+        dayTransitionIndex.Should().BeGreaterThan(dawnFollowUpIndex);
+        debateIndex.Should().BeGreaterThan(dayTransitionIndex);
 
         MarkTestCompleted();
     }

@@ -1,6 +1,6 @@
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
-using Werewolves.Core.StateModels.Resources;
+using Werewolves.Core.StateModels.Models.Simulation;
 
 namespace Werewolves.Core.StateModels.Log;
 
@@ -9,8 +9,8 @@ namespace Werewolves.Core.StateModels.Log;
 /// </summary>
 public record VictoryConditionMetLogEntry : GameLogEntryBase
 {
-    public required Team WinningTeam { get; init; }
-    public string ConditionDescription { get; init; } = GameStrings.DefaultLogValue;
+    public required GameResult GameResult { get; init; }
+    public required VictoryCheckWindow VictoryCheckWindow { get; init; }
 
     /// <summary>
     /// Applies the victory condition to the game state.
@@ -22,5 +22,5 @@ public record VictoryConditionMetLogEntry : GameLogEntryBase
     }
 
     public override string ToString() =>
-        $"Victory: {WinningTeam} - {ConditionDescription}";
+        $"Victory: {GameResult.GetType().Name} at {VictoryCheckWindow}";
 }

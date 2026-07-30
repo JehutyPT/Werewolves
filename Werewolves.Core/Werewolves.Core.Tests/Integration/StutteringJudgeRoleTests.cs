@@ -7,6 +7,7 @@ using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
+using Werewolves.Core.StateModels.Models.Simulation;
 using Werewolves.Core.StateModels.Resources;
 using Werewolves.Core.Tests.Helpers;
 using Xunit;
@@ -306,11 +307,13 @@ public sealed class StutteringJudgeRoleTests : DiagnosticTestBase
 		var debate = InstructionAssert.ExpectType<ConfirmationInstruction>(
 			builder.GetCurrentInstruction());
 
-		var nextNight = builder.Process(debate.CreateResponse());
+		var terminal = builder.Process(debate.CreateResponse());
 
-		nextNight.IsSuccess.Should().BeTrue();
-		nextNight.ModeratorInstruction!.Semantic.Should().Be(
-			ModeratorInstructionSemantic.StartNight);
+		terminal.IsSuccess.Should().BeTrue();
+		var finished = terminal.ModeratorInstruction.Should()
+			.BeOfType<FinishedGameConfirmationInstruction>().Subject;
+		finished.GameResult.Should().BeOfType<NoWinnerGameResult>();
+		finished.VictoryCheckWindow.Should().Be(VictoryCheckWindow.PreNight);
 		builder.GetGameState()!.GameHistoryLog
 			.OfType<VoteOutcomeReportedLogEntry>()
 			.Should().BeEmpty();

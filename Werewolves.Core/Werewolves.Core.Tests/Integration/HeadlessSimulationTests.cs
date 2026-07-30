@@ -491,8 +491,8 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 	}
 
 	[Theory]
-	[InlineData(0L, "wolf-hound-villagers")]
-	[InlineData(1L, "wolf-hound-werewolves")]
+	[InlineData(0L, "wolf-hound-werewolves")]
+	[InlineData(1L, "wolf-hound-villagers")]
 	public void BaselineRandomDecisionStrategy_WithWolfHoundAlignment_UsesGlobalDeterministicStreamWithoutHiddenTruth(
 		long runNumber,
 		string expectedOptionId)
@@ -824,7 +824,7 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 	[Fact]
 	public void BaselineRandomDecisionStrategy_WithKnownOptionalChoiceSeed_ReturnsEmptyValidResponse()
 	{
-		var material = CreateRunSeedMaterial(runNumber: 1);
+		var material = CreateRunSeedMaterial(runNumber: 3);
 		var startState = SimulationStartStateDeriver.Derive(material);
 		var config = startState.CreateGameSessionConfig();
 		var builder = CreateBuilder()
@@ -916,7 +916,8 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 		result.IsFinished.Should().BeTrue();
 		result.TurnCount.Should().BeGreaterThan(0);
 		result.ProcessedInstructionCount.Should().BeGreaterThan(0);
-		result.VictoryDescription.Should().NotBeNullOrWhiteSpace();
+		result.GameResult.Should().NotBeNull();
+		Enum.IsDefined(result.VictoryCheckWindow).Should().BeTrue();
 		MarkTestCompleted();
 	}
 
