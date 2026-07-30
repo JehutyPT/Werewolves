@@ -1,4 +1,5 @@
 using Werewolves.Core.GameLogic.Models.InternalMessages;
+using Werewolves.Core.GameLogic.Queries;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
@@ -125,25 +126,9 @@ internal abstract class NightRoleHookListener<T> : RoleHookListener<T> where T :
 	}
 
 	private bool IsCompleteRoleHolderSetKnown(GameSession session)
-	{
-		var committedLivingRoleHolderCount = GetCommittedLivingRoleHolderIds(session).Count;
-		var knownLivingRoleHolderCount = GetKnownLivingRoleHolderIds(session).Count;
-		var expectedLivingRoleHolderCount = GetExpectedLivingRoleHolderCount(session);
-
-		return committedLivingRoleHolderCount == expectedLivingRoleHolderCount &&
-		       knownLivingRoleHolderCount == expectedLivingRoleHolderCount;
-	}
-
-	private HashSet<Guid> GetKnownLivingRoleHolderIds(GameSession session)
-	{
-		var role = (MainRoleType)Id;
-		return session.GetPlayers()
-			.WithHealth(PlayerHealth.Alive)
-			.Where(player =>
-				player.State.CurrentRole == role &&
-				player.State.ModeratorKnownRole == role)
-			.ToIdSet();
-	}
+		=> GameSessionQueries.IsCompleteLivingRoleHolderSetKnown(
+			session,
+			(MainRoleType)Id);
 
 	private HookListenerActionResult PrepareWakeupInstruction(GameSession session)
 	{

@@ -188,6 +188,18 @@ internal class SimpleWerewolfRole : StandardNightRoleHookListener
         return result;
     }
 
+    protected override HookListenerActionResult HandleNightPowerUse(
+        GameSession session,
+        ModeratorResponse input)
+    {
+        if (GetLivingKnownNonAgents(session).Count == 0)
+        {
+            return PrepareSleepInstruction(session);
+        }
+
+        return base.HandleNightPowerUse(session, input);
+    }
+
     protected override ModeratorInstruction GenerateTargetSelectionInstruction(GameSession session, ModeratorResponse input)
     {
         if (!TryGetKnownLivingWerewolfAgents(session, out var werewolves) ||
@@ -430,56 +442,8 @@ internal class SimpleWerewolfRole : StandardNightRoleHookListener
             return;
         }
 
-        initialAgentGroupBoundary ??=
-            FindInitialCompleteWerewolfAgentGroupBoundary(session);
-        if (initialAgentGroupBoundary == null)
-        {
-            return;
-        }
-
-        _ = InitialBeneficiaryClosureRules.TryCommit(
+        _ = InitialBeneficiaryClosureRules.TryCommitCurrentSession(
             session,
-            new InitialBeneficiaryClosureRequest(
-                initialAgentGroupBoundary,
-                applicableExceptionPrerequisites: [],
-                deferredResults: []));
-    }
-
-    private static FactionFactEffectiveBoundary?
-        FindInitialCompleteWerewolfAgentGroupBoundary(GameSession session)
-    {
-        var playerIds = session.GetPlayers()
-            .Select(player => player.Id)
-            .ToArray();
-        var history = session.GameHistoryLog
-            .OfType<FactionFactsCommittedLogEntry>()
-            .ToArray();
-        var candidateBoundaries = history
-            .SelectMany(entry => entry.Facts)
-            .Where(fact =>
-                fact.Type == FactionFactType.Agent &&
-                fact.Faction == Faction.Werewolf)
-            .Select(fact => fact.EffectiveBoundary)
-            .Distinct()
-            .OrderBy(
-                boundary => boundary,
-                Comparer<FactionFactEffectiveBoundary>.Create(
-                    FactionFactProjection.CompareBoundaries));
-
-        foreach (var boundary in candidateBoundaries)
-        {
-            var projection = FactionFactProjection.Create(
-                history,
-                playerIds,
-                boundary);
-            if (playerIds.All(playerId =>
-                    projection.Agents[playerId][Faction.Werewolf] !=
-                    FactionAgentKnowledge.Unknown))
-            {
-                return boundary;
-            }
-        }
-
-        return null;
+            initialAgentGroupBoundary);
     }
 }

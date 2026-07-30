@@ -125,6 +125,8 @@ public record FinishedGameConfirmationInstruction : ModeratorInstruction
                 GameStrings.VictoryConditionAllWerewolvesEliminated,
             SingleFactionGameResult { Faction: Faction.Werewolf } =>
                 GameStrings.VictoryConditionWerewolvesOutnumber,
+            SingleFactionGameResult { Faction: Faction.WhiteWerewolf } =>
+                GameStrings.VictoryConditionWhiteWerewolfSoleSurvivor,
             SharedVictoryGameResult => GameStrings.VictoryConditionShared,
             NoWinnerGameResult => GameStrings.VictoryConditionNoWinner,
             _ => throw new ArgumentOutOfRangeException(nameof(result))

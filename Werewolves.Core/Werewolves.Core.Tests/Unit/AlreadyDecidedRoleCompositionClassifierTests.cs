@@ -54,6 +54,62 @@ public class AlreadyDecidedRoleCompositionClassifierTests
 	}
 
 	[Fact]
+	public void Classify_WithResolvedWhiteBeneficiaries_AppliesTheSharedThreeFactionRules()
+	{
+		var profile = new SimulatorProfile(
+			new SimulatorProfileIdentity("three-faction-test", "1"),
+			[
+				new(MainRoleType.SimpleVillager, Faction.Villager),
+				new(MainRoleType.SimpleWerewolf, Faction.Werewolf),
+				new(MainRoleType.WhiteWerewolf, Faction.WhiteWerewolf)
+			]);
+
+		var soleWhite = AlreadyDecidedRoleCompositionClassifier.Classify(
+			CanonicalRoleComposition.Create([MainRoleType.WhiteWerewolf]),
+			profile);
+		var werewolfControlBlocked = AlreadyDecidedRoleCompositionClassifier.Classify(
+			CanonicalRoleComposition.Create(
+				[
+					MainRoleType.SimpleWerewolf,
+					MainRoleType.SimpleVillager,
+					MainRoleType.WhiteWerewolf
+				]),
+			profile);
+		var werewolfEliminationBlocked = AlreadyDecidedRoleCompositionClassifier.Classify(
+			CanonicalRoleComposition.Create(
+				[
+					MainRoleType.SimpleWerewolf,
+					MainRoleType.WhiteWerewolf
+				]),
+			profile);
+		var villagerVictoryBlocked = AlreadyDecidedRoleCompositionClassifier.Classify(
+			CanonicalRoleComposition.Create(
+				[
+					MainRoleType.SimpleVillager,
+					MainRoleType.WhiteWerewolf
+				]),
+			profile);
+		var soleWerewolf = AlreadyDecidedRoleCompositionClassifier.Classify(
+			CanonicalRoleComposition.Create([MainRoleType.SimpleWerewolf]),
+			profile);
+		var soleVillager = AlreadyDecidedRoleCompositionClassifier.Classify(
+			CanonicalRoleComposition.Create([MainRoleType.SimpleVillager]),
+			profile);
+
+		soleWhite.GameResult.Should().Be(
+			new SingleFactionGameResult(Faction.WhiteWerewolf));
+		soleWhite.Reason.Should().Be(
+			AlreadyDecidedReason.WhiteWerewolfSoleSurvivor);
+		werewolfControlBlocked.GameResult.Should().BeNull();
+		werewolfEliminationBlocked.GameResult.Should().BeNull();
+		villagerVictoryBlocked.GameResult.Should().BeNull();
+		soleWerewolf.GameResult.Should().Be(
+			new SingleFactionGameResult(Faction.Werewolf));
+		soleVillager.GameResult.Should().Be(
+			new SingleFactionGameResult(Faction.Villager));
+	}
+
+	[Fact]
 	public void Resolve_WithNoSatisfiedPredicates_ReturnsExplicitNotAlreadyDecided()
 	{
 		var result = AlreadyDecidedRoleCompositionClassifier.Resolve(

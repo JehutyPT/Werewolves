@@ -31,6 +31,8 @@ public sealed class BrowserQaHostCultureTests
 			CultureInfo.DefaultThreadCurrentUICulture.Should().Be(BrowserQaHostCulture.EnglishCulture);
 			ClientStrings.LobbyRoster_Title.Should().Be(clientValues[nameof(ClientStrings.LobbyRoster_Title)]);
 			GameStrings.NightStartsPrompt.Should().Be(gameValues[nameof(GameStrings.NightStartsPrompt)]);
+			GameStrings.VictoryConditionWhiteWerewolfSoleSurvivor.Should().Be(
+				gameValues[nameof(GameStrings.VictoryConditionWhiteWerewolfSoleSurvivor)]);
 			MainRoleType.Seer.GetPublicName().Should().Be(gameValues["SeerRoleName"]);
 			RoleGroup.Villagers.GetDisplayName().Should().Be(gameValues["VillagersGroupName"]);
 		}

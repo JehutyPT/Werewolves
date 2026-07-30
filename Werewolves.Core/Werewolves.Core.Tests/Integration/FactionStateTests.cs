@@ -364,8 +364,12 @@ public class FactionStateTests
 			.Single(entry =>
 				entry.Source.Kind ==
 				FactionFactSourceKind.InitialBeneficiaryClosure);
-		closure.Facts.Should().HaveCount(5);
+		closure.Facts.Should().HaveCount(4);
 		closure.Facts.Should().ContainSingle(fact => fact == deferredFact);
+		closure.Facts.Should().ContainSingle(fact =>
+			fact.PlayerId == players[2].Id);
+		closure.Facts.Select(fact => fact.PlayerId)
+			.Should().OnlyHaveUniqueItems();
 		closure.Facts.Should().NotContain(fact =>
 			fact.PlayerId == players[0].Id);
 		closure.Facts

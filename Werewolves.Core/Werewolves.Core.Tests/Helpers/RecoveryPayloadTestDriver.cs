@@ -235,6 +235,19 @@ internal sealed class RecoveryPayloadTestDriver
 		return this;
 	}
 
+	internal RecoveryPayloadTestDriver RewriteSessionTurnNumber(
+		int turnNumber)
+	{
+		_payload.TurnNumber = turnNumber;
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver RemoveDomainRecoveryCursor()
+	{
+		_payload.DomainRecoveryCursor = null;
+		return this;
+	}
+
 	internal RecoveryPayloadTestDriver
 		DowngradeLatestRecurringCommitToLegacyNightAction()
 	{
@@ -263,6 +276,26 @@ internal sealed class RecoveryPayloadTestDriver
 		ModeratorInstructionSemantic semantic)
 	{
 		RequireDomainCursor().NextInstructionSemantic = semantic;
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver RewritePendingConfirmationSemantic(
+		ModeratorInstructionSemantic semantic)
+	{
+		if (_payload.PendingInstruction is not
+		    ConfirmationInstruction pending)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no pending confirmation.");
+		}
+
+		_payload.PendingInstruction = new ConfirmationInstruction(
+			semantic,
+			pending.PublicAnnouncement,
+			pending.PrivateInstruction,
+			pending.AffectedPlayerIds,
+			pending.InstructionId);
+		_payload.PendingInstructionSemantic = semantic;
 		return this;
 	}
 
@@ -427,6 +460,70 @@ internal sealed class RecoveryPayloadTestDriver
 		return this;
 	}
 
+	internal RecoveryPayloadTestDriver
+		SwapInitialBeneficiaryClosureAssignmentsAndCaches(
+			Guid firstPlayerId,
+			Guid secondPlayerId)
+	{
+		if (firstPlayerId == Guid.Empty ||
+		    secondPlayerId == Guid.Empty ||
+		    firstPlayerId == secondPlayerId)
+		{
+			throw new ArgumentException(
+				"Recovery test Players must be distinct and non-empty.");
+		}
+
+		var entryIndex = _payload.GameHistoryLog.FindLastIndex(entry =>
+			entry is FactionFactsCommittedLogEntry facts &&
+			facts.Source.Kind ==
+				FactionFactSourceKind.InitialBeneficiaryClosure);
+		if (entryIndex < 0 ||
+		    _payload.GameHistoryLog[entryIndex] is not
+			    FactionFactsCommittedLogEntry entry)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no Initial Beneficiary Closure.");
+		}
+
+		var firstFact = RequireSingleBeneficiaryFact(
+			entry,
+			firstPlayerId);
+		var secondFact = RequireSingleBeneficiaryFact(
+			entry,
+			secondPlayerId);
+		_payload.GameHistoryLog[entryIndex] = entry with
+		{
+			Facts = entry.Facts
+				.Select(fact =>
+				{
+					if (fact.PlayerId == firstPlayerId)
+					{
+						return FactionFact.Beneficiary(
+							firstPlayerId,
+							secondFact.Faction,
+							fact.EffectiveBoundary,
+							fact.BeneficiaryPrecedence!.Value);
+					}
+
+					return fact.PlayerId == secondPlayerId
+						? FactionFact.Beneficiary(
+							secondPlayerId,
+							firstFact.Faction,
+							fact.EffectiveBoundary,
+							fact.BeneficiaryPrecedence!.Value)
+						: fact;
+				})
+				.ToImmutableArray()
+		};
+		_payload.Players.Single(player => player.Id == firstPlayerId)
+			.FactionBeneficiary =
+			FactionBeneficiaryKnowledge.Known(secondFact.Faction);
+		_payload.Players.Single(player => player.Id == secondPlayerId)
+			.FactionBeneficiary =
+			FactionBeneficiaryKnowledge.Known(firstFact.Faction);
+		return this;
+	}
+
 	internal RecoveryPayloadTestDriver ReplacePendingInstructionWithConfirmation()
 	{
 		var pending = _payload.PendingInstruction
@@ -460,6 +557,21 @@ internal sealed class RecoveryPayloadTestDriver
 		}
 
 		_payload.GameHistoryLog[entryIndex] = rewrite(entry);
+	}
+
+	private static FactionFact RequireSingleBeneficiaryFact(
+		FactionFactsCommittedLogEntry entry,
+		Guid playerId)
+	{
+		var facts = entry.Facts
+			.Where(fact =>
+				fact.Type == FactionFactType.Beneficiary &&
+				fact.PlayerId == playerId)
+			.ToArray();
+		return facts.Length == 1
+			? facts[0]
+			: throw new InvalidOperationException(
+				"The recovery test payload must have exactly one matching Beneficiary fact.");
 	}
 
 	private DomainRecoveryCursor RequireDomainCursor() =>

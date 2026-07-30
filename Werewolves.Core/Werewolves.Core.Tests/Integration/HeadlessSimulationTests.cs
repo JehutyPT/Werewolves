@@ -5,6 +5,7 @@ using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.GameLogic.Simulation;
 using Werewolves.Core.GameLogic.Strategies;
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Models.Simulation;
@@ -544,8 +545,8 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 	}
 
 	[Theory]
-	[InlineData(0L, "wolf-hound-werewolves")]
-	[InlineData(1L, "wolf-hound-villagers")]
+	[InlineData(2L, "wolf-hound-werewolves")]
+	[InlineData(4L, "wolf-hound-villagers")]
 	public void BaselineRandomDecisionStrategy_WithWolfHoundAlignment_UsesGlobalDeterministicStreamWithoutHiddenTruth(
 		long runNumber,
 		string expectedOptionId)
@@ -622,10 +623,10 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 
 		[Theory]
 		[InlineData(
-			4L,
+			0L,
 			AccursedWolfFatherInfectionOptionIds.Infect)]
 		[InlineData(
-	    2L,
+			1L,
 			AccursedWolfFatherInfectionOptionIds.Decline)]
 		public void BaselineRandomDecisionStrategy_WithAccursedWolfFatherInfection_CoversBothBranchesDeterministically(
 			long runNumber,
@@ -875,6 +876,70 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 	}
 
 	[Fact]
+	public void BaselineRandomDecisionStrategy_WithWhiteWerewolfOptionalTarget_UsesOnlyVisibleLegalityDeterministically()
+	{
+		var scenario = new StateModels.Models.Simulation.SimulationScenario(
+			5,
+			[
+				MainRoleType.WhiteWerewolf,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+		var material = new RunSeedMaterial(
+			new SimulationCompatibilityIdentity(
+				scenario.ToCanonical(),
+				SimulatorCapability.SafetyScreening.Identity),
+			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
+			runNumber: 17);
+		var startState = SimulationStartStateDeriver.Derive(
+			material,
+			SimulatorCapability.SafetyScreening);
+		var config = startState.CreateGameSessionConfig();
+		var builder = CreateBuilder()
+			.WithPlayers(config.Players.ToArray())
+			.WithRoles(config.Roles.ToArray());
+		builder.StartGame();
+		var session = builder.GetGameState()!;
+		var players = session.GetPlayers().ToArray();
+		var holderSeat = startState.RoleAssignments
+			.Single(assignment => assignment.Role == MainRoleType.WhiteWerewolf)
+			.SeatNumber;
+		var holderId = players[holderSeat - 1].Id;
+		var legalTargetIds = players
+			.Where(player => player.Id != holderId)
+			.Take(3)
+			.Select(player => player.Id)
+			.ToHashSet();
+		var instruction = new SelectPlayersInstruction(
+			ModeratorInstructionSemantic.SelectWhiteWerewolfTarget,
+			legalTargetIds,
+			NumberRangeConstraint.SingleOptional,
+			privateInstruction: GameStrings.WhiteWerewolfTargetSelectionInstruction,
+			affectedPlayerIds: [holderId]);
+		var firstStrategy = new BaselineRandomDecisionStrategy(
+			material,
+			startState,
+			SimulatorCapability.SafetyScreening.HeadlessResponsePolicy);
+		var replayStrategy = new BaselineRandomDecisionStrategy(
+			material,
+			startState,
+			SimulatorCapability.SafetyScreening.HeadlessResponsePolicy);
+
+		var first = firstStrategy.CreateResponse(instruction, session);
+		var replay = replayStrategy.CreateResponse(instruction, session);
+
+		first.InstructionId.Should().Be(instruction.InstructionId);
+		first.Type.Should().Be(ExpectedInputType.PlayerSelection);
+		first.SelectedPlayerIds.Should().HaveCountLessThanOrEqualTo(1);
+		first.SelectedPlayerIds.Should().BeSubsetOf(legalTargetIds);
+		first.SelectedPlayerIds.Should().Equal(replay.SelectedPlayerIds);
+		first.SelectedPlayerIds.Should().NotContain(holderId);
+		MarkTestCompleted();
+	}
+
+	[Fact]
 	public void BaselineRandomDecisionStrategy_WithKnownOptionalChoiceSeed_ReturnsEmptyValidResponse()
 	{
 		var material = CreateRunSeedMaterial(runNumber: 3);
@@ -955,6 +1020,69 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 			.WhoseValue.Should().Be(MainRoleType.SimpleVillager);
 		response.AssignedPlayerRoles.Should().ContainKey(players[4].Id)
 			.WhoseValue.Should().Be(MainRoleType.Seer);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void HeadlessGameDriver_WithPreKnownWhiteBeneficiaryAndBigBadWolf_CompletesComposition()
+	{
+		var scenario = new StateModels.Models.Simulation.SimulationScenario(
+			9,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.BigBadWolf,
+				MainRoleType.WhiteWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+		var material = new RunSeedMaterial(
+			new SimulationCompatibilityIdentity(
+				scenario.ToCanonical(),
+				SimulatorCapability.SafetyScreening.Identity),
+			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
+			runNumber: 37);
+		var startState = SimulationStartStateDeriver.Derive(
+			material,
+			SimulatorCapability.SafetyScreening);
+		var whiteSeat = startState.RoleAssignments
+			.Single(assignment =>
+				assignment.Role == MainRoleType.WhiteWerewolf)
+			.SeatNumber;
+		var driver = new HeadlessGameDriver(
+			new BaselineRandomDecisionStrategy(
+				material,
+				startState,
+				SimulatorCapability.SafetyScreening.HeadlessResponsePolicy));
+
+		var execution = driver.CompleteGameSession(
+			startState,
+			CancellationToken.None);
+
+		var players = execution.Session.GetPlayers().ToArray();
+		var closure = execution.Session.GameHistoryLog
+			.OfType<FactionFactsCommittedLogEntry>()
+			.Single(entry =>
+				entry.Source.Kind ==
+				FactionFactSourceKind.InitialBeneficiaryClosure);
+		var identifiedRoles = execution.Session.GameHistoryLog
+			.OfType<RoleIdentificationLogEntry>()
+			.Select(entry => entry.Role)
+			.ToArray();
+		execution.FinalInstruction.Should()
+			.BeOfType<FinishedGameConfirmationInstruction>();
+		execution.ProcessedInstructionCount.Should().BeGreaterThan(0);
+		closure.Facts.Should().BeEmpty();
+		startState.FactionFacts[whiteSeat - 1].Beneficiary.Faction.Should()
+			.Be(Faction.WhiteWerewolf);
+		execution.Session
+			.GetFactionBeneficiaryKnowledge(players[whiteSeat - 1].Id)
+			.Faction.Should().Be(Faction.WhiteWerewolf);
+		identifiedRoles.Should().Contain(MainRoleType.WhiteWerewolf)
+			.And.Contain(MainRoleType.BigBadWolf);
 		MarkTestCompleted();
 	}
 

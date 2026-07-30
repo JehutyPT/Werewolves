@@ -111,6 +111,55 @@ internal static class GameSessionQueries
             FactionAgentKnowledge.KnownAgent);
     }
 
+    internal static int GetExpectedLivingRoleHolderCount(
+        IGameSession session,
+        MainRoleType role)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        if (!Enum.IsDefined(role))
+        {
+            throw new ArgumentOutOfRangeException(nameof(role));
+        }
+
+        var committedRoleHolderIds = session.GetPlayers()
+            .Where(player => player.State.CurrentRole == role)
+            .Select(player => player.Id)
+            .ToHashSet();
+        var accountedRoleHolderIds = session.GameHistoryLog
+            .OfType<RoleIdentificationLogEntry>()
+            .Where(entry => entry.Role == role)
+            .SelectMany(entry => entry.PlayerIds)
+            .ToHashSet();
+        accountedRoleHolderIds.UnionWith(committedRoleHolderIds);
+        var unaccountedCompositionHolderCount = Math.Max(
+            0,
+            session.RoleInPlayCount(role) - accountedRoleHolderIds.Count);
+        var committedLivingRoleHolderCount = session.GetPlayers()
+            .Count(player =>
+                player.State.CurrentRole == role &&
+                player.State.Health == PlayerHealth.Alive);
+        return committedLivingRoleHolderCount +
+               unaccountedCompositionHolderCount;
+    }
+
+    internal static bool IsCompleteLivingRoleHolderSetKnown(
+        IGameSession session,
+        MainRoleType role)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        var expectedLivingRoleHolderCount =
+            GetExpectedLivingRoleHolderCount(session, role);
+        var livingRoleHolders = session.GetPlayers()
+            .Where(player =>
+                player.State.CurrentRole == role &&
+                player.State.Health == PlayerHealth.Alive)
+            .ToArray();
+        return livingRoleHolders.Length == expectedLivingRoleHolderCount &&
+               livingRoleHolders.Count(player =>
+                   player.State.ModeratorKnownRole == role) ==
+               expectedLivingRoleHolderCount;
+    }
+
     internal static int GetCommittedLogIndex(
         IGameSession session,
         GameLogEntryBase committedEntry)

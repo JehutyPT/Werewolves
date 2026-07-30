@@ -1,5 +1,6 @@
 using Werewolves.Core.GameLogic.Interfaces;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
+using Werewolves.Core.GameLogic.Queries;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
@@ -69,26 +70,9 @@ internal abstract class RoleHookListener : IGameHookListener
 	}
 
 	protected int GetExpectedLivingRoleHolderCount(GameSession session)
-	{
-		var role = (MainRoleType)Id;
-		var committedRoleHolderIds = session.GetPlayers()
-			.WithRole(Id)
-			.Select(player => player.Id)
-			.ToHashSet();
-		var accountedRoleHolderIds = session.GameHistoryLog
-			.OfType<RoleIdentificationLogEntry>()
-			.Where(entry => entry.Role == role)
-			.SelectMany(entry => entry.PlayerIds)
-			.ToHashSet();
-		accountedRoleHolderIds.UnionWith(committedRoleHolderIds);
-
-		var unaccountedCompositionHolderCount = Math.Max(
-			0,
-			session.RoleInPlayCount(Id) - accountedRoleHolderIds.Count);
-
-		return GetCommittedLivingRoleHolderIds(session).Count +
-		       unaccountedCompositionHolderCount;
-	}
+		=> GameSessionQueries.GetExpectedLivingRoleHolderCount(
+			session,
+			(MainRoleType)Id);
 
 	protected HashSet<IPlayer>? GetAliveRolePlayers(GameSession session) =>
 		session.GetPlayers().WithRole(Id).WithHealth(Alive).ToHashSet();

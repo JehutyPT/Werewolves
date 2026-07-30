@@ -7,6 +7,7 @@ using Werewolves.Client.Components.Pages;
 using Werewolves.Client.Resources;
 using Werewolves.Client.Services;
 using Werewolves.Client.Tests.Helpers;
+using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Models;
@@ -39,6 +40,7 @@ public sealed class RoleKnowledgeFlowBunitTests
 	[InlineData(MainRoleType.AccursedWolfFather)]
 	[InlineData(MainRoleType.BigBadWolf)]
 	[InlineData(MainRoleType.Defender)]
+	[InlineData(MainRoleType.WhiteWerewolf)]
 	public void SingleOptionalRoleLobby_UsesCatalogMetadataAsPortugueseToggle(
 		MainRoleType role)
 	{
@@ -55,8 +57,9 @@ public sealed class RoleKnowledgeFlowBunitTests
 			MainRoleType.Scapegoat => GameStrings.ScapegoatRoleName,
 			MainRoleType.AccursedWolfFather =>
 				GameStrings.AccursedWolfFatherRoleName,
-				MainRoleType.BigBadWolf => GameStrings.BigBadWolfRoleName,
-				MainRoleType.Defender => GameStrings.DefenderRoleName,
+			MainRoleType.BigBadWolf => GameStrings.BigBadWolfRoleName,
+			MainRoleType.Defender => GameStrings.DefenderRoleName,
+			MainRoleType.WhiteWerewolf => GameStrings.WhiteWerewolfRoleName,
 			_ => throw new InvalidOperationException(
 				$"Unexpected Single-Optional Role {role}.")
 		};
@@ -806,6 +809,172 @@ public sealed class RoleKnowledgeFlowBunitTests
 	}
 
 	[Fact]
+	public async Task WhiteWerewolfNightOne_RendersPrivateIdentificationAndSkipsSoloAction()
+	{
+		var timing = new ControlledHoldButtonTiming();
+		using var context = new ModeratorComponentTestContext();
+		context.Services.AddSingleton<IHoldButtonTiming>(timing);
+		var manager = context.Services.GetRequiredService<GameClientManager>();
+		var players = StartWhiteWerewolfGameAtFirstIdentification(manager);
+		var whiteWerewolf = players[1];
+
+		whiteWerewolf.State.ModeratorKnownRole.Should().BeNull();
+		var identification = manager.CurrentInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		var identificationPrompt =
+			GameStrings.RoleSingleIdentificationPrompt.Format(
+				GameStrings.WhiteWerewolfRoleName);
+		identification.Semantic.Should().Be(
+			ModeratorInstructionSemantic.IdentifyRoleHolders);
+		identification.RoleIdentification.Should().Be(
+			MainRoleType.WhiteWerewolf);
+		identification.CountConstraint.Should().Be(NumberRangeConstraint.Single);
+		identification.PublicAnnouncement.Should().BeNull();
+		identification.PrivateInstruction.Should().Be(identificationPrompt);
+		identification.AffectedPlayerIds.Should().BeNull();
+
+		var dashboard = context.RenderModeratorComponent<DashboardPage>();
+		dashboard.FindAll(PublicInstructionSelector).Should().BeEmpty();
+		dashboard.Find(PrivateInstructionSelector).TextContent.Should()
+			.Contain(identificationPrompt);
+		dashboard.Find(HoldButtonSelector)
+			.HasAttribute(Html.Attributes.Disabled).Should().BeTrue();
+		var holderOption = dashboard.FindAll(PlayerOptionSelector)
+			.Single(option => option.TextContent.Contains(
+				whiteWerewolf.Name,
+				StringComparison.CurrentCulture));
+		holderOption.Click();
+		dashboard.Find(HoldButtonSelector)
+			.HasAttribute(Html.Attributes.Disabled).Should().BeFalse();
+
+		await RenderedHoldButtonDriver.CompleteHoldAsync(
+			dashboard,
+			dashboard.Find(HoldButtonSelector),
+			timing);
+
+		whiteWerewolf.State.ModeratorKnownRole.Should().Be(
+			MainRoleType.WhiteWerewolf);
+		whiteWerewolf.State.PubliclyRevealedRole.Should().BeNull();
+		manager.CurrentInstruction.Should()
+			.BeOfType<ConfirmationInstruction>().Which.Semantic.Should().Be(
+				ModeratorInstructionSemantic.FinishNightActions);
+	}
+
+	[Fact]
+	public async Task WhiteWerewolfEvenNightFlow_RendersPublicWakePrivateOptionalAgentTargetExplicitDeclineAndPublicSleep()
+	{
+		var timing = new ControlledHoldButtonTiming();
+		using var context = new ModeratorComponentTestContext();
+		context.Services.AddSingleton<IHoldButtonTiming>(timing);
+		var manager = context.Services.GetRequiredService<GameClientManager>();
+		var players = StartWhiteWerewolfGameAtFirstIdentification(manager);
+		var werewolf = players[0];
+		var whiteWerewolf = players[1];
+
+		var identification = manager.CurrentInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		manager.ProcessInput(
+				identification.CreateResponse([whiteWerewolf.Id]))
+			.IsSuccess.Should().BeTrue();
+		AdvanceToSecondNightStart(manager);
+		var startNight = manager.CurrentInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		manager.ProcessInput(startNight.CreateResponse()).IsSuccess.Should().BeTrue();
+
+		var collectiveWake = manager.CurrentInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		manager.ProcessInput(collectiveWake.CreateResponse())
+			.IsSuccess.Should().BeTrue();
+		var victimSelection = manager.CurrentInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		manager.ProcessInput(victimSelection.CreateResponse([players[5].Id]))
+			.IsSuccess.Should().BeTrue();
+		var collectiveSleep = manager.CurrentInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		manager.ProcessInput(collectiveSleep.CreateResponse())
+			.IsSuccess.Should().BeTrue();
+
+		var wake = manager.CurrentInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var wakeAnnouncement = GameStrings.RoleWakesUp.Format(
+			GameStrings.WhiteWerewolfRoleName);
+		wake.Semantic.Should().Be(ModeratorInstructionSemantic.WakeRole);
+		wake.AffectedPlayerIds.Should().Equal(whiteWerewolf.Id);
+		wake.PublicAnnouncement.Should().Be(wakeAnnouncement);
+		wake.PrivateInstruction.Should().BeNull();
+
+		var dashboard = context.RenderModeratorComponent<DashboardPage>();
+		dashboard.Find(PublicInstructionSelector).TextContent.Should()
+			.Contain(wakeAnnouncement)
+			.And.NotContain(whiteWerewolf.Name);
+		dashboard.FindAll(PrivateInstructionSelector).Should().BeEmpty();
+		dashboard.FindAll(PlayerOptionSelector).Should().BeEmpty();
+		await RenderedHoldButtonDriver.CompleteHoldAsync(
+			dashboard,
+			dashboard.Find(HoldButtonSelector),
+			timing);
+
+		var targetSelection = manager.CurrentInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		targetSelection.Semantic.Should().Be(
+			ModeratorInstructionSemantic.SelectWhiteWerewolfTarget);
+		targetSelection.RoleIdentification.Should().BeNull();
+		targetSelection.CountConstraint.Should().Be(
+			NumberRangeConstraint.SingleOptional);
+		targetSelection.EmptySelectionOptionLabel.Should().Be(
+			GameStrings.DeclineOption);
+		targetSelection.SelectablePlayerIds.Should().Equal(werewolf.Id);
+		targetSelection.AffectedPlayerIds.Should().Equal(whiteWerewolf.Id);
+		targetSelection.PublicAnnouncement.Should().BeNull();
+		targetSelection.PrivateInstruction.Should().Be(
+			GameStrings.WhiteWerewolfTargetSelectionInstruction);
+
+		dashboard.FindAll(PublicInstructionSelector).Should().BeEmpty();
+		dashboard.Find(PrivateInstructionSelector).TextContent.Should()
+			.Contain(GameStrings.WhiteWerewolfTargetSelectionInstruction);
+		var options = dashboard.FindAll(PlayerOptionSelector);
+		options.Should().HaveCount(2);
+		options.Should().ContainSingle(option => option.TextContent.Contains(
+			werewolf.Name,
+			StringComparison.CurrentCulture));
+		var declineOption = options.Single(option => option.TextContent.Contains(
+			GameStrings.DeclineOption,
+			StringComparison.CurrentCulture));
+		dashboard.Find(HoldButtonSelector)
+			.HasAttribute(Html.Attributes.Disabled).Should().BeTrue();
+
+		declineOption.Click();
+
+		declineOption = dashboard.FindAll(PlayerOptionSelector)
+			.Single(option => option.TextContent.Contains(
+				GameStrings.DeclineOption,
+				StringComparison.CurrentCulture));
+		declineOption.GetAttribute(Html.Attributes.AriaSelected).Should().Be(
+			Html.AriaValues.True);
+		dashboard.Find(HoldButtonSelector)
+			.HasAttribute(Html.Attributes.Disabled).Should().BeFalse();
+		await RenderedHoldButtonDriver.CompleteHoldAsync(
+			dashboard,
+			dashboard.Find(HoldButtonSelector),
+			timing);
+
+		var sleep = manager.CurrentInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var sleepAnnouncement = GameStrings.RoleGoesToSleepSingle.Format(
+			GameStrings.WhiteWerewolfRoleName);
+		sleep.Semantic.Should().Be(ModeratorInstructionSemantic.PutRoleToSleep);
+		sleep.AffectedPlayerIds.Should().Equal(whiteWerewolf.Id);
+		sleep.PublicAnnouncement.Should().Be(sleepAnnouncement);
+		sleep.PrivateInstruction.Should().BeNull();
+		dashboard.Find(PublicInstructionSelector).TextContent.Should()
+			.Contain(sleepAnnouncement)
+			.And.NotContain(whiteWerewolf.Name)
+			.And.NotContain(werewolf.Name);
+		dashboard.FindAll(PrivateInstructionSelector).Should().BeEmpty();
+		dashboard.FindAll(PlayerOptionSelector).Should().BeEmpty();
+	}
+
+	[Fact]
 	public async Task BigBadWolfNightFlow_RendersPublicWakePrivateMandatoryTargetAndPublicSleep()
 	{
 		var timing = new ControlledHoldButtonTiming();
@@ -1195,6 +1364,83 @@ public sealed class RoleKnowledgeFlowBunitTests
 		publicSleep.TextContent.Should().NotContain(GameStrings.DeclineOption);
 		sleepDashboard.FindAll(PrivateInstructionSelector).Should().BeEmpty();
 		sleepDashboard.FindAll(PlayerOptionSelector).Should().BeEmpty();
+	}
+
+	private static IPlayer[] StartWhiteWerewolfGameAtFirstIdentification(
+		GameClientManager manager)
+	{
+		var start = manager.StartGame(
+			Enumerable.Range(1, 7).Select(PlayerNames.GeneratedPlayer).ToArray(),
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.WhiteWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+		manager.ProcessInput(start.CreateResponse()).IsSuccess.Should().BeTrue();
+		var startNight = manager.CurrentInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		manager.ProcessInput(startNight.CreateResponse()).IsSuccess.Should().BeTrue();
+
+		var players = manager.CurrentSession!.GetPlayers().ToArray();
+		var factionObservation = manager.CurrentInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		factionObservation.Semantic.Should().Be(
+			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
+		manager.ProcessInput(factionObservation.CreateResponse(
+				[players[0].Id, players[1].Id]))
+			.IsSuccess.Should().BeTrue();
+		var victimSelection = manager.CurrentInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		victimSelection.Semantic.Should().Be(
+			ModeratorInstructionSemantic.SelectWerewolfVictim);
+		manager.ProcessInput(victimSelection.CreateResponse([players[4].Id]))
+			.IsSuccess.Should().BeTrue();
+		var collectiveSleep = manager.CurrentInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		manager.ProcessInput(collectiveSleep.CreateResponse())
+			.IsSuccess.Should().BeTrue();
+		return players;
+	}
+
+	private static void AdvanceToSecondNightStart(GameClientManager manager)
+	{
+		for (var step = 0; step < 30; step++)
+		{
+			if (manager.TurnNumber == 2 && manager.CurrentPhase == GamePhase.Night)
+			{
+				manager.CurrentInstruction.Should()
+					.BeOfType<ConfirmationInstruction>().Which.Semantic.Should().Be(
+						ModeratorInstructionSemantic.StartNight);
+				return;
+			}
+
+			var result = manager.CurrentInstruction switch
+			{
+				SelectPlayersInstruction
+					{
+						Semantic: ModeratorInstructionSemantic.RecordDayVote
+					} instruction =>
+					manager.ProcessInput(instruction.CreateResponse([])),
+				AssignRolesInstruction instruction =>
+					manager.ProcessInput(instruction.CreateResponse(
+						instruction.PlayersForAssignment.ToDictionary(
+							playerId => playerId,
+							_ => MainRoleType.SimpleVillager))),
+				ConfirmationInstruction instruction =>
+					manager.ProcessInput(instruction.CreateResponse()),
+				_ => throw new InvalidOperationException(
+					$"Unexpected instruction while advancing the scenario to Night 2: " +
+					$"{manager.CurrentInstruction?.GetType().Name}.")
+			};
+			result.IsSuccess.Should().BeTrue();
+		}
+
+		throw new InvalidOperationException(
+			"The scenario did not reach Night 2.");
 	}
 
 	private static void AdvanceToFirstDayDebate(

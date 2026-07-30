@@ -1,3 +1,4 @@
+using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Models.Simulation;
 
@@ -53,19 +54,24 @@ public static class AlreadyDecidedRoleCompositionClassifier
 		ArgumentNullException.ThrowIfNull(composition);
 		ArgumentNullException.ThrowIfNull(profile);
 		var evidence = SimulatorFactionBeneficiaryBridge.Map(composition, profile);
-		var werewolves = evidence.GetBeneficiaryCount(Faction.Werewolf);
-		var villagers = evidence.GetBeneficiaryCount(Faction.Villager);
+		var satisfiedFactions = FactionVictoryPredicates
+			.Evaluate(evidence)
+			.ToHashSet();
 
 		return Resolve(
 		[
 			new FactionVictoryPredicateResult(
 				Faction.Villager,
-				villagers > 0 && werewolves == 0,
+				satisfiedFactions.Contains(Faction.Villager),
 				AlreadyDecidedReason.NoWerewolfFactionBeneficiariesAtLobbyExit),
 			new FactionVictoryPredicateResult(
 				Faction.Werewolf,
-				werewolves > 0 && werewolves >= villagers,
-				AlreadyDecidedReason.WerewolfControlShortcut)
+				satisfiedFactions.Contains(Faction.Werewolf),
+				AlreadyDecidedReason.WerewolfControlShortcut),
+			new FactionVictoryPredicateResult(
+				Faction.WhiteWerewolf,
+				satisfiedFactions.Contains(Faction.WhiteWerewolf),
+				AlreadyDecidedReason.WhiteWerewolfSoleSurvivor)
 		]);
 	}
 
@@ -89,20 +95,15 @@ public static class AlreadyDecidedRoleCompositionClassifier
 			.Where(result => result.IsSatisfied)
 			.OrderBy(result => result.Faction)
 			.ToArray();
-		if (satisfied.Length == 0)
+		var gameResult = GameResultSelection.Select(
+			satisfied.Select(result => result.Faction),
+			allPlayersEliminated: false);
+		var reason = satisfied.Length switch
 		{
-			return new(null, AlreadyDecidedReason.NoLobbyExitVictoryPredicateSatisfied);
-		}
-
-		if (satisfied.Length == 1)
-		{
-			return new(
-				new SingleFactionGameResult(satisfied[0].Faction),
-				satisfied[0].Reason);
-		}
-
-		return new(
-			new SharedVictoryGameResult(satisfied.Select(result => result.Faction)),
-			AlreadyDecidedReason.MultipleLobbyExitVictoryPredicatesSatisfied);
+			0 => AlreadyDecidedReason.NoLobbyExitVictoryPredicateSatisfied,
+			1 => satisfied[0].Reason,
+			_ => AlreadyDecidedReason.MultipleLobbyExitVictoryPredicatesSatisfied
+		};
+		return new(gameResult, reason);
 	}
 }

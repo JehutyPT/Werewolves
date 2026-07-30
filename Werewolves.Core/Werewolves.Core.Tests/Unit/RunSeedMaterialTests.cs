@@ -102,6 +102,42 @@ public class RunSeedMaterialTests
 	}
 
 	[Fact]
+	public void Derive_WithWhiteWerewolf_SeparatesBeneficiaryFromOperationalAgent()
+	{
+		var scenario = new SimulationScenario(
+			5,
+			[
+				MainRoleType.WhiteWerewolf,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+		var material = new RunSeedMaterial(
+			new SimulationCompatibilityIdentity(
+				scenario.ToCanonical(),
+				SimulatorCapability.SafetyScreening.Identity),
+			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
+			runNumber: 17);
+
+		var startState = SimulationStartStateDeriver.Derive(
+			material,
+			SimulatorCapability.SafetyScreening);
+		var whiteWerewolfSeat = startState.RoleAssignments
+			.Single(assignment => assignment.Role == MainRoleType.WhiteWerewolf)
+			.SeatNumber;
+		var facts = startState.FactionFacts
+			.Single(candidate => candidate.SeatNumber == whiteWerewolfSeat);
+
+		facts.Beneficiary.IsKnown.Should().BeTrue();
+		facts.Beneficiary.Faction.Should().Be(Faction.WhiteWerewolf);
+		facts.GetAgentKnowledge(Faction.Werewolf).Should().Be(
+			FactionAgentKnowledge.KnownAgent);
+		facts.GetAgentKnowledge(Faction.WhiteWerewolf).Should().Be(
+			FactionAgentKnowledge.KnownNonAgent);
+	}
+
+	[Fact]
 	public void SimulationPlayerFactionFacts_RequiresCompleteKnownFactsAndSnapshotsAgents()
 	{
 		var agents = Enum.GetValues<Faction>().ToDictionary(

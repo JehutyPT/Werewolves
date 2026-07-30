@@ -37,6 +37,10 @@ public class SimulationExecutionTests : DiagnosticTestBase
 		MainRoleType.ThreeBrothers,
 		3,
 		ModeratorInstructionSemantic.CommunicateAsRoleHolders)]
+	[InlineData(
+		MainRoleType.WhiteWerewolf,
+		1,
+		ModeratorInstructionSemantic.SelectWhiteWerewolfTarget)]
 	public void Execute_WithRoleHolderSemanticMissingFromPolicy_ReturnsIncompleteEvidence(
 		MainRoleType role,
 		int roleHolderCardinality,
@@ -50,12 +54,18 @@ public class SimulationExecutionTests : DiagnosticTestBase
 		var scenario = new SimulationScenario(
 			roles.Length,
 			roles);
+		var roleDescriptor = role == MainRoleType.WhiteWerewolf
+			? new SimulatorProfileRoleDescriptor(
+				role,
+				Faction.WhiteWerewolf,
+				Faction.Werewolf)
+			: new SimulatorProfileRoleDescriptor(role, Faction.Villager);
 		var capability = new SimulatorCapability(
 			new SimulatorProfileIdentity(
 				$"test-{role}-missing-{missingSemantic}",
 				"1"),
 			[
-				new(role, Faction.Villager),
+				roleDescriptor,
 				new(MainRoleType.SimpleWerewolf, Faction.Werewolf, Faction.Werewolf),
 				new(MainRoleType.SimpleVillager, Faction.Villager)
 			],
@@ -116,6 +126,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 	[InlineData(MainRoleType.Defender, 1)]
 	[InlineData(MainRoleType.TwoSisters, 2)]
 	[InlineData(MainRoleType.ThreeBrothers, 3)]
+	[InlineData(MainRoleType.WhiteWerewolf, 1)]
 	public void ExecuteBatch_WithCardinalityRoleHolders_SafetyRepresentativeCompletesAllOneThousandAttempts(
 		MainRoleType role,
 		int roleHolderCardinality)
@@ -139,10 +150,42 @@ public class SimulationExecutionTests : DiagnosticTestBase
 			runCount: 1_000);
 
 		batch.Records.Should().HaveCount(1_000);
+		batch.Records
+			.OfType<IncompleteSimulationRun>()
+			.Select(run => run.RunSeedMaterial.RunNumber)
+			.Should().BeEmpty();
 		batch.CompletedRunCount.Should().Be(1_000);
 		batch.IncompleteRunCount.Should().Be(0);
 		batch.Records.Should().OnlyContain(run =>
 			run is CompletedSimulationRun);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void Execute_WhiteWerewolfRepresentativeRunTwo_Completes()
+	{
+		MainRoleType[] roles =
+		[
+			MainRoleType.WhiteWerewolf,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager
+		];
+		var scenario = new SimulationScenario(roles.Length, roles);
+		var identity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+
+		var run = new SimulationExecutor().Execute(
+			scenario,
+			SimulatorCapability.SafetyScreening,
+			identity,
+			runNumber: 2);
+
+		run.Should().BeOfType<CompletedSimulationRun>();
 		MarkTestCompleted();
 	}
 
@@ -604,7 +647,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 
 		first.Should().BeOfType<CompletedSimulationRun>();
 		first.RunSeedMaterial.CompatibilityIdentity.Profile.Should()
-			.Be(new SimulatorProfileIdentity("safety-screening", "16"));
+			.Be(SimulatorCapability.SafetyScreening.Identity);
 		replay.Should().Be(first);
 		MarkTestCompleted();
 	}

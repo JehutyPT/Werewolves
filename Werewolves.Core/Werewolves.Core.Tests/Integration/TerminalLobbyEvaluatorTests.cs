@@ -367,7 +367,7 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 	[Fact]
 	public void Evaluate_ScapegoatPolicyMissingHolderObservation_UsesFixedIncompleteRunAndSyntheticMixedBatch()
 	{
-		const long runNumber = 4;
+		const long runNumber = 3;
 		var scenario = Scenario(
 			MainRoleType.SimpleWerewolf,
 			MainRoleType.Scapegoat,

@@ -16,13 +16,15 @@ public class LobbyEvaluationPresentationTests
 	public void GameResultName_SharedVictoryComposesEveryLocalizedFactionAsOneOutcome()
 	{
 		using var context = new ModeratorComponentTestContext();
-		var result = new SharedVictoryGameResult([Faction.Villager, Faction.Werewolf]);
+		var result = new SharedVictoryGameResult(
+			[Faction.Villager, Faction.Werewolf, Faction.WhiteWerewolf]);
 
 		var name = LobbyEvaluationPresentation.GameResultName(result);
 
 		name.Should().Contain(ClientStrings.LobbyEvaluation_GameResultShared);
 		name.Should().Contain(ClientStrings.LobbyEvaluation_FactionVillager);
 		name.Should().Contain(ClientStrings.LobbyEvaluation_FactionWerewolf);
+		name.Should().Contain(ClientStrings.LobbyEvaluation_FactionWhiteWerewolf);
 	}
 
 	[Fact]
@@ -35,17 +37,24 @@ public class LobbyEvaluationPresentationTests
 		name.Should().Be(ClientStrings.LobbyEvaluation_GameResultNoWinner);
 		name.Should().NotContain(ClientStrings.LobbyEvaluation_FactionVillager);
 		name.Should().NotContain(ClientStrings.LobbyEvaluation_FactionWerewolf);
+		name.Should().NotContain(ClientStrings.LobbyEvaluation_FactionWhiteWerewolf);
 	}
 
 	[Theory]
 	[InlineData(Faction.Villager)]
 	[InlineData(Faction.Werewolf)]
+	[InlineData(Faction.WhiteWerewolf)]
 	public void GameResultName_SingleFactionUsesItsLocalizedFactionName(Faction faction)
 	{
 		using var context = new ModeratorComponentTestContext();
-		var expected = faction == Faction.Villager
-			? ClientStrings.LobbyEvaluation_FactionVillager
-			: ClientStrings.LobbyEvaluation_FactionWerewolf;
+		var expected = faction switch
+		{
+			Faction.Villager => ClientStrings.LobbyEvaluation_FactionVillager,
+			Faction.Werewolf => ClientStrings.LobbyEvaluation_FactionWerewolf,
+			Faction.WhiteWerewolf =>
+				ClientStrings.LobbyEvaluation_FactionWhiteWerewolf,
+			_ => throw new ArgumentOutOfRangeException(nameof(faction))
+		};
 
 		LobbyEvaluationPresentation.GameResultName(new SingleFactionGameResult(faction))
 			.Should().Be(expected);
@@ -142,6 +151,7 @@ public class LobbyEvaluationPresentationTests
 	[InlineData(AlreadyDecidedReason.NoWerewolfFactionBeneficiariesAtLobbyExit)]
 	[InlineData(AlreadyDecidedReason.WerewolfControlShortcut)]
 	[InlineData(AlreadyDecidedReason.MultipleLobbyExitVictoryPredicatesSatisfied)]
+	[InlineData(AlreadyDecidedReason.WhiteWerewolfSoleSurvivor)]
 	public void AlreadyDecidedReasonText_UsesDistinctLocalizedCopyForEveryValidTerminalReason(
 		AlreadyDecidedReason reason)
 	{
@@ -154,6 +164,8 @@ public class LobbyEvaluationPresentationTests
 				ClientStrings.LobbyEvaluation_ReasonWerewolfControl,
 			AlreadyDecidedReason.MultipleLobbyExitVictoryPredicatesSatisfied =>
 				ClientStrings.LobbyEvaluation_ReasonMultipleVictories,
+			AlreadyDecidedReason.WhiteWerewolfSoleSurvivor =>
+				ClientStrings.LobbyEvaluation_ReasonWhiteWerewolfSoleSurvivor,
 			_ => throw new ArgumentOutOfRangeException(nameof(reason))
 		};
 

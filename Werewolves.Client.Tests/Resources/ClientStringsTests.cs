@@ -28,10 +28,12 @@ public class ClientStringsTests
 		nameof(ClientStrings.LobbyEvaluation_GameResultSharedFormat),
 		nameof(ClientStrings.LobbyEvaluation_FactionVillager),
 		nameof(ClientStrings.LobbyEvaluation_FactionWerewolf),
+		nameof(ClientStrings.LobbyEvaluation_FactionWhiteWerewolf),
 		nameof(ClientStrings.LobbyEvaluation_FactionSeparator),
 		nameof(ClientStrings.LobbyEvaluation_ReasonNoWerewolfBeneficiaries),
 		nameof(ClientStrings.LobbyEvaluation_ReasonWerewolfControl),
 		nameof(ClientStrings.LobbyEvaluation_ReasonMultipleVictories),
+		nameof(ClientStrings.LobbyEvaluation_ReasonWhiteWerewolfSoleSurvivor),
 		nameof(ClientStrings.LobbyEvaluation_NotObserved),
 		nameof(ClientStrings.LobbyEvaluation_LessThanOnePercent),
 		nameof(ClientStrings.LobbyEvaluation_WholePercentFormat),
@@ -67,7 +69,9 @@ public class ClientStringsTests
 		nameof(ClientStrings.Dashboard_EliminationReasonDayVote),
 		nameof(ClientStrings.Victory_Title),
 		nameof(ClientStrings.Victory_StepLabel),
-		nameof(ClientStrings.Victory_ReturnToLobbyButton)
+		nameof(ClientStrings.Victory_ReturnToLobbyButton),
+		nameof(ClientStrings.Victory_WindowDawn),
+		nameof(ClientStrings.Victory_WindowPreNight)
 	];
 
 	[Fact]

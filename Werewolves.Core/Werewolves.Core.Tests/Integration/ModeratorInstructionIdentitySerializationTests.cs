@@ -6,6 +6,7 @@ using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Models.Simulation;
+using Werewolves.Core.StateModels.Resources;
 using Werewolves.Core.StateModels.Serialization;
 using Xunit;
 
@@ -71,6 +72,30 @@ public class ModeratorInstructionIdentitySerializationTests
 					.Should().Equal(originalOptions.Options);
 			}
 		}
+	}
+
+	[Fact]
+	public void Converter_WhiteWerewolfTerminalInstruction_PreservesTypedOutcomeAndCopy()
+	{
+		ModeratorInstruction instruction = new FinishedGameConfirmationInstruction(
+			new SingleFactionGameResult(Faction.WhiteWerewolf),
+			VictoryCheckWindow.PreNight);
+
+		var json = JsonSerializer.Serialize(
+			instruction,
+			SerializationOptions);
+		var restored = JsonSerializer.Deserialize<ModeratorInstruction>(
+			json,
+			SerializationOptions);
+
+		var finished = restored.Should()
+			.BeOfType<FinishedGameConfirmationInstruction>()
+			.Subject;
+		finished.GameResult.Should().Be(
+			new SingleFactionGameResult(Faction.WhiteWerewolf));
+		finished.VictoryCheckWindow.Should().Be(VictoryCheckWindow.PreNight);
+		finished.PublicAnnouncement.Should().Contain(
+			GameStrings.VictoryConditionWhiteWerewolfSoleSurvivor);
 	}
 
 	[Fact]

@@ -53,16 +53,17 @@ public class SimulatorProfileTests
 			.Append(ModeratorInstructionSemantic
 				.ChooseAccursedWolfFatherInfection)
 			.Append(ModeratorInstructionSemantic.SelectBigBadWolfTarget)
-			.Append(ModeratorInstructionSemantic.SelectDefenderTarget);
+			.Append(ModeratorInstructionSemantic.SelectDefenderTarget)
+			.Append(ModeratorInstructionSemantic.SelectWhiteWerewolfTarget);
 		var safety = SimulatorCapability.SafetyScreening;
 		var probability = SimulatorCapability.FullProbability;
 
-		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "16"));
+		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "17"));
 		probability.Identity.Should().Be(new SimulatorProfileIdentity("full-probability", "4"));
 		BaselineRandomDecisionStrategy.Identity.Should()
 			.Be(new DecisionStrategyIdentity("baseline-random", "3-splitmix64"));
 		BaselineRandomDecisionStrategy.SafetyScreeningIdentity.Should()
-			.Be(new DecisionStrategyIdentity("baseline-random", "8-splitmix64"));
+			.Be(new DecisionStrategyIdentity("baseline-random", "9-splitmix64"));
 		safety.SupportedRoles.Should().Equal(
 			MainRoleType.SimpleWerewolf,
 			MainRoleType.BigBadWolf,
@@ -79,7 +80,8 @@ public class SimulatorProfileTests
 			MainRoleType.StutteringJudge,
 			MainRoleType.Scapegoat,
 			MainRoleType.WolfHound,
-			MainRoleType.AccursedWolfFather);
+			MainRoleType.AccursedWolfFather,
+			MainRoleType.WhiteWerewolf);
 		probability.SupportedRoles.Should().Equal(
 			MainRoleType.SimpleWerewolf,
 			MainRoleType.Seer,
@@ -104,6 +106,19 @@ public class SimulatorProfileTests
 				MainRoleType.BigBadWolf,
 				Faction.Werewolf)
 			.Should().BeTrue();
+		safety.TryGetBeneficiaryFaction(
+				MainRoleType.WhiteWerewolf,
+				out var whiteWerewolfBeneficiary)
+			.Should().BeTrue();
+		whiteWerewolfBeneficiary.Should().Be(Faction.WhiteWerewolf);
+		safety.IsFactionAgent(
+				MainRoleType.WhiteWerewolf,
+				Faction.Werewolf)
+			.Should().BeTrue();
+		safety.IsFactionAgent(
+				MainRoleType.WhiteWerewolf,
+				Faction.WhiteWerewolf)
+			.Should().BeFalse();
 	    safety.TryGetBeneficiaryFaction(
 	            MainRoleType.LittleGirl,
 	            out var littleGirlBeneficiary)
