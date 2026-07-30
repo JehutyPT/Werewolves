@@ -488,10 +488,14 @@ namespace Werewolves.Core.StateModels.Core
 					$"Unsupported domain recovery cursor '{cursor.Kind}' version '{cursor.Version}'.");
 			}
 
-			if (!Enum.IsDefined(cursor.CommittedActionType) ||
-			    cursor.CommittedActionType == NightActionType.Unknown ||
-			    cursor.CommittedTargetId == Guid.Empty ||
-			    !Enum.IsDefined(cursor.NextInstructionSemantic) ||
+				if (!Enum.IsDefined(cursor.CommittedActionType) ||
+				    cursor.CommittedActionType == NightActionType.Unknown ||
+				    cursor.CommittedTargetIds is not { Count: > 0 } ||
+				    cursor.CommittedTargetIds.Any(targetId =>
+					    targetId == Guid.Empty) ||
+				    cursor.CommittedTargetIds.Distinct().Count() !=
+					    cursor.CommittedTargetIds.Count ||
+				    !Enum.IsDefined(cursor.NextInstructionSemantic) ||
 			    cursor.NextInstructionSemantic ==
 				    ModeratorInstructionSemantic.Unspecified ||
 			    cursor.NextInstructionId == Guid.Empty)
@@ -530,11 +534,11 @@ namespace Werewolves.Core.StateModels.Core
 				if (committedEntry == null ||
 				    committedEntry.ActionType !=
 					    cursor.CommittedActionType ||
-				    committedEntry.ResourceIdentity !=
-					    cursorResourceIdentity.Value ||
-				    committedEntry.TargetIds is not { Count: 1 } ||
-				    committedEntry.TargetIds[0] !=
-					    cursor.CommittedTargetId)
+					    committedEntry.ResourceIdentity !=
+						    cursorResourceIdentity.Value ||
+					    committedEntry.TargetIds is not { Count: 1 } ||
+					    committedEntry.TargetIds[0] !=
+						    cursor.CommittedTargetIds.Single())
 				{
 					throw new InvalidOperationException(
 						"The domain recovery cursor does not match the latest committed One-Use Resource action.");
@@ -562,22 +566,24 @@ namespace Werewolves.Core.StateModels.Core
 				.LastOrDefault(entry =>
 					entry.ActionType == cursor.CommittedActionType);
 			var matchesRecurringCommit =
-				latestActionEntry is RecurringRolePowerCommittedLogEntry
-				{
-					CurrentPhase: GamePhase.Night,
-					TargetIds: { Count: 1 } targetIds
-				} recurringEntry &&
-				recurringEntry.TurnNumber == dto.TurnNumber &&
-				recurringEntry.PowerIdentity == cursorPowerIdentity &&
-				targetIds[0] == cursor.CommittedTargetId;
-			var matchesLegacyAction =
-				latestActionEntry?.GetType() ==
-					typeof(NightActionLogEntry) &&
+					latestActionEntry is RecurringRolePowerCommittedLogEntry
+					{
+						CurrentPhase: GamePhase.Night,
+						TargetIds: { Count: > 0 } targetIds
+					} recurringEntry &&
+					recurringEntry.TurnNumber == dto.TurnNumber &&
+					recurringEntry.PowerIdentity == cursorPowerIdentity &&
+					targetIds.SequenceEqual(cursor.CommittedTargetIds);
+				var matchesLegacyAction =
+					cursor.CommittedTargetIds.Count == 1 &&
+					latestActionEntry?.GetType() ==
+						typeof(NightActionLogEntry) &&
 				latestActionEntry.CurrentPhase == GamePhase.Night &&
 				latestActionEntry.TurnNumber == dto.TurnNumber &&
-				latestActionEntry.TargetIds is
-					{ Count: 1 } legacyTargetIds &&
-				legacyTargetIds[0] == cursor.CommittedTargetId;
+					latestActionEntry.TargetIds is
+						{ Count: 1 } legacyTargetIds &&
+					legacyTargetIds[0] ==
+						cursor.CommittedTargetIds.Single();
 			if (matchesLegacyAction &&
 			    (pendingModeratorInstruction?.AffectedPlayerIds is not
 				     { Count: 1 } ownerAffectedPlayerIds ||

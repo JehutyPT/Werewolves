@@ -4,5 +4,6 @@ public enum Faction
 {
 	Villager,
 	Werewolf,
-	WhiteWerewolf
+	WhiteWerewolf,
+	Piper
 }

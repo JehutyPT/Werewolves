@@ -132,8 +132,10 @@ internal sealed class InitialBeneficiaryClosureRequest
 internal static class InitialBeneficiaryClosureRules
 {
 	private const string SourceIdentifier = "initial-beneficiary-closure";
-	private const string WhiteWerewolfDeferredResultIdentifier =
-		"white-werewolf-beneficiary";
+		private const string WhiteWerewolfDeferredResultIdentifier =
+			"white-werewolf-beneficiary";
+		private const string PiperDeferredResultIdentifier =
+			"piper-beneficiary";
 
 	internal static InitialBeneficiaryClosureResult TryCommitCurrentSession(
 		GameSession session,
@@ -220,24 +222,46 @@ internal static class InitialBeneficiaryClosureRules
 				entry.Source.Kind ==
 				FactionFactSourceKind.InitialBeneficiaryClosure);
 
-	internal static bool HasValidWhiteWerewolfInitialBeneficiaryClosure(
-		GameSession session)
-	{
-		ArgumentNullException.ThrowIfNull(session);
+		internal static bool HasConsistentInitialBeneficiaryClosure(
+			GameSession session)
+		{
+			ArgumentNullException.ThrowIfNull(session);
 		if (session.TurnNumber != 1 ||
 		    session.GetCurrentPhase() != GamePhase.Night)
 		{
 			return false;
 		}
 
-		var closureEntries = session.GameHistoryLog
-			.OfType<FactionFactsCommittedLogEntry>()
+			var closureEntries = session.GameHistoryLog
+				.OfType<FactionFactsCommittedLogEntry>()
 			.Where(entry =>
-				entry.Source.Kind ==
-				FactionFactSourceKind.InitialBeneficiaryClosure)
-			.ToArray();
-		if (closureEntries is not [var closure] ||
-		    closure.TurnNumber != 1 ||
+					entry.Source.Kind ==
+						FactionFactSourceKind.InitialBeneficiaryClosure)
+				.ToArray();
+			var allApplicableExceptionHolderSetsKnown = new[]
+				{
+					MainRoleType.WhiteWerewolf,
+					MainRoleType.Piper
+				}
+				.Where(role => session.RoleInPlayCount(role) > 0)
+				.All(role =>
+					GameSessionQueries.IsCompleteLivingRoleHolderSetKnown(
+						session,
+						role));
+			if (closureEntries.Length == 0)
+			{
+				return !allApplicableExceptionHolderSetsKnown ||
+				       FindInitialCompleteWerewolfAgentGroupBoundary(session) ==
+				       null;
+			}
+
+			if (!allApplicableExceptionHolderSetsKnown)
+			{
+				return false;
+			}
+
+			if (closureEntries is not [var closure] ||
+			    closure.TurnNumber != 1 ||
 		    closure.CurrentPhase != GamePhase.Night ||
 		    !StringComparer.Ordinal.Equals(
 			    closure.Source.Identifier,
@@ -248,25 +272,11 @@ internal static class InitialBeneficiaryClosureRules
 			return false;
 		}
 
-		var playerIds = session.GetPlayers()
-			.Select(player => player.Id)
-			.ToArray();
-		var livingWhiteWerewolfIds = session.GetPlayers()
-			.Where(player =>
-				player.State.Health == PlayerHealth.Alive &&
-				player.State.CurrentRole == MainRoleType.WhiteWerewolf &&
-				player.State.ModeratorKnownRole ==
-				MainRoleType.WhiteWerewolf)
-			.Select(player => player.Id)
-			.ToArray();
-		if (!GameSessionQueries.IsCompleteLivingRoleHolderSetKnown(
-			    session,
-			    MainRoleType.WhiteWerewolf))
-		{
-			return false;
-		}
+			var playerIds = session.GetPlayers()
+				.Select(player => player.Id)
+				.ToArray();
 
-		var committedHistory = session.GameHistoryLog.ToArray();
+			var committedHistory = session.GameHistoryLog.ToArray();
 		var closureIndex = Array.FindIndex(
 			committedHistory,
 			entry => ReferenceEquals(entry, closure));
@@ -303,14 +313,11 @@ internal static class InitialBeneficiaryClosureRules
 		var projection = FactionFactProjection.Create(
 			committedHistory.OfType<FactionFactsCommittedLogEntry>(),
 			playerIds);
-		return playerIds.All(playerId =>
-			       projection.Beneficiaries[playerId].IsKnown &&
-			       session.GetFactionBeneficiaryKnowledge(playerId) ==
-			       projection.Beneficiaries[playerId]) &&
-		       livingWhiteWerewolfIds.All(playerId =>
-			       projection.Beneficiaries[playerId].Faction ==
-			       Faction.WhiteWerewolf);
-	}
+			return playerIds.All(playerId =>
+				       projection.Beneficiaries[playerId].IsKnown &&
+				       session.GetFactionBeneficiaryKnowledge(playerId) ==
+				       projection.Beneficiaries[playerId]);
+		}
 
 	private static bool TryBuildFacts(
 		GameSession session,
@@ -422,56 +429,79 @@ internal static class InitialBeneficiaryClosureRules
 		return true;
 	}
 
-	private static IReadOnlyCollection<
-			InitialBeneficiaryClosureDeferredResult>
-		CreateCurrentDeferredResults(
-			GameSession session,
-			FactionFactEffectiveBoundary initialAgentGroupBoundary,
-			IReadOnlyCollection<FactionFactsCommittedLogEntry> history)
-	{
-		if (session.RoleInPlayCount(MainRoleType.WhiteWerewolf) == 0)
+		private static IReadOnlyCollection<
+				InitialBeneficiaryClosureDeferredResult>
+			CreateCurrentDeferredResults(
+				GameSession session,
+				FactionFactEffectiveBoundary initialAgentGroupBoundary,
+				IReadOnlyCollection<FactionFactsCommittedLogEntry> history)
 		{
-			return [];
+			return new[]
+				{
+					CreateCurrentExclusiveBeneficiaryResult(
+						session,
+						initialAgentGroupBoundary,
+						history,
+						MainRoleType.WhiteWerewolf,
+						Faction.WhiteWerewolf,
+						WhiteWerewolfDeferredResultIdentifier),
+					CreateCurrentExclusiveBeneficiaryResult(
+						session,
+						initialAgentGroupBoundary,
+						history,
+						MainRoleType.Piper,
+						Faction.Piper,
+						PiperDeferredResultIdentifier)
+				}
+				.OfType<InitialBeneficiaryClosureDeferredResult>()
+				.ToArray();
 		}
 
-		if (!GameSessionQueries.IsCompleteLivingRoleHolderSetKnown(
-			    session,
-			    MainRoleType.WhiteWerewolf))
+		private static InitialBeneficiaryClosureDeferredResult?
+			CreateCurrentExclusiveBeneficiaryResult(
+				GameSession session,
+				FactionFactEffectiveBoundary initialAgentGroupBoundary,
+				IReadOnlyCollection<FactionFactsCommittedLogEntry> history,
+				MainRoleType role,
+				Faction faction,
+				string identifier)
 		{
-			return
-			[
-				InitialBeneficiaryClosureDeferredResult.Pending(
-					WhiteWerewolfDeferredResultIdentifier)
-			];
-		}
+			if (session.RoleInPlayCount(role) == 0)
+			{
+				return null;
+			}
 
-		var playerIds = session.GetPlayers()
-			.Select(player => player.Id)
-			.ToArray();
-		var projectionAtGroupBoundary = FactionFactProjection.Create(
-			history,
-			playerIds,
-			initialAgentGroupBoundary);
-		var facts = session.GetPlayers()
-			.Where(player =>
-				player.State.Health == PlayerHealth.Alive &&
-				player.State.CurrentRole ==
-				MainRoleType.WhiteWerewolf &&
-				!projectionAtGroupBoundary
-					.Beneficiaries[player.Id]
-					.IsKnown)
-			.Select(player => FactionFact.Beneficiary(
-				player.Id,
-				Faction.WhiteWerewolf,
-				initialAgentGroupBoundary))
-			.ToArray();
-		return
-		[
-			InitialBeneficiaryClosureDeferredResult.Complete(
-				WhiteWerewolfDeferredResultIdentifier,
-				facts)
-			];
-	}
+			if (!GameSessionQueries.IsCompleteLivingRoleHolderSetKnown(
+				    session,
+				    role))
+			{
+				return InitialBeneficiaryClosureDeferredResult.Pending(
+					identifier);
+			}
+
+			var playerIds = session.GetPlayers()
+				.Select(player => player.Id)
+				.ToArray();
+			var projectionAtGroupBoundary = FactionFactProjection.Create(
+				history,
+				playerIds,
+				initialAgentGroupBoundary);
+			var facts = session.GetPlayers()
+				.Where(player =>
+					player.State.Health == PlayerHealth.Alive &&
+					player.State.CurrentRole == role &&
+					!projectionAtGroupBoundary
+						.Beneficiaries[player.Id]
+						.IsKnown)
+				.Select(player => FactionFact.Beneficiary(
+					player.Id,
+					faction,
+					initialAgentGroupBoundary))
+				.ToArray();
+			return InitialBeneficiaryClosureDeferredResult.Complete(
+				identifier,
+				facts);
+		}
 
 	private static FactionFactEffectiveBoundary?
 		FindInitialCompleteWerewolfAgentGroupBoundary(

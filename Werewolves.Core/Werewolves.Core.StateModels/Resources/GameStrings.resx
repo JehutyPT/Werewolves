@@ -197,6 +197,10 @@
     <value>O Lobisomem Branco é o único jogador sobrevivente.</value>
     <comment/>
   </data>
+  <data name="VictoryConditionPiperCharmedAll" xml:space="preserve">
+    <value>O Flautista encantou todos os outros jogadores vivos.</value>
+    <comment/>
+  </data>
   <data name="VictoryConditionShared" xml:space="preserve">
     <value>Várias facções venceram em conjunto.</value>
     <comment/>
@@ -551,6 +555,18 @@
   </data>
   <data name="RoleHoldersGoToSleep" xml:space="preserve">
     <value>{0} voltam a dormir.</value>
+    <comment/>
+  </data>
+  <data name="PiperTargetSelectionInstruction" xml:space="preserve">
+    <value>Seleciona os jogadores encantados pelo Flautista.</value>
+    <comment/>
+  </data>
+  <data name="PiperCharmedRecognitionAnnouncement" xml:space="preserve">
+    <value>Jogadores Encantados, acordem, reconheçam-se uns aos outros e voltem a dormir.</value>
+    <comment/>
+  </data>
+  <data name="PiperLivingCharmedRosterInstruction" xml:space="preserve">
+    <value>Confirma a lista atual de jogadores Encantados vivos.</value>
     <comment/>
   </data>
 </root>

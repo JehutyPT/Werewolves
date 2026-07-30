@@ -402,6 +402,15 @@ internal class GameSession : IGameSession
 	internal void CommitRecurringRolePowerNightAction(
 		NightActionType actionType,
 		Guid targetId,
+		RolePowerInstanceIdentity powerIdentity) =>
+		CommitRecurringRolePowerNightAction(
+			actionType,
+			new[] { targetId },
+			powerIdentity);
+
+	internal void CommitRecurringRolePowerNightAction(
+		NightActionType actionType,
+		IReadOnlyCollection<Guid> targetIds,
 		RolePowerInstanceIdentity powerIdentity)
 	{
 		if (actionType == NightActionType.Unknown)
@@ -409,10 +418,26 @@ internal class GameSession : IGameSession
 			throw new ArgumentOutOfRangeException(nameof(actionType));
 		}
 
-		if (targetId == Guid.Empty)
+		ArgumentNullException.ThrowIfNull(targetIds);
+		if (targetIds.Count == 0 ||
+		    targetIds.Any(targetId => targetId == Guid.Empty) ||
+		    targetIds.Distinct().Count() != targetIds.Count)
 		{
 			throw new ArgumentException(
-				"Recurring Role Power commits require a concrete target identity.");
+				"Recurring Role Power commits require a nonempty distinct target set.",
+				nameof(targetIds));
+		}
+
+		var targetSet = targetIds.ToHashSet();
+		var deterministicTargetIds = GetPlayers()
+			.Select(player => player.Id)
+			.Where(targetSet.Contains)
+			.ToList();
+		if (deterministicTargetIds.Count != targetSet.Count)
+		{
+			throw new ArgumentException(
+				"Recurring Role Power targets must identify Players in the session.",
+				nameof(targetIds));
 		}
 
 		powerIdentity.EnforceValidity();
@@ -422,7 +447,7 @@ internal class GameSession : IGameSession
 			TurnNumber = TurnNumber,
 			CurrentPhase = _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
 			ActionType = actionType,
-			TargetIds = [targetId],
+			TargetIds = deterministicTargetIds,
 			ActingPlayerId = powerIdentity.ActingPlayerId,
 			SourceRole = powerIdentity.SourceRole,
 			SourcePowerIdentifier = powerIdentity.SourcePowerIdentifier,

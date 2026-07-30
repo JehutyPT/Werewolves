@@ -684,7 +684,7 @@ internal static class GameFlowManager
             }
 
             if (newRecurringEntries is not [var recurringEntry] ||
-                recurringEntry.TargetIds is not [var recurringTargetId])
+                recurringEntry.TargetIds is not { Count: > 0 } recurringTargetIds)
             {
                 throw new InvalidOperationException(
                     "One accepted response must produce exactly one recurring Role Power commit.");
@@ -715,6 +715,13 @@ internal static class GameFlowManager
                             input,
                             recurringEntry,
                             nextInstruction),
+                    MainRoleType.Piper =>
+                        PiperRole.TryValidateCommittedRecoveryBoundary(
+                            session,
+                            startingInstruction,
+                            input,
+                            recurringEntry,
+                            nextInstruction),
                     _ => false
                 };
             if (!recurringCommitCorrelated)
@@ -738,7 +745,7 @@ internal static class GameFlowManager
                 PowerInstanceOrigin =
                     powerIdentity.PowerInstanceOrigin,
                 OneUseResourceId = Guid.Empty,
-                CommittedTargetId = recurringTargetId,
+                CommittedTargetIds = recurringTargetIds.ToList(),
                 NextInstructionSemantic = nextInstruction.Semantic,
                 NextInstructionId = nextInstruction.InstructionId
             };
@@ -780,7 +787,7 @@ internal static class GameFlowManager
             PowerInstanceId = resourceIdentity.PowerInstanceId,
             PowerInstanceOrigin = resourceIdentity.PowerInstanceOrigin,
             OneUseResourceId = resourceIdentity.OneUseResourceId,
-            CommittedTargetId = committedTargetId,
+            CommittedTargetIds = [committedTargetId],
             NextInstructionSemantic = nextInstruction.Semantic,
             NextInstructionId = nextInstruction.InstructionId
         };
@@ -957,10 +964,10 @@ internal static class GameFlowManager
                     HasCommittedRoleIdentification(
                         session,
                         cursor.ObservedRole) &&
-                    (cursor.ObservedRole != WhiteWerewolf ||
+                    (cursor.ObservedRole is not
+                         (WhiteWerewolf or MainRoleType.Piper) ||
                      InitialBeneficiaryClosureRules
-                         .HasValidWhiteWerewolfInitialBeneficiaryClosure(
-                             session)),
+                         .HasConsistentInitialBeneficiaryClosure(session)),
                 ModeratorInstructionSemantic
                     .ObserveWerewolfFactionAgentGroup
                     when cursor.ObservedRole == SimpleWerewolf &&
@@ -968,13 +975,8 @@ internal static class GameFlowManager
                     HasCommittedWerewolfAgentGroupObservation(
                         session,
                         pendingInstruction) &&
-                    (session.RoleInPlayCount(WhiteWerewolf) == 0 ||
-                     !GameSessionQueries.IsCompleteLivingRoleHolderSetKnown(
-                         session,
-                         WhiteWerewolf) ||
-                     InitialBeneficiaryClosureRules
-                         .HasValidWhiteWerewolfInitialBeneficiaryClosure(
-                             session)),
+                    InitialBeneficiaryClosureRules
+                        .HasConsistentInitialBeneficiaryClosure(session),
                 ModeratorInstructionSemantic
                     .EstablishStutteringJudgeSignal
                     when cursor.ObservedRole == StutteringJudge =>
@@ -1248,6 +1250,9 @@ internal static class GameFlowManager
                     WhiteWerewolfRole.ValidateRecurringRecoveryCursorIdentity(
                         cursor);
                     break;
+                case MainRoleType.Piper:
+                    PiperRole.ValidateRecurringRecoveryCursorIdentity(cursor);
+                    break;
                 default:
                     throw new InvalidOperationException(
                         $"Unsupported recurring Role Power continuation '{sourceRole}'.");
@@ -1260,8 +1265,8 @@ internal static class GameFlowManager
                     entry.PowerIdentity == cursor.PowerIdentity &&
                     entry.CurrentPhase == GamePhase.Night &&
                     entry.TurnNumber == session.TurnNumber &&
-                    entry.TargetIds is { Count: 1 } targetIds &&
-                    targetIds[0] == cursor.CommittedTargetId);
+                    entry.TargetIds is { Count: > 0 } targetIds &&
+                    targetIds.SequenceEqual(cursor.CommittedTargetIds));
             if (!hasMatchingRecurringCommit)
             {
                 if (sourceRole != MainRoleType.BigBadWolf)
@@ -1276,7 +1281,7 @@ internal static class GameFlowManager
                 session.NormalizeLegacyRecurringRolePowerCommit(
                     Key,
                     cursor.CommittedActionType,
-                    cursor.CommittedTargetId,
+                    cursor.CommittedTargetIds.Single(),
                     cursor.PowerIdentity!.Value);
             }
         }
@@ -1432,9 +1437,10 @@ internal static class GameFlowManager
     private static void EnsureVictoryFactsReady(
         GameSession session,
         ModeratorResponse _) =>
-        RequireLivingFactionBeneficiaries(session);
+        RequireLivingFactionBeneficiarySnapshot(session);
 
-    private static Faction[] RequireLivingFactionBeneficiaries(
+    private static LivingFactionBeneficiarySnapshot[]
+        RequireLivingFactionBeneficiarySnapshot(
         GameSession session)
     {
         if (!InitialBeneficiaryClosureRules.HasCommitted(session))
@@ -1445,18 +1451,20 @@ internal static class GameFlowManager
 
         return session.GetPlayers()
             .WithHealth(PlayerHealth.Alive)
-            .Select(player => session.RequireKnownFactionBeneficiary(player.Id))
+            .Select(player => new LivingFactionBeneficiarySnapshot(
+                session.RequireKnownFactionBeneficiary(player.Id),
+                player.State.HasStatusEffect(StatusEffectTypes.Charmed)))
             .ToArray();
     }
 
     private static GameResult? CheckVictoryConditions(GameSession session)
     {
-        var livingBeneficiaries =
-            RequireLivingFactionBeneficiaries(session);
+        var livingPlayers =
+            RequireLivingFactionBeneficiarySnapshot(session);
 
         return GameResultSelection.Select(
-            FactionVictoryPredicates.Evaluate(livingBeneficiaries),
-            allPlayersEliminated: livingBeneficiaries.Length == 0);
+            FactionVictoryPredicates.Evaluate(livingPlayers),
+            allPlayersEliminated: livingPlayers.Length == 0);
     }
 
 	#endregion

@@ -92,7 +92,7 @@ internal sealed class RecoveryPayloadTestDriver
 				nameof(targetId));
 		}
 
-		RequireDomainCursor().CommittedTargetId = targetId;
+		RequireDomainCursor().CommittedTargetIds = [targetId];
 		var entryIndex = _payload.GameHistoryLog.FindLastIndex(
 			entry => entry is OneUseRolePowerCommittedLogEntry);
 		if (entryIndex < 0 ||
@@ -120,7 +120,7 @@ internal sealed class RecoveryPayloadTestDriver
 				nameof(targetId));
 		}
 
-		RequireDomainCursor().CommittedTargetId = targetId;
+		RequireDomainCursor().CommittedTargetIds = [targetId];
 		var entryIndex = _payload.GameHistoryLog.FindLastIndex(
 			entry => entry is RecurringRolePowerCommittedLogEntry);
 		if (entryIndex < 0 ||
@@ -135,6 +135,23 @@ internal sealed class RecoveryPayloadTestDriver
 		{
 			TargetIds = [targetId]
 		};
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver RewriteRecurringCursorTargets(
+		params Guid[] targetIds)
+	{
+		ArgumentNullException.ThrowIfNull(targetIds);
+		if (targetIds.Length == 0 ||
+		    targetIds.Any(targetId => targetId == Guid.Empty) ||
+		    targetIds.Distinct().Count() != targetIds.Length)
+		{
+			throw new ArgumentException(
+				"Recovery test targets must contain one or more distinct, non-empty GUIDs.",
+				nameof(targetIds));
+		}
+
+		RequireDomainCursor().CommittedTargetIds = targetIds.ToList();
 		return this;
 	}
 
@@ -537,6 +554,9 @@ internal sealed class RecoveryPayloadTestDriver
 			pending.InstructionId);
 		return this;
 	}
+
+	internal StatusEffectTypes GetActiveEffects(Guid playerId) =>
+		_payload.Players.Single(player => player.Id == playerId).ActiveEffects;
 
 	internal string Serialize() =>
 		JsonSerializer.Serialize(_payload, SerializationOptions);

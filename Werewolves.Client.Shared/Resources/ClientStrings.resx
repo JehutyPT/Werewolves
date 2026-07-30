@@ -181,6 +181,9 @@
   <data name="LobbyEvaluation_FactionWhiteWerewolf" xml:space="preserve">
     <value>White Werewolf</value>
   </data>
+  <data name="LobbyEvaluation_FactionPiper" xml:space="preserve">
+    <value>Piper</value>
+  </data>
   <data name="LobbyEvaluation_FactionSeparator" xml:space="preserve">
     <value> and </value>
   </data>

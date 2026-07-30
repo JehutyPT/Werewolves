@@ -149,8 +149,9 @@ public sealed class SimulatorCapability : SimulatorProfile
 			new(
 				MainRoleType.WhiteWerewolf,
 				Faction.WhiteWerewolf,
-				Faction.Werewolf)
-	];
+				Faction.Werewolf),
+			new(MainRoleType.Piper, Faction.Piper)
+		];
 
 	private static readonly SimulatorProfileRoleDescriptor[] FullProbabilityRoleDescriptors =
 	[
@@ -167,7 +168,7 @@ public sealed class SimulatorCapability : SimulatorProfile
 		SimulatorCapabilityRegistry.Production.FullProbability;
 
 	internal static SimulatorCapability CreateSafetyScreening() => new(
-		new SimulatorProfileIdentity("safety-screening", "17"),
+		new SimulatorProfileIdentity("safety-screening", "18"),
 		SafetyScreeningRoleDescriptors,
 		headlessResponsePolicy: new HeadlessResponsePolicy(
 			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
@@ -184,6 +185,8 @@ public sealed class SimulatorCapability : SimulatorProfile
 				ModeratorInstructionSemantic.SelectBigBadWolfTarget,
 				ModeratorInstructionSemantic.SelectDefenderTarget,
 				ModeratorInstructionSemantic.SelectWhiteWerewolfTarget,
+				ModeratorInstructionSemantic.SelectPiperTargets,
+				ModeratorInstructionSemantic.RecognizeCharmedPlayers,
 				ModeratorInstructionSemantic.SelectSeerTarget,
 				ModeratorInstructionSemantic.RevealSeerResult,
 				ModeratorInstructionSemantic.SelectWildChildModel,

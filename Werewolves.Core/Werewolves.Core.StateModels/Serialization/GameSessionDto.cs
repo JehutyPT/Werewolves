@@ -113,7 +113,7 @@ internal sealed class DomainRecoveryCursor
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public RolePowerInstanceOrigin? PowerInstanceOrigin { get; set; }
     public Guid OneUseResourceId { get; set; }
-    public Guid CommittedTargetId { get; set; }
+    public List<Guid> CommittedTargetIds { get; set; } = new();
     public ModeratorInstructionSemantic NextInstructionSemantic { get; set; }
     public Guid NextInstructionId { get; set; }
 
