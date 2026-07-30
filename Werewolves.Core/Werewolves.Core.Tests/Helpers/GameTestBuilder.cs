@@ -48,6 +48,16 @@ public class NightActionInputs
     /// </summary>
     public bool? AccursedWolfFatherInfectsVictim { get; init; }
 
+    /// <summary>
+    /// Big Bad Wolf action: ID of the role holder to identify.
+    /// </summary>
+    public Guid? BigBadWolfId { get; init; }
+
+    /// <summary>
+    /// Big Bad Wolf action: ID of the additional victim to select.
+    /// </summary>
+    public Guid? BigBadWolfTargetId { get; init; }
+
     // Future roles can add their inputs here, e.g.:
     // public Guid? WitchHealTargetId { get; init; }
     // public Guid? WitchPoisonTargetId { get; init; }
@@ -677,6 +687,76 @@ public class GameTestBuilder
     }
 
     /// <summary>
+    /// Completes the Big Bad Wolf night action sequence:
+    /// identify or wake → select the additional victim → confirm sleep.
+    /// </summary>
+    public ProcessResult CompleteBigBadWolfNightAction(
+        Guid bigBadWolfId,
+        Guid targetId)
+    {
+        EnsureGameStarted();
+
+        ProcessResult afterWake;
+        switch (GetCurrentInstruction())
+        {
+            case SelectPlayersInstruction
+            {
+                Semantic: ModeratorInstructionSemantic.IdentifyRoleHolders,
+                RoleIdentification: MainRoleType.BigBadWolf
+            } identify:
+                afterWake = Process(
+                    identify.CreateResponse([bigBadWolfId]));
+                break;
+            case ConfirmationInstruction
+            {
+                Semantic: ModeratorInstructionSemantic.WakeRole,
+                AffectedPlayerIds: [var affectedPlayerId]
+            } wake when affectedPlayerId == bigBadWolfId:
+                afterWake = Process(wake.CreateResponse());
+                break;
+            case SelectPlayersInstruction
+            {
+                Semantic:
+                    ModeratorInstructionSemantic.SelectBigBadWolfTarget
+            } targetSelection:
+                afterWake = ProcessResult.Success(targetSelection);
+                break;
+            case null:
+                throw new InvalidOperationException(
+                    "No current instruction is available for the Big Bad Wolf wake.");
+            case var instruction:
+                throw new AssertionException(
+                    $"Expected a Big Bad Wolf identification or wake instruction, but received " +
+                    $"{instruction.GetType().Name} ({instruction.Semantic}).");
+        }
+
+        var target = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+            afterWake,
+            "Big Bad Wolf target selection");
+        if (target.Semantic !=
+            ModeratorInstructionSemantic.SelectBigBadWolfTarget)
+        {
+            throw new AssertionException(
+                $"Expected {ModeratorInstructionSemantic.SelectBigBadWolfTarget}, " +
+                $"but received {target.Semantic}.");
+        }
+
+        var afterTarget = Process(target.CreateResponse([targetId]));
+        var sleep = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+            afterTarget,
+            "Big Bad Wolf sleep confirmation");
+        if (sleep.Semantic != ModeratorInstructionSemantic.PutRoleToSleep ||
+            sleep.AffectedPlayerIds is not [var sleepingPlayerId] ||
+            sleepingPlayerId != bigBadWolfId)
+        {
+            throw new AssertionException(
+                "Expected the Big Bad Wolf to receive the sleep confirmation.");
+        }
+
+        return Process(sleep.CreateResponse());
+    }
+
+    /// <summary>
     /// Completes a full night phase by iterating through roles in the order defined by HookListeners[NightMainActionLoop].
     /// This includes confirming the night-end instruction that transitions to Dawn.
     /// </summary>
@@ -714,6 +794,8 @@ public class GameTestBuilder
                 MainRoleType.Seer => HandleSeerNightAction(inputs),
                 MainRoleType.AccursedWolfFather =>
                     HandleAccursedWolfFatherNightAction(inputs),
+                MainRoleType.BigBadWolf =>
+                    HandleBigBadWolfNightAction(inputs),
                 // Future roles can be added here as they're implemented:
                 // MainRoleType.Witch => HandleWitchNightAction(inputs),
                 // MainRoleType.Defender => HandleDefenderNightAction(inputs),
@@ -820,6 +902,22 @@ public class GameTestBuilder
         return CompleteAccursedWolfFatherNightAction(
             inputs.AccursedWolfFatherId.Value,
             inputs.AccursedWolfFatherInfectsVictim.Value);
+    }
+
+    /// <summary>
+    /// Handles the Big Bad Wolf night action if inputs are provided.
+    /// </summary>
+    private ProcessResult HandleBigBadWolfNightAction(NightActionInputs inputs)
+    {
+        if (inputs.BigBadWolfId == null ||
+            inputs.BigBadWolfTargetId == null)
+        {
+            return ProcessResult.Success(GetCurrentInstruction()!);
+        }
+
+        return CompleteBigBadWolfNightAction(
+            inputs.BigBadWolfId.Value,
+            inputs.BigBadWolfTargetId.Value);
     }
 
     #endregion

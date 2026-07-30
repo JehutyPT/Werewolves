@@ -111,6 +111,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 	[InlineData(MainRoleType.Scapegoat, 1)]
 	[InlineData(MainRoleType.WolfHound, 1)]
 	[InlineData(MainRoleType.AccursedWolfFather, 1)]
+	[InlineData(MainRoleType.BigBadWolf, 1)]
 	[InlineData(MainRoleType.TwoSisters, 2)]
 	[InlineData(MainRoleType.ThreeBrothers, 3)]
 	public void ExecuteBatch_WithCardinalityRoleHolders_SafetyRepresentativeCompletesAllOneThousandAttempts(
@@ -393,7 +394,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 
 		first.Should().BeOfType<CompletedSimulationRun>();
 		first.RunSeedMaterial.CompatibilityIdentity.Profile.Should()
-			.Be(new SimulatorProfileIdentity("safety-screening", "12"));
+			.Be(new SimulatorProfileIdentity("safety-screening", "13"));
 		replay.Should().Be(first);
 		MarkTestCompleted();
 	}
@@ -604,8 +605,8 @@ public class SimulationExecutionTests : DiagnosticTestBase
 		var appUnsupported = new SimulationScenario(
 			5,
 			[
-				MainRoleType.BigBadWolf,
-				MainRoleType.Seer,
+				MainRoleType.Cupid,
+				MainRoleType.SimpleWerewolf,
 				MainRoleType.SimpleVillager,
 				MainRoleType.SimpleVillager,
 				MainRoleType.SimpleVillager

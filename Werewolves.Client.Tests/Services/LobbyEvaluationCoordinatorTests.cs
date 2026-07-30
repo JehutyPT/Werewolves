@@ -987,7 +987,7 @@ public class LobbyEvaluationCoordinatorTests
 	}
 
 	[Theory]
-	[InlineData("safety-screening@11")]
+	[InlineData("safety-screening@12")]
 	[InlineData("core-simulator@1")]
 	[InlineData("foreign-simulator@1")]
 	public async Task NonCurrentSafetyLocalRecord_IsAMissBeforeBoundedFallback(
@@ -1083,8 +1083,8 @@ public class LobbyEvaluationCoordinatorTests
 		invalid.State.BlocksLobbyExit.Should().BeFalse();
 
 		var appUnsupportedLobby = CreateLobby(
-			MainRoleType.BigBadWolf,
-			MainRoleType.SimpleVillager,
+			MainRoleType.Cupid,
+			MainRoleType.SimpleWerewolf,
 			MainRoleType.SimpleVillager,
 			MainRoleType.SimpleVillager,
 			MainRoleType.SimpleVillager);

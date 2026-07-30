@@ -381,6 +381,10 @@
     <value>Grande Mau Lobo</value>
     <comment/>
   </data>
+  <data name="BigBadWolfTargetSelectionInstruction" xml:space="preserve">
+    <value>Grande Mau Lobo, escolhe exatamente um jogador vivo para o ataque adicional.</value>
+    <comment/>
+  </data>
   <data name="AccursedWolfFatherRoleName" xml:space="preserve">
     <value>Infecto-Pai dos Lobos</value>
     <comment/>

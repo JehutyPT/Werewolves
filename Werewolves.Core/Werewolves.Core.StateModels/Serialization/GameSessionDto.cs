@@ -88,7 +88,8 @@ internal sealed class AcceptedObservationRecoveryCursor
 
 internal enum DomainRecoveryCursorKind
 {
-    OneUseRolePowerCommit = 1
+    OneUseRolePowerCommit = 1,
+    RecurringNativeRolePowerCommit = 2
 }
 
 /// <summary>

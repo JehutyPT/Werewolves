@@ -108,6 +108,36 @@ internal sealed class RecoveryPayloadTestDriver
 		return this;
 	}
 
+	internal RecoveryPayloadTestDriver
+		RetargetLatestRecurringNightActionAndCursor(Guid targetId)
+	{
+		if (targetId == Guid.Empty)
+		{
+			throw new ArgumentException(
+				"A recovery test target cannot be empty.",
+				nameof(targetId));
+		}
+
+		RequireDomainCursor().CommittedTargetId = targetId;
+		var entryIndex = _payload.GameHistoryLog.FindLastIndex(
+			entry => entry.GetType() == typeof(NightActionLogEntry) &&
+			         ((NightActionLogEntry)entry).ActionType ==
+			         NightActionType.BigBadWolfVictimSelection);
+		if (entryIndex < 0 ||
+		    _payload.GameHistoryLog[entryIndex] is not
+			    NightActionLogEntry entry)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no committed recurring Night action.");
+		}
+
+		_payload.GameHistoryLog[entryIndex] = entry with
+		{
+			TargetIds = [targetId]
+		};
+		return this;
+	}
+
 	internal RecoveryPayloadTestDriver RewriteLatestStutteringJudgeAction(
 		DayPowerType actionType)
 	{

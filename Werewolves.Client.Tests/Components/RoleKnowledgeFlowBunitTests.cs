@@ -36,6 +36,7 @@ public sealed class RoleKnowledgeFlowBunitTests
 	[InlineData(MainRoleType.StutteringJudge)]
 	[InlineData(MainRoleType.Scapegoat)]
 	[InlineData(MainRoleType.AccursedWolfFather)]
+	[InlineData(MainRoleType.BigBadWolf)]
 	public void SingleOptionalRoleLobby_UsesCatalogMetadataAsPortugueseToggle(
 		MainRoleType role)
 	{
@@ -51,6 +52,7 @@ public sealed class RoleKnowledgeFlowBunitTests
 			MainRoleType.Scapegoat => GameStrings.ScapegoatRoleName,
 			MainRoleType.AccursedWolfFather =>
 				GameStrings.AccursedWolfFatherRoleName,
+			MainRoleType.BigBadWolf => GameStrings.BigBadWolfRoleName,
 			_ => throw new InvalidOperationException(
 				$"Unexpected Single-Optional Role {role}.")
 		};
@@ -603,6 +605,220 @@ public sealed class RoleKnowledgeFlowBunitTests
 			.And.Contain(ClientStrings.Dashboard_RoleKnowledgePrivate)
 			.And.NotContain(GameStrings.VillagersGroupName)
 			.And.NotContain(GameStrings.WerewolvesGroupName);
+	}
+
+	[Fact]
+	public async Task BigBadWolfNightFlow_RendersPublicWakePrivateMandatoryTargetAndPublicSleep()
+	{
+		var timing = new ControlledHoldButtonTiming();
+		using var context = new ModeratorComponentTestContext();
+		context.Services.AddSingleton<IHoldButtonTiming>(timing);
+		var manager = context.Services.GetRequiredService<GameClientManager>();
+		var start = manager.StartGame(
+			PlayerNames.DefaultFive,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.BigBadWolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+		manager.ProcessInput(start.CreateResponse()).IsSuccess.Should().BeTrue();
+		var startNight = manager.CurrentInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		manager.ProcessInput(startNight.CreateResponse()).IsSuccess.Should().BeTrue();
+
+		var players = manager.CurrentSession!.GetPlayers().ToArray();
+		var werewolf = players[0];
+		var bigBadWolf = players[1];
+		var collectiveVictim = players[2];
+		var additionalVictim = players[3];
+		var factionObservation = manager.CurrentInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		factionObservation.Semantic.Should().Be(
+			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
+		factionObservation.RoleIdentification.Should().BeNull();
+		manager.ProcessInput(
+				factionObservation.CreateResponse(
+					[werewolf.Id, bigBadWolf.Id]))
+			.IsSuccess.Should().BeTrue();
+		var victimSelection = manager.CurrentInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		victimSelection.Semantic.Should().Be(
+			ModeratorInstructionSemantic.SelectWerewolfVictim);
+		manager.ProcessInput(
+				victimSelection.CreateResponse([collectiveVictim.Id]))
+			.IsSuccess.Should().BeTrue();
+		var collectiveSleep = manager.CurrentInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		manager.ProcessInput(collectiveSleep.CreateResponse())
+			.IsSuccess.Should().BeTrue();
+
+		bigBadWolf.State.ModeratorKnownRole.Should().BeNull();
+		var identification = manager.CurrentInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		var wakeAnnouncement = GameStrings.RoleWakesUp.Format(
+			GameStrings.BigBadWolfRoleName);
+		identification.Semantic.Should().Be(
+			ModeratorInstructionSemantic.IdentifyRoleHolders);
+		identification.RoleIdentification.Should().Be(MainRoleType.BigBadWolf);
+		identification.CountConstraint.Should().Be(NumberRangeConstraint.Single);
+		identification.PublicAnnouncement.Should().Be(wakeAnnouncement);
+
+		var dashboard = context.RenderModeratorComponent<DashboardPage>();
+		var publicWake = dashboard.Find(PublicInstructionSelector);
+		publicWake.TextContent.Should().Contain(wakeAnnouncement);
+		publicWake.TextContent.Should().NotContain(bigBadWolf.Name);
+		dashboard.Find(PrivateInstructionSelector).TextContent.Should()
+			.Contain(identification.PrivateInstruction!);
+		dashboard.Find(HoldButtonSelector)
+			.HasAttribute(Html.Attributes.Disabled).Should().BeTrue();
+		var holderOption = dashboard.FindAll(PlayerOptionSelector)
+			.Single(option => option.TextContent.Contains(
+				bigBadWolf.Name,
+				StringComparison.CurrentCulture));
+		holderOption.Click();
+		dashboard.Find(HoldButtonSelector)
+			.HasAttribute(Html.Attributes.Disabled).Should().BeFalse();
+		await RenderedHoldButtonDriver.CompleteHoldAsync(
+			dashboard,
+			dashboard.Find(HoldButtonSelector),
+			timing);
+
+		var targetSelection = manager.CurrentInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		targetSelection.Semantic.Should().Be(
+			ModeratorInstructionSemantic.SelectBigBadWolfTarget);
+		targetSelection.PublicAnnouncement.Should().BeNull();
+		targetSelection.PrivateInstruction.Should().Be(
+			GameStrings.BigBadWolfTargetSelectionInstruction);
+		targetSelection.AffectedPlayerIds.Should().Equal(bigBadWolf.Id);
+		targetSelection.CountConstraint.Should().Be(NumberRangeConstraint.Single);
+		targetSelection.EmptySelectionOptionLabel.Should().BeNull();
+		targetSelection.SelectablePlayerIds.Should()
+			.Contain(additionalVictim.Id)
+			.And.NotContain(collectiveVictim.Id)
+			.And.NotContain(werewolf.Id)
+			.And.NotContain(bigBadWolf.Id);
+
+		var responses = new List<ModeratorResponse>();
+		var targetView =
+			context.RenderModeratorComponent<InstructionRenderer>(parameters =>
+				parameters
+					.Add(component => component.Instruction, targetSelection)
+					.Add(component => component.Roster, manager.CurrentRoster)
+					.Add(
+						component => component.OnResponse,
+						EventCallback.Factory.Create<ModeratorResponse>(
+							this,
+							responses.Add)));
+		targetView.FindAll(PublicInstructionSelector).Should().BeEmpty();
+		targetView.Find(PrivateInstructionSelector).TextContent.Should()
+			.Contain(GameStrings.BigBadWolfTargetSelectionInstruction);
+		targetView.Find(HoldButtonSelector)
+			.HasAttribute(Html.Attributes.Disabled).Should().BeTrue();
+		var targetOption = targetView.FindAll(PlayerOptionSelector)
+			.Single(option => option.TextContent.Contains(
+				additionalVictim.Name,
+				StringComparison.CurrentCulture));
+		targetOption.Click();
+		targetView.Find(HoldButtonSelector)
+			.HasAttribute(Html.Attributes.Disabled).Should().BeFalse();
+
+		var canceledHoldTask = RenderedHoldButtonDriver.StartHoldAsync(
+			targetView.Find(HoldButtonSelector));
+		await RenderedHoldButtonDriver.FlushAsync(targetView);
+		timing.AdvanceBy(TimeSpan.FromMilliseconds(200));
+		await RenderedHoldButtonDriver.LeaveHoldAsync(
+			targetView.Find(HoldButtonSelector));
+		await canceledHoldTask;
+		timing.AdvanceBy(
+			RenderedHoldButtonDriver.HoldDuration +
+			RenderedHoldButtonDriver.SuccessFlashDuration);
+		await RenderedHoldButtonDriver.FlushAsync(targetView);
+		responses.Should().BeEmpty();
+
+		await RenderedHoldButtonDriver.CompleteHoldAsync(
+			targetView,
+			targetView.Find(HoldButtonSelector),
+			timing);
+		var response = responses.Should().ContainSingle().Subject;
+		response.Type.Should().Be(ExpectedInputType.PlayerSelection);
+		response.InstructionId.Should().Be(targetSelection.InstructionId);
+		response.SelectedPlayerIds.Should().Equal(additionalVictim.Id);
+		manager.ProcessInput(response).IsSuccess.Should().BeTrue();
+
+		var sleep = manager.CurrentInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var sleepAnnouncement = GameStrings.RoleGoesToSleepSingle.Format(
+			GameStrings.BigBadWolfRoleName);
+		sleep.Semantic.Should().Be(ModeratorInstructionSemantic.PutRoleToSleep);
+		sleep.PublicAnnouncement.Should().Be(sleepAnnouncement);
+		sleep.PrivateInstruction.Should().BeNull();
+
+		var sleepDashboard = context.RenderModeratorComponent<DashboardPage>();
+		sleepDashboard.Find(PublicInstructionSelector).TextContent.Should()
+			.Contain(sleepAnnouncement)
+			.And.NotContain(bigBadWolf.Name)
+			.And.NotContain(additionalVictim.Name);
+		sleepDashboard.FindAll(PrivateInstructionSelector).Should().BeEmpty();
+		sleepDashboard.FindAll(PlayerOptionSelector).Should().BeEmpty();
+	}
+
+	[Fact]
+	public void BigBadWolfNoTargetFlow_RendersPublicSleepWithoutPrivateTargetControl()
+	{
+		using var context = new ModeratorComponentTestContext();
+		var manager = context.Services.GetRequiredService<GameClientManager>();
+		var start = manager.StartGame(
+			PlayerNames.DefaultFive,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.BigBadWolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+		manager.ProcessInput(start.CreateResponse()).IsSuccess.Should().BeTrue();
+		var startNight = manager.CurrentInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		manager.ProcessInput(startNight.CreateResponse()).IsSuccess.Should().BeTrue();
+
+		var players = manager.CurrentSession!.GetPlayers().ToArray();
+		var bigBadWolf = players[1];
+		var collectiveVictim = players[4];
+		var factionObservation = manager.CurrentInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		manager.ProcessInput(factionObservation.CreateResponse(
+				[players[0].Id, bigBadWolf.Id, players[2].Id, players[3].Id]))
+			.IsSuccess.Should().BeTrue();
+		var victimSelection = manager.CurrentInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		manager.ProcessInput(
+				victimSelection.CreateResponse([collectiveVictim.Id]))
+			.IsSuccess.Should().BeTrue();
+		var collectiveSleep = manager.CurrentInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		manager.ProcessInput(collectiveSleep.CreateResponse())
+			.IsSuccess.Should().BeTrue();
+		var identification = manager.CurrentInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		identification.RoleIdentification.Should().Be(MainRoleType.BigBadWolf);
+
+		manager.ProcessInput(identification.CreateResponse([bigBadWolf.Id]))
+			.IsSuccess.Should().BeTrue();
+
+		var sleep = manager.CurrentInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		sleep.Semantic.Should().Be(ModeratorInstructionSemantic.PutRoleToSleep);
+		sleep.PublicAnnouncement.Should().Be(
+			GameStrings.RoleGoesToSleepSingle.Format(
+				GameStrings.BigBadWolfRoleName));
+		var dashboard = context.RenderModeratorComponent<DashboardPage>();
+		dashboard.Find(PublicInstructionSelector).TextContent.Should()
+			.Contain(sleep.PublicAnnouncement);
+		dashboard.FindAll(PrivateInstructionSelector).Should().BeEmpty();
+		dashboard.FindAll(PlayerOptionSelector).Should().BeEmpty();
 	}
 
 	[Fact]

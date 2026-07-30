@@ -17,7 +17,7 @@ public sealed class BaselineRandomDecisionStrategy : IModeratorDecisionStrategy
 		new("baseline-random", "3-splitmix64");
 
 	public static DecisionStrategyIdentity SafetyScreeningIdentity { get; } =
-		new("baseline-random", "6-splitmix64");
+		new("baseline-random", "7-splitmix64");
 
 	public static HeadlessResponsePolicy Policy { get; } = new(
 		Identity,
