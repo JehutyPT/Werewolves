@@ -136,10 +136,10 @@ public sealed class SimulatorCapability : SimulatorProfile
 		new(MainRoleType.TwoSisters, Faction.Villager),
 		new(MainRoleType.ThreeBrothers, Faction.Villager),
 		new(MainRoleType.Witch, Faction.Villager),
-				new(MainRoleType.Hunter, Faction.Villager),
-				new(MainRoleType.LittleGirl, Faction.Villager),
-				new(MainRoleType.Defender, Faction.Villager),
-				new(MainRoleType.StutteringJudge, Faction.Villager),
+			new(MainRoleType.Hunter, Faction.Villager),
+			new(MainRoleType.LittleGirl, Faction.Villager),
+			new(MainRoleType.Defender, Faction.Villager),
+			new(MainRoleType.StutteringJudge, Faction.Villager),
 			new(MainRoleType.Scapegoat, Faction.Villager),
 			new(MainRoleType.WolfHound, Faction.Villager),
 			new(
@@ -163,7 +163,7 @@ public sealed class SimulatorCapability : SimulatorProfile
 		SimulatorCapabilityRegistry.Production.FullProbability;
 
 	internal static SimulatorCapability CreateSafetyScreening() => new(
-		        new SimulatorProfileIdentity("safety-screening", "16"),
+	        new SimulatorProfileIdentity("safety-screening", "16"),
 		SafetyScreeningRoleDescriptors,
 		headlessResponsePolicy: new HeadlessResponsePolicy(
 			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
@@ -177,9 +177,9 @@ public sealed class SimulatorCapability : SimulatorProfile
 				ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup,
 				ModeratorInstructionSemantic.PutRoleToSleep,
 				ModeratorInstructionSemantic.SelectWerewolfVictim,
-					ModeratorInstructionSemantic.SelectBigBadWolfTarget,
-					ModeratorInstructionSemantic.SelectDefenderTarget,
-					ModeratorInstructionSemantic.SelectSeerTarget,
+				ModeratorInstructionSemantic.SelectBigBadWolfTarget,
+				ModeratorInstructionSemantic.SelectDefenderTarget,
+				ModeratorInstructionSemantic.SelectSeerTarget,
 				ModeratorInstructionSemantic.RevealSeerResult,
 				ModeratorInstructionSemantic.SelectWildChildModel,
 				ModeratorInstructionSemantic.AnnounceDawnVictims,

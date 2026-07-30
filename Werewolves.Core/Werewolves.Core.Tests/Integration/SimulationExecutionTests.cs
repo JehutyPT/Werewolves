@@ -393,7 +393,8 @@ public class SimulationExecutionTests : DiagnosticTestBase
 		{
 			ModeratorInstructionSemantic.ConductDayVote,
 			ModeratorInstructionSemantic.EstablishStutteringJudgeSignal,
-			ModeratorInstructionSemantic.ObserveStutteringJudgeSignal
+			ModeratorInstructionSemantic.ObserveStutteringJudgeSignal,
+			ModeratorInstructionSemantic.SelectDefenderTarget
 		};
 		recorders.SelectMany(recorder => recorder.ObservedSemantics)
 			.Should().NotContain(semantic => safetyOnlySemantics.Contains(semantic));

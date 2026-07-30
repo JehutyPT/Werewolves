@@ -131,6 +131,63 @@ public sealed class DefenderRoleTests : DiagnosticTestBase
 	}
 
 	[Fact]
+	public void PublicFlow_ProtectingElderFromCollectiveWerewolvesPreservesLifeAndElderProtection()
+	{
+		var builder = CreateBuilder()
+			.WithPlayers(6)
+			.WithRoles(
+				MainRoleType.Defender,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		var defender = players[0];
+		var werewolf = players[1];
+		var elder = players[2];
+		builder.ArrangeCurrentRole(elder.Id, MainRoleType.Elder);
+		builder.ConfirmGameStart();
+
+		var identification =
+			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+				builder.ConfirmNightStart());
+		var targetSelection =
+			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+				builder.Process(
+					identification.CreateResponse([defender.Id])));
+		var defenderSleep =
+			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+				builder.Process(
+					targetSelection.CreateResponse([elder.Id])));
+
+		builder.Process(defenderSleep.CreateResponse()).IsSuccess.Should().BeTrue();
+		var finishNight =
+			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+				builder.CompleteWerewolfNightAction(
+					[werewolf.Id],
+					elder.Id));
+		finishNight.Semantic.Should().Be(
+			ModeratorInstructionSemantic.FinishNightActions);
+		builder.Process(finishNight.CreateResponse()).IsSuccess.Should().BeTrue();
+		builder.CompleteDawnPhase().IsSuccess.Should().BeTrue();
+
+		elder.State.Health.Should().Be(PlayerHealth.Alive);
+		elder.State.HasStatusEffect(StatusEffectTypes.ElderProtectionLost)
+			.Should().BeFalse();
+		builder.GetGameState()!.GameHistoryLog
+			.OfType<DawnVictimDeterminedLogEntry>()
+			.Should().NotContain(entry => entry.PlayerId == elder.Id);
+		builder.GetGameState()!.GameHistoryLog
+			.OfType<RecurringRolePowerCommittedLogEntry>()
+			.Should().ContainSingle(entry =>
+				entry.ActionType == NightActionType.DefenderProtect &&
+				entry.TargetIds!.SequenceEqual(new[] { elder.Id }));
+		MarkTestCompleted();
+	}
+
+	[Fact]
 	public void NextNight_SameNativePowerCannotProtectItsImmediatelyPreviousTarget()
 	{
 		var builder = CreateBuilder()
@@ -186,6 +243,89 @@ public sealed class DefenderRoleTests : DiagnosticTestBase
 
 		secondTargetSelection.SelectablePlayerIds.Should()
 			.NotContain(defender.Id);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void AcceptedUnknownHolderIdentification_FreshServiceRestoresExactTargetAndRejectsStaleResponses()
+	{
+		var builder = CreateBuilder()
+			.WithPlayers(5)
+			.WithRoles(
+				MainRoleType.Defender,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		var defender = players[0];
+		var target = players[2];
+		builder.ConfirmGameStart();
+		var identification =
+			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+				builder.ConfirmNightStart());
+		var acceptedIdentification =
+			identification.CreateResponse([defender.Id]);
+		var expectedTarget =
+			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+				builder.Process(acceptedIdentification));
+		var freshService = new GameService();
+
+		var recoveredGameId = freshService.RehydrateSession(
+			builder.GetGameState()!.Serialize());
+		var recoveredTarget =
+			InstructionAssert.ExpectType<SelectPlayersInstruction>(
+				freshService.GetCurrentInstruction(recoveredGameId));
+
+		recoveredTarget.Semantic.Should().Be(expectedTarget.Semantic);
+		PendingInstructionSnapshot.Capture(recoveredTarget)
+			.Should().BeEquivalentTo(
+				PendingInstructionSnapshot.Capture(expectedTarget),
+				options => options.WithStrictOrdering());
+
+		var beforeStaleIdentification =
+			PublicGameSessionSnapshot.Capture(freshService, recoveredGameId);
+		Action replayIdentification = () =>
+			freshService.ProcessInstruction(
+				recoveredGameId,
+				acceptedIdentification);
+
+		replayIdentification.Should().Throw<InvalidOperationException>();
+		PublicGameSessionSnapshot.Capture(freshService, recoveredGameId)
+			.Should().BeEquivalentTo(
+				beforeStaleIdentification,
+				options => options.WithStrictOrdering());
+
+		var acceptedTarget = recoveredTarget.CreateResponse([target.Id]);
+		var sleep =
+			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+				freshService.ProcessInstruction(
+					recoveredGameId,
+					acceptedTarget));
+
+		sleep.Semantic.Should().Be(ModeratorInstructionSemantic.PutRoleToSleep);
+		var recoveredSession = freshService.GetGameStateView(recoveredGameId)!;
+		recoveredSession.GameHistoryLog
+			.OfType<RecurringRolePowerCommittedLogEntry>()
+			.Should().ContainSingle(entry =>
+				entry.ActionType == NightActionType.DefenderProtect &&
+				entry.ActingPlayerId == defender.Id &&
+				entry.TargetIds!.SequenceEqual(new[] { target.Id }));
+
+		var beforeTargetReplay =
+			PublicGameSessionSnapshot.Capture(freshService, recoveredGameId);
+		Action replayTarget = () =>
+			freshService.ProcessInstruction(recoveredGameId, acceptedTarget);
+
+		replayTarget.Should().Throw<InvalidOperationException>();
+		PublicGameSessionSnapshot.Capture(freshService, recoveredGameId)
+			.Should().BeEquivalentTo(
+				beforeTargetReplay,
+				options => options.WithStrictOrdering());
+		recoveredSession.GameHistoryLog
+			.OfType<RecurringRolePowerCommittedLogEntry>()
+			.Should().ContainSingle();
 		MarkTestCompleted();
 	}
 

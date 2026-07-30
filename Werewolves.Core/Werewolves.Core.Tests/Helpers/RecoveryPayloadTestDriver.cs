@@ -148,10 +148,13 @@ internal sealed class RecoveryPayloadTestDriver
 	internal RecoveryPayloadTestDriver RewriteRecurringActorAndCursor(
 		Guid actingPlayerId)
 	{
-		RequireDomainCursor().ActingPlayerId = actingPlayerId;
+		var cursor = RequireDomainCursor();
+		cursor.ActingPlayerId = actingPlayerId;
+		cursor.PowerInstanceId = actingPlayerId;
 		RewriteLatestRecurringEntry(entry => entry with
 		{
-			ActingPlayerId = actingPlayerId
+			ActingPlayerId = actingPlayerId,
+			PowerInstanceId = actingPlayerId
 		});
 		return this;
 	}
@@ -209,6 +212,50 @@ internal sealed class RecoveryPayloadTestDriver
 		{
 			ActionType = actionType
 		});
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver RewriteRecurringPhase(
+		GamePhase phase)
+	{
+		RewriteLatestRecurringEntry(entry => entry with
+		{
+			CurrentPhase = phase
+		});
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver RewriteRecurringTurnNumber(
+		int turnNumber)
+	{
+		RewriteLatestRecurringEntry(entry => entry with
+		{
+			TurnNumber = turnNumber
+		});
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver
+		DowngradeLatestRecurringCommitToLegacyNightAction()
+	{
+		var entryIndex = _payload.GameHistoryLog.FindLastIndex(
+			entry => entry is RecurringRolePowerCommittedLogEntry);
+		if (entryIndex < 0 ||
+		    _payload.GameHistoryLog[entryIndex] is not
+			    RecurringRolePowerCommittedLogEntry entry)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no committed recurring Night action.");
+		}
+
+		_payload.GameHistoryLog[entryIndex] = new NightActionLogEntry
+		{
+			Timestamp = entry.Timestamp,
+			TurnNumber = entry.TurnNumber,
+			CurrentPhase = entry.CurrentPhase,
+			ActionType = entry.ActionType,
+			TargetIds = entry.TargetIds
+		};
 		return this;
 	}
 

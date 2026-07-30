@@ -106,6 +106,54 @@ public sealed class DefenderRecoveryTests
 		rehydrate.Should().Throw<InvalidOperationException>();
 	}
 
+	[Fact]
+	public void CommittedProtection_DayPhaseCommitAtNightBoundaryIsRejected()
+	{
+		var recovery = CreateCommittedProtection();
+		var tampered = RecoveryPayloadTestDriver
+			.Parse(recovery.SerializedSession)
+			.RewriteRecurringPhase(GamePhase.Day)
+			.Serialize();
+		var service = new GameService();
+
+		Action rehydrate = () => service.RehydrateSession(tampered);
+
+		rehydrate.Should().Throw<InvalidOperationException>()
+			.WithMessage("*latest recurring native Role Power action*");
+	}
+
+	[Fact]
+	public void CommittedProtection_DifferentTurnCommitAtNightBoundaryIsRejected()
+	{
+		var recovery = CreateCommittedProtection();
+		var tampered = RecoveryPayloadTestDriver
+			.Parse(recovery.SerializedSession)
+			.RewriteRecurringTurnNumber(2)
+			.Serialize();
+		var service = new GameService();
+
+		Action rehydrate = () => service.RehydrateSession(tampered);
+
+		rehydrate.Should().Throw<InvalidOperationException>()
+			.WithMessage("*latest recurring native Role Power action*");
+	}
+
+	[Fact]
+	public void CommittedProtection_LegacyPlainNightActionShapeIsRejected()
+	{
+		var recovery = CreateCommittedProtection();
+		var legacyShape = RecoveryPayloadTestDriver
+			.Parse(recovery.SerializedSession)
+			.DowngradeLatestRecurringCommitToLegacyNightAction()
+			.Serialize();
+		var service = new GameService();
+
+		Action rehydrate = () => service.RehydrateSession(legacyShape);
+
+		rehydrate.Should().Throw<InvalidOperationException>()
+			.WithMessage("*latest recurring native Role Power action*");
+	}
+
 	private static CommittedProtectionRecovery CreateCommittedProtection()
 	{
 		var builder = GameTestBuilder.Create()

@@ -534,6 +534,11 @@ namespace Werewolves.Core.StateModels.Core
 					"The domain recovery cursor is structurally invalid.");
 			}
 
+			NormalizeLegacyBigBadWolfRecurringCommit(
+				dto,
+				cursor,
+				cursorPowerIdentity,
+				pendingModeratorInstruction);
 			var recurringEntry = dto.GameHistoryLog
 				.OfType<RecurringRolePowerCommittedLogEntry>()
 				.LastOrDefault();
@@ -541,6 +546,8 @@ namespace Werewolves.Core.StateModels.Core
 			    recurringEntry.ActionType !=
 				    cursor.CommittedActionType ||
 			    recurringEntry.PowerIdentity != cursorPowerIdentity ||
+			    recurringEntry.CurrentPhase != GamePhase.Night ||
+			    recurringEntry.TurnNumber != dto.TurnNumber ||
 			    recurringEntry.TargetIds is not { Count: 1 } ||
 			    recurringEntry.TargetIds[0] !=
 				    cursor.CommittedTargetId)
@@ -550,6 +557,78 @@ namespace Werewolves.Core.StateModels.Core
 			}
 
 			return cursor;
+		}
+
+		private static void NormalizeLegacyBigBadWolfRecurringCommit(
+			GameSessionDto dto,
+			DomainRecoveryCursor cursor,
+			RolePowerInstanceIdentity cursorPowerIdentity,
+			ModeratorInstruction? pendingModeratorInstruction)
+		{
+			const string legacySourcePowerIdentifier =
+				"big-bad-wolf-additional-victim";
+			if (cursor.SourceRole != MainRoleType.BigBadWolf ||
+			    cursor.CommittedActionType !=
+				    NightActionType.BigBadWolfVictimSelection ||
+			    !StringComparer.Ordinal.Equals(
+				    cursor.SourcePowerIdentifier,
+				    legacySourcePowerIdentifier))
+			{
+				return;
+			}
+
+			var entryIndex = dto.GameHistoryLog.FindLastIndex(entry =>
+				entry is NightActionLogEntry nightAction &&
+				nightAction.ActionType ==
+				NightActionType.BigBadWolfVictimSelection);
+			if (entryIndex < 0 ||
+			    dto.GameHistoryLog[entryIndex].GetType() !=
+				    typeof(NightActionLogEntry))
+			{
+				return;
+			}
+
+			var legacyEntry =
+				(NightActionLogEntry)dto.GameHistoryLog[entryIndex];
+			if (pendingModeratorInstruction is not ConfirmationInstruction
+			    {
+				    Semantic:
+					    ModeratorInstructionSemantic.PutRoleToSleep,
+				    AffectedPlayerIds: { Count: 1 } affectedPlayerIds
+			    } ||
+			    affectedPlayerIds.Single() !=
+				    cursorPowerIdentity.ActingPlayerId)
+			{
+				throw new InvalidOperationException(
+					"The legacy Big Bad Wolf recurring commit does not match its exact pending sleep instruction.");
+			}
+
+			if (legacyEntry.CurrentPhase != GamePhase.Night ||
+			    legacyEntry.TurnNumber != dto.TurnNumber ||
+			    legacyEntry.TargetIds is not [var targetId] ||
+			    targetId != cursor.CommittedTargetId)
+			{
+				return;
+			}
+
+			dto.GameHistoryLog[entryIndex] =
+				new RecurringRolePowerCommittedLogEntry
+				{
+					Timestamp = legacyEntry.Timestamp,
+					TurnNumber = legacyEntry.TurnNumber,
+					CurrentPhase = legacyEntry.CurrentPhase,
+					ActionType = legacyEntry.ActionType,
+					TargetIds = legacyEntry.TargetIds,
+					ActingPlayerId =
+						cursorPowerIdentity.ActingPlayerId,
+					SourceRole = cursorPowerIdentity.SourceRole,
+					SourcePowerIdentifier =
+						cursorPowerIdentity.SourcePowerIdentifier,
+					PowerInstanceId =
+						cursorPowerIdentity.PowerInstanceId,
+					PowerInstanceOrigin =
+						cursorPowerIdentity.PowerInstanceOrigin
+				};
 		}
 
 		/// <summary>
