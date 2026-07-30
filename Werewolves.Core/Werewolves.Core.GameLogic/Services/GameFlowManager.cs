@@ -1194,7 +1194,12 @@ internal static class GameFlowManager
 			    NumberRangeConstraint.Exact(session.TurnNumber),
 			    filter: entry =>
 				    entry.ActionType ==
-				    NightActionType.WhiteWerewolfVictimSelection)
+					    NightActionType.WhiteWerewolfVictimSelection ||
+				    entry is RecurringRolePowerCommittedLogEntry recurring &&
+				    recurring.SourceRole == MainRoleType.WhiteWerewolf &&
+				    StringComparer.Ordinal.Equals(
+					    recurring.SourcePowerIdentifier,
+					    WhiteWerewolfRole.SoloAttackPowerIdentifier.Value))
 			    .Any();
 
     private static void RestoreDomainContinuation(
