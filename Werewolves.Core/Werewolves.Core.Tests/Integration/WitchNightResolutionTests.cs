@@ -194,21 +194,19 @@ public sealed class WitchNightResolutionTests : DiagnosticTestBase
 	}
 
 	[Fact]
-	public void Defender_DoesNotBlockSuccessfulInfectionOfOrdinaryVillager()
+	public void PublicFlow_DefenderDoesNotBlockSuccessfulInfectionOfOrdinaryVillager()
 	{
-		var (builder, target) = CreateScenario(MainRoleType.SimpleVillager);
-		var werewolf = builder.GetGameState()!.GetPlayers().First();
+		var (builder, werewolf, wolfFather, target) =
+			CreatePublicInfectionScenario(MainRoleType.SimpleVillager);
 		builder.ArrangeNightAction(
 			NightActionType.DefenderProtect,
 			target.Id);
 
-		CompleteNight(
+		CompletePublicInfectionNight(
 			builder,
 			werewolf,
-			target,
-			afterCollective => afterCollective.ArrangeNightAction(
-				NightActionType.AccursedWolfFatherInfection,
-				target.Id));
+			wolfFather,
+			target);
 
 		target.State.HasStatusEffect(StatusEffectTypes.LycanthropyInfection)
 			.Should().BeTrue();
@@ -226,6 +224,47 @@ public sealed class WitchNightResolutionTests : DiagnosticTestBase
 				entry.Source.Kind ==
 					FactionFactSourceKind.InitialBeneficiaryClosure)
 			.Should().Be(1);
+		MarkTestCompleted();
+	}
+
+	[Theory]
+	[InlineData(false, false)]
+	[InlineData(true, true)]
+	public void PublicFlow_ElderProtectionDeterminesInfectionOutcome(
+		bool elderProtectionAlreadyLost,
+		bool expectedInfection)
+	{
+		var (builder, werewolf, wolfFather, elder) =
+			CreatePublicInfectionScenario(MainRoleType.Elder);
+		if (elderProtectionAlreadyLost)
+		{
+			builder.ArrangeStatusEffect(
+				elder.Id,
+				StatusEffectTypes.ElderProtectionLost);
+		}
+
+		CompletePublicInfectionNight(
+			builder,
+			werewolf,
+			wolfFather,
+			elder);
+
+		using (new AssertionScope())
+		{
+			elder.State.HasStatusEffect(StatusEffectTypes.ElderProtectionLost)
+				.Should().BeTrue();
+			elder.State.HasStatusEffect(StatusEffectTypes.LycanthropyInfection)
+				.Should().Be(expectedInfection);
+		}
+		if (expectedInfection)
+		{
+			AssertSuccessfulInfectionTransition(builder, elder.Id);
+		}
+		else
+		{
+			AssertNoSuccessfulInfectionTransition(builder);
+		}
+		AssertNoDawnVictim(builder, elder.Id);
 		MarkTestCompleted();
 	}
 
@@ -272,12 +311,14 @@ public sealed class WitchNightResolutionTests : DiagnosticTestBase
 	}
 
 	[Fact]
-	public void SuccessfulInfection_PreservesIdentityAndDominantBeneficiaryWhileAddingWerewolfAgency()
+	public void PublicFlow_InfectedWitchPreservesIdentityPowerRelationshipsAndDominantBeneficiary()
 	{
-		var (builder, target) = CreateScenario(MainRoleType.SimpleVillager);
-		var werewolf = builder.GetGameState()!.GetPlayers().First();
+		var (builder, werewolf, wolfFather, target) =
+			CreatePublicInfectionScenario(MainRoleType.Witch);
 		builder
-			.ArrangeKnownRole(target.Id, MainRoleType.SimpleVillager)
+			.ArrangeKnownRole(target.Id, MainRoleType.Witch)
+			.ArrangeStatusEffect(target.Id, StatusEffectTypes.Sheriff)
+			.ArrangeStatusEffect(target.Id, StatusEffectTypes.Lovers)
 			.ArrangeStatusEffect(target.Id, StatusEffectTypes.Charmed);
 		var sessionBefore = builder.GetGameState()!;
 		var boundary = new FactionFactEffectiveBoundary(
@@ -298,13 +339,12 @@ public sealed class WitchNightResolutionTests : DiagnosticTestBase
 			stateBefore.ModeratorKnownRole,
 			stateBefore.PubliclyRevealedRole);
 
-		CompleteNight(
+		CompletePublicInfectionNight(
 			builder,
 			werewolf,
+			wolfFather,
 			target,
-			afterCollective => afterCollective.ArrangeNightAction(
-				NightActionType.AccursedWolfFatherInfection,
-				target.Id));
+			target);
 
 		var stateAfter = target.State;
 		(
@@ -313,8 +353,15 @@ public sealed class WitchNightResolutionTests : DiagnosticTestBase
 			stateAfter.ModeratorKnownRole,
 			stateAfter.PubliclyRevealedRole)
 			.Should().Be(identityBefore);
-		stateAfter.HasStatusEffect(StatusEffectTypes.Charmed)
-			.Should().BeTrue();
+		using (new AssertionScope())
+		{
+			stateAfter.HasStatusEffect(StatusEffectTypes.Sheriff)
+				.Should().BeTrue();
+			stateAfter.HasStatusEffect(StatusEffectTypes.Lovers)
+				.Should().BeTrue();
+			stateAfter.HasStatusEffect(StatusEffectTypes.Charmed)
+				.Should().BeTrue();
+		}
 		stateAfter.HasStatusEffect(StatusEffectTypes.LycanthropyInfection)
 			.Should().BeTrue();
 		stateAfter.FactionBeneficiary.Should().Be(
@@ -331,6 +378,39 @@ public sealed class WitchNightResolutionTests : DiagnosticTestBase
 				fact.Type == FactionFactType.Beneficiary);
 		infectionBeneficiary.Faction.Should().Be(Faction.Werewolf);
 		infectionBeneficiary.BeneficiaryPrecedence.Should().Be(0);
+		builder.GetGameState()!.GameHistoryLog
+			.OfType<OneUseRolePowerCommittedLogEntry>()
+			.Should().ContainSingle(entry =>
+				entry.ActingPlayerId == target.Id &&
+				entry.SourceRole == MainRoleType.Witch &&
+				entry.ActionType == NightActionType.WitchSave &&
+				entry.TargetIds!.SequenceEqual(new[] { target.Id }));
+
+		var history = builder.GetGameState()!.GameHistoryLog.ToArray();
+		var collectiveIndex = Array.FindIndex(
+			history,
+			entry => entry is NightActionLogEntry
+			{
+				ActionType: NightActionType.WerewolfVictimSelection
+			});
+		var infectionIndex = Array.FindIndex(
+			history,
+			entry => entry is OneUseRolePowerCommittedLogEntry
+			{
+				ActionType: NightActionType.AccursedWolfFatherInfection
+			});
+		var infectionTransition = history
+			.OfType<FactionFactsCommittedLogEntry>()
+			.Single(entry =>
+				entry.Source.Identifier ==
+					"accursed-wolf-father-infection");
+		infectionTransition.CurrentPhase.Should().Be(GamePhase.Dawn);
+		infectionTransition.Facts.Should().OnlyContain(fact =>
+			fact.EffectiveBoundary.TurnNumber ==
+				infectionTransition.TurnNumber &&
+			fact.EffectiveBoundary.Phase == GamePhase.Night &&
+			fact.EffectiveBoundary.Order == infectionIndex);
+		infectionIndex.Should().BeGreaterThan(collectiveIndex);
 		MarkTestCompleted();
 	}
 
@@ -530,6 +610,84 @@ public sealed class WitchNightResolutionTests : DiagnosticTestBase
 		}
 
 		return (builder, players[1]);
+	}
+
+	private (
+		GameTestBuilder Builder,
+		IPlayer Werewolf,
+		IPlayer WolfFather,
+		IPlayer Target) CreatePublicInfectionScenario(
+			MainRoleType targetRole)
+	{
+		var configuredTargetRole = targetRole == MainRoleType.Witch
+			? MainRoleType.Witch
+			: MainRoleType.SimpleVillager;
+		var builder = CreateBuilder()
+			.WithPlayers(6)
+			.WithRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.AccursedWolfFather,
+				configuredTargetRole,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		if (targetRole != configuredTargetRole)
+		{
+			builder.ArrangeCurrentRole(players[2].Id, targetRole);
+		}
+
+		return (builder, players[0], players[1], players[2]);
+	}
+
+	private static void CompletePublicInfectionNight(
+		GameTestBuilder builder,
+		IPlayer werewolf,
+		IPlayer wolfFather,
+		IPlayer target,
+		IPlayer? witch = null)
+	{
+		builder.ConfirmGameStart();
+		builder.ConfirmNightStart();
+		builder.CompleteWerewolfNightAction(
+			[werewolf.Id, wolfFather.Id],
+			target.Id);
+		builder.CompleteAccursedWolfFatherNightAction(
+			wolfFather.Id,
+			infectsVictim: true);
+
+		if (witch != null)
+		{
+			var wake = InstructionAssert.ExpectType<ConfirmationInstruction>(
+				builder.GetCurrentInstruction());
+			wake.Semantic.Should().Be(ModeratorInstructionSemantic.WakeRole);
+			var healing =
+				InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+					builder.Process(wake.CreateResponse()));
+			healing.Semantic.Should().Be(
+				ModeratorInstructionSemantic.SelectWitchHealingTarget);
+			var poison =
+				InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+					builder.Process(healing.CreateResponse([target.Id])));
+			poison.Semantic.Should().Be(
+				ModeratorInstructionSemantic.SelectWitchPoisonTarget);
+			var sleep =
+				InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+					builder.Process(poison.CreateResponse([])));
+			sleep.Semantic.Should().Be(
+				ModeratorInstructionSemantic.PutRoleToSleep);
+			builder.Process(sleep.CreateResponse());
+		}
+
+		var finishNight = InstructionAssert.ExpectType<ConfirmationInstruction>(
+			builder.GetCurrentInstruction());
+		finishNight.Semantic.Should().Be(
+			ModeratorInstructionSemantic.FinishNightActions);
+		builder.Process(finishNight.CreateResponse()).IsSuccess.Should().BeTrue();
+		builder.GetGameState()!.GameHistoryLog
+			.OfType<PhaseTransitionLogEntry>()
+			.Should().Contain(entry => entry.CurrentPhase == GamePhase.Dawn);
 	}
 
 	private static void CompleteNight(

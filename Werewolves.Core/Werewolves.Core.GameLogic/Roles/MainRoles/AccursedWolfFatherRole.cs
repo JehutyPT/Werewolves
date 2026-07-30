@@ -248,14 +248,11 @@ internal sealed class AccursedWolfFatherRole
 
 	private static Guid? GetRetainedVictimId(GameSession session)
 	{
-		var victimIds = GameSessionQueries.GetOrderedNightActionsThisNight(
-				session,
-				[NightActionType.WerewolfVictimSelection])
-			.SelectMany(entry => entry.TargetIds ?? [])
-			.ToArray();
-		return victimIds is [var victimId] && victimId != Guid.Empty
-			? victimId
-			: null;
+		return GameSessionQueries.TryGetRetainedWerewolfVictimThisNight(
+			session,
+			out var victimId)
+				? victimId
+				: null;
 	}
 
 	private static bool HasInfectionIntentThisNight(GameSession session) =>

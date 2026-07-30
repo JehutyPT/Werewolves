@@ -37,28 +37,32 @@ internal static class NightInteractionResolver
 			GameSessionQueries.GetOrderedNightActionsThisNight(
 				session,
 				DawnResolutionActionTypes);
-		var infectionLogs = nightActions
-			.Where(entry =>
-				entry.ActionType ==
-					NightActionType.AccursedWolfFatherInfection)
-			.ToArray();
-		if (infectionLogs.Length > 0)
-		{
-			var collectiveLogs = nightActions
+			var infectionLogs = nightActions
 				.Where(entry =>
 					entry.ActionType ==
-						NightActionType.WerewolfVictimSelection)
+						NightActionType.AccursedWolfFatherInfection)
 				.ToArray();
-			if (infectionLogs is not [var infection] ||
-			    collectiveLogs is not [var collective] ||
-			    infection.TargetIds is not [var infectionTarget] ||
-			    collective.TargetIds is not [var collectiveTarget] ||
-			    infectionTarget != collectiveTarget)
+			FactionFactEffectiveBoundary? infectionEffectiveBoundary = null;
+			if (infectionLogs.Length > 0)
 			{
-				throw new InvalidOperationException(
-					"The Accursed Wolf-Father infection intent does not match one retained collective victim.");
+				if (infectionLogs is not [var infection] ||
+				    infection.TargetIds is not [var infectionTarget] ||
+				    !GameSessionQueries.TryGetRetainedWerewolfVictimThisNight(
+					    session,
+					    out var retainedVictimId) ||
+				    infectionTarget != retainedVictimId)
+				{
+					throw new InvalidOperationException(
+						"The Accursed Wolf-Father infection intent does not match one retained collective victim.");
+				}
+
+				infectionEffectiveBoundary = new FactionFactEffectiveBoundary(
+					infection.TurnNumber,
+					infection.CurrentPhase,
+					GameSessionQueries.GetCommittedLogIndex(
+						session,
+						infection));
 			}
-		}
 
 		var committedAttempts = nightActions
 			.SelectMany(log =>
@@ -98,17 +102,16 @@ internal static class NightInteractionResolver
 				return;
 			}
 
-			if (isInfection)
+				if (isInfection)
 				{
+					var boundary = infectionEffectiveBoundary
+						?? throw new InvalidOperationException(
+							"The Accursed Wolf-Father infection requires its historical effective boundary.");
 					session.ApplyStatusEffect(
 						StatusEffectTypes.LycanthropyInfection,
 						player.Id);
 					session.CommitFactionFactBatch(context =>
 					{
-						var boundary = new FactionFactEffectiveBoundary(
-							context.TurnNumber,
-							context.CurrentPhase,
-							session.GameHistoryLog.Count());
 						return new FactionFactsCommittedLogEntry
 						{
 							Timestamp = context.Timestamp,

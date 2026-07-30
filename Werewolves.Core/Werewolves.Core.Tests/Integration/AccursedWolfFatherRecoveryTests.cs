@@ -166,6 +166,36 @@ public sealed class AccursedWolfFatherRecoveryTests
 	}
 
 	[Fact]
+	public void ConfirmedInfection_FreshServiceRejectsCursorAndCommitRetargetedAwayFromCollectiveVictim()
+	{
+		var (builder, holderId, victimId, identification) =
+			CreateGameAtIdentification();
+		var choice = builder.Process(
+				identification.CreateResponse([holderId]))
+			.ModeratorInstruction.Should()
+			.BeOfType<SelectOptionsInstruction>().Subject;
+		builder.Process(
+				choice.CreateResponse(
+					AccursedWolfFatherInfectionOptionIds.Infect))
+			.IsSuccess.Should().BeTrue();
+		var differentTargetId = builder.GetGameState()!.GetPlayers()
+			.Select(player => player.Id)
+			.First(playerId =>
+				playerId != holderId &&
+				playerId != victimId);
+		var tampered = RecoveryPayloadTestDriver
+			.Parse(builder.GetGameState()!.Serialize())
+			.RetargetLatestOneUseActionAndCursor(differentTargetId)
+			.Serialize();
+		var freshService = new GameService();
+
+		Action rehydrate = () => freshService.RehydrateSession(tampered);
+
+		rehydrate.Should().Throw<InvalidOperationException>()
+			.WithMessage("*retained collective victim*");
+	}
+
+	[Fact]
 	public void Decline_SerializeRehydrateReplaysLastDurableChoiceWithoutSpend()
 	{
 		var (builder, holderId, _, identification) =

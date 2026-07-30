@@ -680,13 +680,9 @@ internal static class GameFlowManager
                          selectedOptionIds.Single(),
                          AccursedWolfFatherInfectionOptionIds.Infect):
             {
-                var retainedVictimIds =
-                    GameSessionQueries.GetOrderedNightActionsThisNight(
-                            session,
-                            [NightActionType.WerewolfVictimSelection])
-                        .SelectMany(entry => entry.TargetIds ?? [])
-                        .ToArray();
-                if (retainedVictimIds is not [var retainedVictimId] ||
+                if (!GameSessionQueries.TryGetRetainedWerewolfVictimThisNight(
+                        session,
+                        out var retainedVictimId) ||
                     retainedVictimId != committedTargetId)
                 {
                     throw new InvalidOperationException(
@@ -876,6 +872,18 @@ internal static class GameFlowManager
         var resourceIdentity = cursor.ResourceIdentity
             ?? throw new InvalidOperationException(
                 "The domain recovery cursor is structurally invalid.");
+        if (resourceIdentity.SourceRole == AccursedWolfFather &&
+            cursor.CommittedActionType ==
+                NightActionType.AccursedWolfFatherInfection &&
+            (!GameSessionQueries.TryGetRetainedWerewolfVictimThisNight(
+                 session,
+                 out var retainedVictimId) ||
+             retainedVictimId != cursor.CommittedTargetId))
+        {
+            throw new InvalidOperationException(
+                "The Accursed Wolf-Father domain continuation must target the one retained collective victim.");
+        }
+
         var continuation = ResolveDomainContinuation(
             resourceIdentity.SourceRole,
             cursor.CommittedActionType,

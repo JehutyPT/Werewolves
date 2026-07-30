@@ -73,6 +73,36 @@ public sealed class AccursedWolfFatherRoleTests : DiagnosticTestBase
 	}
 
 	[Fact]
+	public void CompleteNightPhase_AccursedWolfFatherInputUsesPublicFlowAndResolvesDawn()
+	{
+		var (builder, players) = CreateStartedGame();
+		var wolfFather = players[1];
+		var victim = players[4];
+		builder.ConfirmGameStart();
+
+		var result = builder.CompleteNightPhase(new NightActionInputs
+		{
+			WerewolfIds = [players[0].Id, wolfFather.Id],
+			WerewolfVictimId = victim.Id,
+			AccursedWolfFatherId = wolfFather.Id,
+			AccursedWolfFatherInfectsVictim = true
+		});
+
+		result.IsSuccess.Should().BeTrue();
+		builder.GetGameState()!.GetCurrentPhase().Should().Be(GamePhase.Day);
+		builder.GetGameState()!.GameHistoryLog
+			.OfType<PhaseTransitionLogEntry>()
+			.Should().Contain(entry => entry.CurrentPhase == GamePhase.Dawn);
+		builder.GetGameState()!.GameHistoryLog
+			.OfType<OneUseRolePowerCommittedLogEntry>()
+			.Should().ContainSingle(entry =>
+				entry.ActionType ==
+					NightActionType.AccursedWolfFatherInfection &&
+				entry.TargetIds!.SequenceEqual(new[] { victim.Id }));
+		MarkTestCompleted();
+	}
+
+	[Fact]
 	public void FirstNight_KnownLivingHolder_UsesPublicWakeBeforePrivateChoice()
 	{
 		var (builder, players) = CreateStartedGame();
