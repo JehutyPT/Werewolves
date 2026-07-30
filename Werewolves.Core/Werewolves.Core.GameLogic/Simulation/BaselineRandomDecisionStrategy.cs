@@ -39,7 +39,7 @@ public sealed class BaselineRandomDecisionStrategy : IModeratorDecisionStrategy
 			ModeratorInstructionSemantic.StartDayDebate,
 			ModeratorInstructionSemantic.RecordDayVote,
 			ModeratorInstructionSemantic.AssignDayVoteTargetRole,
-			ModeratorInstructionSemantic.AnnounceLynchingImmunity,
+	    ModeratorInstructionSemantic.AnnounceVillageIdiotPardon,
 			ModeratorInstructionSemantic.AnnounceDayElimination,
 			ModeratorInstructionSemantic.ObserveVillagerVillagerFromDeal
 		]);

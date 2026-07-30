@@ -1,0 +1,31 @@
+@using Werewolves.Client.Services
+
+@if (Roster.Count == 0)
+{
+	<p class="ww-empty-state">@ClientStrings.Dashboard_EmptyRoster</p>
+}
+else
+{
+	<ol class="ww-dashboard-roster">
+		@foreach (var player in Roster)
+		{
+			<li class="ww-dashboard-player @(player.IsDead ? "ww-dashboard-player--dead" : "")" @key="player.PlayerId">
+				<span class="ww-seat-number">@player.SeatNumber</span>
+				<div class="ww-dashboard-player__main">
+					<span class="ww-player-name">@player.Name</span>
+					<span class="ww-dashboard-player__meta">@player.RoleLabel · @player.RoleVisibilityLabel · @player.HealthLabel</span>
+					@if (!string.IsNullOrWhiteSpace(player.VotingGuidanceLabel))
+					{
+						<span class="ww-dashboard-player__meta">@player.VotingGuidanceLabel</span>
+					}
+				</div>
+				<span class="ww-status-list">@player.StatusEffectsLabel</span>
+			</li>
+		}
+	</ol>
+}
+
+@code {
+	[Parameter]
+	public IReadOnlyList<DashboardRosterEntry> Roster { get; set; } = [];
+}

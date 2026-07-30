@@ -355,6 +355,12 @@
   <data name="Dashboard_NoStatusEffects" xml:space="preserve">
     <value>No effects</value>
   </data>
+  <data name="Dashboard_VotingPowerLostPermanently" xml:space="preserve">
+    <value>Voting power permanently lost</value>
+  </data>
+  <data name="Dashboard_VotingRightTemporarilyRestricted" xml:space="preserve">
+    <value>Voting right temporarily restricted</value>
+  </data>
   <data name="StatusEffect_ElderProtectionLost" xml:space="preserve">
     <value>Protection lost</value>
   </data>
@@ -363,9 +369,6 @@
   </data>
   <data name="StatusEffect_WildChildChanged" xml:space="preserve">
     <value>Transformed</value>
-  </data>
-  <data name="StatusEffect_LynchingImmunityUsed" xml:space="preserve">
-    <value>Immunity used</value>
   </data>
   <data name="StatusEffect_Sheriff" xml:space="preserve">
     <value>Captain</value>

@@ -77,7 +77,7 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 			ModeratorInstructionSemantic.StartDayDebate,
 			ModeratorInstructionSemantic.RecordDayVote,
 			ModeratorInstructionSemantic.AssignDayVoteTargetRole,
-			ModeratorInstructionSemantic.AnnounceLynchingImmunity,
+	    ModeratorInstructionSemantic.AnnounceVillageIdiotPardon,
 			ModeratorInstructionSemantic.AnnounceDayElimination,
 			ModeratorInstructionSemantic.ObserveVillagerVillagerFromDeal
 		]);
@@ -623,7 +623,7 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 
 		[Theory]
 		[InlineData(
-			0L,
+			2L,
 			AccursedWolfFatherInfectionOptionIds.Infect)]
 		[InlineData(
 			1L,

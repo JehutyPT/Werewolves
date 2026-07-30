@@ -215,6 +215,57 @@ public class SerializationTests : DiagnosticTestBase
         MarkTestCompleted();
     }
 
+    [Fact]
+    public void CurrentPlayerPayload_WithoutDurableVotingPower_IsRejected()
+    {
+        var builder = CreateBuilder()
+            .WithSimpleGame(
+                playerCount: 5,
+                werewolfCount: 1,
+                includeSeer: true);
+        builder.StartGame();
+        builder.ConfirmGameStart();
+        var snapshot = JsonNode.Parse(
+            builder.GetGameState()!.Serialize())!.AsObject();
+        foreach (var player in
+                 snapshot[nameof(GameSessionDto.Players)]!.AsArray())
+        {
+            player!.AsObject().Remove(
+                nameof(PlayerDto.DurableVotingPower));
+        }
+
+        var act = () => new GameService().RehydrateSession(
+            snapshot.ToJsonString());
+
+        act.Should().Throw<JsonException>();
+        MarkTestCompleted();
+    }
+
+    [Fact]
+    public void CurrentPlayerPayload_WithNegativeDurableVotingPower_IsRejected()
+    {
+        var builder = CreateBuilder()
+            .WithSimpleGame(
+                playerCount: 5,
+                werewolfCount: 1,
+                includeSeer: true);
+        builder.StartGame();
+        builder.ConfirmGameStart();
+        var snapshot = JsonNode.Parse(
+            builder.GetGameState()!.Serialize())!.AsObject();
+        snapshot[nameof(GameSessionDto.Players)]!
+            .AsArray()[0]!
+            .AsObject()[nameof(PlayerDto.DurableVotingPower)] = -1;
+
+        var act = () => new GameService().RehydrateSession(
+            snapshot.ToJsonString());
+
+        act.Should()
+            .Throw<InvalidOperationException>()
+            .WithMessage("*Durable Voting Power*negative*");
+        MarkTestCompleted();
+    }
+
     /// <summary>
     /// SZ-004: Round-trip preserves status effects.
     /// </summary>
@@ -899,32 +950,37 @@ public class SerializationTests : DiagnosticTestBase
                     Id = wolfId,
                     Name = "Wolf",
                     MainRole = MainRoleType.SimpleWerewolf,
-                    Health = PlayerHealth.Alive
+                    Health = PlayerHealth.Alive,
+                    DurableVotingPower = 1
                 },
                 new PlayerDto
                 {
                     Id = elderId,
                     Name = "Elder",
                     MainRole = MainRoleType.Elder,
-                    Health = PlayerHealth.Alive
+                    Health = PlayerHealth.Alive,
+                    DurableVotingPower = 1
                 },
                 new PlayerDto
                 {
                     Id = victimId,
                     Name = "Victim",
-                    Health = PlayerHealth.Alive
+                    Health = PlayerHealth.Alive,
+                    DurableVotingPower = 1
                 },
                 new PlayerDto
                 {
                     Id = villagerId,
                     Name = "Villager",
-                    Health = PlayerHealth.Alive
+                    Health = PlayerHealth.Alive,
+                    DurableVotingPower = 1
                 },
                 new PlayerDto
                 {
                     Id = extraVillagerId,
                     Name = "Extra Villager",
-                    Health = PlayerHealth.Alive
+                    Health = PlayerHealth.Alive,
+                    DurableVotingPower = 1
                 }
             ],
             GameHistoryLog =
@@ -1013,21 +1069,24 @@ public class SerializationTests : DiagnosticTestBase
                     Id = alivePlayerId,
                     Name = "Wolf",
                     MainRole = MainRoleType.SimpleWerewolf,
-                    Health = PlayerHealth.Alive
+                    Health = PlayerHealth.Alive,
+                    DurableVotingPower = 1
                 },
                 new PlayerDto
                 {
                     Id = votedPlayerId,
                     Name = "Voted",
                     MainRole = MainRoleType.SimpleVillager,
-                    Health = PlayerHealth.Alive
+                    Health = PlayerHealth.Alive,
+                    DurableVotingPower = 1
                 },
                 new PlayerDto
                 {
                     Id = bystanderId,
                     Name = "Bystander",
                     MainRole = MainRoleType.SimpleVillager,
-                    Health = PlayerHealth.Alive
+                    Health = PlayerHealth.Alive,
+                    DurableVotingPower = 1
                 }
             ],
             GameHistoryLog =

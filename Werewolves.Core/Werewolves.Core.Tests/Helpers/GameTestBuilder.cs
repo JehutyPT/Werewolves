@@ -253,6 +253,19 @@ public class GameTestBuilder
 		return this;
 	}
 
+	internal GameTestBuilder ArrangePubliclyRevealedRole(
+		Guid playerId,
+		MainRoleType role)
+	{
+		EnsureGameStarted();
+		GetMutableSessionForArrangement().RevealRoles(
+			new Dictionary<Guid, MainRoleType>
+			{
+				[playerId] = role
+			});
+		return this;
+	}
+
 		internal GameTestBuilder ArrangeEliminatedPlayer(
 			Guid playerId,
 			EliminationReason reason = EliminationReason.EventElimination)

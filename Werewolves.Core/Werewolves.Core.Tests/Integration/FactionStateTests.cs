@@ -621,6 +621,7 @@ public class FactionStateTests
 		MainRoleType? PubliclyRevealedRole,
 		PlayerHealth Health,
 		bool HasVotingRight,
+		int DurableVotingPower,
 		IReadOnlyList<StatusEffectTypes> Effects)> CaptureNonFactionState(
 			IGameSession session) =>
 		session.GetPlayers()
@@ -632,6 +633,7 @@ public class FactionStateTests
 				player.State.PubliclyRevealedRole,
 				player.State.Health,
 				player.State.HasVotingRight,
+				player.State.DurableVotingPower,
 				(IReadOnlyList<StatusEffectTypes>)player.State
 					.GetActiveStatusEffects()
 					.OrderBy(effect => effect)

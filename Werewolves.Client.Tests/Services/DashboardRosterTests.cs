@@ -107,6 +107,34 @@ public class DashboardRosterTests
 		});
 	}
 
+	[Fact]
+	public void FromSession_DistinguishesPermanentZeroVotingPowerFromDeathAndTemporaryRestriction()
+	{
+		var session = new TestGameSession([
+			new TestPlayer(
+				PlayerNames.Ana,
+				hasVotingRight: false,
+				durableVotingPower: 0),
+			new TestPlayer(
+				PlayerNames.Bruno,
+				health: PlayerHealth.Dead,
+				hasVotingRight: false,
+				durableVotingPower: 0),
+			new TestPlayer(
+				PlayerNames.Carla,
+				hasVotingRight: false,
+				durableVotingPower: 1)
+		]);
+
+		var roster = DashboardRoster.FromSession(session);
+
+		roster[0].VotingGuidanceLabel.Should()
+			.Be(ClientStrings.Dashboard_VotingPowerLostPermanently);
+		roster[1].VotingGuidanceLabel.Should().BeNull();
+		roster[2].VotingGuidanceLabel.Should()
+			.Be(ClientStrings.Dashboard_VotingRightTemporarilyRestricted);
+	}
+
 	private sealed class TestGameSession(IReadOnlyList<IPlayer> players) : IGameSession
 	{
 		public IEnumerable<GameLogEntryBase> GameHistoryLog => [];
@@ -154,6 +182,8 @@ public class DashboardRosterTests
 		MainRoleType? moderatorKnownRole = null,
 		MainRoleType? publiclyRevealedRole = null,
 		PlayerHealth health = PlayerHealth.Alive,
+		bool hasVotingRight = true,
+		int durableVotingPower = 1,
 		IReadOnlyList<StatusEffectTypes>? activeEffects = null) : IPlayer
 	{
 		public Guid Id { get; } = Guid.NewGuid();
@@ -164,6 +194,8 @@ public class DashboardRosterTests
 			moderatorKnownRole,
 			publiclyRevealedRole,
 			health,
+			hasVotingRight,
+			durableVotingPower,
 			activeEffects ?? []);
 	}
 
@@ -173,6 +205,8 @@ public class DashboardRosterTests
 		MainRoleType? moderatorKnownRole,
 		MainRoleType? publiclyRevealedRole,
 		PlayerHealth health,
+		bool hasVotingRight,
+		int durableVotingPower,
 		IReadOnlyList<StatusEffectTypes> activeEffects) : IPlayerState
 	{
 		public MainRoleType? CurrentRole => currentRole;
@@ -180,10 +214,9 @@ public class DashboardRosterTests
 		public MainRoleType? PhysicalCharacterCardRole => physicalCharacterCardRole;
 			public MainRoleType? ModeratorKnownRole => moderatorKnownRole;
 			public MainRoleType? PubliclyRevealedRole => publiclyRevealedRole;
-			public PlayerHealth Health => health;
-			public bool HasVotingRight => true;
-			public bool IsImmuneToLynching => false;
-		public string? LynchingImmunityAnnouncement => null;
+		public PlayerHealth Health => health;
+		public bool HasVotingRight => hasVotingRight;
+		public int DurableVotingPower => durableVotingPower;
 		public Team Team => currentRole == MainRoleType.SimpleWerewolf ? Team.Werewolves : Team.Villagers;
 		public List<StatusEffectTypes> GetActiveStatusEffects() => activeEffects.ToList();
 		public bool HasStatusEffect(StatusEffectTypes effect) => activeEffects.Contains(effect);

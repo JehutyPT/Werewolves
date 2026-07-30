@@ -237,8 +237,9 @@ namespace Werewolves.Core.StateModels.Core
 					ModeratorKnownRole = p.State.ModeratorKnownRole,
 						PubliclyRevealedRole = p.State.PubliclyRevealedRole,
 							ActiveEffects = ((PlayerState)p.State).ActiveEffects,
-							Health = p.State.Health,
-							HasVotingRight = p.State.HasVotingRight,
+								Health = p.State.Health,
+								HasVotingRight = p.State.HasVotingRight,
+								DurableVotingPower = p.State.DurableVotingPower,
 							FactionBeneficiary = p.State.FactionBeneficiary,
 							FactionAgentKnowledge = Enum.GetValues<Faction>()
 								.ToDictionary(
@@ -292,8 +293,15 @@ namespace Werewolves.Core.StateModels.Core
 						: playerDto.ModeratorKnownRole;
 				mutableState.PubliclyRevealedRole = playerDto.PubliclyRevealedRole;
 					mutableState.ActiveEffects = playerDto.ActiveEffects;
-					mutableState.Health = playerDto.Health;
-					mutableState.HasVotingRight = playerDto.HasVotingRight ?? true;
+						mutableState.Health = playerDto.Health;
+						mutableState.HasVotingRight = playerDto.HasVotingRight ?? true;
+						if (playerDto.DurableVotingPower < 0)
+						{
+							throw new InvalidOperationException(
+								"Durable Voting Power cannot be negative.");
+						}
+						mutableState.DurableVotingPower =
+							playerDto.DurableVotingPower;
 					var (beneficiary, agents) =
 						ValidatePlayerFactionState(playerDto);
 					mutableState.ReplaceFactionProjection(

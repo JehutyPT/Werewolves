@@ -30,7 +30,7 @@ public class SimulatorProfileTests
 			ModeratorInstructionSemantic.StartDayDebate,
 			ModeratorInstructionSemantic.RecordDayVote,
 			ModeratorInstructionSemantic.AssignDayVoteTargetRole,
-			ModeratorInstructionSemantic.AnnounceLynchingImmunity,
+	    ModeratorInstructionSemantic.AnnounceVillageIdiotPardon,
 			ModeratorInstructionSemantic.AnnounceDayElimination
 		];
 		var expectedSafetySemantics = expectedProbabilitySemantics
@@ -60,7 +60,7 @@ public class SimulatorProfileTests
 		var safety = SimulatorCapability.SafetyScreening;
 		var probability = SimulatorCapability.FullProbability;
 
-		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "18"));
+		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "19"));
 		probability.Identity.Should().Be(new SimulatorProfileIdentity("full-probability", "4"));
 		BaselineRandomDecisionStrategy.Identity.Should()
 			.Be(new DecisionStrategyIdentity("baseline-random", "3-splitmix64"));
@@ -81,6 +81,7 @@ public class SimulatorProfileTests
 			MainRoleType.Defender,
 			MainRoleType.StutteringJudge,
 			MainRoleType.Scapegoat,
+			MainRoleType.VillageIdiot,
 			MainRoleType.WolfHound,
 			MainRoleType.AccursedWolfFather,
 			MainRoleType.WhiteWerewolf,
@@ -147,6 +148,15 @@ public class SimulatorProfileTests
 		defenderBeneficiary.Should().Be(Faction.Villager);
 		safety.IsFactionAgent(
 				MainRoleType.Defender,
+				Faction.Werewolf)
+			.Should().BeFalse();
+		safety.TryGetBeneficiaryFaction(
+				MainRoleType.VillageIdiot,
+				out var villageIdiotBeneficiary)
+			.Should().BeTrue();
+		villageIdiotBeneficiary.Should().Be(Faction.Villager);
+		safety.IsFactionAgent(
+				MainRoleType.VillageIdiot,
 				Faction.Werewolf)
 			.Should().BeFalse();
 		safety.SupportsActorSetupCards.Should().BeFalse();

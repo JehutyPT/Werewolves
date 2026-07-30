@@ -67,6 +67,7 @@ internal class PlayerDto
     public StatusEffectTypes ActiveEffects { get; set; }
     public PlayerHealth Health { get; set; }
     public bool? HasVotingRight { get; set; }
+    public required int DurableVotingPower { get; set; }
     public FactionBeneficiaryKnowledge? FactionBeneficiary { get; set; }
     public Dictionary<Faction, FactionAgentKnowledge>? FactionAgentKnowledge
         { get; set; }

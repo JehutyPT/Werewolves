@@ -172,7 +172,7 @@ A static helper class that serves as the "Rule Engine" for the Dawn phase, resol
         *   **Witch Kill (Death Potion):** Cannot be blocked or prevented.
         *   **Rusty Sword:** The Knight's posthumous revenge attack cannot be blocked.
 
-The chosen architecture utilizes a dedicated `PlayerState` wrapper class. This class contains individual properties (e.g., `IsSheriff`, `IsImmuneToLynching`) for all dynamic boolean and data-carrying states, typically using `internal set` for controlled modification. The `Player` class then holds a single instance of `PlayerState`. This approach provides a balance of organization (grouping all volatile states together), strong typing, clear separation of concerns (keeping `Player` focused on identity/role), and strict encapsulation. 
+The chosen architecture utilizes a dedicated `PlayerState` wrapper class. This class contains individual properties (e.g., `HasVotingRight`, `DurableVotingPower`) for all dynamic boolean and data-carrying states, typically using `internal set` for controlled modification. The `Player` class then holds a single instance of `PlayerState`. This approach provides a balance of organization (grouping all volatile states together), strong typing, clear separation of concerns (keeping `Player` focused on identity/role), and strict encapsulation.
 
 ## `IPlayer` Interface & `Player` Class
 
@@ -235,14 +235,14 @@ Wrapper class holding all dynamic state information for a `Player`. **Implemente
 *   **Core Properties:**
     *   `MainRole` (MainRoleType?): The player's main character role type.
     *   `Health` (PlayerHealth): Current health status (Alive, Dead, etc.).
+    *   `HasVotingRight` (bool): Whether the player is currently eligible to cast a vote; temporary restrictions may change this without changing the player's durable voting weight.
+    *   `DurableVotingPower` (int): The player's nonnegative persistent vote weight. Ordinary voters start at `1`; permanent effects may reduce it to `0`, while future roles can use larger weights without changing the voting-right model.
 *   **Unified Status Effects API:**
     *   `HasStatusEffect(StatusEffectTypes effect)` (bool): Checks if a specific status effect is currently active. For standard effects, performs a bitwise `HasFlag` check on the internal `ActiveEffects` field. **Special case for `None`:** When called with `StatusEffectTypes.None`, returns `true` if the player has **zero** active effects (i.e., `ActiveEffects == StatusEffectTypes.None`), and `false` if the player has **any** active effect. This semantic allows querying "does this player have no status effects?" directly.
     *   `GetActiveStatusEffects()` (List<StatusEffectTypes>): Returns all currently active status effects as a list (excluding `None`). Intended for UI consumption to display status effect icons.
 *   **Internal Status Effect Storage:**
     *   `ActiveEffects` (StatusEffectTypes, internal): Internal flags field storing all active status effects. Not exposed on the `IPlayerState` interface. Mutations are performed via `AddEffect()`/`RemoveEffect()` internal methods, accessible only through `SessionMutator.SetStatusEffect()`.
 *   **Computed Capability Properties (Logic Decoupling):**
-    *   `IsImmuneToLynching` (bool): Derived from role and status effects (e.g., Village Idiot who hasn't used immunity yet).
-    *   `LynchingImmunityAnnouncement` (string?): The text to announce if immunity triggers.
     *   `Team` (Team): The player's current allegiance, derived from MainRole and status effects.
 
 **PRD #93 target-state migration:** The properties above describe the current implementation, not the accepted identity model. #120 and #135 replace the single nullable `MainRole`/derived `Team` view with separate Physical Character Card Ownership and zones, current Role, known-or-unknown Faction Beneficiary and Agent facts, Moderator-known Role, and public-reveal state. Unknown is a valid persisted value and never means Simple Villager or non-Agent. Role Identification, Faction Agent Group Observation, Role Reveal, and Permanent Role Swap each commit only their own typed fact.
@@ -535,7 +535,7 @@ Polymorphic instruction system for communication TO the moderator. **Assembly Lo
 *   `NightActionType`: `Unknown`, `WerewolfVictimSelection`, `BigBadWolfVictimSelection`, `WhiteWerewolfVictimSelection`, `AccursedWolfFatherInfection`, `SeerCheck`, `FoxCheck`, `WitchSave`, `WitchKill`, `DefenderProtect`, `PiperCharm`, `RustySword`, `ThiefSwap`, `ActorEmulate`, `WildChildModel`, `CupidLink`, `WolfHoundChoice`.
 *   `DayPowerType`: `Unknown`, `JudgeExtraVote`, `DevotedServantSwap`, `TownCrierCardReveal`.
 *   `StatusEffectTypes` (Flags enum): Unified enum for all persistent status effects that can be applied to a player. Combines what was previously split between status effects and secondary roles.
-    *   **Persistent conditions:** `None`, `ElderProtectionLost`, `LycanthropyInfection`, `WildChildChanged`, `LynchingImmunityUsed`.
+    *   **Persistent conditions:** `None`, `ElderProtectionLost`, `LycanthropyInfection`, `WildChildChanged`.
     *   **Hookable status effects:** `Sheriff`, `Lovers`, `Charmed`, `TownCrier`, `Executioner`.
     *   **Note:** This is a `[Flags]` enum to allow multiple status effects to be active simultaneously (e.g., Sheriff + Infected + Charmed).
 
@@ -627,7 +627,7 @@ The chosen approach is an abstract base class (`GameLogEntryBase`) providing uni
 3.  **`NightActionLogEntry`:** Records non-deterministic player choices made during the night (e.g., Seer check, Werewolf attack, Witch potion).
 4.  **`PhaseTransitionLogEntry`:** Records the transition between main game phases (`Night` -> `Dawn`, etc.).
 5.  **`PlayerEliminatedLogEntry`:** Records the elimination of a player and the reason (Vote, Attack, etc.).
-6.  **`StatusEffectLogEntry`:** Records the application of a status effect (e.g., `ElderProtectionLost`, `LycanthropyInfection`, `WildChildChanged`, `LynchingImmunityUsed`). Note: Currently only application is implemented; removal is not handled.
+6.  **`StatusEffectLogEntry`:** Records the application of a status effect (e.g., `ElderProtectionLost`, `LycanthropyInfection`, `WildChildChanged`). Note: Currently only application is implemented; removal is not handled.
 7.  **`VictoryConditionMetLogEntry`:** Records that a specific team has met their win condition.
 8.  **`VoteOutcomeReportedLogEntry`:** Records the result of a day vote (who was eliminated, or if it was a tie).
 9.  **`RoleRevealLogEntry`:** Records one public Role Reveal fact for the complete revealed batch.

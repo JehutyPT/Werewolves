@@ -21,8 +21,9 @@ public interface IPlayerState
 	public MainRoleType? PhysicalCharacterCardRole { get; }
 	public MainRoleType? ModeratorKnownRole { get; }
 	public MainRoleType? PubliclyRevealedRole { get; }
-	public PlayerHealth Health { get; }
-	public bool HasVotingRight { get; }
+		public PlayerHealth Health { get; }
+		public bool HasVotingRight { get; }
+		public int DurableVotingPower { get; }
 	public FactionBeneficiaryKnowledge FactionBeneficiary =>
 		FactionBeneficiaryKnowledge.Unknown;
 
@@ -47,26 +48,6 @@ public interface IPlayerState
 	/// This is the single method that performs bitwise flag checks.
 	/// </summary>
 	public bool HasStatusEffect(StatusEffectTypes effect);
-
-	/// <summary>
-	/// Returns true if the player is immune to lynching (e.g., Village Idiot who hasn't been voted for yet).
-	/// </summary>
-    public bool IsImmuneToLynching { get; }
-
-    /// <summary>
-    /// Returns null if not immune to lynching, or the specific localized string if they are.
-    /// </summary>
-    public string? LynchingImmunityAnnouncement 
-    {
-        get
-        {
-            if (MainRole == MainRoleType.VillageIdiot && IsImmuneToLynching)
-            {
-                return "The Village Idiot is saved by their foolishness! They survive, but lose their vote for the rest of the game.";
-            }
-            return null;
-        }
-    }
 
 	public Team Team
 	{
@@ -146,8 +127,9 @@ internal partial class GameSessionKernel
 
 		public MainRoleType? PubliclyRevealedRole { get; internal set; }
 
-		public PlayerHealth Health { get; internal set; } = PlayerHealth.Alive;
-		public bool HasVotingRight { get; internal set; } = true;
+			public PlayerHealth Health { get; internal set; } = PlayerHealth.Alive;
+			public bool HasVotingRight { get; internal set; } = true;
+			public int DurableVotingPower { get; internal set; } = 1;
 		public FactionBeneficiaryKnowledge FactionBeneficiary { get; internal set; } =
 			FactionBeneficiaryKnowledge.Unknown;
 
@@ -214,13 +196,7 @@ internal partial class GameSessionKernel
 			return effects;
 		}
 
-		/// <summary>
-		/// Village Idiot is immune to lynching until they've used their immunity.
-		/// </summary>
-		public bool IsImmuneToLynching => 
-			MainRole == MainRoleType.VillageIdiot && !HasStatusEffect(StatusEffectTypes.LynchingImmunityUsed);
-
-		// Internal-only mutation methods (accessible only by SessionMutator)
+			// Internal-only mutation methods (accessible only by SessionMutator)
 		internal void AddEffect(StatusEffectTypes effect) => 
 			ActiveEffects |= effect;
 

@@ -10,7 +10,8 @@ public interface ISessionMutator
 	void SetModeratorKnownRole(Guid playerId, MainRoleType role);
 		void SetPhysicalCharacterCardRole(Guid playerId, MainRoleType role);
 		void SetPlayerHealth(Guid playerId, PlayerHealth health);
-		void SetVotingRight(Guid playerId, bool hasVotingRight);
+			void SetVotingRight(Guid playerId, bool hasVotingRight);
+			void SetDurableVotingPower(Guid playerId, int durableVotingPower);
 		void SetPlayerRole(Guid playerId, MainRoleType role);
 	void SetPubliclyRevealedRole(Guid playerId, MainRoleType role);
 	void SetCurrentPhase(GamePhase newPhase);
@@ -56,8 +57,20 @@ internal partial class GameSessionKernel
 			public void SetPlayerHealth(Guid playerId, PlayerHealth health)
 				=> GetMutablePlayerState(playerId).Health = health;
 
-			public void SetVotingRight(Guid playerId, bool hasVotingRight)
-				=> GetMutablePlayerState(playerId).HasVotingRight = hasVotingRight;
+				public void SetVotingRight(Guid playerId, bool hasVotingRight)
+					=> GetMutablePlayerState(playerId).HasVotingRight = hasVotingRight;
+
+			public void SetDurableVotingPower(
+				Guid playerId,
+				int durableVotingPower)
+			{
+				if (durableVotingPower < 0)
+				throw new ArgumentOutOfRangeException(
+					nameof(durableVotingPower));
+
+				GetMutablePlayerState(playerId).DurableVotingPower =
+					durableVotingPower;
+			}
 
 		public void SetPlayerRole(Guid playerId, MainRoleType role)
 			=> GetMutablePlayerState(playerId).MainRole = role;

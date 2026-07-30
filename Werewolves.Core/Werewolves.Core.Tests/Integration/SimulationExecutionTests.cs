@@ -132,6 +132,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 	[InlineData(MainRoleType.Witch, 1)]
 	[InlineData(MainRoleType.StutteringJudge, 1)]
 	[InlineData(MainRoleType.Scapegoat, 1)]
+	[InlineData(MainRoleType.VillageIdiot, 1)]
 	[InlineData(MainRoleType.WolfHound, 1)]
 	[InlineData(MainRoleType.AccursedWolfFather, 1)]
 	[InlineData(MainRoleType.BigBadWolf, 1)]

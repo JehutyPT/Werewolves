@@ -38,6 +38,7 @@ public sealed class RoleKnowledgeFlowBunitTests
 	[InlineData(MainRoleType.Hunter)]
 	[InlineData(MainRoleType.StutteringJudge)]
 	[InlineData(MainRoleType.Scapegoat)]
+	[InlineData(MainRoleType.VillageIdiot)]
 	[InlineData(MainRoleType.AccursedWolfFather)]
 	[InlineData(MainRoleType.BigBadWolf)]
 	[InlineData(MainRoleType.Defender)]
@@ -56,6 +57,7 @@ public sealed class RoleKnowledgeFlowBunitTests
 			MainRoleType.Hunter => GameStrings.HunterRoleName,
 			MainRoleType.StutteringJudge => GameStrings.StutteringJudgeRoleName,
 			MainRoleType.Scapegoat => GameStrings.ScapegoatRoleName,
+			MainRoleType.VillageIdiot => GameStrings.VillageIdiotRoleName,
 			MainRoleType.AccursedWolfFather =>
 				GameStrings.AccursedWolfFatherRoleName,
 			MainRoleType.BigBadWolf => GameStrings.BigBadWolfRoleName,

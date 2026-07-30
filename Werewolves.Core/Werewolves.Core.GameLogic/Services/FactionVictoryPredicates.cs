@@ -5,7 +5,8 @@ namespace Werewolves.Core.GameLogic.Services;
 
 internal sealed record LivingFactionBeneficiarySnapshot(
 	Faction Beneficiary,
-	bool IsCharmed);
+	bool IsCharmed,
+	int DurableVotingPower);
 
 internal static class FactionVictoryPredicates
 {
@@ -15,7 +16,8 @@ internal static class FactionVictoryPredicates
 		ArgumentNullException.ThrowIfNull(livingPlayers);
 		var snapshot = livingPlayers.ToArray();
 		if (snapshot.Any(player =>
-			    !Enum.IsDefined(player.Beneficiary)))
+			    !Enum.IsDefined(player.Beneficiary) ||
+			    player.DurableVotingPower < 0))
 		{
 			throw new ArgumentOutOfRangeException(nameof(livingPlayers));
 		}
@@ -23,6 +25,25 @@ internal static class FactionVictoryPredicates
 		var satisfiedFactions = Evaluate(
 				snapshot.Select(player => player.Beneficiary))
 			.ToList();
+		satisfiedFactions.Remove(Faction.Werewolf);
+		var werewolves = snapshot
+			.Where(player => player.Beneficiary == Faction.Werewolf)
+			.ToArray();
+		var nonWerewolves = snapshot
+			.Where(player => player.Beneficiary != Faction.Werewolf)
+			.ToArray();
+		if (werewolves.Length > 0 &&
+		    (nonWerewolves.Length == 0 ||
+		     nonWerewolves.All(player =>
+			     player.Beneficiary == Faction.Villager) &&
+		     werewolves.Sum(player =>
+			     (long)player.DurableVotingPower) >=
+		     nonWerewolves.Sum(player =>
+			     (long)player.DurableVotingPower)))
+		{
+			satisfiedFactions.Add(Faction.Werewolf);
+		}
+
 		if (snapshot.Any(player =>
 			    player.Beneficiary == Faction.Piper) &&
 		    snapshot.All(player =>

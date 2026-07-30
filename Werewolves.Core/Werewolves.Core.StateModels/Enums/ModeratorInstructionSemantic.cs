@@ -22,7 +22,7 @@ public enum ModeratorInstructionSemantic
 	StartDayDebate = 14,
 	RecordDayVote = 15,
 	AssignDayVoteTargetRole = 16,
-	AnnounceLynchingImmunity = 17,
+	AnnounceVillageIdiotPardon = 17,
 	AnnounceDayElimination = 18,
 	GameSessionNotFound = 19,
 	ObserveVillagerVillagerFromDeal = 20,

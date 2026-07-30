@@ -530,11 +530,11 @@ Tests for the unified status effects system.
   - When: the Elimination Cascade reaches its centrally ordered forced-reaction boundary
   - Then: the Wild Child listener applies `StatusEffectLogEntry` and `AssignRoleLogEntry` separately
 
-- **SE-023**: `ApplyStatusEffect_LynchingImmunityUsed_SetsEffect`
-  - Given: Village Idiot player
-  - When: `session.ApplyStatusEffect(StatusEffectTypes.LynchingImmunityUsed, playerId)` is called
-  - Then: `player.State.HasStatusEffect(StatusEffectTypes.LynchingImmunityUsed)` returns `true`
-  - And: `player.State.IsImmuneToLynching` returns `false` (immunity used up)
+- **VI-001**: `VillageIdiotPardon_CommitsDurableVotingConsequencesExactlyOnce`
+  - Given: a living Village Idiot selected by a non-tied standard day vote with the pardon still available
+  - When: the moderator allows the automatic pardon after the generic public reveal
+  - Then: one owner-qualified pardon commitment spends the role resource, sets `DurableVotingPower` to `0`, revokes `HasVotingRight`, and resolves an empty elimination batch
+  - And: replay or recovery cannot spend the pardon or apply its consequences a second time
 
 ### 10.3 Status Effect Extension Methods
 - **SE-030**: `WithStatusEffect_FiltersPlayersCorrectly`
