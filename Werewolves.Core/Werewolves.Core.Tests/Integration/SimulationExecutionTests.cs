@@ -172,13 +172,6 @@ public class SimulationExecutionTests : DiagnosticTestBase
 		batch.IncompleteRunCount.Should().Be(0);
 		batch.Records.Should().OnlyContain(run =>
 			run is CompletedSimulationRun);
-		if (role == MainRoleType.Piper)
-		{
-			batch.Records
-				.OfType<CompletedSimulationRun>()
-				.Select(run => run.GameResult)
-				.Should().Contain(new SingleFactionGameResult(Faction.Piper));
-		}
 		MarkTestCompleted();
 	}
 

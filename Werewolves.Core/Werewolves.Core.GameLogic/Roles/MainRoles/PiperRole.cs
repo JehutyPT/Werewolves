@@ -280,6 +280,18 @@ internal sealed class PiperRole
 		}
 
 		var holder = GetHolder(session);
+		if (session.PendingModeratorInstruction is not SelectPlayersInstruction
+		    {
+			    Semantic: ModeratorInstructionSemantic.SelectPiperTargets,
+			    AffectedPlayerIds: { Count: 1 } affectedPlayerIds
+		    } pendingSelection ||
+		    pendingSelection.InstructionId != input.InstructionId ||
+		    affectedPlayerIds.Single() != holder.Id)
+		{
+			throw new InvalidOperationException(
+				"The Piper target selection no longer belongs to the instructed living holder.");
+		}
+
 		var eligibleTargets = GetEligibleTargets(session, holder.Id);
 		var expectedCount = Math.Min(2, eligibleTargets.Count);
 		if (input.SelectedPlayerIds is not { } selectedPlayerIds ||

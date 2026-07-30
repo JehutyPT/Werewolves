@@ -46,15 +46,15 @@ public static class SupportedRoleCatalog
 			RoleAdmission.Active(
 				MainRoleType.BigBadWolf,
 				() => new BigBadWolfRole(rolePowerAvailabilityGateway)),
-				RoleAdmission.Active(
-					MainRoleType.WhiteWerewolf,
-					() => new WhiteWerewolfRole(rolePowerAvailabilityGateway)),
-				RoleAdmission.Active(
-					MainRoleType.Piper,
-					() => new PiperRole(rolePowerAvailabilityGateway)),
-				RoleAdmission.Active(
-					MainRoleType.WildChild,
-					() => new WildChildRole()),
+			RoleAdmission.Active(
+				MainRoleType.WhiteWerewolf,
+				() => new WhiteWerewolfRole(rolePowerAvailabilityGateway)),
+			RoleAdmission.Active(
+				MainRoleType.Piper,
+				() => new PiperRole(rolePowerAvailabilityGateway)),
+			RoleAdmission.Active(
+				MainRoleType.WildChild,
+				() => new WildChildRole()),
 				RoleAdmission.Active(
 					MainRoleType.WolfHound,
 					() => new WolfHoundRole()),

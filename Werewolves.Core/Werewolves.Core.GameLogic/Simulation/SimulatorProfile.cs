@@ -151,7 +151,7 @@ public sealed class SimulatorCapability : SimulatorProfile
 				Faction.WhiteWerewolf,
 				Faction.Werewolf),
 			new(MainRoleType.Piper, Faction.Piper)
-		];
+	];
 
 	private static readonly SimulatorProfileRoleDescriptor[] FullProbabilityRoleDescriptors =
 	[

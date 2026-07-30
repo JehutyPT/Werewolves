@@ -396,6 +396,29 @@ public sealed class PiperRoleTests(ITestOutputHelper output)
 	}
 
 	[Fact]
+	public void TargetSelection_HolderChangesWhilePending_IsRejectedBeforeMutation()
+	{
+		var (builder, players, wake) = StartKnownPiperWake();
+		var originalPiper = players[1];
+		var swappedInPiper = players[2];
+		var selection =
+			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+				builder.Process(wake.CreateResponse()));
+		builder.ArrangeKnownRole(
+			originalPiper.Id,
+			MainRoleType.SimpleVillager);
+		builder.ArrangeKnownRole(
+			swappedInPiper.Id,
+			MainRoleType.Piper);
+
+		AssertRejectedResponseIsSideEffectFree(
+			builder,
+			selection,
+			selection.CreateResponse([players[3].Id, players[4].Id]));
+		MarkTestCompleted();
+	}
+
+	[Fact]
 	public void EliminatedKnownHolder_OmitsEntireCallWithoutAvailabilityEvaluation()
 	{
 		var policy = new SequenceAvailabilityPolicy();
@@ -460,11 +483,15 @@ public sealed class PiperRoleTests(ITestOutputHelper output)
 			[players[6].Id] = MainRoleType.SimpleVillager
 		}).IsSuccess.Should().BeTrue();
 		builder.CompleteDayPhaseWithTie().IsSuccess.Should().BeTrue();
-		builder.ArrangeCurrentRole(
+		builder.ArrangeKnownRole(
 			originalPiper.Id,
 			MainRoleType.SimpleVillager);
-		builder.ArrangeCurrentRole(
+		builder.ArrangeKnownRole(
 			swappedInPiper.Id,
+			MainRoleType.Piper);
+		originalPiper.State.ModeratorKnownRole.Should().Be(
+			MainRoleType.SimpleVillager);
+		swappedInPiper.State.ModeratorKnownRole.Should().Be(
 			MainRoleType.Piper);
 		var identificationCount = builder.GetGameState()!.GameHistoryLog
 			.OfType<RoleIdentificationLogEntry>()
