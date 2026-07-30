@@ -26,6 +26,17 @@ internal abstract class NightRoleIdOnlyHookListener : NightRoleHookListener<Nigh
 		CreateEndStage(GameHook.NightMainActionLoop, AsleepStateEnum, (_, _) => Complete(AsleepStateEnum))
 	];
 
+	protected sealed override HookListenerActionResult HandleRoleWakeupAndId(
+		GameSession session,
+		ModeratorResponse input)
+	{
+		var result = base.HandleRoleWakeupAndId(session, input);
+		return result.Instruction?.Semantic ==
+		       ModeratorInstructionSemantic.WakeRole
+		    ? Skip()
+		    : result;
+	}
+
 	protected override HookListenerActionResult HandleNightPowerUse(GameSession session,
 		ModeratorResponse input) =>
 		Complete(AsleepStateEnum);

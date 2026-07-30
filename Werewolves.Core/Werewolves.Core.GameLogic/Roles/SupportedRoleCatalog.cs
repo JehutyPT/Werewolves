@@ -32,7 +32,11 @@ public static class SupportedRoleCatalog
 		[
 			RoleAdmission.Active(
 				MainRoleType.SimpleWerewolf,
-				() => new SimpleWerewolfRole()),
+		            () => new SimpleWerewolfRole(
+		                rolePowerAvailabilityGateway)),
+		    RoleAdmission.Active(
+		        MainRoleType.LittleGirl,
+		        () => new LittleGirlRole()),
 			RoleAdmission.Active(
 				MainRoleType.Seer,
 				() => new SeerRole(rolePowerAvailabilityGateway)),

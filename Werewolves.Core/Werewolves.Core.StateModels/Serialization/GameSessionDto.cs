@@ -82,6 +82,8 @@ internal sealed class AcceptedObservationRecoveryCursor
     public int Version { get; set; }
     public ModeratorInstructionSemantic AcceptedObservationSemantic { get; set; }
     public MainRoleType ObservedRole { get; set; }
+	public MainRoleType? ContinuationRole { get; set; }
+	public bool? RetainedLittleGirlGuidanceDecision { get; set; }
     public ModeratorInstructionSemantic NextInstructionSemantic { get; set; }
     public Guid NextInstructionId { get; set; }
 }

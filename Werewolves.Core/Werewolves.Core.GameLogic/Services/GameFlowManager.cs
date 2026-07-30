@@ -532,6 +532,7 @@ internal static class GameFlowManager
                 Key,
                 domainRecoveryCursor == null
                     ? CreateAcceptedObservationRecoveryCursor(
+	                    session,
                         startingInstruction,
                         nextInstructionToSend)
                     : null,
@@ -792,6 +793,7 @@ internal static class GameFlowManager
 
     private static AcceptedObservationRecoveryCursor?
         CreateAcceptedObservationRecoveryCursor(
+	        GameSession session,
             ModeratorInstruction? startingInstruction,
             ModeratorInstruction nextInstruction)
     {
@@ -824,8 +826,40 @@ internal static class GameFlowManager
                 return null;
         }
 
+        var currentListener = session.GetCurrentListener();
+        if (currentListener == null)
+        {
+            return null;
+        }
+
+        var continuationRole = (MainRoleType)currentListener;
+        var retainsLittleGirlGuidanceDecision =
+            acceptedObservationSemantic ==
+                ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup ||
+            acceptedObservationSemantic ==
+                ModeratorInstructionSemantic.IdentifyRoleHolders &&
+            observedRole == LittleGirl &&
+            continuationRole == SimpleWerewolf &&
+            nextInstruction.Semantic is
+                ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup or
+                ModeratorInstructionSemantic.WakeRole;
+        bool? retainedLittleGirlGuidanceDecision = null;
+        if (retainsLittleGirlGuidanceDecision)
+        {
+            if (!session.TryGetExistingListener<SimpleWerewolfRole>(
+                    Listener(SimpleWerewolf),
+                    out var werewolfListener))
+            {
+                throw new InvalidOperationException(
+                    "The accepted observation requires its Simple Werewolf listener.");
+            }
+
+            retainedLittleGirlGuidanceDecision =
+                werewolfListener.LittleGirlGuidanceDecision;
+        }
+
         var continuation = ResolveAcceptedObservationContinuation(
-            observedRole,
+            continuationRole,
             nextInstruction.Semantic);
         if (continuation == null ||
             !continuation.Value.Matches(nextInstruction))
@@ -839,6 +873,9 @@ internal static class GameFlowManager
             Version = AcceptedObservationRecoveryCursor.CurrentVersion,
             AcceptedObservationSemantic = acceptedObservationSemantic,
             ObservedRole = observedRole,
+            ContinuationRole = continuationRole,
+            RetainedLittleGirlGuidanceDecision =
+                retainedLittleGirlGuidanceDecision,
             NextInstructionSemantic = nextInstruction.Semantic,
             NextInstructionId = nextInstruction.InstructionId
         };
@@ -862,8 +899,9 @@ internal static class GameFlowManager
 	            return;
 	        }
 
+        var continuationRole = cursor.ContinuationRole ?? cursor.ObservedRole;
         var continuation = ResolveAcceptedObservationContinuation(
-            cursor.ObservedRole,
+            continuationRole,
             cursor.NextInstructionSemantic);
         var isSupportedAcceptedObservation =
             cursor.AcceptedObservationSemantic ==
@@ -877,13 +915,37 @@ internal static class GameFlowManager
             continuation == null)
         {
             throw new InvalidOperationException(
-                $"Unsupported accepted observation continuation '{cursor.AcceptedObservationSemantic}:{cursor.ObservedRole}:{cursor.NextInstructionSemantic}'.");
+                $"Unsupported accepted observation continuation '{cursor.AcceptedObservationSemantic}:{cursor.ObservedRole}:{continuationRole}:{cursor.NextInstructionSemantic}'.");
         }
 
         if (!continuation.Value.Matches(session.PendingModeratorInstruction))
         {
             throw new InvalidOperationException(
                 "The Pending Instruction does not match the accepted observation continuation.");
+        }
+
+        var restoresLittleGirlGuidanceDecision =
+            cursor.AcceptedObservationSemantic ==
+                ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup ||
+            cursor.AcceptedObservationSemantic ==
+                ModeratorInstructionSemantic.IdentifyRoleHolders &&
+            cursor.ObservedRole == LittleGirl &&
+            continuationRole == SimpleWerewolf &&
+            cursor.NextInstructionSemantic is
+                ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup or
+                ModeratorInstructionSemantic.WakeRole;
+        if (restoresLittleGirlGuidanceDecision)
+        {
+            if (!session.TryGetExistingListener<SimpleWerewolfRole>(
+                    Listener(SimpleWerewolf),
+                    out var werewolfListener))
+            {
+                throw new InvalidOperationException(
+                    "The active Simple Werewolf listener is unavailable for observation recovery.");
+            }
+
+            werewolfListener.RestoreLittleGirlGuidanceDecision(
+                cursor.RetainedLittleGirlGuidanceDecision);
         }
 
 	        session.RestoreTransientContinuation(
@@ -1044,10 +1106,106 @@ internal static class GameFlowManager
 
     private static AcceptedObservationContinuation?
         ResolveAcceptedObservationContinuation(
-            MainRoleType observedRole,
+	        MainRoleType continuationRole,
             ModeratorInstructionSemantic nextInstructionSemantic)
-        => (observedRole, nextInstructionSemantic) switch
+	    => (continuationRole, nextInstructionSemantic) switch
         {
+	        (StutteringJudge, ModeratorInstructionSemantic.IdentifyRoleHolders or
+	            ModeratorInstructionSemantic.WakeRole) =>
+	            new(
+	                NightMainActionLoop.ToString(),
+	                Listener(StutteringJudge),
+	                StutteringJudgeRoleState.Awake.ToString(),
+	                nextInstructionSemantic ==
+	                    ModeratorInstructionSemantic.IdentifyRoleHolders
+	                        ? AcceptedObservationInstructionShape.PlayerSelection
+	                        : AcceptedObservationInstructionShape.Confirmation),
+	        (TwoSisters or ThreeBrothers,
+	            ModeratorInstructionSemantic.IdentifyRoleHolders) =>
+	            new(
+	                NightMainActionLoop.ToString(),
+	                Listener(continuationRole),
+	                CardinalityRoleHolderNightState.Identification.ToString(),
+	                AcceptedObservationInstructionShape.PlayerSelection),
+	        (WildChild,
+	            ModeratorInstructionSemantic.IdentifyRoleHolders or
+	                ModeratorInstructionSemantic.WakeRole) =>
+	            new(
+	                NightMainActionLoop.ToString(),
+	                Listener(WildChild),
+	                StandardNightRoleState.AwaitingAwakeConfirmation.ToString(),
+	                nextInstructionSemantic ==
+	                    ModeratorInstructionSemantic.IdentifyRoleHolders
+	                        ? AcceptedObservationInstructionShape.PlayerSelection
+	                        : AcceptedObservationInstructionShape.Confirmation),
+	        (WolfHound,
+	            ModeratorInstructionSemantic.IdentifyRoleHolders or
+	                ModeratorInstructionSemantic.WakeRole) =>
+	            new(
+	                NightMainActionLoop.ToString(),
+	                Listener(WolfHound),
+	                WolfHoundRoleState.Awake.ToString(),
+	                nextInstructionSemantic ==
+	                    ModeratorInstructionSemantic.IdentifyRoleHolders
+	                        ? AcceptedObservationInstructionShape.PlayerSelection
+	                        : AcceptedObservationInstructionShape.Confirmation),
+	        (SimpleWerewolf, ModeratorInstructionSemantic.WakeRole) =>
+	            new(
+	                NightMainActionLoop.ToString(),
+	                Listener(SimpleWerewolf),
+	                StandardNightRoleState.AwaitingAwakeConfirmation.ToString(),
+	                AcceptedObservationInstructionShape.Confirmation),
+	        (SimpleWerewolf,
+	            ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup) =>
+	            new(
+	                NightMainActionLoop.ToString(),
+	                Listener(SimpleWerewolf),
+	                StandardNightRoleState.AwaitingAwakeConfirmation.ToString(),
+	                AcceptedObservationInstructionShape.PlayerSelection),
+	        (AccursedWolfFather,
+	            ModeratorInstructionSemantic.IdentifyRoleHolders or
+	                ModeratorInstructionSemantic.WakeRole) =>
+	            new(
+	                NightMainActionLoop.ToString(),
+	                Listener(AccursedWolfFather),
+	                AccursedWolfFatherRoleState.Awake.ToString(),
+	                nextInstructionSemantic ==
+	                    ModeratorInstructionSemantic.IdentifyRoleHolders
+	                        ? AcceptedObservationInstructionShape.PlayerSelection
+	                        : AcceptedObservationInstructionShape.Confirmation),
+	        (BigBadWolf,
+	            ModeratorInstructionSemantic.IdentifyRoleHolders or
+	                ModeratorInstructionSemantic.WakeRole) =>
+	            new(
+	                NightMainActionLoop.ToString(),
+	                Listener(BigBadWolf),
+	                BigBadWolfRoleState.Awake.ToString(),
+	                nextInstructionSemantic ==
+	                    ModeratorInstructionSemantic.IdentifyRoleHolders
+	                        ? AcceptedObservationInstructionShape.PlayerSelection
+	                        : AcceptedObservationInstructionShape.Confirmation),
+	        (Seer,
+	            ModeratorInstructionSemantic.IdentifyRoleHolders or
+	                ModeratorInstructionSemantic.WakeRole) =>
+	            new(
+	                NightMainActionLoop.ToString(),
+	                Listener(Seer),
+	                ImmediateFeedbackNightRoleState.AwaitingAwakeConfirmation.ToString(),
+	                nextInstructionSemantic ==
+	                    ModeratorInstructionSemantic.IdentifyRoleHolders
+	                        ? AcceptedObservationInstructionShape.PlayerSelection
+	                        : AcceptedObservationInstructionShape.Confirmation),
+	        (Witch,
+	            ModeratorInstructionSemantic.IdentifyRoleHolders or
+	                ModeratorInstructionSemantic.WakeRole) =>
+	            new(
+	                NightMainActionLoop.ToString(),
+	                Listener(Witch),
+	                WitchRoleState.Awake.ToString(),
+	                nextInstructionSemantic ==
+	                    ModeratorInstructionSemantic.IdentifyRoleHolders
+	                        ? AcceptedObservationInstructionShape.PlayerSelection
+	                        : AcceptedObservationInstructionShape.Confirmation),
             (WildChild, ModeratorInstructionSemantic.SelectWildChildModel) =>
                 new(
                     NightMainActionLoop.ToString(),

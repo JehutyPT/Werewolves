@@ -56,7 +56,7 @@ public class SimulatorProfileTests
 		var safety = SimulatorCapability.SafetyScreening;
 		var probability = SimulatorCapability.FullProbability;
 
-		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "14"));
+		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "15"));
 		probability.Identity.Should().Be(new SimulatorProfileIdentity("full-probability", "4"));
 		BaselineRandomDecisionStrategy.Identity.Should()
 			.Be(new DecisionStrategyIdentity("baseline-random", "3-splitmix64"));
@@ -73,6 +73,7 @@ public class SimulatorProfileTests
 			MainRoleType.ThreeBrothers,
 			MainRoleType.Witch,
 			MainRoleType.Hunter,
+	        MainRoleType.LittleGirl,
 			MainRoleType.StutteringJudge,
 			MainRoleType.Scapegoat,
 			MainRoleType.WolfHound,
@@ -101,6 +102,15 @@ public class SimulatorProfileTests
 				MainRoleType.BigBadWolf,
 				Faction.Werewolf)
 			.Should().BeTrue();
+	    safety.TryGetBeneficiaryFaction(
+	            MainRoleType.LittleGirl,
+	            out var littleGirlBeneficiary)
+	        .Should().BeTrue();
+	    littleGirlBeneficiary.Should().Be(Faction.Villager);
+	    safety.IsFactionAgent(
+	            MainRoleType.LittleGirl,
+	            Faction.Werewolf)
+	        .Should().BeFalse();
 		safety.SupportsActorSetupCards.Should().BeFalse();
 		probability.SupportsActorSetupCards.Should().BeFalse();
 		safety.SupportsRuleState(SimulationRuleState.Default).Should().BeTrue();

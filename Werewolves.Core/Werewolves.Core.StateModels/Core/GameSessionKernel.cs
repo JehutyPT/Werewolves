@@ -409,6 +409,8 @@ namespace Werewolves.Core.StateModels.Core
 
 			if (!Enum.IsDefined(cursor.AcceptedObservationSemantic) ||
 				!Enum.IsDefined(cursor.ObservedRole) ||
+				(cursor.ContinuationRole.HasValue &&
+				 !Enum.IsDefined(cursor.ContinuationRole.Value)) ||
 				!Enum.IsDefined(cursor.NextInstructionSemantic) ||
 				cursor.NextInstructionSemantic ==
 					ModeratorInstructionSemantic.Unspecified ||
@@ -431,12 +433,53 @@ namespace Werewolves.Core.StateModels.Core
 					$"Unsupported accepted observation semantic '{cursor.AcceptedObservationSemantic}'.");
 			}
 
+			var isWerewolfGroupObservation =
+				cursor.AcceptedObservationSemantic ==
+					ModeratorInstructionSemantic
+						.ObserveWerewolfFactionAgentGroup;
+			var isLittleGirlIdentificationWerewolfWakeBoundary =
+				cursor.AcceptedObservationSemantic ==
+					ModeratorInstructionSemantic.IdentifyRoleHolders &&
+				cursor.ObservedRole == MainRoleType.LittleGirl &&
+				cursor.ContinuationRole == MainRoleType.SimpleWerewolf &&
+				cursor.NextInstructionSemantic is
+					ModeratorInstructionSemantic
+						.ObserveWerewolfFactionAgentGroup or
+					ModeratorInstructionSemantic.WakeRole;
+			var retainsLittleGirlGuidanceDecision =
+				isWerewolfGroupObservation ||
+				isLittleGirlIdentificationWerewolfWakeBoundary;
+			var hasLivingCurrentLittleGirl = dto.Players.Any(player =>
+				player.Health == PlayerHealth.Alive &&
+				player.MainRole == MainRoleType.LittleGirl);
+			if (!retainsLittleGirlGuidanceDecision &&
+				cursor.RetainedLittleGirlGuidanceDecision.HasValue ||
+				retainsLittleGirlGuidanceDecision &&
+				hasLivingCurrentLittleGirl !=
+				cursor.RetainedLittleGirlGuidanceDecision.HasValue)
+			{
+				throw new InvalidOperationException(
+					"The accepted observation recovery cursor has an invalid retained Little Girl guidance decision.");
+			}
+
+			var isSupportedCrossListenerRoleIdentification =
+				cursor.AcceptedObservationSemantic ==
+					ModeratorInstructionSemantic.IdentifyRoleHolders &&
+				cursor.ObservedRole == MainRoleType.LittleGirl &&
+				cursor.ContinuationRole is { } continuationRole &&
+				continuationRole != MainRoleType.LittleGirl &&
+				pendingModeratorInstruction is SelectPlayersInstruction
+				{
+					RoleIdentification: { } pendingRoleIdentification
+				} &&
+				pendingRoleIdentification == continuationRole;
 			if (pendingModeratorInstruction == null ||
 				pendingModeratorInstruction.InstructionId != cursor.NextInstructionId ||
 				pendingModeratorInstruction is SelectPlayersInstruction
 				{
 					RoleIdentification: not null
-				})
+				} &&
+				!isSupportedCrossListenerRoleIdentification)
 			{
 				throw new InvalidOperationException(
 					"The accepted observation recovery cursor does not match its Pending Instruction.");
@@ -450,16 +493,36 @@ namespace Werewolves.Core.StateModels.Core
 
 			var observedPlayerIds =
 				pendingModeratorInstruction.AffectedPlayerIds?.ToHashSet();
-			var matchesCommittedObservation =
-				observedPlayerIds != null &&
-				(cursor.AcceptedObservationSemantic ==
-					ModeratorInstructionSemantic.IdentifyRoleHolders
+	        bool matchesCommittedObservation;
+	        if (cursor.AcceptedObservationSemantic ==
+	            ModeratorInstructionSemantic.IdentifyRoleHolders)
+	        {
+	            matchesCommittedObservation =
+	                cursor.ObservedRole == MainRoleType.LittleGirl
 					? dto.GameHistoryLog
+	                        .OfType<RoleIdentificationLogEntry>()
+	                        .Any(entry =>
+	                            entry.Role == MainRoleType.LittleGirl &&
+	                            entry.PlayerIds.Count == 1 &&
+	                            entry.PlayerIds.All(playerId =>
+	                                dto.Players.Any(player =>
+	                                    player.Id == playerId &&
+	                                    player.Health == PlayerHealth.Alive &&
+	                                    player.MainRole == MainRoleType.LittleGirl &&
+	                                    player.ModeratorKnownRole ==
+	                                    MainRoleType.LittleGirl)))
+	                    : observedPlayerIds != null &&
+	                      dto.GameHistoryLog
 						.OfType<RoleIdentificationLogEntry>()
 						.Any(entry =>
 							entry.Role == cursor.ObservedRole &&
-							entry.PlayerIds.SetEquals(observedPlayerIds))
-					: dto.GameHistoryLog
+	                              entry.PlayerIds.SetEquals(observedPlayerIds));
+	        }
+	        else
+	        {
+	            matchesCommittedObservation =
+	                observedPlayerIds != null &&
+	                dto.GameHistoryLog
 						.OfType<FactionFactsCommittedLogEntry>()
 						.Any(entry =>
 						{
@@ -489,7 +552,8 @@ namespace Werewolves.Core.StateModels.Core
 									.Select(fact => fact.PlayerId)
 									.ToHashSet()
 									.SetEquals(observedPlayerIds);
-						}));
+	                    });
+	        }
 			if (!matchesCommittedObservation)
 			{
 				throw new InvalidOperationException(
