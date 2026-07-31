@@ -12,7 +12,6 @@ namespace Werewolves.Core.StateModels.Core
 	{
 		private readonly Dictionary<Guid, Player> _players = new();
 		private readonly List<Guid> _playerSeatingOrder = new();
-		private readonly List<MainRoleType> _rolesInPlay = new();
 		private readonly RoleLockIn _roleLockIn;
 		private readonly Dictionary<Guid, PhysicalCharacterCardState> _physicalCardStates = new();
 		private readonly IStateChangeObserver? _stateChangeObserver;
@@ -41,7 +40,6 @@ namespace Werewolves.Core.StateModels.Core
 			(NumberRangeConstraint? turnIntervalConstraint = null, GamePhase? phase = null, Func<TLogEntry, bool>? filter = null) where TLogEntry : GameLogEntryBase 
 			=> _gameHistoryLog.FindLogEntries(turnIntervalConstraint ?? NumberRangeConstraint.Any, phase, filter);
 		internal IReadOnlyList<Guid> GetPlayerSeatingOrder() => _playerSeatingOrder.AsReadOnly();
-		internal IReadOnlyList<MainRoleType> GetRolesInPlay() => _rolesInPlay.AsReadOnly();
 		internal RoleLockIn GetRoleLockIn() => _roleLockIn;
 		internal IReadOnlyList<PhysicalCharacterCardState> GetPhysicalCharacterCardStates() =>
 			_roleLockIn.RoleComposition
@@ -77,7 +75,6 @@ namespace Werewolves.Core.StateModels.Core
 				_playerSeatingOrder.Add(player.Id);
 			}
 
-			_rolesInPlay = new List<MainRoleType>(config.Roles);
 			_roleLockIn = config.RoleLockIn;
 			foreach (var card in _roleLockIn.DealPool)
 			{
@@ -256,7 +253,9 @@ namespace Werewolves.Core.StateModels.Core
 					FactionFactSchemaVersion = FactionFactSchema.CurrentVersion,
 					IsStableRecoveryBoundary = true,
 				SeatingOrder = _playerSeatingOrder.ToList(),
-				RolesInPlay = _rolesInPlay.ToList(),
+				RolesInPlay = _roleLockIn.DealPool
+					.Select(card => card.PrintedRole)
+					.ToList(),
 				RoleLockIn = RoleLockInDto.FromValue(_roleLockIn),
 				PhysicalCharacterCards = GetPhysicalCharacterCardStates()
 					.Select(state => new PhysicalCharacterCardStateDto
@@ -311,7 +310,6 @@ namespace Werewolves.Core.StateModels.Core
 			Id = dto.Id;
 			_turnNumber = dto.TurnNumber;
 			_playerSeatingOrder = dto.SeatingOrder;
-			_rolesInPlay = dto.RolesInPlay;
 			_roleLockIn = dto.RoleLockIn?.ToValue()
 				?? throw new InvalidOperationException(
 					"The stable recovery snapshot is missing Role Lock-In.");
@@ -392,6 +390,7 @@ namespace Werewolves.Core.StateModels.Core
 					_gameHistoryLog.RestoreLogEntry(entry, _players.Keys);
 				}
 
+				ValidatePermanentRoleSwapPlayerProjectionMatchesHistory();
 				ValidatePhysicalCharacterCardProjectionMatchesHistory();
 				ValidateFactionProjectionMatchesHistory();
 				ValidateLoversPairProjectionMatchesHistory();

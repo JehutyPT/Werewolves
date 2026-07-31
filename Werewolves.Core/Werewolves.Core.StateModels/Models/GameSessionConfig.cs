@@ -9,9 +9,9 @@ public class GameSessionConfig
 	public const int MaximumPlayerCount = 30;
 
 	public List<string> Players { get; init; } = new();
-	public List<MainRoleType> Roles { get; init; } = new();
-	public ActorSetupCards ActorSetupCards { get; init; }
-	public RoleLockIn RoleLockIn { get; init; } = null!;
+	public IReadOnlyList<MainRoleType> Roles { get; }
+	public ActorSetupCards ActorSetupCards { get; }
+	public RoleLockIn RoleLockIn { get; }
 
 	public static Dictionary<MainRoleType, NumberRangeConstraint> RoleCountConstraints { get; } = new()
 	{
@@ -408,7 +408,7 @@ public class GameSessionConfig
 				nameof(roleLockIn));
 		}
 
-		var roles = roleLockIn.RoleComposition
+		var roles = roleLockIn.DealPool
 			.Select(card => card.PrintedRole)
 			.ToList();
 		var normalizedActorSetupCards = actorSetupCards
@@ -419,7 +419,7 @@ public class GameSessionConfig
 			normalizedActorSetupCards);
 
 		Players = playerNames.ToList();
-		Roles = roles;
+		Roles = Array.AsReadOnly(roles.ToArray());
 		ActorSetupCards = normalizedActorSetupCards;
 		RoleLockIn = roleLockIn;
 	}

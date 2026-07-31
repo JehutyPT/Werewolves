@@ -42,6 +42,14 @@ internal sealed class RecoveryPayloadTestDriver
 		return new RecoveryPayloadTestDriver(payload);
 	}
 
+	internal RecoveryPayloadTestDriver RewriteRolesInPlay(
+		IEnumerable<MainRoleType> roles)
+	{
+		ArgumentNullException.ThrowIfNull(roles);
+		_payload.RolesInPlay = roles.ToList();
+		return this;
+	}
+
 	internal RecoveryPayloadTestDriver MismatchOneUseResource(
 		Guid cursorResourceId)
 	{
@@ -588,6 +596,119 @@ internal sealed class RecoveryPayloadTestDriver
 		return this;
 	}
 
+	internal RecoveryPayloadTestDriver RewriteCurrentRole(
+		Guid playerId,
+		MainRoleType currentRole)
+	{
+		_payload.Players.Single(player => player.Id == playerId).MainRole =
+			currentRole;
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver RewriteModeratorKnownRole(
+		Guid playerId,
+		MainRoleType? role)
+	{
+		_payload.Players.Single(player => player.Id == playerId)
+			.ModeratorKnownRole = role;
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver RewritePubliclyRevealedRole(
+		Guid playerId,
+		MainRoleType? role)
+	{
+		_payload.Players.Single(player => player.Id == playerId)
+			.PubliclyRevealedRole = role;
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver RewriteVotingState(
+		Guid playerId,
+		bool hasVotingRight,
+		int durableVotingPower)
+	{
+		var player = _payload.Players.Single(player => player.Id == playerId);
+		player.HasVotingRight = hasVotingRight;
+		player.DurableVotingPower = durableVotingPower;
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver RewriteLatestPermanentRoleSwapSource(
+		FactionFactSourceKind sourceKind)
+	{
+		RewriteLatestPermanentRoleSwap(entry => entry with
+		{
+			Source = new FactionFactSource(
+				sourceKind,
+				entry.Source.Identifier)
+		});
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver
+		RewriteLatestPermanentRoleSwapSourceIdentifier(string identifier)
+	{
+		RewriteLatestPermanentRoleSwap(entry => entry with
+		{
+			Source = new FactionFactSource(entry.Source.Kind, identifier)
+		});
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver RewriteLatestPermanentRoleSwapFacts(
+		Func<ImmutableArray<FactionFact>, ImmutableArray<FactionFact>> rewrite)
+	{
+		ArgumentNullException.ThrowIfNull(rewrite);
+		RewriteLatestPermanentRoleSwap(entry => entry with
+		{
+			Facts = rewrite(entry.Facts)
+		});
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver
+		RewriteLatestPermanentRoleSwapBeneficiaryAndCache(Faction faction)
+	{
+		RewriteLatestPermanentRoleSwap(entry => entry with
+		{
+			Facts = entry.Facts.Select(fact =>
+				fact.Type == FactionFactType.Beneficiary
+					? FactionFact.Beneficiary(
+						fact.PlayerId,
+						faction,
+						fact.EffectiveBoundary,
+						fact.BeneficiaryPrecedence!.Value)
+					: fact).ToImmutableArray()
+		});
+		var swap = _payload.GameHistoryLog
+			.OfType<PermanentRoleSwapCommittedLogEntry>()
+			.Last();
+		_payload.Players.Single(player => player.Id == swap.PlayerId)
+			.FactionBeneficiary = FactionBeneficiaryKnowledge.Known(faction);
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver
+		RewriteLatestPermanentRoleSwapPowerInstanceId(Guid powerInstanceId)
+	{
+		if (powerInstanceId == Guid.Empty)
+		{
+			throw new ArgumentException(
+				"A recovery test power instance cannot be empty.",
+				nameof(powerInstanceId));
+		}
+
+		RewriteLatestPermanentRoleSwap(entry => entry with
+		{
+			NewPowerInstanceId = powerInstanceId,
+			Source = new FactionFactSource(
+				FactionFactSourceKind.ExplicitTransition,
+				$"permanent-role-swap:{entry.PlayerId:N}:{powerInstanceId:N}")
+		});
+		return this;
+	}
+
 	internal string Serialize() =>
 		JsonSerializer.Serialize(_payload, SerializationOptions);
 
@@ -604,6 +725,24 @@ internal sealed class RecoveryPayloadTestDriver
 		{
 			throw new InvalidOperationException(
 				"The recovery test payload has no committed recurring Night action.");
+		}
+
+		_payload.GameHistoryLog[entryIndex] = rewrite(entry);
+	}
+
+	private void RewriteLatestPermanentRoleSwap(
+		Func<
+			PermanentRoleSwapCommittedLogEntry,
+			PermanentRoleSwapCommittedLogEntry> rewrite)
+	{
+		var entryIndex = _payload.GameHistoryLog.FindLastIndex(
+			entry => entry is PermanentRoleSwapCommittedLogEntry);
+		if (entryIndex < 0 ||
+			_payload.GameHistoryLog[entryIndex] is not
+				PermanentRoleSwapCommittedLogEntry entry)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no Permanent Role Swap.");
 		}
 
 		_payload.GameHistoryLog[entryIndex] = rewrite(entry);

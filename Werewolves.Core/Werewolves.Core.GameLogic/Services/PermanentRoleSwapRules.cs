@@ -1,11 +1,24 @@
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 
 namespace Werewolves.Core.GameLogic.Services;
 
 internal static class PermanentRoleSwapRules
 {
+	internal static void EnforceValidHistory(GameSession session)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		if (session.GameHistoryLog
+			.OfType<PermanentRoleSwapCommittedLogEntry>()
+			.Any(entry => !HasExpectedFactionFacts(entry)))
+		{
+			throw new InvalidOperationException(
+				"Permanent Role Swap Faction defaults are invalid.");
+		}
+	}
+
 	internal static bool CanCommit(
 		GameSession session,
 		PermanentRoleSwapRequest request)
@@ -71,28 +84,47 @@ internal static class PermanentRoleSwapRules
 		policy.RolePowerState == PermanentRoleSwapDisposition.Change;
 
 	private static bool HasExpectedFactionReplacement(
-		PermanentRoleSwapRequest request)
-	{
-		var expectedBeneficiary = request.NewCurrentRole switch
-		{
-			MainRoleType.SimpleWerewolf or MainRoleType.BigBadWolf or
-				MainRoleType.AccursedWolfFather => Faction.Werewolf,
-			MainRoleType.WhiteWerewolf => Faction.WhiteWerewolf,
-			MainRoleType.Piper => Faction.Piper,
-			_ => Faction.Villager
-		};
-		var expectedWerewolfAgent = request.NewCurrentRole is
-			MainRoleType.SimpleWerewolf or MainRoleType.BigBadWolf or
-			MainRoleType.AccursedWolfFather or MainRoleType.WhiteWerewolf;
-		return (request.Policy.FactionBeneficiary !=
+		PermanentRoleSwapRequest request) =>
+		(request.Policy.FactionBeneficiary !=
 				PermanentRoleSwapDisposition.Change ||
-			request.Factions.BeneficiaryCandidate == expectedBeneficiary) &&
-			(request.Policy.FactionAgents !=
-				PermanentRoleSwapDisposition.Change ||
+			request.Factions.BeneficiaryCandidate ==
+				ExpectedBeneficiary(request.NewCurrentRole)) &&
+		(request.Policy.FactionAgents != PermanentRoleSwapDisposition.Change ||
 			Enum.GetValues<Faction>().All(faction =>
 				request.Factions.AgentFacts[faction] ==
-				(expectedWerewolfAgent && faction == Faction.Werewolf
-					? FactionAgentKnowledge.KnownAgent
-					: FactionAgentKnowledge.KnownNonAgent)));
-	}
+					ExpectedAgentKnowledge(request.NewCurrentRole, faction)));
+
+	private static bool HasExpectedFactionFacts(
+		PermanentRoleSwapCommittedLogEntry entry) =>
+		(entry.Policy.FactionBeneficiary !=
+				PermanentRoleSwapDisposition.Change ||
+			entry.Facts.Any(fact =>
+				fact.Type == FactionFactType.Beneficiary &&
+				fact.Faction == ExpectedBeneficiary(entry.NewCurrentRole))) &&
+		(entry.Policy.FactionAgents != PermanentRoleSwapDisposition.Change ||
+			Enum.GetValues<Faction>().All(faction =>
+				entry.Facts.Any(fact =>
+					fact.Type == FactionFactType.Agent &&
+					fact.Faction == faction &&
+					fact.AgentKnowledge == ExpectedAgentKnowledge(
+						entry.NewCurrentRole,
+						faction))));
+
+	private static Faction ExpectedBeneficiary(MainRoleType role) => role switch
+	{
+		MainRoleType.SimpleWerewolf or MainRoleType.BigBadWolf or
+			MainRoleType.AccursedWolfFather => Faction.Werewolf,
+		MainRoleType.WhiteWerewolf => Faction.WhiteWerewolf,
+		MainRoleType.Piper => Faction.Piper,
+		_ => Faction.Villager
+	};
+
+	private static FactionAgentKnowledge ExpectedAgentKnowledge(
+		MainRoleType role,
+		Faction faction) =>
+		role is MainRoleType.SimpleWerewolf or MainRoleType.BigBadWolf or
+			MainRoleType.AccursedWolfFather or MainRoleType.WhiteWerewolf &&
+		faction == Faction.Werewolf
+			? FactionAgentKnowledge.KnownAgent
+			: FactionAgentKnowledge.KnownNonAgent;
 }

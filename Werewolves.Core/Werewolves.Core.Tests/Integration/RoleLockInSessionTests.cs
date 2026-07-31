@@ -1,15 +1,84 @@
 using System.Text.Json.Nodes;
 using FluentAssertions;
 using Werewolves.Core.GameLogic.Services;
+using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Models;
+using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Serialization;
+using Werewolves.Core.Tests.Helpers;
 using Xunit;
 
 namespace Werewolves.Core.Tests.Integration;
 
 public class RoleLockInSessionTests
 {
+	[Fact]
+	public void RoleLockInAuthority_OfferOnlyVillagerVillagerIsNotInitiallyLive()
+	{
+		var cards = new[]
+		{
+			Card("91000000-0000-0000-0000-000000000001", MainRoleType.Thief),
+			Card("91000000-0000-0000-0000-000000000002", MainRoleType.SimpleWerewolf),
+			Card("91000000-0000-0000-0000-000000000003", MainRoleType.SimpleVillager),
+			Card("91000000-0000-0000-0000-000000000004", MainRoleType.SimpleVillager),
+			Card("91000000-0000-0000-0000-000000000005", MainRoleType.SimpleVillager),
+			Card("91000000-0000-0000-0000-000000000006", MainRoleType.VillagerVillager),
+			Card("91000000-0000-0000-0000-000000000007", MainRoleType.Seer)
+		};
+		var lockIn = new RoleLockIn(
+			version: 11,
+			playerCount: 5,
+			roleComposition: cards,
+			dealPoolCardIds: cards.Take(5).Select(card => card.Id),
+			offer1CardId: cards[5].Id,
+			offer2CardId: cards[6].Id);
+		var config = new GameSessionConfig(
+			["Ana", "Bruno", "Carla", "Diogo", "Eva"],
+			lockIn);
+		config.Roles.Should().Equal(
+			lockIn.DealPool.Select(card => card.PrintedRole));
+		var gameId = Guid.NewGuid();
+		var session = new GameSession(
+			gameId,
+			new StartGameConfirmationInstruction(gameId),
+			config);
+
+		session.RoleInPlayCount(MainRoleType.VillagerVillager).Should().Be(0);
+		RoleKnowledgeHandlers.RequestVillagerVillagerPublicFromDealObservation(
+			session,
+			new ModeratorResponse()).Should().BeNull();
+	}
+
+	[Fact]
+	public void RoleLockInAuthority_LegacySerializedRolesCannotOverrideActiveZones()
+	{
+		var roles = new[]
+		{
+			MainRoleType.BigBadWolf,
+			MainRoleType.Seer,
+			MainRoleType.Witch,
+			MainRoleType.Hunter,
+			MainRoleType.SimpleVillager
+		};
+		var service = new GameService();
+		var start = service.StartNewGame(new GameSessionConfig(
+			["Ana", "Bruno", "Carla", "Diogo", "Eva"],
+			roles.ToList()));
+		var tampered = RecoveryPayloadTestDriver
+			.Parse(service.GetGameStateView(start.GameGuid)!.Serialize())
+			.RewriteRolesInPlay(
+				Enumerable.Repeat(MainRoleType.SimpleWerewolf, 5))
+			.Serialize();
+		var recoveredService = new GameService();
+
+		var recoveredId = recoveredService.RehydrateSession(tampered);
+		var recovered = recoveredService.GetGameStateView(recoveredId)!;
+
+		recovered.RoleInPlayCount(MainRoleType.BigBadWolf).Should().Be(1);
+		recovered.RoleInPlayCount(MainRoleType.SimpleWerewolf).Should().Be(0);
+	}
+
 	[Fact]
 	public void StartNewGame_WithAcceptedRoleLockIn_ExposesLockedDealPoolWithoutOwnership()
 	{

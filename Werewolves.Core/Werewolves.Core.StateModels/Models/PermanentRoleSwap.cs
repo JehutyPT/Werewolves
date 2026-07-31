@@ -112,6 +112,103 @@ public sealed record PermanentRoleSwapFactionReplacement
 	}
 }
 
+internal static class PermanentRoleSwapFactionFacts
+{
+	internal static FactionFactSource CreateSource(
+		Guid playerId,
+		Guid powerInstanceId) =>
+		new(
+			FactionFactSourceKind.ExplicitTransition,
+			$"permanent-role-swap:{playerId:N}:{powerInstanceId:N}");
+
+	internal static ImmutableArray<FactionFact> CreateBatch(
+		Guid playerId,
+		PermanentRoleSwapPolicy policy,
+		PermanentRoleSwapFactionReplacement replacement,
+		FactionFactEffectiveBoundary boundary)
+	{
+		ArgumentNullException.ThrowIfNull(policy);
+		ArgumentNullException.ThrowIfNull(replacement);
+		ArgumentNullException.ThrowIfNull(boundary);
+
+		var facts = ImmutableArray.CreateBuilder<FactionFact>();
+		if (policy.FactionBeneficiary == PermanentRoleSwapDisposition.Change)
+		{
+			facts.Add(FactionFact.Beneficiary(
+				playerId,
+				replacement.BeneficiaryCandidate,
+				boundary));
+		}
+		if (policy.FactionAgents == PermanentRoleSwapDisposition.Change)
+		{
+			facts.AddRange(Enum.GetValues<Faction>().Select(faction =>
+				FactionFact.Agent(
+					playerId,
+					faction,
+					replacement.AgentFacts[faction],
+					boundary)));
+		}
+		return facts.ToImmutable();
+	}
+
+	internal static bool IsCanonicalSource(
+		FactionFactSource source,
+		Guid playerId,
+		Guid powerInstanceId) =>
+		source == CreateSource(playerId, powerInstanceId);
+
+	internal static bool IsValidCommittedBatch(
+		Guid playerId,
+		PermanentRoleSwapPolicy policy,
+		ImmutableArray<FactionFact> facts,
+		int turnNumber,
+		GamePhase phase,
+		int? expectedOrder)
+	{
+		ArgumentNullException.ThrowIfNull(policy);
+		if (facts.IsDefault ||
+			facts.Any(fact =>
+				fact.PlayerId != playerId ||
+				fact.EffectiveBoundary.TurnNumber != turnNumber ||
+				fact.EffectiveBoundary.Phase != phase ||
+				expectedOrder is { } order &&
+					fact.EffectiveBoundary.Order != order))
+		{
+			return false;
+		}
+
+		var beneficiaryFacts = facts
+			.Where(fact => fact.Type == FactionFactType.Beneficiary)
+			.ToArray();
+		var agentFacts = facts
+			.Where(fact => fact.Type == FactionFactType.Agent)
+			.ToArray();
+		if (facts.Length != beneficiaryFacts.Length + agentFacts.Length)
+		{
+			return false;
+		}
+
+		var beneficiaryValid = policy.FactionBeneficiary switch
+		{
+			PermanentRoleSwapDisposition.Preserve => beneficiaryFacts.Length == 0,
+			PermanentRoleSwapDisposition.Change =>
+				beneficiaryFacts is [var beneficiary] &&
+				beneficiary.BeneficiaryPrecedence == 0,
+			_ => false
+		};
+		var agentValid = policy.FactionAgents switch
+		{
+			PermanentRoleSwapDisposition.Preserve => agentFacts.Length == 0,
+			PermanentRoleSwapDisposition.Change =>
+				agentFacts.Length == Enum.GetValues<Faction>().Length &&
+				Enum.GetValues<Faction>().All(faction =>
+					agentFacts.Count(fact => fact.Faction == faction) == 1),
+			_ => false
+		};
+		return beneficiaryValid && agentValid;
+	}
+}
+
 public sealed record PermanentRoleSwapVotingState(
 	bool HasVotingRight,
 	int DurableVotingPower)

@@ -54,6 +54,21 @@ public sealed record PermanentRoleSwapCommittedLogEntry
 			throw new InvalidOperationException(
 				"Permanent Role Swap requires an explicit category policy and valid Faction facts.");
 		}
+		if (!PermanentRoleSwapFactionFacts.IsCanonicalSource(
+				Source,
+				PlayerId,
+				NewPowerInstanceId) ||
+			!PermanentRoleSwapFactionFacts.IsValidCommittedBatch(
+				PlayerId,
+				Policy,
+				Facts,
+				TurnNumber,
+				CurrentPhase,
+				expectedOrder: null))
+		{
+			throw new InvalidOperationException(
+				"Permanent Role Swap Faction facts are invalid.");
+		}
 		if (Facts.Distinct().Count() != Facts.Length ||
 			Facts.GroupBy(FactionFactProjection.FactBoundaryKey)
 				.Any(group => group.Count() > 1) ||

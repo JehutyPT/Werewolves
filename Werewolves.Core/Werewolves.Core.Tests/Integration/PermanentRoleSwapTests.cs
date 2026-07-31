@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using FluentAssertions;
 using Werewolves.Core.GameLogic.Queries;
 using Werewolves.Core.GameLogic.RolePowers;
@@ -203,6 +204,178 @@ public class PermanentRoleSwapTests
 			.Should().BeFalse();
 		session.GameHistoryLog.OfType<PermanentRoleSwapCommittedLogEntry>()
 			.Should().ContainSingle();
+	}
+
+	[Theory]
+	[InlineData(PlayerProjectionTamper.CurrentRole)]
+	[InlineData(PlayerProjectionTamper.ModeratorKnownRole)]
+	[InlineData(PlayerProjectionTamper.PubliclyRevealedRole)]
+	[InlineData(PlayerProjectionTamper.ClearedStatusEffect)]
+	[InlineData(PlayerProjectionTamper.PreservedStatusEffect)]
+	[InlineData(PlayerProjectionTamper.HasVotingRight)]
+	[InlineData(PlayerProjectionTamper.DurableVotingPower)]
+	public void PermanentRoleSwap_RecoveryRejectsContradictoryPlayerProjection(
+		PlayerProjectionTamper tamper)
+	{
+		var (session, playerId) = CreateStableSimpleSwap();
+		var payload = RecoveryPayloadTestDriver.Parse(session.Serialize());
+		switch (tamper)
+		{
+			case PlayerProjectionTamper.CurrentRole:
+				payload.RewriteCurrentRole(playerId, MainRoleType.Seer);
+				break;
+			case PlayerProjectionTamper.ModeratorKnownRole:
+				payload.RewriteModeratorKnownRole(playerId, MainRoleType.Seer);
+				break;
+			case PlayerProjectionTamper.PubliclyRevealedRole:
+				payload.RewritePubliclyRevealedRole(
+					playerId,
+					MainRoleType.SimpleVillager);
+				break;
+			case PlayerProjectionTamper.ClearedStatusEffect:
+				payload.RewriteActiveEffects(
+					playerId,
+					payload.GetActiveEffects(playerId) |
+						StatusEffectTypes.Charmed);
+				break;
+			case PlayerProjectionTamper.PreservedStatusEffect:
+				payload.RewriteActiveEffects(
+					playerId,
+					payload.GetActiveEffects(playerId) &
+						~StatusEffectTypes.LycanthropyInfection);
+				break;
+			case PlayerProjectionTamper.HasVotingRight:
+				payload.RewriteVotingState(
+					playerId,
+					hasVotingRight: true,
+					durableVotingPower: 2);
+				break;
+			case PlayerProjectionTamper.DurableVotingPower:
+				payload.RewriteVotingState(
+					playerId,
+					hasVotingRight: false,
+					durableVotingPower: 1);
+				break;
+			default:
+				throw new ArgumentOutOfRangeException(nameof(tamper));
+		}
+		var tampered = payload.Serialize();
+
+		Action rehydrate = () => new GameService().RehydrateSession(tampered);
+
+		rehydrate.Should().Throw<InvalidOperationException>();
+	}
+
+	[Theory]
+	[InlineData(FactionSourceTamper.Kind)]
+	[InlineData(FactionSourceTamper.Identifier)]
+	public void PermanentRoleSwap_RecoveryRejectsNonCanonicalFactionSource(
+		FactionSourceTamper tamper)
+	{
+		var (session, _) = CreateStableSimpleSwap();
+		var payload = RecoveryPayloadTestDriver.Parse(session.Serialize());
+		if (tamper == FactionSourceTamper.Kind)
+		{
+			payload.RewriteLatestPermanentRoleSwapSource(
+				FactionFactSourceKind.ScheduledObservation);
+		}
+		else
+		{
+			payload.RewriteLatestPermanentRoleSwapSourceIdentifier(
+				"permanent-role-swap:noncanonical");
+		}
+		var tampered = payload.Serialize();
+
+		Action rehydrate = () => new GameService().RehydrateSession(tampered);
+
+		rehydrate.Should().Throw<InvalidOperationException>();
+	}
+
+	[Theory]
+	[InlineData(FactionBatchTamper.MissingAgent)]
+	[InlineData(FactionBatchTamper.ExtraAgent)]
+	[InlineData(FactionBatchTamper.WrongAgentDefault)]
+	[InlineData(FactionBatchTamper.WrongBeneficiary)]
+	[InlineData(FactionBatchTamper.WrongBeneficiaryPrecedence)]
+	[InlineData(FactionBatchTamper.WrongBoundaryOrder)]
+	[InlineData(FactionBatchTamper.WrongBoundaryPhase)]
+	public void PermanentRoleSwap_RecoveryRejectsInvalidFactionBatch(
+		FactionBatchTamper tamper)
+	{
+		var (session, _) = CreateStableSimpleSwap();
+		var payload = ApplyFactionBatchTamper(
+			RecoveryPayloadTestDriver.Parse(session.Serialize()),
+			tamper);
+		var tampered = payload.Serialize();
+
+		Action rehydrate = () => new GameService().RehydrateSession(tampered);
+
+		rehydrate.Should().Throw<InvalidOperationException>();
+	}
+
+	[Fact]
+	public void PermanentRoleSwap_RecoveryReplaysLaterSemanticPlayerChanges()
+	{
+		var (session, playerId) = CreateStableSimpleSwap((builder, player) =>
+		{
+			builder
+				.ArrangeKnownRole(player.Id, MainRoleType.Seer)
+				.ArrangePubliclyRevealedRole(
+					player.Id,
+					MainRoleType.SimpleVillager)
+				.ArrangeStatusEffect(player.Id, StatusEffectTypes.Charmed)
+				.ArrangeVotingRight(player.Id, hasVotingRight: true);
+		});
+		var acquiredCardId = session.GetPlayerState(playerId)
+			.PhysicalCharacterCardId!.Value;
+
+		var recoveredService = new GameService();
+		var recoveredId = recoveredService.RehydrateSession(session.Serialize());
+		var recovered = recoveredService.GetGameStateView(recoveredId)!;
+		var player = recovered.GetPlayer(playerId);
+
+		player.State.CurrentRole.Should().Be(MainRoleType.Seer);
+		player.State.ModeratorKnownRole.Should().Be(MainRoleType.Seer);
+		player.State.PubliclyRevealedRole.Should().Be(
+			MainRoleType.SimpleVillager);
+		player.State.GetActiveStatusEffects().Should()
+			.Contain(StatusEffectTypes.Charmed)
+			.And.Contain(StatusEffectTypes.LycanthropyInfection);
+		player.State.HasVotingRight.Should().BeTrue();
+		player.State.DurableVotingPower.Should().Be(2);
+		player.State.PhysicalCharacterCardId.Should().Be(acquiredCardId);
+		player.State.PhysicalCharacterCardRole.Should().Be(
+			MainRoleType.SimpleVillager);
+	}
+
+	[Fact]
+	public void PermanentRoleSwap_RecoveryRejectsPowerInstanceCollidingWithNativeIdentity()
+	{
+		var (session, playerId) = CreateStableSimpleSwap();
+		var tampered = RecoveryPayloadTestDriver
+			.Parse(session.Serialize())
+			.RewriteLatestPermanentRoleSwapPowerInstanceId(playerId)
+			.Serialize();
+
+		Action rehydrate = () => new GameService().RehydrateSession(tampered);
+
+		rehydrate.Should().Throw<InvalidOperationException>()
+			.WithMessage("*power-instance identity is not fresh*");
+	}
+
+	[Fact]
+	public void PermanentRoleSwap_RecoveryRejectsReusedEarlierSwapIdentity()
+	{
+		var (session, firstPowerInstanceId) = CreateStableTwoSwapSession();
+		var tampered = RecoveryPayloadTestDriver
+			.Parse(session.Serialize())
+			.RewriteLatestPermanentRoleSwapPowerInstanceId(firstPowerInstanceId)
+			.Serialize();
+
+		Action rehydrate = () => new GameService().RehydrateSession(tampered);
+
+		rehydrate.Should().Throw<InvalidOperationException>()
+			.WithMessage("*power-instance identity is not fresh*");
 	}
 
 	[Fact]
@@ -727,6 +900,238 @@ public class PermanentRoleSwapTests
 			.IsSuccess.Should().BeTrue();
 	}
 
+	private static RecoveryPayloadTestDriver ApplyFactionBatchTamper(
+		RecoveryPayloadTestDriver payload,
+		FactionBatchTamper tamper)
+	{
+		if (tamper == FactionBatchTamper.WrongBeneficiary)
+		{
+			return payload.RewriteLatestPermanentRoleSwapBeneficiaryAndCache(
+				Faction.Werewolf);
+		}
+
+		payload.RewriteLatestPermanentRoleSwapFacts(facts =>
+			RewriteFactionBatch(facts, tamper));
+		return payload;
+	}
+
+	private static ImmutableArray<FactionFact> RewriteFactionBatch(
+		ImmutableArray<FactionFact> facts,
+		FactionBatchTamper tamper)
+	{
+		var firstAgent = facts.First(fact =>
+			fact.Type == FactionFactType.Agent);
+		return tamper switch
+		{
+			FactionBatchTamper.MissingAgent => facts
+				.Where(fact => fact != firstAgent)
+				.ToImmutableArray(),
+			FactionBatchTamper.ExtraAgent => facts.Add(
+				FactionFact.Agent(
+					firstAgent.PlayerId,
+					firstAgent.Faction,
+					firstAgent.AgentKnowledge!.Value,
+					new FactionFactEffectiveBoundary(
+						firstAgent.EffectiveBoundary.TurnNumber,
+						firstAgent.EffectiveBoundary.Phase,
+						firstAgent.EffectiveBoundary.Order + 1))),
+			FactionBatchTamper.WrongAgentDefault => facts
+				.Select(fact =>
+					fact.Type == FactionFactType.Agent &&
+					fact.Faction == Faction.Werewolf
+						? FactionFact.Agent(
+							fact.PlayerId,
+							fact.Faction,
+							FactionAgentKnowledge.KnownAgent,
+							fact.EffectiveBoundary)
+						: fact)
+				.ToImmutableArray(),
+			FactionBatchTamper.WrongBeneficiaryPrecedence => facts
+				.Select(fact =>
+					fact.Type == FactionFactType.Beneficiary
+						? FactionFact.Beneficiary(
+							fact.PlayerId,
+							fact.Faction,
+							fact.EffectiveBoundary,
+							beneficiaryPrecedence: 1)
+						: fact)
+				.ToImmutableArray(),
+			FactionBatchTamper.WrongBoundaryOrder => facts
+				.Select(fact => RewriteFactionFactBoundary(
+					fact,
+					new FactionFactEffectiveBoundary(
+						fact.EffectiveBoundary.TurnNumber,
+						fact.EffectiveBoundary.Phase,
+						fact.EffectiveBoundary.Order + 1)))
+				.ToImmutableArray(),
+			FactionBatchTamper.WrongBoundaryPhase => facts
+				.Select(fact => RewriteFactionFactBoundary(
+					fact,
+					new FactionFactEffectiveBoundary(
+						fact.EffectiveBoundary.TurnNumber,
+						fact.EffectiveBoundary.Phase == GamePhase.Night
+							? GamePhase.Dawn
+							: GamePhase.Night,
+						fact.EffectiveBoundary.Order)))
+				.ToImmutableArray(),
+			_ => throw new ArgumentOutOfRangeException(nameof(tamper))
+		};
+	}
+
+	private static FactionFact RewriteFactionFactBoundary(
+		FactionFact fact,
+		FactionFactEffectiveBoundary boundary) =>
+		fact.Type == FactionFactType.Beneficiary
+			? FactionFact.Beneficiary(
+				fact.PlayerId,
+				fact.Faction,
+				boundary,
+				fact.BeneficiaryPrecedence!.Value)
+			: FactionFact.Agent(
+				fact.PlayerId,
+				fact.Faction,
+				fact.AgentKnowledge!.Value,
+				boundary);
+
+	private static (IGameSession Session, Guid PlayerId) CreateStableSimpleSwap(
+		Action<GameTestBuilder, IPlayer>? afterSwap = null)
+	{
+		var builder = GameTestBuilder.Create()
+			.WithPlayers(5)
+			.WithRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Seer,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		var session = builder.GetGameState()!;
+		var players = session.GetPlayers().ToArray();
+		var player = players[0];
+		var outgoing = session.GetModeratorPhysicalCharacterCards()
+			.Single(state => state.Card.PrintedRole == MainRoleType.Seer);
+		var acquired = session.GetModeratorPhysicalCharacterCards()
+			.First(state => state.Card.PrintedRole == MainRoleType.SimpleVillager);
+		builder.GameService.TryRecordPhysicalCharacterCardOwnership(
+			builder.GameId,
+			session.RoleLockIn.Version,
+			player.Id,
+			outgoing.Card.Id).Should().BeTrue();
+		builder
+			.ArrangeKnownRole(player.Id, MainRoleType.Seer)
+			.ArrangePubliclyRevealedRole(player.Id, MainRoleType.Seer)
+			.ArrangeStatusEffect(player.Id, StatusEffectTypes.Charmed)
+			.ArrangeStatusEffect(
+				player.Id,
+				StatusEffectTypes.LycanthropyInfection);
+		builder.GameService.TryCommitPermanentRoleSwap(
+			builder.GameId,
+			new PermanentRoleSwapRequest(
+				session.RoleLockIn.Version,
+				player.Id,
+				MainRoleType.Seer,
+				MainRoleType.SimpleVillager,
+				new PermanentRoleSwapCardMovement(
+					outgoing.Card.Id,
+					acquired.Card.Id,
+					[]),
+				ThiefPolicy() with
+				{
+					StatusEffects = PermanentRoleSwapDisposition.Clear,
+					VotingState = PermanentRoleSwapDisposition.Change
+				},
+				VillagerFactionReplacement(),
+				new PermanentRoleSwapStateChanges(
+					new HashSet<StatusEffectTypes>(),
+					new HashSet<StatusEffectTypes>
+					{
+						StatusEffectTypes.Charmed
+					},
+					new PermanentRoleSwapVotingState(
+						HasVotingRight: false,
+						DurableVotingPower: 2),
+					new HashSet<string>(),
+					new HashSet<string>()))).Should().BeTrue();
+		afterSwap?.Invoke(builder, player);
+		AdvanceToStableWerewolfObservationBoundary(builder, players[1].Id);
+		return (session, player.Id);
+	}
+
+	private static (IGameSession Session, Guid FirstPowerInstanceId)
+		CreateStableTwoSwapSession()
+	{
+		var builder = GameTestBuilder.Create()
+			.WithPlayers(5)
+			.WithRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Seer,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		var session = builder.GetGameState()!;
+		var players = session.GetPlayers().ToArray();
+		var seerCard = session.GetModeratorPhysicalCharacterCards()
+			.Single(state => state.Card.PrintedRole == MainRoleType.Seer);
+		var werewolfCard = session.GetModeratorPhysicalCharacterCards()
+			.First(state =>
+				state.Card.PrintedRole == MainRoleType.SimpleWerewolf);
+		var villagerCards = session.GetModeratorPhysicalCharacterCards()
+			.Where(state =>
+				state.Card.PrintedRole == MainRoleType.SimpleVillager)
+			.ToArray();
+		builder.GameService.TryRecordPhysicalCharacterCardOwnership(
+			builder.GameId,
+			session.RoleLockIn.Version,
+			players[0].Id,
+			seerCard.Card.Id).Should().BeTrue();
+		builder.GameService.TryRecordPhysicalCharacterCardOwnership(
+			builder.GameId,
+			session.RoleLockIn.Version,
+			players[1].Id,
+			werewolfCard.Card.Id).Should().BeTrue();
+		builder
+			.ArrangeKnownRole(players[0].Id, MainRoleType.Seer)
+			.ArrangeKnownRole(players[1].Id, MainRoleType.SimpleWerewolf);
+		builder.GameService.TryCommitPermanentRoleSwap(
+			builder.GameId,
+			CreateRequest(
+				players[0].Id,
+				MainRoleType.Seer,
+				seerCard.Card.Id,
+				villagerCards[0].Card.Id)).Should().BeTrue();
+		builder.GameService.TryCommitPermanentRoleSwap(
+			builder.GameId,
+			CreateRequest(
+				players[1].Id,
+				MainRoleType.SimpleWerewolf,
+				werewolfCard.Card.Id,
+				villagerCards[1].Card.Id)).Should().BeTrue();
+		var firstPowerInstanceId = session.GameHistoryLog
+			.OfType<PermanentRoleSwapCommittedLogEntry>()
+			.First().NewPowerInstanceId;
+		AdvanceToStableWerewolfObservationBoundary(builder, players[2].Id);
+		return (session, firstPowerInstanceId);
+
+		PermanentRoleSwapRequest CreateRequest(
+			Guid playerId,
+			MainRoleType expectedRole,
+			Guid outgoingCardId,
+			Guid acquiredCardId) =>
+			new(
+				session.RoleLockIn.Version,
+				playerId,
+				expectedRole,
+				MainRoleType.SimpleVillager,
+				new PermanentRoleSwapCardMovement(
+					outgoingCardId,
+					acquiredCardId,
+					[]),
+				ThiefPolicy(),
+				VillagerFactionReplacement(),
+				PermanentRoleSwapStateChanges.None);
+	}
+
 	private static PermanentRoleSwapFactionReplacement VillagerFactionReplacement() =>
 		new(
 			Faction.Villager,
@@ -755,6 +1160,34 @@ public class PermanentRoleSwapTests
 			Restrictions: PermanentRoleSwapDisposition.Preserve,
 			Assignments: PermanentRoleSwapDisposition.Preserve,
 			RolePowerState: PermanentRoleSwapDisposition.Change);
+
+	public enum PlayerProjectionTamper
+	{
+		CurrentRole,
+		ModeratorKnownRole,
+		PubliclyRevealedRole,
+		ClearedStatusEffect,
+		PreservedStatusEffect,
+		HasVotingRight,
+		DurableVotingPower
+	}
+
+	public enum FactionSourceTamper
+	{
+		Kind,
+		Identifier
+	}
+
+	public enum FactionBatchTamper
+	{
+		MissingAgent,
+		ExtraAgent,
+		WrongAgentDefault,
+		WrongBeneficiary,
+		WrongBeneficiaryPrecedence,
+		WrongBoundaryOrder,
+		WrongBoundaryPhase
+	}
 
 	private sealed class RecordingPolicy(RolePowerAvailabilityResult result)
 		: IRolePowerAvailabilityPolicy

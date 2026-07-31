@@ -99,6 +99,73 @@ public sealed class HunterRoleTests(ITestOutputHelper output)
 	}
 
 	[Fact]
+	public void DawnAttack_PreOwnedHunterCard_ContinueRevealRecordsInitialRoleBeforeFinalShot()
+	{
+		var builder = CreateBuilder()
+			.WithPlayers(
+				"Werewolf",
+				"Hunter",
+				"Shot target",
+				"Villager A",
+				"Villager B")
+			.WithRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Hunter,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		var session = builder.GetGameState()!;
+		var players = session.GetPlayers().ToArray();
+		var hunterId = players[1].Id;
+		var hunterCard = session.GetModeratorPhysicalCharacterCards()
+			.Single(state =>
+				state.Zone == PhysicalCharacterCardZone.DealPool &&
+				state.Card.PrintedRole == MainRoleType.Hunter)
+			.Card;
+
+		builder.GameService.TryRecordPhysicalCharacterCardOwnership(
+				builder.GameId,
+				session.RoleLockIn.Version,
+				hunterId,
+				hunterCard.Id)
+			.Should().BeTrue();
+		var beforeReveal = session.GetPlayerState(hunterId);
+		beforeReveal.CurrentRole.Should().BeNull();
+		beforeReveal.ModeratorKnownRole.Should().BeNull();
+
+		builder.ConfirmGameStart();
+		builder.ConfirmNightStart();
+		var finishNight = builder.CompleteWerewolfNightAction(
+				[players[0].Id],
+				hunterId)
+			.ModeratorInstruction.Should()
+			.BeOfType<ConfirmationInstruction>().Subject;
+		var hunterReveal = builder.Process(finishNight.CreateResponse())
+			.ModeratorInstruction.Should()
+			.BeOfType<ConfirmationInstruction>().Subject;
+
+		var finalShot = builder.Process(hunterReveal.CreateResponse())
+			.ModeratorInstruction.Should()
+			.BeOfType<SelectPlayersInstruction>().Subject;
+
+		finalShot.Semantic.Should().Be(
+			ModeratorInstructionSemantic.SelectHunterFinalShotTarget);
+		var revealedHunter = session.GetPlayerState(hunterId);
+		revealedHunter.CurrentRole.Should().Be(MainRoleType.Hunter);
+		revealedHunter.ModeratorKnownRole.Should().BeNull();
+		revealedHunter.PubliclyRevealedRole.Should().Be(MainRoleType.Hunter);
+		session.GameHistoryLog.OfType<AssignRoleLogEntry>()
+			.Should().ContainSingle(entry =>
+				entry.AssignedMainRole == MainRoleType.Hunter &&
+				entry.PlayerIds.Contains(hunterId));
+		session.GameHistoryLog.OfType<RoleIdentificationLogEntry>()
+			.Should().NotContain(entry => entry.PlayerIds.Contains(hunterId));
+
+		MarkTestCompleted();
+	}
+
+	[Fact]
 	public void PendingFinalShot_RehydratesExactlyAndNewSuppressionCannotCancelIt()
 	{
 		var (builder, players, finalShot) = StartDawnHunterFinalShot();

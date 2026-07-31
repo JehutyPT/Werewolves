@@ -297,7 +297,7 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
     }
 
     [Fact]
-    public void GenericRoleReveal_UnknownDawnVictim_MapsBeforeEliminationWithoutInventoryInference()
+	public void GenericRoleReveal_UnknownDawnVictim_BindsDealPoolCardAndRecordsInitialCurrentRole()
     {
         var builder = CreateBuilder()
             .WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);
@@ -321,7 +321,17 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
             .Should().BeOfType<AssignRolesInstruction>().Subject;
         reveal.PlayersForAssignment.Should().Equal(unknownVictim.Id);
         reveal.AffectedPlayerIds.Should().Equal(unknownVictim.Id);
+		var matchingDealPoolCardIds = builder.GetGameState()!
+			.GetModeratorPhysicalCharacterCards()
+			.Where(state =>
+				state.Zone == PhysicalCharacterCardZone.DealPool &&
+				state.Card.PrintedRole == MainRoleType.SimpleVillager)
+			.Select(state => state.Card.Id)
+			.ToHashSet();
+		matchingDealPoolCardIds.Should().NotBeEmpty();
         unknownVictim.State.CurrentRole.Should().BeNull();
+		unknownVictim.State.ModeratorKnownRole.Should().BeNull();
+		unknownVictim.State.PhysicalCharacterCardId.Should().BeNull();
         unknownVictim.State.PubliclyRevealedRole.Should().BeNull();
         unknownVictim.State.Health.Should().Be(PlayerHealth.Alive);
         builder.GetGameState()!.GameHistoryLog.OfType<PlayerEliminatedLogEntry>()
@@ -333,27 +343,74 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
         }));
 
         afterReveal.IsSuccess.Should().BeTrue();
-        unknownVictim.State.CurrentRole.Should().Be(MainRoleType.SimpleVillager);
-        unknownVictim.State.ModeratorKnownRole.Should().Be(MainRoleType.SimpleVillager);
+		unknownVictim.State.CurrentRole.Should().Be(MainRoleType.SimpleVillager);
+		unknownVictim.State.ModeratorKnownRole.Should().BeNull();
         unknownVictim.State.PubliclyRevealedRole.Should().Be(MainRoleType.SimpleVillager);
-        unknownVictim.State.PhysicalCharacterCardRole.Should().BeNull();
+		unknownVictim.State.PhysicalCharacterCardRole.Should().Be(
+			MainRoleType.SimpleVillager);
+		unknownVictim.State.PhysicalCharacterCardId.Should().NotBeNull();
+		var ownedCardId = unknownVictim.State.PhysicalCharacterCardId!.Value;
+		matchingDealPoolCardIds.Should().Contain(ownedCardId);
+		builder.GetGameState()!.GetModeratorPhysicalCharacterCards()
+			.Single(state => state.Card.Id == ownedCardId)
+			.Should().Be(new PhysicalCharacterCardState(
+				new PhysicalCharacterCard(
+					ownedCardId,
+					MainRoleType.SimpleVillager),
+				PhysicalCharacterCardZone.PlayerOwned,
+				unknownVictim.Id));
         unknownVictim.State.Health.Should().Be(PlayerHealth.Dead);
 
         var history = builder.GetGameState()!.GameHistoryLog.ToList();
-        history.FindIndex(entry => entry is RoleRevealLogEntry).Should().BeLessThan(
-            history.FindIndex(entry =>
+		var ownershipIndex = history.FindIndex(entry =>
+			entry is PhysicalCharacterCardOwnershipObservedLogEntry ownership &&
+			ownership.PlayerId == unknownVictim.Id &&
+			ownership.CardId == ownedCardId);
+		var assignmentIndex = history.FindIndex(entry =>
+			entry is AssignRoleLogEntry assignment &&
+			assignment.AssignedMainRole == MainRoleType.SimpleVillager &&
+			assignment.PlayerIds.Contains(unknownVictim.Id));
+		var revealIndex = history.FindIndex(entry => entry is RoleRevealLogEntry);
+		var eliminationIndex = history.FindIndex(entry =>
                 entry is PlayerEliminatedLogEntry eliminated &&
-                eliminated.PlayerId == unknownVictim.Id));
-        history.OfType<AssignRoleLogEntry>().Should().BeEmpty();
+				eliminated.PlayerId == unknownVictim.Id);
+		history.OfType<PhysicalCharacterCardOwnershipObservedLogEntry>()
+			.Should().ContainSingle(entry =>
+				entry.PlayerId == unknownVictim.Id &&
+				entry.CardId == ownedCardId);
+		ownershipIndex.Should().BeLessThan(assignmentIndex);
+		assignmentIndex.Should().BeLessThan(revealIndex);
+		revealIndex.Should().BeLessThan(eliminationIndex);
+		history.OfType<AssignRoleLogEntry>().Should().ContainSingle(entry =>
+			entry.AssignedMainRole == MainRoleType.SimpleVillager &&
+			entry.PlayerIds.Contains(unknownVictim.Id));
+		history.OfType<RoleIdentificationLogEntry>().Should().NotContain(entry =>
+			entry.PlayerIds.Contains(unknownVictim.Id));
 
         var recoveredService = new GameService();
         var recoveredId = recoveredService.RehydrateSession(builder.GetGameState()!.Serialize());
         var recovered = recoveredService.GetGameStateView(recoveredId)!;
         var recoveredNext = recoveredService.GetCurrentInstruction(recoveredId)!;
 
-        recovered.GetPlayerState(unknownVictim.Id).PubliclyRevealedRole.Should()
-            .Be(MainRoleType.SimpleVillager);
-        recovered.GetPlayerState(unknownVictim.Id).Health.Should().Be(PlayerHealth.Dead);
+		var recoveredVictim = recovered.GetPlayerState(unknownVictim.Id);
+		recoveredVictim.CurrentRole.Should().Be(MainRoleType.SimpleVillager);
+		recoveredVictim.ModeratorKnownRole.Should().BeNull();
+		recoveredVictim.PhysicalCharacterCardId.Should().Be(ownedCardId);
+		recoveredVictim.PhysicalCharacterCardRole.Should().Be(
+			MainRoleType.SimpleVillager);
+		recoveredVictim.PubliclyRevealedRole.Should().Be(
+			MainRoleType.SimpleVillager);
+		recoveredVictim.Health.Should().Be(PlayerHealth.Dead);
+		recovered.GetModeratorPhysicalCharacterCards()
+			.Single(state => state.Card.Id == ownedCardId)
+			.Should().Match<PhysicalCharacterCardState>(state =>
+				state.Zone == PhysicalCharacterCardZone.PlayerOwned &&
+				state.OwnerPlayerId == unknownVictim.Id);
+		recovered.GameHistoryLog
+			.OfType<PhysicalCharacterCardOwnershipObservedLogEntry>()
+			.Should().ContainSingle(entry =>
+				entry.PlayerId == unknownVictim.Id &&
+				entry.CardId == ownedCardId);
         recovered.GameHistoryLog.OfType<RoleRevealLogEntry>().Should().ContainSingle();
         recovered.GameHistoryLog.OfType<PlayerEliminatedLogEntry>().Should()
             .ContainSingle(entry => entry.PlayerId == unknownVictim.Id);

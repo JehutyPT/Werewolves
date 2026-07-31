@@ -117,6 +117,9 @@ public class SimulationRoleLockInTests
 		var config = startState.CreateGameSessionConfig();
 
 		CanonicalRoleComposition.Create(config.Roles).Should().Be(
+			CanonicalRoleComposition.Create(dealPool));
+		CanonicalRoleComposition.Create(config.RoleLockIn.RoleComposition
+			.Select(card => card.PrintedRole)).Should().Be(
 			CanonicalRoleComposition.Create(dealPool.Concat(
 				[MainRoleType.Seer, MainRoleType.Cupid])));
 		config.RoleLockIn.DealPool.Select(card => card.PrintedRole)

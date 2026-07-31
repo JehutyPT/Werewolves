@@ -287,7 +287,7 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 	}
 
 	[Fact]
-	public void DawnCommittedAndUnknownVictims_RevealOneAtomicBatch()
+	public void DawnCommittedAndUnknownVictims_RevealOneAtomicBatchWithDistinctDuplicateRoleCards()
 	{
 		var builder = CreateBuilder()
 			.WithPlayers(
@@ -355,20 +355,58 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 		PublicGameSessionSnapshot.Capture(builder).Should().BeEquivalentTo(
 			beforeInvalidReveal,
 			options => options.WithStrictOrdering());
+		var expectedCardIds = builder.GetGameState()!
+			.GetModeratorPhysicalCharacterCards()
+			.Where(state =>
+				state.Zone == PhysicalCharacterCardZone.DealPool &&
+				state.Card.PrintedRole == MainRoleType.SimpleVillager)
+			.Select(state => state.Card.Id)
+			.Take(2)
+			.ToArray();
+		expectedCardIds.Should().HaveCount(2);
+		builder.GetGameState()!.GetPlayerState(players[1].Id).CurrentRole
+			.Should().Be(MainRoleType.Witch);
+		builder.GetGameState()!.GetPlayerState(players[1].Id).ModeratorKnownRole
+			.Should().Be(MainRoleType.Witch);
+		builder.GetGameState()!.GetPlayerState(players[2].Id).CurrentRole
+			.Should().BeNull();
+		builder.GetGameState()!.GetPlayerState(players[2].Id).ModeratorKnownRole
+			.Should().BeNull();
 
 		builder.Process(reveal.CreateResponse(new()
 		{
-			[players[1].Id] = MainRoleType.Witch,
+			[players[1].Id] = MainRoleType.SimpleVillager,
 			[players[2].Id] = MainRoleType.SimpleVillager
 		}));
 
 		var session = builder.GetGameState()!;
+		var ownerships = session.GameHistoryLog
+			.OfType<PhysicalCharacterCardOwnershipObservedLogEntry>()
+			.Where(entry => entry.PlayerId == players[1].Id ||
+				entry.PlayerId == players[2].Id)
+			.ToArray();
+		ownerships.Should().HaveCount(2);
+		ownerships.Select(entry => entry.PlayerId).Should().OnlyHaveUniqueItems();
+		ownerships.Select(entry => entry.CardId).Should()
+			.Equal(expectedCardIds)
+			.And.OnlyHaveUniqueItems();
+		session.GetPlayerState(players[1].Id).CurrentRole.Should()
+			.Be(MainRoleType.Witch);
+		session.GetPlayerState(players[1].Id).ModeratorKnownRole.Should()
+			.Be(MainRoleType.Witch);
+		session.GetPlayerState(players[2].Id).CurrentRole.Should()
+			.Be(MainRoleType.SimpleVillager);
+		session.GetPlayerState(players[2].Id).ModeratorKnownRole.Should().BeNull();
+		session.GetPlayerState(players[1].Id).PhysicalCharacterCardRole.Should()
+			.Be(MainRoleType.SimpleVillager);
+		session.GetPlayerState(players[2].Id).PhysicalCharacterCardRole.Should()
+			.Be(MainRoleType.SimpleVillager);
 		session.GameHistoryLog
 			.OfType<RoleRevealLogEntry>()
 			.Should().ContainSingle(entry =>
 				entry.RevealedRoles.Count == 2 &&
 				entry.RevealedRoles.GetValueOrDefault(
-					players[1].Id) == MainRoleType.Witch &&
+					players[1].Id) == MainRoleType.SimpleVillager &&
 				entry.RevealedRoles.GetValueOrDefault(
 					players[2].Id) == MainRoleType.SimpleVillager);
 		session.GameHistoryLog

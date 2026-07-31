@@ -18,23 +18,27 @@ internal sealed partial class GameSessionKernel
             ArgumentNullException.ThrowIfNull(playerIds);
 
             entry.EnforceValidity();
+			ValidatePermanentRoleSwapPowerInstance(entry, playerIds);
             ValidateOneUseResourceCommit(entry);
             ValidateEliminationCascadeBatchResolution(entry);
             ValidateEliminationCascadeCompletion(entry);
             ValidateEliminationCascadeReactionCompletion(entry);
             ValidateLoversPairCommitment(entry, playerIds);
             ValidateFactionFacts(entry, playerIds);
+			ValidatePermanentRoleSwapFactionBoundary(entry);
         }
 
         internal void AddLogEntry(SessionMutator.IStateMutatorKey key, GameLogEntryBase entry)
         {
             entry.EnforceValidity();
+			ValidatePermanentRoleSwapPowerInstance(entry, playerIds: null);
             ValidateOneUseResourceCommit(entry);
             ValidateEliminationCascadeBatchResolution(entry);
             ValidateEliminationCascadeCompletion(entry);
             ValidateEliminationCascadeReactionCompletion(entry);
             ValidateLoversPairCommitment(entry, playerIds: null);
             ValidateFactionFacts(entry, playerIds: null);
+			ValidatePermanentRoleSwapFactionBoundary(entry);
             _logEntries.Add(entry);
         }
 
@@ -149,6 +153,39 @@ internal sealed partial class GameSessionKernel
                     "Faction history already contains a fact at this boundary.");
             }
         }
+
+		private void ValidatePermanentRoleSwapFactionBoundary(
+			GameLogEntryBase entry)
+		{
+			if (entry is PermanentRoleSwapCommittedLogEntry swap &&
+				!PermanentRoleSwapFactionFacts.IsValidCommittedBatch(
+					swap.PlayerId,
+					swap.Policy,
+					swap.Facts,
+					swap.TurnNumber,
+					swap.CurrentPhase,
+					_logEntries.Count))
+			{
+				throw new InvalidOperationException(
+					"Permanent Role Swap Faction fact boundary does not match its committed history position.");
+			}
+		}
+
+		private void ValidatePermanentRoleSwapPowerInstance(
+			GameLogEntryBase entry,
+			IReadOnlyCollection<Guid>? playerIds)
+		{
+			if (entry is PermanentRoleSwapCommittedLogEntry swap &&
+				(playerIds?.Contains(swap.NewPowerInstanceId) == true ||
+				 _logEntries
+					 .OfType<PermanentRoleSwapCommittedLogEntry>()
+					 .Any(existing =>
+						 existing.NewPowerInstanceId == swap.NewPowerInstanceId)))
+			{
+				throw new InvalidOperationException(
+					"The Permanent Role Swap power-instance identity is not fresh.");
+			}
+		}
 
         private void ValidateLoversPairCommitment(
             GameLogEntryBase entry,

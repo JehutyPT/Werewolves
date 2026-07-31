@@ -147,12 +147,14 @@ public static class SimulationStartStateDeriver
 		var playerNames = Enumerable.Range(1, startState.PlayerCount)
 			.Select(seatNumber => $"Simulation Player {seatNumber}")
 			.ToList();
+		var assignedRoles = startState.RoleAssignments
+			.Select(assignment => assignment.Role)
+			.ToList();
 		if (startState.CanonicalScenario.Offer1Role is not { } offer1Role ||
-			startState.CanonicalScenario.Offer2Role is not { } offer2Role)
+			startState.CanonicalScenario.Offer2Role is not { } offer2Role ||
+			!assignedRoles.Contains(MainRoleType.Thief))
 		{
-			return new GameSessionConfig(
-				playerNames,
-				startState.RoleAssignments.Select(assignment => assignment.Role).ToList());
+			return new GameSessionConfig(playerNames, assignedRoles);
 		}
 
 		var dealPoolCards = startState.RoleAssignments

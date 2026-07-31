@@ -66,39 +66,63 @@ internal static class RoleKnowledgeHandlers
             return;
         }
 
+		var availableDealPoolCards = session
+			.GetModeratorPhysicalCharacterCards()
+			.Where(state => state.Zone == PhysicalCharacterCardZone.DealPool)
+			.Select(state => state.Card)
+			.ToList();
+		var ownershipsToRecord = new List<(Guid PlayerId, Guid CardId)>();
         var revealedRoles = new Dictionary<Guid, MainRoleType>();
         foreach (var player in requestedPlayers)
         {
-            if (input.AssignedPlayerRoles?.TryGetValue(player.Id, out var assignedRole) == true)
-            {
-                revealedRoles[player.Id] = assignedRole;
-                continue;
-            }
-
-			var physicalRole = player.State.PhysicalCharacterCardId is { } cardId
-				? session.GetModeratorPhysicalCharacterCards()
+			if (player.State.PhysicalCharacterCardId is { } cardId)
+			{
+				revealedRoles[player.Id] = session
+					.GetModeratorPhysicalCharacterCards()
 					.Single(cardState => cardState.Card.Id == cardId)
-					.Card.PrintedRole
-				: player.State.ModeratorKnownRole ?? player.State.CurrentRole;
-			if (physicalRole is not { } revealedRole)
+					.Card.PrintedRole;
+				continue;
+			}
+
+			if (input.AssignedPlayerRoles?.TryGetValue(
+					player.Id,
+					out var assignedRole) != true)
             {
                 throw new InvalidOperationException(
 					$"The accepted Role Reveal response did not establish a physical Role for Player {player.Id}.");
             }
 
-			revealedRoles[player.Id] = revealedRole;
+			var card = availableDealPoolCards.FirstOrDefault(candidate =>
+				candidate.PrintedRole == assignedRole)
+				?? throw new InvalidOperationException(
+					$"No available Deal Pool card matches the accepted Role Reveal for Player {player.Id}.");
+			availableDealPoolCards.Remove(card);
+			ownershipsToRecord.Add((player.Id, card.Id));
+			revealedRoles[player.Id] = assignedRole;
         }
+		var initialRoleAssignments = requestedPlayers
+			.Where(player => player.State.CurrentRole == null)
+			.GroupBy(player => revealedRoles[player.Id])
+			.Select(group => (
+				Role: group.Key,
+				PlayerIds: group.Select(player => player.Id).ToHashSet()))
+			.ToArray();
 
-		foreach (var roleGroup in requestedPlayers
-			.Where(player =>
-				player.State.CurrentRole is null ||
-				player.State.ModeratorKnownRole is null &&
-				player.State.CurrentRole == revealedRoles[player.Id])
-			.GroupBy(player => player.State.CurrentRole ?? revealedRoles[player.Id]))
+		foreach (var (playerId, cardId) in ownershipsToRecord)
 		{
-			session.IdentifyRole(
-				roleGroup.Select(player => player.Id).ToHashSet(),
-				roleGroup.Key);
+			if (!session.TryRecordPhysicalCharacterCardOwnership(
+					session.RoleLockIn.Version,
+					playerId,
+					cardId))
+			{
+				throw new InvalidOperationException(
+					"The accepted Role Reveal physical-card mapping became stale.");
+			}
+		}
+
+		foreach (var (role, playerIds) in initialRoleAssignments)
+		{
+			session.AssignRole(playerIds, role);
 		}
 
         session.RevealRoles(revealedRoles);

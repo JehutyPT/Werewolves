@@ -309,7 +309,11 @@ internal class GameSession : IGameSession
         return agents;
     }
 
-    public int RoleInPlayCount(MainRoleType type) => _gameSessionKernel.GetRolesInPlay().Count(r => r == type);
+    public int RoleInPlayCount(MainRoleType type) =>
+		_gameSessionKernel.GetPhysicalCharacterCardStates().Count(state =>
+			state.Card.PrintedRole == type &&
+			state.Zone is PhysicalCharacterCardZone.DealPool or
+				PhysicalCharacterCardZone.PlayerOwned);
 
 	public IReadOnlyList<PhysicalCharacterCardState>
 		GetModeratorPhysicalCharacterCards() =>
@@ -391,25 +395,12 @@ internal class GameSession : IGameSession
 			TurnNumber,
 			GetCurrentPhase(),
 			GameHistoryLog.Count());
-		var facts = ImmutableArray.CreateBuilder<FactionFact>();
-		if (request.Policy.FactionBeneficiary == PermanentRoleSwapDisposition.Change)
-		{
-			facts.Add(FactionFact.Beneficiary(
-				request.PlayerId,
-				request.Factions.BeneficiaryCandidate,
-				boundary));
-		}
-		if (request.Policy.FactionAgents == PermanentRoleSwapDisposition.Change)
-		{
-			facts.AddRange(Enum.GetValues<Faction>().Select(faction =>
-				FactionFact.Agent(
-					request.PlayerId,
-					faction,
-					request.Factions.AgentFacts[faction],
-					boundary)));
-		}
-
-		var powerInstanceId = Guid.NewGuid();
+		var powerInstanceId = CreateFreshPermanentRoleSwapPowerInstanceId();
+		var facts = PermanentRoleSwapFactionFacts.CreateBatch(
+			request.PlayerId,
+			request.Policy,
+			request.Factions,
+			boundary);
 		_gameSessionKernel.AddEntryAndUpdateState(
 			new PermanentRoleSwapCommittedLogEntry
 			{
@@ -423,14 +414,32 @@ internal class GameSession : IGameSession
 				PhysicalCards = request.PhysicalCards,
 				Policy = request.Policy,
 				StateChanges = request.StateChanges,
-				Source = new FactionFactSource(
-					FactionFactSourceKind.ExplicitTransition,
-					$"permanent-role-swap:{request.PlayerId:N}:{powerInstanceId:N}"),
-				Facts = facts.ToImmutable(),
+				Source = PermanentRoleSwapFactionFacts.CreateSource(
+					request.PlayerId,
+					powerInstanceId),
+				Facts = facts,
 				NewPowerInstanceId = powerInstanceId,
 				PowerInstanceOrigin = RolePowerInstanceOrigin.Swapped
 			});
 		return true;
+	}
+
+	private Guid CreateFreshPermanentRoleSwapPowerInstanceId()
+	{
+		var reservedIds = GetPlayers()
+			.Select(player => player.Id)
+			.Concat(GameHistoryLog
+				.OfType<PermanentRoleSwapCommittedLogEntry>()
+				.Select(entry => entry.NewPowerInstanceId))
+			.ToHashSet();
+		Guid candidate;
+		do
+		{
+			candidate = Guid.NewGuid();
+		}
+		while (reservedIds.Contains(candidate));
+
+		return candidate;
 	}
 
 	private bool CanCommitPermanentRoleSwap(PermanentRoleSwapRequest request)
