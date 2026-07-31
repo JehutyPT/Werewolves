@@ -14,8 +14,9 @@ internal sealed record PossibleGameResultInventory(
 	{
 		ArgumentNullException.ThrowIfNull(scenario);
 		ArgumentNullException.ThrowIfNull(profile);
+		var canonicalScenario = scenario.ToCanonical();
 		var factions = new HashSet<Faction>();
-		foreach (var entry in scenario.ToCanonical().RoleComposition.Entries)
+		foreach (var entry in canonicalScenario.RoleComposition.Entries)
 		{
 			if (!profile.TryGetBeneficiaryFaction(entry.Role, out var faction)
 				|| !Enum.IsDefined(faction))
@@ -25,6 +26,11 @@ internal sealed record PossibleGameResultInventory(
 			}
 
 			factions.Add(faction);
+		}
+		if (canonicalScenario.RoleComposition.Entries.Any(entry =>
+			    entry.Role == MainRoleType.Cupid))
+		{
+			factions.Add(Faction.CrossFactionLovers);
 		}
 
 		var orderedFactions = factions.Order().ToArray();

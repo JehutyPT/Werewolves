@@ -68,7 +68,7 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 			calls++;
 			throw new InvalidOperationException();
 		});
-		var scenario = Scenario(MainRoleType.Cupid, MainRoleType.SimpleWerewolf,
+		var scenario = Scenario(MainRoleType.Elder, MainRoleType.SimpleWerewolf,
 			MainRoleType.SimpleVillager, MainRoleType.SimpleVillager, MainRoleType.SimpleVillager);
 
 		var result = evaluator.Evaluate(
@@ -79,7 +79,7 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 		var stopped = result.Should().BeOfType<AppUnsupportedLobbyEvaluation>().Subject.AppSupport;
 		stopped.Scenario.Should().BeSameAs(scenario);
 		stopped.IsSupported.Should().BeFalse();
-		stopped.UnsupportedRoles.Should().Contain(MainRoleType.Cupid);
+		stopped.UnsupportedRoles.Should().Contain(MainRoleType.Elder);
 		calls.Should().Be(0);
 		MarkTestCompleted();
 	}

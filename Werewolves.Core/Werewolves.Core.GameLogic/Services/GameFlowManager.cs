@@ -128,6 +128,10 @@ internal static class GameFlowManager
 			EliminationCascadeReactionBoundary.Forced,
 			Listener(WildChild)),
 		new(
+			EliminationCascadeReactionIds.LoversHeartbreak,
+			EliminationCascadeReactionBoundary.Forced,
+			Listener(Cupid)),
+		new(
 			EliminationCascadeReactionIds.HunterFinalShot,
 			EliminationCascadeReactionBoundary.Interactive,
 			Listener(Hunter))
@@ -648,11 +652,18 @@ internal static class GameFlowManager
 
     private static bool HasNewRecurringRolePowerCommit(
         GameSession session,
-        int startingLogCount) =>
-        session.GameHistoryLog
+        int startingLogCount)
+    {
+        var hasRecurringRolePowerCommit = session.GameHistoryLog
             .Skip(startingLogCount)
             .OfType<RecurringRolePowerCommittedLogEntry>()
             .Any();
+        return hasRecurringRolePowerCommit ||
+               GameSessionQueries.GetCommittedLoversPairsSince(
+                       session,
+                       startingLogCount)
+                   .Count > 0;
+    }
 
     private static bool HasNewTargetPrivateRolePowerCommit(
         GameSession session,
@@ -706,14 +717,54 @@ internal static class GameFlowManager
             .Skip(startingLogCount)
             .OfType<TargetPrivateRolePowerCommittedLogEntry>()
             .ToArray();
+        var newLoversPairEntries =
+            GameSessionQueries.GetCommittedLoversPairsSince(
+                session,
+                startingLogCount);
         var domainCommitKinds =
             (newCommittedEntries.Length > 0 ? 1 : 0) +
             (newRecurringEntries.Length > 0 ? 1 : 0) +
-            (newTargetPrivateEntries.Length > 0 ? 1 : 0);
+            (newTargetPrivateEntries.Length > 0 ? 1 : 0) +
+            (newLoversPairEntries.Count > 0 ? 1 : 0);
         if (domainCommitKinds > 1)
         {
             throw new InvalidOperationException(
                 "One accepted response cannot produce multiple domain commits.");
+        }
+
+        if (newLoversPairEntries.Count > 0)
+        {
+            if (newLoversPairEntries is not [var pair] ||
+                !CupidRole.TryValidateCommittedRecoveryBoundary(
+                    session,
+                    startingInstruction,
+                    input,
+                    pair,
+                    nextInstruction))
+            {
+                throw new InvalidOperationException(
+                    "One accepted response must produce exactly one correlated private Lovers pair commit.");
+            }
+
+            var powerIdentity = pair.PowerIdentity;
+            return new DomainRecoveryCursor
+            {
+                Version = DomainRecoveryCursor.CurrentVersion,
+                Kind =
+                    DomainRecoveryCursorKind.RecurringNativeRolePowerCommit,
+                SourceRole = MainRoleType.Cupid,
+                CommittedActionType = NightActionType.CupidLink,
+                ActingPlayerId = powerIdentity.ActingPlayerId,
+                SourcePowerIdentifier =
+                    powerIdentity.SourcePowerIdentifier,
+                PowerInstanceId = powerIdentity.PowerInstanceId,
+                PowerInstanceOrigin =
+                    powerIdentity.PowerInstanceOrigin,
+                OneUseResourceId = Guid.Empty,
+                CommittedTargetIds = pair.PlayerIds.ToList(),
+                NextInstructionSemantic = nextInstruction.Semantic,
+                NextInstructionId = nextInstruction.InstructionId
+            };
         }
 
         if (newTargetPrivateEntries.Length > 0)
@@ -892,7 +943,8 @@ internal static class GameFlowManager
             ModeratorInstructionSemantic.AssignDawnVictimRoles or
             ModeratorInstructionSemantic.AssignDayVoteTargetRole or
             ModeratorInstructionSemantic.AssignEliminationCascadeRoles or
-            ModeratorInstructionSemantic.AnnounceBearTamerGrowl;
+            ModeratorInstructionSemantic.AnnounceBearTamerGrowl or
+            ModeratorInstructionSemantic.RecognizeLovers;
 
 		private static bool IsEliminationCascadeReactionInput(
 			ModeratorInstruction instruction) =>
@@ -1069,6 +1121,12 @@ internal static class GameFlowManager
                 ModeratorInstructionSemantic.ChooseWolfHoundAlignment
                     when cursor.ObservedRole == WolfHound =>
                     HasCommittedWolfHoundAlignment(session),
+                ModeratorInstructionSemantic.RecognizeLovers
+                    when cursor.ObservedRole == Cupid &&
+                         continuationRole == Cupid =>
+                    CupidRole.HasExpectedCommittedPairSleep(
+                        session,
+                        pendingInstruction),
                 _ => false
             };
         if (!matchesCommittedObservation)
@@ -1353,20 +1411,35 @@ internal static class GameFlowManager
                 case MainRoleType.Piper:
                     PiperRole.ValidateRecurringRecoveryCursorIdentity(cursor);
                     break;
+                case MainRoleType.Cupid:
+                    CupidRole.ValidateRecurringRecoveryCursorIdentity(cursor);
+                    break;
                 default:
                     throw new InvalidOperationException(
                         $"Unsupported recurring Role Power continuation '{sourceRole}'.");
             }
 
-            var hasMatchingRecurringCommit = session.GameHistoryLog
-                .OfType<RecurringRolePowerCommittedLogEntry>()
-                .Any(entry =>
-                    entry.ActionType == cursor.CommittedActionType &&
-                    entry.PowerIdentity == cursor.PowerIdentity &&
-                    entry.CurrentPhase == GamePhase.Night &&
-                    entry.TurnNumber == session.TurnNumber &&
-                    entry.TargetIds is { Count: > 0 } targetIds &&
-                    targetIds.SequenceEqual(cursor.CommittedTargetIds));
+            var hasMatchingRecurringCommit =
+                sourceRole == MainRoleType.Cupid
+                    ? GameSessionQueries.GetCommittedLoversPair(session) is
+                        { } entry &&
+                            cursor.CommittedActionType ==
+                                NightActionType.CupidLink &&
+                            entry.PowerIdentity == cursor.PowerIdentity &&
+                            entry.CurrentPhase == GamePhase.Night &&
+                            entry.TurnNumber == session.TurnNumber &&
+                            entry.PlayerIds.SequenceEqual(
+                                cursor.CommittedTargetIds)
+                    : session.GameHistoryLog
+                        .OfType<RecurringRolePowerCommittedLogEntry>()
+                        .Any(entry =>
+                            entry.ActionType == cursor.CommittedActionType &&
+                            entry.PowerIdentity == cursor.PowerIdentity &&
+                            entry.CurrentPhase == GamePhase.Night &&
+                            entry.TurnNumber == session.TurnNumber &&
+                            entry.TargetIds is { Count: > 0 } targetIds &&
+                            targetIds.SequenceEqual(
+                                cursor.CommittedTargetIds));
             if (!hasMatchingRecurringCommit)
             {
                 if (sourceRole != MainRoleType.BigBadWolf)
@@ -1549,12 +1622,17 @@ internal static class GameFlowManager
                 "Required Faction facts are not ready.");
         }
 
+        var committedLoverIds =
+            GameSessionQueries.GetCommittedLoversPair(session)?
+            .PlayerIds
+            .ToHashSet() ?? [];
         return session.GetPlayers()
             .WithHealth(PlayerHealth.Alive)
             .Select(player => new LivingFactionBeneficiarySnapshot(
                 session.RequireKnownFactionBeneficiary(player.Id),
                 player.State.HasStatusEffect(StatusEffectTypes.Charmed),
-                player.State.DurableVotingPower))
+                player.State.DurableVotingPower,
+                committedLoverIds.Contains(player.Id)))
             .ToArray();
     }
 

@@ -579,6 +579,15 @@ internal sealed class RecoveryPayloadTestDriver
 	internal StatusEffectTypes GetActiveEffects(Guid playerId) =>
 		_payload.Players.Single(player => player.Id == playerId).ActiveEffects;
 
+	internal RecoveryPayloadTestDriver RewriteActiveEffects(
+		Guid playerId,
+		StatusEffectTypes activeEffects)
+	{
+		_payload.Players.Single(player => player.Id == playerId).ActiveEffects =
+			activeEffects;
+		return this;
+	}
+
 	internal string Serialize() =>
 		JsonSerializer.Serialize(_payload, SerializationOptions);
 

@@ -50,5 +50,7 @@ public enum ModeratorInstructionSemantic
 	RecognizeCharmedPlayers = 42,
 	AnnounceBearTamerGrowl = 43,
 	SelectFoxCenter = 44,
-	RevealFoxResult = 45
+	RevealFoxResult = 45,
+	SelectCupidLovers = 46,
+	RecognizeLovers = 47
 }

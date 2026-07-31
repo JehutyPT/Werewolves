@@ -495,6 +495,51 @@ internal class GameSession : IGameSession
 		_gameSessionKernel.AddEntryAndUpdateState(entry);
 	}
 
+	internal void CommitLoversPair(
+		IReadOnlyCollection<Guid> playerIds,
+		RolePowerInstanceIdentity powerIdentity)
+	{
+		ArgumentNullException.ThrowIfNull(playerIds);
+		if (playerIds.Count != 2 ||
+		    playerIds.Any(playerId => playerId == Guid.Empty) ||
+		    playerIds.Distinct().Count() != 2)
+		{
+			throw new ArgumentException(
+				"The Lovers pair requires exactly two distinct Players.",
+				nameof(playerIds));
+		}
+
+		powerIdentity.EnforceValidity();
+		if (GameHistoryLog.OfType<LoversPairCommittedLogEntry>().Any())
+		{
+			throw new InvalidOperationException(
+				"The Lovers pair is already committed.");
+		}
+
+		var canonicalPlayerIds = playerIds.Order().ToArray();
+		_gameSessionKernel.AddEntryAndUpdateState(
+			new LoversPairCommittedLogEntry
+			{
+				Timestamp = DateTimeOffset.UtcNow,
+				TurnNumber = TurnNumber,
+				CurrentPhase =
+					_gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+				FirstPlayerId = canonicalPlayerIds[0],
+				SecondPlayerId = canonicalPlayerIds[1],
+				ActingPlayerId = powerIdentity.ActingPlayerId,
+				SourceRole = powerIdentity.SourceRole,
+				SourcePowerIdentifier =
+					powerIdentity.SourcePowerIdentifier,
+				PowerInstanceId = powerIdentity.PowerInstanceId,
+				PowerInstanceOrigin =
+					powerIdentity.PowerInstanceOrigin,
+				LinkBoundary = new FactionFactEffectiveBoundary(
+					TurnNumber,
+					_gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+					GameHistoryLog.Count())
+			});
+	}
+
 	    internal void EliminatePlayer(Guid playerId, EliminationReason reason)
 	    {
         var entry = new PlayerEliminatedLogEntry

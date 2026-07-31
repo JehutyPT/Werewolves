@@ -12,6 +12,7 @@ internal static class EliminationCascadeReactionIds
 		"rusty-sword-disease-announcement";
 	internal const string WildChildModelEliminated =
 		"wild-child-model-eliminated";
+	internal const string LoversHeartbreak = "lovers-heartbreak";
 	internal const string HunterFinalShot = "hunter-final-shot";
 }
 

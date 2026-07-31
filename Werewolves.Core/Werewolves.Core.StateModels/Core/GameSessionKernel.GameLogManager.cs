@@ -22,6 +22,7 @@ internal sealed partial class GameSessionKernel
             ValidateEliminationCascadeBatchResolution(entry);
             ValidateEliminationCascadeCompletion(entry);
             ValidateEliminationCascadeReactionCompletion(entry);
+            ValidateLoversPairCommitment(entry, playerIds);
             ValidateFactionFacts(entry, playerIds);
         }
 
@@ -32,6 +33,7 @@ internal sealed partial class GameSessionKernel
             ValidateEliminationCascadeBatchResolution(entry);
             ValidateEliminationCascadeCompletion(entry);
             ValidateEliminationCascadeReactionCompletion(entry);
+            ValidateLoversPairCommitment(entry, playerIds: null);
             ValidateFactionFacts(entry, playerIds: null);
             _logEntries.Add(entry);
         }
@@ -143,6 +145,36 @@ internal sealed partial class GameSessionKernel
             {
                 throw new InvalidOperationException(
                     "Faction history already contains a fact at this boundary.");
+            }
+        }
+
+        private void ValidateLoversPairCommitment(
+            GameLogEntryBase entry,
+            IReadOnlyCollection<Guid>? playerIds)
+        {
+            if (entry is not LoversPairCommittedLogEntry pair)
+            {
+                return;
+            }
+
+            if (_logEntries.OfType<LoversPairCommittedLogEntry>().Any())
+            {
+                throw new InvalidOperationException(
+                    "The Lovers pair is already committed.");
+            }
+
+            if (pair.LinkBoundary.Order != _logEntries.Count)
+            {
+                throw new InvalidOperationException(
+                    "The Lovers pair link boundary does not match its committed history position.");
+            }
+
+            if (playerIds is not null &&
+                (!playerIds.Contains(pair.ActingPlayerId) ||
+                 pair.PlayerIds.Any(playerId => !playerIds.Contains(playerId))))
+            {
+                throw new InvalidOperationException(
+                    "The Lovers pair references a Player outside the Game Session.");
             }
         }
 

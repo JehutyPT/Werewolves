@@ -45,6 +45,7 @@ public class LobbyEvaluationPresentationTests
 	[InlineData(Faction.Werewolf)]
 	[InlineData(Faction.WhiteWerewolf)]
 	[InlineData(Faction.Piper)]
+	[InlineData(Faction.CrossFactionLovers)]
 	public void GameResultName_SingleFactionUsesItsLocalizedFactionName(Faction faction)
 	{
 		using var context = new ModeratorComponentTestContext();
@@ -55,6 +56,8 @@ public class LobbyEvaluationPresentationTests
 			Faction.WhiteWerewolf =>
 				ClientStrings.LobbyEvaluation_FactionWhiteWerewolf,
 			Faction.Piper => ClientStrings.LobbyEvaluation_FactionPiper,
+			Faction.CrossFactionLovers =>
+				ClientStrings.LobbyEvaluation_FactionCrossFactionLovers,
 			_ => throw new ArgumentOutOfRangeException(nameof(faction))
 		};
 

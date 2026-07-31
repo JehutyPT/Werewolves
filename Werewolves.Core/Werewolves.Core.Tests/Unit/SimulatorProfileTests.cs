@@ -59,11 +59,13 @@ public class SimulatorProfileTests
 			.Append(ModeratorInstructionSemantic.RecognizeCharmedPlayers)
 			.Append(ModeratorInstructionSemantic.AnnounceBearTamerGrowl)
 			.Append(ModeratorInstructionSemantic.SelectFoxCenter)
-			.Append(ModeratorInstructionSemantic.RevealFoxResult);
+			.Append(ModeratorInstructionSemantic.RevealFoxResult)
+			.Append(ModeratorInstructionSemantic.SelectCupidLovers)
+			.Append(ModeratorInstructionSemantic.RecognizeLovers);
 		var safety = SimulatorCapability.SafetyScreening;
 		var probability = SimulatorCapability.FullProbability;
 
-		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "22"));
+		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "23"));
 		probability.Identity.Should().Be(new SimulatorProfileIdentity("full-probability", "4"));
 		BaselineRandomDecisionStrategy.Identity.Should()
 			.Be(new DecisionStrategyIdentity("baseline-random", "3-splitmix64"));
@@ -91,7 +93,8 @@ public class SimulatorProfileTests
 			MainRoleType.Piper,
 			MainRoleType.BearTamer,
 			MainRoleType.Fox,
-			MainRoleType.KnightWithRustySword);
+			MainRoleType.KnightWithRustySword,
+			MainRoleType.Cupid);
 		probability.SupportedRoles.Should().Equal(
 			MainRoleType.SimpleWerewolf,
 			MainRoleType.Seer,
@@ -163,6 +166,15 @@ public class SimulatorProfileTests
 		foxBeneficiary.Should().Be(Faction.Villager);
 		safety.IsFactionAgent(
 				MainRoleType.Fox,
+				Faction.Werewolf)
+			.Should().BeFalse();
+		safety.TryGetBeneficiaryFaction(
+				MainRoleType.Cupid,
+				out var cupidBeneficiary)
+			.Should().BeTrue();
+		cupidBeneficiary.Should().Be(Faction.Villager);
+		safety.IsFactionAgent(
+				MainRoleType.Cupid,
 				Faction.Werewolf)
 			.Should().BeFalse();
 	    safety.TryGetBeneficiaryFaction(
@@ -291,6 +303,33 @@ public class SimulatorProfileTests
 			new SingleFactionGameResult(Faction.Villager),
 			new NoWinnerGameResult());
 		SimulatorCapability.FullProbability.SharedVictoryCapabilities.Should().BeEmpty();
+	}
+
+	[Fact]
+	public void PossibleGameResultInventory_WithCupid_IncludesDynamicLoversOutcome()
+	{
+		var scenario = new SimulationScenario(
+			5,
+			[
+				MainRoleType.Cupid,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+
+		PossibleGameResultInventory.TryCreate(
+				scenario,
+				SimulatorCapability.SafetyScreening,
+				out var inventory)
+			.Should().BeTrue();
+
+		inventory.Factions.Should().Equal(
+			Faction.Villager,
+			Faction.Werewolf,
+			Faction.CrossFactionLovers);
+		inventory.GameResults.Should().Contain(
+			new SingleFactionGameResult(Faction.CrossFactionLovers));
 	}
 
 }
