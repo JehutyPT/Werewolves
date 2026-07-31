@@ -580,14 +580,6 @@ internal static class GameFlowManager
 	            return true;
 	        }
 
-	        if (IsCupidRecoveryBoundary(
-		            session,
-		            startingInstruction,
-		            nextInstructionToSend))
-	        {
-		        return true;
-	        }
-
 	        if (nextInstructionToSend.Semantic ==
 	            ModeratorInstructionSemantic.ObserveStutteringJudgeSignal)
 	        {
@@ -648,40 +640,6 @@ internal static class GameFlowManager
                    PublicAnnouncement: var announcement
                } &&
                announcement == GameStrings.NightStartsPrompt;
-    }
-
-    private static bool IsCupidRecoveryBoundary(
-	    GameSession session,
-	    ModeratorInstruction? startingInstruction,
-	    ModeratorInstruction nextInstruction)
-    {
-	    if (session.GetCurrentPhase() != GamePhase.Night ||
-	        session.TurnNumber != 1)
-	    {
-		    return false;
-	    }
-
-	    if (nextInstruction.Semantic ==
-	        ModeratorInstructionSemantic.SelectCupidLovers)
-	    {
-		    return true;
-	    }
-
-	    if (GameSessionQueries.GetCommittedLoversPair(session) is null)
-	    {
-		    return false;
-	    }
-
-	    return startingInstruction?.Semantic switch
-	    {
-		    ModeratorInstructionSemantic.RecognizeLovers =>
-			    nextInstruction.Semantic ==
-			    ModeratorInstructionSemantic.PutRoleToSleep,
-		    ModeratorInstructionSemantic.PutRoleToSleep =>
-			    nextInstruction.Semantic ==
-			    ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup,
-		    _ => false
-	    };
     }
 
     private static bool HasNewOneUseRolePowerCommit(
@@ -985,7 +943,8 @@ internal static class GameFlowManager
             ModeratorInstructionSemantic.AssignDawnVictimRoles or
             ModeratorInstructionSemantic.AssignDayVoteTargetRole or
             ModeratorInstructionSemantic.AssignEliminationCascadeRoles or
-            ModeratorInstructionSemantic.AnnounceBearTamerGrowl;
+            ModeratorInstructionSemantic.AnnounceBearTamerGrowl or
+            ModeratorInstructionSemantic.RecognizeLovers;
 
 		private static bool IsEliminationCascadeReactionInput(
 			ModeratorInstruction instruction) =>
@@ -1162,6 +1121,12 @@ internal static class GameFlowManager
                 ModeratorInstructionSemantic.ChooseWolfHoundAlignment
                     when cursor.ObservedRole == WolfHound =>
                     HasCommittedWolfHoundAlignment(session),
+                ModeratorInstructionSemantic.RecognizeLovers
+                    when cursor.ObservedRole == Cupid &&
+                         continuationRole == Cupid =>
+                    CupidRole.HasExpectedCommittedPairSleep(
+                        session,
+                        pendingInstruction),
                 _ => false
             };
         if (!matchesCommittedObservation)

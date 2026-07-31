@@ -290,18 +290,62 @@ public sealed class CupidRoleTests(ITestOutputHelper output)
 	}
 
 	[Fact]
-	public void PendingSelection_FreshServiceRestoresExactChoiceWithoutPairOrDuplicateWake()
+	public void AcceptedWake_FreshServiceReplaysWakeAndRecreatesPendingSelection()
 	{
-		var scenario = CreateCupidSelectionScenario(
-			knownWerewolfAgentGroup: true);
-		var serialized = scenario.Builder.GetGameState()!.Serialize();
+		var builder = CreateBuilder()
+			.WithPlayers(7)
+			.WithRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Cupid,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		var werewolf = players[0];
+		var cupid = players[1];
+		builder.ArrangeKnownWerewolfFactionAgentGroup(werewolf.Id);
+		builder.ConfirmGameStart();
+		builder.ConfirmNightStart();
+		var identification =
+			InstructionAssert.ExpectType<SelectPlayersInstruction>(
+				builder.GetCurrentInstruction());
+		identification.Semantic.Should().Be(
+			ModeratorInstructionSemantic.IdentifyRoleHolders);
+		identification.RoleIdentification.Should().Be(MainRoleType.Cupid);
+		var wake =
+			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+				builder.Process(identification.CreateResponse([cupid.Id])));
+		var durableSerialized = builder.GetGameState()!.Serialize();
+		var selection =
+			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+				builder.Process(wake.CreateResponse()));
+		builder.GetGameState()!.Serialize().Should().Be(durableSerialized);
 		var freshService = new GameService();
 
-		var gameId = freshService.RehydrateSession(serialized);
+		var gameId = freshService.RehydrateSession(
+			builder.GetGameState()!.Serialize());
 
-		var recoveredSelection = freshService.GetCurrentInstruction(gameId)
-			.Should().BeOfType<SelectPlayersInstruction>().Subject;
-		recoveredSelection.Should().BeEquivalentTo(scenario.Selection);
+		var recoveredWake = freshService.GetCurrentInstruction(gameId)
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		recoveredWake.Should().BeEquivalentTo(wake);
+		var recoveredSelection = freshService.ProcessInstruction(
+				gameId,
+				recoveredWake.CreateResponse())
+			.ModeratorInstruction.Should()
+			.BeOfType<SelectPlayersInstruction>().Subject;
+		recoveredSelection.Semantic.Should().Be(
+			ModeratorInstructionSemantic.SelectCupidLovers);
+		recoveredSelection.CountConstraint.Should().Be(
+			NumberRangeConstraint.Exact(2));
+		recoveredSelection.SelectablePlayerIds.Should().BeEquivalentTo(
+			players.Select(player => player.Id));
+		recoveredSelection.AffectedPlayerIds.Should().Equal(cupid.Id);
+		recoveredSelection.PublicAnnouncement.Should().BeNull();
+		recoveredSelection.PrivateInstruction.Should().Be(
+			selection.PrivateInstruction);
 		var recoveredSession = freshService.GetGameStateView(gameId)!;
 		recoveredSession.GameHistoryLog
 			.OfType<LoversPairCommittedLogEntry>()
@@ -313,7 +357,7 @@ public sealed class CupidRoleTests(ITestOutputHelper output)
 			gameId);
 		Action replayWake = () => freshService.ProcessInstruction(
 			gameId,
-			scenario.Wake.CreateResponse());
+			recoveredWake.CreateResponse());
 		replayWake.Should().Throw<InvalidOperationException>();
 		PublicGameSessionSnapshot.Capture(freshService, gameId)
 			.Should().BeEquivalentTo(
@@ -322,8 +366,8 @@ public sealed class CupidRoleTests(ITestOutputHelper output)
 
 		var lovers = new[]
 		{
-			scenario.Players[2].Id,
-			scenario.Players[3].Id
+			players[2].Id,
+			players[3].Id
 		};
 		var acceptedSelection =
 			recoveredSelection.CreateResponse(lovers.ToHashSet());
@@ -409,7 +453,53 @@ public sealed class CupidRoleTests(ITestOutputHelper output)
 	}
 
 	[Fact]
-	public void InitialClosure_FreshServiceRestoresBothSidesOfAtomicBoundary()
+	public void AcceptedLoversRecognition_WithOverlappingRoleAudience_RestoresExactCupidSleep()
+	{
+		var builder = CreateBuilder()
+			.WithPlayers(7)
+			.WithRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Cupid,
+				MainRoleType.TwoSisters,
+				MainRoleType.TwoSisters,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		var cupid = players[1];
+		var sisterIds = players.Skip(2).Take(2)
+			.Select(player => player.Id)
+			.ToHashSet();
+		builder.ArrangeKnownRole(cupid.Id, MainRoleType.Cupid);
+		builder.ArrangeKnownWerewolfFactionAgentGroup(players[0].Id);
+		builder.ConfirmGameStart();
+		builder.ConfirmNightStart();
+		var wake = InstructionAssert.ExpectType<ConfirmationInstruction>(
+			builder.GetCurrentInstruction());
+		var selection =
+			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+				builder.Process(wake.CreateResponse()));
+		var recognition =
+			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+				builder.Process(selection.CreateResponse(sisterIds)));
+		var expectedSleep =
+			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+				builder.Process(recognition.CreateResponse()));
+		var freshService = new GameService();
+
+		var gameId = freshService.RehydrateSession(
+			builder.GetGameState()!.Serialize());
+
+		var recoveredSleep = freshService.GetCurrentInstruction(gameId)
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		recoveredSleep.Should().BeEquivalentTo(expectedSleep);
+		recoveredSleep.AffectedPlayerIds.Should().BeEquivalentTo(sisterIds);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void LoversSleep_FreshServiceReplaysSleepBeforeAtomicClosure()
 	{
 		var scenario = CreateCupidSelectionScenario(
 			knownWerewolfAgentGroup: false);
@@ -432,10 +522,19 @@ public sealed class CupidRoleTests(ITestOutputHelper output)
 		var preClosureGameId = preClosureService.RehydrateSession(
 			scenario.Builder.GetGameState()!.Serialize());
 
-		var recoveredObservation = preClosureService
+		var recoveredSleep = preClosureService
 			.GetCurrentInstruction(preClosureGameId)
-			.Should().BeOfType<SelectPlayersInstruction>().Subject;
-		recoveredObservation.Should().BeEquivalentTo(expectedObservation);
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		recoveredSleep.Should().BeEquivalentTo(sleep);
+		var recoveredObservation = preClosureService.ProcessInstruction(
+				preClosureGameId,
+				recoveredSleep.CreateResponse())
+			.ModeratorInstruction.Should()
+			.BeOfType<SelectPlayersInstruction>().Subject;
+		recoveredObservation.Should().BeEquivalentTo(
+			expectedObservation,
+			options => options.Excluding(
+				instruction => instruction.InstructionId));
 		var preClosureSession =
 			preClosureService.GetGameStateView(preClosureGameId)!;
 		preClosureSession.GameHistoryLog

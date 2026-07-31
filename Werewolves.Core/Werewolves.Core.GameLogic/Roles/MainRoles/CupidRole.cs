@@ -496,34 +496,43 @@ internal sealed class CupidRole
 		GameSession session,
 		ModeratorInstruction instruction)
 	{
-		if (instruction.AffectedPlayerIds is not { Count: > 0 } playerIds)
+		if (GameSessionQueries.GetCommittedLoversPair(session) is not null)
+		{
+			return HasExpectedCommittedPairSleep(session, instruction);
+		}
+
+		return StringComparer.Ordinal.Equals(
+		       instruction.PublicAnnouncement,
+		       GameStrings.RoleGoesToSleepSingle.Format(PublicName)) &&
+		       instruction.PrivateInstruction is null &&
+		       instruction.SoundEffects.Count == 0 &&
+		       HasExpectedAffectedRoleHolders(session, instruction);
+	}
+
+	internal static bool HasExpectedCommittedPairSleep(
+		GameSession session,
+		ModeratorInstruction instruction)
+	{
+		var pair = GameSessionQueries.GetCommittedLoversPair(session);
+		if (pair is null ||
+		    instruction is not ConfirmationInstruction
+		    {
+			    Semantic:
+				    ModeratorInstructionSemantic.PutRoleToSleep,
+			    AffectedPlayerIds: { Count: 2 } playerIds
+		    } ||
+		    !StringComparer.Ordinal.Equals(
+			    instruction.PublicAnnouncement,
+			    GameStrings.LoversSleepAnnouncement) ||
+		    instruction.PrivateInstruction is not null ||
+		    instruction.SoundEffects.Count != 0 ||
+		    !playerIds.ToHashSet().SetEquals(pair.PlayerIds))
 		{
 			return false;
 		}
 
-		var pair = GameSessionQueries.GetCommittedLoversPair(session);
-		if (pair is not null)
-		{
-			if (!StringComparer.Ordinal.Equals(
-				    instruction.PublicAnnouncement,
-				    GameStrings.LoversSleepAnnouncement) ||
-			    instruction.PrivateInstruction is not null ||
-			    instruction.SoundEffects.Count != 0 ||
-			    !playerIds.ToHashSet().SetEquals(pair.PlayerIds))
-			{
-				return false;
-			}
-
-			ValidateCommittedPair(session, pair);
-			return true;
-		}
-
-		return StringComparer.Ordinal.Equals(
-			       instruction.PublicAnnouncement,
-			       GameStrings.RoleGoesToSleepSingle.Format(PublicName)) &&
-		       instruction.PrivateInstruction is null &&
-		       instruction.SoundEffects.Count == 0 &&
-		       HasExpectedAffectedRoleHolders(session, instruction);
+		ValidateCommittedPair(session, pair);
+		return true;
 	}
 
 	private static void ValidateCommittedPair(
