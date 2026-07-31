@@ -18,6 +18,7 @@ public enum StatusEffectTypes
     ElderProtectionLost = 1 << 0,      // Elder's extra life has been used
     LycanthropyInfection = 1 << 1,     // Player has been infected by the wolf father
     WildChildChanged = 1 << 2,         // Wild Child has changed Faction allegiance
+    RustySwordDisease = 1 << 8,        // Player carries the Knight's scheduled disease
 
     // Hookable status effects (formerly SecondaryRoleType)
     Sheriff = 1 << 3,                  // Player holds the Sheriff title

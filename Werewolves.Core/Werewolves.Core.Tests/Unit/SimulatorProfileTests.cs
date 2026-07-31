@@ -63,7 +63,7 @@ public class SimulatorProfileTests
 		var safety = SimulatorCapability.SafetyScreening;
 		var probability = SimulatorCapability.FullProbability;
 
-		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "21"));
+		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "22"));
 		probability.Identity.Should().Be(new SimulatorProfileIdentity("full-probability", "4"));
 		BaselineRandomDecisionStrategy.Identity.Should()
 			.Be(new DecisionStrategyIdentity("baseline-random", "3-splitmix64"));
@@ -90,13 +90,23 @@ public class SimulatorProfileTests
 			MainRoleType.WhiteWerewolf,
 			MainRoleType.Piper,
 			MainRoleType.BearTamer,
-			MainRoleType.Fox);
+			MainRoleType.Fox,
+			MainRoleType.KnightWithRustySword);
 		probability.SupportedRoles.Should().Equal(
 			MainRoleType.SimpleWerewolf,
 			MainRoleType.Seer,
 			MainRoleType.WildChild,
 			MainRoleType.SimpleVillager);
 		probability.SupportedRoles.Should().NotBeSameAs(safety.SupportedRoles);
+		safety.TryGetBeneficiaryFaction(
+				MainRoleType.KnightWithRustySword,
+				out var knightBeneficiary)
+			.Should().BeTrue();
+		knightBeneficiary.Should().Be(Faction.Villager);
+		safety.IsFactionAgent(
+				MainRoleType.KnightWithRustySword,
+				Faction.Werewolf)
+			.Should().BeFalse();
 		safety.TryGetBeneficiaryFaction(
 				MainRoleType.AccursedWolfFather,
 				out var accursedBeneficiary)

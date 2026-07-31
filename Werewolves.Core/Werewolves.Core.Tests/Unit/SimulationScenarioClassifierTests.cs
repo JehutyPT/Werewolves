@@ -461,4 +461,34 @@ public class SimulationScenarioClassifierTests
 			.Equal(MainRoleType.WhiteWerewolf);
 		probability.Cacheability.Should().BeNull();
 	}
+
+	[Fact]
+	public void Classify_KnightWithRustySword_IsSafetyScreeningOnly()
+	{
+		var scenario = new SimulationScenario(
+			5,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.KnightWithRustySword,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+
+		var safety = SimulationScenarioClassifier.Classify(
+			scenario,
+			SimulatorCapability.SafetyScreening);
+		var probability = SimulationScenarioClassifier.Classify(
+			scenario,
+			SimulatorCapability.FullProbability);
+
+		safety.AppSupport!.IsSupported.Should().BeTrue();
+		safety.SimulatorSupport!.IsSupported.Should().BeTrue();
+		safety.Cacheability!.CompatibilityIdentity.Profile.Should()
+			.Be(SimulatorCapability.SafetyScreening.Identity);
+		probability.SimulatorSupport!.IsSupported.Should().BeFalse();
+		probability.SimulatorSupport.UnsupportedRoles.Should()
+			.Equal(MainRoleType.KnightWithRustySword);
+		probability.Cacheability.Should().BeNull();
+	}
 }

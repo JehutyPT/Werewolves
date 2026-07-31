@@ -122,6 +122,7 @@ public static class DashboardRoster
 		StatusEffectTypes.Charmed => ClientStrings.StatusEffect_Charmed,
 		StatusEffectTypes.TownCrier => ClientStrings.StatusEffect_TownCrier,
 		StatusEffectTypes.Executioner => ClientStrings.StatusEffect_Executioner,
+		StatusEffectTypes.RustySwordDisease => ClientStrings.StatusEffect_RustySwordDisease,
 		_ => ClientStrings.StatusEffect_Fallback
 	};
 

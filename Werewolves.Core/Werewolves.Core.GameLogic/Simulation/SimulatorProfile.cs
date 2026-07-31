@@ -153,7 +153,8 @@ public sealed class SimulatorCapability : SimulatorProfile
 				Faction.Werewolf),
 			new(MainRoleType.Piper, Faction.Piper),
 			new(MainRoleType.BearTamer, Faction.Villager),
-			new(MainRoleType.Fox, Faction.Villager)
+			new(MainRoleType.Fox, Faction.Villager),
+			new(MainRoleType.KnightWithRustySword, Faction.Villager)
 	];
 
 	private static readonly SimulatorProfileRoleDescriptor[] FullProbabilityRoleDescriptors =
@@ -171,7 +172,7 @@ public sealed class SimulatorCapability : SimulatorProfile
 		SimulatorCapabilityRegistry.Production.FullProbability;
 
 	internal static SimulatorCapability CreateSafetyScreening() => new(
-			new SimulatorProfileIdentity("safety-screening", "21"),
+			new SimulatorProfileIdentity("safety-screening", "22"),
 		SafetyScreeningRoleDescriptors,
 		headlessResponsePolicy: new HeadlessResponsePolicy(
 			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,

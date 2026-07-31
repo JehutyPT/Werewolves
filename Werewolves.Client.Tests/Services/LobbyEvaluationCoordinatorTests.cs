@@ -987,7 +987,7 @@ public class LobbyEvaluationCoordinatorTests
 	}
 
 	[Theory]
-	[InlineData("safety-screening@20")]
+	[InlineData("safety-screening@21")]
 	[InlineData("core-simulator@1")]
 	[InlineData("foreign-simulator@1")]
 	public async Task NonCurrentSafetyLocalRecord_IsAMissBeforeBoundedFallback(

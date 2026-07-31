@@ -8,6 +8,8 @@ namespace Werewolves.Core.GameLogic.Models.EliminationCascades;
 
 internal static class EliminationCascadeReactionIds
 {
+	internal const string RustySwordDiseaseAnnouncement =
+		"rusty-sword-disease-announcement";
 	internal const string WildChildModelEliminated =
 		"wild-child-model-eliminated";
 	internal const string HunterFinalShot = "hunter-final-shot";

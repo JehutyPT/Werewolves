@@ -96,6 +96,7 @@ internal static class GameFlowManager
 
         [DawnMainActionLoop] =
         [
+            Listener(KnightWithRustySword),
             Listener(BearTamer),
             Listener(Gypsy),
             Listener(TownCrier),
@@ -118,6 +119,10 @@ internal static class GameFlowManager
 		EliminationCascadeReactionRegistration>
 		EliminationCascadeReactionRegistrations =
 	[
+		new(
+			EliminationCascadeReactionIds.RustySwordDiseaseAnnouncement,
+			EliminationCascadeReactionBoundary.PreReveal,
+			Listener(KnightWithRustySword)),
 		new(
 			EliminationCascadeReactionIds.WildChildModelEliminated,
 			EliminationCascadeReactionBoundary.Forced,
@@ -338,10 +343,16 @@ internal static class GameFlowManager
                 .ToArray());
     }
 
-    private static string CreateDawnEliminationAnnouncement(
+    private static string? CreateDawnEliminationAnnouncement(
         GameSession session,
         IReadOnlyCollection<EliminationRequest> eliminations)
     {
+        if (eliminations.Any(elimination =>
+                elimination.Reason == EliminationReason.RustySword))
+        {
+            return null;
+        }
+
         var victimNames = string.Join(
             Environment.NewLine,
             eliminations.Select(elimination =>
@@ -883,10 +894,11 @@ internal static class GameFlowManager
             ModeratorInstructionSemantic.AssignEliminationCascadeRoles or
             ModeratorInstructionSemantic.AnnounceBearTamerGrowl;
 
-	private static bool IsEliminationCascadeReactionInput(
-		ModeratorInstruction instruction) =>
-		instruction.Semantic is
-			ModeratorInstructionSemantic.SelectHunterFinalShotTarget;
+		private static bool IsEliminationCascadeReactionInput(
+			ModeratorInstruction instruction) =>
+			instruction.Semantic is
+				ModeratorInstructionSemantic.AnnounceDawnVictims or
+				ModeratorInstructionSemantic.SelectHunterFinalShotTarget;
 
     private static AcceptedObservationRecoveryCursor?
         CreateAcceptedObservationRecoveryCursor(
