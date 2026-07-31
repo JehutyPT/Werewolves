@@ -6,7 +6,8 @@ namespace Werewolves.Core.GameLogic.Services;
 internal sealed record LivingFactionBeneficiarySnapshot(
 	Faction Beneficiary,
 	bool IsCharmed,
-	int DurableVotingPower);
+	int DurableVotingPower,
+	bool IsCommittedLover = false);
 
 internal static class FactionVictoryPredicates
 {
@@ -51,6 +52,17 @@ internal static class FactionVictoryPredicates
 			    player.IsCharmed))
 		{
 			satisfiedFactions.Add(Faction.Piper);
+		}
+
+		if (snapshot is
+		    [
+			    { Beneficiary: Faction.CrossFactionLovers,
+			      IsCommittedLover: true },
+			    { Beneficiary: Faction.CrossFactionLovers,
+			      IsCommittedLover: true }
+		    ])
+		{
+			satisfiedFactions.Add(Faction.CrossFactionLovers);
 		}
 
 		return satisfiedFactions;

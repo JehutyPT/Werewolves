@@ -109,6 +109,9 @@
   <data name="VictoryConditionPiperCharmedAll" xml:space="preserve">
     <value>The Piper has charmed every other living player.</value>
   </data>
+  <data name="VictoryConditionCrossFactionLovers" xml:space="preserve">
+    <value>The two cross-faction Lovers are the only surviving players.</value>
+  </data>
   <data name="WhiteWerewolfTargetSelectionInstruction" xml:space="preserve">
     <value>White Werewolf, optionally choose one other living Werewolf Faction Agent for the solo attack.</value>
   </data>
@@ -141,5 +144,14 @@
   </data>
   <data name="PiperLivingCharmedRosterInstruction" xml:space="preserve">
     <value>Confirm the current roster of living Charmed players.</value>
+  </data>
+  <data name="CupidTargetSelectionInstruction" xml:space="preserve">
+    <value>Select exactly two living players as the Lovers. Cupid may be one of them.</value>
+  </data>
+  <data name="LoversRecognitionInstruction" xml:space="preserve">
+    <value>Discreetly wake or tap both Lovers. Tell them they are linked and cannot vote against one another.</value>
+  </data>
+  <data name="LoversSleepAnnouncement" xml:space="preserve">
+    <value>Lovers, return to sleep.</value>
   </data>
 </root>

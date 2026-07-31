@@ -22,6 +22,7 @@ public class GameLogEntryConverter : JsonConverter<GameLogEntryBase>
         ["EliminationCascadeCompletedLogEntry"] = typeof(EliminationCascadeCompletedLogEntry),
         ["EliminationCascadeReactionCompletedLogEntry"] = typeof(EliminationCascadeReactionCompletedLogEntry),
         ["FactionFactsCommittedLogEntry"] = typeof(FactionFactsCommittedLogEntry),
+        ["LoversPairCommittedLogEntry"] = typeof(LoversPairCommittedLogEntry),
         ["NightActionLogEntry"] = typeof(NightActionLogEntry),
         ["OneUseRolePowerCommittedLogEntry"] = typeof(OneUseRolePowerCommittedLogEntry),
         ["RecurringRolePowerCommittedLogEntry"] = typeof(RecurringRolePowerCommittedLogEntry),

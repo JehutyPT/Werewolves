@@ -184,6 +184,9 @@
   <data name="LobbyEvaluation_FactionPiper" xml:space="preserve">
     <value>Piper</value>
   </data>
+  <data name="LobbyEvaluation_FactionCrossFactionLovers" xml:space="preserve">
+    <value>Cross-faction Lovers</value>
+  </data>
   <data name="LobbyEvaluation_FactionSeparator" xml:space="preserve">
     <value> and </value>
   </data>

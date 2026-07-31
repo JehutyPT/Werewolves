@@ -495,6 +495,75 @@ internal class GameSession : IGameSession
 		_gameSessionKernel.AddEntryAndUpdateState(entry);
 	}
 
+	internal void CommitLoversPair(
+		IReadOnlyCollection<Guid> playerIds,
+		RolePowerInstanceIdentity powerIdentity)
+	{
+		ArgumentNullException.ThrowIfNull(playerIds);
+		if (TurnNumber != 1 ||
+		    _gameSessionKernel.PhaseStateCache.GetCurrentPhase() !=
+		    GamePhase.Night)
+		{
+			throw new InvalidOperationException(
+				"Cupid may commit the Lovers pair only on the first Night.");
+		}
+
+		if (playerIds.Count != 2 ||
+		    playerIds.Any(playerId => playerId == Guid.Empty) ||
+		    playerIds.Distinct().Count() != 2)
+		{
+			throw new ArgumentException(
+				"The Lovers pair requires exactly two distinct Players.",
+				nameof(playerIds));
+		}
+
+		powerIdentity.EnforceValidity();
+		if (powerIdentity.SourceRole != MainRoleType.Cupid ||
+		    powerIdentity.PowerInstanceOrigin !=
+		    RolePowerInstanceOrigin.Native ||
+		    powerIdentity.PowerInstanceId != powerIdentity.ActingPlayerId ||
+		    GetPlayer(powerIdentity.ActingPlayerId).State.CurrentRole !=
+		    MainRoleType.Cupid)
+		{
+			throw new ArgumentException(
+				"The Lovers pair requires Cupid's native Role Power identity.",
+				nameof(powerIdentity));
+		}
+
+		if (GameHistoryLog.OfType<LoversPairCommittedLogEntry>().Any())
+		{
+			throw new InvalidOperationException(
+				"The Lovers pair is already committed.");
+		}
+
+		var canonicalPlayerIds = playerIds.Order().ToArray();
+		if (canonicalPlayerIds.Any(playerId =>
+			    GetPlayer(playerId).State.Health != PlayerHealth.Alive))
+		{
+			throw new ArgumentException(
+				"The Lovers pair requires two living Players.",
+				nameof(playerIds));
+		}
+
+		_gameSessionKernel.AddEntryAndUpdateState(
+			new LoversPairCommittedLogEntry
+			{
+				Timestamp = DateTimeOffset.UtcNow,
+				TurnNumber = TurnNumber,
+				CurrentPhase =
+					_gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+				FirstPlayerId = canonicalPlayerIds[0],
+				SecondPlayerId = canonicalPlayerIds[1],
+				ActingPlayerId = powerIdentity.ActingPlayerId,
+				SourcePowerIdentifier =
+					powerIdentity.SourcePowerIdentifier,
+				LinkBoundary = new FactionFactEffectiveBoundary(
+					TurnNumber,
+					_gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+					GameHistoryLog.Count())
+			});
+	}
+
 	    internal void EliminatePlayer(Guid playerId, EliminationReason reason)
 	    {
         var entry = new PlayerEliminatedLogEntry

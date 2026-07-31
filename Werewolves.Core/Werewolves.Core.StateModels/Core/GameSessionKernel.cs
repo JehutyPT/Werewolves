@@ -317,6 +317,7 @@ namespace Werewolves.Core.StateModels.Core
 				}
 
 				ValidateFactionProjectionMatchesHistory();
+				ValidateLoversPairProjectionMatchesHistory();
 
 				_recoveryBoundary = CreateDto();
 			}
@@ -368,6 +369,35 @@ namespace Werewolves.Core.StateModels.Core
 						throw new InvalidOperationException(
 							"Current Faction state does not match committed history.");
 					}
+				}
+			}
+
+			private void ValidateLoversPairProjectionMatchesHistory()
+			{
+				var pair = _gameHistoryLog
+					.GetAllLogEntries()
+					.OfType<LoversPairCommittedLogEntry>()
+					.SingleOrDefault();
+				var expectedLoverIds = pair?.PlayerIds.ToHashSet() ?? [];
+				if (pair is not null &&
+				    GetPlayer(pair.ActingPlayerId)
+					    .GetMutableState(new DeserializationKey())
+					    .MainRole != MainRoleType.Cupid)
+				{
+					throw new InvalidOperationException(
+						"The committed Lovers pair does not belong to Cupid.");
+				}
+
+				var actualLoverIds = _playerSeatingOrder
+					.Where(playerId =>
+						GetPlayer(playerId)
+							.GetMutableState(new DeserializationKey())
+							.HasStatusEffect(StatusEffectTypes.Lovers))
+					.ToHashSet();
+				if (!actualLoverIds.SetEquals(expectedLoverIds))
+				{
+					throw new InvalidOperationException(
+						"The current Lovers statuses do not match committed history.");
 				}
 			}
 
@@ -615,6 +645,29 @@ namespace Werewolves.Core.StateModels.Core
 			{
 				throw new InvalidOperationException(
 					"The domain recovery cursor is structurally invalid.");
+			}
+
+			if (cursor.SourceRole == MainRoleType.Cupid ||
+			    cursor.CommittedActionType == NightActionType.CupidLink)
+			{
+				var latestLoversPair = dto.GameHistoryLog
+					.OfType<LoversPairCommittedLogEntry>()
+					.LastOrDefault();
+				if (cursor.SourceRole != MainRoleType.Cupid ||
+				    cursor.CommittedActionType != NightActionType.CupidLink ||
+				    cursor.CommittedTargetIds.Count != 2 ||
+				    latestLoversPair is null ||
+				    latestLoversPair.TurnNumber != dto.TurnNumber ||
+				    latestLoversPair.CurrentPhase != GamePhase.Night ||
+				    latestLoversPair.PowerIdentity != cursorPowerIdentity ||
+				    !latestLoversPair.PlayerIds.SequenceEqual(
+					    cursor.CommittedTargetIds))
+				{
+					throw new InvalidOperationException(
+						"The domain recovery cursor does not match the private Lovers pair commitment.");
+				}
+
+				return cursor;
 			}
 
 			var latestActionEntry = dto.GameHistoryLog

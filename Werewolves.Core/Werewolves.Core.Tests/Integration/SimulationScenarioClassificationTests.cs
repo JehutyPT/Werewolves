@@ -103,7 +103,7 @@ public class SimulationScenarioClassificationTests : DiagnosticTestBase
 		var scenario = new SimulationScenario(
 			5,
 			[
-				MainRoleType.Cupid,
+				MainRoleType.Elder,
 				MainRoleType.SimpleWerewolf,
 				MainRoleType.SimpleVillager,
 				MainRoleType.SimpleVillager,
@@ -118,7 +118,7 @@ public class SimulationScenarioClassificationTests : DiagnosticTestBase
 		classification.AppSupport.Should().NotBeNull();
 		classification.AppSupport!.IsSupported.Should().BeFalse();
 		classification.AppSupport.Scenario.Should().BeSameAs(scenario);
-		classification.AppSupport.UnsupportedRoles.Should().Equal(MainRoleType.Cupid);
+		classification.AppSupport.UnsupportedRoles.Should().Equal(MainRoleType.Elder);
 		classification.SimulatorSupport.Should().BeNull();
 		classification.AlreadyDecided.Should().BeNull();
 		classification.Cacheability.Should().BeNull();

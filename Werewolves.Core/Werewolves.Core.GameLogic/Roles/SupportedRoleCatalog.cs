@@ -53,6 +53,9 @@ public static class SupportedRoleCatalog
 				MainRoleType.Piper,
 				() => new PiperRole(rolePowerAvailabilityGateway)),
 			RoleAdmission.Active(
+				MainRoleType.Cupid,
+				() => new CupidRole(rolePowerAvailabilityGateway)),
+			RoleAdmission.Active(
 				MainRoleType.WildChild,
 				() => new WildChildRole()),
 				RoleAdmission.Active(

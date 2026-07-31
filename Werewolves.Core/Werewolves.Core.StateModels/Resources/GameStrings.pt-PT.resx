@@ -201,6 +201,10 @@
     <value>O Flautista encantou todos os outros jogadores vivos.</value>
     <comment/>
   </data>
+  <data name="VictoryConditionCrossFactionLovers" xml:space="preserve">
+    <value>Os dois Amantes de facções diferentes são os únicos jogadores sobreviventes.</value>
+    <comment/>
+  </data>
   <data name="VictoryConditionShared" xml:space="preserve">
     <value>Várias facções venceram em conjunto.</value>
     <comment/>
@@ -591,6 +595,18 @@
   </data>
   <data name="PiperLivingCharmedRosterInstruction" xml:space="preserve">
     <value>Confirma a lista atual de jogadores Encantados vivos.</value>
+    <comment/>
+  </data>
+  <data name="CupidTargetSelectionInstruction" xml:space="preserve">
+    <value>Seleciona exatamente dois jogadores vivos para serem os Amantes. O Cupido pode ser um deles.</value>
+    <comment/>
+  </data>
+  <data name="LoversRecognitionInstruction" xml:space="preserve">
+    <value>Acorda ou toca discretamente nos dois Amantes. Explica-lhes que estão ligados e que não podem votar um contra o outro.</value>
+    <comment/>
+  </data>
+  <data name="LoversSleepAnnouncement" xml:space="preserve">
+    <value>Amantes, voltem a dormir.</value>
     <comment/>
   </data>
 </root>

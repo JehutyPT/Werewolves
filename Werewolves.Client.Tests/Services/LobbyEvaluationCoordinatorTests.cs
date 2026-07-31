@@ -1083,7 +1083,7 @@ public class LobbyEvaluationCoordinatorTests
 		invalid.State.BlocksLobbyExit.Should().BeFalse();
 
 		var appUnsupportedLobby = CreateLobby(
-			MainRoleType.Cupid,
+			MainRoleType.Elder,
 			MainRoleType.SimpleWerewolf,
 			MainRoleType.SimpleVillager,
 			MainRoleType.SimpleVillager,

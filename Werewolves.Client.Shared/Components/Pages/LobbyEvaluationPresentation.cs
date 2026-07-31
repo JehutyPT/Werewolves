@@ -114,9 +114,11 @@ public static class LobbyEvaluationPresentation
 	{
 		Faction.Villager => ClientStrings.LobbyEvaluation_FactionVillager,
 		Faction.Werewolf => ClientStrings.LobbyEvaluation_FactionWerewolf,
-			Faction.WhiteWerewolf =>
-				ClientStrings.LobbyEvaluation_FactionWhiteWerewolf,
-			Faction.Piper => ClientStrings.LobbyEvaluation_FactionPiper,
-			_ => throw new ArgumentOutOfRangeException(nameof(faction))
-		};
+		Faction.WhiteWerewolf =>
+			ClientStrings.LobbyEvaluation_FactionWhiteWerewolf,
+		Faction.Piper => ClientStrings.LobbyEvaluation_FactionPiper,
+		Faction.CrossFactionLovers =>
+			ClientStrings.LobbyEvaluation_FactionCrossFactionLovers,
+		_ => throw new ArgumentOutOfRangeException(nameof(faction))
+	};
 }

@@ -136,6 +136,40 @@ internal static class InitialBeneficiaryClosureRules
 		"white-werewolf-beneficiary";
 	private const string PiperDeferredResultIdentifier =
 		"piper-beneficiary";
+	private const string LoversDeferredResultIdentifier =
+		"lovers-beneficiary";
+	private const string LoversClassificationSourceIdentifier =
+		"cupid-lovers-classification";
+	internal const int CrossFactionLoversBeneficiaryPrecedence = 1;
+
+	internal static bool TryCommitKnownLoversClassification(
+		GameSession session)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		var pair = FindCommittedLoversPair(session);
+		if (pair is null)
+		{
+			return false;
+		}
+
+		ValidateLoversPairStatuses(session, pair);
+		var beneficiaries = pair.PlayerIds
+			.Select(session.GetFactionBeneficiaryKnowledge)
+			.ToArray();
+		if (beneficiaries.Any(beneficiary => !beneficiary.IsKnown))
+		{
+			return false;
+		}
+
+		if (beneficiaries[0].Faction == beneficiaries[1].Faction)
+		{
+			return true;
+		}
+
+		var linkBoundary = GetLoversLinkBoundary(session, pair);
+		CommitCrossFactionLoversFacts(session, pair, linkBoundary);
+		return true;
+	}
 
 	internal static InitialBeneficiaryClosureResult TryCommitCurrentSession(
 		GameSession session,
@@ -154,9 +188,7 @@ internal static class InitialBeneficiaryClosureRules
 			return InitialBeneficiaryClosureResult.Incomplete;
 		}
 
-		var history = session.GameHistoryLog
-			.OfType<FactionFactsCommittedLogEntry>()
-			.ToArray();
+		var history = session.GameHistoryLog.ToArray();
 		return TryCommit(
 			session,
 			new InitialBeneficiaryClosureRequest(
@@ -240,8 +272,10 @@ internal static class InitialBeneficiaryClosureRules
 			.ToArray();
 		var allApplicableExceptionHolderSetsKnown = new[]
 			{
+				MainRoleType.Cupid,
 				MainRoleType.WhiteWerewolf,
-				MainRoleType.Piper
+				MainRoleType.Piper,
+				MainRoleType.WolfHound
 			}
 			.Where(role => session.RoleInPlayCount(role) > 0)
 			.All(role =>
@@ -287,12 +321,14 @@ internal static class InitialBeneficiaryClosureRules
 
 		var historyBeforeClosure = committedHistory
 			.Take(closureIndex)
+			.ToArray();
+		var factionHistoryBeforeClosure = historyBeforeClosure
 			.OfType<FactionFactsCommittedLogEntry>()
 			.ToArray();
 		var initialAgentGroupBoundary =
 			FindInitialCompleteWerewolfAgentGroupBoundary(
 				session,
-				historyBeforeClosure);
+				factionHistoryBeforeClosure);
 		if (initialAgentGroupBoundary == null ||
 		    !TryBuildFacts(
 			    session,
@@ -303,7 +339,7 @@ internal static class InitialBeneficiaryClosureRules
 					    session,
 					    initialAgentGroupBoundary,
 					    historyBeforeClosure)),
-			    historyBeforeClosure,
+			    factionHistoryBeforeClosure,
 			    out var expectedFacts) ||
 		    !closure.Facts.SequenceEqual(expectedFacts))
 		{
@@ -434,27 +470,263 @@ internal static class InitialBeneficiaryClosureRules
 		CreateCurrentDeferredResults(
 			GameSession session,
 			FactionFactEffectiveBoundary initialAgentGroupBoundary,
-			IReadOnlyCollection<FactionFactsCommittedLogEntry> history)
+			IReadOnlyCollection<GameLogEntryBase> history)
 	{
+		var factionHistory = history
+			.OfType<FactionFactsCommittedLogEntry>()
+			.ToArray();
 		return new[]
 			{
 				CreateCurrentExclusiveBeneficiaryResult(
 					session,
 					initialAgentGroupBoundary,
-					history,
+					factionHistory,
 					MainRoleType.WhiteWerewolf,
 					Faction.WhiteWerewolf,
 					WhiteWerewolfDeferredResultIdentifier),
 				CreateCurrentExclusiveBeneficiaryResult(
 					session,
 					initialAgentGroupBoundary,
-					history,
+					factionHistory,
 					MainRoleType.Piper,
 					Faction.Piper,
-					PiperDeferredResultIdentifier)
+					PiperDeferredResultIdentifier),
+				CreateCurrentLoversResult(
+					session,
+					initialAgentGroupBoundary,
+					history)
 			}
 			.OfType<InitialBeneficiaryClosureDeferredResult>()
 			.ToArray();
+	}
+
+	private static InitialBeneficiaryClosureDeferredResult?
+		CreateCurrentLoversResult(
+			GameSession session,
+			FactionFactEffectiveBoundary initialAgentGroupBoundary,
+			IReadOnlyCollection<GameLogEntryBase> history)
+	{
+		if (session.RoleInPlayCount(MainRoleType.Cupid) == 0)
+		{
+			return null;
+		}
+
+		if (!GameSessionQueries.IsCompleteLivingRoleHolderSetKnown(
+			    session,
+			    MainRoleType.Cupid))
+		{
+			return InitialBeneficiaryClosureDeferredResult.Pending(
+				LoversDeferredResultIdentifier);
+		}
+
+		var pair = history
+			.OfType<LoversPairCommittedLogEntry>()
+			.SingleOrDefault();
+		if (pair is null)
+		{
+			return InitialBeneficiaryClosureDeferredResult.Complete(
+				LoversDeferredResultIdentifier,
+				[]);
+		}
+
+		ValidateLoversPairStatuses(session, pair);
+		var factionHistory = history
+			.OfType<FactionFactsCommittedLogEntry>()
+			.ToArray();
+		foreach (var prerequisiteRole in new[]
+		         {
+			         MainRoleType.WhiteWerewolf,
+			         MainRoleType.Piper,
+			         MainRoleType.WolfHound
+		         })
+		{
+			if (session.RoleInPlayCount(prerequisiteRole) > 0 &&
+			    !GameSessionQueries.IsCompleteLivingRoleHolderSetKnown(
+				    session,
+				    prerequisiteRole))
+			{
+				return InitialBeneficiaryClosureDeferredResult.Pending(
+					LoversDeferredResultIdentifier);
+			}
+		}
+
+		var existingClassification = factionHistory
+			.SingleOrDefault(entry =>
+				entry.Source.Kind ==
+				FactionFactSourceKind.ExplicitTransition &&
+				StringComparer.Ordinal.Equals(
+					entry.Source.Identifier,
+					LoversClassificationSourceIdentifier));
+		if (existingClassification is not null)
+		{
+			ValidateCrossFactionLoversFacts(
+				pair,
+				GetLoversLinkBoundary(session, pair),
+				existingClassification.Facts);
+			return InitialBeneficiaryClosureDeferredResult.Complete(
+				LoversDeferredResultIdentifier,
+				existingClassification.Facts);
+		}
+
+		var playerIds = session.GetPlayers()
+			.Select(player => player.Id)
+			.ToArray();
+		var linkBoundary = GetLoversLinkBoundary(session, pair);
+		var projectionAtLink = FactionFactProjection.Create(
+			factionHistory,
+			playerIds,
+			linkBoundary);
+		var projectionAtInitialGroup = FactionFactProjection.Create(
+			factionHistory,
+			playerIds,
+			initialAgentGroupBoundary);
+		var candidates = new List<Faction>(2);
+		foreach (var playerId in pair.PlayerIds)
+		{
+			var projected = projectionAtLink.Beneficiaries[playerId];
+			if (projected.IsKnown)
+			{
+				candidates.Add(projected.Faction!.Value);
+				continue;
+			}
+
+			var role = session.GetPlayerState(playerId).CurrentRole;
+			if (role == MainRoleType.WolfHound)
+			{
+				candidates.Add(Faction.Villager);
+				continue;
+			}
+
+			if (role == MainRoleType.WhiteWerewolf)
+			{
+				candidates.Add(Faction.WhiteWerewolf);
+				continue;
+			}
+
+			if (role == MainRoleType.Piper)
+			{
+				candidates.Add(Faction.Piper);
+				continue;
+			}
+
+			var werewolfAgency =
+				projectionAtInitialGroup.Agents[playerId][Faction.Werewolf];
+			if (werewolfAgency == FactionAgentKnowledge.Unknown)
+			{
+				return InitialBeneficiaryClosureDeferredResult.Pending(
+					LoversDeferredResultIdentifier);
+			}
+
+			candidates.Add(
+				werewolfAgency == FactionAgentKnowledge.KnownAgent
+					? Faction.Werewolf
+					: Faction.Villager);
+		}
+
+		var facts = candidates[0] == candidates[1]
+			? []
+			: pair.PlayerIds
+				.Select(playerId => FactionFact.Beneficiary(
+					playerId,
+					Faction.CrossFactionLovers,
+					linkBoundary,
+					CrossFactionLoversBeneficiaryPrecedence))
+				.ToArray();
+		return InitialBeneficiaryClosureDeferredResult.Complete(
+			LoversDeferredResultIdentifier,
+			facts);
+	}
+
+	private static LoversPairCommittedLogEntry? FindCommittedLoversPair(
+		GameSession session) =>
+		session.GameHistoryLog
+			.OfType<LoversPairCommittedLogEntry>()
+			.SingleOrDefault();
+
+	private static FactionFactEffectiveBoundary GetLoversLinkBoundary(
+		GameSession session,
+		LoversPairCommittedLogEntry pair)
+	{
+		var history = session.GameHistoryLog.ToArray();
+		if (pair.LinkBoundary.Order >= history.Length ||
+		    !ReferenceEquals(history[pair.LinkBoundary.Order], pair))
+		{
+			throw new InvalidOperationException(
+				"The Lovers pair boundary does not match committed history.");
+		}
+
+		return pair.LinkBoundary;
+	}
+
+	private static void CommitCrossFactionLoversFacts(
+		GameSession session,
+		LoversPairCommittedLogEntry pair,
+		FactionFactEffectiveBoundary linkBoundary)
+	{
+		if (session.GameHistoryLog
+		    .OfType<FactionFactsCommittedLogEntry>()
+		    .Any(entry =>
+			    entry.Source.Kind ==
+			    FactionFactSourceKind.ExplicitTransition &&
+			    StringComparer.Ordinal.Equals(
+				    entry.Source.Identifier,
+				    LoversClassificationSourceIdentifier)))
+		{
+			throw new InvalidOperationException(
+				"The Lovers classification is already committed.");
+		}
+
+		session.CommitFactionFactBatch(context =>
+			new FactionFactsCommittedLogEntry
+			{
+				Timestamp = context.Timestamp,
+				TurnNumber = context.TurnNumber,
+				CurrentPhase = context.CurrentPhase,
+				Source = new FactionFactSource(
+					FactionFactSourceKind.ExplicitTransition,
+					LoversClassificationSourceIdentifier),
+				Facts = pair.PlayerIds
+					.Select(playerId => FactionFact.Beneficiary(
+						playerId,
+						Faction.CrossFactionLovers,
+						linkBoundary,
+						CrossFactionLoversBeneficiaryPrecedence))
+					.ToImmutableArray()
+			});
+	}
+
+	private static void ValidateCrossFactionLoversFacts(
+		LoversPairCommittedLogEntry pair,
+		FactionFactEffectiveBoundary linkBoundary,
+		IReadOnlyCollection<FactionFact> facts)
+	{
+		if (facts.Count != 2 ||
+		    !facts.Select(fact => fact.PlayerId)
+			    .ToHashSet()
+			    .SetEquals(pair.PlayerIds) ||
+		    facts.Any(fact =>
+			    fact.Type != FactionFactType.Beneficiary ||
+			    fact.Faction != Faction.CrossFactionLovers ||
+			    fact.EffectiveBoundary != linkBoundary ||
+			    fact.BeneficiaryPrecedence !=
+			    CrossFactionLoversBeneficiaryPrecedence))
+		{
+			throw new InvalidOperationException(
+				"The committed Cross-Faction Lovers classification is invalid.");
+		}
+	}
+
+	private static void ValidateLoversPairStatuses(
+		GameSession session,
+		LoversPairCommittedLogEntry pair)
+	{
+		if (pair.PlayerIds.Any(playerId =>
+			    !session.GetPlayerState(playerId)
+				    .HasStatusEffect(StatusEffectTypes.Lovers)))
+		{
+			throw new InvalidOperationException(
+				"The committed Lovers pair requires both durable Lovers statuses.");
+		}
 	}
 
 	private static InitialBeneficiaryClosureDeferredResult?
