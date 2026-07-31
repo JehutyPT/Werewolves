@@ -65,6 +65,291 @@ public sealed class KnightWithTheRustySwordRoleTests : DiagnosticTestBase
 	}
 
 	[Fact]
+	public void Dawn_BigBadWolfAttackSchedulesDiseaseOnSameNightInfectedClockwiseAgent()
+	{
+		var builder = CreateBuilder()
+			.WithPlayers(
+				"Knight",
+				"Clockwise Agent Candidate",
+				"Werewolf",
+				"Accursed Wolf-Father",
+				"Big Bad Wolf",
+				"Villager A",
+				"Villager B",
+				"Villager C",
+				"Villager D",
+				"Villager E")
+			.WithRoles(
+				MainRoleType.KnightWithRustySword,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.AccursedWolfFather,
+				MainRoleType.BigBadWolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		builder
+			.ArrangeKnownRole(
+				players[0].Id,
+				MainRoleType.KnightWithRustySword)
+			.ArrangeKnownRole(
+				players[3].Id,
+				MainRoleType.AccursedWolfFather)
+			.ArrangeKnownRole(
+				players[4].Id,
+				MainRoleType.BigBadWolf)
+			.ArrangeKnownWerewolfFactionAgentGroup(
+				players[2].Id,
+				players[3].Id,
+				players[4].Id);
+		builder.ConfirmGameStart();
+
+		builder.CompleteNightPhase(new NightActionInputs
+		{
+			WerewolfIds = [players[2].Id, players[3].Id, players[4].Id],
+			WerewolfVictimId = players[1].Id,
+			AccursedWolfFatherId = players[3].Id,
+			AccursedWolfFatherInfectsVictim = true,
+			BigBadWolfId = players[4].Id,
+			BigBadWolfTargetId = players[0].Id
+		}).IsSuccess.Should().BeTrue();
+		builder.CompleteDawnPhase(new Dictionary<Guid, MainRoleType>
+		{
+			[players[0].Id] = MainRoleType.KnightWithRustySword
+		}).IsSuccess.Should().BeTrue();
+
+		players[0].State.Health.Should().Be(PlayerHealth.Dead);
+		players[1].State.Health.Should().Be(PlayerHealth.Alive);
+		players[1].State.HasStatusEffect(
+			StatusEffectTypes.LycanthropyInfection).Should().BeTrue();
+		players[1].State.GetFactionAgentKnowledge(Faction.Werewolf)
+			.Should().Be(FactionAgentKnowledge.KnownAgent);
+		players[1].State.HasStatusEffect(
+			StatusEffectTypes.RustySwordDisease).Should().BeTrue();
+		builder.GetGameState()!.GameHistoryLog
+			.OfType<DawnVictimDeterminedLogEntry>()
+			.Should().ContainSingle(entry =>
+				entry.PlayerId == players[0].Id &&
+				entry.Reason == EliminationReason.WerewolfAttack);
+		builder.GetGameState()!.GameHistoryLog
+			.OfType<DawnVictimDeterminedLogEntry>()
+			.Should().NotContain(entry => entry.PlayerId == players[1].Id);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void Dawn_WhiteWerewolfPublicAttackOnAgentKnightSchedulesDisease()
+	{
+		var builder = CreateBuilder()
+			.WithPlayers(
+				"Knight",
+				"Solo Agent",
+				"Werewolf",
+				"First Night Victim",
+				"Second Night Collective Victim",
+				"Villager A",
+				"Villager B",
+				"Villager C")
+			.WithRoles(
+				MainRoleType.KnightWithRustySword,
+				MainRoleType.WhiteWerewolf,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		builder
+			.ArrangeKnownRole(
+				players[0].Id,
+				MainRoleType.KnightWithRustySword)
+			.ArrangeKnownRole(
+				players[1].Id,
+				MainRoleType.WhiteWerewolf)
+			.ArrangeKnownWerewolfFactionAgentGroup(
+				players[0].Id,
+				players[1].Id,
+				players[2].Id);
+		builder.ConfirmGameStart();
+		builder.CompleteNightPhase(new NightActionInputs
+		{
+			WerewolfIds = [players[0].Id, players[1].Id, players[2].Id],
+			WerewolfVictimId = players[3].Id
+		}).IsSuccess.Should().BeTrue();
+		builder.CompleteDawnPhase(new Dictionary<Guid, MainRoleType>
+		{
+			[players[3].Id] = MainRoleType.SimpleVillager
+		}).IsSuccess.Should().BeTrue();
+		builder.CompleteDayPhaseWithTie().IsSuccess.Should().BeTrue();
+		builder.ConfirmNightStart();
+
+		var whiteWake = InstructionAssert
+			.ExpectSuccessWithType<ConfirmationInstruction>(
+				builder.CompleteWerewolfNightAction(
+					[players[0].Id, players[1].Id, players[2].Id],
+					players[4].Id));
+		var whiteTarget = InstructionAssert
+			.ExpectSuccessWithType<SelectPlayersInstruction>(
+				builder.Process(whiteWake.CreateResponse()));
+		whiteTarget.Semantic.Should().Be(
+			ModeratorInstructionSemantic.SelectWhiteWerewolfTarget);
+		var whiteSleep = InstructionAssert
+			.ExpectSuccessWithType<ConfirmationInstruction>(
+				builder.Process(
+					whiteTarget.CreateResponse([players[0].Id])));
+		var nightEnd = InstructionAssert
+			.ExpectSuccessWithType<ConfirmationInstruction>(
+				builder.Process(whiteSleep.CreateResponse()));
+		builder.Process(nightEnd.CreateResponse()).IsSuccess.Should().BeTrue();
+		builder.CompleteDawnPhase(new Dictionary<Guid, MainRoleType>
+		{
+			[players[0].Id] = MainRoleType.KnightWithRustySword,
+			[players[4].Id] = MainRoleType.SimpleVillager
+		}).IsSuccess.Should().BeTrue();
+
+		players[0].State.Health.Should().Be(PlayerHealth.Dead);
+		players[1].State.HasStatusEffect(
+			StatusEffectTypes.RustySwordDisease).Should().BeTrue();
+		builder.GetGameState()!.GameHistoryLog
+			.OfType<RecurringRolePowerCommittedLogEntry>()
+			.Should().ContainSingle(entry =>
+				entry.ActionType ==
+					NightActionType.WhiteWerewolfVictimSelection &&
+				entry.TargetIds!.SequenceEqual(new[] { players[0].Id }));
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void Dawn_WitchPublicHealingPreventsKnightTrigger()
+	{
+		var builder = CreateBuilder()
+			.WithPlayers(
+				"Knight",
+				"Werewolf",
+				"Witch",
+				"Villager A",
+				"Villager B",
+				"Villager C")
+			.WithRoles(
+				MainRoleType.KnightWithRustySword,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Witch,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		builder
+			.ArrangeKnownRole(
+				players[0].Id,
+				MainRoleType.KnightWithRustySword)
+			.ArrangeKnownRole(players[2].Id, MainRoleType.Witch)
+			.ArrangeKnownWerewolfFactionAgentGroup(players[1].Id);
+		builder.ConfirmGameStart();
+		builder.ConfirmNightStart();
+		var witchWake = InstructionAssert
+			.ExpectSuccessWithType<ConfirmationInstruction>(
+				builder.CompleteWerewolfNightAction(
+					[players[1].Id],
+					players[0].Id));
+		var healing = InstructionAssert
+			.ExpectSuccessWithType<SelectPlayersInstruction>(
+				builder.Process(witchWake.CreateResponse()));
+		healing.Semantic.Should().Be(
+			ModeratorInstructionSemantic.SelectWitchHealingTarget);
+		var poison = InstructionAssert
+			.ExpectSuccessWithType<SelectPlayersInstruction>(
+				builder.Process(
+					healing.CreateResponse([players[0].Id])));
+		var witchSleep = InstructionAssert
+			.ExpectSuccessWithType<ConfirmationInstruction>(
+				builder.Process(poison.CreateResponse([])));
+		var nightEnd = InstructionAssert
+			.ExpectSuccessWithType<ConfirmationInstruction>(
+				builder.Process(witchSleep.CreateResponse()));
+		builder.Process(nightEnd.CreateResponse()).IsSuccess.Should().BeTrue();
+		builder.CompleteDawnPhase().IsSuccess.Should().BeTrue();
+
+		players[0].State.Health.Should().Be(PlayerHealth.Alive);
+		players.Should().OnlyContain(player =>
+			!player.State.HasStatusEffect(
+				StatusEffectTypes.RustySwordDisease));
+		builder.GetGameState()!.GameHistoryLog
+			.OfType<OneUseRolePowerCommittedLogEntry>()
+			.Should().ContainSingle(entry =>
+				entry.ActionType == NightActionType.WitchSave &&
+				entry.TargetIds!.SequenceEqual(new[] { players[0].Id }));
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void Dawn_DeclinedInfectionRetainsCollectiveKnightAttackAndSchedulesDisease()
+	{
+		var builder = CreateBuilder()
+			.WithPlayers(
+				"Knight",
+				"Werewolf",
+				"Accursed Wolf-Father",
+				"Villager A",
+				"Villager B",
+				"Villager C",
+				"Villager D",
+				"Villager E")
+			.WithRoles(
+				MainRoleType.KnightWithRustySword,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.AccursedWolfFather,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		builder
+			.ArrangeKnownRole(
+				players[0].Id,
+				MainRoleType.KnightWithRustySword)
+			.ArrangeKnownRole(
+				players[2].Id,
+				MainRoleType.AccursedWolfFather)
+			.ArrangeKnownWerewolfFactionAgentGroup(
+				players[1].Id,
+				players[2].Id);
+		builder.ConfirmGameStart();
+
+		builder.CompleteNightPhase(new NightActionInputs
+		{
+			WerewolfIds = [players[1].Id, players[2].Id],
+			WerewolfVictimId = players[0].Id,
+			AccursedWolfFatherId = players[2].Id,
+			AccursedWolfFatherInfectsVictim = false
+		}).IsSuccess.Should().BeTrue();
+		builder.CompleteDawnPhase(new Dictionary<Guid, MainRoleType>
+		{
+			[players[0].Id] = MainRoleType.KnightWithRustySword
+		}).IsSuccess.Should().BeTrue();
+
+		players[0].State.Health.Should().Be(PlayerHealth.Dead);
+		players[0].State.HasStatusEffect(
+			StatusEffectTypes.LycanthropyInfection).Should().BeFalse();
+		players[1].State.HasStatusEffect(
+			StatusEffectTypes.RustySwordDisease).Should().BeTrue();
+		builder.GetGameState()!.GameHistoryLog
+			.OfType<OneUseRolePowerCommittedLogEntry>()
+			.Should().NotContain(entry =>
+				entry.ActionType ==
+					NightActionType.AccursedWolfFatherInfection);
+		MarkTestCompleted();
+	}
+
+	[Fact]
 	public void FollowingNight_DueDiseaseBecomesOneRustySwordActionAndAnnouncesCauseBeforeElimination()
 	{
 		var builder = CreateBuilder()
@@ -131,33 +416,78 @@ public sealed class KnightWithTheRustySwordRoleTests : DiagnosticTestBase
 			.GetCurrentInstruction(recoveredGameId)
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		recoveredNightEnd.InstructionId.Should().Be(secondNightEnd.InstructionId);
-		var reveal = recoveredService
-			.ProcessInstruction(
-				recoveredGameId,
-				recoveredNightEnd.CreateResponse())
+			var diseaseAnnouncement = recoveredService
+				.ProcessInstruction(
+					recoveredGameId,
+					recoveredNightEnd.CreateResponse())
 			.ModeratorInstruction
-			.Should().BeOfType<AssignRolesInstruction>().Subject;
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
 
-		reveal.Semantic.Should().Be(
-			ModeratorInstructionSemantic.AssignDawnVictimRoles);
-		reveal.PublicAnnouncement.Should().Contain(
-			GameStrings.RustySwordDiseaseEliminationAnnouncement.Format(
-				players[1].Name));
+		diseaseAnnouncement.Semantic.Should().Be(
+			ModeratorInstructionSemantic.AnnounceDawnVictims);
+			diseaseAnnouncement.PublicAnnouncement.Should().Contain(
+				GameStrings.RustySwordDiseaseEliminationAnnouncement.Format(
+					players[1].Name));
+			var announcementService = new GameService();
+			var announcementGameId = announcementService.RehydrateSession(
+				recoveredService.GetGameStateView(recoveredGameId)!.Serialize());
+			var recoveredAnnouncement = announcementService
+				.GetCurrentInstruction(announcementGameId)
+				.Should().BeOfType<ConfirmationInstruction>().Subject;
+			recoveredAnnouncement.InstructionId.Should().Be(
+				diseaseAnnouncement.InstructionId);
+			recoveredAnnouncement.PublicAnnouncement.Should().Be(
+				diseaseAnnouncement.PublicAnnouncement);
+			var beforeStaleNightEnd = announcementService
+				.GetGameStateView(announcementGameId)!.Serialize();
+			Action replayNightEnd = () => announcementService.ProcessInstruction(
+				announcementGameId,
+				recoveredNightEnd.CreateResponse());
 
-		CompleteRecoveredDawn(
-			recoveredService,
-			recoveredGameId,
-			new Dictionary<Guid, MainRoleType>
-		{
-			[players[1].Id] = MainRoleType.SimpleWerewolf,
-			[players[2].Id] = MainRoleType.SimpleVillager
-		});
-		var recoveredState =
-			recoveredService.GetGameStateView(recoveredGameId)!;
-		recoveredState.GameHistoryLog
-			.OfType<PlayerEliminatedLogEntry>()
-			.Should().ContainSingle(entry =>
-				entry.PlayerId == players[1].Id &&
+			replayNightEnd.Should().Throw<InvalidOperationException>();
+			announcementService.GetGameStateView(announcementGameId)!
+				.Serialize().Should().Be(beforeStaleNightEnd);
+			var reveal = announcementService
+				.ProcessInstruction(
+					announcementGameId,
+					recoveredAnnouncement.CreateResponse())
+				.ModeratorInstruction
+				.Should().BeOfType<AssignRolesInstruction>().Subject;
+			reveal.Semantic.Should().Be(
+				ModeratorInstructionSemantic.AssignDawnVictimRoles);
+			reveal.PublicAnnouncement.Should().BeNull();
+
+			var revealService = new GameService();
+			var revealGameId = revealService.RehydrateSession(
+				announcementService.GetGameStateView(announcementGameId)!
+					.Serialize());
+			var recoveredReveal = revealService.GetCurrentInstruction(revealGameId)
+				.Should().BeOfType<AssignRolesInstruction>().Subject;
+			recoveredReveal.InstructionId.Should().Be(reveal.InstructionId);
+			recoveredReveal.PublicAnnouncement.Should().BeNull();
+			var beforeStaleAnnouncement = revealService.GetGameStateView(revealGameId)!
+				.Serialize();
+			Action replayAnnouncement = () => revealService.ProcessInstruction(
+				revealGameId,
+				recoveredAnnouncement.CreateResponse());
+
+			replayAnnouncement.Should().Throw<InvalidOperationException>();
+			revealService.GetGameStateView(revealGameId)!
+				.Serialize().Should().Be(beforeStaleAnnouncement);
+			CompleteRecoveredDawn(
+				revealService,
+				revealGameId,
+				new Dictionary<Guid, MainRoleType>
+			{
+				[players[1].Id] = MainRoleType.SimpleWerewolf,
+				[players[2].Id] = MainRoleType.SimpleVillager
+			});
+			var recoveredState =
+				revealService.GetGameStateView(revealGameId)!;
+			recoveredState.GameHistoryLog
+				.OfType<PlayerEliminatedLogEntry>()
+				.Should().ContainSingle(entry =>
+					entry.PlayerId == players[1].Id &&
 				entry.Reason == EliminationReason.RustySword);
 		recoveredState.GameHistoryLog
 			.OfType<NightActionLogEntry>()
@@ -165,16 +495,22 @@ public sealed class KnightWithTheRustySwordRoleTests : DiagnosticTestBase
 				entry.TurnNumber == 2 &&
 				entry.CurrentPhase == GamePhase.Night &&
 				entry.ActionType == NightActionType.RustySword &&
-				entry.TargetIds != null &&
-				entry.TargetIds.Count == 1 &&
-				entry.TargetIds[0] == players[1].Id);
-		var afterCompletion = recoveredState.Serialize();
-		recoveredService.ProcessInstruction(
-			recoveredGameId,
-			recoveredNightEnd.CreateResponse());
+					entry.TargetIds != null &&
+					entry.TargetIds.Count == 1 &&
+					entry.TargetIds[0] == players[1].Id);
+			recoveredState.GameHistoryLog
+				.OfType<EliminationCascadeReactionCompletedLogEntry>()
+				.Should().ContainSingle(entry =>
+					entry.TriggeringEliminations.Any(elimination =>
+						elimination.PlayerId == players[1].Id &&
+						elimination.Reason == EliminationReason.RustySword));
+			var afterCompletion = recoveredState.Serialize();
+			revealService.ProcessInstruction(
+				revealGameId,
+				recoveredNightEnd.CreateResponse());
 
-		recoveredService.GetGameStateView(recoveredGameId)!
-			.Serialize().Should().Be(afterCompletion);
+			revealService.GetGameStateView(revealGameId)!
+				.Serialize().Should().Be(afterCompletion);
 		MarkTestCompleted();
 	}
 
@@ -566,6 +902,140 @@ public sealed class KnightWithTheRustySwordRoleTests : DiagnosticTestBase
 				entry.TurnNumber == 2 &&
 				entry.CurrentPhase == GamePhase.Night &&
 				entry.ActionType == NightActionType.RustySword);
+		builder.GetGameState()!.GameHistoryLog
+			.OfType<StatusEffectLogEntry>()
+			.Where(entry =>
+				entry.PlayerId == players[1].Id &&
+				entry.EffectType == StatusEffectTypes.RustySwordDisease)
+			.Select(entry => entry.IsActive)
+			.Should().Equal(true, false);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void Night_DiseaseAppliedOutsidePriorDawnIsRetainedThenExpiresWithoutAction()
+	{
+		var builder = CreateBuilder()
+			.WithPlayers(
+				"Knight",
+				"Diseased Werewolf",
+				"Villager A",
+				"Villager B",
+				"Villager C",
+				"Villager D")
+			.WithRoles(
+				MainRoleType.KnightWithRustySword,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		builder
+			.ArrangeKnownRole(
+				players[0].Id,
+				MainRoleType.KnightWithRustySword)
+			.ArrangeKnownWerewolfFactionAgentGroup(players[1].Id)
+			.ArrangeStatusEffect(
+				players[1].Id,
+				StatusEffectTypes.RustySwordDisease);
+		builder.ConfirmGameStart();
+		builder.ConfirmNightStart();
+		var firstNightEnd = InstructionAssert
+			.ExpectSuccessWithType<ConfirmationInstruction>(
+				builder.CompleteWerewolfNightAction(
+					[players[1].Id],
+					players[2].Id));
+
+		players[1].State.HasStatusEffect(
+			StatusEffectTypes.RustySwordDisease).Should().BeTrue();
+		builder.GetGameState()!.GameHistoryLog
+			.OfType<NightActionLogEntry>()
+			.Should().NotContain(entry =>
+				entry.ActionType == NightActionType.RustySword);
+
+		builder.Process(firstNightEnd.CreateResponse());
+		builder.CompleteDawnPhase().IsSuccess.Should().BeTrue();
+		builder.CompleteDayPhaseWithTie().IsSuccess.Should().BeTrue();
+		builder.ConfirmNightStart();
+		InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+			builder.CompleteWerewolfNightAction(
+				[players[1].Id],
+				players[3].Id));
+
+		players[1].State.HasStatusEffect(
+			StatusEffectTypes.RustySwordDisease).Should().BeFalse();
+		builder.GetGameState()!.GameHistoryLog
+			.OfType<NightActionLogEntry>()
+			.Should().NotContain(entry =>
+				entry.ActionType == NightActionType.RustySword);
+		builder.GetGameState()!.GameHistoryLog
+			.OfType<StatusEffectLogEntry>()
+			.Where(entry =>
+				entry.PlayerId == players[1].Id &&
+				entry.EffectType == StatusEffectTypes.RustySwordDisease)
+			.Select(entry => entry.IsActive)
+			.Should().Equal(true, false);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void FollowingNight_ExistingRustySwordActionRemovesActiveDiseaseWithoutDuplicate()
+	{
+		var builder = CreateBuilder()
+			.WithPlayers(
+				"Knight",
+				"Diseased Werewolf",
+				"Villager A",
+				"Villager B",
+				"Villager C",
+				"Villager D")
+			.WithRoles(
+				MainRoleType.KnightWithRustySword,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		builder
+			.ArrangeKnownRole(
+				players[0].Id,
+				MainRoleType.KnightWithRustySword)
+			.ArrangeKnownWerewolfFactionAgentGroup(players[1].Id);
+		builder.ConfirmGameStart();
+		builder.ConfirmNightStart();
+		var firstNightEnd = InstructionAssert
+			.ExpectSuccessWithType<ConfirmationInstruction>(
+				builder.CompleteWerewolfNightAction(
+					[players[1].Id],
+					players[0].Id));
+		builder.Process(firstNightEnd.CreateResponse());
+		builder.CompleteDawnPhase().IsSuccess.Should().BeTrue();
+		builder.CompleteDayPhaseWithTie().IsSuccess.Should().BeTrue();
+		builder.ArrangeNightAction(
+			NightActionType.RustySword,
+			players[1].Id);
+
+		players[1].State.HasStatusEffect(
+			StatusEffectTypes.RustySwordDisease).Should().BeTrue();
+		builder.ConfirmNightStart();
+		InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+			builder.CompleteWerewolfNightAction(
+				[players[1].Id],
+				players[2].Id));
+
+		players[1].State.HasStatusEffect(
+			StatusEffectTypes.RustySwordDisease).Should().BeFalse();
+		builder.GetGameState()!.GameHistoryLog
+			.OfType<NightActionLogEntry>()
+			.Should().ContainSingle(entry =>
+				entry.TurnNumber == 2 &&
+				entry.CurrentPhase == GamePhase.Night &&
+				entry.ActionType == NightActionType.RustySword &&
+				entry.TargetIds!.SequenceEqual(new[] { players[1].Id }));
 		builder.GetGameState()!.GameHistoryLog
 			.OfType<StatusEffectLogEntry>()
 			.Where(entry =>

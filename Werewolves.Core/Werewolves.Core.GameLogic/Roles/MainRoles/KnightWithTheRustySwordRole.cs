@@ -1,10 +1,13 @@
+using Werewolves.Core.GameLogic.Models.EliminationCascades;
 using Werewolves.Core.GameLogic.Models.GameHookListeners;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
 using Werewolves.Core.GameLogic.Queries;
 using Werewolves.Core.GameLogic.RolePowers;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Models;
+using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Resources;
 
 namespace Werewolves.Core.GameLogic.Roles.MainRoles;
@@ -15,7 +18,8 @@ internal enum KnightWithTheRustySwordRoleState
 }
 
 internal sealed class KnightWithTheRustySwordRole
-	: RoleHookListener<KnightWithTheRustySwordRoleState>
+	: RoleHookListener<KnightWithTheRustySwordRoleState>,
+	  IEliminationCascadeReaction
 {
 	private static readonly RolePowerDefinition DiseasePower = new(
 		new RolePowerIdentifier("knight-rusty-sword-disease"),
@@ -35,6 +39,58 @@ internal sealed class KnightWithTheRustySwordRole
 
 	public override ListenerIdentifier Id =>
 		ListenerIdentifier.Listener(MainRoleType.KnightWithRustySword);
+
+	public string ReactionId =>
+		EliminationCascadeReactionIds.RustySwordDiseaseAnnouncement;
+
+	public EliminationCascadeReactionResult Advance(
+		GameSession session,
+		IReadOnlyCollection<Guid> eliminatedPlayerIds,
+		ModeratorResponse input)
+	{
+		var pendingDawnVictims = GameSessionQueries
+			.GetPendingDawnEliminations(session)
+			.Where(victim => eliminatedPlayerIds.Contains(victim.Player.Id))
+			.ToArray();
+		if (pendingDawnVictims.All(victim =>
+			    victim.Reason != EliminationReason.RustySword))
+		{
+			return EliminationCascadeReactionResult.Complete();
+		}
+
+		var pendingInstruction = session.PendingModeratorInstruction;
+		if (pendingInstruction?.Semantic ==
+		    ModeratorInstructionSemantic.AnnounceDawnVictims)
+		{
+			if (pendingInstruction is not ConfirmationInstruction confirmation ||
+			    confirmation.AffectedPlayerIds?.ToHashSet()
+				    .SetEquals(eliminatedPlayerIds) != true ||
+			    input.InstructionId != confirmation.InstructionId ||
+			    input.Type != ExpectedInputType.Continue)
+			{
+				throw new InvalidOperationException(
+					"The Rusty Sword disease announcement received an uncorrelated response.");
+			}
+
+			return EliminationCascadeReactionResult.Complete();
+		}
+
+		var victimNames = string.Join(
+			Environment.NewLine,
+			pendingDawnVictims.Select(victim =>
+				victim.Reason == EliminationReason.RustySword
+					? GameStrings
+						.RustySwordDiseaseEliminationAnnouncement
+						.Format(victim.Player.Name)
+					: victim.Player.Name));
+		return EliminationCascadeReactionResult.NeedInput(
+			new ConfirmationInstruction(
+				ModeratorInstructionSemantic.AnnounceDawnVictims,
+				publicAnnouncement:
+					GameStrings.MultipleVictimEliminatedAnnounce.Format(
+						victimNames),
+				affectedPlayerIds: eliminatedPlayerIds.ToArray()));
+	}
 
 	public override HookListenerActionResult Execute(
 		GameSession session,

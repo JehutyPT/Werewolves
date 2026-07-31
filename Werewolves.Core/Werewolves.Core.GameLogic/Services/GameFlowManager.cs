@@ -120,6 +120,10 @@ internal static class GameFlowManager
 		EliminationCascadeReactionRegistrations =
 	[
 		new(
+			EliminationCascadeReactionIds.RustySwordDiseaseAnnouncement,
+			EliminationCascadeReactionBoundary.PreReveal,
+			Listener(KnightWithRustySword)),
+		new(
 			EliminationCascadeReactionIds.WildChildModelEliminated,
 			EliminationCascadeReactionBoundary.Forced,
 			Listener(WildChild)),
@@ -339,22 +343,20 @@ internal static class GameFlowManager
                 .ToArray());
     }
 
-    private static string CreateDawnEliminationAnnouncement(
+    private static string? CreateDawnEliminationAnnouncement(
         GameSession session,
         IReadOnlyCollection<EliminationRequest> eliminations)
     {
+        if (eliminations.Any(elimination =>
+                elimination.Reason == EliminationReason.RustySword))
+        {
+            return null;
+        }
+
         var victimNames = string.Join(
             Environment.NewLine,
             eliminations.Select(elimination =>
-            {
-                var victimName =
-                    session.GetPlayer(elimination.PlayerId).Name;
-                return elimination.Reason == EliminationReason.RustySword
-                    ? GameStrings
-                        .RustySwordDiseaseEliminationAnnouncement
-                        .Format(victimName)
-                    : victimName;
-            }));
+                session.GetPlayer(elimination.PlayerId).Name));
         return GameStrings.MultipleVictimEliminatedAnnounce.Format(victimNames);
     }
 
@@ -892,10 +894,11 @@ internal static class GameFlowManager
             ModeratorInstructionSemantic.AssignEliminationCascadeRoles or
             ModeratorInstructionSemantic.AnnounceBearTamerGrowl;
 
-	private static bool IsEliminationCascadeReactionInput(
-		ModeratorInstruction instruction) =>
-		instruction.Semantic is
-			ModeratorInstructionSemantic.SelectHunterFinalShotTarget;
+		private static bool IsEliminationCascadeReactionInput(
+			ModeratorInstruction instruction) =>
+			instruction.Semantic is
+				ModeratorInstructionSemantic.AnnounceDawnVictims or
+				ModeratorInstructionSemantic.SelectHunterFinalShotTarget;
 
     private static AcceptedObservationRecoveryCursor?
         CreateAcceptedObservationRecoveryCursor(
