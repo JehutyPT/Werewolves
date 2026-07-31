@@ -7,6 +7,7 @@ using Werewolves.Client.Components.Game.Views;
 using Werewolves.Client.Resources;
 using Werewolves.Client.Services;
 using Werewolves.Client.Tests.Helpers;
+using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
@@ -93,14 +94,20 @@ public sealed class CupidFlowBunitTests
 		FindHoldButton(selectionCut)
 			.HasAttribute(Html.Attributes.Disabled)
 			.Should().BeTrue();
+		await AttemptDisabledHoldAsync(selectionCut, timing);
+		responses.Should().BeEmpty();
 		FindPlayerOption(selectionCut, names[2]).Click();
 		FindHoldButton(selectionCut)
 			.HasAttribute(Html.Attributes.Disabled)
 			.Should().BeTrue();
+		await AttemptDisabledHoldAsync(selectionCut, timing);
+		responses.Should().BeEmpty();
 		FindPlayerOption(selectionCut, names[3]).Click();
 		FindHoldButton(selectionCut)
 			.HasAttribute(Html.Attributes.Disabled)
 			.Should().BeFalse();
+		await CancelHoldAsync(selectionCut, timing);
+		responses.Should().BeEmpty();
 
 		await RenderedHoldButtonDriver.CompleteHoldAsync(
 			selectionCut,
@@ -111,13 +118,20 @@ public sealed class CupidFlowBunitTests
 		responses.Single().SelectedPlayerIds.Should().BeEquivalentTo(
 			[players[2].Id, players[3].Id]);
 		manager.ProcessInput(responses.Single()).IsSuccess.Should().BeTrue();
-		var recognition = manager.CurrentInstruction
+		var expectedRecognition = manager.CurrentInstruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var recoveredManager = new GameClientManager(
+			new GameService(),
+			saveStore: context.Services
+				.GetRequiredService<IGameSessionSaveStore>());
+		var recognition = recoveredManager.CurrentInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		recognition.Should().BeEquivalentTo(expectedRecognition);
 		var recognitionResponses = new List<ModeratorResponse>();
 		var recognitionCut = RenderInstruction(
 			context,
 			recognition,
-			manager.CurrentRoster,
+			recoveredManager.CurrentRoster,
 			recognitionResponses);
 
 		recognition.Semantic.Should().Be(
@@ -127,7 +141,7 @@ public sealed class CupidFlowBunitTests
 		recognitionCut.FindAll(PublicInstructionSelector).Should().BeEmpty();
 		recognitionCut.Find(PrivateInstructionSelector).TextContent.Should()
 			.Contain(GameStrings.LoversRecognitionInstruction);
-		manager.CurrentRoster
+		recoveredManager.CurrentRoster
 			.Where(entry => recognition.AffectedPlayerIds!.Contains(entry.PlayerId))
 			.Should().OnlyContain(entry =>
 				entry.StatusEffects.Contains(ClientStrings.StatusEffect_Lovers));
@@ -138,22 +152,27 @@ public sealed class CupidFlowBunitTests
 			timing);
 
 		recognitionResponses.Should().ContainSingle();
-		manager.ProcessInput(recognitionResponses.Single())
+		recoveredManager.ProcessInput(recognitionResponses.Single())
 			.IsSuccess.Should().BeTrue();
-		var sleep = manager.CurrentInstruction
+		var sleep = recoveredManager.CurrentInstruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		var sleepCut = RenderInstruction(
 			context,
 			sleep,
-			manager.CurrentRoster,
+			recoveredManager.CurrentRoster,
 			[]);
 
 		sleep.Semantic.Should().Be(
 			ModeratorInstructionSemantic.PutRoleToSleep);
 		sleep.AffectedPlayerIds.Should().BeEquivalentTo(
 			[players[2].Id, players[3].Id]);
-		sleepCut.Find(PublicInstructionSelector).TextContent.Should()
-			.Contain(GameStrings.LoversSleepAnnouncement);
+		var publicSleepAnnouncement =
+			sleepCut.Find(PublicInstructionSelector).TextContent;
+		publicSleepAnnouncement.Should().Contain(
+			GameStrings.LoversSleepAnnouncement);
+		publicSleepAnnouncement.Should().NotContain(names[2]);
+		publicSleepAnnouncement.Should().NotContain(names[3]);
+		sleepCut.FindAll(PrivateInstructionSelector).Should().BeEmpty();
 	}
 
 	private static IRenderedComponent<InstructionRenderer> RenderInstruction(
@@ -182,4 +201,38 @@ public sealed class CupidFlowBunitTests
 	private static IElement FindHoldButton(
 		IRenderedComponent<InstructionRenderer> cut) =>
 		cut.Find(HoldButtonSelector);
+
+	private static async Task AttemptDisabledHoldAsync(
+		IRenderedComponent<InstructionRenderer> cut,
+		ControlledHoldButtonTiming timing)
+	{
+		var holdButton = FindHoldButton(cut);
+		holdButton.HasAttribute(Html.Attributes.Disabled).Should().BeTrue();
+
+		var holdTask = RenderedHoldButtonDriver.StartHoldAsync(holdButton);
+		timing.AdvanceBy(
+			RenderedHoldButtonDriver.HoldDuration +
+			RenderedHoldButtonDriver.SuccessFlashDuration);
+		await holdTask;
+		await RenderedHoldButtonDriver.FlushAsync(cut);
+	}
+
+	private static async Task CancelHoldAsync(
+		IRenderedComponent<InstructionRenderer> cut,
+		ControlledHoldButtonTiming timing)
+	{
+		var holdButton = FindHoldButton(cut);
+		var holdTask = RenderedHoldButtonDriver.StartHoldAsync(holdButton);
+		await RenderedHoldButtonDriver.FlushAsync(cut);
+		timing.AdvanceBy(TimeSpan.FromTicks(
+			RenderedHoldButtonDriver.HoldDuration.Ticks / 2));
+		await RenderedHoldButtonDriver.FlushAsync(cut);
+
+		await RenderedHoldButtonDriver.LeaveHoldAsync(holdButton);
+		await holdTask;
+		timing.AdvanceBy(
+			RenderedHoldButtonDriver.HoldDuration +
+			RenderedHoldButtonDriver.SuccessFlashDuration);
+		await RenderedHoldButtonDriver.FlushAsync(cut);
+	}
 }

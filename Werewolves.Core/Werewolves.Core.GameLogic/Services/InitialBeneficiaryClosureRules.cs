@@ -138,38 +138,7 @@ internal static class InitialBeneficiaryClosureRules
 		"piper-beneficiary";
 	private const string LoversDeferredResultIdentifier =
 		"lovers-beneficiary";
-	private const string LoversClassificationSourceIdentifier =
-		"cupid-lovers-classification";
 	internal const int CrossFactionLoversBeneficiaryPrecedence = 1;
-
-	internal static bool TryCommitKnownLoversClassification(
-		GameSession session)
-	{
-		ArgumentNullException.ThrowIfNull(session);
-		var pair = FindCommittedLoversPair(session);
-		if (pair is null)
-		{
-			return false;
-		}
-
-		ValidateLoversPairStatuses(session, pair);
-		var beneficiaries = pair.PlayerIds
-			.Select(session.GetFactionBeneficiaryKnowledge)
-			.ToArray();
-		if (beneficiaries.Any(beneficiary => !beneficiary.IsKnown))
-		{
-			return false;
-		}
-
-		if (beneficiaries[0].Faction == beneficiaries[1].Faction)
-		{
-			return true;
-		}
-
-		var linkBoundary = GetLoversLinkBoundary(session, pair);
-		CommitCrossFactionLoversFacts(session, pair, linkBoundary);
-		return true;
-	}
 
 	internal static InitialBeneficiaryClosureResult TryCommitCurrentSession(
 		GameSession session,
@@ -519,9 +488,8 @@ internal static class InitialBeneficiaryClosureRules
 				LoversDeferredResultIdentifier);
 		}
 
-		var pair = history
-			.OfType<LoversPairCommittedLogEntry>()
-			.SingleOrDefault();
+		var pair =
+			GameSessionQueries.GetCommittedLoversPairFromHistory(history);
 		if (pair is null)
 		{
 			return InitialBeneficiaryClosureDeferredResult.Complete(
@@ -548,24 +516,6 @@ internal static class InitialBeneficiaryClosureRules
 				return InitialBeneficiaryClosureDeferredResult.Pending(
 					LoversDeferredResultIdentifier);
 			}
-		}
-
-		var existingClassification = factionHistory
-			.SingleOrDefault(entry =>
-				entry.Source.Kind ==
-				FactionFactSourceKind.ExplicitTransition &&
-				StringComparer.Ordinal.Equals(
-					entry.Source.Identifier,
-					LoversClassificationSourceIdentifier));
-		if (existingClassification is not null)
-		{
-			ValidateCrossFactionLoversFacts(
-				pair,
-				GetLoversLinkBoundary(session, pair),
-				existingClassification.Facts);
-			return InitialBeneficiaryClosureDeferredResult.Complete(
-				LoversDeferredResultIdentifier,
-				existingClassification.Facts);
 		}
 
 		var playerIds = session.GetPlayers()
@@ -637,83 +587,18 @@ internal static class InitialBeneficiaryClosureRules
 			facts);
 	}
 
-	private static LoversPairCommittedLogEntry? FindCommittedLoversPair(
-		GameSession session) =>
-		session.GameHistoryLog
-			.OfType<LoversPairCommittedLogEntry>()
-			.SingleOrDefault();
-
 	private static FactionFactEffectiveBoundary GetLoversLinkBoundary(
 		GameSession session,
 		LoversPairCommittedLogEntry pair)
 	{
-		var history = session.GameHistoryLog.ToArray();
-		if (pair.LinkBoundary.Order >= history.Length ||
-		    !ReferenceEquals(history[pair.LinkBoundary.Order], pair))
+		if (pair.LinkBoundary.Order !=
+		    GameSessionQueries.GetCommittedLogIndex(session, pair))
 		{
 			throw new InvalidOperationException(
 				"The Lovers pair boundary does not match committed history.");
 		}
 
 		return pair.LinkBoundary;
-	}
-
-	private static void CommitCrossFactionLoversFacts(
-		GameSession session,
-		LoversPairCommittedLogEntry pair,
-		FactionFactEffectiveBoundary linkBoundary)
-	{
-		if (session.GameHistoryLog
-		    .OfType<FactionFactsCommittedLogEntry>()
-		    .Any(entry =>
-			    entry.Source.Kind ==
-			    FactionFactSourceKind.ExplicitTransition &&
-			    StringComparer.Ordinal.Equals(
-				    entry.Source.Identifier,
-				    LoversClassificationSourceIdentifier)))
-		{
-			throw new InvalidOperationException(
-				"The Lovers classification is already committed.");
-		}
-
-		session.CommitFactionFactBatch(context =>
-			new FactionFactsCommittedLogEntry
-			{
-				Timestamp = context.Timestamp,
-				TurnNumber = context.TurnNumber,
-				CurrentPhase = context.CurrentPhase,
-				Source = new FactionFactSource(
-					FactionFactSourceKind.ExplicitTransition,
-					LoversClassificationSourceIdentifier),
-				Facts = pair.PlayerIds
-					.Select(playerId => FactionFact.Beneficiary(
-						playerId,
-						Faction.CrossFactionLovers,
-						linkBoundary,
-						CrossFactionLoversBeneficiaryPrecedence))
-					.ToImmutableArray()
-			});
-	}
-
-	private static void ValidateCrossFactionLoversFacts(
-		LoversPairCommittedLogEntry pair,
-		FactionFactEffectiveBoundary linkBoundary,
-		IReadOnlyCollection<FactionFact> facts)
-	{
-		if (facts.Count != 2 ||
-		    !facts.Select(fact => fact.PlayerId)
-			    .ToHashSet()
-			    .SetEquals(pair.PlayerIds) ||
-		    facts.Any(fact =>
-			    fact.Type != FactionFactType.Beneficiary ||
-			    fact.Faction != Faction.CrossFactionLovers ||
-			    fact.EffectiveBoundary != linkBoundary ||
-			    fact.BeneficiaryPrecedence !=
-			    CrossFactionLoversBeneficiaryPrecedence))
-		{
-			throw new InvalidOperationException(
-				"The committed Cross-Faction Lovers classification is invalid.");
-		}
 	}
 
 	private static void ValidateLoversPairStatuses(

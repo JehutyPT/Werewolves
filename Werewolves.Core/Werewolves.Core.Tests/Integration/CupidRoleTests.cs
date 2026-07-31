@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Werewolves.Core.GameLogic.Models.EliminationCascades;
 using Werewolves.Core.GameLogic.RolePowers;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Core;
@@ -159,6 +160,510 @@ public sealed class CupidRoleTests(ITestOutputHelper output)
 				laterBoundary));
 		session.RequireKnownFactionBeneficiary(villager.Id)
 			.Should().Be(Faction.CrossFactionLovers);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void KnownCrossFactionPair_ClassificationIsCommittedOnlyInsideAtomicInitialClosure()
+	{
+		var builder = CreateBuilder()
+			.WithPlayers(7)
+			.WithRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Cupid,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		var werewolf = players[0];
+		var cupid = players[1];
+		var villager = players[2];
+		var lovers = new[] { werewolf.Id, villager.Id };
+		builder.ArrangeKnownRole(cupid.Id, MainRoleType.Cupid);
+		builder.ArrangeKnownWerewolfFactionAgentGroup(werewolf.Id);
+		builder.ConfirmGameStart();
+		builder.ConfirmNightStart();
+		var wake = InstructionAssert.ExpectType<ConfirmationInstruction>(
+			builder.GetCurrentInstruction());
+		var selection =
+			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+				builder.Process(wake.CreateResponse()));
+
+		builder.Process(selection.CreateResponse(lovers.ToHashSet()))
+			.IsSuccess.Should().BeTrue();
+
+		var session = builder.GetGameState()!;
+		var factEntries = session.GameHistoryLog
+			.OfType<FactionFactsCommittedLogEntry>()
+			.ToArray();
+		var closure = factEntries.Should().ContainSingle(entry =>
+				entry.Source.Kind ==
+				FactionFactSourceKind.InitialBeneficiaryClosure).Subject;
+		closure.Facts.Should().Contain(fact =>
+			fact.PlayerId == werewolf.Id &&
+			fact.Type == FactionFactType.Beneficiary &&
+			fact.Faction == Faction.CrossFactionLovers);
+		closure.Facts.Should().Contain(fact =>
+			fact.PlayerId == villager.Id &&
+			fact.Type == FactionFactType.Beneficiary &&
+			fact.Faction == Faction.CrossFactionLovers);
+		factEntries.Should().NotContain(entry =>
+			entry.Source.Kind == FactionFactSourceKind.ExplicitTransition &&
+			entry.Facts.Any(fact =>
+				lovers.Contains(fact.PlayerId) &&
+				fact.Type == FactionFactType.Beneficiary &&
+				fact.Faction == Faction.CrossFactionLovers));
+		session.RequireKnownFactionBeneficiary(werewolf.Id)
+			.Should().Be(Faction.CrossFactionLovers);
+		session.RequireKnownFactionBeneficiary(villager.Id)
+			.Should().Be(Faction.CrossFactionLovers);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void CommittedPair_AfterCupidRoleChange_FreshServicePreservesHistoricalProvenance()
+	{
+		var builder = CreateBuilder()
+			.WithPlayers(7)
+			.WithRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Cupid,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		var werewolf = players[0];
+		var cupid = players[1];
+		var villager = players[2];
+		var lovers = new[] { werewolf.Id, villager.Id };
+		builder.ArrangeKnownRole(cupid.Id, MainRoleType.Cupid);
+		builder.ArrangeKnownWerewolfFactionAgentGroup(werewolf.Id);
+		builder.ConfirmGameStart();
+		builder.ConfirmNightStart();
+		var wake = InstructionAssert.ExpectType<ConfirmationInstruction>(
+			builder.GetCurrentInstruction());
+		var selection =
+			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+				builder.Process(wake.CreateResponse()));
+		var recognition =
+			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+				builder.Process(selection.CreateResponse(lovers.ToHashSet())));
+		builder.ArrangeCurrentRole(cupid.Id, MainRoleType.SimpleVillager);
+		var expectedSleep =
+			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+				builder.Process(recognition.CreateResponse()));
+		var serialized = builder.GetGameState()!.Serialize();
+		var freshService = new GameService();
+
+		var gameId = freshService.RehydrateSession(serialized);
+
+		var recovered = freshService.GetGameStateView(gameId)!;
+		freshService.GetCurrentInstruction(gameId)
+			.Should().BeEquivalentTo(expectedSleep);
+		recovered.GetPlayerState(cupid.Id).CurrentRole.Should().Be(
+			MainRoleType.SimpleVillager);
+		var committedPair = recovered.GameHistoryLog
+			.OfType<LoversPairCommittedLogEntry>()
+			.Should().ContainSingle().Subject;
+		committedPair.PowerIdentity.Should().Be(
+			new RolePowerInstanceIdentity(
+				cupid.Id,
+				MainRoleType.Cupid,
+				"cupid-link-lovers",
+				cupid.Id,
+				RolePowerInstanceOrigin.Native));
+		committedPair.PlayerIds.Should().BeEquivalentTo(lovers);
+		lovers.Should().OnlyContain(playerId =>
+			recovered.GetPlayerState(playerId)
+				.HasStatusEffect(StatusEffectTypes.Lovers));
+		recovered.RequireKnownFactionBeneficiary(werewolf.Id)
+			.Should().Be(Faction.CrossFactionLovers);
+		recovered.RequireKnownFactionBeneficiary(villager.Id)
+			.Should().Be(Faction.CrossFactionLovers);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void PendingSelection_FreshServiceRestoresExactChoiceWithoutPairOrDuplicateWake()
+	{
+		var scenario = CreateCupidSelectionScenario(
+			knownWerewolfAgentGroup: true);
+		var serialized = scenario.Builder.GetGameState()!.Serialize();
+		var freshService = new GameService();
+
+		var gameId = freshService.RehydrateSession(serialized);
+
+		var recoveredSelection = freshService.GetCurrentInstruction(gameId)
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		recoveredSelection.Should().BeEquivalentTo(scenario.Selection);
+		var recoveredSession = freshService.GetGameStateView(gameId)!;
+		recoveredSession.GameHistoryLog
+			.OfType<LoversPairCommittedLogEntry>()
+			.Should().BeEmpty();
+		recoveredSession.GetPlayers().Should().OnlyContain(player =>
+			!player.State.HasStatusEffect(StatusEffectTypes.Lovers));
+		var beforeReplay = PublicGameSessionSnapshot.Capture(
+			freshService,
+			gameId);
+		Action replayWake = () => freshService.ProcessInstruction(
+			gameId,
+			scenario.Wake.CreateResponse());
+		replayWake.Should().Throw<InvalidOperationException>();
+		PublicGameSessionSnapshot.Capture(freshService, gameId)
+			.Should().BeEquivalentTo(
+				beforeReplay,
+				options => options.WithStrictOrdering());
+
+		var lovers = new[]
+		{
+			scenario.Players[2].Id,
+			scenario.Players[3].Id
+		};
+		var acceptedSelection =
+			recoveredSelection.CreateResponse(lovers.ToHashSet());
+		var recognition = freshService.ProcessInstruction(
+				gameId,
+				acceptedSelection)
+			.ModeratorInstruction.Should()
+			.BeOfType<ConfirmationInstruction>().Subject;
+		recognition.Semantic.Should().Be(
+			ModeratorInstructionSemantic.RecognizeLovers);
+		var beforeRepeatedSelection = PublicGameSessionSnapshot.Capture(
+			freshService,
+			gameId);
+		Action repeatSelection = () => freshService.ProcessInstruction(
+			gameId,
+			acceptedSelection);
+		repeatSelection.Should().Throw<InvalidOperationException>();
+		PublicGameSessionSnapshot.Capture(freshService, gameId)
+			.Should().BeEquivalentTo(
+				beforeRepeatedSelection,
+				options => options.WithStrictOrdering());
+		freshService.GetGameStateView(gameId)!.GameHistoryLog
+			.OfType<LoversPairCommittedLogEntry>()
+			.Should().ContainSingle();
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void PendingLoversSleep_FreshServiceContinuesOnceWithoutReplayingRecognition()
+	{
+		var scenario = CreateCupidSelectionScenario(
+			knownWerewolfAgentGroup: true);
+		var lovers = new[]
+		{
+			scenario.Players[2].Id,
+			scenario.Players[3].Id
+		};
+		var recognition =
+			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+				scenario.Builder.Process(
+					scenario.Selection.CreateResponse(lovers.ToHashSet())));
+		var acceptedRecognition = recognition.CreateResponse();
+		var expectedSleep =
+			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+				scenario.Builder.Process(acceptedRecognition));
+		var freshService = new GameService();
+
+		var gameId = freshService.RehydrateSession(
+			scenario.Builder.GetGameState()!.Serialize());
+
+		var recoveredSleep = freshService.GetCurrentInstruction(gameId)
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		recoveredSleep.Should().BeEquivalentTo(expectedSleep);
+		var recoveredSession = freshService.GetGameStateView(gameId)!;
+		recoveredSession.GameHistoryLog
+			.OfType<LoversPairCommittedLogEntry>()
+			.Should().ContainSingle();
+		lovers.Should().OnlyContain(playerId =>
+			recoveredSession.GetPlayerState(playerId)
+				.HasStatusEffect(StatusEffectTypes.Lovers));
+		var beforeReplay = PublicGameSessionSnapshot.Capture(
+			freshService,
+			gameId);
+		Action replayRecognition = () => freshService.ProcessInstruction(
+			gameId,
+			acceptedRecognition);
+		replayRecognition.Should().Throw<InvalidOperationException>();
+		PublicGameSessionSnapshot.Capture(freshService, gameId)
+			.Should().BeEquivalentTo(
+				beforeReplay,
+				options => options.WithStrictOrdering());
+
+		var werewolfWake = freshService.ProcessInstruction(
+				gameId,
+				recoveredSleep.CreateResponse())
+			.ModeratorInstruction.Should()
+			.BeOfType<ConfirmationInstruction>().Subject;
+		werewolfWake.Semantic.Should().Be(
+			ModeratorInstructionSemantic.WakeRole);
+		werewolfWake.AffectedPlayerIds.Should().Equal(
+			scenario.Werewolf.Id);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void InitialClosure_FreshServiceRestoresBothSidesOfAtomicBoundary()
+	{
+		var scenario = CreateCupidSelectionScenario(
+			knownWerewolfAgentGroup: false);
+		var villager = scenario.Players[2];
+		var lovers = new[] { scenario.Werewolf.Id, villager.Id };
+		var recognition =
+			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+				scenario.Builder.Process(
+					scenario.Selection.CreateResponse(lovers.ToHashSet())));
+		var sleep =
+			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+				scenario.Builder.Process(recognition.CreateResponse()));
+		var expectedObservation =
+			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+				scenario.Builder.Process(sleep.CreateResponse()));
+		expectedObservation.Semantic.Should().Be(
+			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
+		var preClosureService = new GameService();
+
+		var preClosureGameId = preClosureService.RehydrateSession(
+			scenario.Builder.GetGameState()!.Serialize());
+
+		var recoveredObservation = preClosureService
+			.GetCurrentInstruction(preClosureGameId)
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		recoveredObservation.Should().BeEquivalentTo(expectedObservation);
+		var preClosureSession =
+			preClosureService.GetGameStateView(preClosureGameId)!;
+		preClosureSession.GameHistoryLog
+			.OfType<FactionFactsCommittedLogEntry>()
+			.Should().NotContain(entry =>
+				entry.Source.Kind ==
+				FactionFactSourceKind.InitialBeneficiaryClosure);
+		lovers.Should().OnlyContain(playerId =>
+			!preClosureSession.GetFactionBeneficiaryKnowledge(playerId)
+				.IsKnown);
+		var acceptedObservation = recoveredObservation.CreateResponse(
+			[scenario.Werewolf.Id]);
+		var expectedTarget = preClosureService.ProcessInstruction(
+				preClosureGameId,
+				acceptedObservation)
+			.ModeratorInstruction.Should()
+			.BeOfType<SelectPlayersInstruction>().Subject;
+		expectedTarget.Semantic.Should().Be(
+			ModeratorInstructionSemantic.SelectWerewolfVictim);
+		var postClosureService = new GameService();
+
+		var postClosureGameId = postClosureService.RehydrateSession(
+			preClosureService.GetGameStateView(preClosureGameId)!.Serialize());
+
+		var recoveredTarget = postClosureService
+			.GetCurrentInstruction(postClosureGameId)
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		recoveredTarget.Should().BeEquivalentTo(expectedTarget);
+		var postClosureSession =
+			postClosureService.GetGameStateView(postClosureGameId)!;
+		var factEntries = postClosureSession.GameHistoryLog
+			.OfType<FactionFactsCommittedLogEntry>()
+			.ToArray();
+		factEntries.Should().ContainSingle(entry =>
+			entry.Source.Kind ==
+			FactionFactSourceKind.InitialBeneficiaryClosure);
+		factEntries.Should().NotContain(entry =>
+			entry.Source.Kind == FactionFactSourceKind.ExplicitTransition &&
+			entry.Facts.Any(fact =>
+				lovers.Contains(fact.PlayerId) &&
+				fact.Type == FactionFactType.Beneficiary &&
+				fact.Faction == Faction.CrossFactionLovers));
+		postClosureSession.RequireKnownFactionBeneficiary(
+				scenario.Werewolf.Id)
+			.Should().Be(Faction.CrossFactionLovers);
+		postClosureSession.RequireKnownFactionBeneficiary(villager.Id)
+			.Should().Be(Faction.CrossFactionLovers);
+		var beforeReplay = PublicGameSessionSnapshot.Capture(
+			postClosureService,
+			postClosureGameId);
+		Action replayObservation = () =>
+			postClosureService.ProcessInstruction(
+				postClosureGameId,
+				acceptedObservation);
+		replayObservation.Should().Throw<InvalidOperationException>();
+		PublicGameSessionSnapshot.Capture(
+				postClosureService,
+				postClosureGameId)
+			.Should().BeEquivalentTo(
+				beforeReplay,
+				options => options.WithStrictOrdering());
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void SelectionResponseFactory_RejectsWrongDuplicateAndForeignShapesWithoutMutation()
+	{
+		var scenario = CreateCupidSelectionScenario(
+			knownWerewolfAgentGroup: true);
+		var first = scenario.Players[2].Id;
+		var second = scenario.Players[3].Id;
+		var third = scenario.Players[4].Id;
+		var duplicateShape = new HashSet<Guid> { first, first };
+		var wrongCountFactories = new Action[]
+		{
+			() => scenario.Selection.CreateResponse([]),
+			() => scenario.Selection.CreateResponse([first]),
+			() => scenario.Selection.CreateResponse([first, second, third]),
+			() => scenario.Selection.CreateResponse(duplicateShape)
+		};
+		var before = scenario.Builder.GetGameState()!.Serialize();
+
+		foreach (var wrongCountFactory in wrongCountFactories)
+		{
+			wrongCountFactory.Should().Throw<InvalidOperationException>();
+		}
+		Action foreignPlayerFactory = () =>
+			scenario.Selection.CreateResponse([first, Guid.NewGuid()]);
+		foreignPlayerFactory.Should().Throw<ArgumentException>();
+		Action nullFactory = () => scenario.Selection.CreateResponse(null!);
+		nullFactory.Should().Throw<ArgumentNullException>();
+
+		scenario.Builder.GetGameState()!.Serialize().Should().Be(before);
+		scenario.Builder.GetCurrentInstruction()!.InstructionId.Should().Be(
+			scenario.Selection.InstructionId);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void MalformedOrUncorrelatedSelectionResponses_AreSideEffectFree()
+	{
+		var scenario = CreateCupidSelectionScenario(
+			knownWerewolfAgentGroup: true);
+		var selectedPlayerIds = new HashSet<Guid>
+		{
+			scenario.Players[2].Id,
+			scenario.Players[3].Id
+		};
+		var rejectedResponses = new[]
+		{
+			new ModeratorResponse
+			{
+				InstructionId = Guid.NewGuid(),
+				Type = ExpectedInputType.PlayerSelection,
+				SelectedPlayerIds = selectedPlayerIds
+			},
+			new ModeratorResponse
+			{
+				InstructionId = scenario.Selection.InstructionId,
+				Type = ExpectedInputType.Continue
+			},
+			new ModeratorResponse
+			{
+				InstructionId = scenario.Selection.InstructionId,
+				Type = ExpectedInputType.PlayerSelection
+			},
+			new ModeratorResponse
+			{
+				InstructionId = scenario.Selection.InstructionId,
+				Type = ExpectedInputType.PlayerSelection,
+				SelectedPlayerIds =
+					new HashSet<Guid> { scenario.Players[2].Id }
+			},
+			new ModeratorResponse
+			{
+				InstructionId = scenario.Selection.InstructionId,
+				Type = ExpectedInputType.PlayerSelection,
+				SelectedPlayerIds =
+					new HashSet<Guid>
+					{
+						scenario.Players[2].Id,
+						Guid.NewGuid()
+					}
+			}
+		};
+
+		foreach (var rejectedResponse in rejectedResponses)
+		{
+			var before = scenario.Builder.GetGameState()!.Serialize();
+			Action process = () =>
+				scenario.Builder.Process(rejectedResponse);
+			process.Should().Throw<InvalidOperationException>();
+			scenario.Builder.GetGameState()!.Serialize().Should().Be(before);
+			scenario.Builder.GetCurrentInstruction()!.InstructionId.Should()
+				.Be(scenario.Selection.InstructionId);
+		}
+
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void SelectionAfterHolderLeavesCupidRole_IsRejectedWithoutPairMutation()
+	{
+		var scenario = CreateCupidSelectionScenario(
+			knownWerewolfAgentGroup: true);
+		var acceptedSelection = scenario.Selection.CreateResponse(
+			[scenario.Players[2].Id, scenario.Players[3].Id]);
+		scenario.Builder.ArrangeCurrentRole(
+			scenario.Cupid.Id,
+			MainRoleType.SimpleVillager);
+		var before = scenario.Builder.GetGameState()!.Serialize();
+
+		Action process = () =>
+			scenario.Builder.Process(acceptedSelection);
+
+		process.Should().Throw<InvalidOperationException>()
+			.WithMessage("*living Cupid*");
+		scenario.Builder.GetGameState()!.Serialize().Should().Be(before);
+		scenario.Builder.GetGameState()!.GameHistoryLog
+			.OfType<LoversPairCommittedLogEntry>()
+			.Should().BeEmpty();
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void LaterNight_OmitsCupidAndRejectsFirstNightSelectionReplay()
+	{
+		var scenario = CreateCupidSelectionScenario(
+			knownWerewolfAgentGroup: true);
+		var acceptedSelection = scenario.Selection.CreateResponse(
+			[scenario.Players[2].Id, scenario.Players[3].Id]);
+		var recognition =
+			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+				scenario.Builder.Process(acceptedSelection));
+		var sleep =
+			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+				scenario.Builder.Process(recognition.CreateResponse()));
+		scenario.Builder.Process(sleep.CreateResponse())
+			.IsSuccess.Should().BeTrue();
+		scenario.Builder.CompleteWerewolfNightAction(
+				[scenario.Werewolf.Id],
+				scenario.Players[6].Id)
+			.IsSuccess.Should().BeTrue();
+		scenario.Builder.CompleteDawnPhase(new()
+			{
+				[scenario.Players[6].Id] = MainRoleType.SimpleVillager
+			})
+			.IsSuccess.Should().BeTrue();
+		scenario.Builder.CompleteDayPhaseWithTie()
+			.IsSuccess.Should().BeTrue();
+		scenario.Builder.ConfirmNightStart()
+			.IsSuccess.Should().BeTrue();
+
+		var laterNightInstruction = scenario.Builder.GetCurrentInstruction()
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		laterNightInstruction.Semantic.Should().Be(
+			ModeratorInstructionSemantic.WakeRole);
+		laterNightInstruction.AffectedPlayerIds.Should().Equal(
+			scenario.Werewolf.Id);
+		var beforeReplay = scenario.Builder.GetGameState()!.Serialize();
+		Action replaySelection = () =>
+			scenario.Builder.Process(acceptedSelection);
+		replaySelection.Should().Throw<InvalidOperationException>();
+		scenario.Builder.GetGameState()!.Serialize().Should().Be(
+			beforeReplay);
+		scenario.Builder.GetGameState()!.GameHistoryLog
+			.OfType<LoversPairCommittedLogEntry>()
+			.Should().ContainSingle();
 		MarkTestCompleted();
 	}
 
@@ -385,6 +890,7 @@ public sealed class CupidRoleTests(ITestOutputHelper output)
 			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
 				builder.Process(recognition.CreateResponse()));
 		builder.Process(sleep.CreateResponse()).IsSuccess.Should().BeTrue();
+		builder.ArrangeCurrentRole(cupid.Id, MainRoleType.SimpleVillager);
 
 		var finishNight = builder.CompleteWerewolfNightAction(
 				[werewolf.Id],
@@ -395,24 +901,78 @@ public sealed class CupidRoleTests(ITestOutputHelper output)
 			.ModeratorInstruction.Should()
 			.BeOfType<AssignRolesInstruction>().Subject;
 		attackedReveal.PlayersForAssignment.Should().Equal(attackedLover.Id);
-		var hunterReveal = builder.Process(attackedReveal.CreateResponse(new()
-			{
-				[attackedLover.Id] = MainRoleType.SimpleVillager
-			}))
+		var acceptedAttackedReveal = attackedReveal.CreateResponse(new()
+		{
+			[attackedLover.Id] = MainRoleType.SimpleVillager
+		});
+		var expectedHunterReveal = builder.Process(acceptedAttackedReveal)
 			.ModeratorInstruction.Should()
 			.BeOfType<AssignRolesInstruction>().Subject;
-		hunterReveal.PlayersForAssignment.Should().Equal(hunterLover.Id);
+		expectedHunterReveal.PlayersForAssignment.Should().Equal(hunterLover.Id);
+		var revealService = new GameService();
+		var revealGameId = revealService.RehydrateSession(
+			builder.GetGameState()!.Serialize());
+		var recoveredHunterReveal = revealService
+			.GetCurrentInstruction(revealGameId)
+			.Should().BeOfType<AssignRolesInstruction>().Subject;
+		recoveredHunterReveal.Should().BeEquivalentTo(expectedHunterReveal);
+		var preHeartbreakSession = revealService.GetGameStateView(revealGameId)!;
+		preHeartbreakSession.GetPlayerState(cupid.Id).CurrentRole.Should().Be(
+			MainRoleType.SimpleVillager);
+		preHeartbreakSession.GetPlayerState(attackedLover.Id).Health.Should().Be(
+			PlayerHealth.Dead);
+		preHeartbreakSession.GetPlayerState(hunterLover.Id).Health.Should().Be(
+			PlayerHealth.Alive);
+		var beforeAttackedReplay = PublicGameSessionSnapshot.Capture(
+			revealService,
+			revealGameId);
+		Action replayAttackedReveal = () => revealService.ProcessInstruction(
+			revealGameId,
+			acceptedAttackedReveal);
+		replayAttackedReveal.Should().Throw<InvalidOperationException>();
+		PublicGameSessionSnapshot.Capture(revealService, revealGameId)
+			.Should().BeEquivalentTo(
+				beforeAttackedReplay,
+				options => options.WithStrictOrdering());
 
-		var finalShot = builder.Process(hunterReveal.CreateResponse(new()
-			{
-				[hunterLover.Id] = MainRoleType.Hunter
-			}))
+		var acceptedHunterReveal = recoveredHunterReveal.CreateResponse(new()
+		{
+			[hunterLover.Id] = MainRoleType.Hunter
+		});
+		var expectedFinalShot = revealService.ProcessInstruction(
+				revealGameId,
+				acceptedHunterReveal)
 			.ModeratorInstruction.Should()
 			.BeOfType<SelectPlayersInstruction>().Subject;
 
-		finalShot.Semantic.Should().Be(
+		expectedFinalShot.Semantic.Should().Be(
 			ModeratorInstructionSemantic.SelectHunterFinalShotTarget);
-		var session = builder.GetGameState()!;
+		var postHeartbreakService = new GameService();
+		var postHeartbreakGameId = postHeartbreakService.RehydrateSession(
+			revealService.GetGameStateView(revealGameId)!.Serialize());
+		var recoveredFinalShot = postHeartbreakService
+			.GetCurrentInstruction(postHeartbreakGameId)
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		recoveredFinalShot.Should().BeEquivalentTo(expectedFinalShot);
+		var beforeHunterReplay = PublicGameSessionSnapshot.Capture(
+			postHeartbreakService,
+			postHeartbreakGameId);
+		Action replayHunterReveal = () =>
+			postHeartbreakService.ProcessInstruction(
+				postHeartbreakGameId,
+				acceptedHunterReveal);
+		replayHunterReveal.Should().Throw<InvalidOperationException>();
+		PublicGameSessionSnapshot.Capture(
+				postHeartbreakService,
+				postHeartbreakGameId)
+			.Should().BeEquivalentTo(
+				beforeHunterReplay,
+				options => options.WithStrictOrdering());
+
+		var session =
+			postHeartbreakService.GetGameStateView(postHeartbreakGameId)!;
+		session.GetPlayerState(cupid.Id).CurrentRole.Should().Be(
+			MainRoleType.SimpleVillager);
 		session.GetPlayerState(attackedLover.Id).Health.Should().Be(
 			PlayerHealth.Dead);
 		session.GetPlayerState(hunterLover.Id).Health.Should().Be(
@@ -427,6 +987,39 @@ public sealed class CupidRoleTests(ITestOutputHelper output)
 			.Should().ContainSingle(entry =>
 				entry.PlayerId == hunterLover.Id &&
 				entry.Reason == EliminationReason.LoversHeartbreak);
+		var committedPair = session.GameHistoryLog
+			.OfType<LoversPairCommittedLogEntry>()
+			.Should().ContainSingle().Subject;
+		committedPair.PowerIdentity.Should().Be(
+			new RolePowerInstanceIdentity(
+				cupid.Id,
+				MainRoleType.Cupid,
+				"cupid-link-lovers",
+				cupid.Id,
+				RolePowerInstanceOrigin.Native));
+		committedPair.PlayerIds.Should().BeEquivalentTo(
+			[hunterLover.Id, attackedLover.Id]);
+		committedPair.PlayerIds.Should().OnlyContain(playerId =>
+			session.GetPlayerState(playerId)
+				.HasStatusEffect(StatusEffectTypes.Lovers));
+		var heartbreakCompletions = session.GameHistoryLog
+			.OfType<EliminationCascadeReactionCompletedLogEntry>()
+			.Where(entry =>
+				entry.ReactionId ==
+				EliminationCascadeReactionIds.LoversHeartbreak)
+			.ToArray();
+		heartbreakCompletions.Should().HaveCount(2);
+		heartbreakCompletions
+			.SelectMany(entry => entry.AdmittedEliminations)
+			.Should().ContainSingle(elimination =>
+				elimination.PlayerId == hunterLover.Id &&
+				elimination.Reason == EliminationReason.LoversHeartbreak);
+		heartbreakCompletions.Should().OnlyContain(entry =>
+			heartbreakCompletions.Count(candidate =>
+				candidate.ScopeId == entry.ScopeId &&
+				candidate.ReactionId == entry.ReactionId &&
+				candidate.TriggeringEliminations.SequenceEqual(
+					entry.TriggeringEliminations)) == 1);
 		MarkTestCompleted();
 	}
 
@@ -556,6 +1149,7 @@ public sealed class CupidRoleTests(ITestOutputHelper output)
 			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
 				builder.Process(recognition.CreateResponse()));
 		builder.Process(loversSleep.CreateResponse()).IsSuccess.Should().BeTrue();
+		builder.ArrangeCurrentRole(cupid.Id, MainRoleType.SimpleVillager);
 		var identifyWitch = builder.CompleteWerewolfNightAction(
 				[werewolfLover.Id],
 				villagerLover.Id)
@@ -591,12 +1185,60 @@ public sealed class CupidRoleTests(ITestOutputHelper output)
 		finished.VictoryCheckWindow.Should().Be(VictoryCheckWindow.Dawn);
 		finished.PublicAnnouncement.Should().Contain(
 			GameStrings.VictoryConditionCrossFactionLovers);
-		var session = builder.GetGameState()!;
-		session.GetPlayers()
+		var terminalService = new GameService();
+		var terminalGameId = terminalService.RehydrateSession(
+			builder.GetGameState()!.Serialize());
+		var recoveredFinished = terminalService
+			.GetCurrentInstruction(terminalGameId)
+			.Should().BeOfType<FinishedGameConfirmationInstruction>().Subject;
+		recoveredFinished.Should().BeEquivalentTo(finished);
+		var recoveredSession = terminalService.GetGameStateView(terminalGameId)!;
+		recoveredSession.GetPlayerState(cupid.Id).CurrentRole.Should().Be(
+			MainRoleType.SimpleVillager);
+		recoveredSession.GetPlayers()
 			.Where(player => player.State.Health == PlayerHealth.Alive)
 			.Select(player => player.Id)
 			.Should().BeEquivalentTo(
 				[werewolfLover.Id, villagerLover.Id]);
+		var committedPair = recoveredSession.GameHistoryLog
+			.OfType<LoversPairCommittedLogEntry>()
+			.Should().ContainSingle().Subject;
+		committedPair.PowerIdentity.Should().Be(
+			new RolePowerInstanceIdentity(
+				cupid.Id,
+				MainRoleType.Cupid,
+				"cupid-link-lovers",
+				cupid.Id,
+				RolePowerInstanceOrigin.Native));
+		committedPair.PlayerIds.Should().BeEquivalentTo(
+			[werewolfLover.Id, villagerLover.Id]);
+		committedPair.PlayerIds.Should().OnlyContain(playerId =>
+			recoveredSession.GetPlayerState(playerId)
+				.HasStatusEffect(StatusEffectTypes.Lovers));
+		recoveredSession.RequireKnownFactionBeneficiary(werewolfLover.Id)
+			.Should().Be(Faction.CrossFactionLovers);
+		recoveredSession.RequireKnownFactionBeneficiary(villagerLover.Id)
+			.Should().Be(Faction.CrossFactionLovers);
+		recoveredSession.GameHistoryLog
+			.OfType<VictoryConditionMetLogEntry>()
+			.Should().ContainSingle(entry =>
+				entry.GameResult.Equals(
+					new SingleFactionGameResult(
+						Faction.CrossFactionLovers)) &&
+				entry.VictoryCheckWindow == VictoryCheckWindow.Dawn);
+
+		var secondTerminalService = new GameService();
+		var secondTerminalGameId = secondTerminalService.RehydrateSession(
+			recoveredSession.Serialize());
+		secondTerminalService.GetCurrentInstruction(secondTerminalGameId)
+			.Should().BeEquivalentTo(recoveredFinished);
+		secondTerminalService.GetGameStateView(secondTerminalGameId)!
+			.GameHistoryLog.OfType<VictoryConditionMetLogEntry>()
+			.Should().ContainSingle(entry =>
+				entry.GameResult.Equals(
+					new SingleFactionGameResult(
+						Faction.CrossFactionLovers)) &&
+				entry.VictoryCheckWindow == VictoryCheckWindow.Dawn);
 		MarkTestCompleted();
 	}
 
@@ -611,6 +1253,53 @@ public sealed class CupidRoleTests(ITestOutputHelper output)
 			return result;
 		}
 	}
+
+	private CupidSelectionScenario CreateCupidSelectionScenario(
+		bool knownWerewolfAgentGroup)
+	{
+		var builder = CreateBuilder()
+			.WithPlayers(7)
+			.WithRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Cupid,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		var werewolf = players[0];
+		var cupid = players[1];
+		builder.ArrangeKnownRole(cupid.Id, MainRoleType.Cupid);
+		if (knownWerewolfAgentGroup)
+		{
+			builder.ArrangeKnownWerewolfFactionAgentGroup(werewolf.Id);
+		}
+
+		builder.ConfirmGameStart();
+		builder.ConfirmNightStart();
+		var wake = InstructionAssert.ExpectType<ConfirmationInstruction>(
+			builder.GetCurrentInstruction());
+		var selection =
+			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+				builder.Process(wake.CreateResponse()));
+		return new CupidSelectionScenario(
+			builder,
+			players,
+			werewolf,
+			cupid,
+			wake,
+			selection);
+	}
+
+	private sealed record CupidSelectionScenario(
+		GameTestBuilder Builder,
+		IPlayer[] Players,
+		IPlayer Werewolf,
+		IPlayer Cupid,
+		ConfirmationInstruction Wake,
+		SelectPlayersInstruction Selection);
 
 	private sealed class RecoveryBoundaryKey : IGameFlowManagerKey
 	{

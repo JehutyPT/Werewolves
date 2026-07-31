@@ -32,8 +32,7 @@ internal sealed class CupidRole
 	private readonly RolePowerAvailabilityGateway _availabilityGateway;
 
 	private static readonly RolePowerDefinition LinkLoversPower = new(
-		new RolePowerIdentifier(
-			LoversPairCommittedLogEntry.ExpectedSourcePowerIdentifier),
+		new RolePowerIdentifier("cupid-link-lovers"),
 		RolePowerCategory.Chosen);
 
 	internal static RolePowerIdentifier LinkLoversPowerIdentifier =>
@@ -58,7 +57,7 @@ internal sealed class CupidRole
 		IReadOnlyCollection<Guid> eliminatedPlayerIds,
 		ModeratorResponse input)
 	{
-		var pair = GetCommittedPair(session);
+		var pair = GameSessionQueries.GetCommittedLoversPair(session);
 		if (pair is null)
 		{
 			return EliminationCascadeReactionResult.Complete();
@@ -88,6 +87,13 @@ internal sealed class CupidRole
 					EliminationReason.LoversHeartbreak)
 			]);
 	}
+
+	public override HookListenerActionResult Execute(
+		GameSession session,
+		ModeratorResponse input) =>
+		GetCurrentListenerState(session) == null
+			? base.Execute(session, input)
+			: ExecuteCore(session, input);
 
 	protected override CupidRoleState WokenUpStateEnum => CupidRoleState.Awake;
 
@@ -209,7 +215,7 @@ internal sealed class CupidRole
 	{
 		if (session.TurnNumber != 1 ||
 		    session.GetCurrentPhase() != GamePhase.Night ||
-		    GetCommittedPair(session) is not null)
+		    GameSessionQueries.GetCommittedLoversPair(session) is not null)
 		{
 			throw new InvalidOperationException(
 				"Cupid may commit one Lovers pair on the first Night.");
@@ -245,8 +251,6 @@ internal sealed class CupidRole
 
 		var powerIdentity = CreateNativePowerIdentity(holder);
 		session.CommitLoversPair(selectedPlayerIds, powerIdentity);
-		_ = InitialBeneficiaryClosureRules
-			.TryCommitKnownLoversClassification(session);
 		_ = InitialBeneficiaryClosureRules.TryCommitCurrentSession(session);
 
 		return PrepareLoversRecognitionInstruction(
@@ -442,7 +446,7 @@ internal sealed class CupidRole
 		GameSession session,
 		ModeratorResponse _)
 	{
-		var pair = GetCommittedPair(session)
+		var pair = GameSessionQueries.GetCommittedLoversPair(session)
 			?? throw new InvalidOperationException(
 				"The Lovers recognition requires one committed pair.");
 		ValidateCommittedPair(session, pair);
@@ -467,17 +471,11 @@ internal sealed class CupidRole
 			holder.Id,
 			RolePowerInstanceOrigin.Native);
 
-	private static LoversPairCommittedLogEntry? GetCommittedPair(
-		GameSession session) =>
-		session.GameHistoryLog
-			.OfType<LoversPairCommittedLogEntry>()
-			.SingleOrDefault();
-
 	private static bool HasExpectedCommittedPair(
 		GameSession session,
 		ModeratorInstruction instruction)
 	{
-		var pair = GetCommittedPair(session);
+		var pair = GameSessionQueries.GetCommittedLoversPair(session);
 		if (pair is null ||
 		    instruction.PublicAnnouncement is not null ||
 		    !StringComparer.Ordinal.Equals(
@@ -503,7 +501,7 @@ internal sealed class CupidRole
 			return false;
 		}
 
-		var pair = GetCommittedPair(session);
+		var pair = GameSessionQueries.GetCommittedLoversPair(session);
 		if (pair is not null)
 		{
 			if (!StringComparer.Ordinal.Equals(
@@ -533,18 +531,19 @@ internal sealed class CupidRole
 		LoversPairCommittedLogEntry pair)
 	{
 		pair.EnforceValidity();
-		if (pair.ActingPlayerId == Guid.Empty ||
+		if (pair.PowerIdentity.SourceRole != MainRoleType.Cupid ||
+		    pair.PowerIdentity.PowerInstanceOrigin !=
+		    RolePowerInstanceOrigin.Native ||
+		    pair.PowerIdentity.PowerInstanceId != pair.ActingPlayerId ||
 		    !StringComparer.Ordinal.Equals(
 			    pair.SourcePowerIdentifier,
 			    LinkLoversPowerIdentifier.Value) ||
-		    session.GetPlayer(pair.ActingPlayerId).State.CurrentRole !=
-		    MainRoleType.Cupid ||
 		    pair.PlayerIds.Any(playerId =>
 			    !session.GetPlayerState(playerId)
 				    .HasStatusEffect(StatusEffectTypes.Lovers)))
 		{
 			throw new InvalidOperationException(
-				"The committed Lovers pair does not match Cupid and both durable statuses.");
+				"The committed Lovers pair does not match Cupid's native power and both durable statuses.");
 		}
 	}
 }

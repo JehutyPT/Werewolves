@@ -12,8 +12,6 @@ namespace Werewolves.Core.StateModels.Log;
 /// </summary>
 internal sealed record LoversPairCommittedLogEntry : GameLogEntryBase
 {
-	internal const string ExpectedSourcePowerIdentifier = "cupid-link-lovers";
-
 	[JsonInclude]
 	internal required Guid FirstPlayerId { get; init; }
 
@@ -24,7 +22,16 @@ internal sealed record LoversPairCommittedLogEntry : GameLogEntryBase
 	internal required Guid ActingPlayerId { get; init; }
 
 	[JsonInclude]
+	internal required MainRoleType SourceRole { get; init; }
+
+	[JsonInclude]
 	internal required string SourcePowerIdentifier { get; init; }
+
+	[JsonInclude]
+	internal required Guid PowerInstanceId { get; init; }
+
+	[JsonInclude]
+	internal required RolePowerInstanceOrigin PowerInstanceOrigin { get; init; }
 
 	[JsonInclude]
 	internal required FactionFactEffectiveBoundary LinkBoundary { get; init; }
@@ -36,21 +43,16 @@ internal sealed record LoversPairCommittedLogEntry : GameLogEntryBase
 	[JsonIgnore]
 	internal RolePowerInstanceIdentity PowerIdentity => new(
 		ActingPlayerId,
-		MainRoleType.Cupid,
+		SourceRole,
 		SourcePowerIdentifier,
-		ActingPlayerId,
-		RolePowerInstanceOrigin.Native);
+		PowerInstanceId,
+		PowerInstanceOrigin);
 
 	internal override void EnforceValidity()
 	{
 		ArgumentNullException.ThrowIfNull(LinkBoundary);
 		PowerIdentity.EnforceValidity();
-		if (TurnNumber != 1 ||
-		    CurrentPhase != GamePhase.Night ||
-		    !StringComparer.Ordinal.Equals(
-			    SourcePowerIdentifier,
-			    ExpectedSourcePowerIdentifier) ||
-		    LinkBoundary.TurnNumber != TurnNumber ||
+		if (LinkBoundary.TurnNumber != TurnNumber ||
 		    LinkBoundary.Phase != CurrentPhase ||
 		    FirstPlayerId == Guid.Empty ||
 		    SecondPlayerId == Guid.Empty ||

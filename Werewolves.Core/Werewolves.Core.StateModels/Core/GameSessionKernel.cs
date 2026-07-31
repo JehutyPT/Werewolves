@@ -379,14 +379,6 @@ namespace Werewolves.Core.StateModels.Core
 					.OfType<LoversPairCommittedLogEntry>()
 					.SingleOrDefault();
 				var expectedLoverIds = pair?.PlayerIds.ToHashSet() ?? [];
-				if (pair is not null &&
-				    GetPlayer(pair.ActingPlayerId)
-					    .GetMutableState(new DeserializationKey())
-					    .MainRole != MainRoleType.Cupid)
-				{
-					throw new InvalidOperationException(
-						"The committed Lovers pair does not belong to Cupid.");
-				}
 
 				var actualLoverIds = _playerSeatingOrder
 					.Where(playerId =>

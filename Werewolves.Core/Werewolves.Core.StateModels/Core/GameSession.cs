@@ -500,14 +500,6 @@ internal class GameSession : IGameSession
 		RolePowerInstanceIdentity powerIdentity)
 	{
 		ArgumentNullException.ThrowIfNull(playerIds);
-		if (TurnNumber != 1 ||
-		    _gameSessionKernel.PhaseStateCache.GetCurrentPhase() !=
-		    GamePhase.Night)
-		{
-			throw new InvalidOperationException(
-				"Cupid may commit the Lovers pair only on the first Night.");
-		}
-
 		if (playerIds.Count != 2 ||
 		    playerIds.Any(playerId => playerId == Guid.Empty) ||
 		    playerIds.Distinct().Count() != 2)
@@ -518,18 +510,6 @@ internal class GameSession : IGameSession
 		}
 
 		powerIdentity.EnforceValidity();
-		if (powerIdentity.SourceRole != MainRoleType.Cupid ||
-		    powerIdentity.PowerInstanceOrigin !=
-		    RolePowerInstanceOrigin.Native ||
-		    powerIdentity.PowerInstanceId != powerIdentity.ActingPlayerId ||
-		    GetPlayer(powerIdentity.ActingPlayerId).State.CurrentRole !=
-		    MainRoleType.Cupid)
-		{
-			throw new ArgumentException(
-				"The Lovers pair requires Cupid's native Role Power identity.",
-				nameof(powerIdentity));
-		}
-
 		if (GameHistoryLog.OfType<LoversPairCommittedLogEntry>().Any())
 		{
 			throw new InvalidOperationException(
@@ -537,14 +517,6 @@ internal class GameSession : IGameSession
 		}
 
 		var canonicalPlayerIds = playerIds.Order().ToArray();
-		if (canonicalPlayerIds.Any(playerId =>
-			    GetPlayer(playerId).State.Health != PlayerHealth.Alive))
-		{
-			throw new ArgumentException(
-				"The Lovers pair requires two living Players.",
-				nameof(playerIds));
-		}
-
 		_gameSessionKernel.AddEntryAndUpdateState(
 			new LoversPairCommittedLogEntry
 			{
@@ -555,8 +527,12 @@ internal class GameSession : IGameSession
 				FirstPlayerId = canonicalPlayerIds[0],
 				SecondPlayerId = canonicalPlayerIds[1],
 				ActingPlayerId = powerIdentity.ActingPlayerId,
+				SourceRole = powerIdentity.SourceRole,
 				SourcePowerIdentifier =
 					powerIdentity.SourcePowerIdentifier,
+				PowerInstanceId = powerIdentity.PowerInstanceId,
+				PowerInstanceOrigin =
+					powerIdentity.PowerInstanceOrigin,
 				LinkBoundary = new FactionFactEffectiveBoundary(
 					TurnNumber,
 					_gameSessionKernel.PhaseStateCache.GetCurrentPhase(),

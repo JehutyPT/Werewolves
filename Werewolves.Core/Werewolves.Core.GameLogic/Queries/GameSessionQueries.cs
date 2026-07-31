@@ -54,6 +54,40 @@ internal static class GameSessionQueries
         return query;
     }
 
+    internal static LoversPairCommittedLogEntry? GetCommittedLoversPair(
+        IGameSession session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        return GetCommittedLoversPairFromHistory(session.GameHistoryLog);
+    }
+
+    internal static LoversPairCommittedLogEntry?
+        GetCommittedLoversPairFromHistory(
+            IEnumerable<GameLogEntryBase> history)
+    {
+        ArgumentNullException.ThrowIfNull(history);
+        return history
+            .OfType<LoversPairCommittedLogEntry>()
+            .SingleOrDefault();
+    }
+
+    internal static IReadOnlyList<LoversPairCommittedLogEntry>
+        GetCommittedLoversPairsSince(
+            IGameSession session,
+            int startingLogCount)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        if (startingLogCount < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(startingLogCount));
+        }
+
+        return session.GameHistoryLog
+            .Skip(startingLogCount)
+            .OfType<LoversPairCommittedLogEntry>()
+            .ToArray();
+    }
+
     internal static DirectionalLivingNeighbors GetDirectionalLivingNeighbors(
         IGameSession session,
         Guid referencePlayerId)

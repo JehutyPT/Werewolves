@@ -580,6 +580,14 @@ internal static class GameFlowManager
 	            return true;
 	        }
 
+	        if (IsCupidRecoveryBoundary(
+		            session,
+		            startingInstruction,
+		            nextInstructionToSend))
+	        {
+		        return true;
+	        }
+
 	        if (nextInstructionToSend.Semantic ==
 	            ModeratorInstructionSemantic.ObserveStutteringJudgeSignal)
 	        {
@@ -642,6 +650,40 @@ internal static class GameFlowManager
                announcement == GameStrings.NightStartsPrompt;
     }
 
+    private static bool IsCupidRecoveryBoundary(
+	    GameSession session,
+	    ModeratorInstruction? startingInstruction,
+	    ModeratorInstruction nextInstruction)
+    {
+	    if (session.GetCurrentPhase() != GamePhase.Night ||
+	        session.TurnNumber != 1)
+	    {
+		    return false;
+	    }
+
+	    if (nextInstruction.Semantic ==
+	        ModeratorInstructionSemantic.SelectCupidLovers)
+	    {
+		    return true;
+	    }
+
+	    if (GameSessionQueries.GetCommittedLoversPair(session) is null)
+	    {
+		    return false;
+	    }
+
+	    return startingInstruction?.Semantic switch
+	    {
+		    ModeratorInstructionSemantic.RecognizeLovers =>
+			    nextInstruction.Semantic ==
+			    ModeratorInstructionSemantic.PutRoleToSleep,
+		    ModeratorInstructionSemantic.PutRoleToSleep =>
+			    nextInstruction.Semantic ==
+			    ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup,
+		    _ => false
+	    };
+    }
+
     private static bool HasNewOneUseRolePowerCommit(
         GameSession session,
         int startingLogCount) =>
@@ -652,12 +694,18 @@ internal static class GameFlowManager
 
     private static bool HasNewRecurringRolePowerCommit(
         GameSession session,
-        int startingLogCount) =>
-        session.GameHistoryLog
+        int startingLogCount)
+    {
+        var hasRecurringRolePowerCommit = session.GameHistoryLog
             .Skip(startingLogCount)
-            .Any(entry =>
-                entry is RecurringRolePowerCommittedLogEntry or
-                    LoversPairCommittedLogEntry);
+            .OfType<RecurringRolePowerCommittedLogEntry>()
+            .Any();
+        return hasRecurringRolePowerCommit ||
+               GameSessionQueries.GetCommittedLoversPairsSince(
+                       session,
+                       startingLogCount)
+                   .Count > 0;
+    }
 
     private static bool HasNewTargetPrivateRolePowerCommit(
         GameSession session,
@@ -711,22 +759,22 @@ internal static class GameFlowManager
             .Skip(startingLogCount)
             .OfType<TargetPrivateRolePowerCommittedLogEntry>()
             .ToArray();
-        var newLoversPairEntries = session.GameHistoryLog
-            .Skip(startingLogCount)
-            .OfType<LoversPairCommittedLogEntry>()
-            .ToArray();
+        var newLoversPairEntries =
+            GameSessionQueries.GetCommittedLoversPairsSince(
+                session,
+                startingLogCount);
         var domainCommitKinds =
             (newCommittedEntries.Length > 0 ? 1 : 0) +
             (newRecurringEntries.Length > 0 ? 1 : 0) +
             (newTargetPrivateEntries.Length > 0 ? 1 : 0) +
-            (newLoversPairEntries.Length > 0 ? 1 : 0);
+            (newLoversPairEntries.Count > 0 ? 1 : 0);
         if (domainCommitKinds > 1)
         {
             throw new InvalidOperationException(
                 "One accepted response cannot produce multiple domain commits.");
         }
 
-        if (newLoversPairEntries.Length > 0)
+        if (newLoversPairEntries.Count > 0)
         {
             if (newLoversPairEntries is not [var pair] ||
                 !CupidRole.TryValidateCommittedRecoveryBoundary(
@@ -1408,16 +1456,15 @@ internal static class GameFlowManager
 
             var hasMatchingRecurringCommit =
                 sourceRole == MainRoleType.Cupid
-                    ? session.GameHistoryLog
-                        .OfType<LoversPairCommittedLogEntry>()
-                        .Any(entry =>
+                    ? GameSessionQueries.GetCommittedLoversPair(session) is
+                        { } entry &&
                             cursor.CommittedActionType ==
                                 NightActionType.CupidLink &&
                             entry.PowerIdentity == cursor.PowerIdentity &&
                             entry.CurrentPhase == GamePhase.Night &&
                             entry.TurnNumber == session.TurnNumber &&
                             entry.PlayerIds.SequenceEqual(
-                                cursor.CommittedTargetIds))
+                                cursor.CommittedTargetIds)
                     : session.GameHistoryLog
                         .OfType<RecurringRolePowerCommittedLogEntry>()
                         .Any(entry =>
@@ -1610,9 +1657,8 @@ internal static class GameFlowManager
                 "Required Faction facts are not ready.");
         }
 
-        var committedLoverIds = session.GameHistoryLog
-            .OfType<LoversPairCommittedLogEntry>()
-            .SingleOrDefault()?
+        var committedLoverIds =
+            GameSessionQueries.GetCommittedLoversPair(session)?
             .PlayerIds
             .ToHashSet() ?? [];
         return session.GetPlayers()
