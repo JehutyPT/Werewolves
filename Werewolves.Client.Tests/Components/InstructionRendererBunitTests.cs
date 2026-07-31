@@ -213,6 +213,50 @@ public class InstructionRendererBunitTests
 	}
 
 	[Fact]
+	public async Task BearTamerGrowl_RendersPrivatePortugueseGenericContinueWithoutPublicOrPlayerLeakage()
+	{
+		var timing = new ControlledHoldButtonTiming();
+		using var context = new ModeratorComponentTestContext();
+		context.Services.AddSingleton<IHoldButtonTiming>(timing);
+		var instruction = CreateConfirmationInstruction(
+			privateInstruction: GameStrings.BearTamerGrowlInstruction,
+			soundEffects: [SoundEffectsEnum.BearGrowl]);
+		ModeratorResponse? receivedResponse = null;
+
+		var cut = context.RenderModeratorComponent<InstructionRenderer>(
+			parameters => parameters
+				.Add(component => component.Instruction, instruction)
+				.Add(component => component.Roster,
+					[
+						CreateRosterEntry(Guid.NewGuid(), 1, PlayerNames.Ana),
+						CreateRosterEntry(Guid.NewGuid(), 2, PlayerNames.Carla)
+					])
+				.Add(component => component.OnResponse,
+					EventCallback.Factory.Create<ModeratorResponse>(
+						this,
+						response => receivedResponse = response)));
+
+		cut.Find(PrivateInstructionSelector).TextContent.Should()
+			.Contain(GameStrings.BearTamerGrowlInstruction);
+		cut.FindAll(PublicInstructionSelector).Should().BeEmpty();
+		cut.Markup.Should().NotContain(PlayerNames.Ana);
+		cut.Markup.Should().NotContain(PlayerNames.Carla);
+		var action = cut.FindAll(Html.Selectors.Button)
+			.Single(button =>
+				button.TextContent.Trim() ==
+				ClientStrings.Dashboard_ContinueButton);
+
+		await RenderedHoldButtonDriver.CompleteHoldAsync(
+			cut,
+			action,
+			timing);
+
+		receivedResponse.Should().NotBeNull();
+		receivedResponse!.Type.Should().Be(ExpectedInputType.Continue);
+		receivedResponse.InstructionId.Should().Be(instruction.InstructionId);
+	}
+
+	[Fact]
 	public void AssignRolesInstruction_RendersAssignmentSurfaceWithRosterLabels()
 	{
 		using var context = new ModeratorComponentTestContext();
@@ -555,9 +599,16 @@ public class InstructionRendererBunitTests
 
 	private static ConfirmationInstruction CreateConfirmationInstruction(
 		string? publicAnnouncement = null,
-		string? privateInstruction = null) =>
+		string? privateInstruction = null,
+		IReadOnlyList<SoundEffectsEnum>? soundEffects = null) =>
 		(ConfirmationInstruction)ConfirmationConstructor.Invoke(
-			[publicAnnouncement, privateInstruction, null, Guid.Empty]);
+			[
+				publicAnnouncement,
+				privateInstruction,
+				null,
+				Guid.Empty,
+				soundEffects
+			]);
 
 	private static AssignRolesInstruction CreateAssignRolesInstruction(
 		IEnumerable<Guid> playerIds,
@@ -722,7 +773,7 @@ public class InstructionRendererBunitTests
 	private static readonly ConstructorInfo ConfirmationConstructor =
 		typeof(ConfirmationInstruction)
 			.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic)
-			.Single(ctor => ctor.GetParameters().Length == 4);
+			.Single(ctor => ctor.GetParameters().Length == 5);
 
 	private static readonly ConstructorInfo AssignRolesConstructor =
 		typeof(AssignRolesInstruction)

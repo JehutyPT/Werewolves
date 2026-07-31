@@ -1,5 +1,8 @@
 using FluentAssertions;
 using Werewolves.Client.Services;
+using Werewolves.Core.GameLogic.Simulation;
+using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Models.Simulation;
 using Xunit;
 
 namespace Werewolves.Client.Tests.Services;
@@ -98,6 +101,67 @@ public class TerminalLobbyCacheAdapterTests
 			Directory.GetFiles(
 				directory,
 				$"{FileTerminalLobbyCacheStore.CacheFileName}.*.tmp").Should().BeEmpty();
+		}
+		finally
+		{
+			Directory.Delete(directory, recursive: true);
+		}
+	}
+
+	[Fact]
+	public async Task FileStore_CurrentSafetySchemaOneDegenerateDocument_RoundTripsAndResolvesExactIdentity()
+	{
+		var directory = NewTemporaryDirectory();
+		try
+		{
+			var scenario = new SimulationScenario(
+				5,
+				[
+					MainRoleType.SimpleWerewolf,
+					MainRoleType.BearTamer,
+					MainRoleType.SimpleVillager,
+					MainRoleType.SimpleVillager,
+					MainRoleType.SimpleVillager
+				]);
+			var identity = new SimulationCompatibilityIdentity(
+				scenario.ToCanonical(),
+				SimulatorCapability.SafetyScreening.Identity);
+			var villagerVictory = new SingleFactionGameResult(Faction.Villager);
+			var record = new DegenerateTerminalCacheRecord(
+				identity,
+				[
+					new TerminalCacheGameResultFrequency(villagerVictory, 1_000, 1_000),
+					new TerminalCacheGameResultFrequency(
+						new SingleFactionGameResult(Faction.Werewolf),
+						0,
+						1_000),
+					new TerminalCacheGameResultFrequency(new NoWinnerGameResult(), 0, 1_000)
+				],
+				[
+					new TerminalCacheTurnWindowFrequency(
+						villagerVictory,
+						endingTurn: 1,
+						VictoryCheckWindow.Dawn,
+						1_000,
+						1_000)
+				]);
+			var bytes = TerminalLobbyCache.Write(
+				TerminalLobbyCache.CreateDocument([record]));
+			var writer = new FileTerminalLobbyCacheStore(directory);
+
+			await writer.WriteAsync(bytes);
+
+			var reopened = new FileTerminalLobbyCacheStore(directory);
+			var persisted = await reopened.ReadAsync();
+			var read = TerminalLobbyCache.ReadDocument(persisted!.Value.Span);
+
+			SimulatorCapability.SafetyScreening.Identity.ToString()
+				.Should().Be("safety-screening@20");
+			persisted.Value.ToArray().Should().Equal(bytes);
+			read.IsUsable.Should().BeTrue();
+			TerminalLobbyCache.TryGet(read.Document!, identity, out var restored)
+				.Should().BeTrue();
+			restored.Should().BeOfType<DegenerateTerminalCacheRecord>();
 		}
 		finally
 		{

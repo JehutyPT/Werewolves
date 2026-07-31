@@ -22,13 +22,15 @@ public record ConfirmationInstruction : ModeratorInstruction
         string? publicAnnouncement = null,
         string? privateInstruction = null,
         IReadOnlyList<Guid>? affectedPlayerIds = null,
-        Guid instructionId = default)
+        Guid instructionId = default,
+        IReadOnlyList<SoundEffectsEnum>? soundEffects = null)
 		: this(
 			ModeratorInstructionSemantic.Unspecified,
 			publicAnnouncement,
 			privateInstruction,
 			affectedPlayerIds,
-			instructionId)
+			instructionId,
+			soundEffects)
     {
     }
 
@@ -37,11 +39,13 @@ public record ConfirmationInstruction : ModeratorInstruction
 		string? publicAnnouncement = null,
 		string? privateInstruction = null,
 		IReadOnlyList<Guid>? affectedPlayerIds = null,
-		Guid instructionId = default)
+		Guid instructionId = default,
+		IReadOnlyList<SoundEffectsEnum>? soundEffects = null)
 		: base(
 			publicAnnouncement,
 			privateInstruction,
 			affectedPlayerIds,
+			soundEffects,
 			instructionId: instructionId,
 			semantic: semantic)
 	{

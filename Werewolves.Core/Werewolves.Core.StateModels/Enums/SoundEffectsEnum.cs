@@ -8,5 +8,6 @@ namespace Werewolves.Core.StateModels.Enums
 	public enum SoundEffectsEnum
 	{
 		None = 0,
+		BearGrowl = 1,
 	}
 }

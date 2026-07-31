@@ -75,6 +75,28 @@ public class ModeratorInstructionIdentitySerializationTests
 	}
 
 	[Fact]
+	public void Converter_GenericBearGrowlConfirmation_PreservesIdentityAndSound()
+	{
+		ModeratorInstruction instruction = new ConfirmationInstruction(
+			privateInstruction: GameStrings.BearTamerGrowlInstruction,
+			soundEffects: [SoundEffectsEnum.BearGrowl]);
+
+		var json = JsonSerializer.Serialize(
+			instruction,
+			SerializationOptions);
+		var restored = JsonSerializer.Deserialize<ModeratorInstruction>(
+			json,
+			SerializationOptions);
+
+		var confirmation = restored.Should()
+			.BeOfType<ConfirmationInstruction>()
+			.Subject;
+		confirmation.InstructionId.Should().Be(instruction.InstructionId);
+		confirmation.PrivateInstruction.Should().Be(GameStrings.BearTamerGrowlInstruction);
+		confirmation.SoundEffects.Should().Equal(SoundEffectsEnum.BearGrowl);
+	}
+
+	[Fact]
 	public void Converter_WhiteWerewolfTerminalInstruction_PreservesTypedOutcomeAndCopy()
 	{
 		ModeratorInstruction instruction = new FinishedGameConfirmationInstruction(

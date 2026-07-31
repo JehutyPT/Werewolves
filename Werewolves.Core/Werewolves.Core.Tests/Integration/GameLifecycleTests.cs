@@ -44,6 +44,12 @@ public class GameLifecycleTests : DiagnosticTestBase
         wolfHound.GroupDisplayName.Should().Be(MainRoleType.WolfHound.GetRoleGroup().GetDisplayName());
         wolfHound.CountConstraint.Should().Be(GameSessionConfig.RoleCountConstraints[MainRoleType.WolfHound]);
 
+        var bearTamer = metadata.AvailableRoles.Single(role => role.Role == MainRoleType.BearTamer);
+        bearTamer.DisplayName.Should().Be(MainRoleType.BearTamer.GetPublicName());
+        bearTamer.Group.Should().Be(MainRoleType.BearTamer.GetRoleGroup());
+        bearTamer.GroupDisplayName.Should().Be(MainRoleType.BearTamer.GetRoleGroup().GetDisplayName());
+        bearTamer.CountConstraint.Should().Be(NumberRangeConstraint.SingleOptional);
+
         MarkTestCompleted();
     }
 

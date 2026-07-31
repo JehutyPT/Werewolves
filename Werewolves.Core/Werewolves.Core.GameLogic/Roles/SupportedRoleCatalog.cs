@@ -86,6 +86,10 @@ public static class SupportedRoleCatalog
 						MainRoleType.VillageIdiot,
 						() => new VillageIdiotRole(
 							rolePowerAvailabilityGateway)),
+					RoleAdmission.Active(
+						MainRoleType.BearTamer,
+						() => new BearTamerRole(
+							rolePowerAvailabilityGateway)),
 					RoleAdmission.Passive(MainRoleType.SimpleVillager),
 				RoleAdmission.Passive(MainRoleType.VillagerVillager)
 		]);

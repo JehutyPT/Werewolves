@@ -144,6 +144,9 @@ public class DashboardRosterTests
 		public IPlayer GetPlayer(Guid playerId) => players.Single(player => player.Id == playerId);
 		public IPlayerState GetPlayerState(Guid playerId) => GetPlayer(playerId).State;
 		public IEnumerable<IPlayer> GetPlayers() => players;
+		public DirectionalLivingNeighbors GetDirectionalLivingNeighbors(
+			Guid referencePlayerId) =>
+			throw new NotSupportedException();
 		public FactionBeneficiaryKnowledge GetFactionBeneficiaryKnowledge(Guid playerId) =>
 			GetPlayerState(playerId).FactionBeneficiary;
 		public FactionAgentKnowledge GetFactionAgentKnowledge(Guid playerId, Faction faction) =>
