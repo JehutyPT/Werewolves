@@ -292,7 +292,7 @@ internal static class InitialBeneficiaryClosureRules
 			.Take(closureIndex)
 			.ToArray();
 		var factionHistoryBeforeClosure = historyBeforeClosure
-			.OfType<FactionFactsCommittedLogEntry>()
+			.OfType<IFactionFactBatchLogEntry>()
 			.ToArray();
 		var initialAgentGroupBoundary =
 			FindInitialCompleteWerewolfAgentGroupBoundary(
@@ -316,7 +316,7 @@ internal static class InitialBeneficiaryClosureRules
 		}
 
 		var projection = FactionFactProjection.Create(
-			committedHistory.OfType<FactionFactsCommittedLogEntry>(),
+			committedHistory.OfType<IFactionFactBatchLogEntry>(),
 			playerIds);
 		return playerIds.All(playerId =>
 			       projection.Beneficiaries[playerId].IsKnown &&
@@ -332,14 +332,14 @@ internal static class InitialBeneficiaryClosureRules
 			session,
 			request,
 			session.GameHistoryLog
-				.OfType<FactionFactsCommittedLogEntry>()
+				.OfType<IFactionFactBatchLogEntry>()
 				.ToArray(),
 			out closureFacts);
 
 	private static bool TryBuildFacts(
 		GameSession session,
 		InitialBeneficiaryClosureRequest request,
-		IReadOnlyCollection<FactionFactsCommittedLogEntry> history,
+		IReadOnlyCollection<IFactionFactBatchLogEntry> history,
 		out ImmutableArray<FactionFact> closureFacts)
 	{
 		closureFacts = [];
@@ -442,7 +442,7 @@ internal static class InitialBeneficiaryClosureRules
 			IReadOnlyCollection<GameLogEntryBase> history)
 	{
 		var factionHistory = history
-			.OfType<FactionFactsCommittedLogEntry>()
+			.OfType<IFactionFactBatchLogEntry>()
 			.ToArray();
 		return new[]
 			{
@@ -499,7 +499,7 @@ internal static class InitialBeneficiaryClosureRules
 
 		ValidateLoversPairStatuses(session, pair);
 		var factionHistory = history
-			.OfType<FactionFactsCommittedLogEntry>()
+			.OfType<IFactionFactBatchLogEntry>()
 			.ToArray();
 		foreach (var prerequisiteRole in new[]
 		         {
@@ -618,7 +618,7 @@ internal static class InitialBeneficiaryClosureRules
 		CreateCurrentExclusiveBeneficiaryResult(
 			GameSession session,
 			FactionFactEffectiveBoundary initialAgentGroupBoundary,
-			IReadOnlyCollection<FactionFactsCommittedLogEntry> history,
+			IReadOnlyCollection<IFactionFactBatchLogEntry> history,
 			MainRoleType role,
 			Faction faction,
 			string identifier)
@@ -663,14 +663,14 @@ internal static class InitialBeneficiaryClosureRules
 	private static FactionFactEffectiveBoundary?
 		FindInitialCompleteWerewolfAgentGroupBoundary(
 			GameSession session,
-			IReadOnlyCollection<FactionFactsCommittedLogEntry>? history =
+			IReadOnlyCollection<IFactionFactBatchLogEntry>? history =
 				null)
 	{
 		var playerIds = session.GetPlayers()
 			.Select(player => player.Id)
 			.ToArray();
 		history ??= session.GameHistoryLog
-			.OfType<FactionFactsCommittedLogEntry>()
+			.OfType<IFactionFactBatchLogEntry>()
 			.ToArray();
 		var candidateBoundaries = history
 			.SelectMany(entry => entry.Facts)

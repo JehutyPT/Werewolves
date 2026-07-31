@@ -1381,6 +1381,7 @@ internal static class GameFlowManager
                 DomainRecoveryCursorKind.TargetPrivateRolePowerCommit &&
             !RoleListenerDispatch
                 .TryValidateTargetPrivateRecoveryCursorIdentity(
+				session,
                 Listener(sourceRole),
                 admissions,
                 (id, factory) =>
@@ -1398,21 +1399,28 @@ internal static class GameFlowManager
             {
                 case MainRoleType.BigBadWolf:
                     BigBadWolfRole.ValidateRecurringRecoveryCursorIdentity(
+						session,
                         cursor);
                     break;
                 case MainRoleType.Defender:
                     DefenderRole.ValidateRecurringRecoveryCursorIdentity(
+						session,
                         cursor);
                     break;
                 case MainRoleType.WhiteWerewolf:
                     WhiteWerewolfRole.ValidateRecurringRecoveryCursorIdentity(
+						session,
                         cursor);
                     break;
                 case MainRoleType.Piper:
-                    PiperRole.ValidateRecurringRecoveryCursorIdentity(cursor);
+					PiperRole.ValidateRecurringRecoveryCursorIdentity(
+						session,
+						cursor);
                     break;
                 case MainRoleType.Cupid:
-                    CupidRole.ValidateRecurringRecoveryCursorIdentity(cursor);
+					CupidRole.ValidateRecurringRecoveryCursorIdentity(
+						session,
+						cursor);
                     break;
                 default:
                     throw new InvalidOperationException(

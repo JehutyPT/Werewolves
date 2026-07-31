@@ -362,8 +362,10 @@ public sealed class WolfHoundContractTests : DiagnosticTestBase
 		var wolfHoundId = players[0].Id;
 		var simpleWerewolfId = players[1].Id;
 		builder
-			.ArrangeKnownRole(wolfHoundId, MainRoleType.WolfHound)
-			.ArrangeKnownRole(simpleWerewolfId, MainRoleType.SimpleWerewolf)
+			.ArrangeKnownPhysicalRole(wolfHoundId, MainRoleType.WolfHound)
+			.ArrangeKnownPhysicalRole(
+				simpleWerewolfId,
+				MainRoleType.SimpleWerewolf)
 			.ArrangeKnownWerewolfFactionAgentGroup(simpleWerewolfId);
 		builder.ConfirmGameStart();
 		return new KnownWolfHoundScenario(

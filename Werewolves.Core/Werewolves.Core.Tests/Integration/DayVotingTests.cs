@@ -219,7 +219,7 @@ public class DayVotingTests : DiagnosticTestBase
     }
 
     [Fact]
-    public void VoteOutcome_CommittedRoleWithoutModeratorKnowledge_RequiresMatchingRevealAtomically()
+    public void VoteOutcome_DifferentPhysicalReveal_PreservesCommittedCurrentRole()
     {
         var scenario = DayVoteScenario.Start();
         var builder = scenario.Builder
@@ -234,42 +234,24 @@ public class DayVotingTests : DiagnosticTestBase
         assignment.PlayersForAssignment.Should().Equal(
             scenario.LivingTargetId);
         assignment.RolesForAssignment.Should().Contain(
-            MainRoleType.SimpleVillager);
+			MainRoleType.Seer);
         var playerState = builder.GetGameState()!.GetPlayerState(
             scenario.LivingTargetId);
         playerState.CurrentRole.Should().Be(MainRoleType.SimpleVillager);
         playerState.ModeratorKnownRole.Should().BeNull();
         playerState.Health.Should().Be(PlayerHealth.Alive);
 
-        var beforeInvalidReveal = PublicGameSessionSnapshot.Capture(builder);
-        var invalidResponse = new ModeratorResponse
-        {
-            InstructionId = assignment.InstructionId,
-            Type = ExpectedInputType.AssignPlayerRoles,
-            AssignedPlayerRoles = new Dictionary<Guid, MainRoleType>
-            {
-                [scenario.LivingTargetId] = MainRoleType.Seer
-            }
-        };
-        var invalidReveal = () => builder.Process(invalidResponse);
-
-        invalidReveal.Should().Throw<InvalidOperationException>();
-        PublicGameSessionSnapshot.Capture(builder).Should().BeEquivalentTo(
-            beforeInvalidReveal,
-            options => options.WithStrictOrdering());
-
         var afterReveal = builder.Process(assignment.CreateResponse(new()
         {
-            [scenario.LivingTargetId] = MainRoleType.SimpleVillager
+			[scenario.LivingTargetId] = MainRoleType.Seer
         }));
 
         afterReveal.ModeratorInstruction.Should()
             .BeOfType<ConfirmationInstruction>();
         playerState.CurrentRole.Should().Be(MainRoleType.SimpleVillager);
-        playerState.ModeratorKnownRole.Should().Be(
-            MainRoleType.SimpleVillager);
+		playerState.ModeratorKnownRole.Should().BeNull();
         playerState.PubliclyRevealedRole.Should().Be(
-            MainRoleType.SimpleVillager);
+			MainRoleType.Seer);
         playerState.Health.Should().Be(PlayerHealth.Dead);
         builder.GetGameState()!.GameHistoryLog
             .OfType<RoleRevealLogEntry>()
@@ -277,7 +259,7 @@ public class DayVotingTests : DiagnosticTestBase
             .ContainSingle(entry =>
                 entry.RevealedRoles.Count == 1 &&
                 entry.RevealedRoles.GetValueOrDefault(
-                    scenario.LivingTargetId) == MainRoleType.SimpleVillager);
+					scenario.LivingTargetId) == MainRoleType.Seer);
         builder.GetGameState()!.GameHistoryLog
             .OfType<PlayerEliminatedLogEntry>()
             .Should().ContainSingle(entry =>
@@ -374,10 +356,12 @@ public class DayVotingTests : DiagnosticTestBase
         var vote = builder.Process(debate.CreateResponse())
             .ModeratorInstruction.Should()
             .BeOfType<SelectPlayersInstruction>().Subject;
-        var reveal = builder.Process(
-                vote.CreateResponse([wildChildId]))
-            .ModeratorInstruction.Should()
-            .BeOfType<ConfirmationInstruction>().Subject;
+		var reveal = builder.Process(
+				vote.CreateResponse([wildChildId]))
+			.ModeratorInstruction.Should()
+			.BeOfType<AssignRolesInstruction>().Subject;
+		reveal.PlayersForAssignment.Should().Equal(wildChildId);
+		reveal.RolesForAssignment.Should().Contain(MainRoleType.WildChild);
         wildChildState.Health.Should().Be(PlayerHealth.Alive);
 
         session.GameHistoryLog
@@ -392,7 +376,10 @@ public class DayVotingTests : DiagnosticTestBase
                 entry.PlayerIds.SetEquals(new[] { wildChildId }) &&
                 entry.AssignedMainRole == MainRoleType.SimpleWerewolf);
 
-        var afterReveal = builder.Process(reveal.CreateResponse());
+		var afterReveal = builder.Process(reveal.CreateResponse(new()
+		{
+			[wildChildId] = MainRoleType.WildChild
+		}));
 
         afterReveal.ModeratorInstruction.Should()
             .BeOfType<ConfirmationInstruction>();

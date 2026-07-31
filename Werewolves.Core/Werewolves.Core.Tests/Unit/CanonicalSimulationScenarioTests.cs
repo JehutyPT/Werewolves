@@ -9,6 +9,33 @@ namespace Werewolves.Core.Tests.Unit;
 public class CanonicalSimulationScenarioTests
 {
 	[Fact]
+	public void ToCanonical_WithFixedPartition_UsesDealPoolAndOrderedOffersButNotInstanceIds()
+	{
+		var first = CreatePartitionedRoleLockIn();
+		var samePrintedPartitionWithFreshIds = CreatePartitionedRoleLockIn();
+		var swappedOffers = new RoleLockIn(
+			version: 7,
+			playerCount: first.PlayerCount,
+			roleComposition: first.RoleComposition,
+			dealPoolCardIds: first.DealPool.Select(card => card.Id),
+			offer1CardId: first.Offer2!.Id,
+			offer2CardId: first.Offer1!.Id);
+		var firstCanonical = new SimulationScenario(first).ToCanonical();
+		var freshIdsCanonical = new SimulationScenario(samePrintedPartitionWithFreshIds).ToCanonical();
+		var swappedOffersCanonical = new SimulationScenario(swappedOffers).ToCanonical();
+
+		firstCanonical.Should().Be(freshIdsCanonical);
+		firstCanonical.Should().NotBe(swappedOffersCanonical);
+		firstCanonical.RoleComposition.Should().Be(
+			CanonicalRoleComposition.Create(first.DealPool.Select(card => card.PrintedRole)));
+		firstCanonical.Offer1Role.Should().Be(MainRoleType.Seer);
+		firstCanonical.Offer2Role.Should().Be(MainRoleType.Cupid);
+		firstCanonical.ToString().Should().Be(
+			"players=5|roles=[SimpleVillager=3,SimpleWerewolf=1,Thief=1]|offers=[Seer,Cupid]|actor=[]|rules=[]");
+		CanonicalSimulationScenario.Parse(firstCanonical.ToString()).Should().Be(firstCanonical);
+	}
+
+	[Fact]
 	public void ToCanonical_WithArtifactsAndNonDefaultRuleState_SnapshotsAndRoundTripsAllInputs()
 	{
 		var roleCards = new List<MainRoleType>
@@ -120,5 +147,26 @@ public class CanonicalSimulationScenarioTests
 
 		parsed.Should().BeFalse();
 		scenario.Should().BeNull();
+	}
+
+	private static RoleLockIn CreatePartitionedRoleLockIn()
+	{
+		var cards = new[]
+		{
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.Thief),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.SimpleWerewolf),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.SimpleVillager),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.SimpleVillager),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.SimpleVillager),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.Seer),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.Cupid)
+		};
+		return new RoleLockIn(
+			version: 7,
+			playerCount: 5,
+			roleComposition: cards,
+			dealPoolCardIds: cards.Take(5).Select(card => card.Id),
+			offer1CardId: cards[5].Id,
+			offer2CardId: cards[6].Id);
 	}
 }

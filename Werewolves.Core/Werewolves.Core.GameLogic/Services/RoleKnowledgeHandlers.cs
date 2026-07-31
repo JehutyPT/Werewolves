@@ -25,9 +25,7 @@ internal static class RoleKnowledgeHandlers
         }
 
         var playersNeedingMapping = requestedPlayers
-            .Where(player =>
-                player.State.CurrentRole == null ||
-                player.State.ModeratorKnownRole != player.State.CurrentRole)
+			.Where(player => player.State.PhysicalCharacterCardId is null)
             .ToArray();
         var affectedPlayerIds = requestedPlayers
             .Select(player => player.Id)
@@ -43,9 +41,6 @@ internal static class RoleKnowledgeHandlers
         }
 
         var rolesForAssignment = GameSessionQueries.GetUnassignedRoles(session);
-        rolesForAssignment.AddRange(playersNeedingMapping
-            .Where(player => player.State.CurrentRole.HasValue)
-            .Select(player => player.State.CurrentRole!.Value));
 
         return new AssignRolesInstruction(
             semantic,
@@ -76,24 +71,35 @@ internal static class RoleKnowledgeHandlers
         {
             if (input.AssignedPlayerRoles?.TryGetValue(player.Id, out var assignedRole) == true)
             {
-                if (player.State.CurrentRole is { } currentRole && assignedRole != currentRole)
-                {
-                    throw new InvalidOperationException(
-                        $"The accepted Role Reveal response for Player {player.Id} contradicts their committed current Role.");
-                }
-
                 revealedRoles[player.Id] = assignedRole;
                 continue;
             }
 
-            if (player.State.CurrentRole is not { } knownRole)
+			var physicalRole = player.State.PhysicalCharacterCardId is { } cardId
+				? session.GetModeratorPhysicalCharacterCards()
+					.Single(cardState => cardState.Card.Id == cardId)
+					.Card.PrintedRole
+				: player.State.ModeratorKnownRole ?? player.State.CurrentRole;
+			if (physicalRole is not { } revealedRole)
             {
                 throw new InvalidOperationException(
-                    $"The accepted Role Reveal response did not establish a Role for Player {player.Id}.");
+					$"The accepted Role Reveal response did not establish a physical Role for Player {player.Id}.");
             }
 
-            revealedRoles[player.Id] = knownRole;
+			revealedRoles[player.Id] = revealedRole;
         }
+
+		foreach (var roleGroup in requestedPlayers
+			.Where(player =>
+				player.State.CurrentRole is null ||
+				player.State.ModeratorKnownRole is null &&
+				player.State.CurrentRole == revealedRoles[player.Id])
+			.GroupBy(player => player.State.CurrentRole ?? revealedRoles[player.Id]))
+		{
+			session.IdentifyRole(
+				roleGroup.Select(player => player.Id).ToHashSet(),
+				roleGroup.Key);
+		}
 
         session.RevealRoles(revealedRoles);
     }

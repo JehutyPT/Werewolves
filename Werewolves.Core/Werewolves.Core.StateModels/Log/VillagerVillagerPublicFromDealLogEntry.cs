@@ -10,10 +10,16 @@ namespace Werewolves.Core.StateModels.Log;
 public sealed record VillagerVillagerPublicFromDealLogEntry : GameLogEntryBase
 {
     public required Guid PlayerId { get; init; }
+	public required long RoleLockInVersion { get; init; }
+	public required Guid CardId { get; init; }
 
     protected override GameLogEntryBase InnerApply(ISessionMutator mutator)
     {
-        mutator.SetPhysicalCharacterCardRole(PlayerId, MainRoleType.VillagerVillager);
+		mutator.SetPhysicalCharacterCardOwnership(
+			RoleLockInVersion,
+			PlayerId,
+			CardId,
+			MainRoleType.VillagerVillager);
         mutator.SetPlayerRole(PlayerId, MainRoleType.VillagerVillager);
         mutator.SetModeratorKnownRole(PlayerId, MainRoleType.VillagerVillager);
         mutator.SetPubliclyRevealedRole(PlayerId, MainRoleType.VillagerVillager);

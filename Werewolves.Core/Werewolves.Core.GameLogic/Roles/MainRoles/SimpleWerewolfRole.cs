@@ -301,7 +301,8 @@ internal class SimpleWerewolfRole : StandardNightRoleHookListener
 		}
 
 		var holder = livingHolders.Single();
-		var instance = RolePowerInstance.CreateNative(
+		var instance = RolePowerInstance.CreateCurrent(
+			session,
 		    holder,
 		    MainRoleType.LittleGirl,
 		    LittleGirlRole.SpyingPower);

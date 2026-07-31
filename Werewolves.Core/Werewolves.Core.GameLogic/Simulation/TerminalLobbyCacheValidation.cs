@@ -146,10 +146,18 @@ public static partial class TerminalLobbyCache
 
 		var canonical = identity.Scenario;
 		ValidateMaterializationBounds(canonical);
+		var dealPool = canonical.RoleComposition.Entries.SelectMany(entry =>
+			Enumerable.Repeat(entry.Role, entry.Count)).ToArray();
+		var fullComposition = dealPool
+			.Concat(canonical.Offer1Role is { } offer1 ? [offer1] : [])
+			.Concat(canonical.Offer2Role is { } offer2 ? [offer2] : [])
+			.ToArray();
 		var scenario = new SimulationScenario(
 			canonical.PlayerCount,
-			canonical.RoleComposition.Entries.SelectMany(entry =>
-				Enumerable.Repeat(entry.Role, entry.Count)),
+			fullComposition,
+			dealPool,
+			canonical.Offer1Role,
+			canonical.Offer2Role,
 			new ActorSetupCards(canonical.ActorSetupCards),
 			canonical.RuleState);
 		if (!scenario.ToCanonical().Equals(canonical))
@@ -238,6 +246,26 @@ public static partial class TerminalLobbyCache
 					"The canonical Role Composition exceeds the physical card maximum.",
 					nameof(scenario));
 			}
+		}
+
+		try
+		{
+			cardCount = checked(cardCount +
+				(scenario.Offer1Role is null ? 0 : 1) +
+				(scenario.Offer2Role is null ? 0 : 1));
+		}
+		catch (OverflowException exception)
+		{
+			throw new ArgumentException(
+				"The canonical Role Composition card count is unbounded.",
+				nameof(scenario),
+				exception);
+		}
+		if (cardCount > MaximumPhysicalRoleCardCount)
+		{
+			throw new ArgumentException(
+				"The canonical Role Composition exceeds the physical card maximum.",
+				nameof(scenario));
 		}
 	}
 }

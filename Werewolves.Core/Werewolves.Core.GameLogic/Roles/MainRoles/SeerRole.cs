@@ -86,7 +86,8 @@ internal class SeerRole : ImmediateFeedbackNightRoleHookListener
 				seerPlayer,
 				MainRoleType.Seer,
 				WerewolfDetectionPower,
-				RolePowerInstance.CreateNative(
+				RolePowerInstance.CreateCurrent(
+					session,
 					seerPlayer,
 					MainRoleType.Seer,
 					WerewolfDetectionPower)));

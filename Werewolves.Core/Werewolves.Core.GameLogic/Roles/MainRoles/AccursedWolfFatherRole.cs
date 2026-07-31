@@ -73,7 +73,7 @@ internal sealed class AccursedWolfFatherRole
 
 			var holder = GetAliveRolePlayers(session)?.SingleOrDefault();
 			if (holder != null &&
-			    IsSpent(session, CreateResourceIdentity(holder)))
+			    IsSpent(session, CreateResourceIdentity(session, holder)))
 			{
 				return HookListenerActionResult.Skip();
 			}
@@ -143,7 +143,7 @@ internal sealed class AccursedWolfFatherRole
 				"The pending Accursed Wolf-Father sleep instruction has multiple infection commits.");
 		}
 
-		ValidateOwnedInfectionCommit(committedInfection);
+		ValidateOwnedInfectionCommit(session, committedInfection);
 		if (committedInfection.ActingPlayerId != holder.Id)
 		{
 			throw new InvalidOperationException(
@@ -167,7 +167,7 @@ internal sealed class AccursedWolfFatherRole
 			return false;
 		}
 
-		ValidateOwnedInfectionCommit(committedEntry);
+		ValidateOwnedInfectionCommit(session, committedEntry);
 		if (startingInstruction is not SelectOptionsInstruction
 		    {
 			    Semantic:
@@ -262,14 +262,14 @@ internal sealed class AccursedWolfFatherRole
 		var victimId = GetRetainedVictimId(session)
 			?? throw new InvalidOperationException(
 				"The Accursed Wolf-Father infection requires one retained collective victim.");
-		var resourceIdentity = CreateResourceIdentity(holder);
+		var resourceIdentity = CreateResourceIdentity(session, holder);
 		if (IsSpent(session, resourceIdentity))
 		{
 			throw new InvalidOperationException(
 				"The Accursed Wolf-Father infection resource is already spent.");
 		}
 
-		var instance = CreatePowerInstance(holder);
+		var instance = CreatePowerInstance(session, holder);
 		var availability = _availabilityGateway.Evaluate(
 			new RolePowerAttempt(
 				holder,
@@ -310,7 +310,7 @@ internal sealed class AccursedWolfFatherRole
 		var victimId = GetRetainedVictimId(session)
 			?? throw new InvalidOperationException(
 				"The Accursed Wolf-Father infection requires one retained collective victim.");
-		var resourceIdentity = CreateResourceIdentity(holder);
+		var resourceIdentity = CreateResourceIdentity(session, holder);
 		if (IsSpent(session, resourceIdentity))
 		{
 			throw new InvalidOperationException(
@@ -383,16 +383,20 @@ internal sealed class AccursedWolfFatherRole
 			session,
 			resourceIdentity);
 
-	private static RolePowerInstance CreatePowerInstance(IPlayer holder) =>
-		RolePowerInstance.CreateNative(
+	private static RolePowerInstance CreatePowerInstance(
+		GameSession session,
+		IPlayer holder) =>
+		RolePowerInstance.CreateCurrent(
+			session,
 			holder,
 			MainRoleType.AccursedWolfFather,
 			InfectionPower);
 
 	private static OneUseRolePowerResourceIdentity CreateResourceIdentity(
+		GameSession session,
 		IPlayer holder)
 	{
-		var instance = CreatePowerInstance(holder);
+		var instance = CreatePowerInstance(session, holder);
 		return new OneUseRolePowerResourceIdentity(
 			holder.Id,
 			MainRoleType.AccursedWolfFather,
@@ -403,16 +407,13 @@ internal sealed class AccursedWolfFatherRole
 	}
 
 	private static void ValidateOwnedInfectionCommit(
+		GameSession session,
 		OneUseRolePowerCommittedLogEntry committedEntry)
 	{
 		var identity = committedEntry.ResourceIdentity;
-		if (identity.SourceRole != MainRoleType.AccursedWolfFather ||
-		    !StringComparer.Ordinal.Equals(
-			    identity.SourcePowerIdentifier,
-			    InfectionPowerIdentifier.Value) ||
-		    identity.OneUseResourceId != InfectionResourceId ||
-		    identity.PowerInstanceOrigin != RolePowerInstanceOrigin.Native ||
-		    identity.PowerInstanceId != identity.ActingPlayerId)
+		if (identity != CreateResourceIdentity(
+				session,
+				session.GetPlayer(identity.ActingPlayerId)))
 		{
 			throw new InvalidOperationException(
 				"The Accursed Wolf-Father infection commit has an invalid Role Power identity.");

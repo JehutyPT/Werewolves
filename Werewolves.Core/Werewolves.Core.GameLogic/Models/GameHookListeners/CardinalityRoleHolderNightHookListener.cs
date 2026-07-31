@@ -148,7 +148,7 @@ internal abstract class CardinalityRoleHolderNightHookListener
 			}
 
 			var participants = GetLivingCurrentRoleHolders(session);
-			return AreAllPowersAvailable(participants, RecognitionPower)
+			return AreAllPowersAvailable(session, participants, RecognitionPower)
 				? PrepareRecognitionInstruction(participants)
 				: HookListenerActionResult.Complete(
 					CardinalityRoleHolderNightState.Asleep);
@@ -162,7 +162,7 @@ internal abstract class CardinalityRoleHolderNightHookListener
 
 		var currentParticipants = GetLivingCurrentRoleHolders(session);
 		if (currentParticipants.Count < MinimumCommunicationParticipants ||
-		    !AreAllPowersAvailable(currentParticipants, CommunicationPower))
+		    !AreAllPowersAvailable(session, currentParticipants, CommunicationPower))
 		{
 			return HookListenerActionResult.Complete(
 				CardinalityRoleHolderNightState.Asleep);
@@ -186,7 +186,7 @@ internal abstract class CardinalityRoleHolderNightHookListener
 		IdentifyCompleteLivingRoleHolderSet(session, selectedPlayerIds);
 
 		var participants = GetLivingCurrentRoleHolders(session);
-		return AreAllPowersAvailable(participants, RecognitionPower)
+		return AreAllPowersAvailable(session, participants, RecognitionPower)
 			? PrepareRecognitionInstruction(participants)
 			: PrepareSleepInstruction(session);
 	}
@@ -259,13 +259,15 @@ internal abstract class CardinalityRoleHolderNightHookListener
 			GetLivingCurrentRoleHolders(session).Select(player => player.Id));
 
 	private bool AreAllPowersAvailable(
+		GameSession session,
 		IReadOnlyList<IPlayer> participants,
 		RolePowerDefinition power)
 	{
 		var results = participants
 			.Select(participant =>
 			{
-				var instance = RolePowerInstance.CreateNative(
+				var instance = RolePowerInstance.CreateCurrent(
+					session,
 					participant,
 					(MainRoleType)Id,
 					power);

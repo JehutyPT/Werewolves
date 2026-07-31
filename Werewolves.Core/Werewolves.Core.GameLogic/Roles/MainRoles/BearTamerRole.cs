@@ -107,7 +107,8 @@ internal sealed class BearTamerRole : NightRoleIdOnlyHookListener
 		var holder = GetAliveRolePlayers(session)?.SingleOrDefault()
 			?? throw new InvalidOperationException(
 				"No living Bear Tamer is available for the Dawn growl.");
-		var powerInstance = RolePowerInstance.CreateNative(
+		var powerInstance = RolePowerInstance.CreateCurrent(
+			session,
 			holder,
 			MainRoleType.BearTamer,
 			GrowlPower);

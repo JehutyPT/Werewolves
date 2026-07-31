@@ -217,8 +217,10 @@ internal sealed class WhiteWerewolfRole
 	}
 
 	internal static void ValidateRecurringRecoveryCursorIdentity(
+		GameSession session,
 		DomainRecoveryCursor cursor)
 	{
+		ArgumentNullException.ThrowIfNull(session);
 		ArgumentNullException.ThrowIfNull(cursor);
 		if (cursor.Kind !=
 		    DomainRecoveryCursorKind.RecurringNativeRolePowerCommit ||
@@ -229,8 +231,9 @@ internal sealed class WhiteWerewolfRole
 		    !StringComparer.Ordinal.Equals(
 			    cursor.SourcePowerIdentifier,
 			    SoloAttackPowerIdentifier.Value) ||
-		    cursor.PowerInstanceId != cursor.ActingPlayerId ||
-		    cursor.PowerInstanceOrigin != RolePowerInstanceOrigin.Native ||
+		    cursor.PowerIdentity != CreateCurrentPowerIdentity(
+			    session,
+			    session.GetPlayer(cursor.ActingPlayerId)) ||
 		    cursor.OneUseResourceId != Guid.Empty ||
 		    cursor.NextInstructionSemantic !=
 			    ModeratorInstructionSemantic.PutRoleToSleep)
@@ -320,7 +323,8 @@ internal sealed class WhiteWerewolfRole
 				holder,
 				MainRoleType.WhiteWerewolf,
 				SoloAttackPower,
-				RolePowerInstance.CreateNative(
+				RolePowerInstance.CreateCurrent(
+					session,
 					holder,
 					MainRoleType.WhiteWerewolf,
 					SoloAttackPower)));
@@ -387,7 +391,8 @@ internal sealed class WhiteWerewolfRole
 				"The White Werewolf target must be another living known Werewolf Faction Agent.");
 		}
 
-		var powerInstance = RolePowerInstance.CreateNative(
+		var powerInstance = RolePowerInstance.CreateCurrent(
+			session,
 			holder,
 			MainRoleType.WhiteWerewolf,
 			SoloAttackPower);
@@ -453,10 +458,9 @@ internal sealed class WhiteWerewolfRole
 			    committedEntry.SourcePowerIdentifier,
 			    SoloAttackPowerIdentifier.Value) ||
 		    committedEntry.ActingPlayerId == Guid.Empty ||
-		    committedEntry.PowerInstanceId !=
-			    committedEntry.ActingPlayerId ||
-		    committedEntry.PowerInstanceOrigin !=
-			    RolePowerInstanceOrigin.Native ||
+		    committedEntry.PowerIdentity != CreateCurrentPowerIdentity(
+			    session,
+			    session.GetPlayer(committedEntry.ActingPlayerId)) ||
 		    committedEntry.CurrentPhase != GamePhase.Night ||
 		    committedEntry.TurnNumber != session.TurnNumber ||
 		    !IsSoloAttackNight(committedEntry.TurnNumber))
@@ -480,4 +484,13 @@ internal sealed class WhiteWerewolfRole
 				"The White Werewolf attack target must be another living known Werewolf Faction Agent.");
 		}
 	}
+
+	private static RolePowerInstanceIdentity CreateCurrentPowerIdentity(
+		GameSession session,
+		IPlayer holder) =>
+		RolePowerInstance.CreateCurrentIdentity(
+			session,
+			holder,
+			MainRoleType.WhiteWerewolf,
+			SoloAttackPower);
 }

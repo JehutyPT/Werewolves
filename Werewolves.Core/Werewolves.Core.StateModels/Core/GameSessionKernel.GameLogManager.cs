@@ -103,7 +103,7 @@ internal sealed partial class GameSessionKernel
             GameLogEntryBase entry,
             IReadOnlyCollection<Guid>? playerIds)
         {
-            if (entry is not FactionFactsCommittedLogEntry commit)
+			if (entry is not IFactionFactBatchLogEntry commit)
             {
                 return;
             }
@@ -116,10 +116,12 @@ internal sealed partial class GameSessionKernel
             }
 
             var existingCommits = _logEntries
-                .OfType<FactionFactsCommittedLogEntry>()
+				.OfType<IFactionFactBatchLogEntry>()
                 .ToArray();
 
-            if (existingCommits.Any(existing => existing.HasSameBatch(commit)))
+			if (existingCommits.Any(existing =>
+				existing.Source == commit.Source &&
+				existing.Facts.SequenceEqual(commit.Facts)))
             {
                 throw new InvalidOperationException(
                     "The Faction fact batch is already committed.");

@@ -80,6 +80,7 @@ internal static class RoleListenerDispatch
 	}
 
 	internal static bool TryValidateTargetPrivateRecoveryCursorIdentity(
+		GameSession session,
 		ListenerIdentifier listenerId,
 		IRoleAdmissionSource admissions,
 		Func<ListenerIdentifier, Func<IGameHookListener>, IGameHookListener>
@@ -96,7 +97,7 @@ internal static class RoleListenerDispatch
 			return false;
 		}
 
-		capability.ValidateRecoveryCursorIdentity(cursor);
+		capability.ValidateRecoveryCursorIdentity(session, cursor);
 		return true;
 	}
 

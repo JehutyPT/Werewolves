@@ -249,7 +249,7 @@ internal sealed class CupidRole
 				"Cupid must select exactly two distinct living Players.");
 		}
 
-		var powerIdentity = CreateNativePowerIdentity(holder);
+		var powerIdentity = CreateCurrentPowerIdentity(session, holder);
 		session.CommitLoversPair(selectedPlayerIds, powerIdentity);
 		_ = InitialBeneficiaryClosureRules.TryCommitCurrentSession(session);
 
@@ -319,7 +319,8 @@ internal sealed class CupidRole
 				holder,
 				MainRoleType.Cupid,
 				LinkLoversPower,
-				RolePowerInstance.CreateNative(
+				RolePowerInstance.CreateCurrent(
+					session,
 					holder,
 					MainRoleType.Cupid,
 					LinkLoversPower)));
@@ -395,8 +396,10 @@ internal sealed class CupidRole
 	}
 
 	internal static void ValidateRecurringRecoveryCursorIdentity(
+		GameSession session,
 		DomainRecoveryCursor cursor)
 	{
+		ArgumentNullException.ThrowIfNull(session);
 		ArgumentNullException.ThrowIfNull(cursor);
 		if (cursor.Kind !=
 		    DomainRecoveryCursorKind.RecurringNativeRolePowerCommit ||
@@ -406,8 +409,9 @@ internal sealed class CupidRole
 		    !StringComparer.Ordinal.Equals(
 			    cursor.SourcePowerIdentifier,
 			    LinkLoversPowerIdentifier.Value) ||
-		    cursor.PowerInstanceId != cursor.ActingPlayerId ||
-		    cursor.PowerInstanceOrigin != RolePowerInstanceOrigin.Native ||
+		    cursor.PowerIdentity != CreateCurrentPowerIdentity(
+			    session,
+			    session.GetPlayer(cursor.ActingPlayerId)) ||
 		    cursor.OneUseResourceId != Guid.Empty ||
 		    cursor.CommittedTargetIds.Count != 2 ||
 		    cursor.CommittedTargetIds.Distinct().Count() != 2 ||
@@ -462,14 +466,14 @@ internal sealed class CupidRole
 		GetAliveRolePlayers(session)?.SingleOrDefault()
 		?? throw new InvalidOperationException("No living Cupid is available.");
 
-	private static RolePowerInstanceIdentity CreateNativePowerIdentity(
+	private static RolePowerInstanceIdentity CreateCurrentPowerIdentity(
+		GameSession session,
 		IPlayer holder) =>
-		new(
-			holder.Id,
+		RolePowerInstance.CreateCurrentIdentity(
+			session,
+			holder,
 			MainRoleType.Cupid,
-			LinkLoversPowerIdentifier.Value,
-			holder.Id,
-			RolePowerInstanceOrigin.Native);
+			LinkLoversPower);
 
 	private static bool HasExpectedCommittedPair(
 		GameSession session,
@@ -540,10 +544,9 @@ internal sealed class CupidRole
 		LoversPairCommittedLogEntry pair)
 	{
 		pair.EnforceValidity();
-		if (pair.PowerIdentity.SourceRole != MainRoleType.Cupid ||
-		    pair.PowerIdentity.PowerInstanceOrigin !=
-		    RolePowerInstanceOrigin.Native ||
-		    pair.PowerIdentity.PowerInstanceId != pair.ActingPlayerId ||
+		if (pair.PowerIdentity != CreateCurrentPowerIdentity(
+				session,
+				session.GetPlayer(pair.ActingPlayerId)) ||
 		    !StringComparer.Ordinal.Equals(
 			    pair.SourcePowerIdentifier,
 			    LinkLoversPowerIdentifier.Value) ||
@@ -552,7 +555,7 @@ internal sealed class CupidRole
 				    .HasStatusEffect(StatusEffectTypes.Lovers)))
 		{
 			throw new InvalidOperationException(
-				"The committed Lovers pair does not match Cupid's native power and both durable statuses.");
+				"The committed Lovers pair does not match Cupid's current power and both durable statuses.");
 		}
 	}
 }

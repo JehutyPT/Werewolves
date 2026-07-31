@@ -13,6 +13,8 @@ namespace Werewolves.Core.StateModels.Core
 		private readonly Dictionary<Guid, Player> _players = new();
 		private readonly List<Guid> _playerSeatingOrder = new();
 		private readonly List<MainRoleType> _rolesInPlay = new();
+		private readonly RoleLockIn _roleLockIn;
+		private readonly Dictionary<Guid, PhysicalCharacterCardState> _physicalCardStates = new();
 		private readonly IStateChangeObserver? _stateChangeObserver;
 
 		/// <summary>
@@ -40,6 +42,11 @@ namespace Werewolves.Core.StateModels.Core
 			=> _gameHistoryLog.FindLogEntries(turnIntervalConstraint ?? NumberRangeConstraint.Any, phase, filter);
 		internal IReadOnlyList<Guid> GetPlayerSeatingOrder() => _playerSeatingOrder.AsReadOnly();
 		internal IReadOnlyList<MainRoleType> GetRolesInPlay() => _rolesInPlay.AsReadOnly();
+		internal RoleLockIn GetRoleLockIn() => _roleLockIn;
+		internal IReadOnlyList<PhysicalCharacterCardState> GetPhysicalCharacterCardStates() =>
+			_roleLockIn.RoleComposition
+				.Select(card => _physicalCardStates[card.Id])
+				.ToArray();
 		internal IReadOnlyList<GameLogEntryBase> GetAllLogEntries() => _gameHistoryLog.GetAllLogEntries();
 
 		private int _turnNumber;
@@ -71,6 +78,34 @@ namespace Werewolves.Core.StateModels.Core
 			}
 
 			_rolesInPlay = new List<MainRoleType>(config.Roles);
+			_roleLockIn = config.RoleLockIn;
+			foreach (var card in _roleLockIn.DealPool)
+			{
+				_physicalCardStates.Add(
+					card.Id,
+					new PhysicalCharacterCardState(
+						card,
+						PhysicalCharacterCardZone.DealPool,
+						OwnerPlayerId: null));
+			}
+			if (_roleLockIn.Offer1 is { } offer1)
+			{
+				_physicalCardStates.Add(
+					offer1.Id,
+					new PhysicalCharacterCardState(
+						offer1,
+						PhysicalCharacterCardZone.Offer1,
+						OwnerPlayerId: null));
+			}
+			if (_roleLockIn.Offer2 is { } offer2)
+			{
+				_physicalCardStates.Add(
+					offer2.Id,
+					new PhysicalCharacterCardState(
+						offer2,
+						PhysicalCharacterCardZone.Offer2,
+						OwnerPlayerId: null));
+			}
 			_phaseStateCache = new GamePhaseStateCache(GamePhase.Night);
 			_turnNumber = 1;
 
@@ -222,6 +257,15 @@ namespace Werewolves.Core.StateModels.Core
 					IsStableRecoveryBoundary = true,
 				SeatingOrder = _playerSeatingOrder.ToList(),
 				RolesInPlay = _rolesInPlay.ToList(),
+				RoleLockIn = RoleLockInDto.FromValue(_roleLockIn),
+				PhysicalCharacterCards = GetPhysicalCharacterCardStates()
+					.Select(state => new PhysicalCharacterCardStateDto
+					{
+						CardId = state.Card.Id,
+						Zone = state.Zone,
+						OwnerPlayerId = state.OwnerPlayerId
+					})
+					.ToList(),
 				PendingInstruction = _pendingModeratorInstruction,
 				PendingInstructionSemantic = _pendingModeratorInstruction?.Semantic,
 				GameHistoryLog = _gameHistoryLog.GetAllLogEntries().ToList(),
@@ -233,6 +277,7 @@ namespace Werewolves.Core.StateModels.Core
 					Id = p.Id,
 					Name = p.Name,
 					MainRole = p.State.MainRole,
+					PhysicalCharacterCardId = p.State.PhysicalCharacterCardId,
 					PhysicalCharacterCardRole = p.State.PhysicalCharacterCardRole,
 					ModeratorKnownRole = p.State.ModeratorKnownRole,
 						PubliclyRevealedRole = p.State.PubliclyRevealedRole,
@@ -267,6 +312,36 @@ namespace Werewolves.Core.StateModels.Core
 			_turnNumber = dto.TurnNumber;
 			_playerSeatingOrder = dto.SeatingOrder;
 			_rolesInPlay = dto.RolesInPlay;
+			_roleLockIn = dto.RoleLockIn?.ToValue()
+				?? throw new InvalidOperationException(
+					"The stable recovery snapshot is missing Role Lock-In.");
+			var cardsById = _roleLockIn.RoleComposition
+				.ToDictionary(card => card.Id);
+			if (dto.PhysicalCharacterCards.Count != cardsById.Count ||
+				dto.PhysicalCharacterCards.Select(state => state.CardId)
+					.Distinct().Count() != cardsById.Count)
+			{
+				throw new InvalidOperationException(
+					"The stable recovery snapshot has an invalid Physical Character Card zone projection.");
+			}
+			foreach (var stateDto in dto.PhysicalCharacterCards)
+			{
+				if (!cardsById.TryGetValue(stateDto.CardId, out var card) ||
+					!Enum.IsDefined(stateDto.Zone) ||
+					(stateDto.Zone == PhysicalCharacterCardZone.PlayerOwned) !=
+						stateDto.OwnerPlayerId.HasValue)
+				{
+					throw new InvalidOperationException(
+						"The stable recovery snapshot has an invalid Physical Character Card zone projection.");
+				}
+
+				_physicalCardStates.Add(
+					card.Id,
+					new PhysicalCharacterCardState(
+						card,
+						stateDto.Zone,
+						stateDto.OwnerPlayerId));
+			}
 				_pendingModeratorInstruction = RestorePendingInstructionSemantic(dto);
 				ValidateRoleFactSchemaVersion(dto.RoleFactSchemaVersion);
 				ValidateFactionFactSchemaVersion(dto.FactionFactSchemaVersion);
@@ -286,6 +361,7 @@ namespace Werewolves.Core.StateModels.Core
 				var player = new Player(playerDto.Name, playerDto.Id);
 				var mutableState = player.GetMutableState(new DeserializationKey());
 				mutableState.MainRole = playerDto.MainRole;
+				mutableState.PhysicalCharacterCardId = playerDto.PhysicalCharacterCardId;
 				mutableState.PhysicalCharacterCardRole = playerDto.PhysicalCharacterCardRole;
 				mutableState.ModeratorKnownRole = dto.RoleFactSchemaVersion ==
 					RoleFactSchema.LegacyVersion
@@ -316,6 +392,7 @@ namespace Werewolves.Core.StateModels.Core
 					_gameHistoryLog.RestoreLogEntry(entry, _players.Keys);
 				}
 
+				ValidatePhysicalCharacterCardProjectionMatchesHistory();
 				ValidateFactionProjectionMatchesHistory();
 				ValidateLoversPairProjectionMatchesHistory();
 
@@ -349,12 +426,215 @@ namespace Werewolves.Core.StateModels.Core
 					new Dictionary<Faction, FactionAgentKnowledge>(agents));
 			}
 
+			private void ValidatePhysicalCharacterCardProjectionMatchesHistory()
+			{
+				var playerIds = _playerSeatingOrder.ToHashSet();
+				var projected = CreateInitialPhysicalCharacterCardProjection();
+				foreach (var entry in _gameHistoryLog.GetAllLogEntries())
+				{
+					switch (entry)
+					{
+						case PhysicalCharacterCardOwnershipObservedLogEntry ownership:
+							ApplyOwnershipObservation(projected, playerIds, ownership);
+							break;
+						case VillagerVillagerPublicFromDealLogEntry villagerVillager:
+							ApplyOwnershipObservation(
+								projected,
+								playerIds,
+								villagerVillager.RoleLockInVersion,
+								villagerVillager.PlayerId,
+								villagerVillager.CardId,
+								MainRoleType.VillagerVillager);
+							break;
+						case PermanentRoleSwapCommittedLogEntry swap:
+							ApplyPermanentRoleSwapProjection(projected, playerIds, swap);
+							break;
+					}
+				}
+
+				if (projected.Count != _physicalCardStates.Count ||
+					projected.Any(pair =>
+						!_physicalCardStates.TryGetValue(pair.Key, out var actual) ||
+						actual != pair.Value))
+				{
+					throw new InvalidOperationException(
+						"Physical Character Card ownership does not match committed history.");
+				}
+
+				var ownedCardsByPlayer = projected.Values
+					.Where(state => state.Zone == PhysicalCharacterCardZone.PlayerOwned)
+					.GroupBy(state => state.OwnerPlayerId!.Value)
+					.ToDictionary(group => group.Key, group => group.ToArray());
+				if (ownedCardsByPlayer.Keys.Any(ownerId => !playerIds.Contains(ownerId)) ||
+					ownedCardsByPlayer.Values.Any(cards => cards.Length != 1))
+				{
+					throw new InvalidOperationException(
+						"Physical Character Card ownership does not match the Player roster.");
+				}
+				foreach (var playerId in _playerSeatingOrder)
+				{
+					var playerState = GetPlayer(playerId).GetMutableState(
+						new DeserializationKey());
+					var ownedCard = ownedCardsByPlayer.GetValueOrDefault(playerId)?
+						.Single();
+					if (playerState.PhysicalCharacterCardId != ownedCard?.Card.Id ||
+						playerState.PhysicalCharacterCardRole !=
+						ownedCard?.Card.PrintedRole)
+					{
+						throw new InvalidOperationException(
+							"Physical Character Card ownership does not match the Player projection.");
+					}
+				}
+			}
+
+			private Dictionary<Guid, PhysicalCharacterCardState>
+				CreateInitialPhysicalCharacterCardProjection()
+			{
+				var projection = _roleLockIn.DealPool.ToDictionary(
+					card => card.Id,
+					card => new PhysicalCharacterCardState(
+						card,
+						PhysicalCharacterCardZone.DealPool,
+						OwnerPlayerId: null));
+				if (_roleLockIn.Offer1 is { } offer1)
+				{
+					projection.Add(
+						offer1.Id,
+						new PhysicalCharacterCardState(
+							offer1,
+							PhysicalCharacterCardZone.Offer1,
+							OwnerPlayerId: null));
+				}
+				if (_roleLockIn.Offer2 is { } offer2)
+				{
+					projection.Add(
+						offer2.Id,
+						new PhysicalCharacterCardState(
+							offer2,
+							PhysicalCharacterCardZone.Offer2,
+							OwnerPlayerId: null));
+				}
+
+				return projection;
+			}
+
+			private void ApplyOwnershipObservation(
+				Dictionary<Guid, PhysicalCharacterCardState> projection,
+				IReadOnlySet<Guid> playerIds,
+				PhysicalCharacterCardOwnershipObservedLogEntry entry) =>
+				ApplyOwnershipObservation(
+					projection,
+					playerIds,
+					entry.RoleLockInVersion,
+					entry.PlayerId,
+					entry.CardId,
+					entry.PrintedRole);
+
+			private void ApplyOwnershipObservation(
+				Dictionary<Guid, PhysicalCharacterCardState> projection,
+				IReadOnlySet<Guid> playerIds,
+				long roleLockInVersion,
+				Guid playerId,
+				Guid cardId,
+				MainRoleType printedRole)
+			{
+				if (roleLockInVersion != _roleLockIn.Version ||
+					!playerIds.Contains(playerId) ||
+					!projection.TryGetValue(cardId, out var cardState) ||
+					cardState.Zone != PhysicalCharacterCardZone.DealPool ||
+					cardState.OwnerPlayerId is not null ||
+					cardState.Card.PrintedRole != printedRole ||
+					projection.Values.Any(state =>
+						state.OwnerPlayerId == playerId))
+				{
+					throw new InvalidOperationException(
+						"Physical Character Card ownership history is invalid.");
+				}
+
+				projection[cardId] = cardState with
+				{
+					Zone = PhysicalCharacterCardZone.PlayerOwned,
+					OwnerPlayerId = playerId
+				};
+			}
+
+			private void ApplyPermanentRoleSwapProjection(
+				Dictionary<Guid, PhysicalCharacterCardState> projection,
+				IReadOnlySet<Guid> playerIds,
+				PermanentRoleSwapCommittedLogEntry entry)
+			{
+				var movement = entry.PhysicalCards;
+				var expectedAcquiredOwnerId =
+					movement.ExpectedAcquiredCardOwnerPlayerId;
+				if (entry.RoleLockInVersion != _roleLockIn.Version ||
+					!playerIds.Contains(entry.PlayerId) ||
+					!projection.TryGetValue(movement.OutgoingOwnedCardId, out var outgoing) ||
+					outgoing is not
+					{
+						Zone: PhysicalCharacterCardZone.PlayerOwned,
+						OwnerPlayerId: var outgoingOwnerId
+					} ||
+					outgoingOwnerId != entry.PlayerId ||
+					!projection.TryGetValue(movement.AcquiredCardId, out var acquired) ||
+					!IsExpectedAcquiredCardState(acquired, expectedAcquiredOwnerId) ||
+					acquired.Card.PrintedRole != entry.NewCurrentRole ||
+					expectedAcquiredOwnerId == entry.PlayerId ||
+					expectedAcquiredOwnerId is { } ownerId &&
+						!playerIds.Contains(ownerId))
+				{
+					throw new InvalidOperationException(
+						"Permanent Role Swap physical-card history is invalid.");
+				}
+
+				foreach (var cardId in movement.AdditionalSetAsideCardIds)
+				{
+					if (!projection.TryGetValue(cardId, out var cardState) ||
+						cardState.OwnerPlayerId is not null ||
+						cardState.Zone is PhysicalCharacterCardZone.PlayerOwned or
+							PhysicalCharacterCardZone.SetAside)
+					{
+						throw new InvalidOperationException(
+							"Permanent Role Swap physical-card history is invalid.");
+					}
+					projection[cardId] = cardState with
+					{
+						Zone = PhysicalCharacterCardZone.SetAside,
+						OwnerPlayerId = null
+					};
+				}
+
+				projection[movement.OutgoingOwnedCardId] = outgoing with
+				{
+					Zone = PhysicalCharacterCardZone.SetAside,
+					OwnerPlayerId = null
+				};
+				projection[movement.AcquiredCardId] = acquired with
+				{
+					Zone = PhysicalCharacterCardZone.PlayerOwned,
+					OwnerPlayerId = entry.PlayerId
+				};
+
+				static bool IsExpectedAcquiredCardState(
+					PhysicalCharacterCardState acquired,
+					Guid? expectedOwnerId) =>
+					expectedOwnerId is { } ownerId
+						? acquired is
+						{
+							Zone: PhysicalCharacterCardZone.PlayerOwned,
+							OwnerPlayerId: var actualOwnerId
+						} && actualOwnerId == ownerId
+						: acquired.OwnerPlayerId is null &&
+							acquired.Zone is PhysicalCharacterCardZone.DealPool or
+								PhysicalCharacterCardZone.Offer1 or
+								PhysicalCharacterCardZone.Offer2;
+			}
+
 			private void ValidateFactionProjectionMatchesHistory()
 			{
 				var projection = FactionFactProjection.Create(
 					_gameHistoryLog
 						.GetAllLogEntries()
-						.OfType<FactionFactsCommittedLogEntry>(),
+						.OfType<IFactionFactBatchLogEntry>(),
 					_playerSeatingOrder);
 				foreach (var playerId in _playerSeatingOrder)
 				{
@@ -374,11 +654,20 @@ namespace Werewolves.Core.StateModels.Core
 
 			private void ValidateLoversPairProjectionMatchesHistory()
 			{
-				var pair = _gameHistoryLog
-					.GetAllLogEntries()
+				var history = _gameHistoryLog.GetAllLogEntries().ToList();
+				var pair = history
 					.OfType<LoversPairCommittedLogEntry>()
 					.SingleOrDefault();
-				var expectedLoverIds = pair?.PlayerIds.ToHashSet() ?? [];
+				var relationshipCleared = pair is not null && history
+					.Skip(history.IndexOf(pair) + 1)
+					.OfType<PermanentRoleSwapCommittedLogEntry>()
+					.Any(entry =>
+						pair.PlayerIds.Contains(entry.PlayerId) &&
+						entry.StateChanges.RelationshipEffectsToClear.Contains(
+							StatusEffectTypes.Lovers));
+				var expectedLoverIds = relationshipCleared
+					? []
+					: pair?.PlayerIds.ToHashSet() ?? [];
 
 				var actualLoverIds = _playerSeatingOrder
 					.Where(playerId =>
@@ -558,7 +847,10 @@ namespace Werewolves.Core.StateModels.Core
 			{
 				var cursorResourceIdentity = cursor.ResourceIdentity;
 				if (!cursorResourceIdentity.HasValue ||
-				    !cursorResourceIdentity.Value.IsValid)
+				    !cursorResourceIdentity.Value.IsValid ||
+				    !IsCurrentRolePowerIdentity(
+					    dto,
+					    cursorResourceIdentity.Value))
 				{
 					throw new InvalidOperationException(
 						"The domain recovery cursor is structurally invalid.");
@@ -587,7 +879,10 @@ namespace Werewolves.Core.StateModels.Core
                 DomainRecoveryCursorKind.TargetPrivateRolePowerCommit)
             {
                 if (cursor.PowerIdentity is not { } targetPrivatePowerIdentity ||
-                    !targetPrivatePowerIdentity.IsValid)
+					!targetPrivatePowerIdentity.IsValid ||
+					!IsCurrentRolePowerIdentity(
+						dto,
+						targetPrivatePowerIdentity))
                 {
                     throw new InvalidOperationException(
                         "The domain recovery cursor is structurally invalid.");
@@ -630,9 +925,6 @@ namespace Werewolves.Core.StateModels.Core
 					    .RecurringNativeRolePowerCommit ||
 			    cursor.PowerIdentity is not { } cursorPowerIdentity ||
 			    !cursorPowerIdentity.IsValid ||
-			    cursor.PowerInstanceId != cursor.ActingPlayerId ||
-			    cursor.PowerInstanceOrigin !=
-				    RolePowerInstanceOrigin.Native ||
 			    cursor.OneUseResourceId != Guid.Empty)
 			{
 				throw new InvalidOperationException(
@@ -667,6 +959,7 @@ namespace Werewolves.Core.StateModels.Core
 				.LastOrDefault(entry =>
 					entry.ActionType == cursor.CommittedActionType);
 			var matchesRecurringCommit =
+				IsCurrentRolePowerIdentity(dto, cursorPowerIdentity) &&
 				latestActionEntry is RecurringRolePowerCommittedLogEntry
 				{
 					CurrentPhase: GamePhase.Night,
@@ -676,6 +969,10 @@ namespace Werewolves.Core.StateModels.Core
 				recurringEntry.PowerIdentity == cursorPowerIdentity &&
 				targetIds.SequenceEqual(cursor.CommittedTargetIds);
 			var matchesLegacyAction =
+				cursorPowerIdentity.PowerInstanceOrigin ==
+					RolePowerInstanceOrigin.Native &&
+				cursorPowerIdentity.PowerInstanceId ==
+					cursorPowerIdentity.ActingPlayerId &&
 				cursor.CommittedTargetIds.Count == 1 &&
 				latestActionEntry?.GetType() ==
 					typeof(NightActionLogEntry) &&
@@ -709,6 +1006,41 @@ namespace Werewolves.Core.StateModels.Core
 
 			return cursor;
 			}
+
+		private static bool IsCurrentRolePowerIdentity(
+			GameSessionDto dto,
+			OneUseRolePowerResourceIdentity resourceIdentity) =>
+			IsCurrentRolePowerIdentity(
+				dto,
+				new RolePowerInstanceIdentity(
+					resourceIdentity.ActingPlayerId,
+					resourceIdentity.SourceRole,
+					resourceIdentity.SourcePowerIdentifier,
+					resourceIdentity.PowerInstanceId,
+					resourceIdentity.PowerInstanceOrigin));
+
+		private static bool IsCurrentRolePowerIdentity(
+			GameSessionDto dto,
+			RolePowerInstanceIdentity identity)
+		{
+			var player = dto.Players.SingleOrDefault(candidate =>
+				candidate.Id == identity.ActingPlayerId);
+			if (player?.MainRole != identity.SourceRole)
+			{
+				return false;
+			}
+
+			var latestSwap = dto.GameHistoryLog
+				.OfType<PermanentRoleSwapCommittedLogEntry>()
+				.LastOrDefault(entry =>
+					entry.PlayerId == identity.ActingPlayerId);
+			return latestSwap is null
+				? identity.PowerInstanceOrigin == RolePowerInstanceOrigin.Native &&
+				  identity.PowerInstanceId == identity.ActingPlayerId
+				: latestSwap.NewCurrentRole == identity.SourceRole &&
+				  identity.PowerInstanceOrigin == RolePowerInstanceOrigin.Swapped &&
+				  identity.PowerInstanceId == latestSwap.NewPowerInstanceId;
+		}
 
 		/// <summary>
 		/// Special key used only during deserialization to access mutable state

@@ -14,6 +14,8 @@ internal class GameSessionDto
     public Guid Id { get; set; }
     public List<Guid> SeatingOrder { get; set; } = new();
     public List<MainRoleType> RolesInPlay { get; set; } = new();
+	public RoleLockInDto? RoleLockIn { get; set; }
+	public List<PhysicalCharacterCardStateDto> PhysicalCharacterCards { get; set; } = new();
 
     // Derived state restored directly during Rehydration.
     public List<PlayerDto> Players { get; set; } = new();
@@ -61,6 +63,7 @@ internal class PlayerDto
     public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public MainRoleType? MainRole { get; set; }
+	public Guid? PhysicalCharacterCardId { get; set; }
     public MainRoleType? PhysicalCharacterCardRole { get; set; }
     public MainRoleType? ModeratorKnownRole { get; set; }
     public MainRoleType? PubliclyRevealedRole { get; set; }
@@ -71,6 +74,45 @@ internal class PlayerDto
     public FactionBeneficiaryKnowledge? FactionBeneficiary { get; set; }
     public Dictionary<Faction, FactionAgentKnowledge>? FactionAgentKnowledge
         { get; set; }
+}
+
+internal sealed class RoleLockInDto
+{
+	public long Version { get; set; }
+	public int PlayerCount { get; set; }
+	public List<PhysicalCharacterCard> RoleComposition { get; set; } = new();
+	public List<Guid> DealPoolCardIds { get; set; } = new();
+	public Guid? Offer1CardId { get; set; }
+	public Guid? Offer2CardId { get; set; }
+
+	internal static RoleLockInDto FromValue(RoleLockIn roleLockIn)
+	{
+		ArgumentNullException.ThrowIfNull(roleLockIn);
+		return new RoleLockInDto
+		{
+			Version = roleLockIn.Version,
+			PlayerCount = roleLockIn.PlayerCount,
+			RoleComposition = roleLockIn.RoleComposition.ToList(),
+			DealPoolCardIds = roleLockIn.DealPool.Select(card => card.Id).ToList(),
+			Offer1CardId = roleLockIn.Offer1?.Id,
+			Offer2CardId = roleLockIn.Offer2?.Id
+		};
+	}
+
+	internal RoleLockIn ToValue() => new(
+		Version,
+		PlayerCount,
+		RoleComposition,
+		DealPoolCardIds,
+		Offer1CardId,
+		Offer2CardId);
+}
+
+internal sealed class PhysicalCharacterCardStateDto
+{
+	public Guid CardId { get; set; }
+	public PhysicalCharacterCardZone Zone { get; set; }
+	public Guid? OwnerPlayerId { get; set; }
 }
 
 /// <summary>

@@ -109,7 +109,8 @@ internal sealed class HunterRole :
 				hunter,
 				MainRoleType.Hunter,
 				FinalShotPower,
-				RolePowerInstance.CreateNative(
+				RolePowerInstance.CreateCurrent(
+					session,
 					hunter,
 					MainRoleType.Hunter,
 					FinalShotPower)));

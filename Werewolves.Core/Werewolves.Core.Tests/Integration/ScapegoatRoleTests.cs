@@ -38,7 +38,7 @@ public sealed class ScapegoatRoleTests : DiagnosticTestBase
 		var werewolf = players[0];
 		var scapegoat = players[1];
 		var dawnVictim = players[4];
-		builder.ArrangeKnownRole(scapegoat.Id, MainRoleType.Scapegoat);
+		builder.ArrangeKnownPhysicalRole(scapegoat.Id, MainRoleType.Scapegoat);
 		builder.CompleteNightPhase([werewolf.Id], dawnVictim.Id);
 		builder.CompleteDawnPhase(new Dictionary<Guid, MainRoleType>
 		{
@@ -115,7 +115,7 @@ public sealed class ScapegoatRoleTests : DiagnosticTestBase
 		var players = builder.GetGameState()!.GetPlayers().ToArray();
 		var scapegoat = players[1];
 		var dawnVictim = players[4];
-		builder.ArrangeKnownRole(scapegoat.Id, MainRoleType.Scapegoat);
+		builder.ArrangeKnownPhysicalRole(scapegoat.Id, MainRoleType.Scapegoat);
 		builder.CompleteNightPhase([players[0].Id], dawnVictim.Id);
 		builder.CompleteDawnPhase(new Dictionary<Guid, MainRoleType>
 		{
@@ -195,7 +195,7 @@ public sealed class ScapegoatRoleTests : DiagnosticTestBase
 		var players = builder.GetGameState()!.GetPlayers().ToArray();
 		var scapegoat = players[1];
 		var dawnVictim = players[4];
-		builder.ArrangeKnownRole(scapegoat.Id, MainRoleType.Scapegoat);
+		builder.ArrangeKnownPhysicalRole(scapegoat.Id, MainRoleType.Scapegoat);
 		builder.CompleteNightPhase([players[0].Id], dawnVictim.Id);
 		builder.CompleteDawnPhase(new Dictionary<Guid, MainRoleType>
 		{
@@ -252,7 +252,7 @@ public sealed class ScapegoatRoleTests : DiagnosticTestBase
 		var reactionVictim = players[2];
 		var dawnVictim = players[5];
 		reaction.Configure(scapegoat.Id, reactionVictim.Id);
-		builder.ArrangeKnownRole(scapegoat.Id, MainRoleType.Scapegoat);
+		builder.ArrangeKnownPhysicalRole(scapegoat.Id, MainRoleType.Scapegoat);
 		builder.CompleteNightPhase([players[0].Id], dawnVictim.Id);
 		builder.CompleteDawnPhase(new Dictionary<Guid, MainRoleType>
 		{
@@ -375,8 +375,9 @@ public sealed class ScapegoatRoleTests : DiagnosticTestBase
 		scapegoatState.PubliclyRevealedRole.Should().Be(MainRoleType.Scapegoat);
 		scapegoatState.PhysicalCharacterCardRole.Should().BeNull();
 		state.GameHistoryLog.OfType<RoleIdentificationLogEntry>()
-			.Should().NotContain(entry =>
-				entry.Role == MainRoleType.Scapegoat);
+			.Should().ContainSingle(entry =>
+				entry.Role == MainRoleType.Scapegoat &&
+				entry.PlayerIds.SetEquals(new[] { scapegoat.Id }));
 		state.GameHistoryLog.OfType<ScapegoatTieReplacementLogEntry>()
 			.Should().ContainSingle();
 		MarkTestCompleted();
@@ -503,7 +504,7 @@ public sealed class ScapegoatRoleTests : DiagnosticTestBase
 		var players = builder.GetGameState()!.GetPlayers().ToArray();
 		var scapegoat = players[1];
 		var dawnVictim = players[4];
-		builder.ArrangeKnownRole(scapegoat.Id, MainRoleType.Scapegoat);
+		builder.ArrangeKnownPhysicalRole(scapegoat.Id, MainRoleType.Scapegoat);
 		builder.CompleteNightPhase([players[0].Id], dawnVictim.Id);
 		builder.CompleteDawnPhase(new Dictionary<Guid, MainRoleType>
 		{
@@ -550,7 +551,7 @@ public sealed class ScapegoatRoleTests : DiagnosticTestBase
 		var players = builder.GetGameState()!.GetPlayers().ToArray();
 		var scapegoat = players[1];
 		var dawnVictim = players[4];
-		builder.ArrangeKnownRole(scapegoat.Id, MainRoleType.Scapegoat);
+		builder.ArrangeKnownPhysicalRole(scapegoat.Id, MainRoleType.Scapegoat);
 		builder.CompleteNightPhase([players[0].Id], dawnVictim.Id);
 		builder.CompleteDawnPhase(new Dictionary<Guid, MainRoleType>
 		{
@@ -643,7 +644,7 @@ public sealed class ScapegoatRoleTests : DiagnosticTestBase
 		var players = builder.GetGameState()!.GetPlayers().ToArray();
 		var scapegoat = players[1];
 		var dawnVictim = players[4];
-		builder.ArrangeKnownRole(scapegoat.Id, MainRoleType.Scapegoat);
+		builder.ArrangeKnownPhysicalRole(scapegoat.Id, MainRoleType.Scapegoat);
 		builder.CompleteNightPhase([players[0].Id], dawnVictim.Id);
 		builder.CompleteDawnPhase(new Dictionary<Guid, MainRoleType>
 		{
@@ -696,7 +697,7 @@ public sealed class ScapegoatRoleTests : DiagnosticTestBase
 		var unselectedTarget = players[3];
 		var dawnVictim = players[6];
 		builder.ArrangeKnownRole(judge.Id, MainRoleType.StutteringJudge);
-		builder.ArrangeKnownRole(scapegoat.Id, MainRoleType.Scapegoat);
+		builder.ArrangeKnownPhysicalRole(scapegoat.Id, MainRoleType.Scapegoat);
 		builder.ConfirmGameStart();
 		var judgeWake =
 			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
@@ -790,7 +791,7 @@ public sealed class ScapegoatRoleTests : DiagnosticTestBase
 		var unselectedTarget = players[3];
 		var secondNightVictim = players[5];
 		var firstDawnVictim = players[6];
-		builder.ArrangeKnownRole(scapegoat.Id, MainRoleType.Scapegoat);
+		builder.ArrangeKnownPhysicalRole(scapegoat.Id, MainRoleType.Scapegoat);
 		builder.ArrangeVotingRight(
 			permittedWithoutVotingRight.Id,
 			hasVotingRight: false);
@@ -876,7 +877,7 @@ public sealed class ScapegoatRoleTests : DiagnosticTestBase
 		var permittedWithoutVotingRight = players[2];
 		var secondNightVictim = players[5];
 		var firstDawnVictim = players[6];
-		builder.ArrangeKnownRole(scapegoat.Id, MainRoleType.Scapegoat);
+		builder.ArrangeKnownPhysicalRole(scapegoat.Id, MainRoleType.Scapegoat);
 		builder.ArrangeVotingRight(
 			permittedWithoutVotingRight.Id,
 			hasVotingRight: false);

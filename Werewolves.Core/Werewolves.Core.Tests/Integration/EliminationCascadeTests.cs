@@ -27,6 +27,7 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 			[players[2].Id, players[3].Id]);
 		initialReveal.RolesForAssignment.Should().Equal(
 			MainRoleType.SimpleWerewolf,
+			MainRoleType.Witch,
 			MainRoleType.SimpleVillager,
 			MainRoleType.SimpleVillager,
 			MainRoleType.SimpleVillager,
@@ -331,7 +332,8 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 			.ModeratorInstruction.Should()
 			.BeOfType<AssignRolesInstruction>().Subject;
 
-		reveal.PlayersForAssignment.Should().Equal(players[2].Id);
+		reveal.PlayersForAssignment.Should().BeEquivalentTo(
+			new[] { players[2].Id, players[1].Id });
 		builder.GetGameState()!.GetPlayerState(players[1].Id).Health
 			.Should().Be(PlayerHealth.Alive);
 		builder.GetGameState()!.GetPlayerState(players[2].Id).Health
@@ -356,6 +358,7 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 
 		builder.Process(reveal.CreateResponse(new()
 		{
+			[players[1].Id] = MainRoleType.Witch,
 			[players[2].Id] = MainRoleType.SimpleVillager
 		}));
 
@@ -1021,10 +1024,9 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 	[Fact]
 	public void VillageIdiotPardon_CommitsDurableVotingConsequencesExactlyOnce()
 	{
-		var scenario = DayVoteScenario.Start();
-		var builder = scenario.Builder.ArrangeKnownRole(
-			scenario.LivingTargetId,
-			MainRoleType.VillageIdiot);
+		var scenario = DayVoteScenario.Start(
+			livingTargetRole: MainRoleType.VillageIdiot);
+		var builder = scenario.Builder;
 		var beforeVote = builder.GetGameState()!
 			.GetPlayerState(scenario.LivingTargetId);
 		beforeVote.CurrentRole.Should().Be(MainRoleType.VillageIdiot);

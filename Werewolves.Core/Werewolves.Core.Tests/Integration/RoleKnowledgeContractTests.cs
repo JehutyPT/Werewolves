@@ -213,9 +213,16 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
         var recoveredHolder = recovered.GetPlayer(holder.Id);
 
         recoveredHolder.State.CurrentRole.Should().Be(MainRoleType.VillagerVillager);
+		recoveredHolder.State.PhysicalCharacterCardId.Should().NotBeNull();
         recoveredHolder.State.PhysicalCharacterCardRole.Should().Be(MainRoleType.VillagerVillager);
         recoveredHolder.State.ModeratorKnownRole.Should().Be(MainRoleType.VillagerVillager);
         recoveredHolder.State.PubliclyRevealedRole.Should().Be(MainRoleType.VillagerVillager);
+		var recoveredPhysicalCard = recovered.GetModeratorPhysicalCharacterCards()
+			.Single(state => state.Card.Id ==
+				recoveredHolder.State.PhysicalCharacterCardId);
+		recoveredPhysicalCard.Zone.Should().Be(
+			PhysicalCharacterCardZone.PlayerOwned);
+		recoveredPhysicalCard.OwnerPlayerId.Should().Be(holder.Id);
         recovered.GameHistoryLog.OfType<VillagerVillagerPublicFromDealLogEntry>()
             .Should().ContainSingle(entry => entry.PlayerId == holder.Id);
         var recoveredInstruction = recoveredService.GetCurrentInstruction(recoveredId)!;
@@ -228,7 +235,7 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
     }
 
     [Fact]
-    public void GenericRoleReveal_WhenRoleIsPrivatelyKnown_StillCommitsPublicRevealOnContinue()
+	public void GenericRoleReveal_WhenRoleIsPrivatelyKnown_StillMapsPhysicalRoleAndCommitsPublicReveal()
     {
         var builder = CreateBuilder()
             .WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);
@@ -248,13 +255,19 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
             SeerTargetId = otherVillager.Id
         });
 
-        var reveal = builder.GetCurrentInstruction()
-            .Should().BeOfType<ConfirmationInstruction>().Subject;
-        reveal.AffectedPlayerIds.Should().Equal(seer.Id);
-        seer.State.ModeratorKnownRole.Should().Be(MainRoleType.Seer);
-        seer.State.PubliclyRevealedRole.Should().BeNull();
+		var reveal = builder.GetCurrentInstruction()
+			.Should().BeOfType<AssignRolesInstruction>().Subject;
+		reveal.AffectedPlayerIds.Should().Equal(seer.Id);
+		reveal.PlayersForAssignment.Should().Equal(seer.Id);
+		reveal.RolesForAssignment.Should().Contain(MainRoleType.Seer);
+		seer.State.ModeratorKnownRole.Should().Be(MainRoleType.Seer);
+		seer.State.PubliclyRevealedRole.Should().BeNull();
+		var acceptedReveal = reveal.CreateResponse(new()
+		{
+			[seer.Id] = MainRoleType.Seer
+		});
 
-        var afterReveal = builder.Process(reveal.CreateResponse());
+		var afterReveal = builder.Process(acceptedReveal);
 
         afterReveal.IsSuccess.Should().BeTrue();
         seer.State.CurrentRole.Should().Be(MainRoleType.Seer);
@@ -275,8 +288,8 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
         recovered.GameHistoryLog.OfType<RoleRevealLogEntry>().Should().ContainSingle();
         recoveredNext.GetType().Should().Be(afterReveal.ModeratorInstruction!.GetType());
         recoveredNext.InstructionId.Should().Be(afterReveal.ModeratorInstruction.InstructionId);
-        Action replayAcceptedReveal = () =>
-            recoveredService.ProcessInstruction(recoveredId, reveal.CreateResponse());
+		Action replayAcceptedReveal = () =>
+			recoveredService.ProcessInstruction(recoveredId, acceptedReveal);
         replayAcceptedReveal.Should().Throw<InvalidOperationException>();
         recovered.GameHistoryLog.OfType<RoleRevealLogEntry>().Should().ContainSingle();
 

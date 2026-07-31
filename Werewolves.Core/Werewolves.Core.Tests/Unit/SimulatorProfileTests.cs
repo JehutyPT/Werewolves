@@ -332,4 +332,33 @@ public class SimulatorProfileTests
 			new SingleFactionGameResult(Faction.CrossFactionLovers));
 	}
 
+	[Fact]
+	public void PossibleGameResultInventory_WithOfferedCupid_IncludesReachableLoversOutcome()
+	{
+		MainRoleType[] dealPool =
+		[
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.Seer,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager
+		];
+		var scenario = new SimulationScenario(
+			5,
+			dealPool.Concat([MainRoleType.Cupid, MainRoleType.Defender]),
+			dealPool,
+			MainRoleType.Cupid,
+			MainRoleType.Defender);
+
+		PossibleGameResultInventory.TryCreate(
+				scenario,
+				SimulatorCapability.SafetyScreening,
+				out var inventory)
+			.Should().BeTrue();
+
+		inventory.Factions.Should().Contain(Faction.CrossFactionLovers);
+		inventory.GameResults.Should().Contain(
+			new SingleFactionGameResult(Faction.CrossFactionLovers));
+	}
+
 }

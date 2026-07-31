@@ -162,8 +162,10 @@ internal sealed class DefenderRole
 	}
 
 	internal static void ValidateRecurringRecoveryCursorIdentity(
+		GameSession session,
 		DomainRecoveryCursor cursor)
 	{
+		ArgumentNullException.ThrowIfNull(session);
 		ArgumentNullException.ThrowIfNull(cursor);
 		if (cursor.Kind !=
 		    DomainRecoveryCursorKind.RecurringNativeRolePowerCommit ||
@@ -174,9 +176,9 @@ internal sealed class DefenderRole
 		    !StringComparer.Ordinal.Equals(
 			    cursor.SourcePowerIdentifier,
 			    ProtectionPowerIdentifier.Value) ||
-		    cursor.PowerInstanceId != cursor.ActingPlayerId ||
-		    cursor.PowerInstanceOrigin !=
-		    RolePowerInstanceOrigin.Native ||
+		    cursor.PowerIdentity != CreateCurrentPowerIdentity(
+			    session,
+			    session.GetPlayer(cursor.ActingPlayerId)) ||
 		    cursor.OneUseResourceId != Guid.Empty)
 		{
 			throw new InvalidOperationException(
@@ -248,7 +250,8 @@ internal sealed class DefenderRole
 				holder,
 				MainRoleType.Defender,
 				ProtectionPower,
-				RolePowerInstance.CreateNative(
+				RolePowerInstance.CreateCurrent(
+					session,
 					holder,
 					MainRoleType.Defender,
 					ProtectionPower)));
@@ -259,7 +262,7 @@ internal sealed class DefenderRole
 
 		var eligibleTargets = GetEligibleTargets(
 			session,
-			CreateNativePowerIdentity(holder));
+			CreateCurrentPowerIdentity(session, holder));
 		if (eligibleTargets.Count == 0)
 		{
 			return PrepareSleepInstruction(session);
@@ -293,7 +296,7 @@ internal sealed class DefenderRole
 		}
 
 		var holder = GetHolder(session);
-		var powerIdentity = CreateNativePowerIdentity(holder);
+		var powerIdentity = CreateCurrentPowerIdentity(session, holder);
 		var targetId = selectedPlayerIds.Single();
 		if (!GetEligibleTargets(session, powerIdentity).Contains(targetId))
 		{
@@ -381,10 +384,9 @@ internal sealed class DefenderRole
 		    !StringComparer.Ordinal.Equals(
 			    committedEntry.SourcePowerIdentifier,
 			    ProtectionPowerIdentifier.Value) ||
-		    committedEntry.PowerInstanceId !=
-			    committedEntry.ActingPlayerId ||
-		    committedEntry.PowerInstanceOrigin !=
-			    RolePowerInstanceOrigin.Native)
+		    committedEntry.PowerIdentity != CreateCurrentPowerIdentity(
+			    session,
+			    session.GetPlayer(committedEntry.ActingPlayerId)))
 		{
 			throw new InvalidOperationException(
 				"The Defender recovery boundary requires one owned recurring protection action.");
@@ -402,18 +404,12 @@ internal sealed class DefenderRole
 		}
 	}
 
-	private static RolePowerInstanceIdentity CreateNativePowerIdentity(
-		IPlayer holder)
-	{
-		var powerInstance = RolePowerInstance.CreateNative(
+	private static RolePowerInstanceIdentity CreateCurrentPowerIdentity(
+		GameSession session,
+		IPlayer holder) =>
+		RolePowerInstance.CreateCurrentIdentity(
+			session,
 			holder,
 			MainRoleType.Defender,
 			ProtectionPower);
-		return new RolePowerInstanceIdentity(
-			holder.Id,
-			MainRoleType.Defender,
-			ProtectionPower.Identifier.Value,
-			powerInstance.Id,
-			powerInstance.Origin);
-	}
 }

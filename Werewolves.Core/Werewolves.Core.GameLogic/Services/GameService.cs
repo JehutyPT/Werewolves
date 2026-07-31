@@ -102,6 +102,24 @@ public class GameService
         return session.Id;
 	}
 
+	public bool TryRecordPhysicalCharacterCardOwnership(
+		Guid gameId,
+		long expectedRoleLockInVersion,
+		Guid playerId,
+		Guid cardId) =>
+		_sessions.TryGetValue(gameId, out var session) &&
+			session.TryRecordPhysicalCharacterCardOwnership(
+			expectedRoleLockInVersion,
+			playerId,
+			cardId);
+
+	public bool TryCommitPermanentRoleSwap(
+		Guid gameId,
+		PermanentRoleSwapRequest request) =>
+		_sessions.TryGetValue(gameId, out var session) &&
+		PermanentRoleSwapRules.CanCommit(session, request) &&
+		session.TryCommitPermanentRoleSwap(request);
+
     internal void CommitScheduledFactionObservation(
         Guid gameId,
         string observationIdentifier,

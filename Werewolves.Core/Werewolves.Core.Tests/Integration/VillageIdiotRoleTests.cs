@@ -39,22 +39,27 @@ public sealed class VillageIdiotRoleTests
 				reveal.CreateResponse(new Dictionary<Guid, MainRoleType>
 				{
 					[scenario.LivingTargetId] =
-						MainRoleType.VillageIdiot
+						MainRoleType.SimpleVillager
 				}))
 			.ModeratorInstruction.Should()
 			.BeOfType<ConfirmationInstruction>().Subject;
 
 		pardon.Semantic.Should().Be(
 			ModeratorInstructionSemantic.AnnounceVillageIdiotPardon);
-		scenario.Builder.GetGameState()!
-			.GetPlayerState(scenario.LivingTargetId)
-			.DurableVotingPower.Should().Be(0);
+		var state = scenario.Builder.GetGameState()!
+			.GetPlayerState(scenario.LivingTargetId);
+		state.CurrentRole.Should().Be(MainRoleType.VillageIdiot);
+		state.PubliclyRevealedRole.Should().Be(
+			MainRoleType.SimpleVillager);
+		state.DurableVotingPower.Should().Be(0);
 	}
 
 	[Fact]
 	public void UnknownRole_MapsPublicRevealBeforePardon()
 	{
-		var scenario = DayVoteScenario.Start();
+		var scenario = DayVoteScenario.Start(
+			livingTargetRole: MainRoleType.VillageIdiot,
+			arrangeKnownPhysicalRole: false);
 		scenario.Builder.ArrangeCurrentRole(
 			scenario.LivingTargetId,
 			MainRoleType.VillageIdiot);
@@ -90,10 +95,15 @@ public sealed class VillageIdiotRoleTests
 	[Fact]
 	public void AlreadyPublicRole_PardonsWithoutAnotherRevealInstruction()
 	{
-		var scenario = DayVoteScenario.Start();
-		scenario.Builder.ArrangePubliclyRevealedRole(
-			scenario.LivingTargetId,
-			MainRoleType.VillageIdiot);
+		var scenario = DayVoteScenario.Start(
+			livingTargetRole: MainRoleType.VillageIdiot);
+		scenario.Builder
+			.ArrangeKnownPhysicalRole(
+				scenario.LivingTargetId,
+				MainRoleType.VillageIdiot)
+			.ArrangePubliclyRevealedRole(
+				scenario.LivingTargetId,
+				MainRoleType.VillageIdiot);
 
 		var pardon = scenario.Builder.Process(
 				scenario.Instruction.CreateResponse(
@@ -117,15 +127,18 @@ public sealed class VillageIdiotRoleTests
 	public void DawnElimination_BypassesPardonAndEliminatesVillageIdiot()
 	{
 		var builder = GameTestBuilder.Create()
-			.WithSimpleGame(
-				playerCount: 5,
-				werewolfCount: 1,
-				includeSeer: true);
+			.WithPlayers(5)
+			.WithRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Seer,
+				MainRoleType.VillageIdiot,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
 		builder.StartGame();
 		builder.ConfirmGameStart();
 		var players = builder.GetGameState()!.GetPlayers().ToArray();
 		var villageIdiot = players[2];
-		builder.ArrangeKnownRole(
+		builder.ArrangeKnownPhysicalRole(
 			villageIdiot.Id,
 			MainRoleType.VillageIdiot);
 
@@ -155,8 +168,9 @@ public sealed class VillageIdiotRoleTests
 	public void AvailabilityDenied_RevealsThenCommitsOrdinaryVoteElimination()
 	{
 		var scenario = DayVoteScenario.Start(
-			new DenyVillageIdiotPardonPolicy());
-		scenario.Builder.ArrangeKnownRole(
+			new DenyVillageIdiotPardonPolicy(),
+			livingTargetRole: MainRoleType.VillageIdiot);
+		scenario.Builder.ArrangeKnownPhysicalRole(
 			scenario.LivingTargetId,
 			MainRoleType.VillageIdiot);
 
@@ -195,9 +209,10 @@ public sealed class VillageIdiotRoleTests
 	[Fact]
 	public void TemporaryVotingRestriction_DoesNotSuppressFreshPardon()
 	{
-		var scenario = DayVoteScenario.Start();
+		var scenario = DayVoteScenario.Start(
+			livingTargetRole: MainRoleType.VillageIdiot);
 		scenario.Builder
-			.ArrangeKnownRole(
+			.ArrangeKnownPhysicalRole(
 				scenario.LivingTargetId,
 				MainRoleType.VillageIdiot)
 			.ArrangeVotingRight(
@@ -234,8 +249,10 @@ public sealed class VillageIdiotRoleTests
 	public void TiedVote_BypassesRevealAvailabilityAndPardon()
 	{
 		var policy = new DenyVillageIdiotPardonPolicy();
-		var scenario = DayVoteScenario.Start(policy);
-		scenario.Builder.ArrangeKnownRole(
+		var scenario = DayVoteScenario.Start(
+			policy,
+			livingTargetRole: MainRoleType.VillageIdiot);
+		scenario.Builder.ArrangeKnownPhysicalRole(
 			scenario.LivingTargetId,
 			MainRoleType.VillageIdiot);
 
@@ -257,9 +274,10 @@ public sealed class VillageIdiotRoleTests
 	[Fact]
 	public void SpentPardon_ConsecutiveVoteUsesFreshRosterAndEliminatesNormally()
 	{
-		var scenario = DayVoteScenario.Start();
+		var scenario = DayVoteScenario.Start(
+			livingTargetRole: MainRoleType.VillageIdiot);
 		scenario.Builder
-			.ArrangeKnownRole(
+			.ArrangeKnownPhysicalRole(
 				scenario.LivingTargetId,
 				MainRoleType.VillageIdiot)
 			.ArrangeDayAction(DayPowerType.JudgeExtraVote);
@@ -387,8 +405,9 @@ public sealed class VillageIdiotRoleTests
 	[Fact]
 	public void AcknowledgedConsequence_RehydratesNextBoundaryWithoutDuplicatePardon()
 	{
-		var scenario = DayVoteScenario.Start();
-		scenario.Builder.ArrangeKnownRole(
+		var scenario = DayVoteScenario.Start(
+			livingTargetRole: MainRoleType.VillageIdiot);
+		scenario.Builder.ArrangeKnownPhysicalRole(
 			scenario.LivingTargetId,
 			MainRoleType.VillageIdiot);
 		var reveal = scenario.Builder.Process(
@@ -420,7 +439,8 @@ public sealed class VillageIdiotRoleTests
 	[Fact]
 	public void PardonCreatesWerewolfControlAtPreNightVictoryWindow()
 	{
-		var scenario = DayVoteScenario.Start();
+		var scenario = DayVoteScenario.Start(
+			livingTargetRole: MainRoleType.VillageIdiot);
 		var remainingPlayers = scenario.Builder.GetGameState()!
 			.GetPlayers()
 			.Where(player =>
@@ -431,7 +451,7 @@ public sealed class VillageIdiotRoleTests
 		var ordinaryVillager = remainingPlayers[1];
 		var extraVillager = remainingPlayers[2];
 		scenario.Builder
-			.ArrangeKnownRole(
+			.ArrangeKnownPhysicalRole(
 				scenario.LivingTargetId,
 				MainRoleType.VillageIdiot)
 			.ArrangeEliminatedPlayer(extraVillager.Id);

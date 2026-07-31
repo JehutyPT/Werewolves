@@ -54,7 +54,8 @@ internal sealed class VillageIdiotRole
 			return false;
 		}
 
-		var instance = RolePowerInstance.CreateNative(
+		var instance = RolePowerInstance.CreateCurrent(
+			session,
 			target,
 			MainRoleType.VillageIdiot,
 			PardonPower);

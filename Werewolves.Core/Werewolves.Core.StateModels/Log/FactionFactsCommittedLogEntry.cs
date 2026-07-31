@@ -8,8 +8,14 @@ namespace Werewolves.Core.StateModels.Log;
 /// <summary>
 /// One append-only, atomic batch of final Faction facts.
 /// </summary>
+public interface IFactionFactBatchLogEntry
+{
+	FactionFactSource Source { get; }
+	ImmutableArray<FactionFact> Facts { get; }
+}
+
 public sealed record FactionFactsCommittedLogEntry
-	: GameLogEntryBase
+	: GameLogEntryBase, IFactionFactBatchLogEntry
 {
 	public required FactionFactSource Source { get; init; }
 
@@ -94,7 +100,7 @@ internal sealed class FactionFactProjection
 		IReadOnlyDictionary<Faction, FactionAgentKnowledge>> Agents { get; }
 
 	internal static FactionFactProjection Create(
-		IEnumerable<FactionFactsCommittedLogEntry> entries,
+		IEnumerable<IFactionFactBatchLogEntry> entries,
 		IReadOnlyCollection<Guid> playerIds,
 		FactionFactEffectiveBoundary? inclusiveBoundary = null)
 	{

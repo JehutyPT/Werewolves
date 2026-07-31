@@ -87,11 +87,11 @@ internal class TestSessionMutator : ISessionMutator
             CurrentTurnNumber++;
     }
 
-    public void ApplyFactionFacts(FactionFactsCommittedLogEntry entry)
+	public void ApplyFactionFacts(IFactionFactBatchLogEntry entry)
     {
         var projection = FactionFactProjection.Create(
             _appliedEntries
-                .OfType<FactionFactsCommittedLogEntry>()
+				.OfType<IFactionFactBatchLogEntry>()
                 .Append(entry),
             _states.Keys.ToArray());
 

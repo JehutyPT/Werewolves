@@ -495,7 +495,7 @@ public sealed class HunterRoleTests(ITestOutputHelper output)
 		builder.StartGame();
 		var players = builder.GetGameState()!.GetPlayers().ToArray();
 		var hunterId = players[1].Id;
-		builder.ArrangeKnownRole(hunterId, MainRoleType.Hunter);
+		builder.ArrangeKnownPhysicalRole(hunterId, MainRoleType.Hunter);
 		builder.ConfirmGameStart();
 		builder.ConfirmNightStart();
 		var finishNight = builder.CompleteWerewolfNightAction(

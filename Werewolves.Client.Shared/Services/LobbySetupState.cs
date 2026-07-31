@@ -36,6 +36,8 @@ public class LobbySetupState
 	private readonly LobbySetupMetadata _setupMetadata;
 	private readonly IReadOnlyList<MainRoleType> _availableRoles;
 	private readonly Dictionary<MainRoleType, LobbySetupRoleMetadata> _availableRoleMetadata;
+	private bool _roleLockInFinalized;
+	private bool _acceptedRoleLockInRequiresReplacement;
 
 	public LobbySetupState(LobbySetupMetadata setupMetadata)
 	{
@@ -52,6 +54,9 @@ public class LobbySetupState
 	public IReadOnlyList<RoleSelectionGroupInfo> AvailableRoleGroups => GetAvailableRoleGroups();
 
 	public IReadOnlyList<string> PlayerNames => _playerNames;
+	public RoleLockIn? AcceptedRoleLockIn { get; private set; }
+	internal bool AcceptedRoleLockInRequiresReplacement =>
+		_acceptedRoleLockInRequiresReplacement;
 
 	public bool HasPlayerConfigIssues(out List<GameConfigValidationError> issues)
 	{
@@ -87,7 +92,7 @@ public class LobbySetupState
 		}
 
 		_playerNames.Add(normalizedName);
-		OnSimulationScenarioChanged();
+		OnLobbyDraftChanged();
 		return AddPlayerResult.Success;
 	}
 
@@ -99,7 +104,7 @@ public class LobbySetupState
 		}
 
 		_playerNames.RemoveAt(index);
-		OnSimulationScenarioChanged();
+		OnLobbyDraftChanged();
 		return true;
 	}
 
@@ -111,6 +116,7 @@ public class LobbySetupState
 		}
 
 		(_playerNames[index - 1], _playerNames[index]) = (_playerNames[index], _playerNames[index - 1]);
+		OnLobbyDraftChanged(simulationScenarioChanged: false);
 		return true;
 	}
 
@@ -122,6 +128,7 @@ public class LobbySetupState
 		}
 
 		(_playerNames[index], _playerNames[index + 1]) = (_playerNames[index + 1], _playerNames[index]);
+		OnLobbyDraftChanged(simulationScenarioChanged: false);
 		return true;
 	}
 
@@ -141,7 +148,7 @@ public class LobbySetupState
 			if (current == 0)
 			{
 				_roleCounts[role] = batchSize;
-				OnSimulationScenarioChanged();
+				OnLobbyDraftChanged();
 			}
 		}
 		else
@@ -149,7 +156,7 @@ public class LobbySetupState
 			if (current < constraint.Maximum)
 			{
 				_roleCounts[role] = current + 1;
-				OnSimulationScenarioChanged();
+				OnLobbyDraftChanged();
 			}
 		}
 	}
@@ -168,7 +175,7 @@ public class LobbySetupState
 		else
 			_roleCounts[role] = current - 1;
 
-		OnSimulationScenarioChanged();
+		OnLobbyDraftChanged();
 	}
 
 	public List<MainRoleType> GetSelectedRoles()
@@ -183,17 +190,26 @@ public class LobbySetupState
 	}
 
 	public SimulationScenario CreateSimulationScenario() =>
-		new(_playerNames.Count, GetSelectedRoles());
+		AcceptedRoleLockIn is { } acceptedRoleLockIn &&
+			!_acceptedRoleLockInRequiresReplacement
+			? new SimulationScenario(acceptedRoleLockIn)
+			: new SimulationScenario(_playerNames.Count, GetSelectedRoles());
 
 	public void Reset()
 	{
-		if (_playerNames.Count == 0 && _roleCounts.Values.All(count => count == 0))
+		if (_playerNames.Count == 0 &&
+			_roleCounts.Values.All(count => count == 0) &&
+			AcceptedRoleLockIn is null &&
+			!_roleLockInFinalized)
 		{
 			return;
 		}
 
 		_playerNames.Clear();
 		_roleCounts.Clear();
+		AcceptedRoleLockIn = null;
+		_roleLockInFinalized = false;
+		_acceptedRoleLockInRequiresReplacement = false;
 		OnSimulationScenarioChanged();
 	}
 
@@ -263,6 +279,100 @@ public class LobbySetupState
 
 		// Developer-facing guard, not rendered UI copy.
 		throw new InvalidOperationException($"Role {role} is not available in lobby setup metadata.");
+	}
+
+	internal bool CanReplaceRoleLockIn(
+		long expectedCurrentVersion,
+		RoleLockIn replacement)
+	{
+		ArgumentNullException.ThrowIfNull(replacement);
+		var currentVersion = AcceptedRoleLockIn?.Version ?? 0;
+		if (_roleLockInFinalized ||
+			expectedCurrentVersion != currentVersion ||
+			expectedCurrentVersion == long.MaxValue ||
+			replacement.Version != expectedCurrentVersion + 1 ||
+			replacement.PlayerCount != _playerNames.Count ||
+			replacement.RoleComposition.Any(card => !_availableRoleMetadata.ContainsKey(card.PrintedRole)))
+		{
+			return false;
+		}
+
+		return !GameSessionConfig.TryGetRoleLockInConfigIssues(
+			_playerNames,
+			replacement,
+			ActorSetupCards.None,
+			out _);
+	}
+
+	internal void ApplyAcceptedRoleLockIn(RoleLockIn replacement)
+	{
+		AcceptedRoleLockIn = replacement;
+		ApplyRoleComposition(replacement);
+		_acceptedRoleLockInRequiresReplacement = false;
+		OnSimulationScenarioChanged();
+	}
+
+	internal void RestoreAcceptedRoleLockIn(
+		IReadOnlyList<string> playerNames,
+		RoleLockIn roleLockIn)
+	{
+		ArgumentNullException.ThrowIfNull(playerNames);
+		ArgumentNullException.ThrowIfNull(roleLockIn);
+		var names = playerNames.Select(name => name.Trim()).ToArray();
+		if (GameSessionConfig.TryGetPlayerConfigIssues(names.ToList(), out _) ||
+			roleLockIn.PlayerCount != names.Length ||
+			roleLockIn.RoleComposition.Any(card => !_availableRoleMetadata.ContainsKey(card.PrintedRole)) ||
+			GameSessionConfig.TryGetRoleLockInConfigIssues(
+				names.ToList(),
+				roleLockIn,
+				ActorSetupCards.None,
+				out _))
+		{
+			throw new InvalidOperationException("The staged Lobby recovery payload is invalid.");
+		}
+
+		_playerNames.Clear();
+		_playerNames.AddRange(names);
+		ApplyRoleComposition(roleLockIn);
+		AcceptedRoleLockIn = roleLockIn;
+		_roleLockInFinalized = false;
+		_acceptedRoleLockInRequiresReplacement = false;
+		OnSimulationScenarioChanged();
+	}
+
+	internal void FinalizeRoleLockIn(RoleLockIn roleLockIn)
+	{
+		ArgumentNullException.ThrowIfNull(roleLockIn);
+		if (_acceptedRoleLockInRequiresReplacement)
+		{
+			throw new InvalidOperationException(
+				"Lobby Exit requires a fresh accepted Role Lock-In after Lobby edits.");
+		}
+		if (AcceptedRoleLockIn is not null && AcceptedRoleLockIn.Version != roleLockIn.Version)
+		{
+			throw new InvalidOperationException("Lobby Exit must finalize the latest accepted Role Lock-In.");
+		}
+		AcceptedRoleLockIn = roleLockIn;
+		_roleLockInFinalized = true;
+	}
+
+	private void ApplyRoleComposition(RoleLockIn roleLockIn)
+	{
+		_roleCounts.Clear();
+		foreach (var roleGroup in roleLockIn.RoleComposition
+			.GroupBy(card => card.PrintedRole))
+		{
+			_roleCounts[roleGroup.Key] = roleGroup.Count();
+		}
+	}
+
+	private void OnLobbyDraftChanged(bool simulationScenarioChanged = true)
+	{
+		_acceptedRoleLockInRequiresReplacement = AcceptedRoleLockIn is not null;
+		if (simulationScenarioChanged)
+		{
+			OnSimulationScenarioChanged();
+		}
 	}
 
 	private void OnSimulationScenarioChanged() =>

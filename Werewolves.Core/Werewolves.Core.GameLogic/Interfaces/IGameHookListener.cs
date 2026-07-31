@@ -49,5 +49,7 @@ internal interface ITargetPrivateRolePowerRecoveryCapability
         TargetPrivateRolePowerCommittedLogEntry committedEntry,
         ModeratorInstruction nextInstruction);
 
-    void ValidateRecoveryCursorIdentity(DomainRecoveryCursor cursor);
+    void ValidateRecoveryCursorIdentity(
+		GameSession session,
+		DomainRecoveryCursor cursor);
 }
