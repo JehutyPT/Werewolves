@@ -16,8 +16,6 @@ public interface IGameSession
     public IPlayer GetPlayer(Guid playerId);
     public IPlayerState GetPlayerState(Guid playerId);
     public IEnumerable<IPlayer> GetPlayers();
-    public DirectionalLivingNeighbors GetDirectionalLivingNeighbors(
-        Guid referencePlayerId);
     public FactionBeneficiaryKnowledge GetFactionBeneficiaryKnowledge(
         Guid playerId);
     public FactionAgentKnowledge GetFactionAgentKnowledge(
@@ -248,40 +246,6 @@ internal class GameSession : IGameSession
     public IPlayerState GetPlayerState(Guid playerId) => GetPlayer(playerId).State;
 
     public IEnumerable<IPlayer> GetPlayers() => _gameSessionKernel.GetIPlayers();
-
-    public DirectionalLivingNeighbors GetDirectionalLivingNeighbors(
-        Guid referencePlayerId)
-    {
-        var seatingOrder = GetPlayers().ToArray();
-        var referenceIndex = Array.FindIndex(
-            seatingOrder,
-            player => player.Id == referencePlayerId);
-        if (referenceIndex < 0)
-        {
-            _ = GetPlayer(referencePlayerId);
-        }
-
-        return new DirectionalLivingNeighbors(
-            FindNearestLivingPlayer(step: 1),
-            FindNearestLivingPlayer(step: -1));
-
-        IPlayer? FindNearestLivingPlayer(int step)
-        {
-            for (var offset = 1; offset < seatingOrder.Length; offset++)
-            {
-                var candidateIndex =
-                    (referenceIndex + (step * offset) + seatingOrder.Length) %
-                    seatingOrder.Length;
-                var candidate = seatingOrder[candidateIndex];
-                if (candidate.State.Health == PlayerHealth.Alive)
-                {
-                    return candidate;
-                }
-            }
-
-            return null;
-        }
-    }
 
     public FactionBeneficiaryKnowledge GetFactionBeneficiaryKnowledge(
         Guid playerId) =>

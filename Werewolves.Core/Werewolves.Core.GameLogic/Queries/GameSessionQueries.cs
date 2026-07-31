@@ -15,6 +15,10 @@ internal readonly record struct CurrentDayVoteOutcome(
     int VoteOrdinal,
     int LogIndex);
 
+internal readonly record struct DirectionalLivingNeighbors(
+    IPlayer? Clockwise,
+    IPlayer? Counterclockwise);
+
 internal static class GameSessionQueries
 {
     internal static IEnumerable<TLogEntry> FindLogEntries<TLogEntry>(
@@ -48,6 +52,42 @@ internal static class GameSessionQueries
         }
 
         return query;
+    }
+
+    internal static DirectionalLivingNeighbors GetDirectionalLivingNeighbors(
+        IGameSession session,
+        Guid referencePlayerId)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        var seatingOrder = session.GetPlayers().ToArray();
+        var referenceIndex = Array.FindIndex(
+            seatingOrder,
+            player => player.Id == referencePlayerId);
+        if (referenceIndex < 0)
+        {
+            _ = session.GetPlayer(referencePlayerId);
+        }
+
+        return new DirectionalLivingNeighbors(
+            FindNearestLivingPlayer(step: 1),
+            FindNearestLivingPlayer(step: -1));
+
+        IPlayer? FindNearestLivingPlayer(int step)
+        {
+            for (var offset = 1; offset < seatingOrder.Length; offset++)
+            {
+                var candidateIndex =
+                    (referenceIndex + (step * offset) + seatingOrder.Length) %
+                    seatingOrder.Length;
+                var candidate = seatingOrder[candidateIndex];
+                if (candidate.State.Health == PlayerHealth.Alive)
+                {
+                    return candidate;
+                }
+            }
+
+            return null;
+        }
     }
 
     internal static IEnumerable<IPlayer> GetPlayersTargetedLastNight(
@@ -231,6 +271,14 @@ internal static class GameSessionQueries
                        MainRoleType.StutteringJudge)
                .Any();
     }
+
+    internal static bool HasBearTamerGrowlOccurredThisDawn(
+        IGameSession session) =>
+        FindLogEntries<BearTamerGrowlOccurredLogEntry>(
+                session,
+                NumberRangeConstraint.Exact(session.TurnNumber),
+                GamePhase.Dawn)
+            .Any();
 
     internal static bool IsOneUseRolePowerResourceCommitted(
         IGameSession session,

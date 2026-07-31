@@ -163,10 +163,6 @@ public class DashboardStatsSnapshotTests
 
 		public IEnumerable<IPlayer> GetPlayers() => players;
 
-		public DirectionalLivingNeighbors GetDirectionalLivingNeighbors(
-			Guid referencePlayerId) =>
-			throw new NotSupportedException();
-
 		public FactionBeneficiaryKnowledge GetFactionBeneficiaryKnowledge(Guid playerId) =>
 			GetPlayerState(playerId).FactionBeneficiary;
 

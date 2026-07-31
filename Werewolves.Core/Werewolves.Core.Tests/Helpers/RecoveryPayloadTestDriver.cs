@@ -335,6 +335,27 @@ internal sealed class RecoveryPayloadTestDriver
 		return this;
 	}
 
+	internal RecoveryPayloadTestDriver RewritePendingConfirmationPresentation(
+		string? privateInstruction,
+		IReadOnlyList<SoundEffectsEnum>? soundEffects)
+	{
+		if (_payload.PendingInstruction is not
+		    ConfirmationInstruction pending)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no pending confirmation.");
+		}
+
+		_payload.PendingInstruction = new ConfirmationInstruction(
+			pending.Semantic,
+			pending.PublicAnnouncement,
+			privateInstruction,
+			pending.AffectedPlayerIds,
+			pending.InstructionId,
+			soundEffects);
+		return this;
+	}
+
 	internal RecoveryPayloadTestDriver RewriteLatestStutteringJudgeAction(
 		DayPowerType actionType)
 	{

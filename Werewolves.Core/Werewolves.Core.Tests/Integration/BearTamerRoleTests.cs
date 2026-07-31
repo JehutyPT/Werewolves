@@ -122,7 +122,7 @@ public sealed class BearTamerRoleTests : DiagnosticTestBase
 	}
 
 	[Fact]
-	public void DawnGrowl_RecoveryBeforeAndAfterContinue_PreservesPendingExchangeAndDoesNotReplayIt()
+	public void DawnGrowl_RecoveryIgnoresPresentationChangesAndDoesNotReplayCommittedFact()
 	{
 		var builder = CreateBuilder()
 			.WithPlayers(5)
@@ -149,20 +149,28 @@ public sealed class BearTamerRoleTests : DiagnosticTestBase
 			{
 				[players[3].Id] = MainRoleType.SimpleVillager
 			});
+		const string changedPrivateInstruction =
+			"Changed copy must not become recovery identity.";
+		var changedSnapshot = RecoveryPayloadTestDriver
+			.Parse(builder.GetGameState()!.Serialize())
+			.RewritePendingConfirmationPresentation(
+				changedPrivateInstruction,
+				soundEffects: null)
+			.Serialize();
 
 		var recoveredService = new GameService();
 		var recoveredGameId = recoveredService.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			changedSnapshot);
 		var recoveredGrowl = recoveredService
 			.GetCurrentInstruction(recoveredGameId)
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 
 		recoveredGrowl.InstructionId.Should().Be(growl.InstructionId);
 		recoveredGrowl.Semantic.Should().Be(growl.Semantic);
-		recoveredGrowl.PrivateInstruction.Should().Be(growl.PrivateInstruction);
+		recoveredGrowl.PrivateInstruction.Should().Be(changedPrivateInstruction);
 		recoveredGrowl.PublicAnnouncement.Should().BeNull();
 		recoveredGrowl.AffectedPlayerIds.Should().BeNull();
-		recoveredGrowl.SoundEffects.Should().Equal(growl.SoundEffects);
+		recoveredGrowl.SoundEffects.Should().BeEmpty();
 
 		var growlResponse = recoveredGrowl.CreateResponse();
 		recoveredService.ProcessInstruction(recoveredGameId, growlResponse)

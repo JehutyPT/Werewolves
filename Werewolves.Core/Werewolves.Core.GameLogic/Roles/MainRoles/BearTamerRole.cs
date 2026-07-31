@@ -1,5 +1,6 @@
 using Werewolves.Core.GameLogic.Models.GameHookListeners;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
+using Werewolves.Core.GameLogic.Queries;
 using Werewolves.Core.GameLogic.RolePowers;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
@@ -52,14 +53,8 @@ internal sealed class BearTamerRole : NightRoleIdOnlyHookListener
 		    pendingInstruction is ConfirmationInstruction
 		    {
 			    Semantic:
-				    ModeratorInstructionSemantic.AnnounceBearTamerGrowl,
-			    PublicAnnouncement: null,
-			    PrivateInstruction: var privateInstruction,
-			    AffectedPlayerIds: null
-		    } &&
-		    privateInstruction == GameStrings.BearTamerGrowlInstruction &&
-		    pendingInstruction.SoundEffects.SequenceEqual(
-			    [SoundEffectsEnum.BearGrowl]))
+				    ModeratorInstructionSemantic.AnnounceBearTamerGrowl
+		    })
 		{
 			listenerState = NightRoleIdOnlyState.Awake.ToString();
 			return true;
@@ -103,11 +98,7 @@ internal sealed class BearTamerRole : NightRoleIdOnlyHookListener
 		GameSession session,
 		ModeratorResponse input)
 	{
-		if (session.GameHistoryLog
-		    .OfType<BearTamerGrowlOccurredLogEntry>()
-		    .Any(entry =>
-			    entry.TurnNumber == session.TurnNumber &&
-			    entry.CurrentPhase == GamePhase.Dawn))
+		if (GameSessionQueries.HasBearTamerGrowlOccurredThisDawn(session))
 		{
 			return HookListenerActionResult.Complete(
 				NightRoleIdOnlyState.Asleep);
@@ -136,7 +127,9 @@ internal sealed class BearTamerRole : NightRoleIdOnlyHookListener
 			.RequireKnownFactionAgents(Faction.Werewolf)
 			.Select(player => player.Id)
 			.ToHashSet();
-		var neighbors = session.GetDirectionalLivingNeighbors(holder.Id);
+		var neighbors = GameSessionQueries.GetDirectionalLivingNeighbors(
+			session,
+			holder.Id);
 		var distinctNeighborIds = new[]
 			{
 				neighbors.Clockwise?.Id,

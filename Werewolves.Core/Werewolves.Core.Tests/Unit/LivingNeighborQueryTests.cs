@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Werewolves.Core.GameLogic.Queries;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.Tests.Helpers;
@@ -26,7 +27,9 @@ public sealed class LivingNeighborQueryTests
 		builder.ArrangeEliminatedPlayer(players[0].Id);
 		builder.ArrangeEliminatedPlayer(players[3].Id);
 
-		var neighbors = session.GetDirectionalLivingNeighbors(reference.Id);
+		var neighbors = GameSessionQueries.GetDirectionalLivingNeighbors(
+			session,
+			reference.Id);
 
 		neighbors.Clockwise.Should().Be(players[1]);
 		neighbors.Counterclockwise.Should().Be(players[2]);
@@ -43,8 +46,9 @@ public sealed class LivingNeighborQueryTests
 			builder.ArrangeEliminatedPlayer(player.Id);
 		}
 
-		var neighbors =
-			session.GetDirectionalLivingNeighbors(players[0].Id);
+		var neighbors = GameSessionQueries.GetDirectionalLivingNeighbors(
+			session,
+			players[0].Id);
 
 		neighbors.Clockwise.Should().BeNull();
 		neighbors.Counterclockwise.Should().BeNull();
@@ -61,8 +65,9 @@ public sealed class LivingNeighborQueryTests
 			builder.ArrangeEliminatedPlayer(player.Id);
 		}
 
-		var neighbors =
-			session.GetDirectionalLivingNeighbors(players[0].Id);
+		var neighbors = GameSessionQueries.GetDirectionalLivingNeighbors(
+			session,
+			players[0].Id);
 
 		neighbors.Clockwise.Should().Be(players[1]);
 		neighbors.Counterclockwise.Should().Be(players[1]);
@@ -77,8 +82,9 @@ public sealed class LivingNeighborQueryTests
 		builder.ArrangeEliminatedPlayer(players[1].Id);
 		builder.ArrangeEliminatedPlayer(players[3].Id);
 
-		var neighbors =
-			session.GetDirectionalLivingNeighbors(players[2].Id);
+		var neighbors = GameSessionQueries.GetDirectionalLivingNeighbors(
+			session,
+			players[2].Id);
 
 		neighbors.Clockwise.Should().Be(players[4]);
 		neighbors.Counterclockwise.Should().Be(players[0]);
@@ -93,8 +99,9 @@ public sealed class LivingNeighborQueryTests
 		builder.ArrangeEliminatedPlayer(players[0].Id);
 		builder.ArrangeEliminatedPlayer(players[1].Id);
 
-		var neighbors =
-			session.GetDirectionalLivingNeighbors(players[0].Id);
+		var neighbors = GameSessionQueries.GetDirectionalLivingNeighbors(
+			session,
+			players[0].Id);
 
 		neighbors.Clockwise.Should().Be(players[2]);
 		neighbors.Counterclockwise.Should().Be(players[4]);
@@ -106,15 +113,17 @@ public sealed class LivingNeighborQueryTests
 		var builder = CreateBuilder();
 		var session = builder.GetGameState()!;
 		var players = session.GetPlayers().ToArray();
-		var expected =
-			session.GetDirectionalLivingNeighbors(players[4].Id);
+		var expected = GameSessionQueries.GetDirectionalLivingNeighbors(
+			session,
+			players[4].Id);
 		var freshService = new GameService();
 
 		var recoveredGameId =
 			freshService.RehydrateSession(session.Serialize());
 		var recovered = freshService.GetGameStateView(recoveredGameId)!;
-		var actual =
-			recovered.GetDirectionalLivingNeighbors(players[4].Id);
+		var actual = GameSessionQueries.GetDirectionalLivingNeighbors(
+			recovered,
+			players[4].Id);
 
 		actual.Clockwise!.Id.Should().Be(expected.Clockwise!.Id);
 		actual.Counterclockwise!.Id.Should()
