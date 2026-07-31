@@ -809,7 +809,8 @@ internal static class GameFlowManager
             ModeratorInstructionSemantic.AnnounceDawnVictims or
             ModeratorInstructionSemantic.AssignDawnVictimRoles or
             ModeratorInstructionSemantic.AssignDayVoteTargetRole or
-            ModeratorInstructionSemantic.AssignEliminationCascadeRoles;
+            ModeratorInstructionSemantic.AssignEliminationCascadeRoles or
+            ModeratorInstructionSemantic.AnnounceBearTamerGrowl;
 
 	private static bool IsEliminationCascadeReactionInput(
 		ModeratorInstruction instruction) =>

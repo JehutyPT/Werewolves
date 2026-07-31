@@ -373,6 +373,10 @@
     <value>Domador de Ursos</value>
     <comment/>
   </data>
+  <data name="BearTamerGrowlInstruction" xml:space="preserve">
+    <value>Faça fisicamente o rosnado do urso em voz alta para a mesa e depois continue.</value>
+    <comment/>
+  </data>
   <data name="StutteringJudgeRoleName" xml:space="preserve">
     <value>Juiz Gago</value>
     <comment/>

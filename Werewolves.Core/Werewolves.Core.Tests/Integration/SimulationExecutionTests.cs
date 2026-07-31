@@ -142,6 +142,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 	[InlineData(MainRoleType.ThreeBrothers, 3)]
 	[InlineData(MainRoleType.WhiteWerewolf, 1)]
 	[InlineData(MainRoleType.Piper, 1)]
+	[InlineData(MainRoleType.BearTamer, 1)]
 	public void ExecuteBatch_WithCardinalityRoleHolders_SafetyRepresentativeCompletesAllOneThousandAttempts(
 		MainRoleType role,
 		int roleHolderCardinality)

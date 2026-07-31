@@ -545,7 +545,7 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 	}
 
 	[Theory]
-	[InlineData(1L, "wolf-hound-villagers")]
+	[InlineData(0L, "wolf-hound-villagers")]
 	[InlineData(2L, "wolf-hound-werewolves")]
 	public void BaselineRandomDecisionStrategy_WithWolfHoundAlignment_UsesGlobalDeterministicStreamWithoutHiddenTruth(
 		long runNumber,
@@ -623,7 +623,7 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 
 		[Theory]
 		[InlineData(
-			2L,
+			3L,
 			AccursedWolfFatherInfectionOptionIds.Infect)]
 		[InlineData(
 			1L,

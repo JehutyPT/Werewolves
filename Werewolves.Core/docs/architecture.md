@@ -594,11 +594,11 @@ Located in `Werewolves.Core.StateModels/Extensions/MainRoleTypeExtensions.cs`. P
     *   The `PhaseManager` for `Dawn` is activated, starting at `DawnSubPhases.CalculateVictims`.
     *   **Calculate Victims:** The `NightInteractionResolver` processes all Night actions, resolves conflicts (Witch vs Defender vs Infection), applies settled Status Effects, and records the pending Dawn elimination candidates. It navigates either to `AnnounceVictims` or `Finalize`.
     *   **Announce Victims:** `EliminationCascadeStage` reveals the current distinct victim batch, commits every elimination in that batch, and then runs the centrally ordered forced and interactive reactions. Reaction-caused eliminations become child batches in the same scoped cascade. Only after the cascade is empty does the following navigation stage advance to `Finalize`.
-    *   **Finalize:** The `Finalize` sub-phase transitions to `GamePhase.Day`. Victory is checked at this transition.
+    *   **Finalize:** After all Dawn elimination cascades are empty, the sub-phase prepares victory facts and fires `GameHook.DawnMainActionLoop` in its declared order (Bear Tamer, Gypsy, then Town Crier). It transitions to `GamePhase.Day` only after every listener completes; the Dawn Victory Check Window is evaluated at that transition.
 
 4.  **Day Phase (`GamePhase.Day`):**
     *   The `PhaseManager` for `Day` starts at `DaySubPhases.Debate`.
-    *   **Debate:** First fires the post-Dawn `GameHook.DawnMainActionLoop` after the Day-entry victory check, then issues an instruction for discussion and transitions to `DetermineVoteType`.
+    *   **Debate:** Issues an instruction for discussion and transitions to `DetermineVoteType`.
     *   **Determine Vote Type:** Determines what's the appropriate vote type, checking for active events or modifiers (defaults to `NormalVoting` sub-phase).
     *   **Normal Voting:** Records a standard village vote. A tie advances directly to `ProcessVoteOutcome`; a selected living Player advances to `HandleNonTieVote`.
     *   **Accusation Voting:** *(Not yet implemented)* Reserved for accusation-based voting mechanics.

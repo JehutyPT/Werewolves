@@ -47,5 +47,6 @@ public enum ModeratorInstructionSemantic
 	SelectDefenderTarget = 39,
 	SelectWhiteWerewolfTarget = 40,
 	SelectPiperTargets = 41,
-	RecognizeCharmedPlayers = 42
+	RecognizeCharmedPlayers = 42,
+	AnnounceBearTamerGrowl = 43
 }

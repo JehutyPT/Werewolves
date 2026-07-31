@@ -13,7 +13,10 @@ public sealed record AudioMapResult(SoundEffectsEnum SoundEffect, string FileNam
 public sealed class AudioMap : IAudioMap
 {
 	private static readonly IReadOnlyDictionary<SoundEffectsEnum, string> DefaultMappings =
-		new Dictionary<SoundEffectsEnum, string>();
+		new Dictionary<SoundEffectsEnum, string>
+		{
+			[SoundEffectsEnum.BearGrowl] = "bear-growl.mp3"
+		};
 
 	private readonly IReadOnlyDictionary<SoundEffectsEnum, string> _mappings;
 
