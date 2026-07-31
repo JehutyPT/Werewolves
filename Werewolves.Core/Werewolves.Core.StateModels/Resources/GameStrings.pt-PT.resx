@@ -369,6 +369,18 @@
     <value>Raposa</value>
     <comment/>
   </data>
+  <data name="FoxCenterSelectionInstruction" xml:space="preserve">
+    <value>Selecione o jogador no centro do grupo de três jogadores adjacentes que a Raposa vai investigar.</value>
+    <comment/>
+  </data>
+  <data name="FoxAffirmativeFeedbackInstruction" xml:space="preserve">
+    <value>Indique discretamente à Raposa que existe pelo menos um agente da facção dos Lobisomens no grupo investigado.</value>
+    <comment/>
+  </data>
+  <data name="FoxNegativeFeedbackInstruction" xml:space="preserve">
+    <value>Indique discretamente à Raposa que não existe nenhum agente da facção dos Lobisomens no grupo investigado. A Raposa perdeu este poder.</value>
+    <comment/>
+  </data>
   <data name="BearTamerRoleName" xml:space="preserve">
     <value>Domador de Ursos</value>
     <comment/>

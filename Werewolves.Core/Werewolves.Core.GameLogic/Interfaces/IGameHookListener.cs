@@ -1,7 +1,9 @@
 using Werewolves.Core.GameLogic.Models.InternalMessages;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
+using Werewolves.Core.StateModels.Serialization;
 
 namespace Werewolves.Core.GameLogic.Interfaces;
 
@@ -36,4 +38,16 @@ internal interface IGameHookListener
     }
 
     ListenerIdentifier Id { get; }
+}
+
+internal interface ITargetPrivateRolePowerRecoveryCapability
+{
+    bool TryValidateCommittedRecoveryBoundary(
+        GameSession session,
+        ModeratorInstruction? startingInstruction,
+        ModeratorResponse input,
+        TargetPrivateRolePowerCommittedLogEntry committedEntry,
+        ModeratorInstruction nextInstruction);
+
+    void ValidateRecoveryCursorIdentity(DomainRecoveryCursor cursor);
 }

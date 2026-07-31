@@ -284,8 +284,14 @@ internal static class GameSessionQueries
         IGameSession session,
         OneUseRolePowerResourceIdentity resourceIdentity) =>
         session.GameHistoryLog
-            .OfType<IOneUseRolePowerCommittedLogEntry>()
-            .Any(entry => entry.ResourceIdentity == resourceIdentity);
+            .Any(entry =>
+                (entry is IOneUseRolePowerCommittedLogEntry oneUse &&
+                 oneUse.ResourceIdentity == resourceIdentity) ||
+                (entry is TargetPrivateRolePowerCommittedLogEntry
+                 {
+                     SpentResourceIdentity: { } spentResource
+                 } &&
+                 spentResource == resourceIdentity));
 
     internal static IEnumerable<IPlayer> GetPlayersEliminatedThisDawn(IGameSession session)
         => FindLogEntries<PlayerEliminatedLogEntry>(

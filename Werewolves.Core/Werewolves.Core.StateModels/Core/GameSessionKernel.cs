@@ -498,7 +498,13 @@ namespace Werewolves.Core.StateModels.Core
 
 			if (!Enum.IsDefined(cursor.CommittedActionType) ||
 			    cursor.CommittedActionType == NightActionType.Unknown ||
-			    cursor.CommittedTargetIds is not { Count: > 0 } ||
+                cursor.CommittedTargetIds == null ||
+                cursor.Kind ==
+                    DomainRecoveryCursorKind.TargetPrivateRolePowerCommit &&
+                cursor.CommittedTargetIds.Count != 0 ||
+                cursor.Kind !=
+                    DomainRecoveryCursorKind.TargetPrivateRolePowerCommit &&
+                cursor.CommittedTargetIds.Count == 0 ||
 			    cursor.CommittedTargetIds.Any(targetId =>
 				    targetId == Guid.Empty) ||
 			    cursor.CommittedTargetIds.Distinct().Count() !=
@@ -554,6 +560,48 @@ namespace Werewolves.Core.StateModels.Core
 
 				return cursor;
 			}
+
+            if (cursor.Kind ==
+                DomainRecoveryCursorKind.TargetPrivateRolePowerCommit)
+            {
+                if (cursor.PowerIdentity is not { } targetPrivatePowerIdentity ||
+                    !targetPrivatePowerIdentity.IsValid)
+                {
+                    throw new InvalidOperationException(
+                        "The domain recovery cursor is structurally invalid.");
+                }
+
+                OneUseRolePowerResourceIdentity? cursorSpentResource = null;
+                if (cursor.OneUseResourceId != Guid.Empty)
+                {
+                    cursorSpentResource = cursor.ResourceIdentity;
+                    if (cursorSpentResource is not { IsValid: true })
+                    {
+                        throw new InvalidOperationException(
+                            "The domain recovery cursor is structurally invalid.");
+                    }
+                }
+
+                var committedEntry = dto.GameHistoryLog
+                    .OfType<TargetPrivateRolePowerCommittedLogEntry>()
+                    .LastOrDefault();
+                if (committedEntry == null ||
+                    committedEntry.ActionType !=
+                        cursor.CommittedActionType ||
+                    committedEntry.CurrentPhase != GamePhase.Night ||
+                    committedEntry.TurnNumber != dto.TurnNumber ||
+                    committedEntry.TargetIds is { Count: > 0 } ||
+                    committedEntry.PowerIdentity !=
+                        targetPrivatePowerIdentity ||
+                    committedEntry.SpentResourceIdentity !=
+                        cursorSpentResource)
+                {
+                    throw new InvalidOperationException(
+                        "The domain recovery cursor does not match the latest target-private Role Power action.");
+                }
+
+                return cursor;
+            }
 
 			if (cursor.Kind !=
 				    DomainRecoveryCursorKind

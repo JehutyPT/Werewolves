@@ -399,6 +399,43 @@ internal class GameSession : IGameSession
 		_gameSessionKernel.AddEntryAndUpdateState(entry);
 	}
 
+    internal void CommitTargetPrivateRolePowerNightAction(
+        NightActionType actionType,
+        RolePowerInstanceIdentity powerIdentity,
+        OneUseRolePowerResourceIdentity? spentResourceIdentity = null)
+    {
+        if (actionType == NightActionType.Unknown)
+        {
+            throw new ArgumentOutOfRangeException(nameof(actionType));
+        }
+
+        powerIdentity.EnforceValidity();
+        if (spentResourceIdentity is { } spentResource)
+        {
+            spentResource.EnforceValidity();
+        }
+
+        var entry = new TargetPrivateRolePowerCommittedLogEntry
+        {
+            Timestamp = DateTimeOffset.UtcNow,
+            TurnNumber = TurnNumber,
+            CurrentPhase =
+                _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+            ActionType = actionType,
+            TargetIds = [],
+            ActingPlayerId = powerIdentity.ActingPlayerId,
+            SourceRole = powerIdentity.SourceRole,
+            SourcePowerIdentifier =
+                powerIdentity.SourcePowerIdentifier,
+            PowerInstanceId = powerIdentity.PowerInstanceId,
+            PowerInstanceOrigin =
+                powerIdentity.PowerInstanceOrigin,
+            SpentResourceIdentity = spentResourceIdentity
+        };
+
+        _gameSessionKernel.AddEntryAndUpdateState(entry);
+    }
+
 	internal void CommitRecurringRolePowerNightAction(
 		NightActionType actionType,
 		Guid targetId,

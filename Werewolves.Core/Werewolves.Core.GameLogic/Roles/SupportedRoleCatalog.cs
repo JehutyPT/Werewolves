@@ -90,6 +90,10 @@ public static class SupportedRoleCatalog
 						MainRoleType.BearTamer,
 						() => new BearTamerRole(
 							rolePowerAvailabilityGateway)),
+					RoleAdmission.Active(
+						MainRoleType.Fox,
+						() => new FoxRole(
+							rolePowerAvailabilityGateway)),
 					RoleAdmission.Passive(MainRoleType.SimpleVillager),
 				RoleAdmission.Passive(MainRoleType.VillagerVillager)
 		]);
