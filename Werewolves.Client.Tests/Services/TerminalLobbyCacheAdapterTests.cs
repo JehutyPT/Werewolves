@@ -118,7 +118,7 @@ public class TerminalLobbyCacheAdapterTests
 				5,
 				[
 					MainRoleType.SimpleWerewolf,
-					MainRoleType.BearTamer,
+					MainRoleType.Fox,
 					MainRoleType.SimpleVillager,
 					MainRoleType.SimpleVillager,
 					MainRoleType.SimpleVillager
@@ -156,7 +156,7 @@ public class TerminalLobbyCacheAdapterTests
 			var read = TerminalLobbyCache.ReadDocument(persisted!.Value.Span);
 
 			SimulatorCapability.SafetyScreening.Identity.ToString()
-				.Should().Be("safety-screening@20");
+				.Should().Be("safety-screening@21");
 			persisted.Value.ToArray().Should().Equal(bytes);
 			read.IsUsable.Should().BeTrue();
 			TerminalLobbyCache.TryGet(read.Document!, identity, out var restored)

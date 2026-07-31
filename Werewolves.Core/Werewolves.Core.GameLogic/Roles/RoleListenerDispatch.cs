@@ -2,7 +2,9 @@ using Werewolves.Core.GameLogic.Interfaces;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
+using Werewolves.Core.StateModels.Serialization;
 
 namespace Werewolves.Core.GameLogic.Roles;
 
@@ -51,6 +53,51 @@ internal static class RoleListenerDispatch
 		}
 
 		return listenerState;
+	}
+
+	internal static bool TryValidateTargetPrivateCommittedRecoveryBoundary(
+		ListenerIdentifier listenerId,
+		IRoleAdmissionSource admissions,
+		Func<ListenerIdentifier, Func<IGameHookListener>, IGameHookListener>
+			getOrCreateListener,
+		GameSession session,
+		ModeratorInstruction? startingInstruction,
+		ModeratorResponse input,
+		TargetPrivateRolePowerCommittedLogEntry committedEntry,
+		ModeratorInstruction nextInstruction)
+	{
+		var listener = GetActiveListener(
+			listenerId,
+			admissions,
+			getOrCreateListener);
+		return listener is ITargetPrivateRolePowerRecoveryCapability capability &&
+		       capability.TryValidateCommittedRecoveryBoundary(
+			       session,
+			       startingInstruction,
+			       input,
+			       committedEntry,
+			       nextInstruction);
+	}
+
+	internal static bool TryValidateTargetPrivateRecoveryCursorIdentity(
+		ListenerIdentifier listenerId,
+		IRoleAdmissionSource admissions,
+		Func<ListenerIdentifier, Func<IGameHookListener>, IGameHookListener>
+			getOrCreateListener,
+		DomainRecoveryCursor cursor)
+	{
+		var listener = GetActiveListener(
+			listenerId,
+			admissions,
+			getOrCreateListener);
+		if (listener is not
+		    ITargetPrivateRolePowerRecoveryCapability capability)
+		{
+			return false;
+		}
+
+		capability.ValidateRecoveryCursorIdentity(cursor);
+		return true;
 	}
 
 	private static IGameHookListener? GetActiveListener(

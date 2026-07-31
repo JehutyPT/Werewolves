@@ -148,20 +148,31 @@ internal sealed partial class GameSessionKernel
 
         private void ValidateOneUseResourceCommit(GameLogEntryBase entry)
         {
-            if (entry is not IOneUseRolePowerCommittedLogEntry commit)
+            var committedResource = GetCommittedResourceIdentity(entry);
+            if (committedResource == null)
             {
                 return;
             }
 
             if (_logEntries
-                .OfType<IOneUseRolePowerCommittedLogEntry>()
-                .Any(existing =>
-                    existing.ResourceIdentity == commit.ResourceIdentity))
+                .Select(GetCommittedResourceIdentity)
+                .Any(existing => existing == committedResource))
             {
                 throw new InvalidOperationException(
                     "The One-Use Role Power Resource is already spent by its owning power instance.");
             }
         }
+
+        private static OneUseRolePowerResourceIdentity?
+            GetCommittedResourceIdentity(GameLogEntryBase entry) =>
+            entry switch
+            {
+                IOneUseRolePowerCommittedLogEntry oneUse =>
+                    oneUse.ResourceIdentity,
+                TargetPrivateRolePowerCommittedLogEntry targetPrivate =>
+                    targetPrivate.SpentResourceIdentity,
+                _ => null
+            };
 
         private void ValidateEliminationCascadeReactionCompletion(
             GameLogEntryBase entry)

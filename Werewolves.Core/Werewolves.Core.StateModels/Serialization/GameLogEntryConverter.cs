@@ -25,6 +25,7 @@ public class GameLogEntryConverter : JsonConverter<GameLogEntryBase>
         ["NightActionLogEntry"] = typeof(NightActionLogEntry),
         ["OneUseRolePowerCommittedLogEntry"] = typeof(OneUseRolePowerCommittedLogEntry),
         ["RecurringRolePowerCommittedLogEntry"] = typeof(RecurringRolePowerCommittedLogEntry),
+        ["TargetPrivateRolePowerCommittedLogEntry"] = typeof(TargetPrivateRolePowerCommittedLogEntry),
         ["PhaseTransitionLogEntry"] = typeof(PhaseTransitionLogEntry),
         ["PlayerEliminatedLogEntry"] = typeof(PlayerEliminatedLogEntry),
         ["RoleIdentificationLogEntry"] = typeof(RoleIdentificationLogEntry),

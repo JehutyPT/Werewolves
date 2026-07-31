@@ -529,7 +529,8 @@ internal static class GameFlowManager
                 startingInstruction,
                 input,
                 nextInstructionToSend,
-                startingLogCount);
+                startingLogCount,
+                admissions);
 			session.CaptureRecoveryBoundary(
                 Key,
                 domainRecoveryCursor == null
@@ -570,12 +571,23 @@ internal static class GameFlowManager
 		        return true;
 	        }
 
+        if (startingInstruction?.Semantic ==
+            ModeratorInstructionSemantic.RevealFoxResult)
+        {
+            return true;
+        }
+
 			if (IsEliminationCascadeReactionInput(nextInstructionToSend))
 			{
 				return true;
 			}
 
         if (HasNewOneUseRolePowerCommit(session, startingLogCount))
+        {
+            return true;
+        }
+
+        if (HasNewTargetPrivateRolePowerCommit(session, startingLogCount))
         {
             return true;
         }
@@ -631,6 +643,14 @@ internal static class GameFlowManager
             .OfType<RecurringRolePowerCommittedLogEntry>()
             .Any();
 
+    private static bool HasNewTargetPrivateRolePowerCommit(
+        GameSession session,
+        int startingLogCount) =>
+        session.GameHistoryLog
+            .Skip(startingLogCount)
+            .OfType<TargetPrivateRolePowerCommittedLogEntry>()
+            .Any();
+
 	private static bool HasNewEliminationCascadeReactionCompletion(
 		GameSession session,
 		int startingLogCount) =>
@@ -660,7 +680,8 @@ internal static class GameFlowManager
         ModeratorInstruction? startingInstruction,
         ModeratorResponse input,
         ModeratorInstruction nextInstruction,
-        int startingLogCount)
+        int startingLogCount,
+        IRoleAdmissionSource admissions)
     {
         var newCommittedEntries = session.GameHistoryLog
             .Skip(startingLogCount)
@@ -670,11 +691,61 @@ internal static class GameFlowManager
             .Skip(startingLogCount)
             .OfType<RecurringRolePowerCommittedLogEntry>()
             .ToArray();
-        if (newCommittedEntries.Length > 0 &&
-            newRecurringEntries.Length > 0)
+        var newTargetPrivateEntries = session.GameHistoryLog
+            .Skip(startingLogCount)
+            .OfType<TargetPrivateRolePowerCommittedLogEntry>()
+            .ToArray();
+        var domainCommitKinds =
+            (newCommittedEntries.Length > 0 ? 1 : 0) +
+            (newRecurringEntries.Length > 0 ? 1 : 0) +
+            (newTargetPrivateEntries.Length > 0 ? 1 : 0);
+        if (domainCommitKinds > 1)
         {
             throw new InvalidOperationException(
                 "One accepted response cannot produce multiple domain commits.");
+        }
+
+        if (newTargetPrivateEntries.Length > 0)
+        {
+            if (newTargetPrivateEntries is not [var targetPrivateEntry] ||
+                targetPrivateEntry.TargetIds is { Count: > 0 } ||
+                !RoleListenerDispatch
+                    .TryValidateTargetPrivateCommittedRecoveryBoundary(
+                    Listener(targetPrivateEntry.SourceRole),
+                    admissions,
+                    (id, factory) =>
+                        session.GetOrCreateListener(id, factory),
+                    session,
+                    startingInstruction,
+                    input,
+                    targetPrivateEntry,
+                    nextInstruction))
+            {
+                throw new InvalidOperationException(
+                    "One accepted response must produce exactly one correlated target-private Role Power commit.");
+            }
+
+            var powerIdentity = targetPrivateEntry.PowerIdentity;
+            return new DomainRecoveryCursor
+            {
+                Version = DomainRecoveryCursor.CurrentVersion,
+                Kind =
+                    DomainRecoveryCursorKind.TargetPrivateRolePowerCommit,
+                SourceRole = powerIdentity.SourceRole,
+                CommittedActionType = targetPrivateEntry.ActionType,
+                ActingPlayerId = powerIdentity.ActingPlayerId,
+                SourcePowerIdentifier =
+                    powerIdentity.SourcePowerIdentifier,
+                PowerInstanceId = powerIdentity.PowerInstanceId,
+                PowerInstanceOrigin =
+                    powerIdentity.PowerInstanceOrigin,
+                OneUseResourceId =
+                    targetPrivateEntry.SpentResourceIdentity?
+                        .OneUseResourceId ?? Guid.Empty,
+                CommittedTargetIds = [],
+                NextInstructionSemantic = nextInstruction.Semantic,
+                NextInstructionId = nextInstruction.InstructionId
+            };
         }
 
         if (newCommittedEntries.Length == 0)
@@ -1216,7 +1287,8 @@ internal static class GameFlowManager
                 "The domain recovery cursor is structurally invalid.");
         if (cursor.Kind is not
                 (DomainRecoveryCursorKind.OneUseRolePowerCommit or
-                 DomainRecoveryCursorKind.RecurringNativeRolePowerCommit) ||
+                 DomainRecoveryCursorKind.RecurringNativeRolePowerCommit or
+                 DomainRecoveryCursorKind.TargetPrivateRolePowerCommit) ||
             session.GetCurrentPhase() != GamePhase.Night ||
             !IsNightStartSubPhase(session))
         {
@@ -1235,6 +1307,20 @@ internal static class GameFlowManager
         var pendingInstruction = session.PendingModeratorInstruction
             ?? throw new InvalidOperationException(
                 "The committed domain continuation requires one Pending Instruction.");
+        if (cursor.Kind ==
+                DomainRecoveryCursorKind.TargetPrivateRolePowerCommit &&
+            !RoleListenerDispatch
+                .TryValidateTargetPrivateRecoveryCursorIdentity(
+                Listener(sourceRole),
+                admissions,
+                (id, factory) =>
+                    session.GetOrCreateListener(id, factory),
+                cursor))
+        {
+            throw new InvalidOperationException(
+                $"Unsupported target-private Role Power continuation '{sourceRole}'.");
+        }
+
         if (cursor.Kind ==
             DomainRecoveryCursorKind.RecurringNativeRolePowerCommit)
         {

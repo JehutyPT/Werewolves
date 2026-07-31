@@ -57,11 +57,13 @@ public class SimulatorProfileTests
 			.Append(ModeratorInstructionSemantic.SelectWhiteWerewolfTarget)
 			.Append(ModeratorInstructionSemantic.SelectPiperTargets)
 			.Append(ModeratorInstructionSemantic.RecognizeCharmedPlayers)
-			.Append(ModeratorInstructionSemantic.AnnounceBearTamerGrowl);
+			.Append(ModeratorInstructionSemantic.AnnounceBearTamerGrowl)
+			.Append(ModeratorInstructionSemantic.SelectFoxCenter)
+			.Append(ModeratorInstructionSemantic.RevealFoxResult);
 		var safety = SimulatorCapability.SafetyScreening;
 		var probability = SimulatorCapability.FullProbability;
 
-		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "20"));
+		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "21"));
 		probability.Identity.Should().Be(new SimulatorProfileIdentity("full-probability", "4"));
 		BaselineRandomDecisionStrategy.Identity.Should()
 			.Be(new DecisionStrategyIdentity("baseline-random", "3-splitmix64"));
@@ -87,7 +89,8 @@ public class SimulatorProfileTests
 			MainRoleType.AccursedWolfFather,
 			MainRoleType.WhiteWerewolf,
 			MainRoleType.Piper,
-			MainRoleType.BearTamer);
+			MainRoleType.BearTamer,
+			MainRoleType.Fox);
 		probability.SupportedRoles.Should().Equal(
 			MainRoleType.SimpleWerewolf,
 			MainRoleType.Seer,
@@ -141,6 +144,15 @@ public class SimulatorProfileTests
 		bearTamerBeneficiary.Should().Be(Faction.Villager);
 		safety.IsFactionAgent(
 				MainRoleType.BearTamer,
+				Faction.Werewolf)
+			.Should().BeFalse();
+		safety.TryGetBeneficiaryFaction(
+				MainRoleType.Fox,
+				out var foxBeneficiary)
+			.Should().BeTrue();
+		foxBeneficiary.Should().Be(Faction.Villager);
+		safety.IsFactionAgent(
+				MainRoleType.Fox,
 				Faction.Werewolf)
 			.Should().BeFalse();
 	    safety.TryGetBeneficiaryFaction(
