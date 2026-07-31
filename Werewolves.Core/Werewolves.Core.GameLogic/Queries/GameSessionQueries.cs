@@ -118,6 +118,39 @@ internal static class GameSessionQueries
                 log => actionTypes.Contains(log.ActionType))
             .ToArray();
 
+    internal static bool HasNightActionTargetThisNight(
+        IGameSession session,
+        NightActionType actionType,
+        Guid targetPlayerId) =>
+        GetOrderedNightActionsThisNight(session, [actionType])
+            .Any(entry =>
+                entry.TargetIds is [var targetId] &&
+                targetId == targetPlayerId);
+
+    internal static StatusEffectLogEntry? GetLatestStatusEffectLifecycle(
+        IGameSession session,
+        Guid playerId,
+        StatusEffectTypes effectType) =>
+        FindLogEntries<StatusEffectLogEntry>(
+                session,
+                filter: entry =>
+                    entry.PlayerId == playerId &&
+                    entry.EffectType == effectType)
+            .LastOrDefault();
+
+    internal static bool HasActiveStatusEffectAppliedThisPhase(
+        IGameSession session,
+        StatusEffectTypes effectType) =>
+        FindLogEntries<StatusEffectLogEntry>(
+                session,
+                NumberRangeConstraint.Exact(session.TurnNumber),
+                session.GetCurrentPhase(),
+                entry =>
+                    entry.EffectType == effectType &&
+                    entry.IsActive)
+            .Any(entry =>
+                session.GetPlayer(entry.PlayerId).State.HasStatusEffect(effectType));
+
     internal static bool TryGetRetainedWerewolfVictimThisNight(
         IGameSession session,
         out Guid victimId)
@@ -149,6 +182,39 @@ internal static class GameSessionQueries
             player.State.Health == PlayerHealth.Dead &&
             projection.Agents[player.Id][Faction.Werewolf] ==
             FactionAgentKnowledge.KnownAgent);
+    }
+
+    internal static IReadOnlySet<Guid> RequireKnownFactionAgentIdsAtBoundary(
+        IGameSession session,
+        Faction faction,
+        FactionFactEffectiveBoundary inclusiveBoundary)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        if (!Enum.IsDefined(faction))
+        {
+            throw new ArgumentOutOfRangeException(nameof(faction));
+        }
+
+        var playerIds = session.GetPlayers()
+            .Select(player => player.Id)
+            .ToArray();
+        var projection = FactionFactProjection.Create(
+            FindLogEntries<FactionFactsCommittedLogEntry>(session),
+            playerIds,
+            inclusiveBoundary);
+        if (playerIds.Any(playerId =>
+                projection.Agents[playerId][faction] ==
+                FactionAgentKnowledge.Unknown))
+        {
+            throw new InvalidOperationException(
+                "Faction Agent facts are not ready.");
+        }
+
+        return playerIds
+            .Where(playerId =>
+                projection.Agents[playerId][faction] ==
+                FactionAgentKnowledge.KnownAgent)
+            .ToHashSet();
     }
 
     internal static int GetExpectedLivingRoleHolderCount(
@@ -299,6 +365,27 @@ internal static class GameSessionQueries
                 NumberRangeConstraint.Exact(session.TurnNumber),
                 GamePhase.Dawn)
             .Select(log => session.GetPlayer(log.PlayerId));
+
+    internal static IReadOnlySet<Guid> GetDirectDawnEliminationPlayerIds(
+        IGameSession session,
+        EliminationReason reason)
+    {
+        var determinedVictimIds = FindLogEntries<DawnVictimDeterminedLogEntry>(
+                session,
+                NumberRangeConstraint.Exact(session.TurnNumber),
+                GamePhase.Dawn,
+                entry => entry.Reason == reason)
+            .Select(entry => entry.PlayerId)
+            .ToHashSet();
+        determinedVictimIds.IntersectWith(
+            FindLogEntries<PlayerEliminatedLogEntry>(
+                    session,
+                    NumberRangeConstraint.Exact(session.TurnNumber),
+                    GamePhase.Dawn,
+                    entry => entry.Reason == reason)
+                .Select(entry => entry.PlayerId));
+        return determinedVictimIds;
+    }
 
     internal static IReadOnlyList<PendingDawnElimination>
         GetPendingDawnEliminations(IGameSession session) =>

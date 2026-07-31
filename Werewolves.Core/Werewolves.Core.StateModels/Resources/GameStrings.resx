@@ -417,6 +417,10 @@
     <value>Cavaleiro da Espada Enferrujada</value>
     <comment/>
   </data>
+  <data name="RustySwordDiseaseEliminationAnnouncement" xml:space="preserve">
+    <value>{0} (doença da Espada Enferrujada)</value>
+    <comment/>
+  </data>
   <data name="BigBadWolfRoleName" xml:space="preserve">
     <value>Grande Mau Lobo</value>
     <comment/>

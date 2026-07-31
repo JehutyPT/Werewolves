@@ -138,7 +138,7 @@ public class RoleAdmissionTests
 	}
 
 	[Fact]
-	public void SupportedRoleCatalog_AdmitsNineteenActiveRolesAndBothVillagerRolesAsPassive()
+	public void SupportedRoleCatalog_AdmitsTwentyActiveRolesAndBothVillagerRolesAsPassive()
 	{
 		var catalog = SupportedRoleCatalog.Admissions;
 
@@ -162,6 +162,7 @@ public class RoleAdmissionTests
 			MainRoleType.Scapegoat,
 			MainRoleType.VillageIdiot,
 			MainRoleType.BearTamer,
+			MainRoleType.KnightWithRustySword,
 			MainRoleType.Fox,
 			MainRoleType.SimpleVillager,
 			MainRoleType.VillagerVillager
@@ -187,6 +188,7 @@ public class RoleAdmissionTests
 			         MainRoleType.Scapegoat,
 			         MainRoleType.VillageIdiot,
 			         MainRoleType.BearTamer,
+			         MainRoleType.KnightWithRustySword,
 			         MainRoleType.Fox
 		         })
 		{

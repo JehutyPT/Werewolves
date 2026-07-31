@@ -385,6 +385,9 @@
   <data name="StatusEffect_Executioner" xml:space="preserve">
     <value>Executioner</value>
   </data>
+  <data name="StatusEffect_RustySwordDisease" xml:space="preserve">
+    <value>Rusty Sword disease</value>
+  </data>
   <data name="StatusEffect_Fallback" xml:space="preserve">
     <value>Effect</value>
   </data>

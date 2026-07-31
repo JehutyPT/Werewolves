@@ -96,6 +96,7 @@ internal static class GameFlowManager
 
         [DawnMainActionLoop] =
         [
+            Listener(KnightWithRustySword),
             Listener(BearTamer),
             Listener(Gypsy),
             Listener(TownCrier),
@@ -345,7 +346,15 @@ internal static class GameFlowManager
         var victimNames = string.Join(
             Environment.NewLine,
             eliminations.Select(elimination =>
-                session.GetPlayer(elimination.PlayerId).Name));
+            {
+                var victimName =
+                    session.GetPlayer(elimination.PlayerId).Name;
+                return elimination.Reason == EliminationReason.RustySword
+                    ? GameStrings
+                        .RustySwordDiseaseEliminationAnnouncement
+                        .Format(victimName)
+                    : victimName;
+            }));
         return GameStrings.MultipleVictimEliminatedAnnounce.Format(victimNames);
     }
 

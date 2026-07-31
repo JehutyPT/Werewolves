@@ -91,6 +91,10 @@ public static class SupportedRoleCatalog
 						() => new BearTamerRole(
 							rolePowerAvailabilityGateway)),
 					RoleAdmission.Active(
+						MainRoleType.KnightWithRustySword,
+						() => new KnightWithTheRustySwordRole(
+							rolePowerAvailabilityGateway)),
+					RoleAdmission.Active(
 						MainRoleType.Fox,
 						() => new FoxRole(
 							rolePowerAvailabilityGateway)),

@@ -287,6 +287,35 @@ public class InstructionRendererBunitTests
 	}
 
 	[Fact]
+	public void RustySwordDawnCause_RendersThroughGenericPortugueseRoleAssignment()
+	{
+		using var context = new ModeratorComponentTestContext();
+		var victimId = Guid.NewGuid();
+		var announcement = GameStrings.MultipleVictimEliminatedAnnounce.Format(
+			GameStrings.RustySwordDiseaseEliminationAnnouncement.Format(
+				PlayerNames.Ana));
+		var instruction = CreateAssignRolesInstruction(
+			[victimId],
+			[MainRoleType.SimpleWerewolf],
+			announcement);
+
+		var cut = context.RenderModeratorComponent<InstructionRenderer>(
+			parameters => parameters
+				.Add(component => component.Instruction, instruction)
+				.Add(component => component.Roster,
+					[CreateRosterEntry(victimId, 1, PlayerNames.Ana)]));
+
+		cut.Find(PublicInstructionSelector).TextContent.Should()
+			.Contain(announcement);
+		cut.FindAll("[role='group']")
+			.Should().ContainSingle(group =>
+				group.GetAttribute(Html.Attributes.AriaLabel) ==
+				ClientStrings.AssignRoles_Title);
+		cut.FindAll(DashboardActionZoneSelector).Should().ContainSingle();
+		cut.FindAll(HoldButtonSelector).Should().ContainSingle();
+	}
+
+	[Fact]
 	public void SelectPlayersInstruction_RendersRosterResolvedPlayerChoicesAndSingleInputActionZone()
 	{
 		using var context = new ModeratorComponentTestContext();
@@ -612,12 +641,13 @@ public class InstructionRendererBunitTests
 
 	private static AssignRolesInstruction CreateAssignRolesInstruction(
 		IEnumerable<Guid> playerIds,
-		IReadOnlyList<MainRoleType> roles) =>
+		IReadOnlyList<MainRoleType> roles,
+		string? publicAnnouncement = null) =>
 		(AssignRolesInstruction)AssignRolesConstructor.Invoke(
 			[
 				playerIds.ToImmutableHashSet(),
 				roles,
-				null,
+				publicAnnouncement,
 				GameStrings.RevealRolePromptSpecify,
 				null,
 				Guid.Empty

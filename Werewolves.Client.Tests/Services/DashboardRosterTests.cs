@@ -21,7 +21,8 @@ public class DashboardRosterTests
 			StatusEffectTypes.Sheriff,
 			StatusEffectTypes.Lovers,
 			StatusEffectTypes.Charmed,
-			StatusEffectTypes.LycanthropyInfection
+			StatusEffectTypes.LycanthropyInfection,
+			StatusEffectTypes.RustySwordDisease
 		};
 		var brunoStatusLabels = brunoStatusEffects.Select(DashboardRoster.StatusEffectLabel).ToArray();
 		var session = new TestGameSession([
@@ -105,6 +106,9 @@ public class DashboardRosterTests
 			StatusEffectsLabel = DashboardRoster.NoStatusEffectsLabel,
 			StatusEffects = Array.Empty<string>()
 		});
+		DashboardRoster.StatusEffectLabel(StatusEffectTypes.RustySwordDisease)
+			.Should().Be(ClientStrings.StatusEffect_RustySwordDisease)
+			.And.NotBe(ClientStrings.StatusEffect_Fallback);
 	}
 
 	[Fact]
