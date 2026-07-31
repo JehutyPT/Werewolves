@@ -67,20 +67,20 @@ Use CI for deterministic evidence:
 
 ## .NET 10 macOS Build Startup Recovery
 
-Do not set `MSBUILDNOINPROCNODE=1` for routine verification on .NET 10 on macOS. This repo has confirmed that the setting can leave `dotnet build` and `dotnet test` sleeping during Build target startup with no compiler, MSBuild worker, or testhost child, no console output, and an absent or zero-byte binlog. CLI and MSBuild startup, project-property evaluation, and `dotnet test --no-build --list-tests` can still succeed in this state, so those checks do not clear the Build target path.
+Do not set `DOTNET_CLI_USE_MSBUILDNOINPROCNODE` to `1`, `true`, or `yes`, or set `MSBUILDNOINPROCNODE=1`, for routine verification on .NET 10 on macOS. The [.NET CLI environment-variable documentation](https://learn.microsoft.com/dotnet/core/tools/dotnet-environment-variables) confirms that the CLI variable sets `MSBUILDNOINPROCNODE=1` inside the `dotnet` entry process, so checking only the raw MSBuild variable in the caller is insufficient. This repo has confirmed that either setting can leave `dotnet build` and `dotnet test` sleeping during Build target startup with no compiler, MSBuild worker, or testhost child, no console output, and an absent or zero-byte binlog. CLI and MSBuild startup, project-property evaluation, and `dotnet test --no-build --list-tests` can still succeed in this state, so those checks do not clear the Build target path.
 
 A separate sandbox boundary affects normal full-solution verification: `dotnet build Werewolves.sln --no-restore` can stall or fail when MAUI/iOS targets reach mobile task-host IPC inside the sandbox, while the exact unchanged command is confirmed to complete outside the sandbox in about 10 seconds with zero warnings and errors. This signature has mobile target or log events, CPU activity, or task-host progression; the `MSBUILDNOINPROCNODE=1` startup failure has no child, binlog event, or build progression.
 
 Diagnose and recover one bounded layer at a time:
 
-1. Run `printenv MSBUILDNOINPROCNODE`. If it prints `1`, remove the variable from the verification command and current shell with `unset MSBUILDNOINPROCNODE`; also remove it from any agent command template that set it.
+1. Run `printenv DOTNET_CLI_USE_MSBUILDNOINPROCNODE` and `printenv MSBUILDNOINPROCNODE`. If either prints an enabling value, remove both from the verification command and current shell with `unset DOTNET_CLI_USE_MSBUILDNOINPROCNODE MSBUILDNOINPROCNODE`; also remove both from agent command templates.
 2. Confirm SDK and MSBuild startup with `dotnet --info` and `dotnet msbuild -version -nologo`.
 3. Confirm project evaluation without running build targets with `dotnet msbuild Werewolves.Core/Werewolves.Core.Tests/Werewolves.Core.Tests.csproj -nologo -getProperty:TargetFramework`.
 4. When an existing test assembly is available, isolate test discovery with `dotnet test Werewolves.Core/Werewolves.Core.Tests/Werewolves.Core.Tests.csproj --no-build --no-restore --list-tests`.
-5. With `MSBUILDNOINPROCNODE` unset so MSBuild uses its normal in-process node, run the normal build and then `dotnet test --no-build`. Give each command a caller-enforced time limit, run only one build probe at a time, and stop only the process or process group started by that probe if it stalls.
+5. With both variables unset so MSBuild uses its normal in-process node, run the normal build and then `dotnet test --no-build`. Give each command a caller-enforced time limit, run only one build probe at a time, and stop only the process or process group started by that probe if it stalls.
 6. If the normal full-solution build reaches MAUI/iOS task-host work and then stalls or fails inside the sandbox, retry the exact unchanged `dotnet build Werewolves.sln --no-restore` command with the required sandbox escalation. Do not add MSBuild diagnostic overrides to compensate for a sandbox IPC boundary.
 
-`MSBUILDDISABLENODEREUSE=1`, serial execution through `-m:1` or `-p:BuildInParallel=false`, and `dotnet build-server shutdown` test different hypotheses; do not treat them as substitutes for, or reasons to set, `MSBUILDNOINPROCNODE=1`. Shut down build servers only when no other build is active. Remove experimental MSBuild environment variables and diagnostic-only flags before recording normal verification evidence.
+`MSBUILDDISABLENODEREUSE=1`, serial execution through `-m:1` or `-p:BuildInParallel=false`, and `dotnet build-server shutdown` test different hypotheses; do not treat them as substitutes for, or reasons to set, either out-of-process-node variable. Shut down build servers only when no other build is active. Remove experimental MSBuild environment variables and diagnostic-only flags before recording normal verification evidence.
 
 ## Simulator And Cache QA
 
