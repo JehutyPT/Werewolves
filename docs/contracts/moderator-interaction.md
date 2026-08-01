@@ -241,10 +241,10 @@ These sections state only the observable differences from the shared interaction
 
 ### Angel
 
-- Angel has no identification call or strategy choice.
-- A qualifying Elimination reveals Angel before its outcome matters.
-- A Role Composition from which Angel is reachable is not App-Supported until the Angel delivery supplies a legitimate private establishment path for the holder and Beneficiary exception before Initial Beneficiary Closure. A qualifying-Elimination reveal does not satisfy that requirement for a Game Session in which Angel is not Eliminated.
-- If Angel has not won by the Dawn Victory Check Window that resolves Night 2, the app changes the current Role to Simple Villager without a physical card action, Player notification, acknowledgment, or response.
+- Angel has no identification call or strategy choice. Its presence comes from the locked Role Composition; the app never privately establishes its holder merely because Angel is present.
+- Angel creates no Initial Beneficiary Closure prerequisite or exception. Its holder uses ordinary Villager Faction Beneficiary mechanics throughout, whether or not that holder is known.
+- Every actual Elimination of the physical Angel card's holder during Night 1, any part of Day 1, or Night 2 qualifies the card's Role-Card Victory Eligibility for the next shared Victory Check Window. This includes standard and Consecutive Votes and reaction or cascade Eliminations. The ordinary public reveal and ownership observation occur before the eligibility is consumed; they are not an Angel identification flow.
+- If Angel has not won by the Dawn Victory Check Window that resolves Night 2, its eligibility expires immediately after that window. From then on, the physical Angel card supplies Simple Villager current-Role mechanics without a physical card action, ownership or visibility change, Player notification, acknowledgment, or response. An unknown holder remains unknown; a later ordinary reveal or ownership observation projects Simple Villager mechanics without retroactive identification.
 
 ### Devoted Servant
 

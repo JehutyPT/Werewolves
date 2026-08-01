@@ -194,6 +194,10 @@ _Avoid_: Winning Team, result (too generic)
 A Player who would win if a specified Faction's win condition were satisfied now.
 _Avoid_: Team member, ally, Role owner
 
+**Role-Card Victory Eligibility**:
+A time-bounded win condition attached to a physical Character Card and qualifying Game Session history rather than to a Player's Faction Beneficiary. Angel is the current example; its eligibility can join a Shared Victory Outcome without identifying its holder early or changing that holder's Villager Faction Beneficiary.
+_Avoid_: Transient Faction, Angel Beneficiary, known Angel holder
+
 **Faction Agent**:
 A Player who acts for, wakes with, is perceived as, or is counted by a Faction for operational rules.
 _Avoid_: Team member, ally, operative
@@ -211,11 +215,11 @@ A Role replacement that lasts for the rest of the Game Session without replacing
 _Avoid_: Transformation (too broad), conversion (ambiguous with infection)
 
 **Shared Victory Outcome**:
-A Game Session Outcome in which multiple Factions win at the same Victory Check Window.
+A Game Session Outcome in which multiple win conditions are satisfied at the same Victory Check Window.
 _Avoid_: Tie (ambiguous with Vote ties), co-winners (too informal)
 
 **No-Winner Outcome**:
-A Game Session Outcome in which every Player is Eliminated and no Faction wins.
+A Game Session Outcome in which every Player is Eliminated and no win condition is satisfied.
 _Avoid_: Draw, stalemate
 
 **Game Result**:
