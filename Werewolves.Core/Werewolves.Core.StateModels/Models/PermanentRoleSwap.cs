@@ -91,12 +91,13 @@ public sealed record PermanentRoleSwapFactionReplacement
 		IReadOnlyDictionary<Faction, FactionAgentKnowledge> agentFacts)
 	{
 		ArgumentNullException.ThrowIfNull(agentFacts);
-		if (!Enum.IsDefined(beneficiaryCandidate))
+		if (!Enum.IsDefined(beneficiaryCandidate) ||
+			!FactionFactFactions.All.Contains(beneficiaryCandidate))
 		{
 			throw new ArgumentOutOfRangeException(nameof(beneficiaryCandidate));
 		}
-		var factions = Enum.GetValues<Faction>();
-		if (agentFacts.Count != factions.Length ||
+		var factions = FactionFactFactions.All;
+        if (agentFacts.Count != factions.Count ||
 			factions.Any(faction =>
 				!agentFacts.TryGetValue(faction, out var knowledge) ||
 				!Enum.IsDefined(knowledge) ||
@@ -141,7 +142,7 @@ internal static class PermanentRoleSwapFactionFacts
 		}
 		if (policy.FactionAgents == PermanentRoleSwapDisposition.Change)
 		{
-			facts.AddRange(Enum.GetValues<Faction>().Select(faction =>
+			facts.AddRange(FactionFactFactions.All.Select(faction =>
 				FactionFact.Agent(
 					playerId,
 					faction,
@@ -200,8 +201,8 @@ internal static class PermanentRoleSwapFactionFacts
 		{
 			PermanentRoleSwapDisposition.Preserve => agentFacts.Length == 0,
 			PermanentRoleSwapDisposition.Change =>
-				agentFacts.Length == Enum.GetValues<Faction>().Length &&
-				Enum.GetValues<Faction>().All(faction =>
+				agentFacts.Length == FactionFactFactions.All.Count &&
+				FactionFactFactions.All.All(faction =>
 					agentFacts.Count(fact => fact.Faction == faction) == 1),
 			_ => false
 		};

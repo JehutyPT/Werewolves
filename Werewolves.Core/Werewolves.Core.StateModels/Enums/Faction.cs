@@ -6,5 +6,6 @@ public enum Faction
 	Werewolf,
 	WhiteWerewolf,
 	Piper,
-	CrossFactionLovers
+	CrossFactionLovers,
+	Angel
 }

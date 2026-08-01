@@ -138,7 +138,7 @@ public class RoleAdmissionTests
 	}
 
 	[Fact]
-	public void SupportedRoleCatalog_AdmitsTwentyTwoActiveRolesAndBothVillagerRolesAsPassive()
+	public void SupportedRoleCatalog_AdmitsTwentyTwoActiveRolesAndThreePassiveRoles()
 	{
 		var catalog = SupportedRoleCatalog.Admissions;
 
@@ -167,7 +167,8 @@ public class RoleAdmissionTests
 			MainRoleType.KnightWithRustySword,
 			MainRoleType.Fox,
 			MainRoleType.SimpleVillager,
-			MainRoleType.VillagerVillager
+			MainRoleType.VillagerVillager,
+			MainRoleType.Angel
 		]);
 
 		foreach (var activeRole in new[]
@@ -202,10 +203,11 @@ public class RoleAdmissionTests
 		}
 
 		foreach (var passiveRole in new[]
-		         {
-			         MainRoleType.SimpleVillager,
-			         MainRoleType.VillagerVillager
-		         })
+			         {
+				         MainRoleType.SimpleVillager,
+				         MainRoleType.VillagerVillager,
+				         MainRoleType.Angel
+			         })
 		{
 			var listenerId = ListenerIdentifier.Listener(passiveRole);
 			catalog.GetAdmission(listenerId).Should().Be(RoleAdmissionKind.Passive);

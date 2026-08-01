@@ -94,7 +94,8 @@ public sealed record FactionFact
 			throw new ArgumentOutOfRangeException(nameof(type));
 		}
 
-		if (!Enum.IsDefined(faction))
+		if (!Enum.IsDefined(faction) ||
+			!FactionFactFactions.All.Contains(faction))
 		{
 			throw new ArgumentOutOfRangeException(nameof(faction));
 		}

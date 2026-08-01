@@ -33,7 +33,7 @@ internal static class PermanentRoleSwapRules
 			RolePowerState: PermanentRoleSwapDisposition.Change);
 		var factions = new PermanentRoleSwapFactionReplacement(
 			ExpectedBeneficiary(selectedOffer.PrintedRole),
-			Enum.GetValues<Faction>().ToDictionary(
+			FactionFactFactions.All.ToDictionary(
 				faction => faction,
 				faction => ExpectedAgentKnowledge(
 					selectedOffer.PrintedRole,
@@ -178,7 +178,7 @@ internal static class PermanentRoleSwapRules
 			request.Factions.BeneficiaryCandidate ==
 				ExpectedBeneficiary(request.NewCurrentRole)) &&
 		(request.Policy.FactionAgents != PermanentRoleSwapDisposition.Change ||
-			Enum.GetValues<Faction>().All(faction =>
+			FactionFactFactions.All.All(faction =>
 				request.Factions.AgentFacts[faction] ==
 					ExpectedAgentKnowledge(request.NewCurrentRole, faction)));
 
@@ -190,7 +190,7 @@ internal static class PermanentRoleSwapRules
 				fact.Type == FactionFactType.Beneficiary &&
 				fact.Faction == ExpectedBeneficiary(entry.NewCurrentRole))) &&
 		(entry.Policy.FactionAgents != PermanentRoleSwapDisposition.Change ||
-			Enum.GetValues<Faction>().All(faction =>
+			FactionFactFactions.All.All(faction =>
 				entry.Facts.Any(fact =>
 					fact.Type == FactionFactType.Agent &&
 					fact.Faction == faction &&

@@ -146,6 +146,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 	[InlineData(MainRoleType.Fox, 1)]
 	[InlineData(MainRoleType.KnightWithRustySword, 1)]
 	[InlineData(MainRoleType.Cupid, 1)]
+	[InlineData(MainRoleType.Angel, 1)]
 	public void ExecuteBatch_WithCardinalityRoleHolders_SafetyRepresentativeCompletesAllOneThousandAttempts(
 		MainRoleType role,
 		int roleHolderCardinality)
@@ -177,6 +178,51 @@ public class SimulationExecutionTests : DiagnosticTestBase
 		batch.IncompleteRunCount.Should().Be(0);
 		batch.Records.Should().OnlyContain(run =>
 			run is CompletedSimulationRun);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void ExecuteBatch_WithOfferedAngel_CompletesAllOneThousandAttemptsAcrossOrderedBranches()
+	{
+		MainRoleType[] dealPool =
+		[
+			MainRoleType.Thief,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager
+		];
+		var scenario = new SimulationScenario(
+			playerCount: 5,
+			roleCompositionCards: dealPool.Concat(
+				[MainRoleType.Angel, MainRoleType.Seer]),
+			dealPoolCards: dealPool,
+			offer1Role: MainRoleType.Angel,
+			offer2Role: MainRoleType.Seer);
+		var identity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+
+		var batch = new SimulationExecutor().ExecuteBatch(
+			scenario,
+			SimulatorCapability.SafetyScreening,
+			identity,
+			runCount: 1_000);
+
+		scenario.ToCanonical().Offer1Role.Should().Be(MainRoleType.Angel);
+		scenario.ToCanonical().Offer2Role.Should().Be(MainRoleType.Seer);
+		scenario.ThiefOfferBranchPolicy!.Branches.Should().Equal(
+			ThiefOfferBranch.Offer1,
+			ThiefOfferBranch.Offer2,
+			ThiefOfferBranch.Decline);
+		batch.Records.Should().HaveCount(1_000);
+		batch.Records
+			.OfType<IncompleteSimulationRun>()
+			.Select(run => run.RunSeedMaterial.RunNumber)
+			.Should().BeEmpty();
+		batch.CompletedRunCount.Should().Be(1_000);
+		batch.IncompleteRunCount.Should().Be(0);
+		batch.Records.Should().OnlyContain(run => run is CompletedSimulationRun);
 		MarkTestCompleted();
 	}
 
@@ -1142,6 +1188,18 @@ public class SimulationExecutionTests : DiagnosticTestBase
 		var mismatchedIdentity = new SimulationCompatibilityIdentity(
 			supported.ToCanonical(),
 			new SimulatorProfileIdentity("core-simulator", "2"));
+		var angelSupported = new SimulationScenario(
+			5,
+			[
+				MainRoleType.Angel,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+		var legacyAngelIdentity = new SimulationCompatibilityIdentity(
+			angelSupported.ToCanonical(),
+			new SimulatorProfileIdentity("core-simulator", "1"));
 		var attempts = new Action[]
 		{
 			() => executor.Execute(
@@ -1163,6 +1221,11 @@ public class SimulationExecutionTests : DiagnosticTestBase
 				supported,
 				SimulatorCapability.FullProbability,
 				mismatchedIdentity,
+				0),
+			() => executor.Execute(
+				angelSupported,
+				SimulatorCapability.SafetyScreening,
+				legacyAngelIdentity,
 				0)
 		};
 

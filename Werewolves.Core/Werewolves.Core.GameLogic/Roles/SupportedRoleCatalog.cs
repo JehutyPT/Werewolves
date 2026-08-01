@@ -104,9 +104,10 @@ public static class SupportedRoleCatalog
 						MainRoleType.Fox,
 						() => new FoxRole(
 							rolePowerAvailabilityGateway)),
-					RoleAdmission.Passive(MainRoleType.SimpleVillager),
-				RoleAdmission.Passive(MainRoleType.VillagerVillager)
-		]);
+				RoleAdmission.Passive(MainRoleType.SimpleVillager),
+				RoleAdmission.Passive(MainRoleType.VillagerVillager),
+				RoleAdmission.Passive(MainRoleType.Angel)
+			]);
 	}
 
 	public static IReadOnlyList<MainRoleType> Roles => SupportedRoleTypes;

@@ -66,7 +66,7 @@ public class SimulatorProfileTests
 		var safety = SimulatorCapability.SafetyScreening;
 		var probability = SimulatorCapability.FullProbability;
 
-		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "24"));
+		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "25"));
 		probability.Identity.Should().Be(new SimulatorProfileIdentity("full-probability", "4"));
 		BaselineRandomDecisionStrategy.Identity.Should()
 			.Be(new DecisionStrategyIdentity("baseline-random", "3-splitmix64"));
@@ -96,13 +96,32 @@ public class SimulatorProfileTests
 			MainRoleType.Fox,
 			MainRoleType.KnightWithRustySword,
 			MainRoleType.Cupid,
-			MainRoleType.Thief);
+			MainRoleType.Thief,
+			MainRoleType.Angel);
 		probability.SupportedRoles.Should().Equal(
 			MainRoleType.SimpleWerewolf,
 			MainRoleType.Seer,
 			MainRoleType.WildChild,
 			MainRoleType.SimpleVillager);
 		probability.SupportedRoles.Should().NotBeSameAs(safety.SupportedRoles);
+		safety.TryGetBeneficiaryFaction(
+				MainRoleType.Angel,
+				out var angelBeneficiary)
+			.Should().BeTrue();
+		angelBeneficiary.Should().Be(Faction.Villager);
+		foreach (var faction in Enum.GetValues<Faction>())
+		{
+			safety.IsFactionAgent(MainRoleType.Angel, faction).Should().BeFalse();
+		}
+		safety.SharedVictoryCapabilities.Should().BeEquivalentTo(
+		[
+			new SharedVictoryGameResult([Faction.Angel, Faction.Villager]),
+			new SharedVictoryGameResult([Faction.Angel, Faction.Werewolf]),
+			new SharedVictoryGameResult([Faction.Angel, Faction.WhiteWerewolf]),
+			new SharedVictoryGameResult([Faction.Angel, Faction.Piper]),
+			new SharedVictoryGameResult([Faction.Angel, Faction.CrossFactionLovers])
+		]);
+		probability.SharedVictoryCapabilities.Should().BeEmpty();
 		safety.TryGetBeneficiaryFaction(
 				MainRoleType.KnightWithRustySword,
 				out var knightBeneficiary)
@@ -361,6 +380,74 @@ public class SimulatorProfileTests
 		inventory.Factions.Should().Contain(Faction.CrossFactionLovers);
 		inventory.GameResults.Should().Contain(
 			new SingleFactionGameResult(Faction.CrossFactionLovers));
+	}
+
+	[Fact]
+	public void PossibleGameResultInventory_WithAngel_IncludesApplicableAngelOutcomes()
+	{
+		var scenario = new SimulationScenario(
+			5,
+			[
+				MainRoleType.Angel,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+
+		PossibleGameResultInventory.TryCreate(
+				scenario,
+				SimulatorCapability.SafetyScreening,
+				out var inventory)
+			.Should().BeTrue();
+
+		inventory.Factions.Should().Contain(
+			[
+				Faction.Villager,
+				Faction.Werewolf,
+				Faction.Angel
+			]);
+		inventory.GameResults.Should().Contain(
+			new SingleFactionGameResult(Faction.Angel));
+		inventory.GameResults.Should().Contain(
+			new SharedVictoryGameResult([Faction.Angel, Faction.Villager]));
+		inventory.GameResults.Should().Contain(
+			new SharedVictoryGameResult([Faction.Angel, Faction.Werewolf]));
+		inventory.GameResults.Should().NotContain(
+			new SharedVictoryGameResult([Faction.Angel, Faction.Piper]));
+	}
+
+	[Fact]
+	public void PossibleGameResultInventory_WithOfferedAngel_IncludesReachableAngelOutcomes()
+	{
+		MainRoleType[] dealPool =
+		[
+			MainRoleType.Thief,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager
+		];
+		var scenario = new SimulationScenario(
+			5,
+			dealPool.Concat([MainRoleType.Angel, MainRoleType.Seer]),
+			dealPool,
+			MainRoleType.Angel,
+			MainRoleType.Seer);
+
+		PossibleGameResultInventory.TryCreate(
+				scenario,
+				SimulatorCapability.SafetyScreening,
+				out var inventory)
+			.Should().BeTrue();
+
+		inventory.Factions.Should().Contain(Faction.Angel);
+		inventory.GameResults.Should().Contain(
+			new SingleFactionGameResult(Faction.Angel));
+		inventory.GameResults.Should().Contain(
+			new SharedVictoryGameResult([Faction.Angel, Faction.Villager]));
+		inventory.GameResults.Should().Contain(
+			new SharedVictoryGameResult([Faction.Angel, Faction.Werewolf]));
 	}
 
 }

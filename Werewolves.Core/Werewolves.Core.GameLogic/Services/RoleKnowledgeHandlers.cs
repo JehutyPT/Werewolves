@@ -126,6 +126,7 @@ internal static class RoleKnowledgeHandlers
 		}
 
         session.RevealRoles(revealedRoles);
+		AngelLifecycleRules.ApplyExpiredHolderProjection(session, revealedRoles);
     }
 
     internal static ModeratorInstruction? RequestVillagerVillagerPublicFromDealObservation(

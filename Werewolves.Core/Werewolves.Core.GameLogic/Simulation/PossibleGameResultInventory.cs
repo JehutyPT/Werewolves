@@ -30,6 +30,10 @@ internal sealed record PossibleGameResultInventory(
 		{
 			factions.Add(Faction.CrossFactionLovers);
 		}
+		if (scenario.RoleCompositionCards.Contains(MainRoleType.Angel))
+		{
+			factions.Add(Faction.Angel);
+		}
 
 		var orderedFactions = factions.Order().ToArray();
 		inventory = new PossibleGameResultInventory(
