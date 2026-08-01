@@ -100,6 +100,207 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 		policy.AdmittedSemantics.Should().ContainSingle();
 	}
 
+	[Theory]
+	[InlineData(0, ExpectedInputType.Continue)]
+	[InlineData(1, ExpectedInputType.PlayerSelection)]
+	public void BaselineRandomDecisionStrategy_WithDevotedServantVoteWindow_DeterministicallyCoversContinueAndPublicUse(
+		long runNumber,
+		ExpectedInputType expectedResponseType)
+	{
+		var scenario = new StateModels.Models.Simulation.SimulationScenario(
+			5,
+			[
+				MainRoleType.DevotedServant,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+		var identity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+		var material = new RunSeedMaterial(
+			identity,
+			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
+			runNumber);
+		var random = new DeterministicRandomSource(material);
+		var startState = SimulationStartStateDeriver.Derive(
+			material,
+			SimulatorCapability.SafetyScreening,
+			random);
+		var config = startState.CreateGameSessionConfig();
+		var builder = CreateBuilder()
+			.WithPlayers(config.Players.ToArray())
+			.WithRoles(config.Roles.ToArray());
+		builder.StartGame();
+		var session = builder.GetGameState()!;
+		var players = session.GetPlayers().ToArray();
+		var servantSeat = startState.RoleAssignments
+			.Should().ContainSingle(assignment =>
+				assignment.Role == MainRoleType.DevotedServant)
+			.Subject.SeatNumber;
+		var servantId = players[servantSeat - 1].Id;
+		var voteTarget = players.First(player => player.Id != servantId);
+		var voteTargetId = voteTarget.Id;
+		var voteTargetSeat = Array.IndexOf(players, voteTarget) + 1;
+		var voteTargetPrintedRole = startState.RoleAssignments
+			.Single(assignment => assignment.SeatNumber == voteTargetSeat)
+			.Role;
+		var publiclySelectablePlayerIds = players
+			.Where(player => player.Id != voteTargetId)
+			.Select(player => player.Id)
+			.ToHashSet();
+		var instruction = new DevotedServantVoteWindowInstruction(
+			voteTargetId,
+			publiclySelectablePlayerIds,
+			publicAnnouncement: "Public Devoted Servant window.");
+		var recordAcquiredCard = new AssignRolesInstruction(
+			ModeratorInstructionSemantic.RecordDevotedServantAcquiredCard,
+			ImmutableHashSet.Create(voteTargetId),
+			Enum.GetValues<MainRoleType>(),
+			privateInstruction: "Record the acquired printed Role.");
+		var strategy = new BaselineRandomDecisionStrategy(
+			material,
+			startState,
+			SimulatorCapability.SafetyScreening.HeadlessResponsePolicy,
+			random);
+		var replayRandom = new DeterministicRandomSource(material);
+		_ = SimulationStartStateDeriver.Derive(
+			material,
+			SimulatorCapability.SafetyScreening,
+			replayRandom);
+		var replayStrategy = new BaselineRandomDecisionStrategy(
+			material,
+			startState,
+			SimulatorCapability.SafetyScreening.HeadlessResponsePolicy,
+			replayRandom);
+
+		var response = strategy.CreateResponse(instruction, session);
+		var replay = replayStrategy.CreateResponse(instruction, session);
+		var recordedCard = strategy.CreateResponse(recordAcquiredCard, session);
+		var replayRecordedCard = replayStrategy.CreateResponse(recordAcquiredCard, session);
+
+		response.Should().BeEquivalentTo(replay);
+		recordedCard.Should().BeEquivalentTo(replayRecordedCard);
+		instruction.SelectablePlayerIds.Should()
+			.BeEquivalentTo(players.Select(player => player.Id).Except([voteTargetId]));
+		instruction.SelectablePlayerIds.Should().Contain(servantId);
+		recordedCard.AssignedPlayerRoles.Should()
+			.ContainSingle()
+			.Which.Should().Be(new KeyValuePair<Guid, MainRoleType>(
+				voteTargetId,
+				voteTargetPrintedRole));
+		response.InstructionId.Should().Be(instruction.InstructionId);
+		response.Type.Should().Be(expectedResponseType);
+		if (expectedResponseType == ExpectedInputType.Continue)
+		{
+			response.SelectedPlayerIds.Should().BeNullOrEmpty();
+		}
+		else
+		{
+			response.SelectedPlayerIds.Should().Equal(servantId);
+		}
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void BaselineRandomDecisionStrategy_WithExpiredAngelTarget_RecordsPrintedAngelInsteadOfCurrentVillager()
+	{
+		var scenario = new StateModels.Models.Simulation.SimulationScenario(
+			8,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Angel,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+		var identity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+		var material = new RunSeedMaterial(
+			identity,
+			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
+			runNumber: 0);
+		var random = new DeterministicRandomSource(material);
+		var startState = SimulationStartStateDeriver.Derive(
+			material,
+			SimulatorCapability.SafetyScreening,
+			random);
+		var config = startState.CreateGameSessionConfig();
+		var builder = CreateBuilder()
+			.WithPlayers(config.Players.ToArray())
+			.WithRoles(config.Roles.ToArray());
+		builder.StartGame();
+		builder.ConfirmGameStart();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		var werewolfId = players[startState.RoleAssignments
+			.Single(assignment => assignment.Role == MainRoleType.SimpleWerewolf)
+			.SeatNumber - 1].Id;
+		var angelId = players[startState.RoleAssignments
+			.Single(assignment => assignment.Role == MainRoleType.Angel)
+			.SeatNumber - 1].Id;
+		var villagerIds = startState.RoleAssignments
+			.Where(assignment => assignment.Role == MainRoleType.SimpleVillager)
+			.Select(assignment => players[assignment.SeatNumber - 1].Id)
+			.ToArray();
+		builder.ArrangeKnownPhysicalRole(angelId, MainRoleType.Angel);
+
+		AdvanceNightAndDawn(villagerIds[0], subsequentNight: false);
+		builder.CompleteDayPhaseWithTie();
+		AdvanceNightAndDawn(villagerIds[1], subsequentNight: true);
+
+		var session = builder.GetGameState()!;
+		session.GetPlayerState(angelId).CurrentRole.Should()
+			.Be(MainRoleType.SimpleVillager);
+		session.GetPlayerState(angelId).PhysicalCharacterCardRole.Should()
+			.Be(MainRoleType.Angel);
+		var instruction = new AssignRolesInstruction(
+			ModeratorInstructionSemantic.RecordDevotedServantAcquiredCard,
+			ImmutableHashSet.Create(angelId),
+			Enum.GetValues<MainRoleType>(),
+			privateInstruction: "Record the acquired printed Role.");
+		var strategy = new BaselineRandomDecisionStrategy(
+			material,
+			startState,
+			SimulatorCapability.SafetyScreening.HeadlessResponsePolicy,
+			random);
+
+		var response = strategy.CreateResponse(instruction, session);
+
+		response.AssignedPlayerRoles.Should()
+			.ContainSingle()
+			.Which.Should().Be(new KeyValuePair<Guid, MainRoleType>(
+				angelId,
+				MainRoleType.Angel));
+		MarkTestCompleted();
+
+		void AdvanceNightAndDawn(Guid victimId, bool subsequentNight)
+		{
+			builder.ConfirmNightStart();
+			if (subsequentNight)
+			{
+				builder.CompleteWerewolfNightActionSubsequentNight(victimId);
+			}
+			else
+			{
+				builder.CompleteWerewolfNightAction([werewolfId], victimId);
+			}
+
+			var nightEnd = InstructionAssert.ExpectType<ConfirmationInstruction>(
+				builder.GetCurrentInstruction(),
+				CoreTestReferences.InstructionContexts.NightEndConfirmation);
+			builder.Process(nightEnd.CreateResponse());
+			builder.CompleteDawnPhase(new Dictionary<Guid, MainRoleType>
+			{
+				[victimId] = MainRoleType.SimpleVillager
+			});
+		}
+	}
+
 	[Fact]
 	public void ModeratorInstructionSemantic_IsObservableWithoutChangingJsonWireShape()
 	{
@@ -623,7 +824,7 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 
 		[Theory]
 		[InlineData(
-			1L,
+			3L,
 			AccursedWolfFatherInfectionOptionIds.Infect)]
 		[InlineData(
 			2L,

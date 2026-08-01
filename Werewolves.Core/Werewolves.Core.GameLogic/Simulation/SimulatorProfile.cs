@@ -157,6 +157,7 @@ public sealed class SimulatorCapability : SimulatorProfile
 			new(MainRoleType.KnightWithRustySword, Faction.Villager),
 			new(MainRoleType.Cupid, Faction.Villager),
 			new(MainRoleType.Thief, Faction.Villager),
+			new(MainRoleType.DevotedServant, Faction.Villager),
 			new(MainRoleType.Angel, Faction.Villager)
 	];
 
@@ -184,7 +185,7 @@ public sealed class SimulatorCapability : SimulatorProfile
 		SimulatorCapabilityRegistry.Production.FullProbability;
 
 	internal static SimulatorCapability CreateSafetyScreening() => new(
-		new SimulatorProfileIdentity("safety-screening", "25"),
+		new SimulatorProfileIdentity("safety-screening", "26"),
 		SafetyScreeningRoleDescriptors,
 		sharedVictoryCapabilities: SafetyScreeningSharedVictoryCapabilities,
 		headlessResponsePolicy: new HeadlessResponsePolicy(
@@ -210,6 +211,8 @@ public sealed class SimulatorCapability : SimulatorProfile
 				ModeratorInstructionSemantic.SelectCupidLovers,
 				ModeratorInstructionSemantic.RecognizeLovers,
 				ModeratorInstructionSemantic.ChooseThiefOffer,
+				ModeratorInstructionSemantic.ResolveDevotedServantVoteWindow,
+				ModeratorInstructionSemantic.RecordDevotedServantAcquiredCard,
 				ModeratorInstructionSemantic.SelectSeerTarget,
 				ModeratorInstructionSemantic.RevealSeerResult,
 				ModeratorInstructionSemantic.SelectWildChildModel,

@@ -159,13 +159,13 @@ internal sealed partial class GameSessionKernel
 		private void ValidatePermanentRoleSwapFactionBoundary(
 			GameLogEntryBase entry)
 		{
-			if (entry is PermanentRoleSwapCommittedLogEntry swap &&
+			if (entry is IPermanentRoleSwapCommittedLogEntry swap &&
 				!PermanentRoleSwapFactionFacts.IsValidCommittedBatch(
 					swap.PlayerId,
 					swap.Policy,
 					swap.Facts,
-					swap.TurnNumber,
-					swap.CurrentPhase,
+					entry.TurnNumber,
+					entry.CurrentPhase,
 					_logEntries.Count))
 			{
 				throw new InvalidOperationException(
@@ -196,10 +196,10 @@ internal sealed partial class GameSessionKernel
 			GameLogEntryBase entry,
 			IReadOnlyCollection<Guid>? playerIds)
 		{
-			if (entry is PermanentRoleSwapCommittedLogEntry swap &&
+			if (entry is IPermanentRoleSwapCommittedLogEntry swap &&
 				(playerIds?.Contains(swap.NewPowerInstanceId) == true ||
 				 _logEntries
-					 .OfType<PermanentRoleSwapCommittedLogEntry>()
+					 .OfType<IPermanentRoleSwapCommittedLogEntry>()
 					 .Any(existing =>
 						 existing.NewPowerInstanceId == swap.NewPowerInstanceId)))
 			{

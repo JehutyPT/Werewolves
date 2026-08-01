@@ -245,9 +245,9 @@ Wrapper class holding all dynamic state information for a `Player`. **Implemente
 *   **Computed Capability Properties (Logic Decoupling):**
     *   `Team` (Team): The player's current allegiance, derived from MainRole and status effects.
 
-**PRD #93 target-state migration:** The properties above describe the current implementation, not the accepted identity model. #120 and #135 replace the single nullable `MainRole`/derived `Team` view with separate Physical Character Card Ownership and zones, current Role, known-or-unknown Faction Beneficiary and Agent facts, Moderator-known Role, and public-reveal state. Unknown is a valid persisted value and never means Simple Villager or non-Agent. Role Identification, Faction Agent Group Observation, Role Reveal, and Permanent Role Swap each commit only their own typed fact.
+**PRD #93 identity model:** The landed state separates Physical Character Card Ownership and zones, current Role, known-or-unknown Faction Beneficiary and Agent facts, Moderator-known Role, and public-reveal state. Unknown is a valid persisted value and never means Simple Villager or non-Agent. Role Identification, Faction Agent Group Observation, Role Reveal, and Permanent Role Swap each commit only their own typed fact.
 
-*Note on Devoted Servant:* When the Devoted Servant swaps roles, the responsible hook listener must explicitly reset any role-specific status effects on the Servant's `PlayerState` to their default values. 
+**Devoted Servant specialization:** The centralized Elimination Cascade pre-reveal reaction owns the public Continue-or-self-reveal window before any target-dependent consequence. An accepted self-reveal durably commits the concrete one-use spend, public Devoted Servant reveal, and correlated private printed-Role instruction. The accepted private transaction moves the public Devoted Servant card to Discarded, moves the target's hidden card to the Servant, creates fresh acquired-Role power state, clears only Charmed, Sheriff, and Town Crier, retains Player-bound infection and any in-force Scapegoat restriction, and returns the unchanged target to the same Vote for Elimination without generic target Role Reveal or transferred-Role behavior. The acquired Role remains Moderator-private and cannot act until its ordinary boundary from the next Night.
 
 ## `EventCard` Abstract Class (NOT YET IMPLEMENTED)
 
@@ -318,7 +318,7 @@ Acts as a high-level phase controller and reactive hook dispatcher. It contains 
     *   **`SubPhaseStage`**: An abstract class representing a single, **atomic, non-re-entrant** unit of work. The `GamePhaseStateCache` ensures each stage is executed at most once per sub-phase entry.
         *   `LogicSubPhaseStage`: Executes a custom logic handler.
         *   `HookSubPhaseStage`: Fires a `GameHook` and dispatches to all registered listeners.
-        *   `EliminationCascadeStage`: Drains one scoped Dawn or Day elimination cascade. It reveals before committing, commits every Player in the current distinct batch before reactions run, admits chained batches until empty, and may pause for moderator input. A newly Eliminated Hunter is evaluated through the shared Role Power availability boundary after forced reactions drain; a non-empty legal roster produces one mandatory exact-one target instruction, while an empty roster completes silently. The shot creates a child batch in the same cascade. The stage never navigates.
+        *   `EliminationCascadeStage`: Drains one scoped Dawn or Day elimination cascade. Registered pre-reveal reactions run in deterministic order before generic Role Reveal or another target-dependent consequence; the stage then commits every Player in the current distinct batch before forced and interactive reactions run, admits chained batches until empty, and may pause for Moderator input. A newly Eliminated Hunter is evaluated through the shared Role Power availability boundary after forced reactions drain; a non-empty legal roster produces one mandatory exact-one target instruction, while an empty roster completes silently. The shot creates a child batch in the same cascade. The stage never navigates.
         *   `NavigationSubPhaseStage`: A stage that results in a transition to a new sub-phase or main phase. Created via factory methods (`NavigationEndStage`, `NavigationEndStageSilent`) as the required final stage for any sub-phase.
 *   **State Machine Validation:** The architecture provides strong runtime guarantees:
     *   **Transition Validation:** All transitions are validated against the `PossibleNextSubPhases` and `PossibleNextMainPhaseTransitions` sets defined in the `SubPhaseManager`. An illegal transition throws an `InvalidOperationException`.
@@ -335,7 +335,7 @@ Orchestrates the game flow based on moderator input and tracked state. **Delegat
         *   Retrieves the current `GameSession`, validates the response against the exact pending instruction, and then delegates to `GameFlowManager.HandleInput`.
         *   `GameService` owns consume-time correlation, response-type, and complete payload validation; `GameFlowManager` owns state-machine stage and transition validation.
         *   Returns the `ProcessResult` from the state machine, containing either the next instruction or a failure.
-        *   An emitted elimination-reaction input is a stable recovery boundary. Rehydration restores the exact committed Hunter selector and resumes it without re-evaluating Role Power availability, while stale or structurally mismatched selector context fails closed.
+        *   An emitted elimination-reaction input is a stable recovery boundary. Rehydration restores the exact committed Hunter selector and resumes it without re-evaluating Role Power availability, while stale or structurally mismatched selector context fails closed. Devoted Servant uses the same stable-response rule at two semantic boundaries: after the accepted public self-reveal it resumes only the correlated private printed-Role record, and after the accepted swap it resumes target resolution without reopening Continue or duplicating the exchange.
         *   **Session Cleanup:** A `FinishedGameConfirmationInstruction` remains pending until its correlated Continue acknowledgment is accepted; that successful acknowledgment removes the session from the active sessions list.
     *   `GetCurrentInstruction(Guid gameId)` (ModeratorInstruction?): Retrieves the `PendingModeratorInstruction`. 
     *   `GetGameStateView(Guid gameId)` (IGameSession?): Returns the game state via the read-only `IGameSession` interface. This hides the internal mutation methods present on the concrete object, ensuring the UI cannot modify state.
@@ -349,26 +349,27 @@ Orchestrates the game flow based on moderator input and tracked state. **Delegat
 
 Encapsulates and validates all configuration parameters required to start a new game session. This class enforces game configuration constraints at initialization time, preventing invalid game setups.
 
-> **Current implementation versus target contract:** The API described below still uses one undivided `Roles` list and does not yet implement the pre-deal Thief model settled in [ADR-0017](../../docs/adr/0017-thief-offer-is-committed-before-the-physical-deal.md). Issues #135 and #136 must replace that shape with an explicit Role Lock-In partition: a Player-count Deal Pool containing exactly one Thief plus two private, distinct non-Thief Offer instances. Validation will then use Deal Pool coverage, conditional setup for Roles in either zone, and branchwise safety inputs. Until that implementation lands, names such as `MissingExtraThiefRoles` below describe current code, not the accepted target contract.
+> **Landed Role Lock-In contract:** `GameSessionConfig` stores the explicit `RoleLockIn` settled in [ADR-0017](../../docs/adr/0017-thief-offer-is-committed-before-the-physical-deal.md). Its `Roles` property is a read-only printed-Role projection of the Deal Pool for compatibility; it is not the full physical inventory. The non-Thief list constructor may derive an implicit all-Deal-Pool lock-in, while Thief requires an explicit Player-count Deal Pool with exactly one Thief plus ordered, distinct, private non-Thief `Offer1` and `Offer2` instances.
 
 *   **Purpose:** Consolidates game initialization parameters (player names and roles) into a single validated object. This replaces the previous approach of passing `List<string>` and `List<MainRoleType>` directly to `GameService.StartNewGame`, providing improved type safety, validation, and maintainability.
 
 *   **Properties:**
     *   `Players` (List<string>): List of player names in clockwise seating order.
-    *   `Roles` (List<MainRoleType>): The physical Role Composition. It contains one Role card per Player plus Thief's two extra Character Cards when Thief is present.
+    *   `Roles` (IReadOnlyList<MainRoleType>): Compatibility projection of the Deal Pool's printed Roles.
     *   `ActorSetupCards` (`ActorSetupCards`): The Actor's three setup cards as a separate setup artifact outside the Role Composition.
+    *   `RoleLockIn` (`RoleLockIn`): Versioned physical Character Card inventory, Player-count Deal Pool, and optional ordered `Offer1`/`Offer2` slots.
 
 *   **Validation & Constraints:**
-    *   **`EnforceValidity(List<string> players, List<MainRoleType> roles, ActorSetupCards? actorSetupCards)` (static):** Validates configuration before construction. Throws `InvalidOperationException` if validation fails.
-    *   **`EnforceValidity()` (instance):** Validates the current instance. Called automatically during construction.
-    *   **`TryGetConfigIssues(List<string> players, List<MainRoleType> roles, ActorSetupCards actorSetupCards, out List<GameConfigValidationError> issues)` (static):** Diagnostic method that returns validation issues without throwing. The two-argument setup overload uses no Actor Setup Cards. Both paths expose structured validation results to Core and Client callers.
+    *   **Construction:** The `RoleLockIn` constructor validates inventory and zone integrity; `GameSessionConfig` then validates the roster, Deal Pool, and conditional setup before a Game Session can start.
+    *   **`TryGetConfigIssues(List<string> players, List<MainRoleType> roles, ActorSetupCards actorSetupCards, out List<GameConfigValidationError> issues)` (static):** Diagnostic validation for the pre-lock-in physical selection. The two-argument overload uses no Actor Setup Cards.
     *   **`TryGetPlayerConfigIssues(List<string> players, out List<GameConfigValidationError> issues)` (static):** Public helper for validating player-related configuration independently of Roles. Checks for non-unique names (case-insensitive) and the Supported Player Count of 5-30.
-    *   **`GetExpectedRoleCount(int playerCount, List<MainRoleType> roles)` (static):** Public helper for the expected Role Composition card count. Thief adds two Character Cards; Actor Setup Cards are excluded.
+    *   **`TryGetPhysicalSetupIssues(int playerCount, IReadOnlyList<MainRoleType> roles, ActorSetupCards actorSetupCards, out List<GameConfigValidationError> issues)` (static):** Applies the same physical-setup diagnostics when Player identities are not part of the input.
+    *   **`GetExpectedRoleCount(int playerCount, List<MainRoleType> roles)` (static):** Compatibility helper for the expected pre-lock-in Role Composition card count. Thief adds two Character Cards; Actor Setup Cards are excluded.
 
 *   **Validation Rules:**
     *   **Player Count:** 5-30 Players are supported.
     *   **Player Names:** All player names must be unique (case-insensitive).
-    *   **Role Composition Count:** One Role card per Player, plus two Character Cards exactly when Thief is present. Actor adds no Role Composition cards.
+    *   **Role Lock-In Zones:** A non-Thief inventory contains one Deal Pool card per Player. A Thief inventory contains `PlayerCount + 2` cards, a Player-count Deal Pool with exactly one Thief, and distinct non-Thief `Offer1`/`Offer2` instances; every inventory card occupies exactly one locked zone.
     *   **Hard-Aligned Coverage:** At least one hard-aligned Villager Role and one hard-aligned Werewolf Role are required; Simple Villager and Simple Werewolf are not mandatory by name.
     *   **Actor Setup Cards:** When Actor is present, exactly three eligible hard-aligned Villager Roles with actionable individual powers must be provided outside the Role Composition. A selected Role cannot also be an Actor Setup Card; Simple Villager, Villager-Villager, Two Sisters, and Three Brothers are ineligible.
     *   **Per-Role Constraints:** Each role has specific count constraints defined in `RoleCountConstraints` dictionary:
@@ -783,14 +784,15 @@ The Core persistence boundary is `IGameSession.Serialize()` plus `GameService.Re
 *   **Boundary advancement:** `GameFlowManager.HandleInput(...)` captures a new boundary only after routing, victory override handling, and `PendingInstruction` settlement are complete. Accepted observations, committed one-use resources, settled elimination batches, completed elimination reactions, and fully drained elimination cascades are additional semantic boundaries.
 *   **Rehydration:** `GameService.RehydrateSession(string serializedSession)` restores the stable snapshot into a new active session and returns the session's GUID.
 
-**Planned ADR-0017 exception:** the target Thief flow creates one narrow mid-Night stable checkpoint atomically with a successful `Offer1`, `Offer2`, or `Decline` response. That checkpoint contains the committed outcome, resulting card zones, current Role and fresh power state, and the pending public sleep instruction before Core returns success. It does not serialize arbitrary listener progress. This exception is not implemented by the current persistence path.
+**Committed response checkpoints:** the landed Thief flow creates one narrow mid-Night stable checkpoint atomically with a successful `Offer1`, `Offer2`, or `Decline` response. That checkpoint contains the committed outcome, resulting card zones, current Role and fresh power state, and the pending public sleep instruction before Core returns success. Devoted Servant applies the same semantic-boundary pattern after the accepted public self-reveal and again after the accepted private swap record. Neither flow serializes arbitrary listener progress.
 
 ## Durable Payload
 
 `GameSessionDto` is the durable recovery payload:
 
 *   `Id`, `SeatingOrder`, `RolesInPlay`: Session identity and setup.
-*   `Players`: Current derived player cache (`Id`, `Name`, `MainRole`, `ActiveEffects`, `Health`) restored directly so Rehydration does not need to replay log entries. #120/#135 expand this durable state so physical card instance/zone, current Role, known-or-unknown Faction facts, Moderator knowledge, and public reveal rehydrate independently without reconstructing unknown values.
+*   `RoleLockIn`, `PhysicalCharacterCards`: Versioned physical inventory plus current card zones and ownership.
+*   `Players`: Current derived player cache, including current Role, Moderator-known Role, publicly revealed Role, Status Effects, health, voting facts, and known-or-unknown Faction facts. These facts rehydrate independently without reconstructing unknown values.
 *   `TurnNumber`: Derived turn cursor as of the stable boundary. It is durable to avoid double-incrementing after Day-to-Night recovery.
 *   `GameHistoryLog`: Event source entries as of the same stable boundary as the derived caches.
 *   `PendingInstruction`: The committed boundary instruction the moderator must consume next after Rehydration. This is stable boundary state, not arbitrary listener progress.

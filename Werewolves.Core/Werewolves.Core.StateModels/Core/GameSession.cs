@@ -383,6 +383,112 @@ internal class GameSession : IGameSession
 		return true;
 	}
 
+	internal bool TryCommitDevotedServantPublicSelfReveal(
+		Guid actingPlayerId,
+		Guid voteTargetId,
+		OneUseRolePowerResourceIdentity resourceIdentity)
+	{
+		resourceIdentity.EnforceValidity();
+		var actor = GetPlayers().SingleOrDefault(player =>
+			player.Id == actingPlayerId);
+		var target = GetPlayers().SingleOrDefault(player =>
+			player.Id == voteTargetId);
+		if (GetCurrentPhase() != GamePhase.Day ||
+			actor is null || target is null ||
+			actingPlayerId == voteTargetId ||
+			actor.State.Health != PlayerHealth.Alive ||
+			target.State.Health != PlayerHealth.Alive ||
+			actor.State.HasStatusEffect(StatusEffectTypes.Lovers) ||
+			actor.State.CurrentRole is not (null or MainRoleType.DevotedServant) ||
+			actor.State.ModeratorKnownRole is not (null or MainRoleType.DevotedServant) ||
+			actor.State.PubliclyRevealedRole is not null ||
+			resourceIdentity.ActingPlayerId != actingPlayerId ||
+			resourceIdentity.SourceRole != MainRoleType.DevotedServant ||
+			GameHistoryLog.OfType<
+				DevotedServantPublicSelfRevealCommittedLogEntry>().Any() ||
+			GameHistoryLog.OfType<IOneUseRolePowerCommittedLogEntry>().Any(entry =>
+				entry.ResourceIdentity == resourceIdentity))
+		{
+			return false;
+		}
+
+		var cardStates = GetModeratorPhysicalCharacterCards();
+		var bindsOwnership = actor.State.PhysicalCharacterCardId is null;
+		var card = bindsOwnership
+			? cardStates.FirstOrDefault(state =>
+				state.Zone == PhysicalCharacterCardZone.DealPool &&
+				state.OwnerPlayerId is null &&
+				state.Card.PrintedRole == MainRoleType.DevotedServant)
+			: cardStates.SingleOrDefault(state =>
+				state.Card.Id == actor.State.PhysicalCharacterCardId &&
+				state.Zone == PhysicalCharacterCardZone.PlayerOwned &&
+				state.OwnerPlayerId == actingPlayerId &&
+				state.Card.PrintedRole == MainRoleType.DevotedServant);
+		if (card is null)
+		{
+			return false;
+		}
+
+		_gameSessionKernel.AddEntryAndUpdateState(
+			new DevotedServantPublicSelfRevealCommittedLogEntry
+			{
+				Timestamp = DateTimeOffset.UtcNow,
+				TurnNumber = TurnNumber,
+				CurrentPhase = GetCurrentPhase(),
+				RoleLockInVersion = RoleLockIn.Version,
+				ActingPlayerId = actingPlayerId,
+				VoteTargetId = voteTargetId,
+				DevotedServantCardId = card.Card.Id,
+				BindsCardOwnership = bindsOwnership,
+				ResourceIdentity = resourceIdentity
+			});
+		return true;
+	}
+
+	internal bool TryCommitDevotedServantRoleTake(
+		DevotedServantRoleTakeRequest request)
+	{
+		ArgumentNullException.ThrowIfNull(request);
+		if (!CanCommitDevotedServantRoleTake(request))
+		{
+			return false;
+		}
+
+		var boundary = new FactionFactEffectiveBoundary(
+			TurnNumber,
+			GetCurrentPhase(),
+			GameHistoryLog.Count());
+		var powerInstanceId = CreateFreshPermanentRoleSwapPowerInstanceId();
+		var facts = PermanentRoleSwapFactionFacts.CreateBatch(
+			request.ActingPlayerId,
+			request.Policy,
+			request.Factions,
+			boundary);
+		_gameSessionKernel.AddEntryAndUpdateState(
+			new DevotedServantRoleTakenCommittedLogEntry
+			{
+				Timestamp = DateTimeOffset.UtcNow,
+				TurnNumber = TurnNumber,
+				CurrentPhase = GetCurrentPhase(),
+				RoleLockInVersion = request.ExpectedRoleLockInVersion,
+				ActingPlayerId = request.ActingPlayerId,
+				VoteTargetId = request.VoteTargetId,
+				ObservedPrintedRole = request.ObservedPrintedRole,
+				NewCurrentRole = request.NewCurrentRole,
+				ExpectedTargetCurrentRole = request.ExpectedTargetCurrentRole,
+				PhysicalCards = request.PhysicalCards,
+				Policy = request.Policy,
+				StateChanges = request.StateChanges,
+				Source = PermanentRoleSwapFactionFacts.CreateSource(
+					request.ActingPlayerId,
+					powerInstanceId),
+				Facts = facts,
+				NewPowerInstanceId = powerInstanceId,
+				PowerInstanceOrigin = RolePowerInstanceOrigin.Swapped
+			});
+		return true;
+	}
+
 	internal bool TryCommitPermanentRoleSwap(PermanentRoleSwapRequest request)
 	{
 		ArgumentNullException.ThrowIfNull(request);
@@ -461,7 +567,7 @@ internal class GameSession : IGameSession
 		var reservedIds = GetPlayers()
 			.Select(player => player.Id)
 			.Concat(GameHistoryLog
-				.OfType<PermanentRoleSwapCommittedLogEntry>()
+				.OfType<IPermanentRoleSwapCommittedLogEntry>()
 				.Select(entry => entry.NewPowerInstanceId))
 			.ToHashSet();
 		Guid candidate;
@@ -472,6 +578,93 @@ internal class GameSession : IGameSession
 		while (reservedIds.Contains(candidate));
 
 		return candidate;
+	}
+
+	private bool CanCommitDevotedServantRoleTake(
+		DevotedServantRoleTakeRequest request)
+	{
+		if (GetCurrentPhase() != GamePhase.Day ||
+			request.ExpectedRoleLockInVersion != RoleLockIn.Version ||
+			request.ActingPlayerId == Guid.Empty ||
+			request.VoteTargetId == Guid.Empty ||
+			request.ActingPlayerId == request.VoteTargetId ||
+			!Enum.IsDefined(request.ObservedPrintedRole) ||
+			!Enum.IsDefined(request.NewCurrentRole) ||
+			(request.ExpectedTargetCurrentRole is { } expectedTargetRole &&
+				!Enum.IsDefined(expectedTargetRole)) ||
+			(request.ObservedPrintedRole != request.NewCurrentRole &&
+				(request.ObservedPrintedRole != MainRoleType.Angel ||
+				 request.NewCurrentRole != MainRoleType.SimpleVillager)) ||
+			request.PhysicalCards is null ||
+			request.Policy is null ||
+			request.Factions is null ||
+			request.StateChanges is null ||
+			!request.Policy.IsExplicit ||
+			!request.StateChanges.IsCoherentWith(request.Policy) ||
+			request.Policy.PrivateRoleKnowledge !=
+				PermanentRoleSwapDisposition.Change ||
+			request.Policy.PublicRevealHistory !=
+				PermanentRoleSwapDisposition.Preserve ||
+			request.Policy.RolePowerState != PermanentRoleSwapDisposition.Change ||
+			request.PhysicalCards.AdditionalSetAsideCardIds.Count != 0)
+		{
+			return false;
+		}
+
+		var actor = GetPlayers().SingleOrDefault(player =>
+			player.Id == request.ActingPlayerId);
+		var target = GetPlayers().SingleOrDefault(player =>
+			player.Id == request.VoteTargetId);
+		var knownTargetPrintedRole = target?.State.PhysicalCharacterCardRole ??
+			target?.State.ModeratorKnownRole ??
+			target?.State.CurrentRole;
+		if (actor?.State is not
+			{
+				Health: PlayerHealth.Alive,
+				CurrentRole: MainRoleType.DevotedServant,
+				ModeratorKnownRole: MainRoleType.DevotedServant,
+				PubliclyRevealedRole: MainRoleType.DevotedServant
+			} ||
+			target is null ||
+			target.State.Health != PlayerHealth.Alive ||
+			target.State.CurrentRole != request.ExpectedTargetCurrentRole ||
+			target.State.PubliclyRevealedRole is not null ||
+			(knownTargetPrintedRole is { } knownRole &&
+				knownRole != request.ObservedPrintedRole) ||
+			actor.State.PhysicalCharacterCardId !=
+				request.PhysicalCards.OutgoingOwnedCardId ||
+			!GameHistoryLog.OfType<DevotedServantPublicSelfRevealCommittedLogEntry>()
+				.Any(entry =>
+					entry.ActingPlayerId == request.ActingPlayerId &&
+					entry.VoteTargetId == request.VoteTargetId) ||
+			GameHistoryLog.OfType<DevotedServantRoleTakenCommittedLogEntry>().Any())
+		{
+			return false;
+		}
+
+		var cardStates = GetModeratorPhysicalCharacterCards()
+			.ToDictionary(state => state.Card.Id);
+		var movement = request.PhysicalCards;
+		if (!cardStates.TryGetValue(movement.OutgoingOwnedCardId, out var outgoing) ||
+			outgoing.Zone != PhysicalCharacterCardZone.PlayerOwned ||
+			outgoing.OwnerPlayerId != request.ActingPlayerId ||
+			outgoing.Card.PrintedRole != MainRoleType.DevotedServant ||
+			!cardStates.TryGetValue(movement.AcquiredCardId, out var acquired) ||
+			acquired.Card.PrintedRole != request.ObservedPrintedRole)
+		{
+			return false;
+		}
+
+		return movement.ExpectedAcquiredCardOwnerPlayerId is { } ownerId
+			? ownerId == request.VoteTargetId &&
+			  acquired.Zone == PhysicalCharacterCardZone.PlayerOwned &&
+			  acquired.OwnerPlayerId == request.VoteTargetId &&
+			  target.State.PhysicalCharacterCardId == acquired.Card.Id &&
+			  target.State.PhysicalCharacterCardRole == acquired.Card.PrintedRole
+			: acquired.Zone == PhysicalCharacterCardZone.DealPool &&
+			  acquired.OwnerPlayerId is null &&
+			  target.State.PhysicalCharacterCardId is null &&
+			  target.State.PhysicalCharacterCardRole is null;
 	}
 
 	private bool CanCommitPermanentRoleSwap(PermanentRoleSwapRequest request)

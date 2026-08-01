@@ -35,6 +35,7 @@ public class ModeratorInstructionDisplayDefaultsTests
 		yield return [CreateSelectPlayersInstruction()];
 		yield return [CreateSelectOptionsInstruction()];
 		yield return [CreateAssignRolesInstruction()];
+		yield return [CreateDevotedServantVoteWindowInstruction()];
 	}
 
 	public static IEnumerable<object[]> PassiveInstructions()
@@ -73,8 +74,19 @@ public class ModeratorInstructionDisplayDefaultsTests
 				null,
 				GameStrings.RevealRolePromptSpecify,
 				null,
-				Guid.Empty
+					Guid.Empty
+				]);
+
+	private static DevotedServantVoteWindowInstruction CreateDevotedServantVoteWindowInstruction()
+	{
+		var targetId = Guid.NewGuid();
+		return (DevotedServantVoteWindowInstruction)DevotedServantVoteWindowConstructor.Invoke(
+			[
+				targetId,
+				new HashSet<Guid> { Guid.NewGuid() },
+				GameStrings.DevotedServantVoteWindowAnnouncement
 			]);
+	}
 
 	private static readonly ConstructorInfo SelectPlayersConstructor =
 		typeof(SelectPlayersInstruction)
@@ -90,6 +102,11 @@ public class ModeratorInstructionDisplayDefaultsTests
 		typeof(AssignRolesInstruction)
 			.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic)
 			.Single(ctor => ctor.GetParameters().Length == 6);
+
+	private static readonly ConstructorInfo DevotedServantVoteWindowConstructor =
+		typeof(DevotedServantVoteWindowInstruction)
+			.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic)
+			.Single(ctor => ctor.GetParameters().Length == 3);
 
 	private sealed record PassiveInstruction : ModeratorInstruction
 	{

@@ -342,3 +342,15 @@ public sealed record PermanentRoleSwapRequest(
 	PermanentRoleSwapPolicy Policy,
 	PermanentRoleSwapFactionReplacement Factions,
 	PermanentRoleSwapStateChanges StateChanges);
+
+internal sealed record DevotedServantRoleTakeRequest(
+	long ExpectedRoleLockInVersion,
+	Guid ActingPlayerId,
+	Guid VoteTargetId,
+	MainRoleType ObservedPrintedRole,
+	MainRoleType NewCurrentRole,
+	MainRoleType? ExpectedTargetCurrentRole,
+	PermanentRoleSwapCardMovement PhysicalCards,
+	PermanentRoleSwapPolicy Policy,
+	PermanentRoleSwapFactionReplacement Factions,
+	PermanentRoleSwapStateChanges StateChanges);

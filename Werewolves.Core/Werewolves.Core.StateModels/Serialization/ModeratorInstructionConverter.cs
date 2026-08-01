@@ -21,6 +21,8 @@ public class ModeratorInstructionConverter : JsonConverter<ModeratorInstruction>
         ["SelectPlayersInstruction"] = typeof(SelectPlayersInstruction),
         ["AssignRolesInstruction"] = typeof(AssignRolesInstruction),
         ["SelectOptionsInstruction"] = typeof(SelectOptionsInstruction),
+		["DevotedServantVoteWindowInstruction"] =
+			typeof(DevotedServantVoteWindowInstruction),
     };
 
     private static readonly Dictionary<Type, string> ReverseTypeMap = 

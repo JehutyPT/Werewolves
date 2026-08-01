@@ -153,7 +153,11 @@ internal static class GameSessionQueries
                preceding.OfType<PermanentRoleSwapCommittedLogEntry>()
                    .Any(entry =>
                        entry.PlayerId == playerId &&
-                       entry.NewCurrentRole == MainRoleType.Angel);
+                       entry.NewCurrentRole == MainRoleType.Angel) ||
+               preceding.OfType<DevotedServantRoleTakenCommittedLogEntry>()
+                   .Any(entry =>
+                       entry.ActingPlayerId == playerId &&
+                       entry.ObservedPrintedRole == MainRoleType.Angel);
     }
 
     internal static IReadOnlyList<int>
@@ -187,9 +191,9 @@ internal static class GameSessionQueries
         for (var index = 0; index < exclusiveEndLogIndex; index++)
         {
             if (history[index] is PlayerEliminatedLogEntry elimination &&
-                WasRevealedAsPhysicalAngel(
-                    history,
-                    index,
+                OwnedPhysicalAngelAtElimination(
+                     history,
+                     index,
                     elimination.PlayerId))
             {
                 yield return elimination;
@@ -197,26 +201,44 @@ internal static class GameSessionQueries
         }
     }
 
-    private static bool WasRevealedAsPhysicalAngel(
+    private static bool OwnedPhysicalAngelAtElimination(
         IReadOnlyList<GameLogEntryBase> history,
         int eliminationIndex,
         Guid playerId)
     {
-        var preceding = history.Take(eliminationIndex);
-        var ownsPhysicalAngel = preceding
-                .OfType<PhysicalCharacterCardOwnershipObservedLogEntry>()
-                .Any(entry =>
-                    entry.PlayerId == playerId &&
-                    entry.PrintedRole == MainRoleType.Angel) ||
-            preceding.OfType<PermanentRoleSwapCommittedLogEntry>()
-                .Any(entry =>
-                    entry.PlayerId == playerId &&
-                    entry.NewCurrentRole == MainRoleType.Angel);
-        return ownsPhysicalAngel &&
-               preceding.OfType<RoleRevealLogEntry>()
-                   .Any(entry =>
-                       entry.RevealedRoles.TryGetValue(playerId, out var role) &&
-                       role == MainRoleType.Angel);
+        var angelCardOwners = new Dictionary<Guid, Guid>();
+        foreach (var entry in history.Take(eliminationIndex))
+        {
+            switch (entry)
+            {
+                case PhysicalCharacterCardOwnershipObservedLogEntry
+                    {
+                        PrintedRole: MainRoleType.Angel
+                    } ownership:
+                    angelCardOwners[ownership.CardId] = ownership.PlayerId;
+                    break;
+                case PermanentRoleSwapCommittedLogEntry swap:
+                    angelCardOwners.Remove(
+                        swap.PhysicalCards.OutgoingOwnedCardId);
+                    if (swap.NewCurrentRole == MainRoleType.Angel)
+                    {
+                        angelCardOwners[swap.PhysicalCards.AcquiredCardId] =
+                            swap.PlayerId;
+                    }
+                    break;
+                case DevotedServantRoleTakenCommittedLogEntry roleTake:
+                    angelCardOwners.Remove(
+                        roleTake.PhysicalCards.OutgoingOwnedCardId);
+                    if (roleTake.ObservedPrintedRole == MainRoleType.Angel)
+                    {
+                        angelCardOwners[roleTake.PhysicalCards.AcquiredCardId] =
+                            roleTake.ActingPlayerId;
+                    }
+                    break;
+            }
+        }
+
+        return angelCardOwners.Values.Contains(playerId);
     }
 
     private static bool IsEliminationForWindow(
@@ -241,9 +263,50 @@ internal static class GameSessionQueries
         _ => false
     };
 
-    internal static IReadOnlyList<PermanentRoleSwapCommittedLogEntry>
-        GetCommittedPermanentRoleSwaps(IGameSession session) =>
-        FindLogEntries<PermanentRoleSwapCommittedLogEntry>(session).ToArray();
+	internal static IReadOnlyList<PermanentRoleSwapCommittedLogEntry>
+		GetCommittedPermanentRoleSwaps(IGameSession session) =>
+		FindLogEntries<PermanentRoleSwapCommittedLogEntry>(session).ToArray();
+
+	internal static DevotedServantPublicSelfRevealCommittedLogEntry?
+		GetCommittedDevotedServantPublicSelfRevealForTarget(
+			IGameSession session,
+			Guid voteTargetId) =>
+		FindLogEntries<DevotedServantPublicSelfRevealCommittedLogEntry>(session)
+			.SingleOrDefault(entry => entry.VoteTargetId == voteTargetId);
+
+	internal static DevotedServantPublicSelfRevealCommittedLogEntry
+		GetCommittedDevotedServantPublicSelfReveal(
+			IGameSession session,
+			Guid actingPlayerId,
+			Guid voteTargetId) =>
+		FindLogEntries<DevotedServantPublicSelfRevealCommittedLogEntry>(session)
+			.Single(entry =>
+				entry.ActingPlayerId == actingPlayerId &&
+				entry.VoteTargetId == voteTargetId);
+
+	internal static bool HasCommittedDevotedServantRoleTake(
+		IGameSession session,
+		Guid actingPlayerId,
+		Guid voteTargetId) =>
+		FindLogEntries<DevotedServantRoleTakenCommittedLogEntry>(session)
+			.Any(entry =>
+				entry.ActingPlayerId == actingPlayerId &&
+				entry.VoteTargetId == voteTargetId);
+
+	internal static bool HasDevotedServantRoleTakeForTarget(
+		IGameSession session,
+		Guid playerId) =>
+		FindLogEntries<DevotedServantRoleTakenCommittedLogEntry>(session)
+			.Any(entry => entry.VoteTargetId == playerId);
+
+	internal static bool IsDevotedServantAcquiredRoleDormantForCurrentDay(
+		IGameSession session,
+		Guid playerId) =>
+		session.GetCurrentPhase() == GamePhase.Day &&
+		FindLogEntries<DevotedServantRoleTakenCommittedLogEntry>(session)
+			.Any(entry =>
+				entry.ActingPlayerId == playerId &&
+				entry.TurnNumber == session.TurnNumber);
 
     internal static IReadOnlyList<PermanentRoleSwapCommittedLogEntry>
         GetCommittedThiefExchanges(
@@ -572,8 +635,11 @@ internal static class GameSessionQueries
             .Any();
 
     internal static bool HasStutteringJudgeSignalBeenEstablished(
-        IGameSession session) =>
-        FindLogEntries<StutteringJudgeSignalEstablishedLogEntry>(session)
+        IGameSession session,
+        Guid judgePlayerId) =>
+        FindLogEntries<StutteringJudgeSignalEstablishedLogEntry>(
+                session,
+                filter: entry => entry.JudgePlayerId == judgePlayerId)
             .Any();
 
     internal static bool HasUnreportedStutteringJudgeSignalObservation(

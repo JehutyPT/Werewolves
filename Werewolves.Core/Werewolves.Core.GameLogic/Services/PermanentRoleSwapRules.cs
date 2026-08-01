@@ -52,6 +52,98 @@ internal static class PermanentRoleSwapRules
 			PermanentRoleSwapStateChanges.None);
 	}
 
+	internal static DevotedServantRoleTakeRequest
+		CreateDevotedServantRoleTakeRequest(
+			GameSession session,
+			Guid actingPlayerId,
+			Guid voteTargetId,
+			MainRoleType observedPrintedRole,
+			MainRoleType newCurrentRole)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		var actor = session.GetPlayers().SingleOrDefault(player =>
+			player.Id == actingPlayerId) ??
+			throw new InvalidOperationException(
+				"The Devoted Servant actor is unavailable.");
+		var target = session.GetPlayers().SingleOrDefault(player =>
+			player.Id == voteTargetId) ??
+			throw new InvalidOperationException(
+				"The Devoted Servant Vote Target is unavailable.");
+		var cardStates = session.GetModeratorPhysicalCharacterCards();
+		var outgoing = cardStates.SingleOrDefault(state =>
+			state.Card.Id == actor.State.PhysicalCharacterCardId &&
+			state.Zone == PhysicalCharacterCardZone.PlayerOwned &&
+			state.OwnerPlayerId == actingPlayerId &&
+			state.Card.PrintedRole == MainRoleType.DevotedServant) ??
+			throw new InvalidOperationException(
+				"The Devoted Servant outgoing Character Card is unavailable.");
+		var acquired = target.State.PhysicalCharacterCardId is { } targetCardId
+			? cardStates.SingleOrDefault(state =>
+				state.Card.Id == targetCardId &&
+				state.Zone == PhysicalCharacterCardZone.PlayerOwned &&
+				state.OwnerPlayerId == voteTargetId &&
+				state.Card.PrintedRole == observedPrintedRole)
+			: cardStates.FirstOrDefault(state =>
+				state.Zone == PhysicalCharacterCardZone.DealPool &&
+				state.OwnerPlayerId is null &&
+				state.Card.PrintedRole == observedPrintedRole);
+		if (acquired is null)
+		{
+			throw new InvalidOperationException(
+				"The observed acquired Character Card is unavailable.");
+		}
+
+		var policy = DevotedServantRoleTakePolicy();
+		var effectsToClear = new[]
+			{
+				StatusEffectTypes.Charmed,
+				StatusEffectTypes.Sheriff,
+				StatusEffectTypes.TownCrier
+			}
+			.Where(actor.State.HasStatusEffect)
+			.ToHashSet();
+		var durableVotingPower = actor.State.DurableVotingPower -
+			(effectsToClear.Contains(StatusEffectTypes.Sheriff) ? 1 : 0);
+		var stateChanges = new PermanentRoleSwapStateChanges(
+			new HashSet<StatusEffectTypes>(),
+			effectsToClear,
+			new PermanentRoleSwapVotingState(
+				actor.State.HasVotingRight,
+				Math.Max(0, durableVotingPower)),
+			new HashSet<string>(),
+			new HashSet<string>());
+		var isInfected = actor.State.HasStatusEffect(
+			StatusEffectTypes.LycanthropyInfection);
+		var factions = new PermanentRoleSwapFactionReplacement(
+			isInfected
+				? Faction.Werewolf
+				: ExpectedBeneficiary(newCurrentRole),
+			FactionFactFactions.All.ToDictionary(
+				faction => faction,
+				faction =>
+					faction == Faction.Werewolf && isInfected
+						? FactionAgentKnowledge.KnownAgent
+						: ExpectedAgentKnowledge(newCurrentRole, faction)));
+
+		return new DevotedServantRoleTakeRequest(
+			session.RoleLockIn.Version,
+			actingPlayerId,
+			voteTargetId,
+			observedPrintedRole,
+			newCurrentRole,
+			target.State.CurrentRole,
+			new PermanentRoleSwapCardMovement(
+				outgoing.Card.Id,
+				acquired.Card.Id,
+				[],
+				target.State.PhysicalCharacterCardId is null
+					? null
+					: voteTargetId),
+			policy,
+			factions,
+			stateChanges);
+	}
+
 	internal static void EnforceValidHistory(GameSession session)
 	{
 		ArgumentNullException.ThrowIfNull(session);
@@ -170,6 +262,18 @@ internal static class PermanentRoleSwapRules
 		policy.Restrictions == PermanentRoleSwapDisposition.Preserve &&
 		policy.Assignments == PermanentRoleSwapDisposition.Preserve &&
 		policy.RolePowerState == PermanentRoleSwapDisposition.Change;
+
+	private static PermanentRoleSwapPolicy DevotedServantRoleTakePolicy() => new(
+		PrivateRoleKnowledge: PermanentRoleSwapDisposition.Change,
+		PublicRevealHistory: PermanentRoleSwapDisposition.Preserve,
+		FactionBeneficiary: PermanentRoleSwapDisposition.Change,
+		FactionAgents: PermanentRoleSwapDisposition.Change,
+		Relationships: PermanentRoleSwapDisposition.Preserve,
+		StatusEffects: PermanentRoleSwapDisposition.Change,
+		VotingState: PermanentRoleSwapDisposition.Change,
+		Restrictions: PermanentRoleSwapDisposition.Preserve,
+		Assignments: PermanentRoleSwapDisposition.Preserve,
+		RolePowerState: PermanentRoleSwapDisposition.Change);
 
 	private static bool HasExpectedFactionReplacement(
 		PermanentRoleSwapRequest request) =>

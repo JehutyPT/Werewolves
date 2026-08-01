@@ -17,7 +17,7 @@ public sealed class BaselineRandomDecisionStrategy : IModeratorDecisionStrategy
 		new("baseline-random", "3-splitmix64");
 
 	public static DecisionStrategyIdentity SafetyScreeningIdentity { get; } =
-		new("baseline-random", "11-splitmix64");
+		new("baseline-random", "12-splitmix64");
 
 	public static HeadlessResponsePolicy Policy { get; } = new(
 		Identity,
@@ -103,6 +103,10 @@ public sealed class BaselineRandomDecisionStrategy : IModeratorDecisionStrategy
 		return instruction switch
 		{
 			ConfirmationInstruction confirmation => confirmation.CreateResponse(),
+			DevotedServantVoteWindowInstruction devotedServantVoteWindow =>
+				CreateDevotedServantVoteWindowResponse(
+					devotedServantVoteWindow,
+					session),
 			SelectPlayersInstruction { RoleIdentification: not null } selectPlayers =>
 				CreateRoleIdentificationResponse(selectPlayers, session),
 			SelectPlayersInstruction
@@ -128,6 +132,11 @@ public sealed class BaselineRandomDecisionStrategy : IModeratorDecisionStrategy
 					MainRoleType.Scapegoat),
 			SelectPlayersInstruction selectPlayers =>
 				CreatePlayerSelectionResponse(selectPlayers, session),
+			AssignRolesInstruction
+			{
+				Semantic: ModeratorInstructionSemantic.RecordDevotedServantAcquiredCard
+			} assignRoles =>
+				CreatePrintedRoleAssignmentResponse(assignRoles, session),
 			AssignRolesInstruction assignRoles =>
 				CreateRoleAssignmentResponse(assignRoles, session),
 			SelectOptionsInstruction selectOptions =>
@@ -135,6 +144,33 @@ public sealed class BaselineRandomDecisionStrategy : IModeratorDecisionStrategy
 			_ => throw new NotSupportedException(
 				$"Unsupported moderator instruction type: {instruction.GetType().Name}")
 		};
+	}
+
+	private ModeratorResponse CreateDevotedServantVoteWindowResponse(
+		DevotedServantVoteWindowInstruction instruction,
+		IGameSession session)
+	{
+		var players = GetPlayersMatchingStartState(session);
+		var playerIds = players.Select(player => player.Id).ToHashSet();
+		if (!instruction.SelectablePlayerIds.IsSubsetOf(playerIds))
+		{
+			throw new InvalidOperationException(
+				"The Devoted Servant Vote window refers to a Player outside the Game Session.");
+		}
+
+		var effectiveRolesByPlayerId = CreateEffectiveRolesByPlayerId(players);
+		var candidates = players
+			.Where(player => instruction.SelectablePlayerIds.Contains(player.Id))
+			.Where(player => player.State.Health == PlayerHealth.Alive)
+			.Where(player =>
+				effectiveRolesByPlayerId[player.Id] == MainRoleType.DevotedServant)
+			.Select(player => player.Id)
+			.ToArray();
+
+		var branch = _random.NextUInt64((ulong)candidates.Length + 1);
+		return branch == 0
+			? instruction.CreateContinueResponse()
+			: instruction.CreatePublicSelfRevealResponse(candidates[(int)branch - 1]);
 	}
 
 	private ModeratorResponse CreateRoleIdentificationResponse(
@@ -228,6 +264,45 @@ public sealed class BaselineRandomDecisionStrategy : IModeratorDecisionStrategy
 		var assignments = instruction.PlayersForAssignment.ToDictionary(
 			playerId => playerId,
 			playerId => effectiveRolesByPlayerId[playerId]);
+		return instruction.CreateResponse(assignments);
+	}
+
+	private ModeratorResponse CreatePrintedRoleAssignmentResponse(
+		AssignRolesInstruction instruction,
+		IGameSession session)
+	{
+		var players = GetPlayersMatchingStartState(session);
+		var playerSeatById = players
+			.Select((player, index) => (player.Id, SeatNumber: index + 1))
+			.ToDictionary(entry => entry.Id, entry => entry.SeatNumber);
+		var printedRoleByCardId = session.RoleLockIn.RoleComposition
+			.ToDictionary(card => card.Id, card => card.PrintedRole);
+		if (instruction.PlayersForAssignment.Any(playerId =>
+				!playerSeatById.ContainsKey(playerId)))
+		{
+			throw new InvalidOperationException(
+				"Role assignment instruction refers to a Player outside the Game Session.");
+		}
+
+		var assignments = instruction.PlayersForAssignment.ToDictionary(
+			playerId => playerId,
+			playerId =>
+			{
+				var seatNumber = playerSeatById[playerId];
+				var player = players[seatNumber - 1];
+				if (player.State.PhysicalCharacterCardId is { } cardId)
+				{
+					if (!printedRoleByCardId.TryGetValue(cardId, out var printedRole))
+					{
+						throw new InvalidOperationException(
+							"A Player's physical Character Card is outside the Role Lock-In.");
+					}
+
+					return printedRole;
+				}
+
+				return _startState.RoleAssignments[seatNumber - 1].Role;
+			});
 		return instruction.CreateResponse(assignments);
 	}
 

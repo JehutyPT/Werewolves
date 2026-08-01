@@ -43,9 +43,17 @@ public interface ISessionMutator
 	void AddLogEntry<T>(T entry) where T : GameLogEntryBase;
 }
 
+internal interface IDevotedServantSessionMutator
+{
+	void ApplyDevotedServantRoleTake(
+		DevotedServantRoleTakenCommittedLogEntry entry);
+}
+
 internal partial class GameSessionKernel
 {
-	private class SessionMutator(GameSessionKernel kernel) : ISessionMutator
+	private class SessionMutator(GameSessionKernel kernel)
+		: ISessionMutator,
+		  IDevotedServantSessionMutator
 	{
 		/// <summary>
 		/// Represents a key used to allow access to mutate persistent state, player's, game state (i.e. main phase) or game logs.
@@ -329,6 +337,121 @@ internal partial class GameSessionKernel
 						acquired.Zone is PhysicalCharacterCardZone.DealPool or
 							PhysicalCharacterCardZone.Offer1 or
 							PhysicalCharacterCardZone.Offer2;
+		}
+
+		public void ApplyDevotedServantRoleTake(
+			DevotedServantRoleTakenCommittedLogEntry entry)
+		{
+			ArgumentNullException.ThrowIfNull(entry);
+			var actorState = GetMutablePlayerState(entry.ActingPlayerId);
+			var targetState = GetMutablePlayerState(entry.VoteTargetId);
+			if (kernel._roleLockIn.Version != entry.RoleLockInVersion ||
+				actorState.CurrentRole != MainRoleType.DevotedServant ||
+				actorState.ModeratorKnownRole != MainRoleType.DevotedServant ||
+				actorState.PubliclyRevealedRole != MainRoleType.DevotedServant ||
+				actorState.PhysicalCharacterCardId !=
+					entry.PhysicalCards.OutgoingOwnedCardId ||
+				targetState.Health != PlayerHealth.Alive ||
+				targetState.CurrentRole != entry.ExpectedTargetCurrentRole ||
+				targetState.PubliclyRevealedRole is not null ||
+				!entry.Policy.IsExplicit ||
+				!entry.StateChanges.IsCoherentWith(entry.Policy))
+			{
+				throw new InvalidOperationException(
+					"The Devoted Servant Role take is stale or invalid.");
+			}
+
+			var movement = entry.PhysicalCards;
+			if (!kernel._physicalCardStates.TryGetValue(
+					movement.OutgoingOwnedCardId,
+					out var outgoing) ||
+				outgoing.Zone != PhysicalCharacterCardZone.PlayerOwned ||
+				outgoing.OwnerPlayerId != entry.ActingPlayerId ||
+				outgoing.Card.PrintedRole != MainRoleType.DevotedServant ||
+				!kernel._physicalCardStates.TryGetValue(
+					movement.AcquiredCardId,
+					out var acquired) ||
+				acquired.Card.PrintedRole != entry.ObservedPrintedRole ||
+				!IsExpectedTargetCardState(
+					acquired,
+					targetState,
+					entry.VoteTargetId,
+					movement.ExpectedAcquiredCardOwnerPlayerId))
+			{
+				throw new InvalidOperationException(
+					"The Devoted Servant physical-card transfer is stale or invalid.");
+			}
+
+			var factionProjection = FactionFactProjection.Create(
+				kernel._gameHistoryLog
+					.GetAllLogEntries()
+					.OfType<IFactionFactBatchLogEntry>()
+					.Append(entry),
+				kernel._playerSeatingOrder);
+
+			kernel._physicalCardStates[movement.OutgoingOwnedCardId] = outgoing with
+			{
+				Zone = PhysicalCharacterCardZone.Discarded,
+				OwnerPlayerId = null
+			};
+			kernel._physicalCardStates[movement.AcquiredCardId] = acquired with
+			{
+				Zone = PhysicalCharacterCardZone.PlayerOwned,
+				OwnerPlayerId = entry.ActingPlayerId
+			};
+
+			targetState.PhysicalCharacterCardId = null;
+			targetState.PhysicalCharacterCardRole = null;
+			targetState.CurrentRole = null;
+			targetState.ModeratorKnownRole = null;
+			actorState.PhysicalCharacterCardId = movement.AcquiredCardId;
+			actorState.PhysicalCharacterCardRole = entry.ObservedPrintedRole;
+			actorState.CurrentRole = entry.NewCurrentRole;
+			actorState.ModeratorKnownRole = entry.NewCurrentRole;
+			foreach (var effect in entry.StateChanges.StatusEffectsToClear)
+			{
+				actorState.RemoveEffect(effect);
+			}
+			switch (entry.Policy.VotingState)
+			{
+				case PermanentRoleSwapDisposition.Preserve:
+					break;
+				case PermanentRoleSwapDisposition.Clear:
+					actorState.HasVotingRight = true;
+					actorState.DurableVotingPower = 1;
+					break;
+				case PermanentRoleSwapDisposition.Change:
+					actorState.HasVotingRight = entry.StateChanges
+						.VotingStateAfterSwap!.HasVotingRight;
+					actorState.DurableVotingPower = entry.StateChanges
+						.VotingStateAfterSwap.DurableVotingPower;
+					break;
+				default:
+					throw new InvalidOperationException(
+						"The Devoted Servant voting-state policy is invalid.");
+			}
+			foreach (var playerId in kernel._playerSeatingOrder)
+			{
+				GetMutablePlayerState(playerId).ReplaceFactionProjection(
+					factionProjection.Beneficiaries[playerId],
+					factionProjection.Agents[playerId]);
+			}
+
+			static bool IsExpectedTargetCardState(
+				PhysicalCharacterCardState acquired,
+				PlayerState targetState,
+				Guid targetId,
+				Guid? expectedOwnerId) =>
+				expectedOwnerId is { } ownerId
+					? ownerId == targetId &&
+					  acquired.Zone == PhysicalCharacterCardZone.PlayerOwned &&
+					  acquired.OwnerPlayerId == targetId &&
+					  targetState.PhysicalCharacterCardId == acquired.Card.Id &&
+					  targetState.PhysicalCharacterCardRole == acquired.Card.PrintedRole
+					: acquired.Zone == PhysicalCharacterCardZone.DealPool &&
+					  acquired.OwnerPlayerId is null &&
+					  targetState.PhysicalCharacterCardId is null &&
+					  targetState.PhysicalCharacterCardRole is null;
 		}
 
 		public void ApplyThiefOfferDecline(ThiefOfferDeclinedLogEntry entry)

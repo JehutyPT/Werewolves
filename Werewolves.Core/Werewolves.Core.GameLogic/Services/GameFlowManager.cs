@@ -117,8 +117,12 @@ internal static class GameFlowManager
 	// properties and stay centralized here, beside the hook ordering table.
 	internal static readonly IReadOnlyList<
 		EliminationCascadeReactionRegistration>
-		EliminationCascadeReactionRegistrations =
+	EliminationCascadeReactionRegistrations =
 	[
+		new(
+			EliminationCascadeReactionIds.DevotedServantVoteWindow,
+			EliminationCascadeReactionBoundary.PreReveal,
+			Listener(DevotedServant)),
 		new(
 			EliminationCascadeReactionIds.RustySwordDiseaseAnnouncement,
 			EliminationCascadeReactionBoundary.PreReveal,
@@ -969,7 +973,9 @@ internal static class GameFlowManager
 			ModeratorInstruction instruction) =>
 			instruction.Semantic is
 				ModeratorInstructionSemantic.AnnounceDawnVictims or
-				ModeratorInstructionSemantic.SelectHunterFinalShotTarget;
+				ModeratorInstructionSemantic.SelectHunterFinalShotTarget or
+				ModeratorInstructionSemantic.ResolveDevotedServantVoteWindow or
+				ModeratorInstructionSemantic.RecordDevotedServantAcquiredCard;
 
     private static AcceptedObservationRecoveryCursor?
         CreateAcceptedObservationRecoveryCursor(

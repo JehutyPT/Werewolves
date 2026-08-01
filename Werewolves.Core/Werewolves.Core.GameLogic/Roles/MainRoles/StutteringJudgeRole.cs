@@ -408,8 +408,14 @@ internal sealed class StutteringJudgeRole
 		}
 	}
 
-	private static bool HasEstablishedSignal(GameSession session) =>
-		GameSessionQueries.HasStutteringJudgeSignalBeenEstablished(session);
+	private bool HasEstablishedSignal(GameSession session)
+	{
+		var judge = GetAliveRolePlayers(session)?.SingleOrDefault();
+		return judge is not null &&
+		       GameSessionQueries.HasStutteringJudgeSignalBeenEstablished(
+			       session,
+			       judge.Id);
+	}
 
 	internal static bool HasValidEstablishedSignal(GameSession session)
 	{

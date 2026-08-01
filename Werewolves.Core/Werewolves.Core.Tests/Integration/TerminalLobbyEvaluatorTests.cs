@@ -469,7 +469,7 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 	[Fact]
 	public void Evaluate_ScapegoatPolicyMissingHolderObservation_UsesFixedIncompleteRunAndSyntheticMixedBatch()
 	{
-		const long runNumber = 3;
+		const long runNumber = 6;
 		var scenario = Scenario(
 			MainRoleType.SimpleWerewolf,
 			MainRoleType.Scapegoat,
@@ -477,6 +477,67 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 			MainRoleType.SimpleVillager,
 			MainRoleType.SimpleVillager);
 		var capability = SafetyScreeningWithoutScapegoatHolderObservation();
+		var identity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			capability.Identity);
+		var executor = new SimulationExecutor();
+		var expectedMaterial = new RunSeedMaterial(
+			identity,
+			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
+			runNumber);
+		var run = executor.Execute(
+			scenario,
+			capability,
+			identity,
+			runNumber);
+		run.Should().Be(new IncompleteSimulationRun(expectedMaterial));
+
+		var calls = new List<int>();
+		var evaluator = new TerminalLobbyEvaluator(
+			(batchScenario, _, batchIdentity, count, _) =>
+			{
+				calls.Add(count);
+				var completed = Batch(
+					batchScenario,
+					batchIdentity,
+					count,
+					_ => (1, VictoryCheckWindow.Dawn));
+				var records = completed.Records.ToArray();
+				records[^1] = new IncompleteSimulationRun(
+					records[^1].RunSeedMaterial);
+				return new SimulationBatchSourceEvidence(
+					batchScenario.ToCanonical(),
+					batchIdentity.Profile,
+					BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
+					records);
+			});
+
+		var result = evaluator.Evaluate(
+			scenario,
+			capability,
+			LobbyEvaluationDepth.DegenerateScreeningOnly);
+
+		result.Should().BeOfType<CouldNotEvaluateLobbyEvaluation>();
+		calls.Should().Equal(TerminalLobbyEvaluator.ScreeningAttemptCount);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void Evaluate_DevotedServantPolicyMissingVoteWindow_UsesFixedIncompleteRunAndReturnsCouldNotEvaluate()
+	{
+		const long runNumber = 0;
+		var scenario = new SimulationScenario(
+			7,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.DevotedServant,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+		var capability = SafetyScreeningWithoutDevotedServantVoteWindow();
 		var identity = new SimulationCompatibilityIdentity(
 			scenario.ToCanonical(),
 			capability.Identity);
@@ -702,6 +763,21 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 			SimulatorCapability.SafetyScreening.HeadlessResponsePolicy.AdmittedSemantics
 				.Where(semantic =>
 					semantic != ModeratorInstructionSemantic.ObserveScapegoatHolderForTie)),
+		supportsActorSetupCards: false,
+		supportedRuleStates: [SimulationRuleState.Default]);
+
+	private static SimulatorCapability SafetyScreeningWithoutDevotedServantVoteWindow() => new(
+		SimulatorCapability.SafetyScreening.Identity,
+		[
+			new(MainRoleType.SimpleWerewolf, Faction.Werewolf, Faction.Werewolf),
+			new(MainRoleType.DevotedServant, Faction.Villager),
+			new(MainRoleType.SimpleVillager, Faction.Villager)
+		],
+		headlessResponsePolicy: new HeadlessResponsePolicy(
+			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
+			SimulatorCapability.SafetyScreening.HeadlessResponsePolicy.AdmittedSemantics
+				.Where(semantic =>
+					semantic != ModeratorInstructionSemantic.ResolveDevotedServantVoteWindow)),
 		supportsActorSetupCards: false,
 		supportedRuleStates: [SimulationRuleState.Default]);
 

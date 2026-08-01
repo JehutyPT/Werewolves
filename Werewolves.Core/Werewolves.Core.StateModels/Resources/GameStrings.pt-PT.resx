@@ -165,6 +165,14 @@
     <value>Confirma que todos os jogadores indicados revelaram fisicamente a carta e regista os papéis ainda desconhecidos.</value>
     <comment/>
   </data>
+	<data name="DevotedServantVoteWindowAnnouncement" xml:space="preserve">
+		<value>Se a Serventa Devotada quiser usar o seu poder, deve revelar agora publicamente a sua carta. Caso contrário, continua.</value>
+		<comment/>
+	</data>
+	<data name="DevotedServantAcquiredCardInstruction" xml:space="preserve">
+		<value>Troca a carta revelada da Serventa Devotada pela carta do alvo indicado. Lê essa carta apenas com a Serventa Devotada e regista o papel impresso.</value>
+		<comment/>
+	</data>
   <data name="DebateStartsPrompt" xml:space="preserve">
     <value>O debate diurno começa. Quando terminar, confirma para avançar para a votação.</value>
     <comment/>

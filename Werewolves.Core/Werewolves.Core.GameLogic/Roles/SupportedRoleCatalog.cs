@@ -69,6 +69,10 @@ public static class SupportedRoleCatalog
 					MainRoleType.Thief,
 					() => new ThiefRole()),
 				RoleAdmission.Active(
+					MainRoleType.DevotedServant,
+					() => new DevotedServantRole(
+						rolePowerAvailabilityGateway)),
+				RoleAdmission.Active(
 					MainRoleType.TwoSisters,
 				() => new TwoSistersRole(rolePowerAvailabilityGateway)),
 			RoleAdmission.Active(

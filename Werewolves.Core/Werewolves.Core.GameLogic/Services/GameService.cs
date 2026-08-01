@@ -464,6 +464,25 @@ public class GameService
     {
         switch (instruction)
         {
+			case DevotedServantVoteWindowInstruction devotedServantWindow:
+				if (response.Type == ExpectedInputType.Continue)
+				{
+					EnsureNoPayload(response);
+					break;
+				}
+
+				if (response.SelectedPlayerIds is not { Count: 1 } actorIds ||
+					response.AssignedPlayerRoles is not null ||
+					response.SelectedOptionIds is not null)
+				{
+					throw new ArgumentException(
+						"Devoted Servant self-reveal payload is malformed.");
+				}
+
+				devotedServantWindow.CreatePublicSelfRevealResponse(
+					actorIds.Single());
+				break;
+
             case ConfirmationInstruction:
                 EnsureNoPayload(response);
                 break;
@@ -531,6 +550,8 @@ public class GameService
             StartGameConfirmationInstruction => response.Type == Continue,
             FinishedGameConfirmationInstruction => response.Type == Continue,
             ConfirmationInstruction => response.Type == Continue,
+			DevotedServantVoteWindowInstruction =>
+				response.Type is Continue or PlayerSelection,
             SelectPlayersInstruction => response.Type == PlayerSelection,
             AssignRolesInstruction => response.Type == AssignPlayerRoles,
             SelectOptionsInstruction => response.Type == OptionSelection,

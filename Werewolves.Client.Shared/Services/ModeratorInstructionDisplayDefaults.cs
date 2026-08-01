@@ -6,5 +6,5 @@ namespace Werewolves.Client.Services;
 internal static class ModeratorInstructionDisplayDefaults
 {
 	public static bool RequiresModeratorDataEntryForDisplay(ModeratorInstruction instruction) =>
-		instruction is SelectPlayersInstruction or SelectOptionsInstruction or AssignRolesInstruction;
+		instruction is DevotedServantVoteWindowInstruction or SelectPlayersInstruction or SelectOptionsInstruction or AssignRolesInstruction;
 }
