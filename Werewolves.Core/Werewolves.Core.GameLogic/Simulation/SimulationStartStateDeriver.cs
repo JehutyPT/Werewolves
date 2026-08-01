@@ -151,10 +151,14 @@ public static class SimulationStartStateDeriver
 			.Select(assignment => assignment.Role)
 			.ToList();
 		if (startState.CanonicalScenario.Offer1Role is not { } offer1Role ||
-			startState.CanonicalScenario.Offer2Role is not { } offer2Role ||
-			!assignedRoles.Contains(MainRoleType.Thief))
+			startState.CanonicalScenario.Offer2Role is not { } offer2Role)
 		{
 			return new GameSessionConfig(playerNames, assignedRoles);
+		}
+		if (!assignedRoles.Contains(MainRoleType.Thief))
+		{
+			throw new InvalidOperationException(
+				"An offer-bearing Simulation Start State requires an assigned Thief.");
 		}
 
 		var dealPoolCards = startState.RoleAssignments

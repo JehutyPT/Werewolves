@@ -690,6 +690,30 @@ internal sealed class RecoveryPayloadTestDriver
 	}
 
 	internal RecoveryPayloadTestDriver
+		RewriteLatestPermanentRoleSwapAgentAndCache(
+			Faction faction,
+			FactionAgentKnowledge agentKnowledge)
+	{
+		RewriteLatestPermanentRoleSwap(entry => entry with
+		{
+			Facts = entry.Facts.Select(fact =>
+				fact.Type == FactionFactType.Agent && fact.Faction == faction
+					? FactionFact.Agent(
+						fact.PlayerId,
+						faction,
+						agentKnowledge,
+						fact.EffectiveBoundary)
+					: fact).ToImmutableArray()
+		});
+		var swap = _payload.GameHistoryLog
+			.OfType<PermanentRoleSwapCommittedLogEntry>()
+			.Last();
+		_payload.Players.Single(player => player.Id == swap.PlayerId)
+			.FactionAgentKnowledge![faction] = agentKnowledge;
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver
 		RewriteLatestPermanentRoleSwapPowerInstanceId(Guid powerInstanceId)
 	{
 		if (powerInstanceId == Guid.Empty)

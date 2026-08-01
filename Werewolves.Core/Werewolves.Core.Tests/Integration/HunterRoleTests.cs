@@ -153,14 +153,14 @@ public sealed class HunterRoleTests(ITestOutputHelper output)
 			ModeratorInstructionSemantic.SelectHunterFinalShotTarget);
 		var revealedHunter = session.GetPlayerState(hunterId);
 		revealedHunter.CurrentRole.Should().Be(MainRoleType.Hunter);
-		revealedHunter.ModeratorKnownRole.Should().BeNull();
+		revealedHunter.ModeratorKnownRole.Should().Be(MainRoleType.Hunter);
 		revealedHunter.PubliclyRevealedRole.Should().Be(MainRoleType.Hunter);
 		session.GameHistoryLog.OfType<AssignRoleLogEntry>()
-			.Should().ContainSingle(entry =>
-				entry.AssignedMainRole == MainRoleType.Hunter &&
-				entry.PlayerIds.Contains(hunterId));
-		session.GameHistoryLog.OfType<RoleIdentificationLogEntry>()
 			.Should().NotContain(entry => entry.PlayerIds.Contains(hunterId));
+		session.GameHistoryLog.OfType<RoleIdentificationLogEntry>()
+			.Should().ContainSingle(entry =>
+				entry.Role == MainRoleType.Hunter &&
+				entry.PlayerIds.SetEquals(new[] { hunterId }));
 
 		MarkTestCompleted();
 	}

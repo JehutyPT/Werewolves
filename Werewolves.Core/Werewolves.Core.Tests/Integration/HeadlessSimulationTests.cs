@@ -1024,65 +1024,6 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 	}
 
 	[Fact]
-	public void HeadlessGameDriver_WithFixedOffers_CompletesDealPoolWithoutAdmittingOfferRoles()
-	{
-		MainRoleType[] dealPool =
-		[
-			MainRoleType.SimpleWerewolf,
-			MainRoleType.Seer,
-			MainRoleType.SimpleVillager,
-			MainRoleType.SimpleVillager,
-			MainRoleType.SimpleVillager
-		];
-		var scenario = new StateModels.Models.Simulation.SimulationScenario(
-			playerCount: 5,
-			roleCompositionCards: dealPool.Concat(
-				[MainRoleType.Cupid, MainRoleType.Defender]),
-			dealPoolCards: dealPool,
-			offer1Role: MainRoleType.Cupid,
-			offer2Role: MainRoleType.Defender);
-		var material = new RunSeedMaterial(
-			new SimulationCompatibilityIdentity(
-				scenario.ToCanonical(),
-				SimulatorCapability.FullProbability.Identity),
-			BaselineRandomDecisionStrategy.Identity,
-			runNumber: 31);
-		var startState = SimulationStartStateDeriver.Derive(
-			material,
-			SimulatorCapability.FullProbability);
-		var driver = new HeadlessGameDriver(
-			new BaselineRandomDecisionStrategy(
-				material,
-				startState,
-				SimulatorCapability.FullProbability.HeadlessResponsePolicy));
-
-		var execution = driver.CompleteGameSession(
-			startState,
-			CancellationToken.None);
-
-		execution.FinalInstruction.Should()
-			.BeOfType<FinishedGameConfirmationInstruction>();
-		execution.ProcessedInstructionCount.Should().BeGreaterThan(0);
-		CanonicalRoleComposition.Create(
-			execution.Session.RoleLockIn.DealPool
-				.Select(card => card.PrintedRole)).Should().Be(
-			CanonicalRoleComposition.Create(dealPool));
-		execution.Session.RoleLockIn.RoleComposition.Should().HaveCount(5);
-		execution.Session.RoleLockIn.Offer1.Should().BeNull();
-		execution.Session.RoleLockIn.Offer2.Should().BeNull();
-		startState.CanonicalScenario.Offer1Role.Should().Be(MainRoleType.Cupid);
-		startState.CanonicalScenario.Offer2Role.Should().Be(MainRoleType.Defender);
-		execution.Session.RoleInPlayCount(MainRoleType.Cupid).Should().Be(0);
-		execution.Session.RoleInPlayCount(MainRoleType.Defender).Should().Be(0);
-		execution.Session.GameHistoryLog
-			.OfType<RoleIdentificationLogEntry>()
-			.Should().NotContain(entry =>
-				entry.Role == MainRoleType.Cupid ||
-				entry.Role == MainRoleType.Defender);
-		MarkTestCompleted();
-	}
-
-	[Fact]
 	public void HeadlessGameDriver_WithPreKnownWhiteBeneficiaryAndBigBadWolf_CompletesComposition()
 	{
 		var scenario = new StateModels.Models.Simulation.SimulationScenario(

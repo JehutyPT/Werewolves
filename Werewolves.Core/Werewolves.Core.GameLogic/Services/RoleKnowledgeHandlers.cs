@@ -100,7 +100,7 @@ internal static class RoleKnowledgeHandlers
 			ownershipsToRecord.Add((player.Id, card.Id));
 			revealedRoles[player.Id] = assignedRole;
         }
-		var initialRoleAssignments = requestedPlayers
+		var initialRoleIdentifications = requestedPlayers
 			.Where(player => player.State.CurrentRole == null)
 			.GroupBy(player => revealedRoles[player.Id])
 			.Select(group => (
@@ -120,9 +120,9 @@ internal static class RoleKnowledgeHandlers
 			}
 		}
 
-		foreach (var (role, playerIds) in initialRoleAssignments)
+		foreach (var (role, playerIds) in initialRoleIdentifications)
 		{
-			session.AssignRole(playerIds, role);
+			session.IdentifyRole(playerIds, role);
 		}
 
         session.RevealRoles(revealedRoles);

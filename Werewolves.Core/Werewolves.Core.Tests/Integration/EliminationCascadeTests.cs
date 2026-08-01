@@ -355,15 +355,14 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 		PublicGameSessionSnapshot.Capture(builder).Should().BeEquivalentTo(
 			beforeInvalidReveal,
 			options => options.WithStrictOrdering());
-		var expectedCardIds = builder.GetGameState()!
+		var matchingUnusedDealPoolCardIds = builder.GetGameState()!
 			.GetModeratorPhysicalCharacterCards()
 			.Where(state =>
 				state.Zone == PhysicalCharacterCardZone.DealPool &&
 				state.Card.PrintedRole == MainRoleType.SimpleVillager)
 			.Select(state => state.Card.Id)
-			.Take(2)
-			.ToArray();
-		expectedCardIds.Should().HaveCount(2);
+			.ToHashSet();
+		matchingUnusedDealPoolCardIds.Should().HaveCountGreaterThanOrEqualTo(2);
 		builder.GetGameState()!.GetPlayerState(players[1].Id).CurrentRole
 			.Should().Be(MainRoleType.Witch);
 		builder.GetGameState()!.GetPlayerState(players[1].Id).ModeratorKnownRole
@@ -387,16 +386,18 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 			.ToArray();
 		ownerships.Should().HaveCount(2);
 		ownerships.Select(entry => entry.PlayerId).Should().OnlyHaveUniqueItems();
-		ownerships.Select(entry => entry.CardId).Should()
-			.Equal(expectedCardIds)
-			.And.OnlyHaveUniqueItems();
+		var ownedCardIds = ownerships.Select(entry => entry.CardId).ToArray();
+		ownedCardIds.Should().OnlyHaveUniqueItems();
+		ownedCardIds.Should().OnlyContain(cardId =>
+			matchingUnusedDealPoolCardIds.Contains(cardId));
 		session.GetPlayerState(players[1].Id).CurrentRole.Should()
 			.Be(MainRoleType.Witch);
 		session.GetPlayerState(players[1].Id).ModeratorKnownRole.Should()
 			.Be(MainRoleType.Witch);
 		session.GetPlayerState(players[2].Id).CurrentRole.Should()
 			.Be(MainRoleType.SimpleVillager);
-		session.GetPlayerState(players[2].Id).ModeratorKnownRole.Should().BeNull();
+		session.GetPlayerState(players[2].Id).ModeratorKnownRole.Should()
+			.Be(MainRoleType.SimpleVillager);
 		session.GetPlayerState(players[1].Id).PhysicalCharacterCardRole.Should()
 			.Be(MainRoleType.SimpleVillager);
 		session.GetPlayerState(players[2].Id).PhysicalCharacterCardRole.Should()
@@ -409,6 +410,11 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 					players[1].Id) == MainRoleType.SimpleVillager &&
 				entry.RevealedRoles.GetValueOrDefault(
 					players[2].Id) == MainRoleType.SimpleVillager);
+		session.GameHistoryLog
+			.OfType<RoleIdentificationLogEntry>()
+			.Should().ContainSingle(entry =>
+				entry.Role == MainRoleType.SimpleVillager &&
+				entry.PlayerIds.SetEquals(new[] { players[2].Id }));
 		session.GameHistoryLog
 			.OfType<PlayerEliminatedLogEntry>()
 			.Should().ContainSingle(entry =>

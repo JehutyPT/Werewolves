@@ -49,6 +49,39 @@ public class SimulationRoleLockInTests
 	}
 
 	[Fact]
+	public void CreateGameSessionConfig_WithOffersButNoAssignedThief_RejectsRatherThanDroppingOffers()
+	{
+		MainRoleType[] dealPool =
+		[
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.Seer,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager
+		];
+		var scenario = new SimulationScenario(
+			playerCount: 5,
+			roleCompositionCards: dealPool.Concat(
+				[MainRoleType.Cupid, MainRoleType.Defender]),
+			dealPoolCards: dealPool,
+			offer1Role: MainRoleType.Cupid,
+			offer2Role: MainRoleType.Defender);
+		var material = new RunSeedMaterial(
+			new SimulationCompatibilityIdentity(
+				scenario.ToCanonical(),
+				SimulatorCapability.FullProbability.Identity),
+			BaselineRandomDecisionStrategy.Identity,
+			runNumber: 31);
+		var startState = SimulationStartStateDeriver.Derive(
+			material,
+			SimulatorCapability.FullProbability);
+
+		var act = () => startState.CreateGameSessionConfig();
+
+		act.Should().Throw<InvalidOperationException>();
+	}
+
+	[Fact]
 	public void AlreadyDecidedProjection_WithOffers_ClassifiesOnlyDealPool()
 	{
 		MainRoleType[] dealPool =

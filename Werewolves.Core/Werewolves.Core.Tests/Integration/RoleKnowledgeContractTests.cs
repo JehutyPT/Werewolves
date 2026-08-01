@@ -273,11 +273,19 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
         seer.State.CurrentRole.Should().Be(MainRoleType.Seer);
         seer.State.ModeratorKnownRole.Should().Be(MainRoleType.Seer);
         seer.State.PubliclyRevealedRole.Should().Be(MainRoleType.Seer);
-        var revealEntry = builder.GetGameState()!.GameHistoryLog
-            .OfType<RoleRevealLogEntry>()
-            .Should().ContainSingle().Subject;
-        revealEntry.RevealedRoles.Should()
-            .Contain(new KeyValuePair<Guid, MainRoleType>(seer.Id, MainRoleType.Seer));
+		var revealEntry = builder.GetGameState()!.GameHistoryLog
+			.OfType<RoleRevealLogEntry>()
+			.Should().ContainSingle().Subject;
+		revealEntry.RevealedRoles.Should()
+			.Contain(new KeyValuePair<Guid, MainRoleType>(seer.Id, MainRoleType.Seer));
+		builder.GetGameState()!.GameHistoryLog
+			.OfType<RoleIdentificationLogEntry>()
+			.Should().ContainSingle(entry =>
+				entry.Role == MainRoleType.Seer &&
+				entry.PlayerIds.SetEquals(new[] { seer.Id }));
+		builder.GetGameState()!.GameHistoryLog
+			.OfType<AssignRoleLogEntry>()
+			.Should().NotContain(entry => entry.PlayerIds.Contains(seer.Id));
 
         var recoveredService = new GameService();
         var recoveredId = recoveredService.RehydrateSession(builder.GetGameState()!.Serialize());
@@ -342,9 +350,9 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
             [unknownVictim.Id] = MainRoleType.SimpleVillager
         }));
 
-        afterReveal.IsSuccess.Should().BeTrue();
+		afterReveal.IsSuccess.Should().BeTrue();
 		unknownVictim.State.CurrentRole.Should().Be(MainRoleType.SimpleVillager);
-		unknownVictim.State.ModeratorKnownRole.Should().BeNull();
+		unknownVictim.State.ModeratorKnownRole.Should().Be(MainRoleType.SimpleVillager);
         unknownVictim.State.PubliclyRevealedRole.Should().Be(MainRoleType.SimpleVillager);
 		unknownVictim.State.PhysicalCharacterCardRole.Should().Be(
 			MainRoleType.SimpleVillager);
@@ -366,10 +374,10 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
 			entry is PhysicalCharacterCardOwnershipObservedLogEntry ownership &&
 			ownership.PlayerId == unknownVictim.Id &&
 			ownership.CardId == ownedCardId);
-		var assignmentIndex = history.FindIndex(entry =>
-			entry is AssignRoleLogEntry assignment &&
-			assignment.AssignedMainRole == MainRoleType.SimpleVillager &&
-			assignment.PlayerIds.Contains(unknownVictim.Id));
+		var identificationIndex = history.FindIndex(entry =>
+			entry is RoleIdentificationLogEntry identification &&
+			identification.Role == MainRoleType.SimpleVillager &&
+			identification.PlayerIds.Contains(unknownVictim.Id));
 		var revealIndex = history.FindIndex(entry => entry is RoleRevealLogEntry);
 		var eliminationIndex = history.FindIndex(entry =>
                 entry is PlayerEliminatedLogEntry eliminated &&
@@ -378,14 +386,14 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
 			.Should().ContainSingle(entry =>
 				entry.PlayerId == unknownVictim.Id &&
 				entry.CardId == ownedCardId);
-		ownershipIndex.Should().BeLessThan(assignmentIndex);
-		assignmentIndex.Should().BeLessThan(revealIndex);
+		ownershipIndex.Should().BeLessThan(identificationIndex);
+		identificationIndex.Should().BeLessThan(revealIndex);
 		revealIndex.Should().BeLessThan(eliminationIndex);
-		history.OfType<AssignRoleLogEntry>().Should().ContainSingle(entry =>
-			entry.AssignedMainRole == MainRoleType.SimpleVillager &&
+		history.OfType<AssignRoleLogEntry>().Should().NotContain(entry =>
 			entry.PlayerIds.Contains(unknownVictim.Id));
-		history.OfType<RoleIdentificationLogEntry>().Should().NotContain(entry =>
-			entry.PlayerIds.Contains(unknownVictim.Id));
+		history.OfType<RoleIdentificationLogEntry>().Should().ContainSingle(entry =>
+			entry.Role == MainRoleType.SimpleVillager &&
+			entry.PlayerIds.SetEquals(new[] { unknownVictim.Id }));
 
         var recoveredService = new GameService();
         var recoveredId = recoveredService.RehydrateSession(builder.GetGameState()!.Serialize());
@@ -394,7 +402,7 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
 
 		var recoveredVictim = recovered.GetPlayerState(unknownVictim.Id);
 		recoveredVictim.CurrentRole.Should().Be(MainRoleType.SimpleVillager);
-		recoveredVictim.ModeratorKnownRole.Should().BeNull();
+		recoveredVictim.ModeratorKnownRole.Should().Be(MainRoleType.SimpleVillager);
 		recoveredVictim.PhysicalCharacterCardId.Should().Be(ownedCardId);
 		recoveredVictim.PhysicalCharacterCardRole.Should().Be(
 			MainRoleType.SimpleVillager);

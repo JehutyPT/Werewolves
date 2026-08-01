@@ -294,7 +294,6 @@ public class PermanentRoleSwapTests
 	[Theory]
 	[InlineData(FactionBatchTamper.MissingAgent)]
 	[InlineData(FactionBatchTamper.ExtraAgent)]
-	[InlineData(FactionBatchTamper.WrongAgentDefault)]
 	[InlineData(FactionBatchTamper.WrongBeneficiary)]
 	[InlineData(FactionBatchTamper.WrongBeneficiaryPrecedence)]
 	[InlineData(FactionBatchTamper.WrongBoundaryOrder)]
@@ -311,6 +310,22 @@ public class PermanentRoleSwapTests
 		Action rehydrate = () => new GameService().RehydrateSession(tampered);
 
 		rehydrate.Should().Throw<InvalidOperationException>();
+	}
+
+	[Fact]
+	public void PermanentRoleSwap_RecoveryRejectsWrongRoleDerivedAgentDefault()
+	{
+		var (session, _) = CreateStableSimpleSwap();
+		var tampered = RecoveryPayloadTestDriver.Parse(session.Serialize())
+			.RewriteLatestPermanentRoleSwapAgentAndCache(
+				Faction.Piper,
+				FactionAgentKnowledge.KnownAgent)
+			.Serialize();
+
+		Action rehydrate = () => new GameService().RehydrateSession(tampered);
+
+		rehydrate.Should().Throw<InvalidOperationException>()
+			.WithMessage("*Permanent Role Swap Faction defaults are invalid*");
 	}
 
 	[Fact]
@@ -935,17 +950,6 @@ public class PermanentRoleSwapTests
 						firstAgent.EffectiveBoundary.TurnNumber,
 						firstAgent.EffectiveBoundary.Phase,
 						firstAgent.EffectiveBoundary.Order + 1))),
-			FactionBatchTamper.WrongAgentDefault => facts
-				.Select(fact =>
-					fact.Type == FactionFactType.Agent &&
-					fact.Faction == Faction.Werewolf
-						? FactionFact.Agent(
-							fact.PlayerId,
-							fact.Faction,
-							FactionAgentKnowledge.KnownAgent,
-							fact.EffectiveBoundary)
-						: fact)
-				.ToImmutableArray(),
 			FactionBatchTamper.WrongBeneficiaryPrecedence => facts
 				.Select(fact =>
 					fact.Type == FactionFactType.Beneficiary
@@ -1182,7 +1186,6 @@ public class PermanentRoleSwapTests
 	{
 		MissingAgent,
 		ExtraAgent,
-		WrongAgentDefault,
 		WrongBeneficiary,
 		WrongBeneficiaryPrecedence,
 		WrongBoundaryOrder,
