@@ -78,6 +78,7 @@ public sealed class RoleKnowledgeFlowBunitTests
 		var cut = context.RenderModeratorComponent<RoleSelectionPage>();
 		var toggle = cut.FindAll(Html.Selectors.Button)
 			.Single(button => button.GetAttribute(Html.Attributes.AriaLabel) == roleInfo.DisplayName);
+		toggle.ParentElement!.TextContent.Should().Contain(roleInfo.DisplayName);
 		toggle.GetAttribute(Html.Attributes.AriaPressed).Should().Be(Html.AriaValues.False);
 
 		toggle.Click();
