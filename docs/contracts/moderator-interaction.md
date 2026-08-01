@@ -18,6 +18,7 @@ When a Role specialization is silent, the shared interaction rules apply.
 
 - The physical table is authoritative. The app records the Role Composition and facts the Moderator observes; it does not shuffle, deal, or deduce an unknown Player-specific Role.
 - Physical Character Card Ownership, current Role, Moderator knowledge, and public reveal are separate facts.
+- A Player-to-Role observation records the printed Role and never asks the Moderator to distinguish identical copies; internal accounting-ID binding and configured slot identity are defined by the [domain invariants](../domain/invariants.md) and [ADR-0015](../adr/0015-role-ownership-knowledge-and-public-reveal-are-separate.md).
 - A Permanent Role Swap separately defines the new current Role, physical-card handling, and visibility.
 - For a Dawn victim, any applicable pre-reveal intervention occurs before the public Role Reveal and Elimination.
 
