@@ -205,6 +205,10 @@
     <value>Os dois Amantes de facções diferentes são os únicos jogadores sobreviventes.</value>
     <comment/>
   </data>
+  <data name="VictoryConditionAngelEarlyElimination" xml:space="preserve">
+    <value>O Anjo foi eliminado durante a sua janela de vitória inicial.</value>
+    <comment/>
+  </data>
   <data name="VictoryConditionShared" xml:space="preserve">
     <value>Várias facções venceram em conjunto.</value>
     <comment/>

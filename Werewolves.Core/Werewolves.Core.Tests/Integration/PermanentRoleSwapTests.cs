@@ -107,7 +107,7 @@ public class PermanentRoleSwapTests
 		swap.Policy.Should().Be(ThiefPolicy());
 		swap.PhysicalCards.AdditionalSetAsideCardIds.Should()
 			.Equal(cards[6].Id);
-		swap.Facts.Should().HaveCount(Enum.GetValues<Faction>().Length + 1);
+		swap.Facts.Should().HaveCount(FactionFactFactions.All.Count + 1);
 	}
 
 	[Fact]
@@ -675,16 +675,18 @@ public class PermanentRoleSwapTests
 
 		session.GetFactionBeneficiaryKnowledge(player.Id).Faction
 			.Should().Be(Faction.CrossFactionLovers);
-		foreach (var faction in Enum.GetValues<Faction>())
+		foreach (var faction in FactionFactFactions.All)
 		{
 			session.GetFactionAgentKnowledge(player.Id, faction)
 				.Should().Be(FactionAgentKnowledge.KnownNonAgent);
 		}
+		session.GetFactionAgentKnowledge(player.Id, Faction.Angel)
+			.Should().Be(FactionAgentKnowledge.Unknown);
 		var swap = session.GameHistoryLog
 			.OfType<PermanentRoleSwapCommittedLogEntry>()
 			.Should().ContainSingle().Subject;
 		swap.Facts.Where(fact => fact.Type == FactionFactType.Agent)
-			.Should().HaveCount(Enum.GetValues<Faction>().Length);
+			.Should().HaveCount(FactionFactFactions.All.Count);
 		swap.Facts.Should().ContainSingle(fact =>
 			fact.Type == FactionFactType.Beneficiary &&
 			fact.Faction == Faction.Villager &&
@@ -1139,14 +1141,14 @@ public class PermanentRoleSwapTests
 	private static PermanentRoleSwapFactionReplacement VillagerFactionReplacement() =>
 		new(
 			Faction.Villager,
-			Enum.GetValues<Faction>().ToDictionary(
+			FactionFactFactions.All.ToDictionary(
 				faction => faction,
 				_ => FactionAgentKnowledge.KnownNonAgent));
 
 	private static PermanentRoleSwapFactionReplacement WerewolfFactionReplacement() =>
 		new(
 			Faction.Werewolf,
-			Enum.GetValues<Faction>().ToDictionary(
+			FactionFactFactions.All.ToDictionary(
 				faction => faction,
 				faction => faction == Faction.Werewolf
 					? FactionAgentKnowledge.KnownAgent

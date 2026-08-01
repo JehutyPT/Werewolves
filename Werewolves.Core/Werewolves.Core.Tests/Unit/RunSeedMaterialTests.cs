@@ -138,6 +138,40 @@ public class RunSeedMaterialTests
 	}
 
 	[Fact]
+	public void Derive_WithAngel_AssignsVillagerBeneficiaryAndNoFactionAgency()
+	{
+		var scenario = new SimulationScenario(
+			5,
+			[
+				MainRoleType.Angel,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+		var material = new RunSeedMaterial(
+			new SimulationCompatibilityIdentity(
+				scenario.ToCanonical(),
+				SimulatorCapability.SafetyScreening.Identity),
+			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
+			runNumber: 23);
+
+		var startState = SimulationStartStateDeriver.Derive(
+			material,
+			SimulatorCapability.SafetyScreening);
+		var angelSeat = startState.RoleAssignments
+			.Single(assignment => assignment.Role == MainRoleType.Angel)
+			.SeatNumber;
+		var facts = startState.FactionFacts
+			.Single(candidate => candidate.SeatNumber == angelSeat);
+
+		facts.Beneficiary.Should().Be(
+			FactionBeneficiaryKnowledge.Known(Faction.Villager));
+		Enum.GetValues<Faction>().Should().OnlyContain(faction =>
+			facts.GetAgentKnowledge(faction) == FactionAgentKnowledge.KnownNonAgent);
+	}
+
+	[Fact]
 	public void SimulationPlayerFactionFacts_RequiresCompleteKnownFactsAndSnapshotsAgents()
 	{
 		var agents = Enum.GetValues<Faction>().ToDictionary(

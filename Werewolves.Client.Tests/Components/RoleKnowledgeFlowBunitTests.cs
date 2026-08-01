@@ -33,6 +33,7 @@ public sealed class RoleKnowledgeFlowBunitTests
 
 	[Theory]
 	[InlineData(MainRoleType.VillagerVillager)]
+	[InlineData(MainRoleType.Angel)]
 	[InlineData(MainRoleType.LittleGirl)]
 	[InlineData(MainRoleType.Witch)]
 	[InlineData(MainRoleType.Hunter)]
@@ -53,6 +54,7 @@ public sealed class RoleKnowledgeFlowBunitTests
 		var expectedDisplayName = role switch
 		{
 			MainRoleType.VillagerVillager => GameStrings.VillagerVillagerRoleName,
+			MainRoleType.Angel => GameStrings.AngelRoleName,
 			MainRoleType.LittleGirl => GameStrings.LittleGirlRoleName,
 			MainRoleType.Witch => GameStrings.WitchRoleName,
 			MainRoleType.Hunter => GameStrings.HunterRoleName,
@@ -76,6 +78,7 @@ public sealed class RoleKnowledgeFlowBunitTests
 		var cut = context.RenderModeratorComponent<RoleSelectionPage>();
 		var toggle = cut.FindAll(Html.Selectors.Button)
 			.Single(button => button.GetAttribute(Html.Attributes.AriaLabel) == roleInfo.DisplayName);
+		toggle.ParentElement!.TextContent.Should().Contain(roleInfo.DisplayName);
 		toggle.GetAttribute(Html.Attributes.AriaPressed).Should().Be(Html.AriaValues.False);
 
 		toggle.Click();

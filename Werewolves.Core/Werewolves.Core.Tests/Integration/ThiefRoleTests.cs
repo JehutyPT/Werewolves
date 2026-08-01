@@ -96,13 +96,15 @@ public sealed class ThiefRoleTests
 		holder.State.DurableVotingPower.Should().Be(1);
 		session.GetFactionBeneficiaryKnowledge(holder.Id).Should().Be(
 			FactionBeneficiaryKnowledge.Known(Faction.Werewolf));
-		foreach (var faction in Enum.GetValues<Faction>())
+		foreach (var faction in FactionFactFactions.All)
 		{
 			session.GetFactionAgentKnowledge(holder.Id, faction).Should().Be(
 				faction == Faction.Werewolf
 					? FactionAgentKnowledge.KnownAgent
 					: FactionAgentKnowledge.KnownNonAgent);
 		}
+		session.GetFactionAgentKnowledge(holder.Id, Faction.Angel).Should()
+			.Be(FactionAgentKnowledge.Unknown);
 		session.GameHistoryLog.Should().Contain(initialFactionFacts);
 
 		var swap = session.GameHistoryLog
@@ -121,7 +123,7 @@ public sealed class ThiefRoleTests
 			fact.Type == FactionFactType.Beneficiary &&
 			fact.Faction == Faction.Werewolf);
 		swap.Facts.Where(fact => fact.Type == FactionFactType.Agent)
-			.Should().HaveCount(Enum.GetValues<Faction>().Length);
+			.Should().HaveCount(FactionFactFactions.All.Count);
 
 		AssertThiefExchangeCardConservation(session, lockIn, holder.Id);
 		var recoveredService = new GameService();
@@ -141,13 +143,15 @@ public sealed class ThiefRoleTests
 		recovered.GetPlayerState(holder.Id).HasVotingRight.Should().BeFalse();
 		recovered.GetFactionBeneficiaryKnowledge(holder.Id).Should().Be(
 			FactionBeneficiaryKnowledge.Known(Faction.Werewolf));
-		foreach (var faction in Enum.GetValues<Faction>())
+		foreach (var faction in FactionFactFactions.All)
 		{
 			recovered.GetFactionAgentKnowledge(holder.Id, faction).Should().Be(
 				faction == Faction.Werewolf
 					? FactionAgentKnowledge.KnownAgent
 					: FactionAgentKnowledge.KnownNonAgent);
 		}
+		recovered.GetFactionAgentKnowledge(holder.Id, Faction.Angel).Should()
+			.Be(FactionAgentKnowledge.Unknown);
 		AssertThiefExchangeCardConservation(recovered, lockIn, holder.Id);
 	}
 
@@ -717,7 +721,7 @@ public sealed class ThiefRoleTests
 								: Faction.Villager,
 							boundary)),
 					.. players.SelectMany(player =>
-						Enum.GetValues<Faction>().Select(faction =>
+						FactionFactFactions.All.Select(faction =>
 							FactionFact.Agent(
 								player.Id,
 								faction,

@@ -1606,10 +1606,17 @@ internal static class GameFlowManager
             var window = newPhase == GamePhase.Day
                 ? VictoryCheckWindow.Dawn
                 : VictoryCheckWindow.PreNight;
-            var gameResult = CheckVictoryConditions(session);
+            var gameResult = CheckVictoryConditions(
+                session,
+                window,
+                out var angelVictoryEligible);
             if (gameResult != null)
             {
                 session.VictoryConditionMet(gameResult, window);
+                AngelLifecycleRules.ExpireAfterResolvedWindow(
+                    session,
+                    window,
+                    angelVictoryEligible);
 
                 var finalInstruction = new FinishedGameConfirmationInstruction(
                     gameResult,
@@ -1617,6 +1624,11 @@ internal static class GameFlowManager
                 nextInstructionToSend = finalInstruction; // Override instruction
                 return true;
             }
+
+            AngelLifecycleRules.ExpireAfterResolvedWindow(
+                session,
+                window,
+                angelVictoryEligible);
         }
 
 		return false;
@@ -1675,13 +1687,22 @@ internal static class GameFlowManager
             .ToArray();
     }
 
-    private static GameResult? CheckVictoryConditions(GameSession session)
+    private static GameResult? CheckVictoryConditions(
+        GameSession session,
+        VictoryCheckWindow window,
+        out bool angelVictoryEligible)
     {
         var livingPlayers =
             RequireLivingFactionBeneficiarySnapshot(session);
+		angelVictoryEligible = AngelLifecycleRules.IsVictoryEligible(
+			session,
+			window);
+		var satisfiedFactions = FactionVictoryPredicates
+			.Evaluate(livingPlayers)
+			.Concat(angelVictoryEligible ? [Faction.Angel] : []);
 
         return GameResultSelection.Select(
-            FactionVictoryPredicates.Evaluate(livingPlayers),
+            satisfiedFactions,
             allPlayersEliminated: livingPlayers.Length == 0);
     }
 

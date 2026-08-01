@@ -112,6 +112,9 @@
   <data name="VictoryConditionCrossFactionLovers" xml:space="preserve">
     <value>The two cross-faction Lovers are the only surviving players.</value>
   </data>
+  <data name="VictoryConditionAngelEarlyElimination" xml:space="preserve">
+    <value>The Angel was eliminated during the early victory window.</value>
+  </data>
   <data name="WhiteWerewolfTargetSelectionInstruction" xml:space="preserve">
     <value>White Werewolf, optionally choose one other living Werewolf Faction Agent for the solo attack.</value>
   </data>

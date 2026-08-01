@@ -97,6 +97,7 @@ public class GameService
         PermanentRoleSwapRules.EnforceValidHistory(session);
         ThiefOfferRules.EnforceValidHistory(session);
         DayVoteRules.EnforceValidHistory(session);
+		AngelLifecycleRules.EnforceValidHistory(session);
         SeedActiveRoleListeners(session);
         ConfigureEliminationCascadeReactions(session);
         GameFlowManager.RestoreDurableContinuation(session, _roleAdmissions);
@@ -272,7 +273,7 @@ public class GameService
                                 seed.Beneficiary.Faction!.Value,
                                 boundary)
                         }
-                        .Concat(Enum.GetValues<Faction>().Select(faction =>
+                        .Concat(FactionFactFactions.All.Select(faction =>
                             FactionFact.Agent(
                                 playerId,
                                 faction,

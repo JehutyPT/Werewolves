@@ -156,7 +156,17 @@ public sealed class SimulatorCapability : SimulatorProfile
 			new(MainRoleType.Fox, Faction.Villager),
 			new(MainRoleType.KnightWithRustySword, Faction.Villager),
 			new(MainRoleType.Cupid, Faction.Villager),
-			new(MainRoleType.Thief, Faction.Villager)
+			new(MainRoleType.Thief, Faction.Villager),
+			new(MainRoleType.Angel, Faction.Villager)
+	];
+
+	private static readonly SharedVictoryGameResult[] SafetyScreeningSharedVictoryCapabilities =
+	[
+		new([Faction.Angel, Faction.Villager]),
+		new([Faction.Angel, Faction.Werewolf]),
+		new([Faction.Angel, Faction.WhiteWerewolf]),
+		new([Faction.Angel, Faction.Piper]),
+		new([Faction.Angel, Faction.CrossFactionLovers])
 	];
 
 	private static readonly SimulatorProfileRoleDescriptor[] FullProbabilityRoleDescriptors =
@@ -174,8 +184,9 @@ public sealed class SimulatorCapability : SimulatorProfile
 		SimulatorCapabilityRegistry.Production.FullProbability;
 
 	internal static SimulatorCapability CreateSafetyScreening() => new(
-		new SimulatorProfileIdentity("safety-screening", "24"),
+		new SimulatorProfileIdentity("safety-screening", "25"),
 		SafetyScreeningRoleDescriptors,
+		sharedVictoryCapabilities: SafetyScreeningSharedVictoryCapabilities,
 		headlessResponsePolicy: new HeadlessResponsePolicy(
 			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
 			[

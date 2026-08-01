@@ -5,6 +5,7 @@ using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
+using Werewolves.Core.StateModels.Models.Simulation;
 using Werewolves.Core.StateModels.Serialization;
 
 namespace Werewolves.Core.Tests.Helpers;
@@ -19,6 +20,7 @@ internal sealed class RecoveryPayloadTestDriver
 	{
 		Converters =
 		{
+			new GameResultConverter(),
 			new GameLogEntryConverter(),
 			new ModeratorInstructionConverter(),
 			new JsonStringEnumConverter()
@@ -47,6 +49,94 @@ internal sealed class RecoveryPayloadTestDriver
 	{
 		ArgumentNullException.ThrowIfNull(roles);
 		_payload.RolesInPlay = roles.ToList();
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver RemoveAngelExpiry()
+	{
+		var index = _payload.GameHistoryLog.FindLastIndex(
+			entry => entry is AngelExpiredLogEntry);
+		if (index < 0)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no Angel expiry.");
+		}
+
+		_payload.GameHistoryLog.RemoveAt(index);
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver DuplicateAngelExpiry()
+	{
+		var index = _payload.GameHistoryLog.FindLastIndex(
+			entry => entry is AngelExpiredLogEntry);
+		if (index < 0)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no Angel expiry.");
+		}
+
+		_payload.GameHistoryLog.Insert(
+			index + 1,
+			_payload.GameHistoryLog[index]);
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver DuplicatePostExpirySimpleVillagerProjection()
+	{
+		var expiryIndex = _payload.GameHistoryLog.FindLastIndex(
+			entry => entry is AngelExpiredLogEntry);
+		var projectionIndex = _payload.GameHistoryLog.FindIndex(
+			expiryIndex + 1,
+			entry => entry is AssignRoleLogEntry
+			{
+				AssignedMainRole: MainRoleType.SimpleVillager
+			});
+		if (expiryIndex < 0 || projectionIndex < 0)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no post-expiry Simple Villager projection.");
+		}
+
+		_payload.GameHistoryLog.Insert(
+			projectionIndex + 1,
+			_payload.GameHistoryLog[projectionIndex]);
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver MoveKnownAngelProjectionToHistoryTail()
+	{
+		var expiryIndex = _payload.GameHistoryLog.FindLastIndex(
+			entry => entry is AngelExpiredLogEntry);
+		if (expiryIndex < 0 ||
+			expiryIndex + 1 >= _payload.GameHistoryLog.Count ||
+			_payload.GameHistoryLog[expiryIndex + 1] is not AssignRoleLogEntry
+			{
+				AssignedMainRole: MainRoleType.SimpleVillager
+			} projection)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no immediate known-holder Angel projection.");
+		}
+
+		_payload.GameHistoryLog.RemoveAt(expiryIndex + 1);
+		_payload.GameHistoryLog.Add(projection);
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver AppendAngelVictory(
+		int turnNumber,
+		GamePhase phase,
+		VictoryCheckWindow window)
+	{
+		_payload.GameHistoryLog.Add(new VictoryConditionMetLogEntry
+		{
+			Timestamp = _payload.GameHistoryLog[^1].Timestamp.AddTicks(1),
+			TurnNumber = turnNumber,
+			CurrentPhase = phase,
+			GameResult = new SingleFactionGameResult(Faction.Angel),
+			VictoryCheckWindow = window
+		});
 		return this;
 	}
 

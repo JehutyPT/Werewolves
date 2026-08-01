@@ -877,6 +877,16 @@ internal class GameSession : IGameSession
     internal void AssignRole(Guid playerId, MainRoleType mainRoleType) =>
         AssignRole([playerId], mainRoleType);
 
+	internal void RecordAngelExpiry()
+	{
+		_gameSessionKernel.AddEntryAndUpdateState(new AngelExpiredLogEntry
+		{
+			Timestamp = DateTimeOffset.UtcNow,
+			TurnNumber = TurnNumber,
+			CurrentPhase = GetCurrentPhase()
+		});
+	}
+
 
     internal void AssignRole(HashSet<Guid> playerIds, MainRoleType mainRoleType)
     {
