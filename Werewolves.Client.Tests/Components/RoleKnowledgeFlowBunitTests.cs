@@ -33,6 +33,7 @@ public sealed class RoleKnowledgeFlowBunitTests
 
 	[Theory]
 	[InlineData(MainRoleType.VillagerVillager)]
+	[InlineData(MainRoleType.Angel)]
 	[InlineData(MainRoleType.LittleGirl)]
 	[InlineData(MainRoleType.Witch)]
 	[InlineData(MainRoleType.Hunter)]
@@ -53,6 +54,7 @@ public sealed class RoleKnowledgeFlowBunitTests
 		var expectedDisplayName = role switch
 		{
 			MainRoleType.VillagerVillager => GameStrings.VillagerVillagerRoleName,
+			MainRoleType.Angel => GameStrings.AngelRoleName,
 			MainRoleType.LittleGirl => GameStrings.LittleGirlRoleName,
 			MainRoleType.Witch => GameStrings.WitchRoleName,
 			MainRoleType.Hunter => GameStrings.HunterRoleName,

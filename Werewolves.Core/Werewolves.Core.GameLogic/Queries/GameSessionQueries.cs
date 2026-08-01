@@ -2,6 +2,7 @@ using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
+using Werewolves.Core.StateModels.Models.Simulation;
 
 namespace Werewolves.Core.GameLogic.Queries;
 
@@ -18,6 +19,10 @@ internal readonly record struct CurrentDayVoteOutcome(
 internal readonly record struct DirectionalLivingNeighbors(
     IPlayer? Clockwise,
     IPlayer? Counterclockwise);
+
+internal readonly record struct IndexedAngelVictory(
+    VictoryConditionMetLogEntry Entry,
+    int LogIndex);
 
 internal static class GameSessionQueries
 {
@@ -53,6 +58,188 @@ internal static class GameSessionQueries
 
         return query;
     }
+
+    internal static bool HasAngelExpired(IGameSession session) =>
+        FindLogEntries<AngelExpiredLogEntry>(session).Any();
+
+    internal static IReadOnlyList<int> GetAngelExpiryLogIndexes(
+        IGameSession session) =>
+        session.GameHistoryLog
+            .Select((entry, index) => (Entry: entry, Index: index))
+            .Where(item => item.Entry is AngelExpiredLogEntry)
+            .Select(item => item.Index)
+            .ToArray();
+
+    internal static IReadOnlyList<IndexedAngelVictory> GetAngelVictories(
+        IGameSession session) =>
+        session.GameHistoryLog
+            .Select((entry, index) => (Entry: entry, Index: index))
+            .Where(item =>
+                item.Entry is VictoryConditionMetLogEntry victory &&
+                IncludesAngel(victory.GameResult))
+            .Select(item => new IndexedAngelVictory(
+                (VictoryConditionMetLogEntry)item.Entry,
+                item.Index))
+            .ToArray();
+
+    internal static bool HasQualifyingAngelElimination(
+        IGameSession session,
+        int victoryTurnNumber,
+        VictoryCheckWindow window,
+        int? exclusiveEndLogIndex = null)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        var history = session.GameHistoryLog.ToArray();
+        var exclusiveEnd = exclusiveEndLogIndex ?? history.Length;
+        return GetQualifyingAngelEliminations(history, exclusiveEnd)
+            .Any(elimination => IsEliminationForWindow(
+                elimination,
+                victoryTurnNumber,
+                window));
+    }
+
+    internal static bool HasQualifyingAngelEliminationThroughNightTwoDawn(
+        IGameSession session,
+        int exclusiveEndLogIndex)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        var history = session.GameHistoryLog.ToArray();
+        return GetQualifyingAngelEliminations(history, exclusiveEndLogIndex)
+            .Any(elimination => elimination is
+                { TurnNumber: 1, CurrentPhase: GamePhase.Dawn } or
+                { TurnNumber: 1, CurrentPhase: GamePhase.Day } or
+                { TurnNumber: 2, CurrentPhase: GamePhase.Dawn });
+    }
+
+    internal static bool IsResolvedNightTwoDawnImmediatelyBeforeAngelExpiry(
+        IGameSession session,
+        int expiryLogIndex)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        var history = session.GameHistoryLog.ToArray();
+        var boundaryIndex = expiryLogIndex - 1;
+        if (boundaryIndex >= 0 &&
+            history[boundaryIndex] is VictoryConditionMetLogEntry
+            {
+                TurnNumber: 2,
+                CurrentPhase: GamePhase.Day,
+                VictoryCheckWindow: VictoryCheckWindow.Dawn
+            } victory &&
+            !IncludesAngel(victory.GameResult))
+        {
+            boundaryIndex--;
+        }
+
+        return boundaryIndex >= 0 &&
+            history[boundaryIndex] is PhaseTransitionLogEntry
+            {
+                PreviousPhase: GamePhase.Dawn,
+                CurrentPhase: GamePhase.Day,
+                TurnNumber: 2
+            };
+    }
+
+    internal static bool WasAngelHolderKnownBefore(
+        IGameSession session,
+        int boundaryLogIndex,
+        Guid playerId)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        var preceding = session.GameHistoryLog.Take(boundaryLogIndex);
+        return preceding.OfType<RoleIdentificationLogEntry>()
+                   .Any(entry =>
+                       entry.Role == MainRoleType.Angel &&
+                       entry.PlayerIds.Contains(playerId)) ||
+               preceding.OfType<PermanentRoleSwapCommittedLogEntry>()
+                   .Any(entry =>
+                       entry.PlayerId == playerId &&
+                       entry.NewCurrentRole == MainRoleType.Angel);
+    }
+
+    internal static IReadOnlyList<int>
+        GetPostExpirySimpleVillagerProjectionIndexes(
+            IGameSession session,
+            int expiryLogIndex,
+            Guid playerId) =>
+        session.GameHistoryLog
+            .Select((entry, index) => (Entry: entry, Index: index))
+            .Where(item =>
+                item.Index > expiryLogIndex &&
+                item.Entry is AssignRoleLogEntry
+                {
+                    AssignedMainRole: MainRoleType.SimpleVillager
+                } assignment &&
+                assignment.PlayerIds.Contains(playerId))
+            .Select(item => item.Index)
+            .ToArray();
+
+    private static IEnumerable<PlayerEliminatedLogEntry>
+        GetQualifyingAngelEliminations(
+            IReadOnlyList<GameLogEntryBase> history,
+            int exclusiveEndLogIndex)
+    {
+        if (exclusiveEndLogIndex < 0 ||
+            exclusiveEndLogIndex > history.Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(exclusiveEndLogIndex));
+        }
+
+        for (var index = 0; index < exclusiveEndLogIndex; index++)
+        {
+            if (history[index] is PlayerEliminatedLogEntry elimination &&
+                WasRevealedAsPhysicalAngel(
+                    history,
+                    index,
+                    elimination.PlayerId))
+            {
+                yield return elimination;
+            }
+        }
+    }
+
+    private static bool WasRevealedAsPhysicalAngel(
+        IReadOnlyList<GameLogEntryBase> history,
+        int eliminationIndex,
+        Guid playerId)
+    {
+        var preceding = history.Take(eliminationIndex);
+        var ownsPhysicalAngel = preceding
+                .OfType<PhysicalCharacterCardOwnershipObservedLogEntry>()
+                .Any(entry =>
+                    entry.PlayerId == playerId &&
+                    entry.PrintedRole == MainRoleType.Angel) ||
+            preceding.OfType<PermanentRoleSwapCommittedLogEntry>()
+                .Any(entry =>
+                    entry.PlayerId == playerId &&
+                    entry.NewCurrentRole == MainRoleType.Angel);
+        return ownsPhysicalAngel &&
+               preceding.OfType<RoleRevealLogEntry>()
+                   .Any(entry =>
+                       entry.RevealedRoles.TryGetValue(playerId, out var role) &&
+                       role == MainRoleType.Angel);
+    }
+
+    private static bool IsEliminationForWindow(
+        PlayerEliminatedLogEntry elimination,
+        int victoryTurnNumber,
+        VictoryCheckWindow window) =>
+        (victoryTurnNumber,
+            window,
+            elimination.TurnNumber,
+            elimination.CurrentPhase) switch
+        {
+            (1, VictoryCheckWindow.Dawn, 1, GamePhase.Dawn) => true,
+            (2, VictoryCheckWindow.PreNight, 1, GamePhase.Day) => true,
+            (2, VictoryCheckWindow.Dawn, 2, GamePhase.Dawn) => true,
+            _ => false
+        };
+
+    private static bool IncludesAngel(GameResult result) => result switch
+    {
+        SingleFactionGameResult single => single.Faction == Faction.Angel,
+        SharedVictoryGameResult shared => shared.Factions.Contains(Faction.Angel),
+        _ => false
+    };
 
     internal static IReadOnlyList<PermanentRoleSwapCommittedLogEntry>
         GetCommittedPermanentRoleSwaps(IGameSession session) =>
