@@ -26,6 +26,7 @@ internal sealed partial class GameSessionKernel
             ValidateLoversPairCommitment(entry, playerIds);
             ValidateFactionFacts(entry, playerIds);
 			ValidatePermanentRoleSwapFactionBoundary(entry);
+			ValidateThiefOfferDecline(entry, playerIds);
         }
 
         internal void AddLogEntry(SessionMutator.IStateMutatorKey key, GameLogEntryBase entry)
@@ -39,6 +40,7 @@ internal sealed partial class GameSessionKernel
             ValidateLoversPairCommitment(entry, playerIds: null);
             ValidateFactionFacts(entry, playerIds: null);
 			ValidatePermanentRoleSwapFactionBoundary(entry);
+			ValidateThiefOfferDecline(entry, playerIds: null);
             _logEntries.Add(entry);
         }
 
@@ -168,6 +170,25 @@ internal sealed partial class GameSessionKernel
 			{
 				throw new InvalidOperationException(
 					"Permanent Role Swap Faction fact boundary does not match its committed history position.");
+			}
+		}
+
+		private void ValidateThiefOfferDecline(
+			GameLogEntryBase entry,
+			IReadOnlyCollection<Guid>? playerIds)
+		{
+			if (entry is not ThiefOfferDeclinedLogEntry decline)
+			{
+				return;
+			}
+
+			if (playerIds?.Contains(decline.PlayerId) == false ||
+			    _logEntries.OfType<ThiefOfferDeclinedLogEntry>().Any() ||
+			    _logEntries.OfType<PermanentRoleSwapCommittedLogEntry>().Any(swap =>
+				    swap.ExpectedCurrentRole == MainRoleType.Thief))
+			{
+				throw new InvalidOperationException(
+					"The Thief offer opportunity is already committed or invalid.");
 			}
 		}
 

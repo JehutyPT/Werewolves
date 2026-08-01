@@ -7,6 +7,50 @@ namespace Werewolves.Core.GameLogic.Services;
 
 internal static class PermanentRoleSwapRules
 {
+	internal static PermanentRoleSwapRequest CreateThiefExchangeRequest(
+		GameSession session,
+		Guid playerId,
+		PhysicalCharacterCard outgoingThiefCard,
+		PhysicalCharacterCard selectedOffer,
+		PhysicalCharacterCard unselectedOffer)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		ArgumentNullException.ThrowIfNull(outgoingThiefCard);
+		ArgumentNullException.ThrowIfNull(selectedOffer);
+		ArgumentNullException.ThrowIfNull(unselectedOffer);
+
+		var policy = new PermanentRoleSwapPolicy(
+			PrivateRoleKnowledge: PermanentRoleSwapDisposition.Change,
+			PublicRevealHistory: PermanentRoleSwapDisposition.Preserve,
+			FactionBeneficiary: PermanentRoleSwapDisposition.Change,
+			FactionAgents: PermanentRoleSwapDisposition.Change,
+			Relationships: PermanentRoleSwapDisposition.Preserve,
+			StatusEffects: PermanentRoleSwapDisposition.Preserve,
+			VotingState: PermanentRoleSwapDisposition.Preserve,
+			Restrictions: PermanentRoleSwapDisposition.Preserve,
+			Assignments: PermanentRoleSwapDisposition.Preserve,
+			RolePowerState: PermanentRoleSwapDisposition.Change);
+		var factions = new PermanentRoleSwapFactionReplacement(
+			ExpectedBeneficiary(selectedOffer.PrintedRole),
+			Enum.GetValues<Faction>().ToDictionary(
+				faction => faction,
+				faction => ExpectedAgentKnowledge(
+					selectedOffer.PrintedRole,
+					faction)));
+		return new PermanentRoleSwapRequest(
+			session.RoleLockIn.Version,
+			playerId,
+			MainRoleType.Thief,
+			selectedOffer.PrintedRole,
+			new PermanentRoleSwapCardMovement(
+				outgoingThiefCard.Id,
+				selectedOffer.Id,
+				[unselectedOffer.Id]),
+			policy,
+			factions,
+			PermanentRoleSwapStateChanges.None);
+	}
+
 	internal static void EnforceValidHistory(GameSession session)
 	{
 		ArgumentNullException.ThrowIfNull(session);

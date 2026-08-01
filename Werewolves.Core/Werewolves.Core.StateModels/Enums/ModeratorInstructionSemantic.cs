@@ -52,5 +52,6 @@ public enum ModeratorInstructionSemantic
 	SelectFoxCenter = 44,
 	RevealFoxResult = 45,
 	SelectCupidLovers = 46,
-	RecognizeLovers = 47
+	RecognizeLovers = 47,
+	ChooseThiefOffer = 48
 }

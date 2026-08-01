@@ -180,6 +180,108 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 	}
 
 	[Fact]
+	public void Evaluate_ThiefBranchPolicy_WhenOneWholeBranchIsTurnOne_ReturnsDegenerate()
+	{
+		var evaluator = new TerminalLobbyEvaluator((scenario, identity, count, _) =>
+			Batch(
+				scenario,
+				identity,
+				count,
+				run => run % 3 == 1
+					? (1, VictoryCheckWindow.Dawn)
+					: (2, VictoryCheckWindow.PreNight)));
+
+		var result = evaluator.Evaluate(
+			ThiefScenario(),
+			SimulatorCapability.SafetyScreening,
+			LobbyEvaluationDepth.DegenerateScreeningOnly);
+
+		result.Should().BeOfType<DegenerateTerminalEvaluation>();
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void Evaluate_ThiefBranchPolicy_DegenerateBranchWinsOverIncompleteOtherBranch()
+	{
+		var evaluator = new TerminalLobbyEvaluator((scenario, identity, count, _) =>
+		{
+			var complete = Batch(
+				scenario,
+				identity,
+				count,
+				run => run % 3 == 1
+					? (1, VictoryCheckWindow.Dawn)
+					: (2, VictoryCheckWindow.PreNight));
+			var records = complete.Records.ToArray();
+			var incompleteIndex = Enumerable.Range(0, count)
+				.Last(run => run % 3 == 2);
+			records[incompleteIndex] = new IncompleteSimulationRun(
+				records[incompleteIndex].RunSeedMaterial);
+			return new SimulationBatchSourceEvidence(
+				scenario.ToCanonical(),
+				identity.Profile,
+				BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
+				records);
+		});
+
+		var result = evaluator.Evaluate(
+			ThiefScenario(),
+			SimulatorCapability.SafetyScreening,
+			LobbyEvaluationDepth.DegenerateScreeningOnly);
+
+		result.Should().BeOfType<DegenerateTerminalEvaluation>();
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void Evaluate_ThiefBranchPolicy_AllBranchesCompleteAndNonDegenerate_ReturnsScreeningPassed()
+	{
+		var evaluator = new TerminalLobbyEvaluator((scenario, identity, count, _) =>
+			Batch(
+				scenario,
+				identity,
+				count,
+				_ => (2, VictoryCheckWindow.PreNight)));
+
+		var result = evaluator.Evaluate(
+			ThiefScenario(),
+			SimulatorCapability.SafetyScreening,
+			LobbyEvaluationDepth.DegenerateScreeningOnly);
+
+		result.Should().BeOfType<ScreeningPassedLobbyEvaluation>();
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void Evaluate_ThiefBranchPolicy_NoDegenerateBranchAndOneIncomplete_ReturnsCouldNotEvaluate()
+	{
+		var evaluator = new TerminalLobbyEvaluator((scenario, identity, count, _) =>
+		{
+			var complete = Batch(
+				scenario,
+				identity,
+				count,
+				_ => (2, VictoryCheckWindow.PreNight));
+			var records = complete.Records.ToArray();
+			records[^1] = new IncompleteSimulationRun(
+				records[^1].RunSeedMaterial);
+			return new SimulationBatchSourceEvidence(
+				scenario.ToCanonical(),
+				identity.Profile,
+				BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
+				records);
+		});
+
+		var result = evaluator.Evaluate(
+			ThiefScenario(),
+			SimulatorCapability.SafetyScreening,
+			LobbyEvaluationDepth.DegenerateScreeningOnly);
+
+		result.Should().BeOfType<CouldNotEvaluateLobbyEvaluation>();
+		MarkTestCompleted();
+	}
+
+	[Fact]
 	public void Evaluate_DegenerateScreeningOnly_VillagerVillagerCompletesTheRequiredRealScreen()
 	{
 		var scenario = Scenario(
@@ -367,7 +469,7 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 	[Fact]
 	public void Evaluate_ScapegoatPolicyMissingHolderObservation_UsesFixedIncompleteRunAndSyntheticMixedBatch()
 	{
-		const long runNumber = 6;
+		const long runNumber = 3;
 		var scenario = Scenario(
 			MainRoleType.SimpleWerewolf,
 			MainRoleType.Scapegoat,
@@ -520,6 +622,24 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 	private static SimulationScenario SupportedScenario() => Scenario(
 		MainRoleType.SimpleWerewolf, MainRoleType.Seer, MainRoleType.SimpleVillager,
 		MainRoleType.SimpleVillager, MainRoleType.SimpleVillager);
+
+	private static SimulationScenario ThiefScenario()
+	{
+		MainRoleType[] dealPool =
+		[
+			MainRoleType.Thief,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager
+		];
+		return new SimulationScenario(
+			5,
+			dealPool.Concat([MainRoleType.Seer, MainRoleType.Defender]),
+			dealPool,
+			MainRoleType.Seer,
+			MainRoleType.Defender);
+	}
 
 	private static SimulationScenario Scenario(params MainRoleType[] roles) => new(5, roles);
 

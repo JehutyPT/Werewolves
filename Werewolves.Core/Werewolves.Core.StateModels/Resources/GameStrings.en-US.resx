@@ -154,4 +154,7 @@
   <data name="LoversSleepAnnouncement" xml:space="preserve">
     <value>Lovers, return to sleep.</value>
   </data>
+  <data name="ThiefOfferSelectionInstruction" xml:space="preserve">
+    <value>Thief, choose one offered card or decline when allowed.</value>
+  </data>
 </root>

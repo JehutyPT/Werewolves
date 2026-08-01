@@ -424,6 +424,38 @@ internal class GameSession : IGameSession
 		return true;
 	}
 
+	internal bool TryCommitThiefOfferDecline(Guid playerId)
+	{
+		var offer1 = RoleLockIn.Offer1;
+		var offer2 = RoleLockIn.Offer2;
+		var player = GetPlayers().SingleOrDefault(candidate => candidate.Id == playerId);
+		if (offer1 is null || offer2 is null || player is null ||
+		    player.State.CurrentRole != MainRoleType.Thief ||
+		    player.State.ModeratorKnownRole != MainRoleType.Thief ||
+		    player.State.PhysicalCharacterCardId is not { } thiefCardId ||
+		    GameHistoryLog.OfType<ThiefOfferDeclinedLogEntry>().Any() ||
+		    GameHistoryLog.OfType<PermanentRoleSwapCommittedLogEntry>().Any(swap =>
+			    swap.ExpectedCurrentRole == MainRoleType.Thief))
+		{
+			return false;
+		}
+
+		CommitSessionEntry(
+			context => new ThiefOfferDeclinedLogEntry
+			{
+				Timestamp = context.Timestamp,
+				TurnNumber = context.TurnNumber,
+				CurrentPhase = context.CurrentPhase,
+				RoleLockInVersion = RoleLockIn.Version,
+				PlayerId = playerId,
+				ThiefCardId = thiefCardId,
+				Offer1CardId = offer1.Id,
+				Offer2CardId = offer2.Id
+			},
+			"Thief offer decline");
+		return true;
+	}
+
 	private Guid CreateFreshPermanentRoleSwapPowerInstanceId()
 	{
 		var reservedIds = GetPlayers()

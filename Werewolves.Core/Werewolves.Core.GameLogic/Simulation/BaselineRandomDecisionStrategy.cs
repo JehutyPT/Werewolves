@@ -17,7 +17,7 @@ public sealed class BaselineRandomDecisionStrategy : IModeratorDecisionStrategy
 		new("baseline-random", "3-splitmix64");
 
 	public static DecisionStrategyIdentity SafetyScreeningIdentity { get; } =
-		new("baseline-random", "10-splitmix64");
+		new("baseline-random", "11-splitmix64");
 
 	public static HeadlessResponsePolicy Policy { get; } = new(
 		Identity,
@@ -266,6 +266,23 @@ public sealed class BaselineRandomDecisionStrategy : IModeratorDecisionStrategy
 
 	private ModeratorResponse CreateOptionSelectionResponse(SelectOptionsInstruction instruction)
 	{
+		if (instruction.Semantic ==
+		    ModeratorInstructionSemantic.ChooseThiefOffer)
+		{
+			var policy = _startState.CanonicalScenario.ThiefOfferBranchPolicy
+				?? throw new InvalidOperationException(
+					"A Thief offer choice requires its canonical branch policy.");
+			var optionId = policy.GetBranch(_random.Material.RunNumber).ToString();
+			if (!instruction.Options.Any(option =>
+					StringComparer.Ordinal.Equals(option.Id, optionId)))
+			{
+				throw new InvalidOperationException(
+					"The canonical Thief branch is unavailable in the current instruction.");
+			}
+
+			return instruction.CreateResponse(optionId);
+		}
+
 		var candidates = instruction.Options
 			.Select(option => option.Id)
 			.ToArray();

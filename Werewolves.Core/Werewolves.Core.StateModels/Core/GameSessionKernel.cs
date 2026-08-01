@@ -448,6 +448,9 @@ namespace Werewolves.Core.StateModels.Core
 						case PermanentRoleSwapCommittedLogEntry swap:
 							ApplyPermanentRoleSwapProjection(projected, playerIds, swap);
 							break;
+						case ThiefOfferDeclinedLogEntry decline:
+							ApplyThiefOfferDeclineProjection(projected, playerIds, decline);
+							break;
 					}
 				}
 
@@ -626,6 +629,40 @@ namespace Werewolves.Core.StateModels.Core
 							acquired.Zone is PhysicalCharacterCardZone.DealPool or
 								PhysicalCharacterCardZone.Offer1 or
 								PhysicalCharacterCardZone.Offer2;
+			}
+
+			private void ApplyThiefOfferDeclineProjection(
+				Dictionary<Guid, PhysicalCharacterCardState> projection,
+				IReadOnlySet<Guid> playerIds,
+				ThiefOfferDeclinedLogEntry entry)
+			{
+				if (entry.RoleLockInVersion != _roleLockIn.Version ||
+				    !playerIds.Contains(entry.PlayerId) ||
+				    _roleLockIn.Offer1?.Id != entry.Offer1CardId ||
+				    _roleLockIn.Offer2?.Id != entry.Offer2CardId ||
+				    !projection.TryGetValue(entry.ThiefCardId, out var thief) ||
+				    thief is not
+				    {
+					    Zone: PhysicalCharacterCardZone.PlayerOwned,
+					    OwnerPlayerId: var ownerId
+				    } || ownerId != entry.PlayerId ||
+				    !projection.TryGetValue(entry.Offer1CardId, out var offer1) ||
+				    offer1.Zone != PhysicalCharacterCardZone.Offer1 ||
+				    !projection.TryGetValue(entry.Offer2CardId, out var offer2) ||
+				    offer2.Zone != PhysicalCharacterCardZone.Offer2)
+				{
+					throw new InvalidOperationException(
+						"Thief offer decline physical-card history is invalid.");
+				}
+
+				projection[entry.Offer1CardId] = offer1 with
+				{
+					Zone = PhysicalCharacterCardZone.SetAside
+				};
+				projection[entry.Offer2CardId] = offer2 with
+				{
+					Zone = PhysicalCharacterCardZone.SetAside
+				};
 			}
 
 			private void ValidateFactionProjectionMatchesHistory()

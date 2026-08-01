@@ -36,6 +36,9 @@ public interface ISessionMutator
 	void ApplyPermanentRoleSwap(PermanentRoleSwapCommittedLogEntry entry) =>
 		throw new NotSupportedException(
 			"This Session Mutator does not project Permanent Role Swaps.");
+	void ApplyThiefOfferDecline(ThiefOfferDeclinedLogEntry entry) =>
+		throw new NotSupportedException(
+			"This Session Mutator does not project Thief offer declines.");
 
 	void AddLogEntry<T>(T entry) where T : GameLogEntryBase;
 }
@@ -326,6 +329,40 @@ internal partial class GameSessionKernel
 						acquired.Zone is PhysicalCharacterCardZone.DealPool or
 							PhysicalCharacterCardZone.Offer1 or
 							PhysicalCharacterCardZone.Offer2;
+		}
+
+		public void ApplyThiefOfferDecline(ThiefOfferDeclinedLogEntry entry)
+		{
+			ArgumentNullException.ThrowIfNull(entry);
+			var playerState = GetMutablePlayerState(entry.PlayerId);
+			if (kernel._roleLockIn.Version != entry.RoleLockInVersion ||
+			    playerState.CurrentRole != MainRoleType.Thief ||
+			    playerState.ModeratorKnownRole != MainRoleType.Thief ||
+			    playerState.PhysicalCharacterCardId != entry.ThiefCardId ||
+			    kernel._roleLockIn.Offer1?.Id != entry.Offer1CardId ||
+			    kernel._roleLockIn.Offer2?.Id != entry.Offer2CardId ||
+			    !kernel._physicalCardStates.TryGetValue(entry.ThiefCardId, out var thief) ||
+			    thief.Zone != PhysicalCharacterCardZone.PlayerOwned ||
+			    thief.OwnerPlayerId != entry.PlayerId ||
+			    !kernel._physicalCardStates.TryGetValue(entry.Offer1CardId, out var offer1) ||
+			    offer1.Zone != PhysicalCharacterCardZone.Offer1 ||
+			    offer1.OwnerPlayerId is not null ||
+			    !kernel._physicalCardStates.TryGetValue(entry.Offer2CardId, out var offer2) ||
+			    offer2.Zone != PhysicalCharacterCardZone.Offer2 ||
+			    offer2.OwnerPlayerId is not null)
+			{
+				throw new InvalidOperationException(
+					"The Thief offer decline is stale or invalid.");
+			}
+
+			kernel._physicalCardStates[entry.Offer1CardId] = offer1 with
+			{
+				Zone = PhysicalCharacterCardZone.SetAside
+			};
+			kernel._physicalCardStates[entry.Offer2CardId] = offer2 with
+			{
+				Zone = PhysicalCharacterCardZone.SetAside
+			};
 		}
 
 		public void AddLogEntry<T>(T entry) where T : GameLogEntryBase

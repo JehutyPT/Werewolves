@@ -212,8 +212,8 @@ public class GameService
 	    EnforceRolesAreSupported(config.RoleLockIn.RoleComposition
 		    .Select(card => card.PrintedRole)
 		    .ToArray());
-        if (factionFacts != null
-            && (factionFacts.Count != config.Players.Count
+		if (factionFacts != null
+			&& (factionFacts.Count != config.Players.Count
                 || !factionFacts
                     .Select(facts => facts.SeatNumber)
                     .SequenceEqual(Enumerable.Range(1, config.Players.Count))))
@@ -307,8 +307,9 @@ public class GameService
 		var roleReactions = GameFlowManager
 			.EliminationCascadeReactionRegistrations
 			.Where(registration =>
-				session.RoleInPlayCount(
-					(MainRoleType)registration.Listener) > 0)
+				session.RoleLockIn.RoleComposition.Any(card =>
+					card.PrintedRole ==
+					(MainRoleType)registration.Listener))
 			.Select(registration =>
 				CreateEliminationCascadeReactionBinding(
 					session,

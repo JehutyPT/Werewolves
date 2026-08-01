@@ -66,6 +66,9 @@ public static class SupportedRoleCatalog
 					() => new AccursedWolfFatherRole(
 						rolePowerAvailabilityGateway)),
 				RoleAdmission.Active(
+					MainRoleType.Thief,
+					() => new ThiefRole()),
+				RoleAdmission.Active(
 					MainRoleType.TwoSisters,
 				() => new TwoSistersRole(rolePowerAvailabilityGateway)),
 			RoleAdmission.Active(
