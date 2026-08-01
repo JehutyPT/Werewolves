@@ -418,6 +418,28 @@ public class GameClientManagerTests
 	}
 
 	[Fact]
+	public void Constructor_WhenSaveFileIsRawCoreSession_DoesNotThrowAndClearsSave()
+	{
+		using var saveDirectory = TemporaryDirectory.Create();
+		var saveFilePath = Path.Combine(
+			saveDirectory.Path,
+			FileGameSessionSaveStore.SaveFileName);
+		var manager = new GameClientManager(
+			new GameService(),
+			saveStore: new FileGameSessionSaveStore(saveDirectory.Path));
+		StartSimpleGame(manager);
+		File.WriteAllText(saveFilePath, manager.CurrentSession!.Serialize());
+
+		var act = () => new GameClientManager(
+			new GameService(),
+			saveStore: new FileGameSessionSaveStore(saveDirectory.Path));
+
+		var resumed = act.Should().NotThrow().Subject;
+		resumed.HasActiveSession.Should().BeFalse();
+		File.Exists(saveFilePath).Should().BeFalse();
+	}
+
+	[Fact]
 	public void StartGame_WhenSaveFileExists_ReplacesItWithActiveGamePayload()
 	{
 		using var saveDirectory = TemporaryDirectory.Create();

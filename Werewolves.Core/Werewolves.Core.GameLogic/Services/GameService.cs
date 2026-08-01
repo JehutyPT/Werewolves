@@ -103,7 +103,7 @@ public class GameService
         return session.Id;
 	}
 
-	public bool TryRecordPhysicalCharacterCardOwnership(
+	internal bool TryRecordPhysicalCharacterCardOwnership(
 		Guid gameId,
 		long expectedRoleLockInVersion,
 		Guid playerId,

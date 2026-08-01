@@ -81,29 +81,33 @@ internal static class LocalRecoveryPayloadCodec
 	public static LocalRecoveryPayload Deserialize(string payload)
 	{
 		ArgumentException.ThrowIfNullOrWhiteSpace(payload);
-		try
-		{
-			var envelope = JsonSerializer.Deserialize<RecoveryEnvelopeDto>(payload, JsonOptions);
-			if (envelope is { SchemaVersion: CurrentSchemaVersion, Kind: StagedLobbyKind, StagedLobby: not null })
+		var envelope = JsonSerializer.Deserialize<RecoveryEnvelopeDto>(
+			payload,
+			JsonOptions);
+		if (envelope is
 			{
-				return new StagedLobbyRecoveryPayload(
-					envelope.StagedLobby.PlayerNames.ToArray(),
-					envelope.StagedLobby.RoleLockIn.ToRoleLockIn());
-			}
-
-			if (envelope is { SchemaVersion: CurrentSchemaVersion, Kind: ActiveGameKind, ActiveGame: not null })
-			{
-				return new ActiveGameRecoveryPayload(envelope.ActiveGame.SerializedSession);
-			}
-		}
-		catch (JsonException)
+				SchemaVersion: CurrentSchemaVersion,
+				Kind: StagedLobbyKind,
+				StagedLobby: not null
+			})
 		{
-			// A pre-discriminator save is handled by the compatibility path below.
+			return new StagedLobbyRecoveryPayload(
+				envelope.StagedLobby.PlayerNames.ToArray(),
+				envelope.StagedLobby.RoleLockIn.ToRoleLockIn());
 		}
 
-		// Existing installations may still have a raw Core session payload. Treat it
-		// as ActiveGame and let Core perform the authoritative validation.
-		return new ActiveGameRecoveryPayload(payload);
+		if (envelope is
+			{
+				SchemaVersion: CurrentSchemaVersion,
+				Kind: ActiveGameKind,
+				ActiveGame: not null
+			})
+		{
+			return new ActiveGameRecoveryPayload(envelope.ActiveGame.SerializedSession);
+		}
+
+		throw new InvalidOperationException(
+			"The local recovery payload is invalid or unsupported.");
 	}
 
 	private sealed record RecoveryEnvelopeDto(
