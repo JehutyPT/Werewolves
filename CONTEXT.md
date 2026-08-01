@@ -52,7 +52,11 @@ _Avoid_: Undealt Character Cards, random leftovers, Thief options (when referrin
 
 **Set-Aside Character Cards**:
 Physical Character Card instances kept face-down outside active play.
-_Avoid_: Discarded cards, undealt cards
+_Avoid_: Discarded (for face-down cards), undealt cards
+
+**Discarded**:
+The public, out-of-play zone for Character Cards removed from active play. It is distinct from both face-down Set-Aside Character Cards and the historical fact that a card was publicly revealed.
+_Avoid_: Set-Aside (for public out-of-play cards), discarded Role
 
 **Physical Deal**:
 The face-down random distribution of one Deal Pool card to each Player.

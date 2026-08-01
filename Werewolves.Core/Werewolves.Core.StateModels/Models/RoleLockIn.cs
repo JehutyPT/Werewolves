@@ -31,7 +31,8 @@ public enum PhysicalCharacterCardZone
 	Offer1 = 1,
 	Offer2 = 2,
 	PlayerOwned = 3,
-	SetAside = 4
+	SetAside = 4,
+	Discarded = 5
 }
 
 public sealed record PhysicalCharacterCardState(

@@ -9,7 +9,7 @@ internal sealed partial class GameSessionKernel
 	private void ValidatePermanentRoleSwapPlayerProjectionMatchesHistory()
 	{
 		var history = _gameHistoryLog.GetAllLogEntries();
-		if (!history.OfType<PermanentRoleSwapCommittedLogEntry>().Any())
+		if (!history.OfType<IPermanentRoleSwapCommittedLogEntry>().Any())
 		{
 			return;
 		}
@@ -45,7 +45,9 @@ internal sealed partial class GameSessionKernel
 	/// projections; phase and health are outside the Permanent Role Swap policy.
 	/// </summary>
 	private sealed class PermanentRoleSwapRecoveryProjection(
-		IReadOnlyCollection<Guid> playerIds) : ISessionMutator
+		IReadOnlyCollection<Guid> playerIds)
+		: ISessionMutator,
+		  IDevotedServantSessionMutator
 	{
 		private readonly Dictionary<Guid, ProjectedPlayer> _players =
 			playerIds.ToDictionary(
@@ -187,6 +189,49 @@ internal sealed partial class GameSessionKernel
 				default:
 					throw new InvalidOperationException(
 						"Permanent Role Swap voting history is invalid.");
+			}
+		}
+
+		public void ApplyDevotedServantRoleTake(
+			DevotedServantRoleTakenCommittedLogEntry entry)
+		{
+			var actor = GetPlayer(entry.ActingPlayerId);
+			var target = GetPlayer(entry.VoteTargetId);
+			if (actor.CurrentRole != MainRoleType.DevotedServant ||
+				target.CurrentRole != entry.ExpectedTargetCurrentRole)
+			{
+				throw new InvalidOperationException(
+					"Devoted Servant Role-take history does not match the prior current Roles.");
+			}
+
+			SwappedPlayerIds.Add(entry.ActingPlayerId);
+			SwappedPlayerIds.Add(entry.VoteTargetId);
+			actor.CurrentRole = entry.NewCurrentRole;
+			actor.ModeratorKnownRole = entry.NewCurrentRole;
+			target.CurrentRole = null;
+			target.ModeratorKnownRole = null;
+			foreach (var effect in entry.StateChanges.StatusEffectsToClear)
+			{
+				actor.ActiveEffects &= ~effect;
+			}
+
+			switch (entry.Policy.VotingState)
+			{
+				case PermanentRoleSwapDisposition.Preserve:
+					break;
+				case PermanentRoleSwapDisposition.Clear:
+					actor.HasVotingRight = true;
+					actor.DurableVotingPower = 1;
+					break;
+				case PermanentRoleSwapDisposition.Change:
+					actor.HasVotingRight = entry.StateChanges
+						.VotingStateAfterSwap!.HasVotingRight;
+					actor.DurableVotingPower = entry.StateChanges
+						.VotingStateAfterSwap.DurableVotingPower;
+					break;
+				default:
+					throw new InvalidOperationException(
+						"Devoted Servant voting-state history is invalid.");
 			}
 		}
 

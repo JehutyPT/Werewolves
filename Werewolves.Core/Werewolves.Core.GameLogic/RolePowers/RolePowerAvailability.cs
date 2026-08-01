@@ -63,7 +63,7 @@ internal sealed record RolePowerInstance(
 		ArgumentNullException.ThrowIfNull(actingPlayer);
 		ArgumentNullException.ThrowIfNull(sourcePower);
 		var latestSwap = session.GameHistoryLog
-			.OfType<PermanentRoleSwapCommittedLogEntry>()
+			.OfType<IPermanentRoleSwapCommittedLogEntry>()
 			.LastOrDefault(entry => entry.PlayerId == actingPlayer.Id);
 		if (latestSwap is null)
 		{

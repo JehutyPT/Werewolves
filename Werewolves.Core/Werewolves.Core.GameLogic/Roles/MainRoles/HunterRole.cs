@@ -2,6 +2,7 @@ using Werewolves.Core.GameLogic.Interfaces;
 using Werewolves.Core.GameLogic.Models.EliminationCascades;
 using Werewolves.Core.GameLogic.Models.GameHookListeners;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
+using Werewolves.Core.GameLogic.Queries;
 using Werewolves.Core.GameLogic.RolePowers;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
@@ -49,7 +50,11 @@ internal sealed class HunterRole :
 			.Select(session.GetPlayer)
 			.SingleOrDefault(player =>
 				player.State.CurrentRole == MainRoleType.Hunter &&
-				player.State.Health == PlayerHealth.Dead);
+				player.State.Health == PlayerHealth.Dead &&
+				!GameSessionQueries
+					.IsDevotedServantAcquiredRoleDormantForCurrentDay(
+						session,
+						player.Id));
 		if (hunter == null)
 		{
 			if (pendingInstruction?.Semantic ==

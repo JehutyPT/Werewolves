@@ -259,8 +259,8 @@ public class GameTestBuilder
 	{
 		EnsureGameStarted();
 		var session = GetMutableSessionForArrangement();
-		var card = session.GetModeratorPhysicalCharacterCards()
-			.Single(state =>
+			var card = session.GetModeratorPhysicalCharacterCards()
+				.First(state =>
 				(state.Zone == PhysicalCharacterCardZone.DealPool ||
 				 state is
 				 {

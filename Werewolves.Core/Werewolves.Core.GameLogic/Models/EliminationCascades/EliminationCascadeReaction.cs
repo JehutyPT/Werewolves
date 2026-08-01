@@ -14,6 +14,8 @@ internal static class EliminationCascadeReactionIds
 		"wild-child-model-eliminated";
 	internal const string LoversHeartbreak = "lovers-heartbreak";
 	internal const string HunterFinalShot = "hunter-final-shot";
+	internal const string DevotedServantVoteWindow =
+		"devoted-servant-vote-window";
 }
 
 internal enum EliminationCascadeReactionBoundary

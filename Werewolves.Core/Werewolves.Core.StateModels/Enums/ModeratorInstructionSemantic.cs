@@ -53,5 +53,7 @@ public enum ModeratorInstructionSemantic
 	RevealFoxResult = 45,
 	SelectCupidLovers = 46,
 	RecognizeLovers = 47,
-	ChooseThiefOffer = 48
+	ChooseThiefOffer = 48,
+	ResolveDevotedServantVoteWindow = 49,
+	RecordDevotedServantAcquiredCard = 50
 }

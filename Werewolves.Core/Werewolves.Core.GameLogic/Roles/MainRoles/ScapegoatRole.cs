@@ -188,7 +188,18 @@ internal sealed class ScapegoatRole
 		GameSession session,
 		ModeratorResponse input)
 	{
-		var scapegoat = GetAliveRolePlayers(session)?.SingleOrDefault();
+		var aliveScapegoats = GetAliveRolePlayers(session)?.ToArray();
+		if (aliveScapegoats?.Any(player =>
+				GameSessionQueries
+					.IsDevotedServantAcquiredRoleDormantForCurrentDay(
+						session,
+						player.Id)) == true)
+		{
+			return HookListenerActionResult.Complete(
+				ScapegoatRoleState.Complete);
+		}
+
+		var scapegoat = aliveScapegoats?.SingleOrDefault();
 		if (scapegoat == null)
 		{
 			var candidates = session.GetPlayers()

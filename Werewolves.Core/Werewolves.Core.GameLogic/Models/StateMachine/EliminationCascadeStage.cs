@@ -512,7 +512,9 @@ internal sealed class EliminationCascadeStage : SubPhaseStage
 				case BatchProgress.AwaitingReveal:
 					RoleKnowledgeHandlers.RecordPublicRoleReveal(
 						session,
-						GetPlayers(session, frame.Eliminations),
+						GetPlayersForPublicRoleReveal(
+							session,
+							frame.Eliminations),
 						input);
 					frame.Progress = BatchProgress.Commit;
 					continue;
@@ -876,7 +878,9 @@ internal sealed class EliminationCascadeStage : SubPhaseStage
 		GameSession session,
 		BatchFrame frame)
 	{
-		var players = GetPlayers(session, frame.Eliminations);
+		var players = GetPlayersForPublicRoleReveal(
+			session,
+			frame.Eliminations);
 		var semantic = frame.IsInitial
 			? _initialRevealSemantic
 			: ModeratorInstructionSemantic.AssignEliminationCascadeRoles;
@@ -978,6 +982,16 @@ internal sealed class EliminationCascadeStage : SubPhaseStage
 		IReadOnlyCollection<EliminationRequest> eliminations) =>
 		eliminations
 			.Select(elimination => session.GetPlayer(elimination.PlayerId))
+			.ToArray();
+
+	private static IReadOnlyCollection<IPlayer> GetPlayersForPublicRoleReveal(
+		GameSession session,
+		IReadOnlyCollection<EliminationRequest> eliminations) =>
+		GetPlayers(session, eliminations)
+			.Where(player =>
+				!GameSessionQueries.HasDevotedServantRoleTakeForTarget(
+					session,
+					player.Id))
 			.ToArray();
 
 	private static bool PendingRevealMatches(

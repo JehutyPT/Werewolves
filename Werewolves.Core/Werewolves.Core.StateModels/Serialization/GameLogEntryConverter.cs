@@ -18,6 +18,10 @@ public class GameLogEntryConverter : JsonConverter<GameLogEntryBase>
 	        ["AssignRoleLogEntry"] = typeof(AssignRoleLogEntry),
 	        ["BearTamerGrowlOccurredLogEntry"] = typeof(BearTamerGrowlOccurredLogEntry),
 	        ["DayActionLogEntry"] = typeof(DayActionLogEntry),
+		["DevotedServantPublicSelfRevealCommittedLogEntry"] =
+			typeof(DevotedServantPublicSelfRevealCommittedLogEntry),
+		["DevotedServantRoleTakenCommittedLogEntry"] =
+			typeof(DevotedServantRoleTakenCommittedLogEntry),
         ["DawnVictimDeterminedLogEntry"] = typeof(DawnVictimDeterminedLogEntry),
         ["EliminationCascadeBatchResolvedLogEntry"] = typeof(EliminationCascadeBatchResolvedLogEntry),
         ["EliminationCascadeCompletedLogEntry"] = typeof(EliminationCascadeCompletedLogEntry),

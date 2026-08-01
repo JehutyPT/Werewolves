@@ -436,6 +436,16 @@ namespace Werewolves.Core.StateModels.Core
 						case PhysicalCharacterCardOwnershipObservedLogEntry ownership:
 							ApplyOwnershipObservation(projected, playerIds, ownership);
 							break;
+						case DevotedServantPublicSelfRevealCommittedLogEntry
+							{ BindsCardOwnership: true } selfReveal:
+							ApplyOwnershipObservation(
+								projected,
+								playerIds,
+								selfReveal.RoleLockInVersion,
+								selfReveal.ActingPlayerId,
+								selfReveal.DevotedServantCardId,
+								MainRoleType.DevotedServant);
+							break;
 						case VillagerVillagerPublicFromDealLogEntry villagerVillager:
 							ApplyOwnershipObservation(
 								projected,
@@ -447,6 +457,12 @@ namespace Werewolves.Core.StateModels.Core
 							break;
 						case PermanentRoleSwapCommittedLogEntry swap:
 							ApplyPermanentRoleSwapProjection(projected, playerIds, swap);
+							break;
+						case DevotedServantRoleTakenCommittedLogEntry roleTake:
+							ApplyDevotedServantRoleTakeProjection(
+								projected,
+								playerIds,
+								roleTake);
 							break;
 						case ThiefOfferDeclinedLogEntry decline:
 							ApplyThiefOfferDeclineProjection(projected, playerIds, decline);
@@ -629,6 +645,58 @@ namespace Werewolves.Core.StateModels.Core
 							acquired.Zone is PhysicalCharacterCardZone.DealPool or
 								PhysicalCharacterCardZone.Offer1 or
 								PhysicalCharacterCardZone.Offer2;
+			}
+
+			private void ApplyDevotedServantRoleTakeProjection(
+				Dictionary<Guid, PhysicalCharacterCardState> projection,
+				IReadOnlySet<Guid> playerIds,
+				DevotedServantRoleTakenCommittedLogEntry entry)
+			{
+				var movement = entry.PhysicalCards;
+				var expectedOwnerId = movement.ExpectedAcquiredCardOwnerPlayerId;
+				if (entry.RoleLockInVersion != _roleLockIn.Version ||
+					!playerIds.Contains(entry.ActingPlayerId) ||
+					!playerIds.Contains(entry.VoteTargetId) ||
+					!projection.TryGetValue(movement.OutgoingOwnedCardId, out var outgoing) ||
+					outgoing.Zone != PhysicalCharacterCardZone.PlayerOwned ||
+					outgoing.OwnerPlayerId != entry.ActingPlayerId ||
+					outgoing.Card.PrintedRole != MainRoleType.DevotedServant ||
+					!projection.TryGetValue(movement.AcquiredCardId, out var acquired) ||
+					acquired.Card.PrintedRole != entry.ObservedPrintedRole ||
+					!IsExpectedTargetCardState(
+						projection,
+						acquired,
+						entry.VoteTargetId,
+						expectedOwnerId))
+				{
+					throw new InvalidOperationException(
+						"Devoted Servant physical-card transfer history is invalid.");
+				}
+
+				projection[movement.OutgoingOwnedCardId] = outgoing with
+				{
+					Zone = PhysicalCharacterCardZone.Discarded,
+					OwnerPlayerId = null
+				};
+				projection[movement.AcquiredCardId] = acquired with
+				{
+					Zone = PhysicalCharacterCardZone.PlayerOwned,
+					OwnerPlayerId = entry.ActingPlayerId
+				};
+
+				static bool IsExpectedTargetCardState(
+					IReadOnlyDictionary<Guid, PhysicalCharacterCardState> projection,
+					PhysicalCharacterCardState acquired,
+					Guid targetId,
+					Guid? expectedOwnerId) =>
+					expectedOwnerId is { } ownerId
+						? ownerId == targetId &&
+						  acquired.Zone == PhysicalCharacterCardZone.PlayerOwned &&
+						  acquired.OwnerPlayerId == targetId
+						: acquired.Zone == PhysicalCharacterCardZone.DealPool &&
+						  acquired.OwnerPlayerId is null &&
+						  projection.Values.All(state =>
+							  state.OwnerPlayerId != targetId);
 			}
 
 			private void ApplyThiefOfferDeclineProjection(
@@ -1067,7 +1135,7 @@ namespace Werewolves.Core.StateModels.Core
 			}
 
 			var latestSwap = dto.GameHistoryLog
-				.OfType<PermanentRoleSwapCommittedLogEntry>()
+				.OfType<IPermanentRoleSwapCommittedLogEntry>()
 				.LastOrDefault(entry =>
 					entry.PlayerId == identity.ActingPlayerId);
 			return latestSwap is null

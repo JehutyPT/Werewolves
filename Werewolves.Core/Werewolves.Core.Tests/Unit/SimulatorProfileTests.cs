@@ -62,16 +62,18 @@ public class SimulatorProfileTests
 			.Append(ModeratorInstructionSemantic.RevealFoxResult)
 			.Append(ModeratorInstructionSemantic.SelectCupidLovers)
 			.Append(ModeratorInstructionSemantic.RecognizeLovers)
-			.Append(ModeratorInstructionSemantic.ChooseThiefOffer);
+			.Append(ModeratorInstructionSemantic.ChooseThiefOffer)
+			.Append(ModeratorInstructionSemantic.ResolveDevotedServantVoteWindow)
+			.Append(ModeratorInstructionSemantic.RecordDevotedServantAcquiredCard);
 		var safety = SimulatorCapability.SafetyScreening;
 		var probability = SimulatorCapability.FullProbability;
 
-		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "25"));
+		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "26"));
 		probability.Identity.Should().Be(new SimulatorProfileIdentity("full-probability", "4"));
 		BaselineRandomDecisionStrategy.Identity.Should()
 			.Be(new DecisionStrategyIdentity("baseline-random", "3-splitmix64"));
 		BaselineRandomDecisionStrategy.SafetyScreeningIdentity.Should()
-			.Be(new DecisionStrategyIdentity("baseline-random", "11-splitmix64"));
+			.Be(new DecisionStrategyIdentity("baseline-random", "12-splitmix64"));
 		safety.SupportedRoles.Should().Equal(
 			MainRoleType.SimpleWerewolf,
 			MainRoleType.BigBadWolf,
@@ -97,12 +99,15 @@ public class SimulatorProfileTests
 			MainRoleType.KnightWithRustySword,
 			MainRoleType.Cupid,
 			MainRoleType.Thief,
+			MainRoleType.DevotedServant,
 			MainRoleType.Angel);
 		probability.SupportedRoles.Should().Equal(
 			MainRoleType.SimpleWerewolf,
 			MainRoleType.Seer,
 			MainRoleType.WildChild,
 			MainRoleType.SimpleVillager);
+		safety.SupportsRole(MainRoleType.DevotedServant).Should().BeTrue();
+		probability.SupportsRole(MainRoleType.DevotedServant).Should().BeFalse();
 		probability.SupportedRoles.Should().NotBeSameAs(safety.SupportedRoles);
 		safety.TryGetBeneficiaryFaction(
 				MainRoleType.Angel,

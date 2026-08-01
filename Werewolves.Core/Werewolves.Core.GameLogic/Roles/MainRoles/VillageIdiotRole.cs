@@ -49,7 +49,10 @@ internal sealed class VillageIdiotRole
 
 		if (target.State.Health != PlayerHealth.Alive ||
 		    target.State.CurrentRole != MainRoleType.VillageIdiot ||
-		    target.State.DurableVotingPower != 1)
+		    target.State.DurableVotingPower != 1 ||
+			GameSessionQueries.IsDevotedServantAcquiredRoleDormantForCurrentDay(
+				session,
+				target.Id))
 		{
 			return false;
 		}

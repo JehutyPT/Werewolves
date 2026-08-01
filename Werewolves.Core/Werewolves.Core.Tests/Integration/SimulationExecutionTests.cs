@@ -147,6 +147,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 	[InlineData(MainRoleType.KnightWithRustySword, 1)]
 	[InlineData(MainRoleType.Cupid, 1)]
 	[InlineData(MainRoleType.Angel, 1)]
+	[InlineData(MainRoleType.DevotedServant, 1)]
 	public void ExecuteBatch_WithCardinalityRoleHolders_SafetyRepresentativeCompletesAllOneThousandAttempts(
 		MainRoleType role,
 		int roleHolderCardinality)
@@ -210,6 +211,51 @@ public class SimulationExecutionTests : DiagnosticTestBase
 			runCount: 1_000);
 
 		scenario.ToCanonical().Offer1Role.Should().Be(MainRoleType.Angel);
+		scenario.ToCanonical().Offer2Role.Should().Be(MainRoleType.Seer);
+		scenario.ThiefOfferBranchPolicy!.Branches.Should().Equal(
+			ThiefOfferBranch.Offer1,
+			ThiefOfferBranch.Offer2,
+			ThiefOfferBranch.Decline);
+		batch.Records.Should().HaveCount(1_000);
+		batch.Records
+			.OfType<IncompleteSimulationRun>()
+			.Select(run => run.RunSeedMaterial.RunNumber)
+			.Should().BeEmpty();
+		batch.CompletedRunCount.Should().Be(1_000);
+		batch.IncompleteRunCount.Should().Be(0);
+		batch.Records.Should().OnlyContain(run => run is CompletedSimulationRun);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void ExecuteBatch_WithOfferedDevotedServant_CompletesAllOneThousandAttemptsAcrossOrderedBranches()
+	{
+		MainRoleType[] dealPool =
+		[
+			MainRoleType.Thief,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager
+		];
+		var scenario = new SimulationScenario(
+			playerCount: 5,
+			roleCompositionCards: dealPool.Concat(
+				[MainRoleType.DevotedServant, MainRoleType.Seer]),
+			dealPoolCards: dealPool,
+			offer1Role: MainRoleType.DevotedServant,
+			offer2Role: MainRoleType.Seer);
+		var identity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+
+		var batch = new SimulationExecutor().ExecuteBatch(
+			scenario,
+			SimulatorCapability.SafetyScreening,
+			identity,
+			runCount: 1_000);
+
+		scenario.ToCanonical().Offer1Role.Should().Be(MainRoleType.DevotedServant);
 		scenario.ToCanonical().Offer2Role.Should().Be(MainRoleType.Seer);
 		scenario.ThiefOfferBranchPolicy!.Branches.Should().Equal(
 			ThiefOfferBranch.Offer1,

@@ -9,8 +9,20 @@ namespace Werewolves.Core.StateModels.Log;
 /// One append-only Permanent Role Swap. The entry carries the caller's complete
 /// category policy, physical-card exchange, Faction facts, and fresh power lineage.
 /// </summary>
+internal interface IPermanentRoleSwapCommittedLogEntry
+{
+	Guid PlayerId { get; }
+	MainRoleType NewCurrentRole { get; }
+	PermanentRoleSwapPolicy Policy { get; }
+	ImmutableArray<FactionFact> Facts { get; }
+	Guid NewPowerInstanceId { get; }
+	RolePowerInstanceOrigin PowerInstanceOrigin { get; }
+}
+
 public sealed record PermanentRoleSwapCommittedLogEntry
-	: GameLogEntryBase, IFactionFactBatchLogEntry
+	: GameLogEntryBase,
+	  IFactionFactBatchLogEntry,
+	  IPermanentRoleSwapCommittedLogEntry
 {
 	public required long RoleLockInVersion { get; init; }
 	public required Guid PlayerId { get; init; }

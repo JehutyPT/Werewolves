@@ -588,6 +588,126 @@ public sealed class StutteringJudgeRoleTests : DiagnosticTestBase
 	}
 
 	[Fact]
+	public void DayTwo_AcquiredJudge_DoesNotReusePredecessorsNightOneSignal()
+	{
+		var builder = CreateBuilder()
+			.WithPlayers(7)
+			.WithRoles(
+				MainRoleType.StutteringJudge,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.DevotedServant,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		var originalJudge = players[0];
+		var werewolf = players[1];
+		var servant = players[2];
+		var firstNightVictim = players[6];
+		var secondNightVictim = players[5];
+		builder.ArrangeKnownRole(
+			originalJudge.Id,
+			MainRoleType.StutteringJudge);
+		builder.ConfirmGameStart();
+
+		var judgeWake =
+			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+				builder.ConfirmNightStart());
+		var signalSetup =
+			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+				builder.Process(judgeWake.CreateResponse()));
+		_ = builder.Process(signalSetup.CreateResponse());
+		var firstNightEnd =
+			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+				builder.CompleteWerewolfNightAction(
+					[werewolf.Id],
+					firstNightVictim.Id));
+		_ = builder.Process(firstNightEnd.CreateResponse());
+		builder.CompleteDawnPhase(new()
+		{
+			[firstNightVictim.Id] = MainRoleType.SimpleVillager
+		});
+
+		var firstDayDebate = InstructionAssert.ExpectType<ConfirmationInstruction>(
+			builder.GetCurrentInstruction());
+		var conductFirstVote =
+			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+				builder.Process(firstDayDebate.CreateResponse()));
+		var signalObservation =
+			InstructionAssert.ExpectSuccessWithType<SelectOptionsInstruction>(
+				builder.Process(conductFirstVote.CreateResponse()));
+		var firstVote =
+			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+				builder.Process(signalObservation.CreateResponse(
+					StutteringJudgeSignalOptionIds.DidNotOccur)));
+		var servantWindow =
+			InstructionAssert.ExpectSuccessWithType<
+				DevotedServantVoteWindowInstruction>(
+				builder.Process(firstVote.CreateResponse([originalJudge.Id])));
+		var acquiredCard =
+			InstructionAssert.ExpectSuccessWithType<AssignRolesInstruction>(
+				builder.Process(servantWindow.CreatePublicSelfRevealResponse(
+					servant.Id)));
+		var firstEliminationAnnouncement =
+			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+				builder.Process(acquiredCard.CreateResponse(new()
+				{
+					[originalJudge.Id] = MainRoleType.StutteringJudge
+				})));
+
+		var transfer = builder.GetGameState()!.GameHistoryLog
+			.OfType<DevotedServantRoleTakenCommittedLogEntry>()
+			.Should().ContainSingle().Subject;
+		transfer.ActingPlayerId.Should().Be(servant.Id);
+		transfer.VoteTargetId.Should().Be(originalJudge.Id);
+		transfer.NewCurrentRole.Should().Be(MainRoleType.StutteringJudge);
+		transfer.PowerInstanceOrigin.Should().Be(RolePowerInstanceOrigin.Swapped);
+		transfer.NewPowerInstanceId.Should().NotBe(servant.Id);
+		transfer.NewPowerInstanceId.Should().NotBe(originalJudge.Id);
+		servant.State.CurrentRole.Should().Be(MainRoleType.StutteringJudge);
+		originalJudge.State.Health.Should().Be(PlayerHealth.Dead);
+
+		var secondNightStart = builder.Process(
+			firstEliminationAnnouncement.CreateResponse());
+		secondNightStart.ModeratorInstruction!.Semantic.Should().Be(
+			ModeratorInstructionSemantic.StartNight);
+		builder.ConfirmNightStart();
+		_ = builder.CompleteWerewolfNightActionSubsequentNight(
+			secondNightVictim.Id);
+		var secondNightEnd = InstructionAssert.ExpectType<ConfirmationInstruction>(
+			builder.GetCurrentInstruction());
+		_ = builder.Process(secondNightEnd.CreateResponse());
+		builder.CompleteDawnPhase(new()
+		{
+			[secondNightVictim.Id] = MainRoleType.SimpleVillager
+		});
+
+		var secondDayDebate = InstructionAssert.ExpectType<ConfirmationInstruction>(
+			builder.GetCurrentInstruction());
+		var directSecondDayVote =
+			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+				builder.Process(secondDayDebate.CreateResponse()));
+
+		directSecondDayVote.Semantic.Should().Be(
+			ModeratorInstructionSemantic.RecordDayVote);
+		var session = builder.GetGameState()!;
+		session.GameHistoryLog
+			.OfType<StutteringJudgeSignalEstablishedLogEntry>()
+			.Should().ContainSingle(entry =>
+				entry.JudgePlayerId == originalJudge.Id);
+		session.GameHistoryLog
+			.OfType<StutteringJudgeSignalDidNotOccurLogEntry>()
+			.Should().NotContain(entry => entry.JudgePlayerId == servant.Id);
+		session.GameHistoryLog
+			.OfType<OneUseRolePowerDayActionCommittedLogEntry>()
+			.Should().NotContain(entry =>
+				entry.ResourceIdentity.ActingPlayerId == servant.Id);
+		MarkTestCompleted();
+	}
+
+	[Fact]
 	public void PositiveSignal_AfterFirstCascade_UsesFreshScopeRosterAndVotingRightsEvenIfJudgeDies()
 	{
 		var (builder, judge, werewolf, _) = CreateGameAtFirstDay();

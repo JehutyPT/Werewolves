@@ -55,7 +55,13 @@
 
 	@if (_flow.HasInstruction)
 	{
-		if (Instruction is SelectPlayersInstruction selectPlayersInstruction)
+		if (Instruction is DevotedServantVoteWindowInstruction devotedServantVoteWindowInstruction)
+		{
+			<DevotedServantVoteWindowView Instruction="devotedServantVoteWindowInstruction"
+										Roster="Roster"
+										OnResponse="OnResponse" />
+		}
+		else if (Instruction is SelectPlayersInstruction selectPlayersInstruction)
 		{
 			<SelectPlayersView Instruction="selectPlayersInstruction" Roster="Roster" OnResponse="OnResponse" />
 		}
@@ -86,7 +92,7 @@
 								  Instruction="confirmationInstruction"
 								  OnResponse="OnResponse" />
 			}
-			else if (Instruction is not (SelectPlayersInstruction or SelectOptionsInstruction or AssignRolesInstruction))
+			else if (Instruction is not (DevotedServantVoteWindowInstruction or SelectPlayersInstruction or SelectOptionsInstruction or AssignRolesInstruction))
 			{
 				<button type="button" class="ww-btn-primary" disabled>@ClientStrings.Dashboard_RespondButton</button>
 			}
@@ -130,7 +136,7 @@
 	private bool ShouldRenderDashboardActionZone =>
 		AudioControls is not null ||
 		(_flow.HasInstruction &&
-			Instruction is not (SelectPlayersInstruction or SelectOptionsInstruction or AssignRolesInstruction));
+			Instruction is not (DevotedServantVoteWindowInstruction or SelectPlayersInstruction or SelectOptionsInstruction or AssignRolesInstruction));
 
 	private bool IsExpanded(InstructionSection section) =>
 		_expandedSections.HasFlag(section);
