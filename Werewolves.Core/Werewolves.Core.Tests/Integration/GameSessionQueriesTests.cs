@@ -147,7 +147,8 @@ public class GameSessionQueriesTests : DiagnosticTestBase
     {
         // 5 players (1 WW, 1 Seer, 3 V). The Werewolf collective observation
         // does not identify an exact Role, so arrange that independent fact
-        // explicitly; the Seer is still identified through ordinary Night flow.
+        // explicitly; the Seer is still identified through ordinary Night flow,
+        // then its independent physical-card ownership is arranged explicitly.
         // That leaves only SimpleVillager among the unassigned Role copies.
         // requiredAssignmentCount = 2 matches the exact unassigned count.
         var builder = CreateBuilder()
@@ -159,13 +160,16 @@ public class GameSessionQueriesTests : DiagnosticTestBase
         var players = gameState.GetPlayers().ToList();
         var werewolf = players[0];
         var seer = players[1];
-        builder.ArrangeKnownRole(werewolf.Id, MainRoleType.SimpleWerewolf);
+        builder.ArrangeKnownPhysicalRole(
+            werewolf.Id,
+            MainRoleType.SimpleWerewolf);
 
         builder.CompleteNightPhase(
             werewolfIds: [werewolf.Id],
             victimId: players[2].Id,
             seerId: seer.Id,
             seerTargetId: werewolf.Id);
+        builder.ArrangeKnownPhysicalRole(seer.Id, MainRoleType.Seer);
 
         var result = GameSessionQueries.TryGetOnlyPossibleUnassignedRole(
             gameState, requiredAssignmentCount: 2, out var role);
@@ -191,7 +195,9 @@ public class GameSessionQueriesTests : DiagnosticTestBase
         var gameState = builder.GetGameState()!;
         var players = gameState.GetPlayers().ToList();
         var werewolf = players[0];
-        builder.ArrangeKnownRole(werewolf.Id, MainRoleType.SimpleWerewolf);
+        builder.ArrangeKnownPhysicalRole(
+            werewolf.Id,
+            MainRoleType.SimpleWerewolf);
 
         builder.CompleteNightPhase(
             werewolfIds: [werewolf.Id],

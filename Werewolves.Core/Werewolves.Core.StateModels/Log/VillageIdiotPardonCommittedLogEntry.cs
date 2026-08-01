@@ -37,11 +37,16 @@ public sealed record VillageIdiotPardonCommittedLogEntry
 		if (PlayerId == Guid.Empty ||
 		    PlayerId != ActingPlayerId ||
 		    SourceRole != MainRoleType.VillageIdiot ||
-		    PowerInstanceId != ActingPlayerId ||
-		    PowerInstanceOrigin != RolePowerInstanceOrigin.Native)
+		    PowerInstanceOrigin switch
+		    {
+			    RolePowerInstanceOrigin.Native =>
+				    PowerInstanceId != ActingPlayerId,
+			    RolePowerInstanceOrigin.Swapped => false,
+			    _ => true
+		    })
 		{
 			throw new InvalidOperationException(
-				"The Village Idiot pardon must belong to its native living Role holder.");
+				"The Village Idiot pardon must belong to its current living Role holder.");
 		}
 	}
 

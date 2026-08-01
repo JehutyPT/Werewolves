@@ -1,5 +1,7 @@
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Log;
+using Werewolves.Core.StateModels.Models;
 
 namespace Werewolves.Core.GameLogic.RolePowers;
 
@@ -49,6 +51,55 @@ internal sealed record RolePowerInstance(
 			sourceRole,
 			sourcePower,
 			RolePowerInstanceOrigin.Native);
+	}
+
+	internal static RolePowerInstance CreateCurrent(
+		IGameSession session,
+		IPlayer actingPlayer,
+		MainRoleType sourceRole,
+		RolePowerDefinition sourcePower)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		ArgumentNullException.ThrowIfNull(actingPlayer);
+		ArgumentNullException.ThrowIfNull(sourcePower);
+		var latestSwap = session.GameHistoryLog
+			.OfType<PermanentRoleSwapCommittedLogEntry>()
+			.LastOrDefault(entry => entry.PlayerId == actingPlayer.Id);
+		if (latestSwap is null)
+		{
+			return CreateNative(actingPlayer, sourceRole, sourcePower);
+		}
+		if (latestSwap.NewCurrentRole != sourceRole ||
+			actingPlayer.State.CurrentRole != sourceRole)
+		{
+			throw new InvalidOperationException(
+				"The current Role Power does not match the Player's latest Permanent Role Swap.");
+		}
+
+		return new RolePowerInstance(
+			latestSwap.NewPowerInstanceId,
+			sourceRole,
+			sourcePower,
+			RolePowerInstanceOrigin.Swapped);
+	}
+
+	internal static RolePowerInstanceIdentity CreateCurrentIdentity(
+		IGameSession session,
+		IPlayer actingPlayer,
+		MainRoleType sourceRole,
+		RolePowerDefinition sourcePower)
+	{
+		var instance = CreateCurrent(
+			session,
+			actingPlayer,
+			sourceRole,
+			sourcePower);
+		return new RolePowerInstanceIdentity(
+			actingPlayer.Id,
+			sourceRole,
+			sourcePower.Identifier.Value,
+			instance.Id,
+			instance.Origin);
 	}
 }
 

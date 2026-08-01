@@ -134,7 +134,7 @@ internal sealed class WitchRole : NightRoleHookListener<WitchRoleState>
 			var witch = GetAliveRolePlayers(session)?.SingleOrDefault();
 			if (witch != null)
 			{
-				var instance = CreatePowerInstance(witch);
+				var instance = CreatePowerInstance(session, witch);
 				if (IsSpent(
 					    session,
 					    CreateResourceIdentity(
@@ -202,7 +202,7 @@ internal sealed class WitchRole : NightRoleHookListener<WitchRoleState>
 	{
 		var witch = GetWitch(session);
 		var attackTargets = GameSessionQueries.GetPhysicalAttackTargetsThisNight(session);
-		var instance = CreatePowerInstance(witch);
+		var instance = CreatePowerInstance(session, witch);
 		if (attackTargets.Count > 0 &&
 		    TryEvaluateAvailableResource(
 			    session,
@@ -278,7 +278,7 @@ internal sealed class WitchRole : NightRoleHookListener<WitchRoleState>
 			.Select(player => player.Id)
 			.ToHashSet();
 
-		var instance = CreatePowerInstance(witch);
+		var instance = CreatePowerInstance(session, witch);
 		if (poisonCandidates.Count == 0 ||
 		    !TryEvaluateAvailableResource(
 			    session,
@@ -318,7 +318,7 @@ internal sealed class WitchRole : NightRoleHookListener<WitchRoleState>
 	{
 		var witch = GetWitch(session);
 		var attackTargets = GameSessionQueries.GetPhysicalAttackTargetsThisNight(session);
-		var instance = CreatePowerInstance(witch);
+		var instance = CreatePowerInstance(session, witch);
 		var healingIdentity = CreateResourceIdentity(
 			witch,
 			instance,
@@ -387,8 +387,11 @@ internal sealed class WitchRole : NightRoleHookListener<WitchRoleState>
 			session,
 			resourceIdentity);
 
-	private static RolePowerInstance CreatePowerInstance(IPlayer witch) =>
-		RolePowerInstance.CreateNative(
+	private static RolePowerInstance CreatePowerInstance(
+		GameSession session,
+		IPlayer witch) =>
+		RolePowerInstance.CreateCurrent(
+			session,
 			witch,
 			MainRoleType.Witch,
 			PotionsPower);
@@ -411,7 +414,7 @@ internal sealed class WitchRole : NightRoleHookListener<WitchRoleState>
 		NightActionType actionType,
 		Guid targetId)
 	{
-		var instance = CreatePowerInstance(witch);
+		var instance = CreatePowerInstance(session, witch);
 		var resourceIdentity = CreateResourceIdentity(
 			witch,
 			instance,

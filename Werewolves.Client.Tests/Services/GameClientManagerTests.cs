@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Text.Json;
 using FluentAssertions;
 using Werewolves.Client.Services;
 using Werewolves.Client.Tests.Helpers;
@@ -17,6 +18,152 @@ namespace Werewolves.Client.Tests.Services;
 
 public class GameClientManagerTests
 {
+	[Fact]
+	public void StagedRoleLockIn_ReplacementRecoveryAndLobbyExit_KeepOneDiscriminatedArtifact()
+	{
+		using var saveDirectory = TemporaryDirectory.Create();
+		var saveStore = new FileGameSessionSaveStore(saveDirectory.Path);
+		var lobby = CreateThiefLobby();
+		var first = CreateThiefRoleLockIn(version: 1, rotateOffer1IntoDealPool: false);
+		var second = CreateThiefRoleLockIn(version: 2, rotateOffer1IntoDealPool: true);
+		var manager = new GameClientManager(new GameService(), saveStore: saveStore);
+		var scenarioChanges = 0;
+		lobby.SimulationScenarioChanged += (_, _) => scenarioChanges++;
+
+		manager.TryReplaceStagedRoleLockIn(lobby, expectedCurrentVersion: 0, first)
+			.Should().BeTrue();
+		var firstPayload = saveStore.Load();
+		ReadRecoveryKind(firstPayload).Should().Be("StagedLobby");
+		lobby.AcceptedRoleLockIn.Should().BeSameAs(first);
+		scenarioChanges.Should().Be(1);
+
+		manager.TryReplaceStagedRoleLockIn(lobby, expectedCurrentVersion: 1, second)
+			.Should().BeTrue();
+		var secondPayload = saveStore.Load();
+		secondPayload.Should().NotBe(firstPayload);
+		ReadRecoveryKind(secondPayload).Should().Be("StagedLobby");
+		lobby.AcceptedRoleLockIn.Should().BeSameAs(second);
+		scenarioChanges.Should().Be(2);
+
+		manager.TryReplaceStagedRoleLockIn(lobby, expectedCurrentVersion: 0, first)
+			.Should().BeFalse();
+		lobby.AcceptedRoleLockIn.Should().BeSameAs(second);
+		saveStore.Load().Should().Be(secondPayload);
+		scenarioChanges.Should().Be(2);
+
+		var recoveredLobby = CreateThiefLobby(withPlayers: false);
+		var recovered = new GameClientManager(
+			new GameService(),
+			saveStore: new FileGameSessionSaveStore(saveDirectory.Path),
+			lobbySetupState: recoveredLobby);
+		recovered.HasActiveSession.Should().BeFalse();
+		recoveredLobby.PlayerNames.Should().Equal(PlayerNames.DefaultFive);
+		recoveredLobby.AcceptedRoleLockIn.Should().NotBeNull();
+		recoveredLobby.AcceptedRoleLockIn!.Version.Should().Be(2);
+		recoveredLobby.AcceptedRoleLockIn.RoleComposition.Select(card => card.Id)
+			.Should().Equal(second.RoleComposition.Select(card => card.Id));
+		var finalSupportedLockIn = CreateSupportedRoleLockIn(version: 3);
+		recovered.TryReplaceStagedRoleLockIn(
+			recoveredLobby,
+			expectedCurrentVersion: 2,
+			finalSupportedLockIn).Should().BeTrue();
+
+		recovered.StartGame(recoveredLobby);
+
+		recovered.HasActiveSession.Should().BeTrue();
+		ReadRecoveryKind(saveStore.Load()).Should().Be("ActiveGame");
+		recovered.TryReplaceStagedRoleLockIn(
+			recoveredLobby,
+			expectedCurrentVersion: 3,
+			CreateSupportedRoleLockIn(version: 4))
+			.Should().BeFalse("Lobby Exit finalizes the latest Role Lock-In");
+		ReadRecoveryKind(saveStore.Load()).Should().Be("ActiveGame");
+	}
+
+	[Theory]
+	[InlineData(true)]
+	[InlineData(false)]
+	public void PartialLobbyEdit_BlocksExitButPreservesLastAcceptedStagedBytes(
+		bool editRoster)
+	{
+		using var saveDirectory = TemporaryDirectory.Create();
+		var saveStore = new FileGameSessionSaveStore(saveDirectory.Path);
+		var lobby = CreateThiefLobby();
+		var staged = CreateThiefRoleLockIn(
+			version: 1,
+			rotateOffer1IntoDealPool: false);
+		var manager = new GameClientManager(new GameService(), saveStore: saveStore);
+		manager.TryReplaceStagedRoleLockIn(
+			lobby,
+			expectedCurrentVersion: 0,
+			staged).Should().BeTrue();
+		var stagedPayload = saveStore.Load();
+
+		if (editRoster)
+		{
+			lobby.MovePlayerDown(0).Should().BeTrue();
+		}
+		else
+		{
+			lobby.DecrementRole(MainRoleType.SimpleVillager);
+		}
+
+		lobby.AcceptedRoleLockIn.Should().BeSameAs(staged);
+		saveStore.Load().Should().Be(stagedPayload);
+		var exit = () => manager.StartGame(lobby);
+		exit.Should().Throw<InvalidOperationException>()
+			.WithMessage("*fresh accepted Role Lock-In*");
+		manager.HasActiveSession.Should().BeFalse();
+		saveStore.Load().Should().Be(stagedPayload);
+	}
+
+	[Fact]
+	public void StartGame_WhenActiveGameOverwriteFails_RetainsStagedLobbyAndPublishesNoSession()
+	{
+		var store = new ToggleThrowSaveStore();
+		var lobby = CreateThiefLobby();
+		var manager = new GameClientManager(new GameService(), saveStore: store);
+		var staged = CreateSupportedRoleLockIn(version: 1);
+		manager.TryReplaceStagedRoleLockIn(lobby, expectedCurrentVersion: 0, staged)
+			.Should().BeTrue();
+		var stagedPayload = store.Load();
+		store.ThrowOnSave = true;
+
+		var act = () => manager.StartGame(lobby);
+
+		act.Should().Throw<IOException>();
+		manager.HasActiveSession.Should().BeFalse();
+		manager.ActiveGameId.Should().BeNull();
+		manager.CurrentSession.Should().BeNull();
+		store.Load().Should().Be(stagedPayload);
+		ReadRecoveryKind(store.Load()).Should().Be("StagedLobby");
+		store.ThrowOnSave = false;
+		manager.TryReplaceStagedRoleLockIn(
+			lobby,
+			expectedCurrentVersion: 1,
+			CreateSupportedRoleLockIn(version: 2)).Should().BeTrue(
+				"a failed Lobby Exit must not finalize the staged Role Lock-In");
+	}
+
+	[Fact]
+	public void StartGame_FromUnstagedLobby_PersistsFinalRoleLockInBeforeActiveGame()
+	{
+		var store = new RecordingSaveStore();
+		var lobby = CreateSupportedLobby();
+		var manager = new GameClientManager(new GameService(), saveStore: store);
+
+		manager.StartGame(lobby);
+
+		store.SavedPayloads.Select(ReadRecoveryKind).Should().Equal(
+			"StagedLobby",
+			"ActiveGame");
+		lobby.AcceptedRoleLockIn.Should().NotBeNull();
+		manager.CurrentSession!.RoleLockIn.RoleComposition
+			.Select(card => card.Id)
+			.Should().Equal(lobby.AcceptedRoleLockIn!.RoleComposition
+				.Select(card => card.Id));
+	}
+
 	[Fact]
 	public void StartGame_FromLobbyConfiguration_CreatesCoreSessionAndExposesInstruction()
 	{
@@ -145,7 +292,7 @@ public class GameClientManagerTests
 	}
 
 	[Fact]
-	public void ProcessInput_SuccessfulInput_WritesSingleSaveFileWithSerializedSession()
+	public void ProcessInput_SuccessfulInput_WritesSingleActiveGameSaveFile()
 	{
 		using var saveDirectory = TemporaryDirectory.Create();
 		var saveStore = new FileGameSessionSaveStore(saveDirectory.Path);
@@ -156,7 +303,10 @@ public class GameClientManagerTests
 
 		var saveFiles = Directory.GetFiles(saveDirectory.Path);
 		saveFiles.Should().ContainSingle();
-		File.ReadAllText(saveFiles.Single()).Should().Be(manager.CurrentSession!.Serialize());
+		var payload = File.ReadAllText(saveFiles.Single());
+		ReadRecoveryKind(payload).Should().Be("ActiveGame");
+		ReadActiveGameSerializedSession(payload).Should().Be(
+			manager.CurrentSession!.Serialize());
 	}
 
 	[Fact]
@@ -172,7 +322,10 @@ public class GameClientManagerTests
 		manager.ProcessInput(startInstruction.CreateResponse());
 
 		Directory.GetFiles(saveDirectory.Path).Should().ContainSingle();
-		File.ReadAllText(saveFilePath).Should().Be(manager.CurrentSession!.Serialize());
+		var payload = File.ReadAllText(saveFilePath);
+		ReadRecoveryKind(payload).Should().Be("ActiveGame");
+		ReadActiveGameSerializedSession(payload).Should().Be(
+			manager.CurrentSession!.Serialize());
 	}
 
 	[Fact]
@@ -265,7 +418,29 @@ public class GameClientManagerTests
 	}
 
 	[Fact]
-	public void StartGame_WhenSaveFileExists_DeletesSaveFile()
+	public void Constructor_WhenSaveFileIsRawCoreSession_DoesNotThrowAndClearsSave()
+	{
+		using var saveDirectory = TemporaryDirectory.Create();
+		var saveFilePath = Path.Combine(
+			saveDirectory.Path,
+			FileGameSessionSaveStore.SaveFileName);
+		var manager = new GameClientManager(
+			new GameService(),
+			saveStore: new FileGameSessionSaveStore(saveDirectory.Path));
+		StartSimpleGame(manager);
+		File.WriteAllText(saveFilePath, manager.CurrentSession!.Serialize());
+
+		var act = () => new GameClientManager(
+			new GameService(),
+			saveStore: new FileGameSessionSaveStore(saveDirectory.Path));
+
+		var resumed = act.Should().NotThrow().Subject;
+		resumed.HasActiveSession.Should().BeFalse();
+		File.Exists(saveFilePath).Should().BeFalse();
+	}
+
+	[Fact]
+	public void StartGame_WhenSaveFileExists_ReplacesItWithActiveGamePayload()
 	{
 		using var saveDirectory = TemporaryDirectory.Create();
 		var saveFilePath = Path.Combine(saveDirectory.Path, FileGameSessionSaveStore.SaveFileName);
@@ -276,7 +451,8 @@ public class GameClientManagerTests
 
 		StartSimpleGame(manager);
 
-		File.Exists(saveFilePath).Should().BeFalse();
+		File.Exists(saveFilePath).Should().BeTrue();
+		ReadRecoveryKind(File.ReadAllText(saveFilePath)).Should().Be("ActiveGame");
 	}
 
 	[Fact]
@@ -1084,6 +1260,103 @@ public class GameClientManagerTests
 		}
 	}
 
+	private static LobbySetupState CreateThiefLobby(bool withPlayers = true)
+	{
+		var lobby = LobbySetupMetadataFixture.StateWithRoles(
+			MainRoleType.Thief,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager);
+		if (withPlayers)
+		{
+			foreach (var playerName in PlayerNames.DefaultFive)
+			{
+				lobby.AddPlayer(playerName);
+			}
+		}
+
+		return lobby;
+	}
+
+	private static LobbySetupState CreateSupportedLobby()
+	{
+		var lobby = LobbySetupMetadataFixture.StateWithRoles(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.Seer,
+			MainRoleType.SimpleVillager);
+		foreach (var playerName in PlayerNames.DefaultFive)
+		{
+			lobby.AddPlayer(playerName);
+		}
+
+		lobby.IncrementRole(MainRoleType.SimpleWerewolf);
+		lobby.IncrementRole(MainRoleType.Seer);
+		for (var i = 0; i < 3; i++)
+		{
+			lobby.IncrementRole(MainRoleType.SimpleVillager);
+		}
+
+		return lobby;
+	}
+
+	private static RoleLockIn CreateThiefRoleLockIn(long version, bool rotateOffer1IntoDealPool)
+	{
+		var cards = new[]
+		{
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.Thief),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.SimpleWerewolf),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.SimpleVillager),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.SimpleVillager),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.SimpleVillager),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.SimpleVillager),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.SimpleVillager)
+		};
+		var dealPool = rotateOffer1IntoDealPool
+			? new[] { cards[0].Id, cards[1].Id, cards[2].Id, cards[3].Id, cards[5].Id }
+			: cards.Take(5).Select(card => card.Id).ToArray();
+		var offer1 = rotateOffer1IntoDealPool ? cards[4].Id : cards[5].Id;
+
+		return new RoleLockIn(
+			version,
+			playerCount: 5,
+			cards,
+			dealPool,
+			offer1,
+			cards[6].Id);
+	}
+
+	private static RoleLockIn CreateSupportedRoleLockIn(long version)
+	{
+		var cards = new[]
+		{
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.SimpleWerewolf),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.SimpleVillager),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.SimpleVillager),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.SimpleVillager),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.SimpleVillager)
+		};
+		return new RoleLockIn(
+			version,
+			playerCount: 5,
+			cards,
+			cards.Select(card => card.Id));
+	}
+
+	private static string ReadRecoveryKind(string? payload)
+	{
+		payload.Should().NotBeNullOrWhiteSpace();
+		using var document = JsonDocument.Parse(payload!);
+		return document.RootElement.GetProperty("kind").GetString()!;
+	}
+
+	private static string ReadActiveGameSerializedSession(string payload)
+	{
+		using var document = JsonDocument.Parse(payload);
+		return document.RootElement
+			.GetProperty("activeGame")
+			.GetProperty("serializedSession")
+			.GetString()!;
+	}
+
 	private sealed class ThrowingSaveStore : IGameSessionSaveStore
 	{
 		public string? Load() => null;
@@ -1094,6 +1367,43 @@ public class GameClientManagerTests
 		public void Clear()
 		{
 		}
+	}
+
+	private sealed class ToggleThrowSaveStore : IGameSessionSaveStore
+	{
+		private string? _payload;
+
+		public bool ThrowOnSave { get; set; }
+
+		public string? Load() => _payload;
+
+		public void Save(string serializedSession)
+		{
+			if (ThrowOnSave)
+			{
+				throw new IOException(ClientTestReferences.ExceptionMessages.SaveFailed);
+			}
+			_payload = serializedSession;
+		}
+
+		public void Clear() => _payload = null;
+	}
+
+	private sealed class RecordingSaveStore : IGameSessionSaveStore
+	{
+		private string? _payload;
+
+		public List<string> SavedPayloads { get; } = new();
+
+		public string? Load() => _payload;
+
+		public void Save(string serializedSession)
+		{
+			SavedPayloads.Add(serializedSession);
+			_payload = serializedSession;
+		}
+
+		public void Clear() => _payload = null;
 	}
 
 	[Fact]

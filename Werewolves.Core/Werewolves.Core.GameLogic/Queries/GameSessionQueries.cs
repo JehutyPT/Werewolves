@@ -210,7 +210,7 @@ internal static class GameSessionQueries
         ArgumentNullException.ThrowIfNull(session);
         var players = session.GetPlayers().ToArray();
         var projection = FactionFactProjection.Create(
-            session.GameHistoryLog.OfType<FactionFactsCommittedLogEntry>(),
+			session.GameHistoryLog.OfType<IFactionFactBatchLogEntry>(),
             players.Select(player => player.Id).ToArray());
         return players.Any(player =>
             player.State.Health == PlayerHealth.Dead &&
@@ -233,7 +233,7 @@ internal static class GameSessionQueries
             .Select(player => player.Id)
             .ToArray();
         var projection = FactionFactProjection.Create(
-            FindLogEntries<FactionFactsCommittedLogEntry>(session),
+			session.GameHistoryLog.OfType<IFactionFactBatchLogEntry>(),
             playerIds,
             inclusiveBoundary);
         if (playerIds.Any(playerId =>
@@ -271,9 +271,14 @@ internal static class GameSessionQueries
             .SelectMany(entry => entry.PlayerIds)
             .ToHashSet();
         accountedRoleHolderIds.UnionWith(committedRoleHolderIds);
+		var activePrintedRoleCardCount = session.GetModeratorPhysicalCharacterCards()
+			.Count(cardState =>
+				cardState.Card.PrintedRole == role &&
+				cardState.Zone is PhysicalCharacterCardZone.DealPool or
+					PhysicalCharacterCardZone.PlayerOwned);
         var unaccountedCompositionHolderCount = Math.Max(
             0,
-            session.RoleInPlayCount(role) - accountedRoleHolderIds.Count);
+			activePrintedRoleCardCount - accountedRoleHolderIds.Count);
         var committedLivingRoleHolderCount = session.GetPlayers()
             .Count(player =>
                 player.State.CurrentRole == role &&
@@ -454,21 +459,11 @@ internal static class GameSessionQueries
             .Select(log => log.PlayerId);
 
     internal static List<MainRoleType> GetUnassignedRoles(IGameSession session)
-    {
-        var assignedRoles = session.GetPlayers()
-            .Select(p => p.State.MainRole)
-            .Where(role => role.HasValue)
-            .Select(role => role!.Value)
-            .ToList();
-
-        var unassignedRoles = GetRolesInPlay(session).ToList();
-        foreach (var role in assignedRoles)
-        {
-            unassignedRoles.Remove(role);
-        }
-
-        return unassignedRoles;
-    }
+        => session.GetModeratorPhysicalCharacterCards()
+			.Where(cardState =>
+				cardState.Zone == PhysicalCharacterCardZone.DealPool)
+			.Select(cardState => cardState.Card.PrintedRole)
+			.ToList();
 
     internal static bool TryGetOnlyPossibleUnassignedRole(
         IGameSession session,
@@ -578,12 +573,10 @@ internal static class GameSessionQueries
 
     private static IEnumerable<MainRoleType> GetRolesInPlay(IGameSession session)
     {
-        foreach (var role in Enum.GetValues<MainRoleType>())
-        {
-            for (var i = 0; i < session.RoleInPlayCount(role); i++)
-            {
-                yield return role;
-            }
-        }
+		return session.GetModeratorPhysicalCharacterCards()
+			.Where(cardState =>
+				cardState.Zone is PhysicalCharacterCardZone.DealPool or
+					PhysicalCharacterCardZone.PlayerOwned)
+			.Select(cardState => cardState.Card.PrintedRole);
     }
 }

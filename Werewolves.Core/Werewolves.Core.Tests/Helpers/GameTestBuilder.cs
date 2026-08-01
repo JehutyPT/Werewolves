@@ -253,6 +253,34 @@ public class GameTestBuilder
 		return this;
 	}
 
+	internal GameTestBuilder ArrangeKnownPhysicalRole(
+		Guid playerId,
+		MainRoleType role)
+	{
+		EnsureGameStarted();
+		var session = GetMutableSessionForArrangement();
+		var card = session.GetModeratorPhysicalCharacterCards()
+			.Single(state =>
+				(state.Zone == PhysicalCharacterCardZone.DealPool ||
+				 state is
+				 {
+					 Zone: PhysicalCharacterCardZone.PlayerOwned,
+					 OwnerPlayerId: var ownerId
+				 } && ownerId == playerId) &&
+				state.Card.PrintedRole == role);
+		if (card.Zone == PhysicalCharacterCardZone.DealPool &&
+			!session.TryRecordPhysicalCharacterCardOwnership(
+				session.RoleLockIn.Version,
+				playerId,
+				card.Card.Id))
+		{
+			throw new InvalidOperationException(
+				"The requested physical Role arrangement is not available.");
+		}
+
+		return ArrangeKnownRole(playerId, role);
+	}
+
 	internal GameTestBuilder ArrangePubliclyRevealedRole(
 		Guid playerId,
 		MainRoleType role)

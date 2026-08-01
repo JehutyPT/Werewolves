@@ -218,7 +218,7 @@ internal sealed class ScapegoatRole
 				ScapegoatRoleState.AwaitingHolderObservation);
 		}
 
-		if (!IsTieReplacementAvailable(scapegoat))
+		if (!IsTieReplacementAvailable(session, scapegoat))
 		{
 			return HookListenerActionResult.Complete(
 				ScapegoatRoleState.Complete);
@@ -265,12 +265,13 @@ internal sealed class ScapegoatRole
 				"The observed Scapegoat holder contradicts committed Role or health facts.");
 		}
 
-		if (!IsTieReplacementAvailable(player))
+		if (!IsTieReplacementAvailable(session, player))
 		{
 			throw new InvalidOperationException(
 				"The observed Scapegoat holder's Role Power is unavailable.");
 		}
 
+		session.IdentifyRole([player.Id], MainRoleType.Scapegoat);
 		session.RevealRoles(new Dictionary<Guid, MainRoleType>
 		{
 			[player.Id] = MainRoleType.Scapegoat
@@ -318,9 +319,12 @@ internal sealed class ScapegoatRole
 			ScapegoatRoleState.AwaitingSacrificeCascade);
 	}
 
-	private bool IsTieReplacementAvailable(IPlayer scapegoat)
+	private bool IsTieReplacementAvailable(
+		GameSession session,
+		IPlayer scapegoat)
 	{
-		var instance = RolePowerInstance.CreateNative(
+		var instance = RolePowerInstance.CreateCurrent(
+			session,
 			scapegoat,
 			MainRoleType.Scapegoat,
 			TieReplacementPower);

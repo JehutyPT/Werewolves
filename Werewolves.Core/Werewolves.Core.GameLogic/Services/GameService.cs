@@ -94,6 +94,7 @@ public class GameService
     public Guid RehydrateSession(string serializedSession)
     {
         var session = new GameSession(serializedSession);
+		PermanentRoleSwapRules.EnforceValidHistory(session);
         DayVoteRules.EnforceValidHistory(session);
         SeedActiveRoleListeners(session);
         ConfigureEliminationCascadeReactions(session);
@@ -101,6 +102,24 @@ public class GameService
         _sessions.TryAdd(session.Id, session);
         return session.Id;
 	}
+
+	internal bool TryRecordPhysicalCharacterCardOwnership(
+		Guid gameId,
+		long expectedRoleLockInVersion,
+		Guid playerId,
+		Guid cardId) =>
+		_sessions.TryGetValue(gameId, out var session) &&
+			session.TryRecordPhysicalCharacterCardOwnership(
+			expectedRoleLockInVersion,
+			playerId,
+			cardId);
+
+	public bool TryCommitPermanentRoleSwap(
+		Guid gameId,
+		PermanentRoleSwapRequest request) =>
+		_sessions.TryGetValue(gameId, out var session) &&
+		PermanentRoleSwapRules.CanCommit(session, request) &&
+		session.TryCommitPermanentRoleSwap(request);
 
     internal void CommitScheduledFactionObservation(
         Guid gameId,
@@ -190,7 +209,9 @@ public class GameService
         IReadOnlyList<SimulationPlayerFactionFacts>? factionFacts)
     {
         ArgumentNullException.ThrowIfNull(config);
-	    EnforceRolesAreSupported(config.Roles);
+	    EnforceRolesAreSupported(config.RoleLockIn.RoleComposition
+		    .Select(card => card.PrintedRole)
+		    .ToArray());
         if (factionFacts != null
             && (factionFacts.Count != config.Players.Count
                 || !factionFacts
@@ -206,7 +227,11 @@ public class GameService
         var gameId = Guid.NewGuid();
         
         // 2. Get the initial instruction from GameFlowManager (pure function)
-        var initialInstruction = GameFlowManager.GetInitialInstruction(config.Roles, gameId);
+        var initialInstruction = GameFlowManager.GetInitialInstruction(
+	        config.RoleLockIn.DealPool
+		        .Select(card => card.PrintedRole)
+		        .ToList(),
+	        gameId);
         
         // 3. Create the session with both the ID and instruction
         var session = new GameSession(gameId, initialInstruction, config, stateChangeObserver);

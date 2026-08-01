@@ -256,12 +256,30 @@ internal sealed record DayVoteScenario(
 {
     public static DayVoteScenario Start(
         IRolePowerAvailabilityPolicy? rolePowerAvailabilityPolicy = null,
-        MainRoleType? livingTargetRole = null)
+        MainRoleType? livingTargetRole = null,
+		bool arrangeKnownPhysicalRole = true)
     {
-        var builder = GameTestBuilder.Create()
-            .WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true)
-            .WithOptionalRolePowerAvailabilityPolicy(
-                rolePowerAvailabilityPolicy);
+		var builder = GameTestBuilder.Create()
+			.WithOptionalRolePowerAvailabilityPolicy(
+				rolePowerAvailabilityPolicy);
+		if (livingTargetRole is { } configuredRole)
+		{
+			builder
+				.WithPlayers(5)
+				.WithRoles(
+					MainRoleType.SimpleWerewolf,
+					MainRoleType.Seer,
+					configuredRole,
+					MainRoleType.SimpleVillager,
+					MainRoleType.SimpleVillager);
+		}
+		else
+		{
+			builder.WithSimpleGame(
+				playerCount: 5,
+				werewolfCount: 1,
+				includeSeer: true);
+		}
         builder.StartGame();
 
         var players = builder.GetGameState()!.GetPlayers().ToArray();
@@ -269,9 +287,10 @@ internal sealed record DayVoteScenario(
         var seerId = players[1].Id;
         var nightVictimId = players[2].Id;
         var livingTargetId = players[3].Id;
-        if (livingTargetRole is { } role)
+		if (arrangeKnownPhysicalRole &&
+			livingTargetRole is { } role)
         {
-            builder.ArrangeKnownRole(livingTargetId, role);
+			builder.ArrangeKnownPhysicalRole(livingTargetId, role);
         }
 
         builder.ConfirmGameStart();

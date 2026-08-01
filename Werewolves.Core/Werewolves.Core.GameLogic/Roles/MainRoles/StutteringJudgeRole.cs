@@ -314,7 +314,7 @@ internal sealed class StutteringJudgeRole
 		DayVoteRules.CommitOneUseDayAction(
 			session,
 			DayPowerType.JudgeExtraVote,
-			CreateResourceIdentity(judge));
+			CreateResourceIdentity(session, judge));
 		return HookListenerActionResult.Complete(
 			StutteringJudgeRoleState.DayComplete);
 	}
@@ -323,7 +323,8 @@ internal sealed class StutteringJudgeRole
 		GameSession session,
 		IPlayer judge)
 	{
-		var instance = RolePowerInstance.CreateNative(
+		var instance = RolePowerInstance.CreateCurrent(
+			session,
 			judge,
 			MainRoleType.StutteringJudge,
 			ConsecutiveVotePower);
@@ -346,9 +347,11 @@ internal sealed class StutteringJudgeRole
 	}
 
 	private static OneUseRolePowerResourceIdentity CreateResourceIdentity(
+		GameSession session,
 		IPlayer judge)
 	{
-		var instance = RolePowerInstance.CreateNative(
+		var instance = RolePowerInstance.CreateCurrent(
+			session,
 			judge,
 			MainRoleType.StutteringJudge,
 			ConsecutiveVotePower);

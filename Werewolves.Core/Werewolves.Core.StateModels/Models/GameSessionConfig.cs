@@ -9,8 +9,9 @@ public class GameSessionConfig
 	public const int MaximumPlayerCount = 30;
 
 	public List<string> Players { get; init; } = new();
-	public List<MainRoleType> Roles { get; init; } = new();
-	public ActorSetupCards ActorSetupCards { get; init; }
+	public IReadOnlyList<MainRoleType> Roles { get; }
+	public ActorSetupCards ActorSetupCards { get; }
+	public RoleLockIn RoleLockIn { get; }
 
 	public static Dictionary<MainRoleType, NumberRangeConstraint> RoleCountConstraints { get; } = new()
 	{
@@ -68,7 +69,81 @@ public class GameSessionConfig
 
 	internal void EnforceValidity()
 	{
-		EnforceValidity(Players, Roles, ActorSetupCards);
+		EnforceRoleLockInValidity(Players, RoleLockIn, ActorSetupCards);
+	}
+
+	public static bool TryGetRoleLockInConfigIssues(
+		List<string> players,
+		RoleLockIn roleLockIn,
+		ActorSetupCards actorSetupCards,
+		out List<GameConfigValidationError> issues)
+	{
+		ArgumentNullException.ThrowIfNull(players);
+		ArgumentNullException.ThrowIfNull(roleLockIn);
+		ArgumentNullException.ThrowIfNull(actorSetupCards);
+		issues = new List<GameConfigValidationError>();
+		var collectedIssues = issues;
+		if (TryGetPlayerConfigIssues(players, out var playerIssues))
+		{
+			collectedIssues.AddRange(playerIssues);
+		}
+		if (roleLockIn.PlayerCount != players.Count)
+		{
+			collectedIssues.Add(new GameConfigValidationError(
+				GameConfigValidationErrorType.RoleCountMismatch,
+				"Role Lock-In Player count must match the Game Session roster."));
+			return true;
+		}
+
+		var reachableRoleSets = roleLockIn.Offer1 is null
+			? new[]
+			{
+				roleLockIn.DealPool.Select(card => card.PrintedRole).ToArray()
+			}
+			: new[]
+			{
+				roleLockIn.DealPool
+					.Where(card => card.PrintedRole != MainRoleType.Thief)
+					.Select(card => card.PrintedRole)
+					.Append(roleLockIn.Offer1.PrintedRole)
+					.ToArray(),
+				roleLockIn.DealPool
+					.Where(card => card.PrintedRole != MainRoleType.Thief)
+					.Select(card => card.PrintedRole)
+					.Append(roleLockIn.Offer2!.PrintedRole)
+					.ToArray()
+			};
+		foreach (var reachableRoles in reachableRoleSets)
+		{
+			var reachableIssues = new List<GameConfigValidationError>();
+			AddRoleCompositionIssues(
+				players.Count,
+				reachableRoles,
+				actorSetupCards,
+				reachableIssues);
+			foreach (var issue in reachableIssues.Where(issue => !collectedIssues.Contains(issue)))
+			{
+				collectedIssues.Add(issue);
+			}
+		}
+
+		return collectedIssues.Count > 0;
+	}
+
+	private static void EnforceRoleLockInValidity(
+		List<string> players,
+		RoleLockIn roleLockIn,
+		ActorSetupCards actorSetupCards)
+	{
+		if (TryGetRoleLockInConfigIssues(
+			players,
+			roleLockIn,
+			actorSetupCards,
+			out var issues))
+		{
+			throw new InvalidOperationException(
+				"Game session configuration is invalid:\n" + string.Join(", ", issues));
+		}
 	}
 
 	/// <summary>
@@ -309,14 +384,69 @@ public class GameSessionConfig
 		List<string> playerNames,
 		List<MainRoleType> roles,
 		ActorSetupCards? actorSetupCards = null)
+		: this(
+			playerNames,
+			CreateImplicitNonThiefRoleLockIn(
+				playerNames,
+				roles,
+				actorSetupCards),
+			actorSetupCards)
 	{
+	}
+
+	public GameSessionConfig(
+		List<string> playerNames,
+		RoleLockIn roleLockIn,
+		ActorSetupCards? actorSetupCards = null)
+	{
+		ArgumentNullException.ThrowIfNull(playerNames);
+		ArgumentNullException.ThrowIfNull(roleLockIn);
+		if (roleLockIn.PlayerCount != playerNames.Count)
+		{
+			throw new ArgumentException(
+				"Role Lock-In Player count must match the Game Session roster.",
+				nameof(roleLockIn));
+		}
+
+		var roles = roleLockIn.DealPool
+			.Select(card => card.PrintedRole)
+			.ToList();
 		var normalizedActorSetupCards = actorSetupCards
 			?? global::Werewolves.Core.StateModels.Models.ActorSetupCards.None;
-		EnforceValidity(playerNames, roles, normalizedActorSetupCards);
+		EnforceRoleLockInValidity(
+			playerNames,
+			roleLockIn,
+			normalizedActorSetupCards);
 
-		Players = playerNames;
-		Roles = roles;
+		Players = playerNames.ToList();
+		Roles = Array.AsReadOnly(roles.ToArray());
 		ActorSetupCards = normalizedActorSetupCards;
+		RoleLockIn = roleLockIn;
+	}
+
+	private static RoleLockIn CreateImplicitNonThiefRoleLockIn(
+		List<string> playerNames,
+		List<MainRoleType> roles,
+		ActorSetupCards? actorSetupCards)
+	{
+		ArgumentNullException.ThrowIfNull(playerNames);
+		ArgumentNullException.ThrowIfNull(roles);
+		EnforceValidity(playerNames, roles, actorSetupCards);
+		if (roles.Contains(MainRoleType.Thief))
+		{
+			throw new ArgumentException(
+				"Thief requires an explicit Role Lock-In with ordered offer cards.",
+				nameof(roles));
+		}
+
+		var cards = roles
+			.Select(role => new PhysicalCharacterCard(Guid.NewGuid(), role))
+			.ToArray();
+		return new RoleLockIn(
+			version: 1,
+			playerCount: playerNames.Count,
+			roleComposition: cards,
+			dealPoolCardIds: cards.Select(card => card.Id));
 	}
 }
 

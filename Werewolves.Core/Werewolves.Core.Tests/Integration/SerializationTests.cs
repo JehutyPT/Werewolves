@@ -923,8 +923,8 @@ public class SerializationTests : DiagnosticTestBase
         Guid villagerId,
         Guid extraVillagerId)
     {
-        var dto = new GameSessionDto
-        {
+		var dto = new GameSessionDto
+		{
             Id = Guid.NewGuid(),
             TurnNumber = 1,
             IsStableRecoveryBoundary = true,
@@ -1024,10 +1024,14 @@ public class SerializationTests : DiagnosticTestBase
                     PreviousPhase = GamePhase.Night,
                     CurrentPhase = GamePhase.Dawn
                 }
-            ]
-        };
+			]
+		};
+		AttachPhysicalCardState(
+			dto,
+			(wolfId, MainRoleType.SimpleWerewolf),
+			(elderId, MainRoleType.Elder));
 
-        return SerializeWithCurrentFactionShape(dto);
+		return SerializeWithCurrentFactionShape(dto);
     }
 
     private static string CreateStableDayVoteBoundaryJson(
@@ -1035,8 +1039,8 @@ public class SerializationTests : DiagnosticTestBase
         Guid votedPlayerId,
         Guid bystanderId)
     {
-        var dto = new GameSessionDto
-        {
+		var dto = new GameSessionDto
+		{
             Id = Guid.NewGuid(),
             TurnNumber = 1,
             IsStableRecoveryBoundary = true,
@@ -1122,13 +1126,78 @@ public class SerializationTests : DiagnosticTestBase
                     PreviousPhase = GamePhase.Dawn,
                     CurrentPhase = GamePhase.Day
                 }
-            ]
-        };
+			]
+		};
+		AttachPhysicalCardState(
+			dto,
+			(alivePlayerId, MainRoleType.SimpleWerewolf),
+			(votedPlayerId, MainRoleType.SimpleVillager),
+			(bystanderId, MainRoleType.SimpleVillager));
 
-        return SerializeWithCurrentFactionShape(dto);
-    }
+		return SerializeWithCurrentFactionShape(dto);
+	}
 
-    private static string SerializeWithCurrentFactionShape(GameSessionDto dto)
+	private static void AttachPhysicalCardState(
+		GameSessionDto dto,
+		params (Guid PlayerId, MainRoleType Role)[] assignments)
+	{
+		var cards = dto.RolesInPlay
+			.Select(role => new PhysicalCharacterCard(Guid.NewGuid(), role))
+			.ToList();
+		var availableCards = cards.ToList();
+		var ownersByCardId = new Dictionary<Guid, Guid>();
+		var ownershipEntries = new List<GameLogEntryBase>();
+		foreach (var (playerId, role) in assignments)
+		{
+			var card = availableCards.First(candidate =>
+				candidate.PrintedRole == role);
+			availableCards.Remove(card);
+			ownersByCardId.Add(card.Id, playerId);
+
+			var player = dto.Players.Single(candidate =>
+				candidate.Id == playerId);
+			player.PhysicalCharacterCardId = card.Id;
+			player.PhysicalCharacterCardRole = card.PrintedRole;
+			ownershipEntries.Add(
+				new PhysicalCharacterCardOwnershipObservedLogEntry
+				{
+					Timestamp = DateTimeOffset.UtcNow,
+					TurnNumber = 1,
+					CurrentPhase = GamePhase.Night,
+					RoleLockInVersion = 1,
+					PlayerId = playerId,
+					CardId = card.Id,
+					PrintedRole = card.PrintedRole
+				});
+		}
+		dto.GameHistoryLog.InsertRange(0, ownershipEntries);
+
+		dto.RoleLockIn = new RoleLockInDto
+		{
+			Version = 1,
+			PlayerCount = dto.Players.Count,
+			RoleComposition = cards,
+			DealPoolCardIds = cards.Select(card => card.Id).ToList()
+		};
+		dto.PhysicalCharacterCards = cards
+			.Select(card => ownersByCardId.TryGetValue(
+				card.Id,
+				out var ownerPlayerId)
+				? new PhysicalCharacterCardStateDto
+				{
+					CardId = card.Id,
+					Zone = PhysicalCharacterCardZone.PlayerOwned,
+					OwnerPlayerId = ownerPlayerId
+				}
+				: new PhysicalCharacterCardStateDto
+				{
+					CardId = card.Id,
+					Zone = PhysicalCharacterCardZone.DealPool
+				})
+			.ToList();
+	}
+
+	private static string SerializeWithCurrentFactionShape(GameSessionDto dto)
     {
         dto.FactionFactSchemaVersion = FactionFactSchema.CurrentVersion;
         foreach (var player in dto.Players)

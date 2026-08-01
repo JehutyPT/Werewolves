@@ -25,9 +25,7 @@ internal static class RoleKnowledgeHandlers
         }
 
         var playersNeedingMapping = requestedPlayers
-            .Where(player =>
-                player.State.CurrentRole == null ||
-                player.State.ModeratorKnownRole != player.State.CurrentRole)
+			.Where(player => player.State.PhysicalCharacterCardId is null)
             .ToArray();
         var affectedPlayerIds = requestedPlayers
             .Select(player => player.Id)
@@ -43,9 +41,6 @@ internal static class RoleKnowledgeHandlers
         }
 
         var rolesForAssignment = GameSessionQueries.GetUnassignedRoles(session);
-        rolesForAssignment.AddRange(playersNeedingMapping
-            .Where(player => player.State.CurrentRole.HasValue)
-            .Select(player => player.State.CurrentRole!.Value));
 
         return new AssignRolesInstruction(
             semantic,
@@ -71,29 +66,64 @@ internal static class RoleKnowledgeHandlers
             return;
         }
 
+		var availableDealPoolCards = session
+			.GetModeratorPhysicalCharacterCards()
+			.Where(state => state.Zone == PhysicalCharacterCardZone.DealPool)
+			.Select(state => state.Card)
+			.ToList();
+		var ownershipsToRecord = new List<(Guid PlayerId, Guid CardId)>();
         var revealedRoles = new Dictionary<Guid, MainRoleType>();
         foreach (var player in requestedPlayers)
         {
-            if (input.AssignedPlayerRoles?.TryGetValue(player.Id, out var assignedRole) == true)
-            {
-                if (player.State.CurrentRole is { } currentRole && assignedRole != currentRole)
-                {
-                    throw new InvalidOperationException(
-                        $"The accepted Role Reveal response for Player {player.Id} contradicts their committed current Role.");
-                }
+			if (player.State.PhysicalCharacterCardId is { } cardId)
+			{
+				revealedRoles[player.Id] = session
+					.GetModeratorPhysicalCharacterCards()
+					.Single(cardState => cardState.Card.Id == cardId)
+					.Card.PrintedRole;
+				continue;
+			}
 
-                revealedRoles[player.Id] = assignedRole;
-                continue;
-            }
-
-            if (player.State.CurrentRole is not { } knownRole)
+			if (input.AssignedPlayerRoles?.TryGetValue(
+					player.Id,
+					out var assignedRole) != true)
             {
                 throw new InvalidOperationException(
-                    $"The accepted Role Reveal response did not establish a Role for Player {player.Id}.");
+					$"The accepted Role Reveal response did not establish a physical Role for Player {player.Id}.");
             }
 
-            revealedRoles[player.Id] = knownRole;
+			var card = availableDealPoolCards.FirstOrDefault(candidate =>
+				candidate.PrintedRole == assignedRole)
+				?? throw new InvalidOperationException(
+					$"No available Deal Pool card matches the accepted Role Reveal for Player {player.Id}.");
+			availableDealPoolCards.Remove(card);
+			ownershipsToRecord.Add((player.Id, card.Id));
+			revealedRoles[player.Id] = assignedRole;
         }
+		var initialRoleIdentifications = requestedPlayers
+			.Where(player => player.State.CurrentRole == null)
+			.GroupBy(player => revealedRoles[player.Id])
+			.Select(group => (
+				Role: group.Key,
+				PlayerIds: group.Select(player => player.Id).ToHashSet()))
+			.ToArray();
+
+		foreach (var (playerId, cardId) in ownershipsToRecord)
+		{
+			if (!session.TryRecordPhysicalCharacterCardOwnership(
+					session.RoleLockIn.Version,
+					playerId,
+					cardId))
+			{
+				throw new InvalidOperationException(
+					"The accepted Role Reveal physical-card mapping became stale.");
+			}
+		}
+
+		foreach (var (role, playerIds) in initialRoleIdentifications)
+		{
+			session.IdentifyRole(playerIds, role);
+		}
 
         session.RevealRoles(revealedRoles);
     }

@@ -14,11 +14,10 @@ internal sealed record PossibleGameResultInventory(
 	{
 		ArgumentNullException.ThrowIfNull(scenario);
 		ArgumentNullException.ThrowIfNull(profile);
-		var canonicalScenario = scenario.ToCanonical();
 		var factions = new HashSet<Faction>();
-		foreach (var entry in canonicalScenario.RoleComposition.Entries)
+		foreach (var role in scenario.RoleCompositionCards.Distinct())
 		{
-			if (!profile.TryGetBeneficiaryFaction(entry.Role, out var faction)
+			if (!profile.TryGetBeneficiaryFaction(role, out var faction)
 				|| !Enum.IsDefined(faction))
 			{
 				inventory = null!;
@@ -27,8 +26,7 @@ internal sealed record PossibleGameResultInventory(
 
 			factions.Add(faction);
 		}
-		if (canonicalScenario.RoleComposition.Entries.Any(entry =>
-			    entry.Role == MainRoleType.Cupid))
+		if (scenario.RoleCompositionCards.Contains(MainRoleType.Cupid))
 		{
 			factions.Add(Faction.CrossFactionLovers);
 		}

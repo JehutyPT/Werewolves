@@ -18,6 +18,7 @@ public interface IPlayerState
 {
 	public MainRoleType? CurrentRole { get; }
 	public MainRoleType? MainRole { get; }
+	public Guid? PhysicalCharacterCardId => null;
 	public MainRoleType? PhysicalCharacterCardRole { get; }
 	public MainRoleType? ModeratorKnownRole { get; }
 	public MainRoleType? PubliclyRevealedRole { get; }
@@ -122,6 +123,8 @@ internal partial class GameSessionKernel
 		}
 
 		public MainRoleType? PhysicalCharacterCardRole { get; internal set; }
+
+		public Guid? PhysicalCharacterCardId { get; internal set; }
 
 		public MainRoleType? ModeratorKnownRole { get; internal set; }
 

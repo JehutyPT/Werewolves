@@ -242,7 +242,8 @@ internal sealed class PiperRole
 				holder,
 				MainRoleType.Piper,
 				CharmPower,
-				RolePowerInstance.CreateNative(
+				RolePowerInstance.CreateCurrent(
+					session,
 					holder,
 					MainRoleType.Piper,
 					CharmPower)));
@@ -302,7 +303,7 @@ internal sealed class PiperRole
 				"The Piper must select the exact required set of legal living Players.");
 		}
 
-		var powerIdentity = CreateNativePowerIdentity(holder);
+		var powerIdentity = CreateCurrentPowerIdentity(session, holder);
 		session.CommitRecurringRolePowerNightAction(
 			NightActionType.PiperCharm,
 			selectedPlayerIds,
@@ -380,8 +381,10 @@ internal sealed class PiperRole
 	}
 
 	internal static void ValidateRecurringRecoveryCursorIdentity(
+		GameSession session,
 		DomainRecoveryCursor cursor)
 	{
+		ArgumentNullException.ThrowIfNull(session);
 		ArgumentNullException.ThrowIfNull(cursor);
 		if (cursor.Kind !=
 		    DomainRecoveryCursorKind.RecurringNativeRolePowerCommit ||
@@ -391,8 +394,9 @@ internal sealed class PiperRole
 		    !StringComparer.Ordinal.Equals(
 			    cursor.SourcePowerIdentifier,
 			    CharmPowerIdentifier.Value) ||
-		    cursor.PowerInstanceId != cursor.ActingPlayerId ||
-		    cursor.PowerInstanceOrigin != RolePowerInstanceOrigin.Native ||
+		    cursor.PowerIdentity != CreateCurrentPowerIdentity(
+			    session,
+			    session.GetPlayer(cursor.ActingPlayerId)) ||
 		    cursor.OneUseResourceId != Guid.Empty)
 		{
 			throw new InvalidOperationException(
@@ -428,14 +432,14 @@ internal sealed class PiperRole
 		?? throw new InvalidOperationException(
 			"No living Piper is available.");
 
-	private static RolePowerInstanceIdentity CreateNativePowerIdentity(
+	private static RolePowerInstanceIdentity CreateCurrentPowerIdentity(
+		GameSession session,
 		IPlayer holder) =>
-		new(
-			holder.Id,
+		RolePowerInstance.CreateCurrentIdentity(
+			session,
+			holder,
 			MainRoleType.Piper,
-			CharmPowerIdentifier.Value,
-			holder.Id,
-			RolePowerInstanceOrigin.Native);
+			CharmPower);
 
 	private static HashSet<Guid> GetEligibleTargets(
 		GameSession session,
@@ -480,9 +484,9 @@ internal sealed class PiperRole
 		    !StringComparer.Ordinal.Equals(
 			    committedEntry.SourcePowerIdentifier,
 			    CharmPowerIdentifier.Value) ||
-		    committedEntry.PowerInstanceId != committedEntry.ActingPlayerId ||
-		    committedEntry.PowerInstanceOrigin !=
-		    RolePowerInstanceOrigin.Native)
+		    committedEntry.PowerIdentity != CreateCurrentPowerIdentity(
+			    session,
+			    session.GetPlayer(committedEntry.ActingPlayerId)))
 		{
 			throw new InvalidOperationException(
 				"The Piper recovery boundary requires one owned recurring charm action.");

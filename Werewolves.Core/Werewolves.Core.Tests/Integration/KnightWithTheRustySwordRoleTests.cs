@@ -933,7 +933,7 @@ public sealed class KnightWithTheRustySwordRoleTests : DiagnosticTestBase
 		builder.StartGame();
 		var players = builder.GetGameState()!.GetPlayers().ToArray();
 		builder
-			.ArrangeKnownRole(
+			.ArrangeKnownPhysicalRole(
 				players[0].Id,
 				MainRoleType.KnightWithRustySword)
 			.ArrangeKnownWerewolfFactionAgentGroup(players[1].Id)

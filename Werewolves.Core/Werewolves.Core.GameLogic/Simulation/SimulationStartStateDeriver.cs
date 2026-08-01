@@ -144,10 +144,36 @@ public static class SimulationStartStateDeriver
 	internal static GameSessionConfig CreateGameSessionConfig(this SimulationStartState startState)
 	{
 		ArgumentNullException.ThrowIfNull(startState);
+		var playerNames = Enumerable.Range(1, startState.PlayerCount)
+			.Select(seatNumber => $"Simulation Player {seatNumber}")
+			.ToList();
+		var assignedRoles = startState.RoleAssignments
+			.Select(assignment => assignment.Role)
+			.ToList();
+		if (startState.CanonicalScenario.Offer1Role is not { } offer1Role ||
+			startState.CanonicalScenario.Offer2Role is not { } offer2Role)
+		{
+			return new GameSessionConfig(playerNames, assignedRoles);
+		}
+		if (!assignedRoles.Contains(MainRoleType.Thief))
+		{
+			throw new InvalidOperationException(
+				"An offer-bearing Simulation Start State requires an assigned Thief.");
+		}
+
+		var dealPoolCards = startState.RoleAssignments
+			.Select(assignment => new PhysicalCharacterCard(Guid.NewGuid(), assignment.Role))
+			.ToArray();
+		var offer1 = new PhysicalCharacterCard(Guid.NewGuid(), offer1Role);
+		var offer2 = new PhysicalCharacterCard(Guid.NewGuid(), offer2Role);
 		return new GameSessionConfig(
-			Enumerable.Range(1, startState.PlayerCount)
-				.Select(seatNumber => $"Simulation Player {seatNumber}")
-				.ToList(),
-			startState.RoleAssignments.Select(assignment => assignment.Role).ToList());
+			playerNames,
+			new RoleLockIn(
+				version: 1,
+				playerCount: startState.PlayerCount,
+				roleComposition: dealPoolCards.Concat([offer1, offer2]),
+				dealPoolCardIds: dealPoolCards.Select(card => card.Id),
+				offer1CardId: offer1.Id,
+				offer2CardId: offer2.Id));
 	}
 }

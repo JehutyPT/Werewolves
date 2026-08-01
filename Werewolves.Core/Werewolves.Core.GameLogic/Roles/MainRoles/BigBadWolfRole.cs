@@ -194,8 +194,10 @@ internal sealed class BigBadWolfRole
     }
 
     internal static void ValidateRecurringRecoveryCursorIdentity(
+        GameSession session,
         DomainRecoveryCursor cursor)
     {
+        ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(cursor);
         if (cursor.Kind !=
             DomainRecoveryCursorKind.RecurringNativeRolePowerCommit ||
@@ -206,8 +208,9 @@ internal sealed class BigBadWolfRole
             !StringComparer.Ordinal.Equals(
                 cursor.SourcePowerIdentifier,
                 AdditionalVictimPowerIdentifier.Value) ||
-            cursor.PowerInstanceId != cursor.ActingPlayerId ||
-            cursor.PowerInstanceOrigin != RolePowerInstanceOrigin.Native ||
+            cursor.PowerIdentity != CreateCurrentPowerIdentity(
+                session,
+                session.GetPlayer(cursor.ActingPlayerId)) ||
             cursor.OneUseResourceId != Guid.Empty)
         {
             throw new InvalidOperationException(
@@ -220,8 +223,20 @@ internal sealed class BigBadWolfRole
         ModeratorInstruction pendingInstruction)
     {
         ArgumentNullException.ThrowIfNull(pendingInstruction);
-        ValidateRecurringRecoveryCursorIdentity(cursor);
-        if (cursor.NextInstructionSemantic !=
+        ArgumentNullException.ThrowIfNull(cursor);
+        if (cursor.Kind !=
+                DomainRecoveryCursorKind.RecurringNativeRolePowerCommit ||
+            cursor.SourceRole != MainRoleType.BigBadWolf ||
+            cursor.CommittedActionType !=
+                NightActionType.BigBadWolfVictimSelection ||
+            cursor.ActingPlayerId == Guid.Empty ||
+            !StringComparer.Ordinal.Equals(
+                cursor.SourcePowerIdentifier,
+                AdditionalVictimPowerIdentifier.Value) ||
+            cursor.PowerInstanceId != cursor.ActingPlayerId ||
+            cursor.PowerInstanceOrigin != RolePowerInstanceOrigin.Native ||
+            cursor.OneUseResourceId != Guid.Empty ||
+            cursor.NextInstructionSemantic !=
                 ModeratorInstructionSemantic.PutRoleToSleep ||
             pendingInstruction is not ConfirmationInstruction
             {
@@ -313,7 +328,8 @@ internal sealed class BigBadWolfRole
                 holder,
                 MainRoleType.BigBadWolf,
                 AdditionalVictimPower,
-                RolePowerInstance.CreateNative(
+				RolePowerInstance.CreateCurrent(
+					session,
                     holder,
                     MainRoleType.BigBadWolf,
                     AdditionalVictimPower)));
@@ -375,7 +391,8 @@ internal sealed class BigBadWolfRole
         }
 
         var holder = GetHolder(session);
-        var powerInstance = RolePowerInstance.CreateNative(
+		var powerInstance = RolePowerInstance.CreateCurrent(
+			session,
             holder,
             MainRoleType.BigBadWolf,
             AdditionalVictimPower);
@@ -445,10 +462,9 @@ internal sealed class BigBadWolfRole
             !StringComparer.Ordinal.Equals(
                 committedEntry.SourcePowerIdentifier,
                 AdditionalVictimPowerIdentifier.Value) ||
-            committedEntry.PowerInstanceId !=
-                committedEntry.ActingPlayerId ||
-            committedEntry.PowerInstanceOrigin !=
-                RolePowerInstanceOrigin.Native)
+            committedEntry.PowerIdentity != CreateCurrentPowerIdentity(
+                session,
+                session.GetPlayer(committedEntry.ActingPlayerId)))
         {
             throw new InvalidOperationException(
                 "The Big Bad Wolf recovery boundary requires one owned recurring additional-victim action.");
@@ -468,4 +484,13 @@ internal sealed class BigBadWolfRole
                 "The Big Bad Wolf additional victim must be a living known non-Agent other than the collective victim.");
         }
     }
+
+    private static RolePowerInstanceIdentity CreateCurrentPowerIdentity(
+        GameSession session,
+        IPlayer holder) =>
+        RolePowerInstance.CreateCurrentIdentity(
+            session,
+            holder,
+            MainRoleType.BigBadWolf,
+            AdditionalVictimPower);
 }

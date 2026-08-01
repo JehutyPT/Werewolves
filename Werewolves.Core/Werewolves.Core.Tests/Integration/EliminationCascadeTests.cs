@@ -27,6 +27,7 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 			[players[2].Id, players[3].Id]);
 		initialReveal.RolesForAssignment.Should().Equal(
 			MainRoleType.SimpleWerewolf,
+			MainRoleType.Witch,
 			MainRoleType.SimpleVillager,
 			MainRoleType.SimpleVillager,
 			MainRoleType.SimpleVillager,
@@ -286,7 +287,7 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 	}
 
 	[Fact]
-	public void DawnCommittedAndUnknownVictims_RevealOneAtomicBatch()
+	public void DawnCommittedAndUnknownVictims_RevealOneAtomicBatchWithDistinctDuplicateRoleCards()
 	{
 		var builder = CreateBuilder()
 			.WithPlayers(
@@ -331,7 +332,8 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 			.ModeratorInstruction.Should()
 			.BeOfType<AssignRolesInstruction>().Subject;
 
-		reveal.PlayersForAssignment.Should().Equal(players[2].Id);
+		reveal.PlayersForAssignment.Should().BeEquivalentTo(
+			new[] { players[2].Id, players[1].Id });
 		builder.GetGameState()!.GetPlayerState(players[1].Id).Health
 			.Should().Be(PlayerHealth.Alive);
 		builder.GetGameState()!.GetPlayerState(players[2].Id).Health
@@ -353,21 +355,66 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 		PublicGameSessionSnapshot.Capture(builder).Should().BeEquivalentTo(
 			beforeInvalidReveal,
 			options => options.WithStrictOrdering());
+		var matchingUnusedDealPoolCardIds = builder.GetGameState()!
+			.GetModeratorPhysicalCharacterCards()
+			.Where(state =>
+				state.Zone == PhysicalCharacterCardZone.DealPool &&
+				state.Card.PrintedRole == MainRoleType.SimpleVillager)
+			.Select(state => state.Card.Id)
+			.ToHashSet();
+		matchingUnusedDealPoolCardIds.Should().HaveCountGreaterThanOrEqualTo(2);
+		builder.GetGameState()!.GetPlayerState(players[1].Id).CurrentRole
+			.Should().Be(MainRoleType.Witch);
+		builder.GetGameState()!.GetPlayerState(players[1].Id).ModeratorKnownRole
+			.Should().Be(MainRoleType.Witch);
+		builder.GetGameState()!.GetPlayerState(players[2].Id).CurrentRole
+			.Should().BeNull();
+		builder.GetGameState()!.GetPlayerState(players[2].Id).ModeratorKnownRole
+			.Should().BeNull();
 
 		builder.Process(reveal.CreateResponse(new()
 		{
+			[players[1].Id] = MainRoleType.SimpleVillager,
 			[players[2].Id] = MainRoleType.SimpleVillager
 		}));
 
 		var session = builder.GetGameState()!;
+		var ownerships = session.GameHistoryLog
+			.OfType<PhysicalCharacterCardOwnershipObservedLogEntry>()
+			.Where(entry => entry.PlayerId == players[1].Id ||
+				entry.PlayerId == players[2].Id)
+			.ToArray();
+		ownerships.Should().HaveCount(2);
+		ownerships.Select(entry => entry.PlayerId).Should().OnlyHaveUniqueItems();
+		var ownedCardIds = ownerships.Select(entry => entry.CardId).ToArray();
+		ownedCardIds.Should().OnlyHaveUniqueItems();
+		ownedCardIds.Should().OnlyContain(cardId =>
+			matchingUnusedDealPoolCardIds.Contains(cardId));
+		session.GetPlayerState(players[1].Id).CurrentRole.Should()
+			.Be(MainRoleType.Witch);
+		session.GetPlayerState(players[1].Id).ModeratorKnownRole.Should()
+			.Be(MainRoleType.Witch);
+		session.GetPlayerState(players[2].Id).CurrentRole.Should()
+			.Be(MainRoleType.SimpleVillager);
+		session.GetPlayerState(players[2].Id).ModeratorKnownRole.Should()
+			.Be(MainRoleType.SimpleVillager);
+		session.GetPlayerState(players[1].Id).PhysicalCharacterCardRole.Should()
+			.Be(MainRoleType.SimpleVillager);
+		session.GetPlayerState(players[2].Id).PhysicalCharacterCardRole.Should()
+			.Be(MainRoleType.SimpleVillager);
 		session.GameHistoryLog
 			.OfType<RoleRevealLogEntry>()
 			.Should().ContainSingle(entry =>
 				entry.RevealedRoles.Count == 2 &&
 				entry.RevealedRoles.GetValueOrDefault(
-					players[1].Id) == MainRoleType.Witch &&
+					players[1].Id) == MainRoleType.SimpleVillager &&
 				entry.RevealedRoles.GetValueOrDefault(
 					players[2].Id) == MainRoleType.SimpleVillager);
+		session.GameHistoryLog
+			.OfType<RoleIdentificationLogEntry>()
+			.Should().ContainSingle(entry =>
+				entry.Role == MainRoleType.SimpleVillager &&
+				entry.PlayerIds.SetEquals(new[] { players[2].Id }));
 		session.GameHistoryLog
 			.OfType<PlayerEliminatedLogEntry>()
 			.Should().ContainSingle(entry =>
@@ -1021,10 +1068,9 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 	[Fact]
 	public void VillageIdiotPardon_CommitsDurableVotingConsequencesExactlyOnce()
 	{
-		var scenario = DayVoteScenario.Start();
-		var builder = scenario.Builder.ArrangeKnownRole(
-			scenario.LivingTargetId,
-			MainRoleType.VillageIdiot);
+		var scenario = DayVoteScenario.Start(
+			livingTargetRole: MainRoleType.VillageIdiot);
+		var builder = scenario.Builder;
 		var beforeVote = builder.GetGameState()!
 			.GetPlayerState(scenario.LivingTargetId);
 		beforeVote.CurrentRole.Should().Be(MainRoleType.VillageIdiot);

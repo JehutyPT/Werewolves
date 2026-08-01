@@ -10,6 +10,8 @@ public sealed class CanonicalSimulationScenario : IEquatable<CanonicalSimulation
 	public int PlayerCount { get; }
 
 	public CanonicalRoleComposition RoleComposition { get; }
+	public MainRoleType? Offer1Role { get; }
+	public MainRoleType? Offer2Role { get; }
 
 	public IReadOnlyList<MainRoleType> ActorSetupCards { get; }
 
@@ -18,11 +20,15 @@ public sealed class CanonicalSimulationScenario : IEquatable<CanonicalSimulation
 	private CanonicalSimulationScenario(
 		int playerCount,
 		CanonicalRoleComposition roleComposition,
+		MainRoleType? offer1Role,
+		MainRoleType? offer2Role,
 		MainRoleType[] actorSetupCards,
 		SimulationRuleState ruleState)
 	{
 		PlayerCount = playerCount;
 		RoleComposition = roleComposition;
+		Offer1Role = offer1Role;
+		Offer2Role = offer2Role;
 		_actorSetupCards = actorSetupCards;
 		ActorSetupCards = Array.AsReadOnly(_actorSetupCards);
 		RuleState = ruleState;
@@ -34,7 +40,9 @@ public sealed class CanonicalSimulationScenario : IEquatable<CanonicalSimulation
 
 		return new CanonicalSimulationScenario(
 			scenario.PlayerCount,
-			CanonicalRoleComposition.Create(scenario.RoleCompositionCards),
+			CanonicalRoleComposition.Create(scenario.DealPoolCards),
+			scenario.Offer1Role,
+			scenario.Offer2Role,
 			scenario.ActorSetupCards.Cards
 				.OrderBy(role => role.ToString(), StringComparer.Ordinal)
 				.ToArray(),
@@ -62,12 +70,17 @@ public sealed class CanonicalSimulationScenario : IEquatable<CanonicalSimulation
 		}
 
 		var parts = value.Split('|');
-		if (parts.Length != 4
+		var hasOffers = parts.Length == 5;
+		var actorPartIndex = hasOffers ? 3 : 2;
+		var rulesPartIndex = hasOffers ? 4 : 3;
+		if (parts.Length is not 4 and not 5
 			|| !parts[0].StartsWith("players=", StringComparison.Ordinal)
-			|| !parts[2].StartsWith("actor=[", StringComparison.Ordinal)
-			|| !parts[2].EndsWith(']')
-			|| !parts[3].StartsWith("rules=[", StringComparison.Ordinal)
-			|| !parts[3].EndsWith(']'))
+			|| (hasOffers && (!parts[2].StartsWith("offers=[", StringComparison.Ordinal)
+				|| !parts[2].EndsWith(']')))
+			|| !parts[actorPartIndex].StartsWith("actor=[", StringComparison.Ordinal)
+			|| !parts[actorPartIndex].EndsWith(']')
+			|| !parts[rulesPartIndex].StartsWith("rules=[", StringComparison.Ordinal)
+			|| !parts[rulesPartIndex].EndsWith(']'))
 		{
 			return false;
 		}
@@ -87,8 +100,12 @@ public sealed class CanonicalSimulationScenario : IEquatable<CanonicalSimulation
 			return false;
 		}
 
-		if (!TryParseActorSetupCards(parts[2], out var actorSetupCards)
-			|| !TryParseRuleState(parts[3], out var ruleState))
+		if (!TryParseOffers(
+				hasOffers ? parts[2] : null,
+				out var offer1Role,
+				out var offer2Role)
+			|| !TryParseActorSetupCards(parts[actorPartIndex], out var actorSetupCards)
+			|| !TryParseRuleState(parts[rulesPartIndex], out var ruleState))
 		{
 			return false;
 		}
@@ -96,6 +113,8 @@ public sealed class CanonicalSimulationScenario : IEquatable<CanonicalSimulation
 		scenario = new CanonicalSimulationScenario(
 			playerCount,
 			roleComposition,
+			offer1Role,
+			offer2Role,
 			actorSetupCards,
 			ruleState);
 		return string.Equals(value, scenario.ToString(), StringComparison.Ordinal);
@@ -105,13 +124,18 @@ public sealed class CanonicalSimulationScenario : IEquatable<CanonicalSimulation
 	{
 		var actorCards = string.Join(',', _actorSetupCards.Select(role => role.ToString()));
 		var ruleState = RuleState.NewMoonEnabled ? "NewMoonEnabled" : string.Empty;
-		return $"players={PlayerCount.ToString(CultureInfo.InvariantCulture)}|{RoleComposition}|actor=[{actorCards}]|rules=[{ruleState}]";
+		var offers = Offer1Role is { } offer1 && Offer2Role is { } offer2
+			? $"|offers=[{offer1},{offer2}]"
+			: string.Empty;
+		return $"players={PlayerCount.ToString(CultureInfo.InvariantCulture)}|{RoleComposition}{offers}|actor=[{actorCards}]|rules=[{ruleState}]";
 	}
 
 	public bool Equals(CanonicalSimulationScenario? other) =>
 		other is not null
 		&& PlayerCount == other.PlayerCount
 		&& RoleComposition.Equals(other.RoleComposition)
+		&& Offer1Role == other.Offer1Role
+		&& Offer2Role == other.Offer2Role
 		&& _actorSetupCards.SequenceEqual(other._actorSetupCards)
 		&& RuleState == other.RuleState;
 
@@ -123,6 +147,8 @@ public sealed class CanonicalSimulationScenario : IEquatable<CanonicalSimulation
 		var hash = new HashCode();
 		hash.Add(PlayerCount);
 		hash.Add(RoleComposition);
+		hash.Add(Offer1Role);
+		hash.Add(Offer2Role);
 		foreach (var role in _actorSetupCards)
 		{
 			hash.Add(role);
@@ -176,6 +202,38 @@ public sealed class CanonicalSimulationScenario : IEquatable<CanonicalSimulation
 
 		return true;
 	}
+
+	private static bool TryParseOffers(
+		string? value,
+		out MainRoleType? offer1Role,
+		out MainRoleType? offer2Role)
+	{
+		offer1Role = null;
+		offer2Role = null;
+		if (value is null)
+		{
+			return true;
+		}
+
+		var identifiers = value["offers=[".Length..^1].Split(',');
+		if (identifiers.Length != 2 ||
+			!TryParseCanonicalRole(identifiers[0], out var offer1) ||
+			!TryParseCanonicalRole(identifiers[1], out var offer2))
+		{
+			return false;
+		}
+
+		offer1Role = offer1;
+		offer2Role = offer2;
+		return true;
+	}
+
+	private static bool TryParseCanonicalRole(
+		string identifier,
+		out MainRoleType role) =>
+		Enum.TryParse(identifier, out role)
+		&& Enum.IsDefined(role)
+		&& string.Equals(identifier, role.ToString(), StringComparison.Ordinal);
 
 	private static bool TryParseRuleState(
 		string value,

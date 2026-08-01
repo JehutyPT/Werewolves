@@ -225,12 +225,16 @@ internal sealed class FoxRole
 	}
 
 	void ITargetPrivateRolePowerRecoveryCapability
-		.ValidateRecoveryCursorIdentity(DomainRecoveryCursor cursor) =>
-		ValidateTargetPrivateRecoveryCursorIdentity(cursor);
+		.ValidateRecoveryCursorIdentity(
+			GameSession session,
+			DomainRecoveryCursor cursor) =>
+		ValidateTargetPrivateRecoveryCursorIdentity(session, cursor);
 
 	private static void ValidateTargetPrivateRecoveryCursorIdentity(
+		GameSession session,
 		DomainRecoveryCursor cursor)
 	{
+		ArgumentNullException.ThrowIfNull(session);
 		ArgumentNullException.ThrowIfNull(cursor);
 		if (cursor.Kind !=
 				DomainRecoveryCursorKind.TargetPrivateRolePowerCommit ||
@@ -240,8 +244,11 @@ internal sealed class FoxRole
 			!StringComparer.Ordinal.Equals(
 				cursor.SourcePowerIdentifier,
 				NeighborhoodCheckPower.Identifier.Value) ||
-			cursor.PowerInstanceId != cursor.ActingPlayerId ||
-			cursor.PowerInstanceOrigin != RolePowerInstanceOrigin.Native ||
+			cursor.PowerIdentity != CreatePowerIdentity(
+				session.GetPlayer(cursor.ActingPlayerId),
+				CreatePowerInstance(
+					session,
+					session.GetPlayer(cursor.ActingPlayerId))) ||
 			cursor.OneUseResourceId != Guid.Empty &&
 			cursor.OneUseResourceId != NeighborhoodCheckResourceId ||
 			cursor.CommittedTargetIds.Count != 0 ||
@@ -379,7 +386,7 @@ internal sealed class FoxRole
 		var isAffirmative = checkedPlayerIds.Any(playerId =>
 			session.GetFactionAgentKnowledge(playerId, Faction.Werewolf) ==
 			FactionAgentKnowledge.KnownAgent);
-		var powerInstance = CreatePowerInstance(fox);
+		var powerInstance = CreatePowerInstance(session, fox);
 		var powerIdentity = CreatePowerIdentity(fox, powerInstance);
 		var spentResourceIdentity = isAffirmative
 			? (OneUseRolePowerResourceIdentity?)null
@@ -406,7 +413,7 @@ internal sealed class FoxRole
 			return knownAvailability;
 		}
 
-		var powerInstance = CreatePowerInstance(fox);
+		var powerInstance = CreatePowerInstance(session, fox);
 		if (GameSessionQueries.IsOneUseRolePowerResourceCommitted(
 				session,
 				CreateResourceIdentity(fox, powerInstance)))
@@ -441,8 +448,11 @@ internal sealed class FoxRole
 			FoxRoleState.ReadyToSleep);
 	}
 
-	private static RolePowerInstance CreatePowerInstance(IPlayer fox) =>
-		RolePowerInstance.CreateNative(
+	private static RolePowerInstance CreatePowerInstance(
+		GameSession session,
+		IPlayer fox) =>
+		RolePowerInstance.CreateCurrent(
+			session,
 			fox,
 			MainRoleType.Fox,
 			NeighborhoodCheckPower);
@@ -485,8 +495,11 @@ internal sealed class FoxRole
 			!StringComparer.Ordinal.Equals(
 				commit.SourcePowerIdentifier,
 				NeighborhoodCheckPower.Identifier.Value) ||
-			commit.PowerInstanceId != commit.ActingPlayerId ||
-			commit.PowerInstanceOrigin != RolePowerInstanceOrigin.Native ||
+			commit.PowerIdentity != CreatePowerIdentity(
+				session.GetPlayer(commit.ActingPlayerId),
+				CreatePowerInstance(
+					session,
+					session.GetPlayer(commit.ActingPlayerId))) ||
 			commit.CurrentPhase != GamePhase.Night ||
 			commit.TurnNumber != session.TurnNumber)
 		{
@@ -505,7 +518,7 @@ internal sealed class FoxRole
 		if (commit.SpentResourceIdentity is { } spentResource &&
 			spentResource != CreateResourceIdentity(
 				fox,
-				CreatePowerInstance(fox)))
+				CreatePowerInstance(session, fox)))
 		{
 			throw new InvalidOperationException(
 				"The Fox target-private check commit has an invalid spent Resource.");

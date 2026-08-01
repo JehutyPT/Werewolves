@@ -14,6 +14,8 @@ public sealed class GameClientManager
 	private readonly IInstructionAudioPlayback _audioPlayback;
 	private readonly IGameSessionSaveStore _saveStore;
 	private readonly TimeProvider _timeProvider;
+	private readonly LobbySetupState? _lobbySetupState;
+	private StagedLobbyRecoveryPayload? _stagedLobby;
 	private DateTimeOffset? _debateStartedAt;
 
 	public GameClientManager()
@@ -25,12 +27,14 @@ public sealed class GameClientManager
 		GameService gameService,
 		IInstructionAudioPlayback? audioPlayback = null,
 		IGameSessionSaveStore? saveStore = null,
-		TimeProvider? timeProvider = null)
+		TimeProvider? timeProvider = null,
+		LobbySetupState? lobbySetupState = null)
 	{
 		_gameService = gameService;
 		_audioPlayback = audioPlayback ?? DisabledInstructionAudioPlayback.Instance;
 		_saveStore = saveStore ?? DisabledGameSessionSaveStore.Instance;
 		_timeProvider = timeProvider ?? TimeProvider.System;
+		_lobbySetupState = lobbySetupState;
 		TryResumeSavedGame();
 	}
 
@@ -48,6 +52,31 @@ public sealed class GameClientManager
 
 	public TimeSpan? DebateElapsed =>
 		_debateStartedAt is { } start ? _timeProvider.GetUtcNow() - start : null;
+	public RoleLockIn? StagedRoleLockIn => _stagedLobby?.RoleLockIn;
+
+	public bool TryReplaceStagedRoleLockIn(
+		LobbySetupState lobby,
+		long expectedCurrentVersion,
+		RoleLockIn replacement)
+	{
+		ArgumentNullException.ThrowIfNull(lobby);
+		ArgumentNullException.ThrowIfNull(replacement);
+		if (HasActiveSession ||
+			!lobby.CanReplaceRoleLockIn(expectedCurrentVersion, replacement))
+		{
+			return false;
+		}
+
+		try
+		{
+			PersistStagedRoleLockIn(lobby, replacement);
+		}
+		catch (Exception)
+		{
+			return false;
+		}
+		return true;
+	}
 
 	public StartGameConfirmationInstruction StartGame(
 		IReadOnlyList<string> playerNamesInOrder,
@@ -57,12 +86,87 @@ public sealed class GameClientManager
 		return StartGame(config);
 	}
 
+	public StartGameConfirmationInstruction StartGame(LobbySetupState lobby)
+	{
+		ArgumentNullException.ThrowIfNull(lobby);
+		if (lobby.AcceptedRoleLockInRequiresReplacement)
+		{
+			throw new InvalidOperationException(
+				"Lobby Exit requires a fresh accepted Role Lock-In after Lobby edits.");
+		}
+		GameSessionConfig config;
+		if (lobby.AcceptedRoleLockIn is { } acceptedRoleLockIn)
+		{
+			config = new GameSessionConfig(
+				lobby.PlayerNames.ToList(),
+				acceptedRoleLockIn);
+		}
+		else
+		{
+			config = new GameSessionConfig(
+				lobby.PlayerNames.ToList(),
+				lobby.GetSelectedRoles());
+			if (!lobby.CanReplaceRoleLockIn(
+				expectedCurrentVersion: 0,
+				config.RoleLockIn))
+			{
+				throw new InvalidOperationException(
+					"Lobby Exit could not finalize the current Role Lock-In.");
+			}
+			PersistStagedRoleLockIn(lobby, config.RoleLockIn);
+		}
+		return StartGame(config, lobby);
+	}
+
+	private void PersistStagedRoleLockIn(
+		LobbySetupState lobby,
+		RoleLockIn roleLockIn)
+	{
+		var payload = LocalRecoveryPayloadCodec.SerializeStagedLobby(
+			lobby.PlayerNames,
+			roleLockIn);
+		_saveStore.Save(payload);
+		lobby.ApplyAcceptedRoleLockIn(roleLockIn);
+		_stagedLobby = new StagedLobbyRecoveryPayload(
+			lobby.PlayerNames.ToArray(),
+			roleLockIn);
+		OnStateChanged();
+	}
+
 	public StartGameConfirmationInstruction StartGame(GameSessionConfig config)
+		=> StartGame(config, lobby: null);
+
+	private StartGameConfirmationInstruction StartGame(
+		GameSessionConfig config,
+		LobbySetupState? lobby)
 	{
 		var instruction = _gameService.StartNewGame(config);
-		ClearSavedGame();
+		var startedSession = _gameService.GetGameStateView(instruction.GameGuid)
+			?? throw new InvalidOperationException("Core did not publish the stable initial Game Session.");
+		if (lobby is not null)
+		{
+			try
+			{
+				_saveStore.Save(LocalRecoveryPayloadCodec.SerializeActiveGame(
+					startedSession.Serialize()));
+			}
+			catch
+			{
+				_gameService.DiscardSession(instruction.GameGuid);
+				throw;
+			}
+			lobby.FinalizeRoleLockIn(config.RoleLockIn);
+		}
+
 		ActiveGameId = instruction.GameGuid;
-		RefreshCurrentState(instruction);
+		CurrentSession = startedSession;
+		CurrentInstruction = _gameService.GetCurrentInstruction(instruction.GameGuid)
+			?? instruction;
+		if (lobby is null)
+		{
+			SaveCurrentSession();
+		}
+		_stagedLobby = null;
 		UpdateDebateTimer();
 		QueueAudioReconciliation();
 		OnStateChanged();
@@ -157,7 +261,8 @@ public sealed class GameClientManager
 
 		try
 		{
-			_saveStore.Save(CurrentSession.Serialize());
+			_saveStore.Save(LocalRecoveryPayloadCodec.SerializeActiveGame(
+				CurrentSession.Serialize()));
 		}
 		catch (Exception)
 		{
@@ -168,15 +273,26 @@ public sealed class GameClientManager
 	{
 		try
 		{
-			var serializedSession = _saveStore.Load();
-			if (string.IsNullOrWhiteSpace(serializedSession))
+			var serializedPayload = _saveStore.Load();
+			if (string.IsNullOrWhiteSpace(serializedPayload))
 			{
 				return;
 			}
 
-			ActiveGameId = _gameService.RehydrateSession(serializedSession);
-			RefreshCurrentState();
-			UpdateDebateTimer();
+			switch (LocalRecoveryPayloadCodec.Deserialize(serializedPayload))
+			{
+				case StagedLobbyRecoveryPayload stagedLobby:
+					_stagedLobby = stagedLobby;
+					_lobbySetupState?.RestoreAcceptedRoleLockIn(
+						stagedLobby.PlayerNames,
+						stagedLobby.RoleLockIn);
+					break;
+				case ActiveGameRecoveryPayload activeGame:
+					ActiveGameId = _gameService.RehydrateSession(activeGame.SerializedSession);
+					RefreshCurrentState();
+					UpdateDebateTimer();
+					break;
+			}
 		}
 		catch (Exception)
 		{

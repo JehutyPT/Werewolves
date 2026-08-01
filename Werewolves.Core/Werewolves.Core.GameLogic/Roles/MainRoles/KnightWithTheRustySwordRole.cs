@@ -250,7 +250,8 @@ internal sealed class KnightWithTheRustySwordRole
 				"The Knight disease cannot be scheduled before the triggering Dawn Elimination Cascade completes.");
 		}
 
-		var powerInstance = RolePowerInstance.CreateNative(
+		var powerInstance = RolePowerInstance.CreateCurrent(
+			session,
 			triggeringKnight,
 			MainRoleType.KnightWithRustySword,
 			DiseasePower);
