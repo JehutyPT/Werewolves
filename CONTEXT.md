@@ -39,8 +39,8 @@ A living Player whose current Role is a specified Role.
 _Avoid_: Role Composition count, selected Role count, active holder (ambiguous with Role Power availability)
 
 **Physical Character Card Ownership**:
-The relationship between a Player and a specific physical Character Card instance.
-_Avoid_: Current Role, app assignment, known Role, revealed Role
+The relationship between a Player and one Character Card from the locked Role Composition. Same-printed copies are interchangeable for ownership bookkeeping; configured Offer 1 and Offer 2 slots remain distinct.
+_Avoid_: Current Role, app assignment, known Role, revealed Role, observed copy identity
 
 **Deal Pool**:
 The Player-count subset of the Role Composition used for the Physical Deal.

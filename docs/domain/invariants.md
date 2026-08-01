@@ -24,6 +24,7 @@ This document records short, stable domain facts that can be asserted without ca
 - Role Reveal records a public physical event and never changes the current Role.
 - Villager-Villager is public from the Physical Deal because its Character Card is printed on both sides.
 - Recorded Role and card-zone facts respect Role Composition multiplicity and one-to-one physical card ownership.
+- Character Cards with the same printed Role are interchangeable for Player ownership; stable card IDs are accounting handles for multiplicity, one-owner, one-zone, and recovery checks, not Moderator-observed distinctions between identical copies. Configured Offer 1 and Offer 2 slots remain distinct.
 - Public announcements and public history use only publicly revealed facts.
 
 ## Simulation boundaries
