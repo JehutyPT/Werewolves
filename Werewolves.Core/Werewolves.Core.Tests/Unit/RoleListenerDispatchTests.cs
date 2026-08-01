@@ -59,9 +59,9 @@ public class RoleListenerDispatchTests
 	}
 
 	[Fact]
-	public void UnadmittedPlannedListener_DoesNotCreateOrExecuteRoleBehavior()
+	public void UnadmittedListener_DoesNotCreateOrExecuteRoleBehavior()
 	{
-		var listenerId = ListenerIdentifier.Listener(MainRoleType.Thief);
+		var listenerId = ListenerIdentifier.Listener(MainRoleType.Elder);
 		var listener = new CountingListener(listenerId);
 		var admissions = new StubRoleAdmissionSource(
 			admission: null,

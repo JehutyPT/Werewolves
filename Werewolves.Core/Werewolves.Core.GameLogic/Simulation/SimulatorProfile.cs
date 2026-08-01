@@ -155,7 +155,8 @@ public sealed class SimulatorCapability : SimulatorProfile
 			new(MainRoleType.BearTamer, Faction.Villager),
 			new(MainRoleType.Fox, Faction.Villager),
 			new(MainRoleType.KnightWithRustySword, Faction.Villager),
-			new(MainRoleType.Cupid, Faction.Villager)
+			new(MainRoleType.Cupid, Faction.Villager),
+			new(MainRoleType.Thief, Faction.Villager)
 	];
 
 	private static readonly SimulatorProfileRoleDescriptor[] FullProbabilityRoleDescriptors =
@@ -173,7 +174,7 @@ public sealed class SimulatorCapability : SimulatorProfile
 		SimulatorCapabilityRegistry.Production.FullProbability;
 
 	internal static SimulatorCapability CreateSafetyScreening() => new(
-		new SimulatorProfileIdentity("safety-screening", "23"),
+		new SimulatorProfileIdentity("safety-screening", "24"),
 		SafetyScreeningRoleDescriptors,
 		headlessResponsePolicy: new HeadlessResponsePolicy(
 			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
@@ -197,6 +198,7 @@ public sealed class SimulatorCapability : SimulatorProfile
 				ModeratorInstructionSemantic.RevealFoxResult,
 				ModeratorInstructionSemantic.SelectCupidLovers,
 				ModeratorInstructionSemantic.RecognizeLovers,
+				ModeratorInstructionSemantic.ChooseThiefOffer,
 				ModeratorInstructionSemantic.SelectSeerTarget,
 				ModeratorInstructionSemantic.RevealSeerResult,
 				ModeratorInstructionSemantic.SelectWildChildModel,

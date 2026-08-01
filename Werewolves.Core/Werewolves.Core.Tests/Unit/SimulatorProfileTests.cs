@@ -61,16 +61,17 @@ public class SimulatorProfileTests
 			.Append(ModeratorInstructionSemantic.SelectFoxCenter)
 			.Append(ModeratorInstructionSemantic.RevealFoxResult)
 			.Append(ModeratorInstructionSemantic.SelectCupidLovers)
-			.Append(ModeratorInstructionSemantic.RecognizeLovers);
+			.Append(ModeratorInstructionSemantic.RecognizeLovers)
+			.Append(ModeratorInstructionSemantic.ChooseThiefOffer);
 		var safety = SimulatorCapability.SafetyScreening;
 		var probability = SimulatorCapability.FullProbability;
 
-		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "23"));
+		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "24"));
 		probability.Identity.Should().Be(new SimulatorProfileIdentity("full-probability", "4"));
 		BaselineRandomDecisionStrategy.Identity.Should()
 			.Be(new DecisionStrategyIdentity("baseline-random", "3-splitmix64"));
 		BaselineRandomDecisionStrategy.SafetyScreeningIdentity.Should()
-			.Be(new DecisionStrategyIdentity("baseline-random", "10-splitmix64"));
+			.Be(new DecisionStrategyIdentity("baseline-random", "11-splitmix64"));
 		safety.SupportedRoles.Should().Equal(
 			MainRoleType.SimpleWerewolf,
 			MainRoleType.BigBadWolf,
@@ -94,7 +95,8 @@ public class SimulatorProfileTests
 			MainRoleType.BearTamer,
 			MainRoleType.Fox,
 			MainRoleType.KnightWithRustySword,
-			MainRoleType.Cupid);
+			MainRoleType.Cupid,
+			MainRoleType.Thief);
 		probability.SupportedRoles.Should().Equal(
 			MainRoleType.SimpleWerewolf,
 			MainRoleType.Seer,

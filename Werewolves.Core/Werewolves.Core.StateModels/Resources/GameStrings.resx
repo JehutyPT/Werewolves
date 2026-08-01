@@ -457,6 +457,10 @@
     <value>Ladrão</value>
     <comment/>
   </data>
+  <data name="ThiefOfferSelectionInstruction" xml:space="preserve">
+    <value>Ladrão, escolhe uma das duas cartas oferecidas ou recusa, quando permitido.</value>
+    <comment/>
+  </data>
   <data name="DevotedServantRoleName" xml:space="preserve">
     <value>Serventa Devotada</value>
     <comment/>

@@ -667,6 +667,116 @@ internal sealed class RecoveryPayloadTestDriver
 		return this;
 	}
 
+	internal RecoveryPayloadTestDriver RewriteLatestPermanentRoleSwapPolicy(
+		Func<PermanentRoleSwapPolicy, PermanentRoleSwapPolicy> rewrite)
+	{
+		ArgumentNullException.ThrowIfNull(rewrite);
+		RewriteLatestPermanentRoleSwap(entry => entry with
+		{
+			Policy = rewrite(entry.Policy)
+		});
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver RewriteLatestThiefSwapAcquiredCard(
+		Guid replacementCardId)
+	{
+		var swap = RequireLatestPermanentRoleSwap();
+		var replacementCard = RequireRoleLockInCard(replacementCardId);
+		var previousAcquiredCardId = swap.PhysicalCards.AcquiredCardId;
+		var previousAcquired = RequirePhysicalCardState(previousAcquiredCardId);
+		var replacement = RequirePhysicalCardState(replacementCardId);
+		if (replacement.Zone != PhysicalCharacterCardZone.DealPool ||
+		    replacement.OwnerPlayerId is not null)
+		{
+			throw new InvalidOperationException(
+				"The replacement acquired card must be unused in the Deal Pool.");
+		}
+
+		previousAcquired.Zone = RequireOfferZone(previousAcquiredCardId);
+		previousAcquired.OwnerPlayerId = null;
+		replacement.Zone = PhysicalCharacterCardZone.PlayerOwned;
+		replacement.OwnerPlayerId = swap.PlayerId;
+		var player = _payload.Players.Single(player => player.Id == swap.PlayerId);
+		player.MainRole = replacementCard.PrintedRole;
+		player.ModeratorKnownRole = replacementCard.PrintedRole;
+		player.PhysicalCharacterCardId = replacementCardId;
+		player.PhysicalCharacterCardRole = replacementCard.PrintedRole;
+		RewriteLatestPermanentRoleSwap(entry => entry with
+		{
+			NewCurrentRole = replacementCard.PrintedRole,
+			PhysicalCards = new PermanentRoleSwapCardMovement(
+				entry.PhysicalCards.OutgoingOwnedCardId,
+				replacementCardId,
+				entry.PhysicalCards.AdditionalSetAsideCardIds)
+		});
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver RewriteLatestThiefSwapUnchosenCard(
+		Guid replacementCardId)
+	{
+		var swap = RequireLatestPermanentRoleSwap();
+		var previousUnchosenCardId = swap.PhysicalCards
+			.AdditionalSetAsideCardIds.Single();
+		var previousUnchosen = RequirePhysicalCardState(previousUnchosenCardId);
+		var replacement = RequirePhysicalCardState(replacementCardId);
+		if (replacement.Zone != PhysicalCharacterCardZone.DealPool ||
+		    replacement.OwnerPlayerId is not null)
+		{
+			throw new InvalidOperationException(
+				"The replacement unchosen card must be unused in the Deal Pool.");
+		}
+
+		previousUnchosen.Zone = RequireOfferZone(previousUnchosenCardId);
+		previousUnchosen.OwnerPlayerId = null;
+		replacement.Zone = PhysicalCharacterCardZone.SetAside;
+		replacement.OwnerPlayerId = null;
+		RewriteLatestPermanentRoleSwap(entry => entry with
+		{
+			PhysicalCards = new PermanentRoleSwapCardMovement(
+				entry.PhysicalCards.OutgoingOwnedCardId,
+				entry.PhysicalCards.AcquiredCardId,
+				[replacementCardId])
+		});
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver RewriteThiefOfferPrintedRoles(
+		MainRoleType offer1Role,
+		MainRoleType offer2Role)
+	{
+		var lockIn = _payload.RoleLockIn
+			?? throw new InvalidOperationException(
+				"The recovery test payload has no Role Lock-In.");
+		if (lockIn.Offer1CardId is not { } offer1CardId ||
+		    lockIn.Offer2CardId is not { } offer2CardId)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no Thief offers.");
+		}
+
+		RewriteCard(offer1CardId, offer1Role);
+		RewriteCard(offer2CardId, offer2Role);
+		return this;
+
+		void RewriteCard(Guid cardId, MainRoleType printedRole)
+		{
+			var index = lockIn.RoleComposition.FindIndex(card => card.Id == cardId);
+			if (index < 0)
+			{
+				throw new InvalidOperationException(
+					"The recovery test payload is missing a Thief offer card.");
+			}
+
+			lockIn.RoleComposition[index] =
+				new PhysicalCharacterCard(cardId, printedRole);
+			var persistedState = RequirePhysicalCardState(cardId);
+			persistedState.Zone = PhysicalCharacterCardZone.SetAside;
+			persistedState.OwnerPlayerId = null;
+		}
+	}
+
 	internal RecoveryPayloadTestDriver
 		RewriteLatestPermanentRoleSwapBeneficiaryAndCache(Faction faction)
 	{
@@ -770,6 +880,38 @@ internal sealed class RecoveryPayloadTestDriver
 		}
 
 		_payload.GameHistoryLog[entryIndex] = rewrite(entry);
+	}
+
+	private PermanentRoleSwapCommittedLogEntry RequireLatestPermanentRoleSwap() =>
+		_payload.GameHistoryLog
+			.OfType<PermanentRoleSwapCommittedLogEntry>()
+			.LastOrDefault()
+		?? throw new InvalidOperationException(
+			"The recovery test payload has no Permanent Role Swap.");
+
+	private PhysicalCharacterCard RequireRoleLockInCard(Guid cardId) =>
+		_payload.RoleLockIn?.RoleComposition
+			.SingleOrDefault(card => card.Id == cardId)
+		?? throw new InvalidOperationException(
+			"The recovery test payload is missing a Physical Character Card.");
+
+	private PhysicalCharacterCardStateDto RequirePhysicalCardState(Guid cardId) =>
+		_payload.PhysicalCharacterCards
+			.SingleOrDefault(state => state.CardId == cardId)
+		?? throw new InvalidOperationException(
+			"The recovery test payload is missing Physical Character Card state.");
+
+	private PhysicalCharacterCardZone RequireOfferZone(Guid cardId)
+	{
+		var lockIn = _payload.RoleLockIn
+			?? throw new InvalidOperationException(
+				"The recovery test payload has no Role Lock-In.");
+		return cardId == lockIn.Offer1CardId
+			? PhysicalCharacterCardZone.Offer1
+			: cardId == lockIn.Offer2CardId
+				? PhysicalCharacterCardZone.Offer2
+				: throw new InvalidOperationException(
+					"The recovery test card is not a locked Thief offer.");
 	}
 
 	private static FactionFact RequireSingleBeneficiaryFact(

@@ -580,8 +580,9 @@ internal static class GameFlowManager
 	            return true;
 	        }
 
-	        if (nextInstructionToSend.Semantic ==
-	            ModeratorInstructionSemantic.ObserveStutteringJudgeSignal)
+	        if (nextInstructionToSend.Semantic is
+	            ModeratorInstructionSemantic.ObserveStutteringJudgeSignal or
+	            ModeratorInstructionSemantic.ChooseThiefOffer)
 	        {
 		        return true;
 	        }
@@ -611,6 +612,11 @@ internal static class GameFlowManager
         {
             return true;
         }
+
+		if (HasNewThiefOfferCommit(session, startingLogCount))
+		{
+			return true;
+		}
 
 		if (HasNewEliminationCascadeReactionCompletion(
 			session,
@@ -672,6 +678,18 @@ internal static class GameFlowManager
             .Skip(startingLogCount)
             .OfType<TargetPrivateRolePowerCommittedLogEntry>()
             .Any();
+
+	private static bool HasNewThiefOfferCommit(
+		GameSession session,
+		int startingLogCount) =>
+		session.GameHistoryLog
+			.Skip(startingLogCount)
+			.Any(entry =>
+				entry is ThiefOfferDeclinedLogEntry ||
+				entry is PermanentRoleSwapCommittedLogEntry
+				{
+					ExpectedCurrentRole: MainRoleType.Thief
+				});
 
 	private static bool HasNewEliminationCascadeReactionCompletion(
 		GameSession session,
@@ -939,6 +957,7 @@ internal static class GameFlowManager
             ModeratorInstructionSemantic.EstablishStutteringJudgeSignal or
             ModeratorInstructionSemantic.ObserveStutteringJudgeSignal or
             ModeratorInstructionSemantic.ChooseWolfHoundAlignment or
+            ModeratorInstructionSemantic.ChooseThiefOffer or
             ModeratorInstructionSemantic.AnnounceDawnVictims or
             ModeratorInstructionSemantic.AssignDawnVictimRoles or
             ModeratorInstructionSemantic.AssignDayVoteTargetRole or
@@ -1121,6 +1140,18 @@ internal static class GameFlowManager
                 ModeratorInstructionSemantic.ChooseWolfHoundAlignment
                     when cursor.ObservedRole == WolfHound =>
                     HasCommittedWolfHoundAlignment(session),
+				ModeratorInstructionSemantic.ChooseThiefOffer
+					when cursor.ObservedRole == MainRoleType.Thief &&
+						 continuationRole == MainRoleType.Thief &&
+						 pendingInstruction is ConfirmationInstruction
+						 {
+							 Semantic:
+								 ModeratorInstructionSemantic.PutRoleToSleep,
+							 AffectedPlayerIds: [var thiefPlayerId]
+						 } =>
+					ThiefOfferRules.HasValidCommittedChoice(
+						session,
+						thiefPlayerId),
                 ModeratorInstructionSemantic.RecognizeLovers
                     when cursor.ObservedRole == Cupid &&
                          continuationRole == Cupid =>

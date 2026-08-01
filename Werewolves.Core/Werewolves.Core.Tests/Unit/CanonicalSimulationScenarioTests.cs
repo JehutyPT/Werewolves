@@ -31,8 +31,26 @@ public class CanonicalSimulationScenarioTests
 		firstCanonical.Offer1Role.Should().Be(MainRoleType.Seer);
 		firstCanonical.Offer2Role.Should().Be(MainRoleType.Cupid);
 		firstCanonical.ToString().Should().Be(
-			"players=5|roles=[SimpleVillager=3,SimpleWerewolf=1,Thief=1]|offers=[Seer,Cupid]|actor=[]|rules=[]");
+			"players=5|roles=[SimpleVillager=3,SimpleWerewolf=1,Thief=1]|offers=[Seer,Cupid]|thief=[Offer1,Offer2,Decline]|actor=[]|rules=[]");
 		CanonicalSimulationScenario.Parse(firstCanonical.ToString()).Should().Be(firstCanonical);
+	}
+
+	[Fact]
+	public void ToCanonical_WithSamePrintedOffers_PreservesSlotsAndDeduplicatesBehavioralBranches()
+	{
+		var canonical = new SimulationScenario(
+			CreatePartitionedRoleLockIn(MainRoleType.Seer, MainRoleType.Seer))
+			.ToCanonical();
+
+		canonical.Offer1Role.Should().Be(MainRoleType.Seer);
+		canonical.Offer2Role.Should().Be(MainRoleType.Seer);
+		canonical.ThiefOfferBranchPolicy.Should().NotBeNull();
+		canonical.ThiefOfferBranchPolicy!.Branches.Should().Equal(
+			ThiefOfferBranch.Offer1,
+			ThiefOfferBranch.Decline);
+		canonical.ToString().Should().Contain(
+			"|offers=[Seer,Seer]|thief=[Offer1,Decline]|");
+		CanonicalSimulationScenario.Parse(canonical.ToString()).Should().Be(canonical);
 	}
 
 	[Fact]
@@ -141,6 +159,7 @@ public class CanonicalSimulationScenarioTests
 	[InlineData("players=5|roles=[Seer=1]|actor=[UnknownRole]|rules=[]")]
 	[InlineData("players=5|roles=[Seer=1]|actor=[]|rules=[newMoonEnabled]")]
 	[InlineData("players=5|roles=[Seer=1]|actor=[]")]
+	[InlineData("players=5|roles=[SimpleVillager=3,SimpleWerewolf=1,Thief=1]|offers=[Seer,Cupid]|actor=[]|rules=[]")]
 	public void TryParse_WithMalformedOrNoncanonicalValue_ReturnsFalse(string value)
 	{
 		var parsed = CanonicalSimulationScenario.TryParse(value, out var scenario);
@@ -149,7 +168,9 @@ public class CanonicalSimulationScenarioTests
 		scenario.Should().BeNull();
 	}
 
-	private static RoleLockIn CreatePartitionedRoleLockIn()
+	private static RoleLockIn CreatePartitionedRoleLockIn(
+		MainRoleType offer1Role = MainRoleType.Seer,
+		MainRoleType offer2Role = MainRoleType.Cupid)
 	{
 		var cards = new[]
 		{
@@ -158,8 +179,8 @@ public class CanonicalSimulationScenarioTests
 			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.SimpleVillager),
 			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.SimpleVillager),
 			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.SimpleVillager),
-			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.Seer),
-			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.Cupid)
+			new PhysicalCharacterCard(Guid.NewGuid(), offer1Role),
+			new PhysicalCharacterCard(Guid.NewGuid(), offer2Role)
 		};
 		return new RoleLockIn(
 			version: 7,

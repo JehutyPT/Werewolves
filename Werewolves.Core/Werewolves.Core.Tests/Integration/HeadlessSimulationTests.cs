@@ -626,7 +626,7 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 			0L,
 			AccursedWolfFatherInfectionOptionIds.Infect)]
 		[InlineData(
-			1L,
+			2L,
 			AccursedWolfFatherInfectionOptionIds.Decline)]
 		public void BaselineRandomDecisionStrategy_WithAccursedWolfFatherInfection_CoversBothBranchesDeterministically(
 			long runNumber,

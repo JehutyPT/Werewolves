@@ -21,6 +21,7 @@ public sealed class SimulationScenario : IEquatable<SimulationScenario>
 	public IReadOnlyList<MainRoleType> DealPoolCards { get; }
 	public MainRoleType? Offer1Role { get; }
 	public MainRoleType? Offer2Role { get; }
+	public ThiefOfferBranchPolicy? ThiefOfferBranchPolicy { get; }
 
 	public ActorSetupCards ActorSetupCards => _actorSetupCards;
 
@@ -132,6 +133,13 @@ public sealed class SimulationScenario : IEquatable<SimulationScenario>
 		DealPoolCards = Array.AsReadOnly(_dealPoolCards);
 		Offer1Role = partition.Offer1Role;
 		Offer2Role = partition.Offer2Role;
+		ThiefOfferBranchPolicy =
+			partition.Offer1Role is { } branchOffer1 &&
+			partition.Offer2Role is { } branchOffer2 &&
+			_dealPoolCards.Count(role => role == MainRoleType.Thief) == 1
+				? global::Werewolves.Core.StateModels.Models.Simulation
+					.ThiefOfferBranchPolicy.Create(branchOffer1, branchOffer2)
+				: null;
 		_actorSetupCards = new ActorSetupCards(actorCards);
 		RuleState = ruleState;
 		_canonical = CanonicalSimulationScenario.Create(this);

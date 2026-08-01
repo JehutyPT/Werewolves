@@ -54,6 +54,43 @@ internal static class GameSessionQueries
         return query;
     }
 
+    internal static IReadOnlyList<PermanentRoleSwapCommittedLogEntry>
+        GetCommittedPermanentRoleSwaps(IGameSession session) =>
+        FindLogEntries<PermanentRoleSwapCommittedLogEntry>(session).ToArray();
+
+    internal static IReadOnlyList<PermanentRoleSwapCommittedLogEntry>
+        GetCommittedThiefExchanges(
+            IGameSession session,
+            Guid playerId,
+            long roleLockInVersion) =>
+        FindLogEntries<PermanentRoleSwapCommittedLogEntry>(
+                session,
+                NumberRangeConstraint.Exact(1),
+                GamePhase.Night,
+                entry =>
+                    entry.ExpectedCurrentRole == MainRoleType.Thief &&
+                    entry.PlayerId == playerId &&
+                    entry.RoleLockInVersion == roleLockInVersion)
+            .ToArray();
+
+    internal static IReadOnlyList<ThiefOfferDeclinedLogEntry>
+        GetCommittedThiefOfferDeclines(
+            IGameSession session,
+            Guid playerId,
+            long roleLockInVersion) =>
+        FindLogEntries<ThiefOfferDeclinedLogEntry>(
+                session,
+                NumberRangeConstraint.Exact(1),
+                GamePhase.Night,
+                entry =>
+                    entry.PlayerId == playerId &&
+                    entry.RoleLockInVersion == roleLockInVersion)
+            .ToArray();
+
+    internal static IReadOnlyList<ThiefOfferDeclinedLogEntry>
+        GetAllCommittedThiefOfferDeclines(IGameSession session) =>
+        FindLogEntries<ThiefOfferDeclinedLogEntry>(session).ToArray();
+
     internal static LoversPairCommittedLogEntry? GetCommittedLoversPair(
         IGameSession session)
     {

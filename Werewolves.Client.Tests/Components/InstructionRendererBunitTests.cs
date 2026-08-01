@@ -9,6 +9,7 @@ using Werewolves.Client.Resources;
 using Werewolves.Client.Services;
 using Werewolves.Client.Tests.Helpers;
 using Werewolves.Core.GameLogic.Services;
+using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Models;
@@ -620,6 +621,97 @@ public class InstructionRendererBunitTests
 		actionZones.Should().ContainSingle();
 		actionZones.Single().TextContent.Should().Contain(ClientStrings.Dashboard_ContinueButton);
 		actionZones.Single().QuerySelectorAll(HoldButtonSelector).Should().ContainSingle();
+	}
+
+	[Fact]
+	public async Task LiveThiefOfferChoice_RendersPrivatePortugueseCoreOptionsForDesignatedPlayer()
+	{
+		var timing = new ControlledHoldButtonTiming();
+		using var context = new ModeratorComponentTestContext();
+		context.Services.AddSingleton<IHoldButtonTiming>(timing);
+		GameStrings.Culture = ModeratorComponentTestContext.PortugueseCulture;
+		var manager = context.Services.GetRequiredService<GameClientManager>();
+		var cards = new[]
+		{
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.Thief),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.SimpleWerewolf),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.SimpleVillager),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.SimpleVillager),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.SimpleVillager),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.Seer),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.Seer)
+		};
+		var lockIn = new RoleLockIn(
+			version: 1,
+			playerCount: 5,
+			roleComposition: cards,
+			dealPoolCardIds: cards.Take(5).Select(card => card.Id),
+			offer1CardId: cards[5].Id,
+			offer2CardId: cards[6].Id);
+		var start = manager.StartGame(new GameSessionConfig(
+			PlayerNames.DefaultFive.ToList(),
+			lockIn));
+		manager.ProcessInput(start.CreateResponse()).IsSuccess.Should().BeTrue();
+		var nightStart = manager.CurrentInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		manager.ProcessInput(nightStart.CreateResponse()).IsSuccess.Should().BeTrue();
+		var players = manager.CurrentSession!.GetPlayers().ToArray();
+		var thiefHolder = players[0];
+		var identification = manager.CurrentInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		identification.RoleIdentification.Should().Be(MainRoleType.Thief);
+		manager.ProcessInput(identification.CreateResponse([thiefHolder.Id]))
+			.IsSuccess.Should().BeTrue();
+
+		var choice = manager.CurrentInstruction
+			.Should().BeOfType<SelectOptionsInstruction>().Subject;
+		choice.Semantic.Should().Be(ModeratorInstructionSemantic.ChooseThiefOffer);
+		choice.PublicAnnouncement.Should().BeNull();
+		choice.PrivateInstruction.Should().Be(GameStrings.ThiefOfferSelectionInstruction);
+		choice.AffectedPlayerIds.Should().Equal(thiefHolder.Id);
+		choice.Options.Select(option => option.Id).Should().Equal(
+			ThiefOfferOptionIds.Offer1,
+			ThiefOfferOptionIds.Offer2,
+			ThiefOfferOptionIds.Decline);
+		ModeratorResponse? receivedResponse = null;
+		var cut = context.RenderModeratorComponent<InstructionRenderer>(parameters => parameters
+			.Add(component => component.Instruction, choice)
+			.Add(component => component.OnResponse,
+				EventCallback.Factory.Create<ModeratorResponse>(
+					this,
+					response => receivedResponse = response)));
+
+		cut.Find(PrivateInstructionSelector).TextContent.Should()
+			.Contain(GameStrings.ThiefOfferSelectionInstruction);
+		cut.FindAll(PublicInstructionSelector).Should().BeEmpty();
+		var optionGroup = cut.FindAll("*")
+			.Single(element =>
+				element.GetAttribute(Html.Attributes.AriaLabel) ==
+				ClientStrings.SelectOptions_Title);
+		var optionButtons = optionGroup.QuerySelectorAll(Html.Selectors.Button).ToArray();
+		optionButtons.Select(button => button.TextContent.Trim()).Should().Equal(
+			choice.Options.Select(option => option.Label));
+		optionButtons.Should().HaveCount(choice.Options.Count);
+		optionButtons.Take(2).Select(button => button.TextContent.Trim()).Should().Equal(
+			MainRoleType.Seer.GetPublicName(),
+			MainRoleType.Seer.GetPublicName());
+		optionButtons[0].Should().NotBeSameAs(optionButtons[1]);
+		optionButtons[1].Click();
+		await RenderedHoldButtonDriver.CompleteHoldAsync(
+			cut,
+			cut.Find(HoldButtonSelector),
+			timing);
+
+		receivedResponse.Should().NotBeNull();
+		var response = receivedResponse!;
+		response.Type.Should().Be(ExpectedInputType.OptionSelection);
+		response.InstructionId.Should().Be(choice.InstructionId);
+		response.SelectedOptionIds.Should().Equal(ThiefOfferOptionIds.Offer2);
+		manager.ProcessInput(response).IsSuccess.Should().BeTrue();
+		manager.CurrentInstruction.Should()
+			.BeOfType<ConfirmationInstruction>().Which.Semantic.Should().Be(
+				ModeratorInstructionSemantic.PutRoleToSleep);
+		thiefHolder.State.CurrentRole.Should().Be(MainRoleType.Seer);
 	}
 
 	private static ConfirmationInstruction CreateConfirmationInstruction(

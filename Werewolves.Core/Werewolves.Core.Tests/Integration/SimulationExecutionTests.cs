@@ -181,6 +181,168 @@ public class SimulationExecutionTests : DiagnosticTestBase
 	}
 
 	[Fact]
+	public void HeadlessSafety_OfferBearingThiefScenario_ExecutesGenuineChoice()
+	{
+		MainRoleType[] dealPool =
+		[
+			MainRoleType.Thief,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager
+		];
+		var scenario = new SimulationScenario(
+			playerCount: 5,
+			roleCompositionCards: dealPool.Concat(
+				[MainRoleType.Seer, MainRoleType.Defender]),
+			dealPoolCards: dealPool,
+			offer1Role: MainRoleType.Seer,
+			offer2Role: MainRoleType.Defender);
+		var identity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+		var material = new RunSeedMaterial(
+			identity,
+			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
+			runNumber: 0);
+		var random = new DeterministicRandomSource(material);
+		var startState = SimulationStartStateDeriver.Derive(
+			material,
+			SimulatorCapability.SafetyScreening,
+			random);
+		var recorder = new RecordingDecisionStrategy(
+			new BaselineRandomDecisionStrategy(
+				material,
+				startState,
+				SimulatorCapability.SafetyScreening.HeadlessResponsePolicy,
+				random));
+
+		var execution = new HeadlessGameDriver(recorder).CompleteGameSession(
+			startState,
+			CancellationToken.None);
+
+		startState.RoleAssignments.Select(assignment => assignment.Role)
+			.Should().BeEquivalentTo(dealPool);
+		startState.CanonicalScenario.Offer1Role.Should().Be(MainRoleType.Seer);
+		startState.CanonicalScenario.Offer2Role.Should().Be(MainRoleType.Defender);
+		var choice = recorder.Observations.Should()
+			.ContainSingle(observation =>
+				observation.Instruction.Semantic ==
+				ModeratorInstructionSemantic.ChooseThiefOffer)
+			.Subject;
+		choice.Response.SelectedOptionIds.Should().ContainSingle();
+		execution.Session.RoleLockIn.Offer1!.PrintedRole.Should().Be(MainRoleType.Seer);
+		execution.Session.RoleLockIn.Offer2!.PrintedRole.Should().Be(MainRoleType.Defender);
+		(execution.Session.GameHistoryLog.OfType<PermanentRoleSwapCommittedLogEntry>().Count() +
+		 execution.Session.GameHistoryLog.OfType<ThiefOfferDeclinedLogEntry>().Count())
+			.Should().Be(1);
+		MarkTestCompleted();
+	}
+
+	[Theory]
+	[InlineData(
+		0,
+		ThiefOfferOptionIds.Offer1,
+		MainRoleType.Seer,
+		ModeratorInstructionSemantic.SelectSeerTarget,
+		NightActionType.SeerCheck)]
+	[InlineData(
+		1,
+		ThiefOfferOptionIds.Offer2,
+		MainRoleType.Defender,
+		ModeratorInstructionSemantic.SelectDefenderTarget,
+		NightActionType.DefenderProtect)]
+	[InlineData(2, ThiefOfferOptionIds.Decline, null, null, null)]
+	public void HeadlessSafety_OfferBearingThiefScenario_ForcesEveryLegalBranch(
+		long runNumber,
+		string expectedOptionId,
+		MainRoleType? expectedAcquiredRole,
+		ModeratorInstructionSemantic? expectedNightOneActionSemantic,
+		NightActionType? expectedNightOneActionType)
+	{
+		var scenario = CreateOfferBearingThiefScenario();
+		var identity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+		var material = new RunSeedMaterial(
+			identity,
+			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
+			runNumber);
+		var random = new DeterministicRandomSource(material);
+		var startState = SimulationStartStateDeriver.Derive(
+			material,
+			SimulatorCapability.SafetyScreening,
+			random);
+		var recorder = new RecordingDecisionStrategy(
+			new BaselineRandomDecisionStrategy(
+				material,
+				startState,
+				SimulatorCapability.SafetyScreening.HeadlessResponsePolicy,
+				random));
+
+		var execution = new HeadlessGameDriver(recorder).CompleteGameSession(
+			startState,
+			CancellationToken.None);
+
+		var choice = recorder.Observations.Should()
+			.ContainSingle(observation =>
+				observation.Instruction.Semantic ==
+				ModeratorInstructionSemantic.ChooseThiefOffer)
+			.Subject;
+		choice.Response.SelectedOptionIds.Should().Equal(expectedOptionId);
+		var swaps = execution.Session.GameHistoryLog
+			.OfType<PermanentRoleSwapCommittedLogEntry>()
+			.ToArray();
+		var declines = execution.Session.GameHistoryLog
+			.OfType<ThiefOfferDeclinedLogEntry>()
+			.ToArray();
+		if (expectedOptionId == ThiefOfferOptionIds.Decline)
+		{
+			swaps.Should().BeEmpty();
+			declines.Should().ContainSingle();
+		}
+		else
+		{
+			declines.Should().BeEmpty();
+			swaps.Should().ContainSingle().Which.NewCurrentRole.Should().Be(
+				expectedAcquiredRole);
+
+			var nightOneObservations = recorder.Observations
+				.Where(observation => observation.TurnNumber == 1)
+				.ToArray();
+			nightOneObservations.Count(observation =>
+				observation.Instruction.Semantic ==
+				ModeratorInstructionSemantic.StartNight).Should().Be(1);
+			var nightOneChoiceIndex = Array.FindIndex(
+				nightOneObservations,
+				observation => observation.Instruction.Semantic ==
+					ModeratorInstructionSemantic.ChooseThiefOffer);
+			var acquiredRoleActionIndex = Array.FindIndex(
+				nightOneObservations,
+				observation => observation.Instruction.Semantic ==
+					expectedNightOneActionSemantic);
+			acquiredRoleActionIndex.Should().BeGreaterThan(nightOneChoiceIndex);
+
+			var acquiredRoleAction = nightOneObservations[acquiredRoleActionIndex];
+			acquiredRoleAction.Instruction.AffectedPlayerIds.Should().Equal(
+				choice.Instruction.AffectedPlayerIds);
+			nightOneObservations
+				.Select(observation => observation.Instruction)
+				.OfType<SelectPlayersInstruction>()
+				.Where(instruction => instruction.Semantic ==
+					ModeratorInstructionSemantic.IdentifyRoleHolders)
+				.Select(instruction => instruction.RoleIdentification)
+				.Should().Equal(MainRoleType.Thief);
+			execution.Session.GameHistoryLog
+				.OfType<NightActionLogEntry>()
+				.Should().ContainSingle(entry =>
+					entry.TurnNumber == 1 &&
+					entry.ActionType == expectedNightOneActionType);
+		}
+		MarkTestCompleted();
+	}
+
+	[Fact]
 	public void SafetyRunZero_Piper_RecordsSeededExactTargetAndRecognitionTrace()
 	{
 		MainRoleType[] roles =
@@ -1342,7 +1504,8 @@ public class SimulationExecutionTests : DiagnosticTestBase
 		internal List<ModeratorInstructionSemantic> ObservedSemantics { get; } = [];
 		internal List<(
 			ModeratorInstruction Instruction,
-			ModeratorResponse Response)> Observations { get; } = [];
+			ModeratorResponse Response,
+			int TurnNumber)> Observations { get; } = [];
 
 		public ModeratorResponse CreateResponse(
 			ModeratorInstruction instruction,
@@ -1350,9 +1513,28 @@ public class SimulationExecutionTests : DiagnosticTestBase
 		{
 			ObservedSemantics.Add(instruction.Semantic);
 			var response = _inner.CreateResponse(instruction, session);
-			Observations.Add((instruction, response));
+			Observations.Add((instruction, response, session.TurnNumber));
 			return response;
 		}
+	}
+
+	private static SimulationScenario CreateOfferBearingThiefScenario()
+	{
+		MainRoleType[] dealPool =
+		[
+			MainRoleType.Thief,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager
+		];
+		return new SimulationScenario(
+			playerCount: 5,
+			roleCompositionCards: dealPool.Concat(
+				[MainRoleType.Seer, MainRoleType.Defender]),
+			dealPoolCards: dealPool,
+			offer1Role: MainRoleType.Seer,
+			offer2Role: MainRoleType.Defender);
 	}
 
 	private static SimulationCompatibilityIdentity CreateIdentity(SimulationScenario scenario) =>

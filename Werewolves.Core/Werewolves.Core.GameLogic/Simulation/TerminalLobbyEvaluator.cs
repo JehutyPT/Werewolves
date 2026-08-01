@@ -158,7 +158,7 @@ public sealed class TerminalLobbyEvaluator
 		}
 
 		cancellationToken.ThrowIfCancellationRequested();
-		if (!IsConsistentCompleteBatch(
+		if (!IsConsistentBatch(
 			screening,
 			identity,
 			simulatorSupport.Profile.HeadlessResponsePolicy.StrategyIdentity,
@@ -178,8 +178,19 @@ public sealed class TerminalLobbyEvaluator
 		{
 			return new CouldNotEvaluateLobbyEvaluation();
 		}
-		if (screening.Records.Cast<CompletedSimulationRun>()
-			.All(run => run.EndingTurn == 1))
+		var thiefBranchPolicy = identity.Scenario.ThiefOfferBranchPolicy;
+		if (thiefBranchPolicy != null &&
+		    HasDegenerateThiefBranch(screening, thiefBranchPolicy))
+		{
+			return new DegenerateTerminalEvaluation(screeningEvidence);
+		}
+		if (screening.IncompleteRunCount > 0)
+		{
+			return new CouldNotEvaluateLobbyEvaluation();
+		}
+		if (thiefBranchPolicy == null &&
+		    screening.Records.Cast<CompletedSimulationRun>()
+			    .All(run => run.EndingTurn == 1))
 		{
 			return new DegenerateTerminalEvaluation(screeningEvidence);
 		}
@@ -252,12 +263,36 @@ public sealed class TerminalLobbyEvaluator
 		SimulationCompatibilityIdentity identity,
 		DecisionStrategyIdentity decisionStrategyIdentity,
 		int expectedCount) =>
+		IsConsistentBatch(
+			evidence,
+			identity,
+			decisionStrategyIdentity,
+			expectedCount)
+		&& evidence.CompletedRunCount == expectedCount
+		&& evidence.IncompleteRunCount == 0;
+
+	private static bool IsConsistentBatch(
+		SimulationBatchSourceEvidence evidence,
+		SimulationCompatibilityIdentity identity,
+		DecisionStrategyIdentity decisionStrategyIdentity,
+		int expectedCount) =>
 		evidence is not null
 		&& evidence.CanonicalScenario.Equals(identity.Scenario)
 		&& evidence.SimulatorProfile.Equals(identity.Profile)
 		&& evidence.DecisionStrategy.Equals(decisionStrategyIdentity)
-		&& evidence.Records.Count == expectedCount
-		&& evidence.CompletedRunCount == expectedCount
-		&& evidence.IncompleteRunCount == 0;
+		&& evidence.Records.Count == expectedCount;
+
+	private static bool HasDegenerateThiefBranch(
+		SimulationBatchSourceEvidence evidence,
+		ThiefOfferBranchPolicy policy) =>
+		policy.Branches.Any(branch =>
+		{
+			var records = evidence.Records
+				.Where(record =>
+					policy.GetBranch(record.RunSeedMaterial.RunNumber) == branch)
+				.ToArray();
+			return records.Length > 0 && records.All(record =>
+				record is CompletedSimulationRun { EndingTurn: 1 });
+		});
 
 }
