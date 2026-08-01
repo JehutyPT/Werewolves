@@ -30,17 +30,19 @@ public sealed class ThiefRoleTests
 
 		var choice = InstructionAssert.ExpectSuccessWithType<SelectOptionsInstruction>(
 			service.ProcessInstruction(gameId, wake.CreateResponse()));
-		choice.Semantic.ToString().Should().Be("ChooseThiefOffer");
+		choice.Semantic.Should().Be(ModeratorInstructionSemantic.ChooseThiefOffer);
 		choice.PublicAnnouncement.Should().BeNull();
 		choice.AffectedPlayerIds.Should().Equal(holder.Id);
 		choice.SelectionRange.Should().Be(NumberRangeConstraint.Single);
 		choice.Options.Select(option => option.Id).Should().Equal(
-			"Offer1",
-			"Offer2",
-			"Decline");
+			ThiefOfferOptionIds.Offer1,
+			ThiefOfferOptionIds.Offer2,
+			ThiefOfferOptionIds.Decline);
 
 		var sleep = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
-			service.ProcessInstruction(gameId, choice.CreateResponse("Offer1")));
+			service.ProcessInstruction(
+				gameId,
+				choice.CreateResponse(ThiefOfferOptionIds.Offer1)));
 		sleep.Semantic.Should().Be(ModeratorInstructionSemantic.PutRoleToSleep);
 		sleep.AffectedPlayerIds.Should().Equal(holder.Id);
 
@@ -58,6 +60,95 @@ public sealed class ThiefRoleTests
 			.Should().Be(PhysicalCharacterCardZone.SetAside);
 		session.GameHistoryLog.OfType<PermanentRoleSwapCommittedLogEntry>()
 			.Should().ContainSingle();
+	}
+
+	[Fact]
+	public void FirstNight_AlignedWerewolfOffer_ReplacesFactionAndPowerWhilePreservingPlayerState()
+	{
+		var (service, gameId, holder, lockIn, start) = StartKnownThief(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.Seer);
+		var session = (GameSession)service.GetGameStateView(gameId)!;
+		session.RevealRoles(new Dictionary<Guid, MainRoleType>
+		{
+			[holder.Id] = MainRoleType.Thief
+		});
+		session.ApplyStatusEffect(StatusEffectTypes.Charmed, holder.Id);
+		session.SetPlayerVotingRight(holder.Id, false);
+		var lockedCardIds = lockIn.RoleComposition.Select(card => card.Id).ToArray();
+		var initialFactionFacts = session.GameHistoryLog
+			.OfType<FactionFactsCommittedLogEntry>()
+			.Single(entry =>
+				entry.Source.Identifier == "test-thief-initial-faction");
+		var choice = ReachChoice(service, gameId, start, holder.Id);
+
+		var sleep = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+			service.ProcessInstruction(
+				gameId,
+				choice.CreateResponse(ThiefOfferOptionIds.Offer1)));
+
+		sleep.Semantic.Should().Be(ModeratorInstructionSemantic.PutRoleToSleep);
+		holder.State.CurrentRole.Should().Be(MainRoleType.SimpleWerewolf);
+		holder.State.ModeratorKnownRole.Should().Be(MainRoleType.SimpleWerewolf);
+		holder.State.PubliclyRevealedRole.Should().Be(MainRoleType.Thief);
+		holder.State.GetActiveStatusEffects().Should().Contain(StatusEffectTypes.Charmed);
+		holder.State.HasVotingRight.Should().BeFalse();
+		holder.State.DurableVotingPower.Should().Be(1);
+		session.GetFactionBeneficiaryKnowledge(holder.Id).Should().Be(
+			FactionBeneficiaryKnowledge.Known(Faction.Werewolf));
+		foreach (var faction in Enum.GetValues<Faction>())
+		{
+			session.GetFactionAgentKnowledge(holder.Id, faction).Should().Be(
+				faction == Faction.Werewolf
+					? FactionAgentKnowledge.KnownAgent
+					: FactionAgentKnowledge.KnownNonAgent);
+		}
+		session.GameHistoryLog.Should().Contain(initialFactionFacts);
+
+		var swap = session.GameHistoryLog
+			.OfType<PermanentRoleSwapCommittedLogEntry>()
+			.Should().ContainSingle().Subject;
+		swap.Policy.Should().Be(ExpectedThiefSwapPolicy());
+		swap.StateChanges.IsEmpty.Should().BeTrue();
+		swap.NewPowerInstanceId.Should().NotBeEmpty()
+			.And.NotBe(holder.Id);
+		lockedCardIds.Should().NotContain(swap.NewPowerInstanceId);
+		swap.PowerInstanceOrigin.Should().Be(RolePowerInstanceOrigin.Swapped);
+		swap.Source.Should().Be(PermanentRoleSwapFactionFacts.CreateSource(
+			holder.Id,
+			swap.NewPowerInstanceId));
+		swap.Facts.Should().ContainSingle(fact =>
+			fact.Type == FactionFactType.Beneficiary &&
+			fact.Faction == Faction.Werewolf);
+		swap.Facts.Where(fact => fact.Type == FactionFactType.Agent)
+			.Should().HaveCount(Enum.GetValues<Faction>().Length);
+
+		AssertThiefExchangeCardConservation(session, lockIn, holder.Id);
+		var recoveredService = new GameService();
+		var recoveredId = recoveredService.RehydrateSession(session.Serialize());
+		var recovered = recoveredService.GetGameStateView(recoveredId)!;
+		var recoveredSwap = recovered.GameHistoryLog
+			.OfType<PermanentRoleSwapCommittedLogEntry>()
+			.Should().ContainSingle().Subject;
+		recoveredSwap.NewPowerInstanceId.Should().Be(swap.NewPowerInstanceId);
+		recoveredSwap.PowerInstanceOrigin.Should().Be(RolePowerInstanceOrigin.Swapped);
+		recovered.GetPlayerState(holder.Id).CurrentRole
+			.Should().Be(MainRoleType.SimpleWerewolf);
+		recovered.GetPlayerState(holder.Id).PubliclyRevealedRole
+			.Should().Be(MainRoleType.Thief);
+		recovered.GetPlayerState(holder.Id).GetActiveStatusEffects()
+			.Should().Contain(StatusEffectTypes.Charmed);
+		recovered.GetPlayerState(holder.Id).HasVotingRight.Should().BeFalse();
+		recovered.GetFactionBeneficiaryKnowledge(holder.Id).Should().Be(
+			FactionBeneficiaryKnowledge.Known(Faction.Werewolf));
+		foreach (var faction in Enum.GetValues<Faction>())
+		{
+			recovered.GetFactionAgentKnowledge(holder.Id, faction).Should().Be(
+				faction == Faction.Werewolf
+					? FactionAgentKnowledge.KnownAgent
+					: FactionAgentKnowledge.KnownNonAgent);
+		}
+		AssertThiefExchangeCardConservation(recovered, lockIn, holder.Id);
 	}
 
 	[Fact]
@@ -207,6 +298,76 @@ public sealed class ThiefRoleTests
 	}
 
 	[Fact]
+	public void Recovery_ThiefSwapWithNonCanonicalPolicy_IsRejected()
+	{
+		var (service, gameId, holder, _, start) = StartKnownThief(
+			MainRoleType.Seer,
+			MainRoleType.Cupid);
+		var choice = ReachChoice(service, gameId, start, holder.Id);
+		_ = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+			service.ProcessInstruction(
+				gameId,
+				choice.CreateResponse(ThiefOfferOptionIds.Offer1)));
+		var tampered = RecoveryPayloadTestDriver
+			.Parse(service.GetGameStateView(gameId)!.Serialize())
+			.RewriteLatestPermanentRoleSwapPolicy(policy => policy with
+			{
+				Relationships = PermanentRoleSwapDisposition.Clear
+			})
+			.Serialize();
+
+		var act = () => new GameService().RehydrateSession(tampered);
+
+		act.Should().Throw<InvalidOperationException>();
+	}
+
+	[Fact]
+	public void Recovery_ThiefSwapWithNonOfferAcquiredCard_IsRejected()
+	{
+		var (service, gameId, holder, lockIn, start) = StartKnownThief(
+			MainRoleType.Seer,
+			MainRoleType.Cupid);
+		var choice = ReachChoice(service, gameId, start, holder.Id);
+		_ = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+			service.ProcessInstruction(
+				gameId,
+				choice.CreateResponse(ThiefOfferOptionIds.Offer1)));
+		var unusedVillagerCardId = lockIn.DealPool
+			.First(card => card.PrintedRole == MainRoleType.SimpleVillager).Id;
+		var tampered = RecoveryPayloadTestDriver
+			.Parse(service.GetGameStateView(gameId)!.Serialize())
+			.RewriteLatestThiefSwapAcquiredCard(unusedVillagerCardId)
+			.Serialize();
+
+		var act = () => new GameService().RehydrateSession(tampered);
+
+		act.Should().Throw<InvalidOperationException>();
+	}
+
+	[Fact]
+	public void Recovery_ThiefSwapWithNonOfferUnchosenCard_IsRejected()
+	{
+		var (service, gameId, holder, lockIn, start) = StartKnownThief(
+			MainRoleType.Seer,
+			MainRoleType.Cupid);
+		var choice = ReachChoice(service, gameId, start, holder.Id);
+		_ = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+			service.ProcessInstruction(
+				gameId,
+				choice.CreateResponse(ThiefOfferOptionIds.Offer1)));
+		var unusedVillagerCardId = lockIn.DealPool
+			.First(card => card.PrintedRole == MainRoleType.SimpleVillager).Id;
+		var tampered = RecoveryPayloadTestDriver
+			.Parse(service.GetGameStateView(gameId)!.Serialize())
+			.RewriteLatestThiefSwapUnchosenCard(unusedVillagerCardId)
+			.Serialize();
+
+		var act = () => new GameService().RehydrateSession(tampered);
+
+		act.Should().Throw<InvalidOperationException>();
+	}
+
+	[Fact]
 	public void FirstNight_LegalDecline_PreservesThiefAndRecoversPendingSleepExactlyOnce()
 	{
 		var (service, gameId, holder, lockIn, start) = StartKnownThief(
@@ -268,16 +429,114 @@ public sealed class ThiefRoleTests
 		choice.Options.Select(option => option.Id).Should().Equal(
 			ThiefOfferOptionIds.Offer1,
 			ThiefOfferOptionIds.Offer2);
-		var act = () => choice.CreateResponse(ThiefOfferOptionIds.Decline);
+		var unavailableDecline = new ModeratorResponse
+		{
+			InstructionId = choice.InstructionId,
+			Type = ExpectedInputType.OptionSelection,
+			SelectedOptionIds = [ThiefOfferOptionIds.Decline]
+		};
+		var act = () => service.ProcessInstruction(gameId, unavailableDecline);
 
-		act.Should().Throw<ArgumentException>();
+		act.Should().Throw<InvalidOperationException>();
 		service.GetGameStateView(gameId)!.Serialize().Should().Be(before);
+		service.GetCurrentInstruction(gameId)!.InstructionId
+			.Should().Be(choice.InstructionId);
 		service.GetGameStateView(gameId)!.GameHistoryLog
 			.OfType<PermanentRoleSwapCommittedLogEntry>().Should().BeEmpty();
 		service.GetGameStateView(gameId)!.GameHistoryLog
 			.OfType<ThiefOfferDeclinedLogEntry>().Should().BeEmpty();
 		lockIn.Offer1!.PrintedRole.Should().Be(MainRoleType.SimpleWerewolf);
 		lockIn.Offer2!.PrintedRole.Should().Be(MainRoleType.BigBadWolf);
+	}
+
+	[Fact]
+	public void FirstNight_RawInvalidOfferResponses_AreAtomicAndDoNotCorruptContinuation()
+	{
+		var (service, gameId, holder, _, start) = StartKnownThief(
+			MainRoleType.Seer,
+			MainRoleType.Cupid);
+		var choice = ReachChoice(service, gameId, start, holder.Id);
+		var foreignPlayerId = service.GetGameStateView(gameId)!.GetPlayers()
+			.First(player => player.Id != holder.Id).Id;
+		var cases = new (string Name, ModeratorResponse? Response)[]
+		{
+			("zero", RawOptionResponse(choice.InstructionId, [])),
+			("multiple", RawOptionResponse(
+				choice.InstructionId,
+				[ThiefOfferOptionIds.Offer1, ThiefOfferOptionIds.Offer2])),
+			("unknown", RawOptionResponse(choice.InstructionId, ["unknown-thief-option"])),
+			("foreign-payload", new ModeratorResponse
+			{
+				InstructionId = choice.InstructionId,
+				Type = ExpectedInputType.OptionSelection,
+				SelectedOptionIds = [ThiefOfferOptionIds.Offer1],
+				SelectedPlayerIds = new HashSet<Guid> { foreignPlayerId }
+			}),
+			("mismatched-type", new ModeratorResponse
+			{
+				InstructionId = choice.InstructionId,
+				Type = ExpectedInputType.PlayerSelection,
+				SelectedPlayerIds = new HashSet<Guid> { holder.Id }
+			}),
+			("mismatched-instruction", RawOptionResponse(
+				Guid.NewGuid(),
+				[ThiefOfferOptionIds.Offer1])),
+			("canceled", null)
+		};
+
+		foreach (var (name, response) in cases)
+		{
+			var before = service.GetGameStateView(gameId)!.Serialize();
+			var act = () => service.ProcessInstruction(gameId, response);
+
+			if (response is null)
+			{
+				act.Should().Throw<ArgumentNullException>(name);
+			}
+			else
+			{
+				act.Should().Throw<InvalidOperationException>(name);
+			}
+			service.GetGameStateView(gameId)!.Serialize().Should().Be(before, name);
+			service.GetCurrentInstruction(gameId)!.InstructionId
+				.Should().Be(choice.InstructionId, name);
+		}
+
+		var accepted = choice.CreateResponse(ThiefOfferOptionIds.Offer1);
+		var sleep = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+			service.ProcessInstruction(gameId, accepted));
+		var afterAccepted = service.GetGameStateView(gameId)!.Serialize();
+		var stale = () => service.ProcessInstruction(gameId, accepted);
+
+		stale.Should().Throw<InvalidOperationException>();
+		service.GetGameStateView(gameId)!.Serialize().Should().Be(afterAccepted);
+		service.GetCurrentInstruction(gameId)!.InstructionId
+			.Should().Be(sleep.InstructionId);
+		service.GetGameStateView(gameId)!.GameHistoryLog
+			.OfType<PermanentRoleSwapCommittedLogEntry>().Should().ContainSingle();
+	}
+
+	[Fact]
+	public void Recovery_DeclineRewrittenToDoubleHardWerewolfOffers_IsRejected()
+	{
+		var (service, gameId, holder, _, start) = StartKnownThief(
+			MainRoleType.Seer,
+			MainRoleType.Cupid);
+		var choice = ReachChoice(service, gameId, start, holder.Id);
+		_ = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+			service.ProcessInstruction(
+				gameId,
+				choice.CreateResponse(ThiefOfferOptionIds.Decline)));
+		var tampered = RecoveryPayloadTestDriver
+			.Parse(service.GetGameStateView(gameId)!.Serialize())
+			.RewriteThiefOfferPrintedRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.BigBadWolf)
+			.Serialize();
+
+		var act = () => new GameService().RehydrateSession(tampered);
+
+		act.Should().Throw<InvalidOperationException>();
 	}
 
 	[Fact]
@@ -346,6 +605,49 @@ public sealed class ThiefRoleTests
 		wake.AffectedPlayerIds.Should().Equal(holderId);
 		return InstructionAssert.ExpectSuccessWithType<SelectOptionsInstruction>(
 			service.ProcessInstruction(gameId, wake.CreateResponse()));
+	}
+
+	private static ModeratorResponse RawOptionResponse(
+		Guid instructionId,
+		IReadOnlyList<string> selectedOptionIds) => new()
+	{
+		InstructionId = instructionId,
+		Type = ExpectedInputType.OptionSelection,
+		SelectedOptionIds = selectedOptionIds
+	};
+
+	private static PermanentRoleSwapPolicy ExpectedThiefSwapPolicy() => new(
+		PrivateRoleKnowledge: PermanentRoleSwapDisposition.Change,
+		PublicRevealHistory: PermanentRoleSwapDisposition.Preserve,
+		FactionBeneficiary: PermanentRoleSwapDisposition.Change,
+		FactionAgents: PermanentRoleSwapDisposition.Change,
+		Relationships: PermanentRoleSwapDisposition.Preserve,
+		StatusEffects: PermanentRoleSwapDisposition.Preserve,
+		VotingState: PermanentRoleSwapDisposition.Preserve,
+		Restrictions: PermanentRoleSwapDisposition.Preserve,
+		Assignments: PermanentRoleSwapDisposition.Preserve,
+		RolePowerState: PermanentRoleSwapDisposition.Change);
+
+	private static void AssertThiefExchangeCardConservation(
+		IGameSession session,
+		RoleLockIn lockIn,
+		Guid holderId)
+	{
+		var states = session.GetModeratorPhysicalCharacterCards().ToArray();
+		states.Should().HaveCount(lockIn.RoleComposition.Count);
+		states.Select(state => state.Card.Id).Should().BeEquivalentTo(
+			lockIn.RoleComposition.Select(card => card.Id));
+		states.Select(state => state.Card.Id).Should().OnlyHaveUniqueItems();
+		states.Should().ContainSingle(state =>
+			state.Zone == PhysicalCharacterCardZone.PlayerOwned &&
+			state.OwnerPlayerId == holderId &&
+			state.Card.Id == lockIn.Offer1!.Id);
+		states.Should().ContainSingle(state =>
+			state.Zone == PhysicalCharacterCardZone.SetAside &&
+			state.Card.Id == lockIn.Offer2!.Id);
+		states.Should().ContainSingle(state =>
+			state.Zone == PhysicalCharacterCardZone.SetAside &&
+			state.Card.PrintedRole == MainRoleType.Thief);
 	}
 
 	private static (

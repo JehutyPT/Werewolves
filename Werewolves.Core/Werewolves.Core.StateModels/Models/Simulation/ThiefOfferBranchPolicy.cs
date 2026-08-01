@@ -1,4 +1,5 @@
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Extensions;
 
 namespace Werewolves.Core.StateModels.Models.Simulation;
 
@@ -47,7 +48,8 @@ public sealed class ThiefOfferBranchPolicy : IEquatable<ThiefOfferBranchPolicy>
 		{
 			branches.Add(ThiefOfferBranch.Offer2);
 		}
-		if (IsDeclineLegal(offer1Role, offer2Role))
+		if (!offer1Role.IsHardAlignedWerewolf() ||
+		    !offer2Role.IsHardAlignedWerewolf())
 		{
 			branches.Add(ThiefOfferBranch.Decline);
 		}
@@ -60,12 +62,6 @@ public sealed class ThiefOfferBranchPolicy : IEquatable<ThiefOfferBranchPolicy>
 		ArgumentOutOfRangeException.ThrowIfNegative(runNumber);
 		return _branches[(int)(runNumber % _branches.Length)];
 	}
-
-	public static bool IsDeclineLegal(
-		MainRoleType offer1Role,
-		MainRoleType offer2Role) =>
-		!IsHardAlignedWerewolf(offer1Role) ||
-		!IsHardAlignedWerewolf(offer2Role);
 
 	internal static bool TryParse(
 		string value,
@@ -111,8 +107,4 @@ public sealed class ThiefOfferBranchPolicy : IEquatable<ThiefOfferBranchPolicy>
 
 		return hash.ToHashCode();
 	}
-
-	private static bool IsHardAlignedWerewolf(MainRoleType role) =>
-		role is MainRoleType.SimpleWerewolf or MainRoleType.BigBadWolf or
-			MainRoleType.AccursedWolfFather;
 }

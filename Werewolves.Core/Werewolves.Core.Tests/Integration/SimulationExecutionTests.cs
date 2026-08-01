@@ -240,12 +240,25 @@ public class SimulationExecutionTests : DiagnosticTestBase
 	}
 
 	[Theory]
-	[InlineData(0, ThiefOfferOptionIds.Offer1)]
-	[InlineData(1, ThiefOfferOptionIds.Offer2)]
-	[InlineData(2, ThiefOfferOptionIds.Decline)]
+	[InlineData(
+		0,
+		ThiefOfferOptionIds.Offer1,
+		MainRoleType.Seer,
+		ModeratorInstructionSemantic.SelectSeerTarget,
+		NightActionType.SeerCheck)]
+	[InlineData(
+		1,
+		ThiefOfferOptionIds.Offer2,
+		MainRoleType.Defender,
+		ModeratorInstructionSemantic.SelectDefenderTarget,
+		NightActionType.DefenderProtect)]
+	[InlineData(2, ThiefOfferOptionIds.Decline, null, null, null)]
 	public void HeadlessSafety_OfferBearingThiefScenario_ForcesEveryLegalBranch(
 		long runNumber,
-		string expectedOptionId)
+		string expectedOptionId,
+		MainRoleType? expectedAcquiredRole,
+		ModeratorInstructionSemantic? expectedNightOneActionSemantic,
+		NightActionType? expectedNightOneActionType)
 	{
 		var scenario = CreateOfferBearingThiefScenario();
 		var identity = new SimulationCompatibilityIdentity(
@@ -292,9 +305,39 @@ public class SimulationExecutionTests : DiagnosticTestBase
 		{
 			declines.Should().BeEmpty();
 			swaps.Should().ContainSingle().Which.NewCurrentRole.Should().Be(
-				expectedOptionId == ThiefOfferOptionIds.Offer1
-					? MainRoleType.Seer
-					: MainRoleType.Defender);
+				expectedAcquiredRole);
+
+			var nightOneObservations = recorder.Observations
+				.Where(observation => observation.TurnNumber == 1)
+				.ToArray();
+			nightOneObservations.Count(observation =>
+				observation.Instruction.Semantic ==
+				ModeratorInstructionSemantic.StartNight).Should().Be(1);
+			var nightOneChoiceIndex = Array.FindIndex(
+				nightOneObservations,
+				observation => observation.Instruction.Semantic ==
+					ModeratorInstructionSemantic.ChooseThiefOffer);
+			var acquiredRoleActionIndex = Array.FindIndex(
+				nightOneObservations,
+				observation => observation.Instruction.Semantic ==
+					expectedNightOneActionSemantic);
+			acquiredRoleActionIndex.Should().BeGreaterThan(nightOneChoiceIndex);
+
+			var acquiredRoleAction = nightOneObservations[acquiredRoleActionIndex];
+			acquiredRoleAction.Instruction.AffectedPlayerIds.Should().Equal(
+				choice.Instruction.AffectedPlayerIds);
+			nightOneObservations
+				.Select(observation => observation.Instruction)
+				.OfType<SelectPlayersInstruction>()
+				.Where(instruction => instruction.Semantic ==
+					ModeratorInstructionSemantic.IdentifyRoleHolders)
+				.Select(instruction => instruction.RoleIdentification)
+				.Should().Equal(MainRoleType.Thief);
+			execution.Session.GameHistoryLog
+				.OfType<NightActionLogEntry>()
+				.Should().ContainSingle(entry =>
+					entry.TurnNumber == 1 &&
+					entry.ActionType == expectedNightOneActionType);
 		}
 		MarkTestCompleted();
 	}
@@ -1461,7 +1504,8 @@ public class SimulationExecutionTests : DiagnosticTestBase
 		internal List<ModeratorInstructionSemantic> ObservedSemantics { get; } = [];
 		internal List<(
 			ModeratorInstruction Instruction,
-			ModeratorResponse Response)> Observations { get; } = [];
+			ModeratorResponse Response,
+			int TurnNumber)> Observations { get; } = [];
 
 		public ModeratorResponse CreateResponse(
 			ModeratorInstruction instruction,
@@ -1469,7 +1513,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 		{
 			ObservedSemantics.Add(instruction.Semantic);
 			var response = _inner.CreateResponse(instruction, session);
-			Observations.Add((instruction, response));
+			Observations.Add((instruction, response, session.TurnNumber));
 			return response;
 		}
 	}

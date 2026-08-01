@@ -54,13 +54,37 @@ internal static class PermanentRoleSwapRules
 	internal static void EnforceValidHistory(GameSession session)
 	{
 		ArgumentNullException.ThrowIfNull(session);
-		if (session.GameHistoryLog
+		var swaps = session.GameHistoryLog
 			.OfType<PermanentRoleSwapCommittedLogEntry>()
-			.Any(entry => !HasExpectedFactionFacts(entry)))
+			.ToArray();
+		if (swaps.Any(entry => !HasExpectedFactionFacts(entry)))
 		{
 			throw new InvalidOperationException(
 				"Permanent Role Swap Faction defaults are invalid.");
 		}
+		if (swaps.Any(entry =>
+			entry.ExpectedCurrentRole == MainRoleType.Thief &&
+			!IsValidCommittedThiefExchange(session, entry)))
+		{
+			throw new InvalidOperationException(
+				"Permanent Role Swap Thief exchange history is invalid.");
+		}
+	}
+
+	internal static bool IsValidCommittedThiefExchange(
+		GameSession session,
+		PermanentRoleSwapCommittedLogEntry entry)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		ArgumentNullException.ThrowIfNull(entry);
+		return HasExpectedFactionFacts(entry) && IsValidThiefExchange(
+			session,
+			entry.RoleLockInVersion,
+			entry.ExpectedCurrentRole,
+			entry.NewCurrentRole,
+			entry.PhysicalCards,
+			entry.Policy,
+			entry.StateChanges);
 	}
 
 	internal static bool CanCommit(
@@ -81,35 +105,56 @@ internal static class PermanentRoleSwapRules
 
 		return HasExpectedFactionReplacement(request) &&
 			(request.ExpectedCurrentRole != MainRoleType.Thief ||
-				IsValidThiefExchange(session, request));
+				IsValidThiefExchange(
+					session,
+					request.ExpectedRoleLockInVersion,
+					request.ExpectedCurrentRole,
+					request.NewCurrentRole,
+					request.PhysicalCards,
+					request.Policy,
+					request.StateChanges));
 	}
 
 	private static bool IsValidThiefExchange(
 		GameSession session,
-		PermanentRoleSwapRequest request)
+		long roleLockInVersion,
+		MainRoleType expectedCurrentRole,
+		MainRoleType newCurrentRole,
+		PermanentRoleSwapCardMovement physicalCards,
+		PermanentRoleSwapPolicy policy,
+		PermanentRoleSwapStateChanges stateChanges)
 	{
 		var offer1 = session.RoleLockIn.Offer1;
 		var offer2 = session.RoleLockIn.Offer2;
-		if (offer1 is null || offer2 is null)
+		if (roleLockInVersion != session.RoleLockIn.Version ||
+			expectedCurrentRole != MainRoleType.Thief ||
+			offer1 is null || offer2 is null)
 		{
 			return false;
 		}
 
-		var acquiredCardId = request.PhysicalCards.AcquiredCardId;
+		var acquiredCardId = physicalCards.AcquiredCardId;
 		var otherOfferCardId = acquiredCardId == offer1.Id
 			? offer2.Id
 			: acquiredCardId == offer2.Id
 				? offer1.Id
 				: Guid.Empty;
+		var acquiredOffer = acquiredCardId == offer1.Id
+			? offer1
+			: acquiredCardId == offer2.Id
+				? offer2
+				: null;
 		var outgoingCard = session.RoleLockIn.RoleComposition
 			.SingleOrDefault(card =>
-				card.Id == request.PhysicalCards.OutgoingOwnedCardId);
-		return IsThiefExchangePolicy(request.Policy) &&
-			request.StateChanges.IsEmpty &&
+				card.Id == physicalCards.OutgoingOwnedCardId);
+		return IsThiefExchangePolicy(policy) &&
+			stateChanges.IsEmpty &&
 			outgoingCard?.PrintedRole == MainRoleType.Thief &&
+			acquiredOffer?.PrintedRole == newCurrentRole &&
+			physicalCards.ExpectedAcquiredCardOwnerPlayerId is null &&
 			otherOfferCardId != Guid.Empty &&
-			request.PhysicalCards.AdditionalSetAsideCardIds.Count == 1 &&
-			request.PhysicalCards.AdditionalSetAsideCardIds[0] ==
+			physicalCards.AdditionalSetAsideCardIds.Count == 1 &&
+			physicalCards.AdditionalSetAsideCardIds[0] ==
 				otherOfferCardId;
 	}
 

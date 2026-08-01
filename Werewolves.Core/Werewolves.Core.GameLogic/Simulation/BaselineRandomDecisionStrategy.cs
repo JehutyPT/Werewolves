@@ -272,7 +272,14 @@ public sealed class BaselineRandomDecisionStrategy : IModeratorDecisionStrategy
 			var policy = _startState.CanonicalScenario.ThiefOfferBranchPolicy
 				?? throw new InvalidOperationException(
 					"A Thief offer choice requires its canonical branch policy.");
-			var optionId = policy.GetBranch(_random.Material.RunNumber).ToString();
+			var optionId = policy.GetBranch(_random.Material.RunNumber) switch
+			{
+				ThiefOfferBranch.Offer1 => ThiefOfferOptionIds.Offer1,
+				ThiefOfferBranch.Offer2 => ThiefOfferOptionIds.Offer2,
+				ThiefOfferBranch.Decline => ThiefOfferOptionIds.Decline,
+				_ => throw new InvalidOperationException(
+					"The canonical Thief branch is unknown.")
+			};
 			if (!instruction.Options.Any(option =>
 					StringComparer.Ordinal.Equals(option.Id, optionId)))
 			{

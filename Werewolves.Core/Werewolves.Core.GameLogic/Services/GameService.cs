@@ -94,7 +94,8 @@ public class GameService
     public Guid RehydrateSession(string serializedSession)
     {
         var session = new GameSession(serializedSession);
-		PermanentRoleSwapRules.EnforceValidHistory(session);
+        PermanentRoleSwapRules.EnforceValidHistory(session);
+        ThiefOfferRules.EnforceValidHistory(session);
         DayVoteRules.EnforceValidHistory(session);
         SeedActiveRoleListeners(session);
         ConfigureEliminationCascadeReactions(session);

@@ -4,10 +4,8 @@ using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
-using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
-using Werewolves.Core.StateModels.Models.Simulation;
 using Werewolves.Core.StateModels.Resources;
 
 namespace Werewolves.Core.GameLogic.Roles.MainRoles;
@@ -103,44 +101,13 @@ internal sealed class ThiefRole : NightRoleHookListener<ThiefRoleState>
 				out listenerState);
 		}
 
-		if (!HasValidCommittedOfferChoice(session, playerId))
+		if (!ThiefOfferRules.HasValidCommittedChoice(session, playerId))
 		{
 			return false;
 		}
 
 		listenerState = ThiefRoleState.ReadyToSleep.ToString();
 		return true;
-	}
-
-	internal static bool HasValidCommittedOfferChoice(
-		GameSession session,
-		Guid playerId)
-	{
-		if (session.TurnNumber != 1 ||
-		    session.GetCurrentPhase() != GamePhase.Night ||
-		    playerId == Guid.Empty)
-		{
-			return false;
-		}
-
-		var swaps = session.GameHistoryLog
-			.OfType<PermanentRoleSwapCommittedLogEntry>()
-			.Where(entry =>
-				entry.ExpectedCurrentRole == MainRoleType.Thief &&
-				entry.PlayerId == playerId &&
-				entry.RoleLockInVersion == session.RoleLockIn.Version &&
-				entry.TurnNumber == 1 &&
-				entry.CurrentPhase == GamePhase.Night)
-			.ToArray();
-		var declines = session.GameHistoryLog
-			.OfType<ThiefOfferDeclinedLogEntry>()
-			.Where(entry =>
-				entry.PlayerId == playerId &&
-				entry.RoleLockInVersion == session.RoleLockIn.Version &&
-				entry.TurnNumber == 1 &&
-				entry.CurrentPhase == GamePhase.Night)
-			.ToArray();
-		return swaps.Length + declines.Length == 1;
 	}
 
 	protected override List<RoleStateMachineStage> DefineStateMachineStages() =>
@@ -185,7 +152,7 @@ internal sealed class ThiefRole : NightRoleHookListener<ThiefRoleState>
 			new(ThiefOfferOptionIds.Offer1, offer1.PrintedRole.GetPublicName()),
 			new(ThiefOfferOptionIds.Offer2, offer2.PrintedRole.GetPublicName())
 		};
-		if (ThiefOfferBranchPolicy.IsDeclineLegal(
+		if (ThiefOfferRules.IsDeclineLegal(
 			offer1.PrintedRole,
 			offer2.PrintedRole))
 		{
@@ -251,10 +218,7 @@ internal sealed class ThiefRole : NightRoleHookListener<ThiefRoleState>
 		var offer2 = session.RoleLockIn.Offer2!;
 		if (selectedOptionId == ThiefOfferOptionIds.Decline)
 		{
-			if (!ThiefOfferBranchPolicy.IsDeclineLegal(
-					offer1.PrintedRole,
-					offer2.PrintedRole) ||
-			    !session.TryCommitThiefOfferDecline(holder.Id))
+			if (!ThiefOfferRules.TryCommitDecline(session, holder.Id))
 			{
 				throw new InvalidOperationException(
 					"The Thief decline could not be committed.");

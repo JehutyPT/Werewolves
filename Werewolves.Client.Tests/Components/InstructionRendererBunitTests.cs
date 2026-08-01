@@ -639,7 +639,7 @@ public class InstructionRendererBunitTests
 			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.SimpleVillager),
 			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.SimpleVillager),
 			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.Seer),
-			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.Cupid)
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.Seer)
 		};
 		var lockIn = new RoleLockIn(
 			version: 1,
@@ -691,8 +691,12 @@ public class InstructionRendererBunitTests
 		var optionButtons = optionGroup.QuerySelectorAll(Html.Selectors.Button).ToArray();
 		optionButtons.Select(button => button.TextContent.Trim()).Should().Equal(
 			choice.Options.Select(option => option.Label));
-		optionButtons.Single(button =>
-			button.TextContent.Trim() == MainRoleType.Cupid.GetPublicName()).Click();
+		optionButtons.Should().HaveCount(choice.Options.Count);
+		optionButtons.Take(2).Select(button => button.TextContent.Trim()).Should().Equal(
+			MainRoleType.Seer.GetPublicName(),
+			MainRoleType.Seer.GetPublicName());
+		optionButtons[0].Should().NotBeSameAs(optionButtons[1]);
+		optionButtons[1].Click();
 		await RenderedHoldButtonDriver.CompleteHoldAsync(
 			cut,
 			cut.Find(HoldButtonSelector),
@@ -707,7 +711,7 @@ public class InstructionRendererBunitTests
 		manager.CurrentInstruction.Should()
 			.BeOfType<ConfirmationInstruction>().Which.Semantic.Should().Be(
 				ModeratorInstructionSemantic.PutRoleToSleep);
-		thiefHolder.State.CurrentRole.Should().Be(MainRoleType.Cupid);
+		thiefHolder.State.CurrentRole.Should().Be(MainRoleType.Seer);
 	}
 
 	private static ConfirmationInstruction CreateConfirmationInstruction(

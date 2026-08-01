@@ -1149,7 +1149,7 @@ internal static class GameFlowManager
 								 ModeratorInstructionSemantic.PutRoleToSleep,
 							 AffectedPlayerIds: [var thiefPlayerId]
 						 } =>
-					ThiefRole.HasValidCommittedOfferChoice(
+					ThiefOfferRules.HasValidCommittedChoice(
 						session,
 						thiefPlayerId),
                 ModeratorInstructionSemantic.RecognizeLovers
