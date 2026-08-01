@@ -55,6 +55,10 @@ internal static class GameSessionQueries
     }
 
     internal static IReadOnlyList<PermanentRoleSwapCommittedLogEntry>
+        GetCommittedPermanentRoleSwaps(IGameSession session) =>
+        FindLogEntries<PermanentRoleSwapCommittedLogEntry>(session).ToArray();
+
+    internal static IReadOnlyList<PermanentRoleSwapCommittedLogEntry>
         GetCommittedThiefExchanges(
             IGameSession session,
             Guid playerId,

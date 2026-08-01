@@ -1,3 +1,4 @@
+using Werewolves.Core.GameLogic.Queries;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
@@ -54,9 +55,7 @@ internal static class PermanentRoleSwapRules
 	internal static void EnforceValidHistory(GameSession session)
 	{
 		ArgumentNullException.ThrowIfNull(session);
-		var swaps = session.GameHistoryLog
-			.OfType<PermanentRoleSwapCommittedLogEntry>()
-			.ToArray();
+		var swaps = GameSessionQueries.GetCommittedPermanentRoleSwaps(session);
 		if (swaps.Any(entry => !HasExpectedFactionFacts(entry)))
 		{
 			throw new InvalidOperationException(

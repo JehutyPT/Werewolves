@@ -771,6 +771,9 @@ internal sealed class RecoveryPayloadTestDriver
 
 			lockIn.RoleComposition[index] =
 				new PhysicalCharacterCard(cardId, printedRole);
+			var persistedState = RequirePhysicalCardState(cardId);
+			persistedState.Zone = PhysicalCharacterCardZone.SetAside;
+			persistedState.OwnerPlayerId = null;
 		}
 	}
 

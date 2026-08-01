@@ -536,7 +536,8 @@ public sealed class ThiefRoleTests
 
 		var act = () => new GameService().RehydrateSession(tampered);
 
-		act.Should().Throw<InvalidOperationException>();
+		act.Should().Throw<InvalidOperationException>()
+			.WithMessage("Thief offer decline history is invalid.");
 	}
 
 	[Fact]
