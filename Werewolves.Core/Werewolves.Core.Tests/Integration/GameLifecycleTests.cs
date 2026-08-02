@@ -107,7 +107,7 @@ public class GameLifecycleTests : DiagnosticTestBase
     {
         // Arrange
         var gameService = new GameLogic.Services.GameService();
-        const MainRoleType unsupportedRole = MainRoleType.PrejudicedManipulator;
+        const MainRoleType unsupportedRole = MainRoleType.Gypsy;
         var config = new GameSessionConfig(
             ["Alice", "Bob", "Charlie", "Diana", "Eve"],
             [

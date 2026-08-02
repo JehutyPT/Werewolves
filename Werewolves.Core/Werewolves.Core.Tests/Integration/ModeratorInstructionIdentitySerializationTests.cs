@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using FluentAssertions;
@@ -118,6 +119,55 @@ public class ModeratorInstructionIdentitySerializationTests
 		finished.VictoryCheckWindow.Should().Be(VictoryCheckWindow.PreNight);
 		finished.PublicAnnouncement.Should().Contain(
 			GameStrings.VictoryConditionWhiteWerewolfSoleSurvivor);
+	}
+
+	[Fact]
+	public void Converter_PrejudicedManipulatorTerminalInstruction_PreservesTypedOutcomeAndCopy()
+	{
+		ModeratorInstruction instruction = new FinishedGameConfirmationInstruction(
+			new SingleFactionGameResult(Faction.PrejudicedManipulator),
+			VictoryCheckWindow.Dawn);
+
+		var json = JsonSerializer.Serialize(
+			instruction,
+			SerializationOptions);
+		var restored = JsonSerializer.Deserialize<ModeratorInstruction>(
+			json,
+			SerializationOptions);
+
+		var finished = restored.Should()
+			.BeOfType<FinishedGameConfirmationInstruction>()
+			.Subject;
+		finished.GameResult.Should().Be(
+			new SingleFactionGameResult(Faction.PrejudicedManipulator));
+		finished.VictoryCheckWindow.Should().Be(VictoryCheckWindow.Dawn);
+		finished.PublicAnnouncement.Should().Contain(
+			GameStrings.VictoryConditionPrejudicedManipulatorOpposingGroupEliminated);
+	}
+
+	[Theory]
+	[InlineData("pt-PT")]
+	[InlineData("en-US")]
+	public void PrejudicedManipulatorVictoryCopy_IsAvailableInEverySpecificCulture(
+		string cultureName)
+	{
+		var originalCulture = CultureInfo.CurrentUICulture;
+		var culture = CultureInfo.GetCultureInfo(cultureName);
+		try
+		{
+			CultureInfo.CurrentUICulture = culture;
+			var expected =
+				GameStrings.VictoryConditionPrejudicedManipulatorOpposingGroupEliminated;
+
+			GameStrings.ResourceManager.GetString(
+					nameof(GameStrings.VictoryConditionPrejudicedManipulatorOpposingGroupEliminated),
+					culture)
+				.Should().Be(expected);
+		}
+		finally
+		{
+			CultureInfo.CurrentUICulture = originalCulture;
+		}
 	}
 
 	[Fact]

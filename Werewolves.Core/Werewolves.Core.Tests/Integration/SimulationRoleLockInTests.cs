@@ -109,25 +109,30 @@ public class SimulationRoleLockInTests
 	}
 
 	[Fact]
-	public void CreateGameSessionConfig_WithThiefPartition_RetainsFullInventoryAndOrderedOffers()
+	public void CreateGameSessionConfig_WithCanonicalPublicGroupPartition_MapsSeatsToRunRosterAndRetainsSamePrintedOffers()
 	{
 		MainRoleType[] dealPool =
 		[
 			MainRoleType.Thief,
+			MainRoleType.PrejudicedManipulator,
 			MainRoleType.SimpleWerewolf,
-			MainRoleType.SimpleVillager,
 			MainRoleType.SimpleVillager,
 			MainRoleType.SimpleVillager
 		];
+		var canonicalPartition = CanonicalPublicGroupPartition.Create(
+			5,
+			[1, 3],
+			[2, 4, 5]);
 		var scenario = new SimulationScenario(
 			5,
-			dealPool.Concat([MainRoleType.Seer, MainRoleType.Cupid]),
+			dealPool.Concat([MainRoleType.Seer, MainRoleType.Seer]),
 			dealPool,
 			MainRoleType.Seer,
-			MainRoleType.Cupid);
+			MainRoleType.Seer,
+			publicGroupPartition: canonicalPartition);
 		var identity = new SimulationCompatibilityIdentity(
 			scenario.ToCanonical(),
-			SimulatorCapability.FullProbability.Identity);
+			SimulatorCapability.SafetyScreening.Identity);
 		var assignments = dealPool
 			.Select((role, index) => new SimulationPlayerRoleAssignment(index + 1, role))
 			.ToArray();
@@ -154,10 +159,24 @@ public class SimulationRoleLockInTests
 		CanonicalRoleComposition.Create(config.RoleLockIn.RoleComposition
 			.Select(card => card.PrintedRole)).Should().Be(
 			CanonicalRoleComposition.Create(dealPool.Concat(
-				[MainRoleType.Seer, MainRoleType.Cupid])));
+				[MainRoleType.Seer, MainRoleType.Seer])));
 		config.RoleLockIn.DealPool.Select(card => card.PrintedRole)
 			.Should().BeEquivalentTo(dealPool);
 		config.RoleLockIn.Offer1!.PrintedRole.Should().Be(MainRoleType.Seer);
-		config.RoleLockIn.Offer2!.PrintedRole.Should().Be(MainRoleType.Cupid);
+		config.RoleLockIn.Offer2!.PrintedRole.Should().Be(MainRoleType.Seer);
+		config.RoleLockIn.Offer1.Id.Should().NotBe(config.RoleLockIn.Offer2.Id);
+		config.PlayerRoster.Select(player => player.Name).Should().Equal(
+			Enumerable.Range(1, 5).Select(seatNumber =>
+				$"Simulation Player {seatNumber}"));
+		config.PlayerRoster.Select(player => player.Id)
+			.Should().NotContain(Guid.Empty)
+			.And.OnlyHaveUniqueItems();
+		config.PublicGroupPartition.Should().NotBeNull();
+		config.PublicGroupPartition!.FirstGroupPlayerIds.Should().BeEquivalentTo(
+			canonicalPartition.FirstGroupSeatNumbers.Select(seatNumber =>
+				config.PlayerRoster[seatNumber - 1].Id));
+		config.PublicGroupPartition.SecondGroupPlayerIds.Should().BeEquivalentTo(
+			canonicalPartition.SecondGroupSeatNumbers.Select(seatNumber =>
+				config.PlayerRoster[seatNumber - 1].Id));
 	}
 }

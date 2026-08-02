@@ -138,7 +138,7 @@ public class RoleAdmissionTests
 	}
 
 	[Fact]
-	public void SupportedRoleCatalog_AdmitsTwentyFourActiveRolesAndThreePassiveRoles()
+	public void SupportedRoleCatalog_AdmitsTwentyFiveActiveRolesAndThreePassiveRoles()
 	{
 		var catalog = SupportedRoleCatalog.Admissions;
 
@@ -156,6 +156,7 @@ public class RoleAdmissionTests
 				MainRoleType.DevotedServant,
 				MainRoleType.WhiteWerewolf,
 				MainRoleType.Piper,
+				MainRoleType.PrejudicedManipulator,
 				MainRoleType.Cupid,
 				MainRoleType.TwoSisters,
 			MainRoleType.ThreeBrothers,
@@ -187,6 +188,7 @@ public class RoleAdmissionTests
 			         MainRoleType.DevotedServant,
 			         MainRoleType.WhiteWerewolf,
 			         MainRoleType.Piper,
+			         MainRoleType.PrejudicedManipulator,
 			         MainRoleType.Cupid,
 			         MainRoleType.TwoSisters,
 			         MainRoleType.ThreeBrothers,

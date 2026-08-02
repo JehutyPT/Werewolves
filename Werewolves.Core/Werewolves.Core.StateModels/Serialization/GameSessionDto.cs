@@ -15,6 +15,7 @@ internal class GameSessionDto
     public List<Guid> SeatingOrder { get; set; } = new();
     public List<MainRoleType> RolesInPlay { get; set; } = new();
 	public RoleLockInDto? RoleLockIn { get; set; }
+	public PublicGroupPartitionDto? PublicGroupPartition { get; set; }
 	public List<PhysicalCharacterCardStateDto> PhysicalCharacterCards { get; set; } = new();
 
     // Derived state restored directly during Rehydration.
@@ -52,7 +53,7 @@ internal static class RoleFactSchema
 
 internal static class FactionFactSchema
 {
-    public const int CurrentVersion = 1;
+    public const int CurrentVersion = 2;
 }
 
 /// <summary>
@@ -113,6 +114,29 @@ internal sealed class PhysicalCharacterCardStateDto
 	public Guid CardId { get; set; }
 	public PhysicalCharacterCardZone Zone { get; set; }
 	public Guid? OwnerPlayerId { get; set; }
+}
+
+internal sealed class PublicGroupPartitionDto
+{
+	public List<Guid> FirstGroupPlayerIds { get; set; } = new();
+	public List<Guid> SecondGroupPlayerIds { get; set; } = new();
+
+	internal static PublicGroupPartitionDto FromValue(
+		PublicGroupPartition publicGroupPartition)
+	{
+		ArgumentNullException.ThrowIfNull(publicGroupPartition);
+		return new PublicGroupPartitionDto
+		{
+			FirstGroupPlayerIds = publicGroupPartition.FirstGroupPlayerIds.ToList(),
+			SecondGroupPlayerIds = publicGroupPartition.SecondGroupPlayerIds.ToList()
+		};
+	}
+
+	internal PublicGroupPartition ToValue(IEnumerable<Guid> rosterPlayerIds) =>
+		PublicGroupPartition.Create(
+			rosterPlayerIds,
+			FirstGroupPlayerIds,
+			SecondGroupPlayerIds);
 }
 
 /// <summary>

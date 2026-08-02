@@ -66,10 +66,13 @@ public static class SupportedRoleCatalog
 					() => new AccursedWolfFatherRole(
 						rolePowerAvailabilityGateway)),
 				RoleAdmission.Active(
-					MainRoleType.Thief,
-					() => new ThiefRole()),
-				RoleAdmission.Active(
-					MainRoleType.DevotedServant,
+						MainRoleType.Thief,
+						() => new ThiefRole()),
+					RoleAdmission.Active(
+						MainRoleType.PrejudicedManipulator,
+						() => new PrejudicedManipulatorRole()),
+					RoleAdmission.Active(
+						MainRoleType.DevotedServant,
 					() => new DevotedServantRole(
 						rolePowerAvailabilityGateway)),
 				RoleAdmission.Active(

@@ -1,4 +1,5 @@
 using FluentAssertions;
+using FluentAssertions.Execution;
 using Werewolves.Core.GameLogic.Simulation;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Models.Simulation;
@@ -8,6 +9,51 @@ namespace Werewolves.Core.Tests.Unit;
 
 public class SimulatorProfileTests
 {
+	[Fact]
+	public void SafetyScreeningCapability_UsesIssue140Identity()
+	{
+		SimulatorCapability.SafetyScreening.Identity.Should().Be(
+			new SimulatorProfileIdentity("safety-screening", "28"));
+	}
+
+	[Fact]
+	public void SafetyScreeningCapability_AdmitsPrejudicedManipulatorWithoutExpandingFullProbability()
+	{
+		var safety = SimulatorCapability.SafetyScreening;
+		var probability = SimulatorCapability.FullProbability;
+		var hasBeneficiary = safety.TryGetBeneficiaryFaction(
+			MainRoleType.PrejudicedManipulator,
+			out var beneficiary);
+
+		using (new AssertionScope())
+		{
+			safety.SupportsRole(MainRoleType.PrejudicedManipulator).Should().BeTrue();
+			hasBeneficiary.Should().BeTrue();
+			beneficiary.Should().Be(Faction.PrejudicedManipulator);
+			safety.SharedVictoryCapabilities.Should().Contain(
+				new SharedVictoryGameResult(
+					[Faction.Angel, Faction.PrejudicedManipulator]));
+			safety.SharedVictoryCapabilities.Should().Contain(
+				new SharedVictoryGameResult(
+					[Faction.Piper, Faction.PrejudicedManipulator]));
+			safety.SharedVictoryCapabilities.Should().Contain(
+				new SharedVictoryGameResult(
+					[
+						Faction.Angel,
+						Faction.Piper,
+						Faction.PrejudicedManipulator
+					]));
+			probability.SupportsRole(MainRoleType.PrejudicedManipulator)
+				.Should().BeFalse();
+			safety.HeadlessResponsePolicy.StrategyIdentity.Should().Be(
+				new DecisionStrategyIdentity("baseline-random", "13-splitmix64"));
+			probability.Identity.Should().Be(
+				new SimulatorProfileIdentity("full-probability", "4"));
+			probability.HeadlessResponsePolicy.StrategyIdentity.Should().Be(
+				new DecisionStrategyIdentity("baseline-random", "3-splitmix64"));
+		}
+	}
+
 	[Fact]
 	public void ProductionCapabilities_ExposeIndependentFrozenDeclarations()
 	{
@@ -70,7 +116,7 @@ public class SimulatorProfileTests
 		var safety = SimulatorCapability.SafetyScreening;
 		var probability = SimulatorCapability.FullProbability;
 
-		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "27"));
+		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "28"));
 		probability.Identity.Should().Be(new SimulatorProfileIdentity("full-probability", "4"));
 		BaselineRandomDecisionStrategy.Identity.Should()
 			.Be(new DecisionStrategyIdentity("baseline-random", "3-splitmix64"));
@@ -103,7 +149,8 @@ public class SimulatorProfileTests
 			MainRoleType.Cupid,
 			MainRoleType.Thief,
 			MainRoleType.DevotedServant,
-			MainRoleType.Angel);
+			MainRoleType.Angel,
+			MainRoleType.PrejudicedManipulator);
 		probability.SupportedRoles.Should().Equal(
 			MainRoleType.SimpleWerewolf,
 			MainRoleType.Seer,
@@ -127,7 +174,17 @@ public class SimulatorProfileTests
 			new SharedVictoryGameResult([Faction.Angel, Faction.Werewolf]),
 			new SharedVictoryGameResult([Faction.Angel, Faction.WhiteWerewolf]),
 			new SharedVictoryGameResult([Faction.Angel, Faction.Piper]),
-			new SharedVictoryGameResult([Faction.Angel, Faction.CrossFactionLovers])
+			new SharedVictoryGameResult([Faction.Angel, Faction.CrossFactionLovers]),
+			new SharedVictoryGameResult(
+				[Faction.Angel, Faction.PrejudicedManipulator]),
+			new SharedVictoryGameResult(
+				[Faction.Piper, Faction.PrejudicedManipulator]),
+			new SharedVictoryGameResult(
+				[
+					Faction.Angel,
+					Faction.Piper,
+					Faction.PrejudicedManipulator
+				])
 		]);
 		probability.SharedVictoryCapabilities.Should().BeEmpty();
 		safety.TryGetBeneficiaryFaction(

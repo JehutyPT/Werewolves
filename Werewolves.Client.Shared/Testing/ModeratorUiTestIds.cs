@@ -26,4 +26,13 @@ public static class ModeratorUiTestIds
 	public const string ThiefRoleLockInBack = "thief-role-lock-in-back";
 	public const string ThiefRoleLockInReview = "thief-role-lock-in-review";
 	public const string ThiefRoleLockInSummary = "thief-role-lock-in-summary";
+	public const string PublicGroupPartitionPage = "public-group-partition-page";
+	public const string PublicGroupPartitionPlayerList = "public-group-partition-player-list";
+	public const string PublicGroupPartitionPlayer = "public-group-partition-player";
+	public const string PublicGroupPartitionFirstChoice = "public-group-partition-first-choice";
+	public const string PublicGroupPartitionSecondChoice = "public-group-partition-second-choice";
+	public const string PublicGroupPartitionCommit = "public-group-partition-commit";
+	public const string PublicGroupPartitionBack = "public-group-partition-back";
+	public const string PublicGroupPartitionReview = "public-group-partition-review";
+	public const string PublicGroupPartitionSummary = "public-group-partition-summary";
 }

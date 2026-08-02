@@ -1,4 +1,5 @@
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Simulation;
 
 namespace Werewolves.Core.GameLogic.Services;
@@ -7,12 +8,14 @@ internal sealed record LivingFactionBeneficiarySnapshot(
 	Faction Beneficiary,
 	bool IsCharmed,
 	int DurableVotingPower,
-	bool IsCommittedLover = false);
+	bool IsCommittedLover = false,
+	Guid PlayerId = default);
 
 internal static class FactionVictoryPredicates
 {
 	internal static IReadOnlyList<Faction> Evaluate(
-		IEnumerable<LivingFactionBeneficiarySnapshot> livingPlayers)
+		IEnumerable<LivingFactionBeneficiarySnapshot> livingPlayers,
+		PublicGroupPartition? publicGroupPartition = null)
 	{
 		ArgumentNullException.ThrowIfNull(livingPlayers);
 		var snapshot = livingPlayers.ToArray();
@@ -65,7 +68,36 @@ internal static class FactionVictoryPredicates
 			satisfiedFactions.Add(Faction.CrossFactionLovers);
 		}
 
+		if (publicGroupPartition is not null &&
+		    snapshot.Any(player =>
+			    player.Beneficiary == Faction.PrejudicedManipulator &&
+			    HasNoLivingPlayerInOpposingGroup(
+				    player.PlayerId,
+				    snapshot,
+				    publicGroupPartition)))
+		{
+			satisfiedFactions.Add(Faction.PrejudicedManipulator);
+		}
+
 		return satisfiedFactions;
+	}
+
+	private static bool HasNoLivingPlayerInOpposingGroup(
+		Guid beneficiaryPlayerId,
+		IReadOnlyCollection<LivingFactionBeneficiarySnapshot> livingPlayers,
+		PublicGroupPartition publicGroupPartition)
+	{
+		IReadOnlySet<Guid>? opposingGroup =
+			publicGroupPartition.FirstGroupPlayerIds.Contains(beneficiaryPlayerId)
+				? publicGroupPartition.SecondGroupPlayerIds
+				: publicGroupPartition.SecondGroupPlayerIds.Contains(
+					beneficiaryPlayerId)
+					? publicGroupPartition.FirstGroupPlayerIds
+					: null;
+		return opposingGroup is not null &&
+		       livingPlayers.All(player =>
+			       player.PlayerId != Guid.Empty &&
+			       !opposingGroup.Contains(player.PlayerId));
 	}
 
 	internal static IReadOnlyList<Faction> Evaluate(

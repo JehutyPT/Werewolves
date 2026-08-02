@@ -144,16 +144,30 @@ public static class SimulationStartStateDeriver
 	internal static GameSessionConfig CreateGameSessionConfig(this SimulationStartState startState)
 	{
 		ArgumentNullException.ThrowIfNull(startState);
-		var playerNames = Enumerable.Range(1, startState.PlayerCount)
-			.Select(seatNumber => $"Simulation Player {seatNumber}")
-			.ToList();
+		var playerRoster = Enumerable.Range(1, startState.PlayerCount)
+			.Select(seatNumber => new GameSessionPlayerConfig(
+				Guid.NewGuid(),
+				$"Simulation Player {seatNumber}"))
+			.ToArray();
+		var publicGroupPartition =
+			startState.CanonicalScenario.PublicGroupPartition is { } canonicalPartition
+				? PublicGroupPartition.Create(
+					playerRoster.Select(player => player.Id),
+					canonicalPartition.FirstGroupSeatNumbers.Select(seatNumber =>
+						playerRoster[seatNumber - 1].Id),
+					canonicalPartition.SecondGroupSeatNumbers.Select(seatNumber =>
+						playerRoster[seatNumber - 1].Id))
+				: null;
 		var assignedRoles = startState.RoleAssignments
 			.Select(assignment => assignment.Role)
 			.ToList();
 		if (startState.CanonicalScenario.Offer1Role is not { } offer1Role ||
 			startState.CanonicalScenario.Offer2Role is not { } offer2Role)
 		{
-			return new GameSessionConfig(playerNames, assignedRoles);
+			return new GameSessionConfig(
+				playerRoster,
+				assignedRoles,
+				publicGroupPartition: publicGroupPartition);
 		}
 		if (!assignedRoles.Contains(MainRoleType.Thief))
 		{
@@ -167,13 +181,14 @@ public static class SimulationStartStateDeriver
 		var offer1 = new PhysicalCharacterCard(Guid.NewGuid(), offer1Role);
 		var offer2 = new PhysicalCharacterCard(Guid.NewGuid(), offer2Role);
 		return new GameSessionConfig(
-			playerNames,
+			playerRoster,
 			new RoleLockIn(
 				version: 1,
 				playerCount: startState.PlayerCount,
 				roleComposition: dealPoolCards.Concat([offer1, offer2]),
 				dealPoolCardIds: dealPoolCards.Select(card => card.Id),
 				offer1CardId: offer1.Id,
-				offer2CardId: offer2.Id));
+				offer2CardId: offer2.Id),
+			publicGroupPartition: publicGroupPartition);
 	}
 }

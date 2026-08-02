@@ -10,6 +10,22 @@ namespace Werewolves.Client.Tests.Resources;
 
 public class ClientStringsTests
 {
+	private static readonly string[] PublicGroupPartitionUiResourceKeys =
+	[
+		nameof(ClientStrings.PublicGroupPartition_StepLabel),
+		nameof(ClientStrings.PublicGroupPartition_Title),
+		nameof(ClientStrings.PublicGroupPartition_Description),
+		nameof(ClientStrings.PublicGroupPartition_ListAria),
+		nameof(ClientStrings.PublicGroupPartition_PlayerChoiceAriaFormat),
+		nameof(ClientStrings.PublicGroupPartition_FirstGroupLabel),
+		nameof(ClientStrings.PublicGroupPartition_SecondGroupLabel),
+		nameof(ClientStrings.PublicGroupPartition_CommitButton),
+		nameof(ClientStrings.PublicGroupPartition_IncompleteValidation),
+		nameof(ClientStrings.PublicGroupPartition_SaveFailedValidation),
+		nameof(ClientStrings.PublicGroupPartition_SummaryTitle),
+		nameof(ClientStrings.RoleSelection_ReviewPublicGroupPartitionButton)
+	];
+
 	private static readonly string[] PortugueseUiResourceKeys =
 	[
 		nameof(ClientStrings.LobbyRoster_Title),
@@ -74,7 +90,8 @@ public class ClientStringsTests
 		nameof(ClientStrings.Victory_StepLabel),
 		nameof(ClientStrings.Victory_ReturnToLobbyButton),
 		nameof(ClientStrings.Victory_WindowDawn),
-		nameof(ClientStrings.Victory_WindowPreNight)
+		nameof(ClientStrings.Victory_WindowPreNight),
+		.. PublicGroupPartitionUiResourceKeys
 	];
 
 	[Fact]
@@ -87,6 +104,32 @@ public class ClientStringsTests
 			ClientStrings.Culture = CultureInfo.GetCultureInfo("pt-PT");
 
 			foreach (var key in PortugueseUiResourceKeys)
+			{
+				GetClientStringAccessorValue(key).Should().Be(expectedValues[key]);
+			}
+		}
+		finally
+		{
+			ClientStrings.Culture = previousCulture;
+		}
+	}
+
+	[Theory]
+	[InlineData("en-US", "ClientStrings.resx")]
+	[InlineData("pt-PT", "ClientStrings.pt-PT.resx")]
+	public void PublicGroupPartitionStrings_ExposeEveryCurrentCultureThroughGeneratedAccessors(
+		string cultureName,
+		string resourceFileName)
+	{
+		var expectedValues = LoadResourceValues(
+			resourceFileName,
+			PublicGroupPartitionUiResourceKeys);
+		var previousCulture = ClientStrings.Culture;
+		try
+		{
+			ClientStrings.Culture = CultureInfo.GetCultureInfo(cultureName);
+
+			foreach (var key in PublicGroupPartitionUiResourceKeys)
 			{
 				GetClientStringAccessorValue(key).Should().Be(expectedValues[key]);
 			}

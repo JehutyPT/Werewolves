@@ -11,10 +11,10 @@ namespace Werewolves.Core.Tests.Unit;
 public class TerminalLobbyCacheTests
 {
 	private const string AlreadyGolden =
-		"{\"schema\":\"terminal-lobby-cache\",\"version\":1,\"record\":{\"identity\":\"profile=safety-screening@27|players=5|roles=[SimpleVillager=2,SimpleWerewolf=3]|actor=[]|rules=[]\",\"kind\":\"alreadyDecided\",\"result\":{\"kind\":0,\"factions\":[1]},\"reason\":2}}";
+		"{\"schema\":\"terminal-lobby-cache\",\"version\":1,\"record\":{\"identity\":\"profile=safety-screening@28|players=5|roles=[SimpleVillager=2,SimpleWerewolf=3]|actor=[]|rules=[]\",\"kind\":\"alreadyDecided\",\"result\":{\"kind\":0,\"factions\":[1]},\"reason\":2}}";
 
 	private const string DegenerateGolden =
-		"{\"schema\":\"terminal-lobby-cache\",\"version\":1,\"record\":{\"identity\":\"profile=safety-screening@27|players=5|roles=[SimpleVillager=4,SimpleWerewolf=1]|actor=[]|rules=[]\",\"kind\":\"degenerate\",\"attempted\":1000,\"completed\":1000,\"incomplete\":0,\"results\":[{\"result\":{\"kind\":0,\"factions\":[0]},\"numerator\":750,\"denominator\":1000},{\"result\":{\"kind\":0,\"factions\":[1]},\"numerator\":250,\"denominator\":1000},{\"result\":{\"kind\":2,\"factions\":[]},\"numerator\":0,\"denominator\":1000}],\"cells\":[{\"result\":{\"kind\":0,\"factions\":[0]},\"turn\":1,\"window\":0,\"numerator\":750,\"denominator\":1000},{\"result\":{\"kind\":0,\"factions\":[1]},\"turn\":1,\"window\":1,\"numerator\":250,\"denominator\":1000}],\"inclusiveEndingTurnCutoff\":1}}";
+		"{\"schema\":\"terminal-lobby-cache\",\"version\":1,\"record\":{\"identity\":\"profile=safety-screening@28|players=5|roles=[SimpleVillager=4,SimpleWerewolf=1]|actor=[]|rules=[]\",\"kind\":\"degenerate\",\"attempted\":1000,\"completed\":1000,\"incomplete\":0,\"results\":[{\"result\":{\"kind\":0,\"factions\":[0]},\"numerator\":750,\"denominator\":1000},{\"result\":{\"kind\":0,\"factions\":[1]},\"numerator\":250,\"denominator\":1000},{\"result\":{\"kind\":2,\"factions\":[]},\"numerator\":0,\"denominator\":1000}],\"cells\":[{\"result\":{\"kind\":0,\"factions\":[0]},\"turn\":1,\"window\":0,\"numerator\":750,\"denominator\":1000},{\"result\":{\"kind\":0,\"factions\":[1]},\"turn\":1,\"window\":1,\"numerator\":250,\"denominator\":1000}],\"inclusiveEndingTurnCutoff\":1}}";
 
 	private const string ProbabilityGolden =
 		"{\"schema\":\"terminal-lobby-cache\",\"version\":1,\"record\":{\"identity\":\"profile=full-probability@4|players=6|roles=[SimpleVillager=5,SimpleWerewolf=1]|actor=[]|rules=[]\",\"kind\":\"probability\",\"attempted\":10000,\"completed\":10000,\"incomplete\":0,\"results\":[{\"result\":{\"kind\":0,\"factions\":[0]},\"numerator\":7000,\"denominator\":10000},{\"result\":{\"kind\":0,\"factions\":[1]},\"numerator\":3000,\"denominator\":10000},{\"result\":{\"kind\":2,\"factions\":[]},\"numerator\":0,\"denominator\":10000}],\"cells\":[{\"result\":{\"kind\":0,\"factions\":[0]},\"turn\":1,\"window\":0,\"numerator\":7000,\"denominator\":10000},{\"result\":{\"kind\":0,\"factions\":[1]},\"turn\":2,\"window\":1,\"numerator\":3000,\"denominator\":10000}]}}";
@@ -181,6 +181,56 @@ public class TerminalLobbyCacheTests
 	}
 
 	[Fact]
+	public void DegenerateRecord_WithPartitionBearingPrejudicedManipulatorIdentity_RoundTripsExactly()
+	{
+		var partition = CanonicalPublicGroupPartition.Create(
+			5,
+			[1, 3],
+			[2, 4, 5]);
+		var scenario = new SimulationScenario(
+			5,
+			[
+				MainRoleType.PrejudicedManipulator,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			],
+			publicGroupPartition: partition);
+		var identity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+		var manipulatorVictory = new SingleFactionGameResult(
+			Faction.PrejudicedManipulator);
+		var record = new DegenerateTerminalCacheRecord(
+			identity,
+			[
+				new(new SingleFactionGameResult(Faction.Villager), 0, 1_000),
+				new(new SingleFactionGameResult(Faction.Werewolf), 0, 1_000),
+				new(manipulatorVictory, 1_000, 1_000),
+				new(new NoWinnerGameResult(), 0, 1_000)
+			],
+			[
+				new(
+					manipulatorVictory,
+					1,
+					VictoryCheckWindow.Dawn,
+					1_000,
+					1_000)
+			]);
+
+		var bytes = TerminalLobbyCache.Write(record);
+		var read = TerminalLobbyCache.Read(bytes, identity);
+
+		TerminalLobbyCache.SchemaVersion.Should().Be(1);
+		read.IsUsable.Should().BeTrue();
+		read.Record!.CompatibilityIdentity.Should().Be(identity);
+		read.Record.CompatibilityIdentity.Scenario.PublicGroupPartition
+			.Should().Be(partition);
+		TerminalLobbyCache.Write(read.Record).Should().Equal(bytes);
+	}
+
+	[Fact]
 	public void ProbabilityRecord_HasReviewedGoldenBytesAndRoundTripsExactCompactDistribution()
 	{
 		var record = ProbabilityRecord();
@@ -290,8 +340,8 @@ public class TerminalLobbyCacheTests
 		yield return [AlreadyGolden.Replace("\"reason\":2", "\"reason\":99", StringComparison.Ordinal)];
 		yield return [AlreadyGolden.Replace("alreadyDecided", "unknownKind", StringComparison.Ordinal)];
 		yield return [AlreadyGolden.Replace("players=5", "players=05", StringComparison.Ordinal)];
-		yield return [AlreadyGolden.Replace("safety-screening@27", "safety screening@27", StringComparison.Ordinal)];
-		yield return [AlreadyGolden.Replace("safety-screening@27", "safety-screening@26", StringComparison.Ordinal)];
+		yield return [AlreadyGolden.Replace("safety-screening@28", "safety screening@28", StringComparison.Ordinal)];
+		yield return [AlreadyGolden.Replace("safety-screening@28", "safety-screening@27", StringComparison.Ordinal)];
 		yield return [AlreadyGolden.Replace("\"schema\":\"terminal-lobby-cache\",\"version\":1", "\"version\":1,\"schema\":\"terminal-lobby-cache\"", StringComparison.Ordinal)];
 	}
 
@@ -413,8 +463,8 @@ public class TerminalLobbyCacheTests
 		var reversed = "{\"schema\":\"terminal-lobby-cache\",\"version\":1,\"records\":["
 			+ RecordJson(DegenerateGolden) + "," + RecordJson(ProbabilityGolden) + "]}";
 		var stale = canonical.Replace(
+			"safety-screening@28",
 			"safety-screening@27",
-			"safety-screening@26",
 			StringComparison.Ordinal);
 		Action duplicateConstructor = () => TerminalLobbyCache.CreateDocument(
 			[DegenerateRecord(), DegenerateRecord()]);
@@ -440,7 +490,7 @@ public class TerminalLobbyCacheTests
 
 		read.Rejection.Should().BeNull();
 		read.Document!.Records.Select(record => record.CompatibilityIdentity.Profile.ToString())
-			.Should().Equal("full-probability@4", "safety-screening@27", "safety-screening@27");
+			.Should().Equal("full-probability@4", "safety-screening@28", "safety-screening@28");
 	}
 
 	[Fact]
@@ -448,7 +498,7 @@ public class TerminalLobbyCacheTests
 	{
 		var record = RecordJson(ProbabilityGolden.Replace(
 			"full-probability@4",
-			"safety-screening@27",
+			"safety-screening@28",
 			StringComparison.Ordinal));
 		var payload = "{\"schema\":\"terminal-lobby-cache\",\"version\":1,\"records\":["
 			+ record + "]}";
@@ -457,10 +507,10 @@ public class TerminalLobbyCacheTests
 	}
 
 	[Theory]
-	[InlineData(false, "safety-screening@27", "safety-screening@26")]
+	[InlineData(false, "safety-screening@28", "safety-screening@27")]
 	[InlineData(true, "full-probability@4", "full-probability@3")]
-	[InlineData(false, "safety-screening@27", "foreign-simulator@1")]
-	[InlineData(false, "safety-screening@27", "core-simulator@1")]
+	[InlineData(false, "safety-screening@28", "foreign-simulator@1")]
+	[InlineData(false, "safety-screening@28", "core-simulator@1")]
 	public void ReadDocument_RejectsSchemaOneRecordsFromNonCurrentProducersAtomically(
 		bool probabilityRecord,
 		string currentProducer,
@@ -484,7 +534,7 @@ public class TerminalLobbyCacheTests
 	public void Read_RejectsObsoleteCoreSimulatorProducer()
 	{
 		var obsolete = AlreadyGolden.Replace(
-			"safety-screening@27",
+			"safety-screening@28",
 			"core-simulator@1",
 			StringComparison.Ordinal);
 		var document = "{\"schema\":\"terminal-lobby-cache\",\"version\":1,\"records\":["

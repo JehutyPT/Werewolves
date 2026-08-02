@@ -66,9 +66,10 @@ internal static class GameFlowManager
         // Define hook-to-listener mappings here.
         // ORDER MATTERS!!!!
         [NightMainActionLoop] = 
-        [
-            Listener(Thief),                //first night only
-            Listener(Actor),
+		[
+			Listener(Thief),                //first night only
+			Listener(PrejudicedManipulator), //first night only
+			Listener(Actor),
             Listener(LittleGirl),           //first night only
             Listener(Cupid),                //first night only
             Listener(Lovers),              //first night only
@@ -1130,12 +1131,13 @@ internal static class GameFlowManager
             cursor.AcceptedObservationSemantic switch
             {
                 ModeratorInstructionSemantic.IdentifyRoleHolders =>
-                    HasCommittedRoleIdentification(
-                        session,
-                        cursor.ObservedRole) &&
-                    (cursor.ObservedRole is not
-                         (WhiteWerewolf or MainRoleType.Piper) ||
-                     InitialBeneficiaryClosureRules
+					 HasCommittedRoleIdentification(
+						 session,
+						 cursor.ObservedRole) &&
+					 (cursor.ObservedRole is not
+						  (WhiteWerewolf or MainRoleType.Piper or
+						   MainRoleType.PrejudicedManipulator) ||
+					  InitialBeneficiaryClosureRules
                          .HasConsistentInitialBeneficiaryClosure(session)),
                 ModeratorInstructionSemantic
                     .ObserveWerewolfFactionAgentGroup
@@ -1692,11 +1694,12 @@ internal static class GameFlowManager
             .ToHashSet() ?? [];
         return session.GetPlayers()
             .WithHealth(PlayerHealth.Alive)
-            .Select(player => new LivingFactionBeneficiarySnapshot(
-                session.RequireKnownFactionBeneficiary(player.Id),
-                player.State.HasStatusEffect(StatusEffectTypes.Charmed),
-                player.State.DurableVotingPower,
-                committedLoverIds.Contains(player.Id)))
+			.Select(player => new LivingFactionBeneficiarySnapshot(
+				session.RequireKnownFactionBeneficiary(player.Id),
+				player.State.HasStatusEffect(StatusEffectTypes.Charmed),
+				player.State.DurableVotingPower,
+				committedLoverIds.Contains(player.Id),
+				player.Id))
             .ToArray();
     }
 
@@ -1710,8 +1713,8 @@ internal static class GameFlowManager
 		angelVictoryEligible = AngelLifecycleRules.IsVictoryEligible(
 			session,
 			window);
-		var satisfiedFactions = FactionVictoryPredicates
-			.Evaluate(livingPlayers)
+			var satisfiedFactions = FactionVictoryPredicates
+				.Evaluate(livingPlayers, session.PublicGroupPartition)
 			.Concat(angelVictoryEligible ? [Faction.Angel] : []);
 
         return GameResultSelection.Select(

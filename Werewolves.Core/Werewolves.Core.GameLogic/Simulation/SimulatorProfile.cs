@@ -159,7 +159,10 @@ public sealed class SimulatorCapability : SimulatorProfile
 			new(MainRoleType.Cupid, Faction.Villager),
 			new(MainRoleType.Thief, Faction.Villager),
 			new(MainRoleType.DevotedServant, Faction.Villager),
-			new(MainRoleType.Angel, Faction.Villager)
+			new(MainRoleType.Angel, Faction.Villager),
+			new(
+				MainRoleType.PrejudicedManipulator,
+				Faction.PrejudicedManipulator)
 	];
 
 	private static readonly SharedVictoryGameResult[] SafetyScreeningSharedVictoryCapabilities =
@@ -168,7 +171,15 @@ public sealed class SimulatorCapability : SimulatorProfile
 		new([Faction.Angel, Faction.Werewolf]),
 		new([Faction.Angel, Faction.WhiteWerewolf]),
 		new([Faction.Angel, Faction.Piper]),
-		new([Faction.Angel, Faction.CrossFactionLovers])
+		new([Faction.Angel, Faction.CrossFactionLovers]),
+		new([Faction.Angel, Faction.PrejudicedManipulator]),
+		new([Faction.Piper, Faction.PrejudicedManipulator]),
+		new(
+			[
+				Faction.Angel,
+				Faction.Piper,
+				Faction.PrejudicedManipulator
+			])
 	];
 
 	private static readonly SimulatorProfileRoleDescriptor[] FullProbabilityRoleDescriptors =
@@ -186,7 +197,7 @@ public sealed class SimulatorCapability : SimulatorProfile
 		SimulatorCapabilityRegistry.Production.FullProbability;
 
 	internal static SimulatorCapability CreateSafetyScreening() => new(
-		new SimulatorProfileIdentity("safety-screening", "27"),
+		new SimulatorProfileIdentity("safety-screening", "28"),
 		SafetyScreeningRoleDescriptors,
 		sharedVictoryCapabilities: SafetyScreeningSharedVictoryCapabilities,
 		headlessResponsePolicy: new HeadlessResponsePolicy(

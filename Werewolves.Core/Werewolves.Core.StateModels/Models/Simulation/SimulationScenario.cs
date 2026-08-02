@@ -24,6 +24,7 @@ public sealed class SimulationScenario : IEquatable<SimulationScenario>
 	public ThiefOfferBranchPolicy? ThiefOfferBranchPolicy { get; }
 
 	public ActorSetupCards ActorSetupCards => _actorSetupCards;
+	public CanonicalPublicGroupPartition? PublicGroupPartition { get; }
 
 	public SimulationRuleState RuleState { get; }
 
@@ -31,12 +32,14 @@ public sealed class SimulationScenario : IEquatable<SimulationScenario>
 		int playerCount,
 		IEnumerable<MainRoleType> roleCompositionCards,
 		ActorSetupCards? actorSetupCards = null,
-		SimulationRuleState ruleState = default)
+		SimulationRuleState ruleState = default,
+		CanonicalPublicGroupPartition? publicGroupPartition = null)
 		: this(
 			CreateUnpartitionedInput(roleCompositionCards),
 			playerCount,
 			actorSetupCards,
-			ruleState)
+			ruleState,
+			publicGroupPartition)
 	{
 	}
 
@@ -47,7 +50,8 @@ public sealed class SimulationScenario : IEquatable<SimulationScenario>
 		MainRoleType? offer1Role,
 		MainRoleType? offer2Role,
 		ActorSetupCards? actorSetupCards = null,
-		SimulationRuleState ruleState = default)
+		SimulationRuleState ruleState = default,
+		CanonicalPublicGroupPartition? publicGroupPartition = null)
 		: this(
 			CreatePartitionedInput(
 				roleCompositionCards,
@@ -56,14 +60,16 @@ public sealed class SimulationScenario : IEquatable<SimulationScenario>
 				offer2Role),
 			playerCount,
 			actorSetupCards,
-			ruleState)
+			ruleState,
+			publicGroupPartition)
 	{
 	}
 
 	public SimulationScenario(
 		RoleLockIn roleLockIn,
 		ActorSetupCards? actorSetupCards = null,
-		SimulationRuleState ruleState = default)
+		SimulationRuleState ruleState = default,
+		CanonicalPublicGroupPartition? publicGroupPartition = null)
 		: this(
 			roleLockIn?.PlayerCount ?? throw new ArgumentNullException(nameof(roleLockIn)),
 			roleLockIn.RoleComposition.Select(card => card.PrintedRole),
@@ -71,7 +77,8 @@ public sealed class SimulationScenario : IEquatable<SimulationScenario>
 			roleLockIn.Offer1?.PrintedRole,
 			roleLockIn.Offer2?.PrintedRole,
 			actorSetupCards,
-			ruleState)
+			ruleState,
+			publicGroupPartition)
 	{
 	}
 
@@ -79,7 +86,8 @@ public sealed class SimulationScenario : IEquatable<SimulationScenario>
 		PartitionInput partition,
 		int playerCount,
 		ActorSetupCards? actorSetupCards,
-		SimulationRuleState ruleState)
+		SimulationRuleState ruleState,
+		CanonicalPublicGroupPartition? publicGroupPartition)
 	{
 		_roleCompositionCards = partition.RoleCompositionCards;
 		_dealPoolCards = partition.DealPoolCards;
@@ -141,6 +149,14 @@ public sealed class SimulationScenario : IEquatable<SimulationScenario>
 					.ThiefOfferBranchPolicy.Create(branchOffer1, branchOffer2)
 				: null;
 		_actorSetupCards = new ActorSetupCards(actorCards);
+		if (publicGroupPartition is not null &&
+			publicGroupPartition.PlayerCount != playerCount)
+		{
+			throw new ArgumentException(
+				"The canonical Public Group Partition must cover the Simulation Scenario Player count.",
+				nameof(publicGroupPartition));
+		}
+		PublicGroupPartition = publicGroupPartition;
 		RuleState = ruleState;
 		_canonical = CanonicalSimulationScenario.Create(this);
 	}

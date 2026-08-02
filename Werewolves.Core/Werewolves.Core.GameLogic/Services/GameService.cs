@@ -217,10 +217,10 @@ public class GameService
 		    .Select(card => card.PrintedRole)
 		    .ToArray());
 		if (factionFacts != null
-			&& (factionFacts.Count != config.Players.Count
+			&& (factionFacts.Count != config.PlayerRoster.Count
                 || !factionFacts
                     .Select(facts => facts.SeatNumber)
-                    .SequenceEqual(Enumerable.Range(1, config.Players.Count))))
+                    .SequenceEqual(Enumerable.Range(1, config.PlayerRoster.Count))))
         {
             throw new ArgumentException(
                 "Simulation Faction facts must cover every Player seat in order.",

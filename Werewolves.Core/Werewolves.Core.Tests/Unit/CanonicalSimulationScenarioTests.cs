@@ -54,6 +54,39 @@ public class CanonicalSimulationScenarioTests
 	}
 
 	[Fact]
+	public void ToCanonical_WithPublicGroupPartition_PreservesOffersAndRoundTripsMembershipIdentity()
+	{
+		var roleLockIn = CreatePartitionedRoleLockIn(
+			MainRoleType.PrejudicedManipulator,
+			MainRoleType.Cupid);
+		var partition = CanonicalPublicGroupPartition.Create(
+			playerCount: 5,
+			[3, 1],
+			[5, 2, 4]);
+		var changedMembership = CanonicalPublicGroupPartition.Create(
+			playerCount: 5,
+			[1, 2],
+			[3, 4, 5]);
+
+		var canonical = new SimulationScenario(
+			roleLockIn,
+			publicGroupPartition: partition).ToCanonical();
+		var different = new SimulationScenario(
+			roleLockIn,
+			publicGroupPartition: changedMembership).ToCanonical();
+
+		canonical.PublicGroupPartition.Should().Be(partition);
+		canonical.RoleComposition.GetCount(MainRoleType.PrejudicedManipulator)
+			.Should().Be(0);
+		canonical.Offer1Role.Should().Be(MainRoleType.PrejudicedManipulator);
+		canonical.Offer2Role.Should().Be(MainRoleType.Cupid);
+		canonical.ToString().Should().Be(
+			"players=5|roles=[SimpleVillager=3,SimpleWerewolf=1,Thief=1]|offers=[PrejudicedManipulator,Cupid]|thief=[Offer1,Offer2,Decline]|partition=[[1,3],[2,4,5]]|actor=[]|rules=[]");
+		CanonicalSimulationScenario.Parse(canonical.ToString()).Should().Be(canonical);
+		different.Should().NotBe(canonical);
+	}
+
+	[Fact]
 	public void ToCanonical_WithArtifactsAndNonDefaultRuleState_SnapshotsAndRoundTripsAllInputs()
 	{
 		var roleCards = new List<MainRoleType>

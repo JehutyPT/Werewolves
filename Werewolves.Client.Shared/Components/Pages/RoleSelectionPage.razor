@@ -96,6 +96,21 @@
 		</section>
 	}
 
+	@if (Lobby.AcceptedPublicGroupPartition is not null)
+	{
+		<section class="ww-role-group"
+				 data-testid="@ModeratorUiTestIds.PublicGroupPartitionSummary"
+				 aria-labelledby="public-group-partition-summary-title">
+			<div class="ww-section-head">
+				<h2 id="public-group-partition-summary-title">@ClientStrings.PublicGroupPartition_SummaryTitle</h2>
+			</div>
+			<button type="button"
+					class="ww-secondary-button"
+					data-testid="@ModeratorUiTestIds.PublicGroupPartitionReview"
+					@onclick="ConfigurePublicGroupPartition">@ClientStrings.RoleSelection_ReviewPublicGroupPartitionButton</button>
+		</section>
+	}
+
 	@if (ShouldRenderEvaluationPanel)
 	{
 		<LobbyEvaluationPanel State="@_evaluationState" OnRetry="RetryEvaluation" />
@@ -156,6 +171,9 @@
 
 	[Parameter]
 	public EventCallback OnConfigureRoleLockIn { get; set; }
+
+	[Parameter]
+	public EventCallback OnConfigurePublicGroupPartition { get; set; }
 
 	private List<string> _validationErrors = new();
 	private LobbyEvaluationState _evaluationState = LobbyEvaluationState.NotApplicable();
@@ -237,6 +255,9 @@
 		_validationErrors.Clear();
 		return OnConfigureRoleLockIn.InvokeAsync();
 	}
+
+	private Task ConfigurePublicGroupPartition() =>
+		OnConfigurePublicGroupPartition.InvokeAsync();
 
 	private Task StartGame()
 	{
