@@ -510,6 +510,43 @@ public sealed class ActorBorrowedStutteringJudgeTests
 	}
 
 	[Fact]
+	public void BorrowedStutteringJudge_PriorDayScapegoatRestrictionRecoversFormattedVoteGuidance()
+	{
+		var fixture = CreateCommittedJudgeObservationBoundary(
+			withPriorDayScapegoatRestriction: true);
+		var restriction = DayVoteRules
+			.GetActiveVoterEligibilityRestriction(fixture.Session);
+		restriction.Should().NotBeNull();
+		fixture.Session.GameHistoryLog
+			.OfType<VoterEligibilityRestrictionAnnouncementAcknowledgedLogEntry>()
+			.Should().ContainSingle(entry => entry.ScopeId == restriction!.ScopeId);
+		var pending = fixture.Session.PendingModeratorInstruction.Should()
+			.BeOfType<SelectPlayersInstruction>().Subject;
+		var expectedPrivateInstruction =
+			GameStrings.ScapegoatEffectiveVotersInstruction.Format(
+				string.Join(
+					Environment.NewLine,
+					"Werewolf",
+					"Villager 1"));
+		pending.PrivateInstruction.Should().Be(expectedPrivateInstruction);
+		var service = new GameService();
+
+		var gameId = service.RehydrateSession(fixture.Session.Serialize());
+
+		var recoveredVote = service.GetCurrentInstruction(gameId).Should()
+			.BeOfType<SelectPlayersInstruction>().Subject;
+		recoveredVote.InstructionId.Should().Be(pending.InstructionId);
+		recoveredVote.PrivateInstruction.Should().Be(expectedPrivateInstruction);
+		var recovered = (GameSession)service.GetGameStateView(gameId)!;
+		var recoveredRestriction = DayVoteRules
+			.GetActiveVoterEligibilityRestriction(recovered);
+		recoveredRestriction.Should().NotBeNull();
+		recoveredRestriction!.ScopeId.Should().Be(restriction!.ScopeId);
+		recoveredRestriction!.PermittedVoterIds.Should().Equal(
+			restriction!.PermittedVoterIds);
+	}
+
+	[Fact]
 	public void BorrowedStutteringJudge_RecoveryRejectsTwoSpendTamperWithDifferentActiveActivation()
 	{
 		var fixture = CreateCommittedJudgeObservationBoundary();
@@ -763,9 +800,11 @@ public sealed class ActorBorrowedStutteringJudgeTests
 				AllowAllRolePowerAvailabilityPolicy.Instance)));
 
 	private static CommittedJudgeObservationBoundary
-		CreateCommittedJudgeObservationBoundary()
+		CreateCommittedJudgeObservationBoundary(
+			bool withPriorDayScapegoatRestriction = false)
 	{
-		var (session, start, actorId) = CreateLaterNightActorSession();
+		var (session, start, actorId) = CreateLaterNightActorSession(
+			withPriorDayScapegoatRestriction);
 		var activation = PerformSpendOpening(
 			CreateActorRole(),
 			session,
@@ -851,7 +890,8 @@ public sealed class ActorBorrowedStutteringJudgeTests
 	private static (
 		GameSession Session,
 		StartGameConfirmationInstruction Start,
-		Guid ActorId) CreateLaterNightActorSession()
+		Guid ActorId) CreateLaterNightActorSession(
+			bool withPriorDayScapegoatRestriction = false)
 	{
 		var setup = new ActorSetupCards(
 			version: 7,
@@ -890,6 +930,28 @@ public sealed class ActorBorrowedStutteringJudgeTests
 		session.IdentifyRole([actorId], MainRoleType.Actor);
 		SeedRequiredFactionBeneficiaryFacts(session);
 		session.TransitionMainPhase(GamePhase.Day);
+		if (withPriorDayScapegoatRestriction)
+		{
+			var players = session.GetPlayers().ToArray();
+			var restrictionScope =
+				"test-actor-borrowed-judge-prior-day-scapegoat-restriction";
+			var announcementInstructionId = Guid.NewGuid();
+			DayVoteRules.CommitVoterEligibilityRestriction(
+				session,
+				restrictionScope,
+				MainRoleType.Scapegoat,
+				players.Select(player => player.Id).ToArray(),
+				players
+					.Where(player => player.Name is "Werewolf" or "Villager 1")
+					.Select(player => player.Id)
+					.ToArray(),
+				session.TurnNumber + 1,
+				announcementInstructionId);
+			DayVoteRules.AcknowledgeVoterEligibilityRestrictionAnnouncement(
+				session,
+				restrictionScope,
+				announcementInstructionId);
+		}
 		session.TransitionMainPhase(GamePhase.Night);
 		session.TurnNumber.Should().Be(2);
 		session.RoleInPlayCount(MainRoleType.StutteringJudge).Should().Be(0);

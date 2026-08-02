@@ -19,7 +19,12 @@ internal static class DayPhaseHandlers
             publicAnnouncement: GameStrings.DebateStartsPrompt,
             privateInstruction: GameStrings.DebateModeratorInstructions);
 
-    internal static ModeratorInstruction RequestNormalVoteOutcome(GameSession session, ModeratorResponse input)
+    internal static ModeratorInstruction RequestNormalVoteOutcome(
+        GameSession session,
+        ModeratorResponse input) => CreateRecordDayVoteInstruction(session);
+
+    internal static SelectPlayersInstruction CreateRecordDayVoteInstruction(
+        GameSession session)
     {
         var alivePlayers = session.GetPlayers().WithHealth(PlayerHealth.Alive);
         var activeRestriction =

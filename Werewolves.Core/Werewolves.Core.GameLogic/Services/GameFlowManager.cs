@@ -1982,6 +1982,8 @@ internal static class GameFlowManager
 		if (cursor.Kind == DomainRecoveryCursorKind
 			.ActorBorrowedStutteringJudgeSignalObservationCommit)
 		{
+			var expectedVoteInstruction =
+				DayPhaseHandlers.CreateRecordDayVoteInstruction(session);
 			if (sourceRole != MainRoleType.StutteringJudge ||
 				cursor.CommittedActionType != NightActionType.Unknown ||
 				cursor.CommittedDayActionType != DayPowerType.JudgeExtraVote ||
@@ -1989,17 +1991,34 @@ internal static class GameFlowManager
 				session.GetSubPhase<DaySubPhases>() !=
 					DaySubPhases.NormalVoting ||
 				session.PendingModeratorInstruction is not
-					SelectPlayersInstruction
-					{
-						Semantic: ModeratorInstructionSemantic.RecordDayVote,
-						CountConstraint: var countConstraint,
-						RoleIdentification: null,
-						AffectedPlayerIds: null
-					} ||
-				countConstraint != NumberRangeConstraint.SingleOptional)
+					SelectPlayersInstruction pendingVoteInstruction ||
+				pendingVoteInstruction.Semantic !=
+					expectedVoteInstruction.Semantic ||
+				!StringComparer.Ordinal.Equals(
+					pendingVoteInstruction.PublicAnnouncement,
+					expectedVoteInstruction.PublicAnnouncement) ||
+				!StringComparer.Ordinal.Equals(
+					pendingVoteInstruction.PrivateInstruction,
+					expectedVoteInstruction.PrivateInstruction) ||
+				(pendingVoteInstruction.AffectedPlayerIds is null) !=
+					(expectedVoteInstruction.AffectedPlayerIds is null) ||
+				pendingVoteInstruction.AffectedPlayerIds is { } affectedPlayerIds &&
+					!affectedPlayerIds.SequenceEqual(
+						expectedVoteInstruction.AffectedPlayerIds!) ||
+				!pendingVoteInstruction.SoundEffects.SequenceEqual(
+					expectedVoteInstruction.SoundEffects) ||
+				!pendingVoteInstruction.SelectablePlayerIds.SetEquals(
+					expectedVoteInstruction.SelectablePlayerIds) ||
+				pendingVoteInstruction.CountConstraint !=
+					expectedVoteInstruction.CountConstraint ||
+				pendingVoteInstruction.RoleIdentification !=
+					expectedVoteInstruction.RoleIdentification ||
+				!StringComparer.Ordinal.Equals(
+					pendingVoteInstruction.EmptySelectionOptionLabel,
+					expectedVoteInstruction.EmptySelectionOptionLabel))
 			{
 				throw new InvalidOperationException(
-					$"Unsupported domain continuation '{sourceRole}:{cursor.CommittedDayActionType}:{cursor.NextInstructionSemantic}'.");
+					"The Actor borrowed Stuttering Judge recovery cursor does not match the canonical Record Day Vote instruction.");
 			}
 
 			return;

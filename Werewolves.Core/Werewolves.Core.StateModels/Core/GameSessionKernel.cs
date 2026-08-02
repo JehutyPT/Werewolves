@@ -5,7 +5,6 @@ using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
-using Werewolves.Core.StateModels.Resources;
 using Werewolves.Core.StateModels.Serialization;
 
 namespace Werewolves.Core.StateModels.Core
@@ -2539,18 +2538,10 @@ namespace Werewolves.Core.StateModels.Core
 				{
 					Semantic: ModeratorInstructionSemantic.RecordDayVote,
 					CountConstraint: var countConstraint,
-					PublicAnnouncement: null,
-					PrivateInstruction: var privateInstruction,
 					RoleIdentification: null,
 					AffectedPlayerIds: null
 				} voteInstruction ||
 				countConstraint != NumberRangeConstraint.SingleOptional ||
-				!StringComparer.Ordinal.Equals(
-					privateInstruction,
-					GameStrings.VoteStartsModeratorInstruction) ||
-				!StringComparer.Ordinal.Equals(
-					voteInstruction.EmptySelectionOptionLabel,
-					GameStrings.DayVoteNoEliminationOption) ||
 				!voteInstruction.SelectablePlayerIds.SetEquals(livingPlayerIds))
 			{
 				throw new InvalidOperationException(
