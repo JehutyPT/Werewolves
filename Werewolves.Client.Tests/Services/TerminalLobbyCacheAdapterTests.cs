@@ -156,7 +156,7 @@ public class TerminalLobbyCacheAdapterTests
 			var read = TerminalLobbyCache.ReadDocument(persisted!.Value.Span);
 
 			SimulatorCapability.SafetyScreening.Identity.ToString()
-				.Should().Be("safety-screening@26");
+				.Should().Be("safety-screening@27");
 			persisted.Value.ToArray().Should().Equal(bytes);
 			read.IsUsable.Should().BeTrue();
 			TerminalLobbyCache.TryGet(read.Document!, identity, out var restored)

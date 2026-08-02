@@ -247,6 +247,7 @@ internal sealed class DefenderRole
 		var holder = GetHolder(session);
 		var availability = _availabilityGateway.Evaluate(
 			new RolePowerAttempt(
+				session,
 				holder,
 				MainRoleType.Defender,
 				ProtectionPower,

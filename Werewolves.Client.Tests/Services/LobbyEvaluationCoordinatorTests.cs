@@ -987,6 +987,7 @@ public class LobbyEvaluationCoordinatorTests
 	}
 
 	[Theory]
+	[InlineData("safety-screening@26")]
 	[InlineData("safety-screening@21")]
 	[InlineData("core-simulator@1")]
 	[InlineData("foreign-simulator@1")]
@@ -1083,7 +1084,7 @@ public class LobbyEvaluationCoordinatorTests
 		invalid.State.BlocksLobbyExit.Should().BeFalse();
 
 		var appUnsupportedLobby = CreateLobby(
-			MainRoleType.Elder,
+			MainRoleType.PrejudicedManipulator,
 			MainRoleType.SimpleWerewolf,
 			MainRoleType.SimpleVillager,
 			MainRoleType.SimpleVillager,

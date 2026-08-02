@@ -325,6 +325,7 @@ internal sealed class BigBadWolfRole
 
         var availability = _availabilityGateway.Evaluate(
             new RolePowerAttempt(
+				session,
                 holder,
                 MainRoleType.BigBadWolf,
                 AdditionalVictimPower,

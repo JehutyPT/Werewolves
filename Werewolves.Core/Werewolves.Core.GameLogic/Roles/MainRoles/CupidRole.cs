@@ -316,6 +316,7 @@ internal sealed class CupidRole
 		var holder = GetHolder(session);
 		var availability = _availabilityGateway.Evaluate(
 			new RolePowerAttempt(
+				session,
 				holder,
 				MainRoleType.Cupid,
 				LinkLoversPower,

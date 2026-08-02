@@ -139,6 +139,7 @@ public sealed class SimulatorCapability : SimulatorProfile
 			new(MainRoleType.Hunter, Faction.Villager),
 			new(MainRoleType.LittleGirl, Faction.Villager),
 			new(MainRoleType.Defender, Faction.Villager),
+			new(MainRoleType.Elder, Faction.Villager),
 				new(MainRoleType.StutteringJudge, Faction.Villager),
 				new(MainRoleType.Scapegoat, Faction.Villager),
 				new(MainRoleType.VillageIdiot, Faction.Villager),
@@ -185,7 +186,7 @@ public sealed class SimulatorCapability : SimulatorProfile
 		SimulatorCapabilityRegistry.Production.FullProbability;
 
 	internal static SimulatorCapability CreateSafetyScreening() => new(
-		new SimulatorProfileIdentity("safety-screening", "26"),
+		new SimulatorProfileIdentity("safety-screening", "27"),
 		SafetyScreeningRoleDescriptors,
 		sharedVictoryCapabilities: SafetyScreeningSharedVictoryCapabilities,
 		headlessResponsePolicy: new HeadlessResponsePolicy(
@@ -240,7 +241,9 @@ public sealed class SimulatorCapability : SimulatorProfile
 					ModeratorInstructionSemantic.AnnounceScapegoatPermittedVoters,
 					ModeratorInstructionSemantic.ChooseWolfHoundAlignment,
 					ModeratorInstructionSemantic
-						.ChooseAccursedWolfFatherInfection
+						.ChooseAccursedWolfFatherInfection,
+					ModeratorInstructionSemantic
+						.AnnounceVillagerRolePowerSuppression
 				]),
 		supportsActorSetupCards: false,
 		supportedRuleStates: [SimulationRuleState.Default]);

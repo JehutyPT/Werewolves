@@ -101,8 +101,8 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 	}
 
 	[Theory]
-	[InlineData(0, ExpectedInputType.Continue)]
-	[InlineData(1, ExpectedInputType.PlayerSelection)]
+	[InlineData(0, ExpectedInputType.PlayerSelection)]
+	[InlineData(1, ExpectedInputType.Continue)]
 	public void BaselineRandomDecisionStrategy_WithDevotedServantVoteWindow_DeterministicallyCoversContinueAndPublicUse(
 		long runNumber,
 		ExpectedInputType expectedResponseType)
@@ -825,10 +825,10 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 		[Theory]
 		[InlineData(
 			3L,
-			AccursedWolfFatherInfectionOptionIds.Infect)]
+			AccursedWolfFatherInfectionOptionIds.Decline)]
 		[InlineData(
 			2L,
-			AccursedWolfFatherInfectionOptionIds.Decline)]
+			AccursedWolfFatherInfectionOptionIds.Infect)]
 		public void BaselineRandomDecisionStrategy_WithAccursedWolfFatherInfection_CoversBothBranchesDeterministically(
 			long runNumber,
 			string expectedOptionId)

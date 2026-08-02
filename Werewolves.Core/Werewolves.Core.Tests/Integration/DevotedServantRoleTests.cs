@@ -904,6 +904,80 @@ public sealed class DevotedServantRoleTests
 	}
 
 	[Fact]
+	public void AcquiredElder_IsDormantForAcquisitionDayAndResistsOnNextNight()
+	{
+		var builder = GameTestBuilder.Create()
+			.WithPlayers(7)
+			.WithRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.Elder,
+				MainRoleType.DevotedServant,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		var werewolf = players[0];
+		var nightVictim = players[1];
+		var elderVoteTarget = players[2];
+		var servant = players[3];
+		builder.ArrangeKnownPhysicalRole(
+			elderVoteTarget.Id,
+			MainRoleType.Elder);
+		builder.ConfirmGameStart();
+		builder.CompleteNightPhase([werewolf.Id], nightVictim.Id);
+		builder.CompleteDawnPhase(new()
+		{
+			[nightVictim.Id] = MainRoleType.SimpleVillager
+		});
+		var window = OpenWindow(builder, elderVoteTarget.Id);
+		var assignment = builder.Process(
+				window.CreatePublicSelfRevealResponse(servant.Id))
+			.ModeratorInstruction.Should()
+			.BeOfType<AssignRolesInstruction>().Subject;
+		var announcement = builder.Process(assignment.CreateResponse(new()
+			{
+				[elderVoteTarget.Id] = MainRoleType.Elder
+			}))
+			.ModeratorInstruction.Should()
+			.BeOfType<ConfirmationInstruction>().Subject;
+
+		servant.State.CurrentRole.Should().Be(MainRoleType.Elder);
+		servant.State.HasStatusEffect(StatusEffectTypes.ElderProtectionLost)
+			.Should().BeFalse();
+		builder.GetGameState()!.GameHistoryLog
+			.OfType<VillagerRolePowerSuppressionCommittedLogEntry>()
+			.Should().BeEmpty();
+		var elderIdentificationCount = builder.GetGameState()!.GameHistoryLog
+			.OfType<RoleIdentificationLogEntry>()
+			.Count(entry => entry.Role == MainRoleType.Elder);
+
+		var startNight = builder.Process(announcement.CreateResponse());
+		startNight.ModeratorInstruction!.Semantic.Should().Be(
+			ModeratorInstructionSemantic.StartNight);
+		builder.ConfirmNightStart();
+		var finishNight = builder.CompleteWerewolfNightActionSubsequentNight(
+			servant.Id).ModeratorInstruction.Should()
+			.BeOfType<ConfirmationInstruction>().Subject;
+		builder.Process(finishNight.CreateResponse()).IsSuccess.Should().BeTrue();
+
+		servant.State.Health.Should().Be(PlayerHealth.Alive);
+		servant.State.HasStatusEffect(StatusEffectTypes.ElderProtectionLost)
+			.Should().BeTrue();
+		builder.GetGameState()!.GameHistoryLog
+			.OfType<DawnVictimDeterminedLogEntry>()
+			.Should().NotContain(entry => entry.PlayerId == servant.Id);
+		builder.GetGameState()!.GameHistoryLog
+			.OfType<RoleIdentificationLogEntry>()
+			.Count(entry => entry.Role == MainRoleType.Elder)
+			.Should().Be(elderIdentificationCount);
+		builder.GetGameState()!.GameHistoryLog
+			.OfType<VillagerRolePowerSuppressionCommittedLogEntry>()
+			.Should().BeEmpty();
+	}
+
+	[Fact]
 	public void AcquiredAngel_NewHolderKilledOnNightTwoWinsWithoutSecondPublicReveal()
 	{
 		var builder = GameTestBuilder.Create()

@@ -105,6 +105,7 @@ internal static class GameFlowManager
         [OnVoteConcluded] =
         [
             Listener(Scapegoat),            // in case of a tie, scapegoat ability triggers
+			Listener(Elder),                // after a complete village-Vote Elimination Cascade
         ],
 
         [OnVoteConducted] =
@@ -189,6 +190,12 @@ internal static class GameFlowManager
                     subPhase: DawnSubPhases.CalculateVictims,
                     subPhaseStages:
                     [
+						LogicStage(
+							DawnSubPhaseStage.RequestElderRoleIdentification,
+							DawnPhaseHandlers.RequestElderRoleIdentification),
+						LogicStage(
+							DawnSubPhaseStage.RecordElderRoleIdentification,
+							DawnPhaseHandlers.RecordElderRoleIdentification),
                         NavigationEndStage(DawnSubPhaseStage.CheckForVictims, CalculateVictimsAndChooseDawnPath)
                     ],
                     possibleNextSubPhases:

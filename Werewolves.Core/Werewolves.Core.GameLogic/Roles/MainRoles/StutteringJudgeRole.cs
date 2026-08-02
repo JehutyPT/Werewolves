@@ -336,6 +336,7 @@ internal sealed class StutteringJudgeRole
 		}
 		return _availabilityGateway.Evaluate(
 				new RolePowerAttempt(
+					session,
 					judge,
 					MainRoleType.StutteringJudge,
 					ConsecutiveVotePower,

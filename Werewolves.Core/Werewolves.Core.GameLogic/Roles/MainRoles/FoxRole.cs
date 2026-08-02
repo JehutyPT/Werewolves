@@ -424,6 +424,7 @@ internal sealed class FoxRole
 
 		var executionContext = _availabilityGateway.Evaluate(
 			new RolePowerAttempt(
+				session,
 				fox,
 				MainRoleType.Fox,
 				NeighborhoodCheckPower,

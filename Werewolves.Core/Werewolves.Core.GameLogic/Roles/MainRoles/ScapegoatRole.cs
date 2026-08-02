@@ -341,6 +341,7 @@ internal sealed class ScapegoatRole
 			TieReplacementPower);
 		return _availabilityGateway.Evaluate(
 				new RolePowerAttempt(
+					session,
 					scapegoat,
 					MainRoleType.Scapegoat,
 					TieReplacementPower,

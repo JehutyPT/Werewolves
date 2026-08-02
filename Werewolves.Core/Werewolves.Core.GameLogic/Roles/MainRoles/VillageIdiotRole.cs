@@ -78,6 +78,7 @@ internal sealed class VillageIdiotRole
 
 		var execution = _availabilityGateway.Evaluate(
 			new RolePowerAttempt(
+				session,
 				target,
 				MainRoleType.VillageIdiot,
 				PardonPower,

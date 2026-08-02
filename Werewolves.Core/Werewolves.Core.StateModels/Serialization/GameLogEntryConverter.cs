@@ -52,6 +52,11 @@ public class GameLogEntryConverter : JsonConverter<GameLogEntryBase>
 	        ["VoteOutcomeReportedLogEntry"] = typeof(VoteOutcomeReportedLogEntry),
 	        ["VotingRightChangedLogEntry"] = typeof(VotingRightChangedLogEntry),
 	        ["VillageIdiotPardonCommittedLogEntry"] = typeof(VillageIdiotPardonCommittedLogEntry),
+	        ["VillagerRolePowerSuppressionCommittedLogEntry"] =
+		        typeof(VillagerRolePowerSuppressionCommittedLogEntry),
+	        ["VillagerRolePowerSuppressionAnnouncementAcknowledgedLogEntry"] =
+		        typeof(
+			        VillagerRolePowerSuppressionAnnouncementAcknowledgedLogEntry),
 	    };
 
     private static readonly Dictionary<Type, string> ReverseTypeMap =

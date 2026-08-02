@@ -114,6 +114,7 @@ internal sealed class BearTamerRole : NightRoleIdOnlyHookListener
 			GrowlPower);
 		var execution = _availabilityGateway.Evaluate(
 			new RolePowerAttempt(
+				session,
 				holder,
 				MainRoleType.BearTamer,
 				GrowlPower,

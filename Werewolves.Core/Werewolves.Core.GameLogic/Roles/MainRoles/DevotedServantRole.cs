@@ -239,6 +239,7 @@ internal sealed class DevotedServantRole
 			TakeRolePower);
 		return _availabilityGateway.Evaluate(
 				new RolePowerAttempt(
+					session,
 					actor,
 					MainRoleType.DevotedServant,
 					TakeRolePower,

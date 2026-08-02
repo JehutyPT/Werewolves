@@ -25,6 +25,30 @@ internal static class NightInteractionResolver
 		NightActionType.RustySword
 	];
 
+	internal static bool RequiresElderRoleIdentification(
+		GameSession session)
+	{
+		if (GameSessionQueries.IsCompleteLivingRoleHolderSetKnown(
+				session,
+				MainRoleType.Elder) ||
+		    GameSessionQueries.IsVillagerRolePowerSuppressionActive(session))
+		{
+			return false;
+		}
+
+		var committedAttempts = GetCommittedNightAttempts(session);
+		var defenderTargets = GetDefenderTargets(committedAttempts);
+		return GetCanonicalWerewolfAttackAttempts(committedAttempts)
+			.Any(attempt =>
+				CanTargetBeElder(session, attempt.TargetId) &&
+				(attempt.ActionType ==
+					 NightActionType.AccursedWolfFatherInfection ||
+				 !DefenderBlocksPhysicalAttack(
+					 session,
+					 defenderTargets,
+					 attempt.TargetId)));
+	}
+
 	/// <summary>
 	/// Analyzes the night's logs to determine who lives, dies, or changes status.
 	/// Applies consequences directly to the GameSession.
@@ -62,16 +86,9 @@ internal static class NightInteractionResolver
 						infection));
 			}
 
-		var committedAttempts = nightActions
-			.SelectMany(log =>
-				(log.TargetIds ?? []).Select(targetId =>
-					new CommittedNightAttempt(log.ActionType, targetId)))
-			.ToArray();
-		var defenderTargets = committedAttempts
-			.Where(attempt =>
-				attempt.ActionType == NightActionType.DefenderProtect)
-			.Select(attempt => attempt.TargetId)
-			.ToHashSet();
+		var committedAttempts = GetCommittedNightAttempts(nightActions);
+		var defenderTargets = GetDefenderTargets(committedAttempts);
+		var elderRole = GetElderRole(session);
 		var elderProtectionConsumedThisResolution = new HashSet<Guid>();
 		var lethalPhysicalTargets = new HashSet<Guid>();
 		var orderedLethalTargets = new List<Guid>();
@@ -81,9 +98,10 @@ internal static class NightInteractionResolver
 			bool isInfection)
 		{
 			var player = session.GetPlayer(attempt.TargetId);
-			var defenderBlocksPhysical =
-				defenderTargets.Contains(player.Id) &&
-				player.State.MainRole != MainRoleType.LittleGirl;
+			var defenderBlocksPhysical = DefenderBlocksPhysicalAttack(
+				session,
+				defenderTargets,
+				player.Id);
 			if (!isInfection && defenderBlocksPhysical)
 			{
 				return;
@@ -91,7 +109,8 @@ internal static class NightInteractionResolver
 
 			if (player.State.MainRole == MainRoleType.Elder &&
 			    !player.State.HasStatusEffect(
-				    StatusEffectTypes.ElderProtectionLost))
+				    StatusEffectTypes.ElderProtectionLost) &&
+			    elderRole.IsResistanceAvailable(session, player))
 			{
 				session.ApplyStatusEffect(
 					StatusEffectTypes.ElderProtectionLost,
@@ -246,5 +265,101 @@ internal static class NightInteractionResolver
 			// --- Record the consequence so public Role Reveal can precede elimination ---
 			session.DetermineDawnVictim(targetId, eliminationReason);
 		}
+	}
+
+	internal static ElderRole GetElderRole(GameSession session)
+	{
+		var listenerId = ListenerIdentifier.Listener(MainRoleType.Elder);
+		if (session.TryGetExistingListener<ElderRole>(
+				listenerId,
+				out var elderRole))
+		{
+			return elderRole;
+		}
+
+		if (!GameFlowManager.ListenerFactories.TryGetValue(
+				listenerId,
+				out var factory) ||
+		    session.GetOrCreateListener(listenerId, factory) is not
+			    ElderRole createdElderRole)
+		{
+			throw new InvalidOperationException(
+				"The admitted Elder Role listener is unavailable.");
+		}
+
+		return createdElderRole;
+	}
+
+	private static CommittedNightAttempt[] GetCommittedNightAttempts(
+		GameSession session) =>
+		GetCommittedNightAttempts(
+			GameSessionQueries.GetOrderedNightActionsThisNight(
+				session,
+				DawnResolutionActionTypes));
+
+	private static CommittedNightAttempt[] GetCommittedNightAttempts(
+		IEnumerable<NightActionLogEntry> nightActions) =>
+		nightActions
+			.SelectMany(log =>
+				(log.TargetIds ?? []).Select(targetId =>
+					new CommittedNightAttempt(log.ActionType, targetId)))
+			.ToArray();
+
+	private static HashSet<Guid> GetDefenderTargets(
+		IEnumerable<CommittedNightAttempt> attempts) =>
+		attempts
+			.Where(attempt =>
+				attempt.ActionType == NightActionType.DefenderProtect)
+			.Select(attempt => attempt.TargetId)
+			.ToHashSet();
+
+	private static IEnumerable<CommittedNightAttempt>
+		GetCanonicalWerewolfAttackAttempts(
+		IReadOnlyCollection<CommittedNightAttempt> committedAttempts)
+	{
+		var infectionAttempts = committedAttempts
+			.Where(attempt =>
+				attempt.ActionType ==
+				NightActionType.AccursedWolfFatherInfection)
+			.ToArray();
+		foreach (var attempt in infectionAttempts.Length > 0
+			         ? infectionAttempts
+			         : committedAttempts.Where(attempt =>
+				         attempt.ActionType ==
+				         NightActionType.WerewolfVictimSelection))
+		{
+			yield return attempt;
+		}
+
+		foreach (var attempt in committedAttempts.Where(attempt =>
+			         attempt.ActionType ==
+			         NightActionType.WhiteWerewolfVictimSelection))
+		{
+			yield return attempt;
+		}
+
+		foreach (var attempt in committedAttempts.Where(attempt =>
+			         attempt.ActionType ==
+			         NightActionType.BigBadWolfVictimSelection))
+		{
+			yield return attempt;
+		}
+	}
+
+	private static bool DefenderBlocksPhysicalAttack(
+		GameSession session,
+		IReadOnlySet<Guid> defenderTargets,
+		Guid targetId) =>
+		defenderTargets.Contains(targetId) &&
+		session.GetPlayerState(targetId).MainRole !=
+		MainRoleType.LittleGirl;
+
+	private static bool CanTargetBeElder(
+		GameSession session,
+		Guid targetId)
+	{
+		var state = session.GetPlayerState(targetId);
+		return state.CurrentRole is null or MainRoleType.Elder &&
+		       state.ModeratorKnownRole is null or MainRoleType.Elder;
 	}
 }

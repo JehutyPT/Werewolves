@@ -83,6 +83,7 @@ internal class SeerRole : ImmediateFeedbackNightRoleHookListener
 				"No alive Seer found for Role Power availability.");
 		var context = _rolePowerAvailabilityGateway.Evaluate(
 			new RolePowerAttempt(
+				session,
 				seerPlayer,
 				MainRoleType.Seer,
 				WerewolfDetectionPower,

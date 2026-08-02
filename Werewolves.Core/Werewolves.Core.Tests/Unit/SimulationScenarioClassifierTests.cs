@@ -463,6 +463,37 @@ public class SimulationScenarioClassifierTests
 	}
 
 	[Fact]
+	public void Classify_Elder_IsSafetyScreeningOnly()
+	{
+		var scenario = new SimulationScenario(
+			5,
+			[
+				MainRoleType.Elder,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+
+		var safety = SimulationScenarioClassifier.Classify(
+			scenario,
+			SimulatorCapability.SafetyScreening);
+		var probability = SimulationScenarioClassifier.Classify(
+			scenario,
+			SimulatorCapability.FullProbability);
+
+		safety.AppSupport!.IsSupported.Should().BeTrue();
+		safety.SimulatorSupport!.IsSupported.Should().BeTrue();
+		safety.Cacheability!.CompatibilityIdentity.Profile.Should()
+			.Be(SimulatorCapability.SafetyScreening.Identity);
+		probability.AppSupport!.IsSupported.Should().BeTrue();
+		probability.SimulatorSupport!.IsSupported.Should().BeFalse();
+		probability.SimulatorSupport.UnsupportedRoles.Should()
+			.Equal(MainRoleType.Elder);
+		probability.Cacheability.Should().BeNull();
+	}
+
+	[Fact]
 	public void Classify_Angel_IsSafetyScreeningOnly()
 	{
 		var scenario = new SimulationScenario(

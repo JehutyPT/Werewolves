@@ -308,6 +308,7 @@ internal class SimpleWerewolfRole : StandardNightRoleHookListener
 		    LittleGirlRole.SpyingPower);
 		return _availabilityGateway.Evaluate(
 		        new RolePowerAttempt(
+		            session,
 		            holder,
 		            MainRoleType.LittleGirl,
 		            LittleGirlRole.SpyingPower,

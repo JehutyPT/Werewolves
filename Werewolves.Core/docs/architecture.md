@@ -119,7 +119,8 @@ A lightweight, stateless wrapper that implements `IGameSession` and delegates al
         *   `EliminatePlayer(Guid playerId, EliminationReason reason)`: Eliminates a player by creating a `PlayerEliminatedLogEntry`.
         *   `AssignRole(Guid playerId, MainRoleType role)`: Assigns a role to a single player by creating an `AssignRoleLogEntry`.
         *   `AssignRole(List<Guid> playerIds, MainRoleType role)`: Assigns the same role to multiple players by creating an `AssignRoleLogEntry`.
-        *   `ApplyStatusEffect(StatusEffectTypes effectType, Guid playerId)`: Applies a status effect by creating a `StatusEffectLogEntry`.
+        *   `ApplyStatusEffect(StatusEffectTypes effectType, Guid playerId)`: Applies a status effect by creating a `StatusEffectLogEntry` with `IsActive = true`.
+        *   `RemoveStatusEffect(StatusEffectTypes effectType, Guid playerId)`: Removes a status effect through the same log-backed path with `IsActive = false`.
         *   `TransitionMainPhase(GamePhase newPhase)`: Transitions main phase by creating a `PhaseTransitionLogEntry`.
         *   `PerformNightActionNoTarget(NightActionType type)`: Records a night action with no target.
         *   `PerformNightAction(NightActionType type, Guid targetId)`: Records a night action targeting a single player.
@@ -146,7 +147,7 @@ A lightweight, stateless wrapper that implements `IGameSession` and delegates al
 
 Rule-specific questions over the event log live in `Werewolves.Core.GameLogic.Queries.GameSessionQueries`, not on the `GameSession` state facade. The module operates over `IGameSession` and `GameHistoryLog`, keeping `GameSession` focused on structural state access and mutation commands.
 
-*   **Purpose:** Centralize rules-layer log queries such as current-night targets, dawn eliminations, vote outcomes, unassigned role choices, and Stuttering Judge repeat-vote checks.
+*   **Purpose:** Centralize rules-layer log queries such as current-night targets, dawn eliminations, vote outcomes, unassigned role choices, Stuttering Judge repeat-vote checks, and the session-wide Villager Role Power Suppression commitment and announcement acknowledgment.
 *   **Boundary:** `GameSession` retains structural queries (`GetPlayers`, `GetPlayer`, `GetPlayerState`, `GameHistoryLog`, `RoleInPlayCount`) plus mutation methods. Rule concepts such as "last night", "this dawn", and "current vote target" belong in `GameSessionQueries`.
 *   **Consumers:** Phase handlers and resolvers call `GameSessionQueries` instead of duplicating log scans or adding new rule-specific methods to `GameSession`.
 
@@ -157,8 +158,9 @@ A static helper class that serves as the "Rule Engine" for the Dawn phase, resol
 *   **Purpose:** Decouples the `GameFlowManager` from specific role logic (e.g., Witch vs. Defender vs. Infection).
 *   **Process:**
     1.  **Input:** Accepts the `GameSession` state.
-    2.  **Resolution:** Reads the ordered current-night committed attempts and resolves their target outcomes in canonical global slot order rather than grouping them by Player or Seating Order.
-    3.  **Output:** Records resolution-scoped Dawn victim candidates and applies settled Status Effects. `EliminationCascadeStage` consumes those candidates: pre-reveal interceptions run first, each required generic public reveal commits next, the entire distinct batch is eliminated atomically, and every resulting reaction batch drains before navigation.
+    2.  **Just-in-time Elder identification:** Before resolution, Dawn requests one private exact-Role identification only when the living Elder holder set is still unknown, Villager Role Power Suppression is inactive, and the current Night contains a qualifying attack that survives the Defender precheck. An infection always passes that precheck; a Night whose qualifying physical attacks are all blocked does not identify the Elder.
+    3.  **Resolution:** Reads the ordered current-night committed attempts and resolves their target outcomes in canonical global slot order rather than grouping them by Player or Seating Order.
+    4.  **Output:** Records resolution-scoped Dawn victim candidates and applies settled Status Effects. `EliminationCascadeStage` consumes those candidates: pre-reveal interceptions run first, each required generic public reveal commits next, the entire distinct batch is eliminated atomically, and every resulting reaction batch drains before navigation.
 
 *   **Resolution Priority & Special Rules:**
     1.  **Collective Slot:** A committed Accursed Wolf-Father infection globally replaces the collective physical Werewolf attempt; otherwise the collective physical attempt resolves first.
@@ -171,6 +173,16 @@ A static helper class that serves as the "Rule Engine" for the Dawn phase, resol
     7.  **Independent Lethal Actions:** The following actions ignore Defender protection and Witch healing:
         *   **Witch Kill (Death Potion):** Cannot be blocked or prevented.
         *   **Rusty Sword:** The Knight's posthumous revenge attack cannot be blocked.
+
+The authoritative interaction semantics remain in the [game-rule clarifications](../../docs/domain/game-rules-clarifications.md#night-action-resolution); this document records only their architectural placement.
+
+## Role Power Availability
+
+`RolePowerAvailabilityGateway` is the single execution boundary for Role Power attempts. It validates that the attempt, concrete power instance, and optional One-Use Resource share the same source identity, then delegates to a decorated `IRolePowerAvailabilityPolicy` chain.
+
+*   `VillagerRolePowerSuppressionPolicy` decorates the next policy and reads the session-wide suppression fact through `GameSessionQueries.IsVillagerRolePowerSuppressionActive(...)`.
+*   Suppression is decided from `RolePowerAttempt.SourceRole.GetRoleGroup()`, so it follows the Role supplying the power rather than the acting Player's Faction or the power category. The policy denies a new Villager Role Power attempt and otherwise delegates unchanged.
+*   The policy remains derived from the append-only session log; Roles do not own independent suppression flags. Detailed scope and already-committed-effect semantics live in the [Role Powers and New Moon Assignments clarification](../../docs/domain/game-rules-clarifications.md#role-powers-and-new-moon-assignments).
 
 The chosen architecture utilizes a dedicated `PlayerState` wrapper class. This class contains individual properties (e.g., `HasVotingRight`, `DurableVotingPower`) for all dynamic boolean and data-carrying states, typically using `internal set` for controlled modification. The `Player` class then holds a single instance of `PlayerState`. This approach provides a balance of organization (grouping all volatile states together), strong typing, clear separation of concerns (keeping `Player` focused on identity/role), and strict encapsulation.
 
@@ -605,7 +617,7 @@ Located in `Werewolves.Core.StateModels/Extensions/MainRoleTypeExtensions.cs`. P
     *   **Accusation Voting:** *(Not yet implemented)* Reserved for accusation-based voting mechanics.
     *   **Friend Voting:** *(Not yet implemented)* Reserved for friend-based voting mechanics (e.g., Angel event).
     *   **Handle Non Tie Vote:** Runs a fresh vote-scoped `EliminationCascadeStage`. It reveals the target, settles pre-commit interception such as Village Idiot lynching immunity, commits any resulting Day Vote elimination, drains reactions, and only then transitions to `ProcessVoteOutcome`.
-    *   **Process Vote Outcome:** Fires `GameHook.OnVoteConcluded`, then starts a fresh vote when a Consecutive Vote is required or advances to `Finalize`.
+    *   **Process Vote Outcome:** Runs only after the vote-scoped Elimination Cascade is complete, then fires `GameHook.OnVoteConcluded`. The Elder listener can commit session-wide Villager Role Power Suppression and pause for its public confirmation here; only after every listener completes does the navigation stage start an already-committed Consecutive Vote or advance to `Finalize`.
     *   **Finalize:** Transitions to `GamePhase.Night`. Victory is checked at this transition.
 
 # Game Logs 
@@ -628,13 +640,15 @@ The chosen approach is an abstract base class (`GameLogEntryBase`) providing uni
 3.  **`NightActionLogEntry`:** Records non-deterministic player choices made during the night (e.g., Seer check, Werewolf attack, Witch potion).
 4.  **`PhaseTransitionLogEntry`:** Records the transition between main game phases (`Night` -> `Dawn`, etc.).
 5.  **`PlayerEliminatedLogEntry`:** Records the elimination of a player and the reason (Vote, Attack, etc.).
-6.  **`StatusEffectLogEntry`:** Records the application of a status effect (e.g., `ElderProtectionLost`, `LycanthropyInfection`, `WildChildChanged`). Note: Currently only application is implemented; removal is not handled.
+6.  **`StatusEffectLogEntry`:** Records application or removal of a status effect (e.g., `ElderProtectionLost`, `LycanthropyInfection`, `WildChildChanged`) through its typed `IsActive` value.
 7.  **`VictoryConditionMetLogEntry`:** Records that a specific team has met their win condition.
 8.  **`VoteOutcomeReportedLogEntry`:** Records the result of a day vote (who was eliminated, or if it was a tie).
 9.  **`RoleRevealLogEntry`:** Records one public Role Reveal fact for the complete revealed batch.
 10. **`EliminationCascadeBatchResolvedLogEntry`:** Records a scoped requested batch and its actual committed eliminations. A zero-commit Vote interception remains durable while its consequence announcement is pending.
 11. **`EliminationCascadeReactionCompletedLogEntry`:** Records a reaction's scoped triggering batch and the exact elimination candidates it admitted, allowing recovery to skip the completed side effect and reconstruct its child work.
 12. **`EliminationCascadeCompletedLogEntry`:** Records that one Dawn or vote-scoped cascade drained completely.
+13. **`VillagerRolePowerSuppressionCommittedLogEntry`:** Records the continuing session-wide suppression fact and its announcement instruction correlation ID, without private holder identity or localized announcement text.
+14. **`VillagerRolePowerSuppressionAnnouncementAcknowledgedLogEntry`:** Records delivery acknowledgment for that same correlation ID, also without private holder data.
 
 This list covers the distinct, loggable events derived from the rules. Each entry captures unique information critical for game logic, auditing, or moderator context.
 
@@ -785,6 +799,8 @@ The Core persistence boundary is `IGameSession.Serialize()` plus `GameService.Re
 *   **Rehydration:** `GameService.RehydrateSession(string serializedSession)` restores the stable snapshot into a new active session and returns the session's GUID.
 
 **Committed response checkpoints:** the landed Thief flow creates one narrow mid-Night stable checkpoint atomically with a successful `Offer1`, `Offer2`, or `Decline` response. That checkpoint contains the committed outcome, resulting card zones, current Role and fresh power state, and the pending public sleep instruction before Core returns success. Devoted Servant applies the same semantic-boundary pattern after the accepted public self-reveal and again after the accepted private swap record. Neither flow serializes arbitrary listener progress.
+
+**Elder suppression recovery:** the suppression commitment and its pending public `ConfirmationInstruction` form a stable boundary. Rehydration derives active suppression from the committed log fact and reconstructs the `OnVoteConcluded` listener continuation by matching `ModeratorInstructionSemantic.AnnounceVillagerRolePowerSuppression` and the correlation ID. After confirmation, the acknowledgment fact prevents the announcement from being repeated before vote-outcome navigation continues. The durable facts contain neither the private Elder holder nor localized prose.
 
 ## Durable Payload
 

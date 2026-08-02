@@ -1,5 +1,7 @@
+using Werewolves.Core.GameLogic.Queries;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 
@@ -108,6 +110,7 @@ internal sealed record OneUseRolePowerResource(
 	RolePowerInstance OwningPowerInstance);
 
 internal sealed record RolePowerAttempt(
+	IGameSession Session,
 	IPlayer ActingPlayer,
 	MainRoleType SourceRole,
 	RolePowerDefinition SourcePower,
@@ -124,6 +127,7 @@ internal sealed record RolePowerExecutionContext(
 	RolePowerAttempt Attempt,
 	RolePowerAvailabilityResult AvailabilityResult)
 {
+	internal IGameSession Session => Attempt.Session;
 	internal IPlayer ActingPlayer => Attempt.ActingPlayer;
 	internal MainRoleType SourceRole => Attempt.SourceRole;
 	internal RolePowerDefinition SourcePower => Attempt.SourcePower;
@@ -146,6 +150,30 @@ internal sealed class AllowAllRolePowerAvailabilityPolicy : IRolePowerAvailabili
 		RolePowerAvailabilityResult.Allowed;
 }
 
+internal sealed class VillagerRolePowerSuppressionPolicy : IRolePowerAvailabilityPolicy
+{
+	private readonly IRolePowerAvailabilityPolicy _next;
+
+	internal VillagerRolePowerSuppressionPolicy(
+		IRolePowerAvailabilityPolicy next)
+	{
+		ArgumentNullException.ThrowIfNull(next);
+		_next = next;
+	}
+
+	public RolePowerAvailabilityResult Evaluate(RolePowerAttempt attempt)
+	{
+		if (attempt.SourceRole.GetRoleGroup() == RoleGroup.Villagers &&
+		    GameSessionQueries.IsVillagerRolePowerSuppressionActive(
+			    attempt.Session))
+		{
+			return RolePowerAvailabilityResult.Denied;
+		}
+
+		return _next.Evaluate(attempt);
+	}
+}
+
 internal sealed class RolePowerAvailabilityGateway
 {
 	private readonly IRolePowerAvailabilityPolicy _policy;
@@ -159,6 +187,7 @@ internal sealed class RolePowerAvailabilityGateway
 	internal RolePowerExecutionContext Evaluate(RolePowerAttempt attempt)
 	{
 		ArgumentNullException.ThrowIfNull(attempt);
+		ArgumentNullException.ThrowIfNull(attempt.Session);
 		ArgumentNullException.ThrowIfNull(attempt.ActingPlayer);
 		ArgumentNullException.ThrowIfNull(attempt.SourcePower);
 		ArgumentNullException.ThrowIfNull(attempt.PowerInstance);

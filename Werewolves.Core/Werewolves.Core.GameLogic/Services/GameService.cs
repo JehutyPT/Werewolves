@@ -52,7 +52,9 @@ public class GameService
 		ArgumentNullException.ThrowIfNull(
 			eliminationCascadeReactionExtensions);
 		_roleAdmissions = SupportedRoleCatalog.CreateAdmissions(
-			new RolePowerAvailabilityGateway(rolePowerAvailabilityPolicy));
+			new RolePowerAvailabilityGateway(
+				new VillagerRolePowerSuppressionPolicy(
+					rolePowerAvailabilityPolicy)));
 		_eliminationCascadeReactionExtensions =
 			eliminationCascadeReactionExtensions.ToArray();
 	}
