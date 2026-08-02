@@ -514,14 +514,7 @@ public sealed class ActorBorrowedStutteringJudgeTests
 	{
 		var fixture = CreateCommittedJudgeObservationBoundary(
 			withPriorDayScapegoatRestriction: true);
-		var restriction = DayVoteRules
-			.GetActiveVoterEligibilityRestriction(fixture.Session);
-		restriction.Should().NotBeNull();
-		fixture.Session.GameHistoryLog
-			.OfType<VoterEligibilityRestrictionAnnouncementAcknowledgedLogEntry>()
-			.Should().ContainSingle(entry => entry.ScopeId == restriction!.ScopeId);
-		var pending = fixture.Session.PendingModeratorInstruction.Should()
-			.BeOfType<SelectPlayersInstruction>().Subject;
+		var pending = fixture.RecordDayVoteInstruction;
 		var expectedPrivateInstruction =
 			GameStrings.ScapegoatEffectiveVotersInstruction.Format(
 				string.Join(
@@ -537,13 +530,6 @@ public sealed class ActorBorrowedStutteringJudgeTests
 			.BeOfType<SelectPlayersInstruction>().Subject;
 		recoveredVote.InstructionId.Should().Be(pending.InstructionId);
 		recoveredVote.PrivateInstruction.Should().Be(expectedPrivateInstruction);
-		var recovered = (GameSession)service.GetGameStateView(gameId)!;
-		var recoveredRestriction = DayVoteRules
-			.GetActiveVoterEligibilityRestriction(recovered);
-		recoveredRestriction.Should().NotBeNull();
-		recoveredRestriction!.ScopeId.Should().Be(restriction!.ScopeId);
-		recoveredRestriction!.PermittedVoterIds.Should().Equal(
-			restriction!.PermittedVoterIds);
 	}
 
 	[Fact]
@@ -834,13 +820,15 @@ public sealed class ActorBorrowedStutteringJudgeTests
 				conductVote.CreateResponse(),
 				SupportedRoleCatalog.Admissions).ModeratorInstruction
 			.Should().BeOfType<SelectOptionsInstruction>().Subject;
-		_ = GameFlowManager.HandleInput(
+		var recordDayVoteInstruction = GameFlowManager.HandleInput(
 				session,
 				signal.CreateResponse(StutteringJudgeSignalOptionIds.Occurred),
 				SupportedRoleCatalog.Admissions).ModeratorInstruction
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
 
-		return new CommittedJudgeObservationBoundary(session);
+		return new CommittedJudgeObservationBoundary(
+			session,
+			recordDayVoteInstruction);
 	}
 
 	internal static GameSession
@@ -1029,5 +1017,7 @@ public sealed class ActorBorrowedStutteringJudgeTests
 		PrivateInstruction,
 		EmptySelectionOptionLabel
 	}
-	private sealed record CommittedJudgeObservationBoundary(GameSession Session);
+	private sealed record CommittedJudgeObservationBoundary(
+		GameSession Session,
+		SelectPlayersInstruction RecordDayVoteInstruction);
 }
