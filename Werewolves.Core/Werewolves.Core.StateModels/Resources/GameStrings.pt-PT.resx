@@ -217,6 +217,10 @@
     <value>O Anjo foi eliminado durante a sua janela de vitória inicial.</value>
     <comment/>
   </data>
+  <data name="VictoryConditionPrejudicedManipulatorOpposingGroupEliminated" xml:space="preserve">
+    <value>Todos os jogadores do grupo oposto ao Manipulador foram eliminados.</value>
+    <comment/>
+  </data>
   <data name="VictoryConditionShared" xml:space="preserve">
     <value>Várias facções venceram em conjunto.</value>
     <comment/>

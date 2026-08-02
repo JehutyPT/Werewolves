@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Werewolves.Core.GameLogic.Simulation;
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Simulation;
 using Xunit;
 
@@ -552,5 +553,116 @@ public class SimulationScenarioClassifierTests
 		probability.SimulatorSupport.UnsupportedRoles.Should()
 			.Equal(MainRoleType.KnightWithRustySword);
 		probability.Cacheability.Should().BeNull();
+	}
+
+	[Fact]
+	public void Classify_SamePrintedPrejudicedManipulatorOffersWithExactPartition_IsRulesValidAndSafetySupported()
+	{
+		MainRoleType[] dealPool =
+		[
+			MainRoleType.Thief,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager
+		];
+		var scenario = new SimulationScenario(
+			5,
+			dealPool.Concat(
+			[
+				MainRoleType.PrejudicedManipulator,
+				MainRoleType.PrejudicedManipulator
+			]),
+			dealPool,
+			MainRoleType.PrejudicedManipulator,
+			MainRoleType.PrejudicedManipulator,
+			publicGroupPartition: CanonicalPublicGroupPartition.Create(
+				5,
+				[1, 3],
+				[2, 4, 5]));
+
+		var classification = SimulationScenarioClassifier.Classify(
+			scenario,
+			SimulatorCapability.SafetyScreening);
+
+		classification.RulesValidity.IsValid.Should().BeTrue();
+		classification.RulesValidity.Errors.Should().BeEmpty();
+		classification.AppSupport!.IsSupported.Should().BeTrue();
+		classification.SimulatorSupport!.IsSupported.Should().BeTrue();
+		classification.Cacheability!.CompatibilityIdentity.Scenario.Should().Be(
+			scenario.ToCanonical());
+	}
+
+	[Fact]
+	public void Classify_DealPoolAndOfferPrejudicedManipulators_IsBranchwiseInvalid()
+	{
+		MainRoleType[] dealPool =
+		[
+			MainRoleType.Thief,
+			MainRoleType.PrejudicedManipulator,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager
+		];
+		var scenario = new SimulationScenario(
+			5,
+			dealPool.Concat(
+				[MainRoleType.PrejudicedManipulator, MainRoleType.Seer]),
+			dealPool,
+			MainRoleType.PrejudicedManipulator,
+			MainRoleType.Seer,
+			publicGroupPartition: CanonicalPublicGroupPartition.Create(
+				5,
+				[1, 3],
+				[2, 4, 5]));
+
+		var classification = SimulationScenarioClassifier.Classify(
+			scenario,
+			SimulatorCapability.SafetyScreening);
+
+		classification.RulesValidity.IsValid.Should().BeFalse();
+		classification.RulesValidity.Errors.Should().ContainSingle(error =>
+			error.Type == GameConfigValidationErrorType.RoleCountMismatch &&
+			error.Message.Contains(
+				"PrejudicedManipulator",
+				StringComparison.Ordinal));
+		classification.AppSupport.Should().BeNull();
+		classification.SimulatorSupport.Should().BeNull();
+		classification.Cacheability.Should().BeNull();
+	}
+
+	[Fact]
+	public void Classify_SamePrintedPrejudicedManipulatorOffersWithoutPartition_StopsAtRulesValidity()
+	{
+		MainRoleType[] dealPool =
+		[
+			MainRoleType.Thief,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager
+		];
+		var scenario = new SimulationScenario(
+			5,
+			dealPool.Concat(
+			[
+				MainRoleType.PrejudicedManipulator,
+				MainRoleType.PrejudicedManipulator
+			]),
+			dealPool,
+			MainRoleType.PrejudicedManipulator,
+			MainRoleType.PrejudicedManipulator);
+
+		var classification = SimulationScenarioClassifier.Classify(
+			scenario,
+			SimulatorCapability.SafetyScreening);
+
+		classification.RulesValidity.IsValid.Should().BeFalse();
+		classification.RulesValidity.Errors.Should().ContainSingle(error =>
+			error.Type ==
+				GameConfigValidationErrorType.PublicGroupPartitionMismatch);
+		classification.AppSupport.Should().BeNull();
+		classification.SimulatorSupport.Should().BeNull();
+		classification.Cacheability.Should().BeNull();
 	}
 }

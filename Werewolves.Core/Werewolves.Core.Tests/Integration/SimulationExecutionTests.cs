@@ -184,6 +184,464 @@ public class SimulationExecutionTests : DiagnosticTestBase
 	}
 
 	[Fact]
+	public void ExecuteBatch_WithDealPoolPrejudicedManipulatorAndExactPartition_CompletesAllOneThousandAttempts()
+	{
+		var partition = CanonicalPublicGroupPartition.Create(
+			7,
+			[1, 3, 5],
+			[2, 4, 6, 7]);
+		var scenario = new SimulationScenario(
+			7,
+			[
+				MainRoleType.PrejudicedManipulator,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			],
+			publicGroupPartition: partition);
+		var identity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+
+		var batch = new SimulationExecutor().ExecuteBatch(
+			scenario,
+			SimulatorCapability.SafetyScreening,
+			identity,
+			runCount: 1_000);
+
+		scenario.ToCanonical().PublicGroupPartition.Should().Be(partition);
+		batch.Records.Should().HaveCount(1_000);
+		batch.CompletedRunCount.Should().Be(1_000);
+		batch.IncompleteRunCount.Should().Be(0);
+		batch.Records.Should().OnlyContain(run => run is CompletedSimulationRun);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void ExecuteBatch_WithPrejudicedManipulatorInOffer1_CompletesAllOneThousandAttempts()
+	{
+		MainRoleType[] dealPool =
+		[
+			MainRoleType.Thief,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager
+		];
+		var partition = CanonicalPublicGroupPartition.Create(
+			5,
+			[1, 3],
+			[2, 4, 5]);
+		var scenario = new SimulationScenario(
+			5,
+			dealPool.Concat(
+				[MainRoleType.PrejudicedManipulator, MainRoleType.Seer]),
+			dealPool,
+			MainRoleType.PrejudicedManipulator,
+			MainRoleType.Seer,
+			publicGroupPartition: partition);
+		var identity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+
+		var batch = new SimulationExecutor().ExecuteBatch(
+			scenario,
+			SimulatorCapability.SafetyScreening,
+			identity,
+			runCount: 1_000);
+
+		scenario.ToCanonical().Offer1Role.Should()
+			.Be(MainRoleType.PrejudicedManipulator);
+		scenario.ToCanonical().Offer2Role.Should().Be(MainRoleType.Seer);
+		scenario.ThiefOfferBranchPolicy!.Branches.Should().Equal(
+			ThiefOfferBranch.Offer1,
+			ThiefOfferBranch.Offer2,
+			ThiefOfferBranch.Decline);
+		batch.Records.Should().HaveCount(1_000);
+		batch.CompletedRunCount.Should().Be(1_000);
+		batch.IncompleteRunCount.Should().Be(0);
+		batch.Records.Should().OnlyContain(run => run is CompletedSimulationRun);
+		MarkTestCompleted();
+	}
+
+	[Theory]
+	[InlineData(
+		0,
+		ThiefOfferOptionIds.Offer1,
+		MainRoleType.PrejudicedManipulator)]
+	[InlineData(1, ThiefOfferOptionIds.Offer2, MainRoleType.Seer)]
+	[InlineData(2, ThiefOfferOptionIds.Decline, null)]
+	public void HeadlessSafety_PrejudicedManipulatorInOffer1_ForcesEveryLegalBranchWithoutRedundantIdentification(
+		long runNumber,
+		string expectedOptionId,
+		MainRoleType? expectedAcquiredRole)
+	{
+		MainRoleType[] dealPool =
+		[
+			MainRoleType.Thief,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager
+		];
+		var scenario = new SimulationScenario(
+			5,
+			dealPool.Concat(
+				[MainRoleType.PrejudicedManipulator, MainRoleType.Seer]),
+			dealPool,
+			MainRoleType.PrejudicedManipulator,
+			MainRoleType.Seer,
+			publicGroupPartition: CanonicalPublicGroupPartition.Create(
+				5,
+				[1, 3],
+				[2, 4, 5]));
+		var identity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+		var material = new RunSeedMaterial(
+			identity,
+			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
+			runNumber);
+		var random = new DeterministicRandomSource(material);
+		var startState = SimulationStartStateDeriver.Derive(
+			material,
+			SimulatorCapability.SafetyScreening,
+			random);
+		var recorder = new RecordingDecisionStrategy(
+			new BaselineRandomDecisionStrategy(
+				material,
+				startState,
+				SimulatorCapability.SafetyScreening.HeadlessResponsePolicy,
+				random));
+
+		var execution = new HeadlessGameDriver(recorder).CompleteGameSession(
+			startState,
+			CancellationToken.None);
+
+		startState.CanonicalScenario.Offer1Role.Should().Be(
+			MainRoleType.PrejudicedManipulator);
+		startState.CanonicalScenario.Offer2Role.Should().Be(MainRoleType.Seer);
+		var choice = recorder.Observations.Should()
+			.ContainSingle(observation =>
+				observation.Instruction.Semantic ==
+				ModeratorInstructionSemantic.ChooseThiefOffer)
+			.Subject;
+		choice.Response.SelectedOptionIds.Should().Equal(expectedOptionId);
+		var swaps = execution.Session.GameHistoryLog
+			.OfType<PermanentRoleSwapCommittedLogEntry>()
+			.ToArray();
+		var declines = execution.Session.GameHistoryLog
+			.OfType<ThiefOfferDeclinedLogEntry>()
+			.ToArray();
+		if (expectedOptionId == ThiefOfferOptionIds.Decline)
+		{
+			swaps.Should().BeEmpty();
+			declines.Should().ContainSingle();
+		}
+		else
+		{
+			declines.Should().BeEmpty();
+			swaps.Should().ContainSingle().Which.NewCurrentRole.Should().Be(
+				expectedAcquiredRole);
+		}
+		recorder.Observations
+			.Select(observation => observation.Instruction)
+			.OfType<SelectPlayersInstruction>()
+			.Should().NotContain(instruction =>
+				instruction.Semantic ==
+					ModeratorInstructionSemantic.IdentifyRoleHolders &&
+				instruction.RoleIdentification ==
+					MainRoleType.PrejudicedManipulator);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void ExecuteBatch_WithPrejudicedManipulatorInOffer2_CompletesAllOneThousandAttempts()
+	{
+		MainRoleType[] dealPool =
+		[
+			MainRoleType.Thief,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager
+		];
+		var partition = CanonicalPublicGroupPartition.Create(
+			5,
+			[1, 3],
+			[2, 4, 5]);
+		var scenario = new SimulationScenario(
+			5,
+			dealPool.Concat(
+				[MainRoleType.Seer, MainRoleType.PrejudicedManipulator]),
+			dealPool,
+			MainRoleType.Seer,
+			MainRoleType.PrejudicedManipulator,
+			publicGroupPartition: partition);
+		var identity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+
+		var batch = new SimulationExecutor().ExecuteBatch(
+			scenario,
+			SimulatorCapability.SafetyScreening,
+			identity,
+			runCount: 1_000);
+
+		scenario.ToCanonical().Offer1Role.Should().Be(MainRoleType.Seer);
+		scenario.ToCanonical().Offer2Role.Should()
+			.Be(MainRoleType.PrejudicedManipulator);
+		scenario.ThiefOfferBranchPolicy!.Branches.Should().Equal(
+			ThiefOfferBranch.Offer1,
+			ThiefOfferBranch.Offer2,
+			ThiefOfferBranch.Decline);
+		batch.Records.Should().HaveCount(1_000);
+		batch.CompletedRunCount.Should().Be(1_000);
+		batch.IncompleteRunCount.Should().Be(0);
+		batch.Records.Should().OnlyContain(run => run is CompletedSimulationRun);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void HeadlessSafety_PrejudicedManipulatorInOffer2_ForcesOffer2AcquisitionWithoutRedundantIdentification()
+	{
+		MainRoleType[] dealPool =
+		[
+			MainRoleType.Thief,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager
+		];
+		var scenario = new SimulationScenario(
+			5,
+			dealPool.Concat(
+				[MainRoleType.Seer, MainRoleType.PrejudicedManipulator]),
+			dealPool,
+			MainRoleType.Seer,
+			MainRoleType.PrejudicedManipulator,
+			publicGroupPartition: CanonicalPublicGroupPartition.Create(
+				5,
+				[1, 3],
+				[2, 4, 5]));
+		var identity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+		var material = new RunSeedMaterial(
+			identity,
+			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
+			runNumber: 1);
+		var random = new DeterministicRandomSource(material);
+		var startState = SimulationStartStateDeriver.Derive(
+			material,
+			SimulatorCapability.SafetyScreening,
+			random);
+		var recorder = new RecordingDecisionStrategy(
+			new BaselineRandomDecisionStrategy(
+				material,
+				startState,
+				SimulatorCapability.SafetyScreening.HeadlessResponsePolicy,
+				random));
+
+		var execution = new HeadlessGameDriver(recorder).CompleteGameSession(
+			startState,
+			CancellationToken.None);
+
+		startState.CanonicalScenario.Offer1Role.Should().Be(MainRoleType.Seer);
+		startState.CanonicalScenario.Offer2Role.Should().Be(
+			MainRoleType.PrejudicedManipulator);
+		var choice = recorder.Observations.Should()
+			.ContainSingle(observation =>
+				observation.Instruction.Semantic ==
+				ModeratorInstructionSemantic.ChooseThiefOffer)
+			.Subject;
+		choice.Response.SelectedOptionIds.Should().Equal(
+			ThiefOfferOptionIds.Offer2);
+		execution.Session.GameHistoryLog
+			.OfType<PermanentRoleSwapCommittedLogEntry>()
+			.Should().ContainSingle().Which.NewCurrentRole.Should().Be(
+				MainRoleType.PrejudicedManipulator);
+		execution.Session.GameHistoryLog
+			.OfType<ThiefOfferDeclinedLogEntry>()
+			.Should().BeEmpty();
+		recorder.Observations
+			.Select(observation => observation.Instruction)
+			.OfType<SelectPlayersInstruction>()
+			.Should().NotContain(instruction =>
+				instruction.Semantic ==
+					ModeratorInstructionSemantic.IdentifyRoleHolders &&
+				instruction.RoleIdentification ==
+					MainRoleType.PrejudicedManipulator);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void ExecuteBatch_WithSamePrintedPrejudicedManipulatorOffers_CompletesAllOneThousandAttemptsAcrossDeduplicatedBranches()
+	{
+		MainRoleType[] dealPool =
+		[
+			MainRoleType.Thief,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager
+		];
+		var partition = CanonicalPublicGroupPartition.Create(
+			5,
+			[1, 3],
+			[2, 4, 5]);
+		var scenario = new SimulationScenario(
+			5,
+			dealPool.Concat(
+			[
+				MainRoleType.PrejudicedManipulator,
+				MainRoleType.PrejudicedManipulator
+			]),
+			dealPool,
+			MainRoleType.PrejudicedManipulator,
+			MainRoleType.PrejudicedManipulator,
+			publicGroupPartition: partition);
+		var identity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+
+		var batch = new SimulationExecutor().ExecuteBatch(
+			scenario,
+			SimulatorCapability.SafetyScreening,
+			identity,
+			runCount: 1_000);
+
+		scenario.ToCanonical().Offer1Role.Should().Be(
+			MainRoleType.PrejudicedManipulator);
+		scenario.ToCanonical().Offer2Role.Should().Be(
+			MainRoleType.PrejudicedManipulator);
+		scenario.ThiefOfferBranchPolicy!.Branches.Should().Equal(
+			ThiefOfferBranch.Offer1,
+			ThiefOfferBranch.Decline);
+		batch.Records.Should().HaveCount(1_000);
+		batch.CompletedRunCount.Should().Be(1_000);
+		batch.IncompleteRunCount.Should().Be(0);
+		batch.Records.Should().OnlyContain(run => run is CompletedSimulationRun);
+		MarkTestCompleted();
+	}
+
+	[Theory]
+	[InlineData(0, ThiefOfferOptionIds.Offer1)]
+	[InlineData(1, ThiefOfferOptionIds.Decline)]
+	public void HeadlessSafety_SamePrintedPrejudicedManipulatorOffers_ForceDeduplicatedAcquisitionAndDecline(
+		long runNumber,
+		string expectedOptionId)
+	{
+		MainRoleType[] dealPool =
+		[
+			MainRoleType.Thief,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager
+		];
+		var scenario = new SimulationScenario(
+			5,
+			dealPool.Concat(
+			[
+				MainRoleType.PrejudicedManipulator,
+				MainRoleType.PrejudicedManipulator
+			]),
+			dealPool,
+			MainRoleType.PrejudicedManipulator,
+			MainRoleType.PrejudicedManipulator,
+			publicGroupPartition: CanonicalPublicGroupPartition.Create(
+				5,
+				[1, 3],
+				[2, 4, 5]));
+		var identity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+		var material = new RunSeedMaterial(
+			identity,
+			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
+			runNumber);
+		var random = new DeterministicRandomSource(material);
+		var startState = SimulationStartStateDeriver.Derive(
+			material,
+			SimulatorCapability.SafetyScreening,
+			random);
+		var recorder = new RecordingDecisionStrategy(
+			new BaselineRandomDecisionStrategy(
+				material,
+				startState,
+				SimulatorCapability.SafetyScreening.HeadlessResponsePolicy,
+				random));
+
+		var execution = new HeadlessGameDriver(recorder).CompleteGameSession(
+			startState,
+			CancellationToken.None);
+
+		startState.CanonicalScenario.Offer1Role.Should().Be(
+			MainRoleType.PrejudicedManipulator);
+		startState.CanonicalScenario.Offer2Role.Should().Be(
+			MainRoleType.PrejudicedManipulator);
+		startState.CanonicalScenario.ThiefOfferBranchPolicy!.Branches.Should().Equal(
+			ThiefOfferBranch.Offer1,
+			ThiefOfferBranch.Decline);
+		var lockIn = execution.Session.RoleLockIn;
+		lockIn.RoleComposition.Should().HaveCount(7);
+		lockIn.RoleComposition.Select(card => card.PrintedRole).Should().BeEquivalentTo(
+			dealPool.Concat(
+			[
+				MainRoleType.PrejudicedManipulator,
+				MainRoleType.PrejudicedManipulator
+			]));
+		lockIn.RoleComposition.Select(card => card.Id).Should().OnlyHaveUniqueItems();
+		lockIn.DealPool.Should().HaveCount(5);
+		lockIn.DealPool.Select(card => card.PrintedRole).Should().BeEquivalentTo(
+			dealPool);
+		lockIn.Offer1!.PrintedRole.Should().Be(
+			MainRoleType.PrejudicedManipulator);
+		lockIn.Offer2!.PrintedRole.Should().Be(
+			MainRoleType.PrejudicedManipulator);
+		lockIn.Offer1.Id.Should().NotBe(lockIn.Offer2.Id);
+		lockIn.RoleComposition.Should().Contain(card => card.Id == lockIn.Offer1.Id);
+		lockIn.RoleComposition.Should().Contain(card => card.Id == lockIn.Offer2.Id);
+		var choice = recorder.Observations.Should()
+			.ContainSingle(observation =>
+				observation.Instruction.Semantic ==
+				ModeratorInstructionSemantic.ChooseThiefOffer)
+			.Subject;
+		choice.Response.SelectedOptionIds.Should().Equal(expectedOptionId);
+		var swaps = execution.Session.GameHistoryLog
+			.OfType<PermanentRoleSwapCommittedLogEntry>()
+			.ToArray();
+		var declines = execution.Session.GameHistoryLog
+			.OfType<ThiefOfferDeclinedLogEntry>()
+			.ToArray();
+		if (expectedOptionId == ThiefOfferOptionIds.Decline)
+		{
+			swaps.Should().BeEmpty();
+			declines.Should().ContainSingle();
+		}
+		else
+		{
+			declines.Should().BeEmpty();
+			var swap = swaps.Should().ContainSingle().Subject;
+			swap.NewCurrentRole.Should().Be(MainRoleType.PrejudicedManipulator);
+			swap.PhysicalCards.AcquiredCardId.Should().Be(lockIn.Offer1.Id);
+		}
+		recorder.Observations
+			.Select(observation => observation.Instruction)
+			.OfType<SelectPlayersInstruction>()
+			.Should().NotContain(instruction =>
+				instruction.Semantic ==
+					ModeratorInstructionSemantic.IdentifyRoleHolders &&
+				instruction.RoleIdentification ==
+					MainRoleType.PrejudicedManipulator);
+		MarkTestCompleted();
+	}
+
+	[Fact]
 	public void ExecuteBatch_WithOfferedAngel_CompletesAllOneThousandAttemptsAcrossOrderedBranches()
 	{
 		MainRoleType[] dealPool =
@@ -1265,6 +1723,28 @@ public class SimulationExecutionTests : DiagnosticTestBase
 				MainRoleType.SimpleVillager,
 				MainRoleType.SimpleVillager
 			]);
+		var missingRequiredPublicGroupPartition = new SimulationScenario(
+			5,
+			[
+				MainRoleType.PrejudicedManipulator,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+		var extraneousPublicGroupPartition = new SimulationScenario(
+			5,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Seer,
+				MainRoleType.WildChild,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			],
+			publicGroupPartition: CanonicalPublicGroupPartition.Create(
+				5,
+				[1, 3],
+				[2, 4, 5]));
 		var simulatorUnsupported = new SimulationScenario(
 			5,
 			[
@@ -1303,6 +1783,16 @@ public class SimulationExecutionTests : DiagnosticTestBase
 				appUnsupported,
 				SimulatorCapability.FullProbability,
 				CreateIdentity(appUnsupported),
+				0),
+			() => executor.Execute(
+				missingRequiredPublicGroupPartition,
+				SimulatorCapability.FullProbability,
+				CreateIdentity(missingRequiredPublicGroupPartition),
+				0),
+			() => executor.Execute(
+				extraneousPublicGroupPartition,
+				SimulatorCapability.FullProbability,
+				CreateIdentity(extraneousPublicGroupPartition),
 				0),
 			() => executor.Execute(
 				simulatorUnsupported,

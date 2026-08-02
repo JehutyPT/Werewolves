@@ -86,6 +86,296 @@ public class LobbySetupStateTests
 	}
 
 	[Fact]
+	public void TryCreateSimulationScenario_WithReachableManipulatorAndNoPartition_FailsClosed()
+	{
+		var state = CreateStateWithAcceptedRoleLockIn(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.Seer,
+			MainRoleType.Witch,
+			MainRoleType.PrejudicedManipulator);
+
+		var created = state.TryCreateSimulationScenario(out var scenario);
+
+		state.RequiresPublicGroupPartition.Should().BeTrue();
+		state.AcceptedPublicGroupPartition.Should().BeNull();
+		created.Should().BeFalse();
+		scenario.Should().BeNull();
+	}
+
+	[Fact]
+	public void ApplyAcceptedPublicGroupPartition_WithExactCurrentRoster_CompletesLobbySetup()
+	{
+		var state = CreateStateWithAcceptedRoleLockIn(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.Seer,
+			MainRoleType.Witch,
+			MainRoleType.PrejudicedManipulator);
+		var rosterIds = state.PlayerRoster.Select(player => player.Id).ToArray();
+		var partition = PublicGroupPartition.Create(
+			rosterIds,
+			firstGroupPlayerIds: [rosterIds[0], rosterIds[2]],
+			secondGroupPlayerIds: [rosterIds[1], rosterIds[3], rosterIds[4]]);
+		var scenarioChanges = 0;
+		state.SimulationScenarioChanged += (_, _) => scenarioChanges++;
+
+		var canReplace = state.CanReplacePublicGroupPartition(partition);
+		state.ApplyAcceptedPublicGroupPartition(partition);
+		var created = state.TryCreateSimulationScenario(out var scenario);
+
+		canReplace.Should().BeTrue();
+		state.AcceptedPublicGroupPartition.Should().BeSameAs(partition);
+		state.RequiresPublicGroupPartition.Should().BeFalse();
+		created.Should().BeTrue();
+		scenario.Should().NotBeNull();
+		scenario.PublicGroupPartition.Should().Be(
+			CanonicalPublicGroupPartition.Project(rosterIds, partition));
+		scenarioChanges.Should().Be(1);
+	}
+
+	[Theory]
+	[InlineData(true)]
+	[InlineData(false)]
+	public void RosterMembershipChange_ClearsAcceptedPartitionAndStalesRoleLockIn(
+		bool addPlayer)
+	{
+		var state = CreateStateWithAcceptedRoleLockIn(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.Seer,
+			MainRoleType.Witch,
+			MainRoleType.PrejudicedManipulator);
+		var partition = AcceptCurrentRosterPartition(state);
+
+		var changed = addPlayer
+			? state.AddPlayer("Extra") == AddPlayerResult.Success
+			: state.RemovePlayerAt(0);
+
+		changed.Should().BeTrue();
+		state.AcceptedPublicGroupPartition.Should().BeNull();
+		state.AcceptedRoleLockInRequiresReplacement.Should().BeTrue();
+		state.CanReplacePublicGroupPartition(partition).Should().BeFalse();
+	}
+
+	[Fact]
+	public void PublicGroupPartitionReplacement_HandlesNoOpMeaningfulAndFinalizedValues()
+	{
+		var state = CreateStateWithAcceptedRoleLockIn(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.Seer,
+			MainRoleType.Witch,
+			MainRoleType.PrejudicedManipulator);
+		var accepted = AcceptCurrentRosterPartition(state);
+		var rosterIds = state.PlayerRoster.Select(player => player.Id).ToArray();
+		var equivalent = PublicGroupPartition.Create(
+			rosterIds.Reverse(),
+			accepted.SecondGroupPlayerIds.Reverse(),
+			accepted.FirstGroupPlayerIds.Reverse());
+		var replacement = PublicGroupPartition.Create(
+			rosterIds,
+			[rosterIds[0], rosterIds[1]],
+			[rosterIds[2], rosterIds[3], rosterIds[4]]);
+		var scenarioChanges = 0;
+		state.SimulationScenarioChanged += (_, _) => scenarioChanges++;
+		var acceptedScenario = state.CreateSimulationScenario();
+
+		state.CanReplacePublicGroupPartition(equivalent).Should().BeTrue();
+		state.ApplyAcceptedPublicGroupPartition(equivalent);
+		state.AcceptedPublicGroupPartition.Should().BeSameAs(accepted);
+		state.CreateSimulationScenario().Should().Be(acceptedScenario);
+		scenarioChanges.Should().Be(0);
+
+		state.CanReplacePublicGroupPartition(replacement).Should().BeTrue();
+		state.ApplyAcceptedPublicGroupPartition(replacement);
+		state.AcceptedPublicGroupPartition.Should().BeSameAs(replacement);
+		state.CreateSimulationScenario().Should().NotBe(acceptedScenario);
+		scenarioChanges.Should().Be(1);
+
+		state.FinalizeRoleLockIn(state.AcceptedRoleLockIn!);
+		state.CanReplacePublicGroupPartition(accepted).Should().BeFalse();
+	}
+
+	[Fact]
+	public void RoleLockInReplacement_WhenManipulatorBecomesUnreachable_ClearsPartition()
+	{
+		var state = CreateStateWithAcceptedRoleLockIn(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.Seer,
+			MainRoleType.Witch,
+			MainRoleType.PrejudicedManipulator);
+		AcceptCurrentRosterPartition(state);
+		var replacement = RoleLockIn.CreateFromPrintedRoles(
+			version: 2,
+			playerCount: state.PlayerRoster.Count,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.Seer,
+				MainRoleType.Witch
+			]);
+
+		state.CanReplaceRoleLockIn(1, replacement).Should().BeTrue();
+		state.ApplyAcceptedRoleLockIn(replacement);
+
+		state.AcceptedPublicGroupPartition.Should().BeNull();
+		state.RequiresPublicGroupPartition.Should().BeFalse();
+		state.TryCreateSimulationScenario(out _).Should().BeTrue();
+	}
+
+	[Fact]
+	public void RestoreAcceptedRoleLockIn_WithTypedRosterAndPartition_RestoresExactState()
+	{
+		MainRoleType[] roles =
+		[
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.Seer,
+			MainRoleType.Witch,
+			MainRoleType.PrejudicedManipulator
+		];
+		var state = LobbySetupMetadataFixture.StateWithRoles(roles);
+		var roster = PlayerNames.DefaultFive
+			.Select((name, index) => new GameSessionPlayerConfig(
+				Guid.Parse($"20000000-0000-0000-0000-{index + 1:D12}"),
+				name))
+			.ToArray();
+		var roleLockIn = RoleLockIn.CreateFromPrintedRoles(
+			version: 7,
+			playerCount: roster.Length,
+			roles);
+		var partition = PublicGroupPartition.Create(
+			roster.Select(player => player.Id),
+			[roster[0].Id, roster[3].Id],
+			[roster[1].Id, roster[2].Id, roster[4].Id]);
+		var scenarioChanges = 0;
+		state.SimulationScenarioChanged += (_, _) => scenarioChanges++;
+
+		state.RestoreAcceptedRoleLockIn(roster, roleLockIn, partition);
+
+		state.PlayerRoster.Select(player => player.Id).Should().Equal(
+			roster.Select(player => player.Id));
+		state.PlayerRoster.Select(player => player.Name).Should().Equal(
+			roster.Select(player => player.Name));
+		state.AcceptedRoleLockIn.Should().BeSameAs(roleLockIn);
+		state.AcceptedPublicGroupPartition.Should().BeSameAs(partition);
+		state.TryCreateSimulationScenario(out _).Should().BeTrue();
+		scenarioChanges.Should().Be(1);
+	}
+
+	[Fact]
+	public void RoleDraftEdit_WithAcceptedPartition_RequiresFreshRoleLockInBeforeScenario()
+	{
+		var state = CreateStateWithAcceptedRoleLockIn(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.Seer,
+			MainRoleType.Witch,
+			MainRoleType.PrejudicedManipulator);
+		var partition = AcceptCurrentRosterPartition(state);
+
+		state.IncrementRole(MainRoleType.SimpleVillager);
+
+		state.AcceptedPublicGroupPartition.Should().BeSameAs(partition);
+		state.AcceptedRoleLockInRequiresReplacement.Should().BeTrue();
+		state.RequiresRoleLockIn.Should().BeTrue();
+		state.TryCreateSimulationScenario(out var scenario).Should().BeFalse();
+		scenario.Should().BeNull();
+	}
+
+	[Theory]
+	[InlineData(true)]
+	[InlineData(false)]
+	public void TryCreateSimulationScenario_WithManipulatorInEitherOffer_RequiresPartition(
+		bool manipulatorIsOffer1)
+	{
+		MainRoleType[] roles =
+		[
+			MainRoleType.Thief,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.Seer,
+			MainRoleType.Witch,
+			MainRoleType.PrejudicedManipulator,
+			MainRoleType.Hunter
+		];
+		var state = LobbySetupMetadataFixture.StateWithRoles(roles.Distinct().ToArray());
+		foreach (var name in PlayerNames.DefaultFive)
+		{
+			state.AddPlayer(name).Should().Be(AddPlayerResult.Success);
+		}
+		var roleLockIn = RoleLockIn.CreateFromPrintedRoles(
+			version: 1,
+			playerCount: state.PlayerRoster.Count,
+			roles,
+			offer1: manipulatorIsOffer1
+				? MainRoleType.PrejudicedManipulator
+				: MainRoleType.Hunter,
+			offer2: manipulatorIsOffer1
+				? MainRoleType.Hunter
+				: MainRoleType.PrejudicedManipulator);
+		state.CanReplaceRoleLockIn(0, roleLockIn).Should().BeTrue();
+		state.ApplyAcceptedRoleLockIn(roleLockIn);
+
+		state.RequiresPublicGroupPartition.Should().BeTrue();
+		state.TryCreateSimulationScenario(out _).Should().BeFalse();
+	}
+
+	[Fact]
+	public void Reorder_WithAcceptedPartition_MovesWholeIdentityAndInvalidatesScenario()
+	{
+		var state = CreateStateWithAcceptedRoleLockIn(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.Seer,
+			MainRoleType.Witch,
+			MainRoleType.PrejudicedManipulator);
+		var partition = AcceptCurrentRosterPartition(state);
+		var originalRoster = state.PlayerRoster.ToArray();
+		var scenarioChanges = 0;
+		state.SimulationScenarioChanged += (_, _) => scenarioChanges++;
+		var originalScenario = state.CreateSimulationScenario();
+
+		state.MovePlayerDown(0).Should().BeTrue();
+		state.TryCreateSimulationScenario(out var reorderedScenario).Should().BeTrue();
+
+		state.PlayerRoster.Should().Equal(
+			originalRoster[1],
+			originalRoster[0],
+			originalRoster[2],
+			originalRoster[3],
+			originalRoster[4]);
+		state.AcceptedPublicGroupPartition.Should().BeSameAs(partition);
+		state.AcceptedRoleLockInRequiresReplacement.Should().BeFalse();
+		reorderedScenario.Should().NotBe(originalScenario);
+		reorderedScenario.PublicGroupPartition.Should().Be(
+			CanonicalPublicGroupPartition.Project(
+				state.PlayerRoster.Select(player => player.Id).ToArray(),
+				partition));
+		scenarioChanges.Should().Be(1);
+	}
+
+	[Fact]
+	public void RemoveThenAdd_DoesNotReuseRemovedPlayerIdentity()
+	{
+		var state = LobbySetupMetadataFixture.DefaultState();
+		state.AddPlayer(PlayerNames.Ana).Should().Be(AddPlayerResult.Success);
+		state.AddPlayer(PlayerNames.Bruno).Should().Be(AddPlayerResult.Success);
+		var retained = state.PlayerRoster[0];
+		var removedId = state.PlayerRoster[1].Id;
+
+		state.RemovePlayerAt(1).Should().BeTrue();
+		state.AddPlayer(PlayerNames.Catarina).Should().Be(AddPlayerResult.Success);
+
+		state.PlayerRoster[0].Should().BeSameAs(retained);
+		state.PlayerRoster[1].Id.Should().NotBe(Guid.Empty);
+		state.PlayerRoster[1].Id.Should().NotBe(removedId);
+	}
+
+	[Fact]
 	public void Construction_ProjectsLobbySetupMetadataIntoInitialState()
 	{
 		var metadata = LobbySetupMetadataFixture.ForRoles(
@@ -112,6 +402,25 @@ public class LobbySetupStateTests
 		state.AddPlayer(PlayerNames.Catarina).Should().Be(AddPlayerResult.Success);
 
 		state.PlayerNames.Should().Equal(PlayerNames.DefaultThree);
+	}
+
+	[Fact]
+	public void AddPlayer_CreatesOrderedStableRosterIdentities()
+	{
+		var state = LobbySetupMetadataFixture.DefaultState();
+
+		state.AddPlayer($"  {PlayerNames.Ana}  ").Should().Be(AddPlayerResult.Success);
+		var firstEntry = state.PlayerRoster.Single();
+		state.AddPlayer(PlayerNames.Bruno).Should().Be(AddPlayerResult.Success);
+
+		state.PlayerRoster.Select(player => player.Name).Should().Equal(
+			PlayerNames.Ana,
+			PlayerNames.Bruno);
+		state.PlayerRoster.Select(player => player.Id)
+			.Should().NotContain(Guid.Empty)
+			.And.OnlyHaveUniqueItems();
+		state.PlayerRoster[0].Should().BeSameAs(firstEntry);
+		state.PlayerNames.Should().Equal(PlayerNames.Ana, PlayerNames.Bruno);
 	}
 
 	[Fact]
@@ -564,5 +873,36 @@ public class LobbySetupStateTests
 		state.PlayerNames.Should().BeEmpty();
 		state.GetSelectedRoles().Should().BeEmpty();
 		state.TotalSelectedRoleCount.Should().Be(0);
+	}
+
+	private static LobbySetupState CreateStateWithAcceptedRoleLockIn(
+		params MainRoleType[] roleComposition)
+	{
+		var state = LobbySetupMetadataFixture.StateWithRoles(
+			roleComposition.Distinct().ToArray());
+		foreach (var name in PlayerNames.DefaultFive)
+		{
+			state.AddPlayer(name).Should().Be(AddPlayerResult.Success);
+		}
+		var roleLockIn = RoleLockIn.CreateFromPrintedRoles(
+			version: 1,
+			playerCount: PlayerNames.DefaultFive.Length,
+			roleComposition);
+		state.CanReplaceRoleLockIn(0, roleLockIn).Should().BeTrue();
+		state.ApplyAcceptedRoleLockIn(roleLockIn);
+		return state;
+	}
+
+	private static PublicGroupPartition AcceptCurrentRosterPartition(
+		LobbySetupState state)
+	{
+		var rosterIds = state.PlayerRoster.Select(player => player.Id).ToArray();
+		var partition = PublicGroupPartition.Create(
+			rosterIds,
+			firstGroupPlayerIds: [rosterIds[0], rosterIds[2]],
+			secondGroupPlayerIds: rosterIds.Except([rosterIds[0], rosterIds[2]]));
+		state.CanReplacePublicGroupPartition(partition).Should().BeTrue();
+		state.ApplyAcceptedPublicGroupPartition(partition);
+		return partition;
 	}
 }

@@ -11,6 +11,7 @@ internal static class FactionFactFactions
             Faction.Werewolf,
             Faction.WhiteWerewolf,
             Faction.Piper,
-            Faction.CrossFactionLovers
+            Faction.CrossFactionLovers,
+            Faction.PrejudicedManipulator
         });
 }

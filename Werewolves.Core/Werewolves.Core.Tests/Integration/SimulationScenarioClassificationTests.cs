@@ -97,13 +97,61 @@ public class SimulationScenarioClassificationTests : DiagnosticTestBase
 		MarkTestCompleted();
 	}
 
+	[Theory]
+	[InlineData(PrejudicedManipulatorLocation.DealPool)]
+	[InlineData(PrejudicedManipulatorLocation.Offer1)]
+	[InlineData(PrejudicedManipulatorLocation.Offer2)]
+	public void Classify_WithReachablePrejudicedManipulatorAndMissingPartition_StopsAtRulesGate(
+		PrejudicedManipulatorLocation location)
+	{
+		var scenario = CreatePrejudicedManipulatorScenario(location);
+
+		var classification = SimulationScenarioClassifier.Classify(
+			scenario,
+			SimulatorCapability.FullProbability);
+
+		classification.RulesValidity.IsValid.Should().BeFalse();
+		classification.RulesValidity.Errors.Should().ContainSingle().Which.Type.Should().Be(
+			GameConfigValidationErrorType.PublicGroupPartitionMismatch);
+		classification.AppSupport.Should().BeNull();
+		classification.SimulatorSupport.Should().BeNull();
+		classification.AlreadyDecided.Should().BeNull();
+		classification.Cacheability.Should().BeNull();
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void Classify_WithUnreachablePrejudicedManipulatorAndExtraneousPartition_StopsAtRulesGate()
+	{
+		var scenario = new SimulationScenario(
+			5,
+			CreateSupportedScenario().RoleCompositionCards,
+			publicGroupPartition: CanonicalPublicGroupPartition.Create(
+				5,
+				[1, 3],
+				[2, 4, 5]));
+
+		var classification = SimulationScenarioClassifier.Classify(
+			scenario,
+			SimulatorCapability.FullProbability);
+
+		classification.RulesValidity.IsValid.Should().BeFalse();
+		classification.RulesValidity.Errors.Should().ContainSingle().Which.Type.Should().Be(
+			GameConfigValidationErrorType.PublicGroupPartitionMismatch);
+		classification.AppSupport.Should().BeNull();
+		classification.SimulatorSupport.Should().BeNull();
+		classification.AlreadyDecided.Should().BeNull();
+		classification.Cacheability.Should().BeNull();
+		MarkTestCompleted();
+	}
+
 	[Fact]
 	public void Classify_WithAppUnsupportedRole_StopsAfterAppGateAndPreservesInput()
 	{
 		var scenario = new SimulationScenario(
 			5,
 			[
-				MainRoleType.PrejudicedManipulator,
+				MainRoleType.Gypsy,
 				MainRoleType.SimpleWerewolf,
 				MainRoleType.SimpleVillager,
 				MainRoleType.SimpleVillager,
@@ -118,7 +166,7 @@ public class SimulationScenarioClassificationTests : DiagnosticTestBase
 		classification.AppSupport.Should().NotBeNull();
 		classification.AppSupport!.IsSupported.Should().BeFalse();
 		classification.AppSupport.Scenario.Should().BeSameAs(scenario);
-		classification.AppSupport.UnsupportedRoles.Should().Equal(MainRoleType.PrejudicedManipulator);
+		classification.AppSupport.UnsupportedRoles.Should().Equal(MainRoleType.Gypsy);
 		classification.SimulatorSupport.Should().BeNull();
 		classification.AlreadyDecided.Should().BeNull();
 		classification.Cacheability.Should().BeNull();
@@ -276,4 +324,57 @@ public class SimulationScenarioClassificationTests : DiagnosticTestBase
 				MainRoleType.SimpleVillager,
 				MainRoleType.SimpleVillager
 			]);
+
+	private static SimulationScenario CreatePrejudicedManipulatorScenario(
+		PrejudicedManipulatorLocation location) =>
+		location switch
+		{
+			PrejudicedManipulatorLocation.DealPool => new SimulationScenario(
+				5,
+				[
+					MainRoleType.PrejudicedManipulator,
+					MainRoleType.SimpleWerewolf,
+					MainRoleType.SimpleVillager,
+					MainRoleType.SimpleVillager,
+					MainRoleType.SimpleVillager
+				]),
+			PrejudicedManipulatorLocation.Offer1 => CreateOfferedPrejudicedManipulatorScenario(
+				MainRoleType.PrejudicedManipulator,
+				MainRoleType.Seer),
+			PrejudicedManipulatorLocation.Offer2 => CreateOfferedPrejudicedManipulatorScenario(
+				MainRoleType.Seer,
+				MainRoleType.PrejudicedManipulator),
+			_ => throw new ArgumentOutOfRangeException(nameof(location), location, null)
+		};
+
+	private static SimulationScenario CreateOfferedPrejudicedManipulatorScenario(
+		MainRoleType offer1Role,
+		MainRoleType offer2Role) =>
+		new(
+			5,
+			[
+				MainRoleType.Thief,
+				MainRoleType.PrejudicedManipulator,
+				MainRoleType.Seer,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			],
+			[
+				MainRoleType.Thief,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			],
+			offer1Role,
+			offer2Role);
+
+	public enum PrejudicedManipulatorLocation
+	{
+		DealPool,
+		Offer1,
+		Offer2
+	}
 }

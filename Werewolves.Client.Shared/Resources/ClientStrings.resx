@@ -628,4 +628,40 @@
   <data name="ThiefRoleLockIn_SaveFailedValidation" xml:space="preserve">
     <value>This offer partition could not be saved. Check the selected cards and try again.</value>
   </data>
+  <data name="PublicGroupPartition_StepLabel" xml:space="preserve">
+    <value>Public table setup</value>
+  </data>
+  <data name="PublicGroupPartition_Title" xml:space="preserve">
+    <value>Public group partition</value>
+  </data>
+  <data name="PublicGroupPartition_Description" xml:space="preserve">
+    <value>After announcing a clear table criterion, record each player in one of the two public groups. Only membership is saved.</value>
+  </data>
+  <data name="PublicGroupPartition_ListAria" xml:space="preserve">
+    <value>Players and public groups</value>
+  </data>
+  <data name="PublicGroupPartition_PlayerChoiceAriaFormat" xml:space="preserve">
+    <value>Place {0} in {1}</value>
+  </data>
+  <data name="PublicGroupPartition_FirstGroupLabel" xml:space="preserve">
+    <value>Group 1</value>
+  </data>
+  <data name="PublicGroupPartition_SecondGroupLabel" xml:space="preserve">
+    <value>Group 2</value>
+  </data>
+  <data name="PublicGroupPartition_CommitButton" xml:space="preserve">
+    <value>Save public groups</value>
+  </data>
+  <data name="PublicGroupPartition_IncompleteValidation" xml:space="preserve">
+    <value>Place every player in exactly one group and keep both groups non-empty.</value>
+  </data>
+  <data name="PublicGroupPartition_SaveFailedValidation" xml:space="preserve">
+    <value>This public group partition could not be saved. Check the current roster and try again.</value>
+  </data>
+  <data name="PublicGroupPartition_SummaryTitle" xml:space="preserve">
+    <value>Public groups saved</value>
+  </data>
+  <data name="RoleSelection_ReviewPublicGroupPartitionButton" xml:space="preserve">
+    <value>Review or change public groups</value>
+  </data>
 </root>

@@ -308,6 +308,7 @@ internal static class PermanentRoleSwapRules
 			MainRoleType.AccursedWolfFather => Faction.Werewolf,
 		MainRoleType.WhiteWerewolf => Faction.WhiteWerewolf,
 		MainRoleType.Piper => Faction.Piper,
+		MainRoleType.PrejudicedManipulator => Faction.PrejudicedManipulator,
 		_ => Faction.Villager
 	};
 

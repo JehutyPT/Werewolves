@@ -14,12 +14,17 @@
 else if (_currentStep == LobbyStep.RoleSelection)
 {
 	<RoleSelectionPage OnBack="ShowRoster"
-				   OnConfigureRoleLockIn="ShowRoleLockIn"
-				   OnStartGame="HandleStartGame" />
+					   OnConfigureRoleLockIn="ShowRoleLockIn"
+					   OnConfigurePublicGroupPartition="ShowPublicGroupPartition"
+					   OnStartGame="HandleStartGame" />
 }
 else if (_currentStep == LobbyStep.RoleLockIn)
 {
 	<ThiefRoleLockInPage OnBack="ShowRoleSelection" OnAccepted="ShowRoleSelection" />
+}
+else if (_currentStep == LobbyStep.PublicGroupPartition)
+{
+	<PublicGroupPartitionPage OnBack="ShowRoleSelection" OnAccepted="ShowRoleSelection" />
 }
 else if (_currentStep == LobbyStep.Labs)
 {
@@ -75,6 +80,11 @@ else
 		MoveTo(LobbyStep.RoleLockIn);
 	}
 
+	private void ShowPublicGroupPartition()
+	{
+		MoveTo(LobbyStep.PublicGroupPartition);
+	}
+
 	private void ShowLabs()
 	{
 		MoveTo(LobbyStep.Labs);
@@ -82,6 +92,17 @@ else
 
 	private void HandleStartGame()
 	{
+		if (!Game.TryEnsureStagedRoleLockIn(Lobby))
+		{
+			return;
+		}
+
+		if (Lobby.RequiresPublicGroupPartition)
+		{
+			MoveTo(LobbyStep.PublicGroupPartition);
+			return;
+		}
+
 		Game.StartGame(Lobby);
 		MoveTo(LobbyStep.Dashboard);
 	}
@@ -110,7 +131,8 @@ else
 		_currentStep = step;
 		WakeLock.MoveTo(step switch
 		{
-				LobbyStep.Roster or LobbyStep.RoleSelection or LobbyStep.RoleLockIn => GameplayWakeLockArea.Lobby,
+				LobbyStep.Roster or LobbyStep.RoleSelection or LobbyStep.RoleLockIn or
+					LobbyStep.PublicGroupPartition => GameplayWakeLockArea.Lobby,
 			LobbyStep.Dashboard => GameplayWakeLockArea.Dashboard,
 			_ => GameplayWakeLockArea.None
 		});
@@ -127,6 +149,7 @@ else
 			Roster,
 			RoleSelection,
 			RoleLockIn,
+			PublicGroupPartition,
 			Labs,
 		Dashboard,
 		Victory

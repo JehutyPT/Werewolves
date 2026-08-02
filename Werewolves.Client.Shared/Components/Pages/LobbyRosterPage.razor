@@ -1,4 +1,5 @@
 @inject LobbySetupState Lobby
+@inject GameClientManager Game
 
 <main class="ww-app-shell" aria-labelledby="roster-title">
 	<section class="ww-lobby-header">
@@ -130,8 +131,11 @@
 
 	private void AddPlayer()
 	{
-		var result = Lobby.AddPlayer(_draftPlayerName);
-		if (result == AddPlayerResult.Success)
+		var added = Game.TryAddStagedPlayer(
+			Lobby,
+			_draftPlayerName,
+			out var result);
+		if (added)
 		{
 			_draftPlayerName = string.Empty;
 			_validationMessage = null;
@@ -149,18 +153,20 @@
 
 	private void MovePlayerUp(int index)
 	{
-		Lobby.MovePlayerUp(index);
+		Game.TryMoveStagedPlayerUp(Lobby, index);
 	}
 
 	private void MovePlayerDown(int index)
 	{
-		Lobby.MovePlayerDown(index);
+		Game.TryMoveStagedPlayerDown(Lobby, index);
 	}
 
 	private void RemovePlayer(int index)
 	{
-		Lobby.RemovePlayerAt(index);
-		_rosterErrors.Clear();
+		if (Game.TryRemoveStagedPlayer(Lobby, index))
+		{
+			_rosterErrors.Clear();
+		}
 	}
 
 	private Task Continue()

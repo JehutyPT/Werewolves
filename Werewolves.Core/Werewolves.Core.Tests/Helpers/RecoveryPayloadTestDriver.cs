@@ -52,6 +52,34 @@ internal sealed class RecoveryPayloadTestDriver
 		return this;
 	}
 
+	internal RecoveryPayloadTestDriver RewriteSeatingOrder(
+		IEnumerable<Guid> playerIds)
+	{
+		ArgumentNullException.ThrowIfNull(playerIds);
+		_payload.SeatingOrder = playerIds.ToList();
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver RemovePublicGroupPartition()
+	{
+		_payload.PublicGroupPartition = null;
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver RewritePublicGroupPartition(
+		IEnumerable<Guid> firstGroupPlayerIds,
+		IEnumerable<Guid> secondGroupPlayerIds)
+	{
+		ArgumentNullException.ThrowIfNull(firstGroupPlayerIds);
+		ArgumentNullException.ThrowIfNull(secondGroupPlayerIds);
+		_payload.PublicGroupPartition = new PublicGroupPartitionDto
+		{
+			FirstGroupPlayerIds = firstGroupPlayerIds.ToList(),
+			SecondGroupPlayerIds = secondGroupPlayerIds.ToList()
+		};
+		return this;
+	}
+
 	internal RecoveryPayloadTestDriver RemoveAngelExpiry()
 	{
 		var index = _payload.GameHistoryLog.FindLastIndex(

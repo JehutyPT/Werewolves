@@ -33,15 +33,16 @@ public sealed class DisabledGameSessionSaveStore : IGameSessionSaveStore
 internal abstract record LocalRecoveryPayload;
 
 internal sealed record StagedLobbyRecoveryPayload(
-	IReadOnlyList<string> PlayerNames,
-	RoleLockIn RoleLockIn) : LocalRecoveryPayload;
+	IReadOnlyList<GameSessionPlayerConfig> PlayerRoster,
+	RoleLockIn RoleLockIn,
+	PublicGroupPartition? PublicGroupPartition) : LocalRecoveryPayload;
 
 internal sealed record ActiveGameRecoveryPayload(
 	string SerializedSession) : LocalRecoveryPayload;
 
 internal static class LocalRecoveryPayloadCodec
 {
-	private const int CurrentSchemaVersion = 1;
+	private const int CurrentSchemaVersion = 2;
 	private const string StagedLobbyKind = "StagedLobby";
 	private const string ActiveGameKind = "ActiveGame";
 	private static readonly JsonSerializerOptions JsonOptions = new()
@@ -50,18 +51,24 @@ internal static class LocalRecoveryPayloadCodec
 	};
 
 	public static string SerializeStagedLobby(
-		IReadOnlyList<string> playerNames,
-		RoleLockIn roleLockIn)
+		IReadOnlyList<GameSessionPlayerConfig> playerRoster,
+		RoleLockIn roleLockIn,
+		PublicGroupPartition? publicGroupPartition)
 	{
-		ArgumentNullException.ThrowIfNull(playerNames);
+		ArgumentNullException.ThrowIfNull(playerRoster);
 		ArgumentNullException.ThrowIfNull(roleLockIn);
 		return JsonSerializer.Serialize(
 			new RecoveryEnvelopeDto(
 				CurrentSchemaVersion,
 				StagedLobbyKind,
 				new StagedLobbyDto(
-					playerNames.ToArray(),
-					RoleLockInDto.FromRoleLockIn(roleLockIn)),
+					playerRoster
+						.Select(GameSessionPlayerConfigDto.FromValue)
+						.ToArray(),
+					RoleLockInDto.FromRoleLockIn(roleLockIn),
+					publicGroupPartition is null
+						? null
+						: PublicGroupPartitionDto.FromValue(publicGroupPartition)),
 				ActiveGame: null),
 			JsonOptions);
 	}
@@ -85,21 +92,28 @@ internal static class LocalRecoveryPayloadCodec
 			payload,
 			JsonOptions);
 		if (envelope is
-			{
-				SchemaVersion: CurrentSchemaVersion,
+		{
+			SchemaVersion: CurrentSchemaVersion,
 				Kind: StagedLobbyKind,
-				StagedLobby: not null
+				StagedLobby: not null,
+				ActiveGame: null
 			})
 		{
+			var playerRoster = envelope.StagedLobby.PlayerRoster
+				.Select(player => player.ToValue())
+				.ToArray();
 			return new StagedLobbyRecoveryPayload(
-				envelope.StagedLobby.PlayerNames.ToArray(),
-				envelope.StagedLobby.RoleLockIn.ToRoleLockIn());
+				playerRoster,
+				envelope.StagedLobby.RoleLockIn.ToRoleLockIn(),
+				envelope.StagedLobby.PublicGroupPartition?.ToValue(
+					playerRoster.Select(player => player.Id)));
 		}
 
 		if (envelope is
-			{
-				SchemaVersion: CurrentSchemaVersion,
+		{
+			SchemaVersion: CurrentSchemaVersion,
 				Kind: ActiveGameKind,
+				StagedLobby: null,
 				ActiveGame: not null
 			})
 		{
@@ -117,8 +131,9 @@ internal static class LocalRecoveryPayloadCodec
 		ActiveGameDto? ActiveGame);
 
 	private sealed record StagedLobbyDto(
-		IReadOnlyList<string> PlayerNames,
-		RoleLockInDto RoleLockIn);
+		IReadOnlyList<GameSessionPlayerConfigDto> PlayerRoster,
+		RoleLockInDto RoleLockIn,
+		PublicGroupPartitionDto? PublicGroupPartition);
 
 	private sealed record ActiveGameDto(string SerializedSession);
 
@@ -155,4 +170,30 @@ internal static class LocalRecoveryPayloadCodec
 	private sealed record PhysicalCharacterCardDto(
 		Guid Id,
 		MainRoleType PrintedRole);
+
+	private sealed record GameSessionPlayerConfigDto(Guid Id, string Name)
+	{
+		public static GameSessionPlayerConfigDto FromValue(
+			GameSessionPlayerConfig player) =>
+			new(player.Id, player.Name);
+
+		public GameSessionPlayerConfig ToValue() => new(Id, Name);
+	}
+
+	private sealed record PublicGroupPartitionDto(
+		IReadOnlyList<Guid> FirstGroupPlayerIds,
+		IReadOnlyList<Guid> SecondGroupPlayerIds)
+	{
+		public static PublicGroupPartitionDto FromValue(
+			PublicGroupPartition partition) =>
+			new(
+				partition.FirstGroupPlayerIds.ToArray(),
+				partition.SecondGroupPlayerIds.ToArray());
+
+		public PublicGroupPartition ToValue(IEnumerable<Guid> rosterPlayerIds) =>
+			PublicGroupPartition.Create(
+				rosterPlayerIds,
+				FirstGroupPlayerIds,
+				SecondGroupPlayerIds);
+	}
 }

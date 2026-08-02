@@ -22,11 +22,35 @@ public static class SimulationScenarioClassifier
 		ArgumentNullException.ThrowIfNull(scenario);
 		ArgumentNullException.ThrowIfNull(profile);
 
-		GameSessionConfig.TryGetPhysicalSetupIssues(
-			scenario.PlayerCount,
-			scenario.RoleCompositionCards,
-			scenario.ActorSetupCards,
-			out var errors);
+		List<GameConfigValidationError> errors;
+		if (scenario.ThiefOfferBranchPolicy is not null &&
+			scenario.Offer1Role is { } offer1Role &&
+			scenario.Offer2Role is { } offer2Role)
+		{
+			GameSessionConfig.TryGetRoleLockInPhysicalSetupIssues(
+				scenario.PlayerCount,
+				scenario.DealPoolCards,
+				offer1Role,
+				offer2Role,
+				scenario.ActorSetupCards,
+				out errors);
+		}
+		else
+		{
+			GameSessionConfig.TryGetPhysicalSetupIssues(
+				scenario.PlayerCount,
+				scenario.RoleCompositionCards,
+				scenario.ActorSetupCards,
+				out errors);
+		}
+		var prejudicedManipulatorIsReachable = scenario.RoleCompositionCards.Contains(
+			MainRoleType.PrejudicedManipulator);
+		if (prejudicedManipulatorIsReachable != (scenario.PublicGroupPartition is not null))
+		{
+			errors.Add(new GameConfigValidationError(
+				GameConfigValidationErrorType.PublicGroupPartitionMismatch,
+				"A Public Group Partition is required exactly when Prejudiced Manipulator is reachable in the complete Role Composition."));
+		}
 		var appSupportErrors = errors
 			.Where(IsAppSupportError)
 			.ToArray();

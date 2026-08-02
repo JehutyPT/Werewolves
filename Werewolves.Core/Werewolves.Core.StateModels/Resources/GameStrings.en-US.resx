@@ -115,6 +115,9 @@
   <data name="VictoryConditionAngelEarlyElimination" xml:space="preserve">
     <value>The Angel was eliminated during the early victory window.</value>
   </data>
+  <data name="VictoryConditionPrejudicedManipulatorOpposingGroupEliminated" xml:space="preserve">
+    <value>Every player in the Prejudiced Manipulator's opposing group has been eliminated.</value>
+  </data>
   <data name="WhiteWerewolfTargetSelectionInstruction" xml:space="preserve">
     <value>White Werewolf, optionally choose one other living Werewolf Faction Agent for the solo attack.</value>
   </data>

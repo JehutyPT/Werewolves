@@ -137,6 +137,9 @@ public record FinishedGameConfirmationInstruction : ModeratorInstruction
                 GameStrings.VictoryConditionCrossFactionLovers,
             SingleFactionGameResult { Faction: Faction.Angel } =>
                 GameStrings.VictoryConditionAngelEarlyElimination,
+            SingleFactionGameResult
+                { Faction: Faction.PrejudicedManipulator } =>
+                GameStrings.VictoryConditionPrejudicedManipulatorOpposingGroupEliminated,
             SharedVictoryGameResult => GameStrings.VictoryConditionShared,
             NoWinnerGameResult => GameStrings.VictoryConditionNoWinner,
             _ => throw new ArgumentOutOfRangeException(nameof(result))

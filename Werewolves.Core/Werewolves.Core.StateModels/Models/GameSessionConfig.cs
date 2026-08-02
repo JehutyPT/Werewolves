@@ -8,10 +8,12 @@ public class GameSessionConfig
 	public const int MinimumPlayerCount = 5;
 	public const int MaximumPlayerCount = 30;
 
-	public List<string> Players { get; init; } = new();
+	public IReadOnlyList<string> Players { get; }
+	public IReadOnlyList<GameSessionPlayerConfig> PlayerRoster { get; }
 	public IReadOnlyList<MainRoleType> Roles { get; }
 	public ActorSetupCards ActorSetupCards { get; }
 	public RoleLockIn RoleLockIn { get; }
+	public PublicGroupPartition? PublicGroupPartition { get; }
 
 	public static Dictionary<MainRoleType, NumberRangeConstraint> RoleCountConstraints { get; } = new()
 	{
@@ -69,7 +71,10 @@ public class GameSessionConfig
 
 	internal void EnforceValidity()
 	{
-		EnforceRoleLockInValidity(Players, RoleLockIn, ActorSetupCards);
+		EnforceRoleLockInValidity(
+			PlayerRoster.Select(player => player.Name).ToList(),
+			RoleLockIn,
+			ActorSetupCards);
 	}
 
 	public static bool TryGetRoleLockInConfigIssues(
@@ -95,37 +100,13 @@ public class GameSessionConfig
 			return true;
 		}
 
-		var reachableRoleSets = roleLockIn.Offer1 is null
-			? new[]
-			{
-				roleLockIn.DealPool.Select(card => card.PrintedRole).ToArray()
-			}
-			: new[]
-			{
-				roleLockIn.DealPool
-					.Where(card => card.PrintedRole != MainRoleType.Thief)
-					.Select(card => card.PrintedRole)
-					.Append(roleLockIn.Offer1.PrintedRole)
-					.ToArray(),
-				roleLockIn.DealPool
-					.Where(card => card.PrintedRole != MainRoleType.Thief)
-					.Select(card => card.PrintedRole)
-					.Append(roleLockIn.Offer2!.PrintedRole)
-					.ToArray()
-			};
-		foreach (var reachableRoles in reachableRoleSets)
-		{
-			var reachableIssues = new List<GameConfigValidationError>();
-			AddRoleCompositionIssues(
-				players.Count,
-				reachableRoles,
-				actorSetupCards,
-				reachableIssues);
-			foreach (var issue in reachableIssues.Where(issue => !collectedIssues.Contains(issue)))
-			{
-				collectedIssues.Add(issue);
-			}
-		}
+		AddRoleLockInCompositionIssues(
+			players.Count,
+			roleLockIn.DealPool.Select(card => card.PrintedRole).ToArray(),
+			roleLockIn.Offer1?.PrintedRole,
+			roleLockIn.Offer2?.PrintedRole,
+			actorSetupCards,
+			collectedIssues);
 
 		return collectedIssues.Count > 0;
 	}
@@ -242,6 +223,75 @@ public class GameSessionConfig
 		AddPlayerCountIssues(playerCount, issues);
 		AddRoleCompositionIssues(playerCount, roles, actorSetupCards, issues);
 		return issues.Count > 0;
+	}
+
+	/// <summary>
+	/// Validates the reachable printed-role branches of a Role Lock-In when
+	/// physical Character Card identities are not part of the input.
+	/// </summary>
+	public static bool TryGetRoleLockInPhysicalSetupIssues(
+		int playerCount,
+		IReadOnlyList<MainRoleType> dealPoolRoles,
+		MainRoleType? offer1Role,
+		MainRoleType? offer2Role,
+		ActorSetupCards actorSetupCards,
+		out List<GameConfigValidationError> issues)
+	{
+		ArgumentNullException.ThrowIfNull(dealPoolRoles);
+		ArgumentNullException.ThrowIfNull(actorSetupCards);
+		if ((offer1Role is null) != (offer2Role is null))
+		{
+			throw new ArgumentException(
+				"A Role Lock-In physical setup requires both ordered offers or neither offer.",
+				nameof(offer1Role));
+		}
+
+		issues = new List<GameConfigValidationError>();
+		AddPlayerCountIssues(playerCount, issues);
+		AddRoleLockInCompositionIssues(
+			playerCount,
+			dealPoolRoles,
+			offer1Role,
+			offer2Role,
+			actorSetupCards,
+			issues);
+		return issues.Count > 0;
+	}
+
+	private static void AddRoleLockInCompositionIssues(
+		int playerCount,
+		IReadOnlyList<MainRoleType> dealPoolRoles,
+		MainRoleType? offer1Role,
+		MainRoleType? offer2Role,
+		ActorSetupCards actorSetupCards,
+		List<GameConfigValidationError> issues)
+	{
+		var reachableRoleSets = offer1Role is null
+			? new[] { dealPoolRoles.ToArray() }
+			: new[]
+			{
+				dealPoolRoles
+					.Where(role => role != MainRoleType.Thief)
+					.Append(offer1Role.Value)
+					.ToArray(),
+				dealPoolRoles
+					.Where(role => role != MainRoleType.Thief)
+					.Append(offer2Role!.Value)
+					.ToArray()
+			};
+		foreach (var reachableRoles in reachableRoleSets)
+		{
+			var reachableIssues = new List<GameConfigValidationError>();
+			AddRoleCompositionIssues(
+				playerCount,
+				reachableRoles,
+				actorSetupCards,
+				reachableIssues);
+			foreach (var issue in reachableIssues.Where(issue => !issues.Contains(issue)))
+			{
+				issues.Add(issue);
+			}
+		}
 	}
 
 	private static void AddPlayerCountIssues(
@@ -385,7 +435,7 @@ public class GameSessionConfig
 		List<MainRoleType> roles,
 		ActorSetupCards? actorSetupCards = null)
 		: this(
-			playerNames,
+			CreatePlayerRoster(playerNames),
 			CreateImplicitNonThiefRoleLockIn(
 				playerNames,
 				roles,
@@ -395,19 +445,56 @@ public class GameSessionConfig
 	}
 
 	public GameSessionConfig(
+		IReadOnlyList<GameSessionPlayerConfig> playerRoster,
+		List<MainRoleType> roles,
+		ActorSetupCards? actorSetupCards = null,
+		PublicGroupPartition? publicGroupPartition = null)
+		: this(
+			playerRoster,
+			CreateImplicitNonThiefRoleLockIn(
+				playerRoster.Select(player => player.Name).ToList(),
+				roles,
+				actorSetupCards),
+			actorSetupCards,
+			publicGroupPartition)
+	{
+	}
+
+	public GameSessionConfig(
 		List<string> playerNames,
 		RoleLockIn roleLockIn,
 		ActorSetupCards? actorSetupCards = null)
+		: this(
+			CreatePlayerRoster(playerNames),
+			roleLockIn,
+			actorSetupCards)
 	{
-		ArgumentNullException.ThrowIfNull(playerNames);
+	}
+
+	public GameSessionConfig(
+		IReadOnlyList<GameSessionPlayerConfig> playerRoster,
+		RoleLockIn roleLockIn,
+		ActorSetupCards? actorSetupCards = null,
+		PublicGroupPartition? publicGroupPartition = null)
+	{
+		ArgumentNullException.ThrowIfNull(playerRoster);
 		ArgumentNullException.ThrowIfNull(roleLockIn);
-		if (roleLockIn.PlayerCount != playerNames.Count)
+		var roster = playerRoster.ToArray();
+		if (roster.Any(player => player is null) ||
+			roster.Select(player => player.Id).Distinct().Count() != roster.Length)
+		{
+			throw new ArgumentException(
+				"A Game Session roster requires distinct stable Player identities.",
+				nameof(playerRoster));
+		}
+		if (roleLockIn.PlayerCount != playerRoster.Count)
 		{
 			throw new ArgumentException(
 				"Role Lock-In Player count must match the Game Session roster.",
 				nameof(roleLockIn));
 		}
 
+		var playerNames = roster.Select(player => player.Name).ToList();
 		var roles = roleLockIn.DealPool
 			.Select(card => card.PrintedRole)
 			.ToList();
@@ -417,11 +504,60 @@ public class GameSessionConfig
 			playerNames,
 			roleLockIn,
 			normalizedActorSetupCards);
+		EnforcePublicGroupPartitionValidity(
+			roster,
+			roleLockIn,
+			publicGroupPartition);
 
-		Players = playerNames.ToList();
+		PlayerRoster = Array.AsReadOnly(roster);
+		Players = Array.AsReadOnly(playerNames.ToArray());
 		Roles = Array.AsReadOnly(roles.ToArray());
 		ActorSetupCards = normalizedActorSetupCards;
 		RoleLockIn = roleLockIn;
+		PublicGroupPartition = publicGroupPartition;
+	}
+
+	private static void EnforcePublicGroupPartitionValidity(
+		IReadOnlyCollection<GameSessionPlayerConfig> roster,
+		RoleLockIn roleLockIn,
+		PublicGroupPartition? publicGroupPartition)
+	{
+		var prejudicedManipulatorReachable = roleLockIn.DealPool.Any(
+				card => card.PrintedRole == MainRoleType.PrejudicedManipulator) ||
+			roleLockIn.Offer1?.PrintedRole == MainRoleType.PrejudicedManipulator ||
+			roleLockIn.Offer2?.PrintedRole == MainRoleType.PrejudicedManipulator;
+		if (prejudicedManipulatorReachable && publicGroupPartition is null)
+		{
+			throw new InvalidOperationException(
+				"A reachable Prejudiced Manipulator requires a Public Group Partition.");
+		}
+		if (!prejudicedManipulatorReachable && publicGroupPartition is not null)
+		{
+			throw new ArgumentException(
+				"A Public Group Partition is not valid when Prejudiced Manipulator is unreachable.",
+				nameof(publicGroupPartition));
+		}
+		if (publicGroupPartition is not null)
+		{
+			var partitionPlayerIds = publicGroupPartition.FirstGroupPlayerIds
+				.Concat(publicGroupPartition.SecondGroupPlayerIds);
+			if (!roster.Select(player => player.Id).ToHashSet()
+				.SetEquals(partitionPlayerIds))
+			{
+				throw new ArgumentException(
+					"A Public Group Partition must contain the exact Game Session roster.",
+					nameof(publicGroupPartition));
+			}
+		}
+	}
+
+	private static IReadOnlyList<GameSessionPlayerConfig> CreatePlayerRoster(
+		List<string> playerNames)
+	{
+		ArgumentNullException.ThrowIfNull(playerNames);
+		return playerNames
+			.Select(name => new GameSessionPlayerConfig(Guid.NewGuid(), name))
+			.ToArray();
 	}
 
 	private static RoleLockIn CreateImplicitNonThiefRoleLockIn(
@@ -463,7 +599,8 @@ public enum GameConfigValidationErrorType
 	ActorSetupCardInRoleComposition,
 	IneligibleActorSetupCard,
 	MissingHardAlignedWerewolf,
-	MissingHardAlignedVillager
+	MissingHardAlignedVillager,
+	PublicGroupPartitionMismatch
 }
 
 public class GameConfigValidationError

@@ -159,7 +159,8 @@ public static partial class TerminalLobbyCache
 			canonical.Offer1Role,
 			canonical.Offer2Role,
 			new ActorSetupCards(canonical.ActorSetupCards),
-			canonical.RuleState);
+			canonical.RuleState,
+			canonical.PublicGroupPartition);
 		if (!scenario.ToCanonical().Equals(canonical))
 		{
 			throw new ArgumentException(

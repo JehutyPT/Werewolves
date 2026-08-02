@@ -625,4 +625,40 @@
   <data name="ThiefRoleLockIn_SaveFailedValidation" xml:space="preserve">
     <value>Não foi possível guardar esta configuração de ofertas. Verifique as cartas selecionadas e tente novamente.</value>
   </data>
+  <data name="PublicGroupPartition_StepLabel" xml:space="preserve">
+    <value>Configuração pública da mesa</value>
+  </data>
+  <data name="PublicGroupPartition_Title" xml:space="preserve">
+    <value>Divisão pública dos jogadores</value>
+  </data>
+  <data name="PublicGroupPartition_Description" xml:space="preserve">
+    <value>Depois de anunciar um critério claro à mesa, registe cada jogador num dos dois grupos públicos. A aplicação guarda apenas os membros.</value>
+  </data>
+  <data name="PublicGroupPartition_ListAria" xml:space="preserve">
+    <value>Jogadores e grupos públicos</value>
+  </data>
+  <data name="PublicGroupPartition_PlayerChoiceAriaFormat" xml:space="preserve">
+    <value>Colocar {0} em {1}</value>
+  </data>
+  <data name="PublicGroupPartition_FirstGroupLabel" xml:space="preserve">
+    <value>Grupo 1</value>
+  </data>
+  <data name="PublicGroupPartition_SecondGroupLabel" xml:space="preserve">
+    <value>Grupo 2</value>
+  </data>
+  <data name="PublicGroupPartition_CommitButton" xml:space="preserve">
+    <value>Guardar grupos públicos</value>
+  </data>
+  <data name="PublicGroupPartition_IncompleteValidation" xml:space="preserve">
+    <value>Coloque cada jogador num único grupo e mantenha os dois grupos não vazios.</value>
+  </data>
+  <data name="PublicGroupPartition_SaveFailedValidation" xml:space="preserve">
+    <value>Não foi possível guardar esta divisão pública. Verifique os jogadores atuais e tente novamente.</value>
+  </data>
+  <data name="PublicGroupPartition_SummaryTitle" xml:space="preserve">
+    <value>Grupos públicos guardados</value>
+  </data>
+  <data name="RoleSelection_ReviewPublicGroupPartitionButton" xml:space="preserve">
+    <value>Rever ou alterar grupos públicos</value>
+  </data>
 </root>

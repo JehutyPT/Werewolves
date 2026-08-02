@@ -13,6 +13,7 @@ namespace Werewolves.Core.StateModels.Core
 		private readonly Dictionary<Guid, Player> _players = new();
 		private readonly List<Guid> _playerSeatingOrder = new();
 		private readonly RoleLockIn _roleLockIn;
+		private readonly PublicGroupPartition? _publicGroupPartition;
 		private readonly Dictionary<Guid, PhysicalCharacterCardState> _physicalCardStates = new();
 		private readonly IStateChangeObserver? _stateChangeObserver;
 
@@ -41,6 +42,7 @@ namespace Werewolves.Core.StateModels.Core
 			=> _gameHistoryLog.FindLogEntries(turnIntervalConstraint ?? NumberRangeConstraint.Any, phase, filter);
 		internal IReadOnlyList<Guid> GetPlayerSeatingOrder() => _playerSeatingOrder.AsReadOnly();
 		internal RoleLockIn GetRoleLockIn() => _roleLockIn;
+		internal PublicGroupPartition? GetPublicGroupPartition() => _publicGroupPartition;
 		internal IReadOnlyList<PhysicalCharacterCardState> GetPhysicalCharacterCardStates() =>
 			_roleLockIn.RoleComposition
 				.Select(card => _physicalCardStates[card.Id])
@@ -66,16 +68,17 @@ namespace Werewolves.Core.StateModels.Core
 			_pendingModeratorInstruction = initialInstruction;
 			config.EnforceValidity();
 
-			foreach (var name in config.Players)
-			{
-				var player = new Player(name);
-				_players.Add(player.Id, player);
+				foreach (var playerConfig in config.PlayerRoster)
+				{
+					var player = new Player(playerConfig.Name, playerConfig.Id);
+					_players.Add(player.Id, player);
 
 				//TODO: add seating order input logic
 				_playerSeatingOrder.Add(player.Id);
 			}
 
 			_roleLockIn = config.RoleLockIn;
+			_publicGroupPartition = config.PublicGroupPartition;
 			foreach (var card in _roleLockIn.DealPool)
 			{
 				_physicalCardStates.Add(
@@ -256,8 +259,11 @@ namespace Werewolves.Core.StateModels.Core
 				RolesInPlay = _roleLockIn.DealPool
 					.Select(card => card.PrintedRole)
 					.ToList(),
-				RoleLockIn = RoleLockInDto.FromValue(_roleLockIn),
-				PhysicalCharacterCards = GetPhysicalCharacterCardStates()
+					RoleLockIn = RoleLockInDto.FromValue(_roleLockIn),
+					PublicGroupPartition = _publicGroupPartition is null
+						? null
+						: PublicGroupPartitionDto.FromValue(_publicGroupPartition),
+					PhysicalCharacterCards = GetPhysicalCharacterCardStates()
 					.Select(state => new PhysicalCharacterCardStateDto
 					{
 						CardId = state.Card.Id,
@@ -305,15 +311,17 @@ namespace Werewolves.Core.StateModels.Core
 		/// <summary>
 		/// Private constructor for deserialization
 		/// </summary>
-		private GameSessionKernel(GameSessionDto dto)
-		{
-			Id = dto.Id;
-			_turnNumber = dto.TurnNumber;
-			_playerSeatingOrder = dto.SeatingOrder;
-			_roleLockIn = dto.RoleLockIn?.ToValue()
-				?? throw new InvalidOperationException(
-					"The stable recovery snapshot is missing Role Lock-In.");
-			var cardsById = _roleLockIn.RoleComposition
+			private GameSessionKernel(GameSessionDto dto)
+			{
+				Id = dto.Id;
+				_turnNumber = dto.TurnNumber;
+				_roleLockIn = dto.RoleLockIn?.ToValue()
+					?? throw new InvalidOperationException(
+						"The stable recovery snapshot is missing Role Lock-In.");
+				ValidateRecoveryRoster(dto, _roleLockIn);
+				_playerSeatingOrder = dto.SeatingOrder.ToList();
+				_publicGroupPartition = RestorePublicGroupPartition(dto, _roleLockIn);
+				var cardsById = _roleLockIn.RoleComposition
 				.ToDictionary(card => card.Id);
 			if (dto.PhysicalCharacterCards.Count != cardsById.Count ||
 				dto.PhysicalCharacterCards.Select(state => state.CardId)
@@ -396,6 +404,62 @@ namespace Werewolves.Core.StateModels.Core
 				ValidateLoversPairProjectionMatchesHistory();
 
 				_recoveryBoundary = CreateDto();
+			}
+
+			private static void ValidateRecoveryRoster(
+				GameSessionDto dto,
+				RoleLockIn roleLockIn)
+			{
+				if (dto.Players is null || dto.SeatingOrder is null)
+				{
+					throw new InvalidOperationException(
+						"The stable recovery snapshot is missing its Player roster or Seating Order.");
+				}
+
+				var playerIds = dto.Players.Select(player => player.Id).ToArray();
+				if (dto.Players.Count != roleLockIn.PlayerCount ||
+					dto.Players.Any(player =>
+						player.Id == Guid.Empty ||
+						string.IsNullOrWhiteSpace(player.Name)) ||
+					playerIds.Distinct().Count() != playerIds.Length ||
+					dto.SeatingOrder.Count != playerIds.Length ||
+					dto.SeatingOrder.Any(playerId => playerId == Guid.Empty) ||
+					dto.SeatingOrder.Distinct().Count() != dto.SeatingOrder.Count ||
+					!playerIds.ToHashSet().SetEquals(dto.SeatingOrder))
+				{
+					throw new InvalidOperationException(
+						"The stable recovery snapshot has an invalid Player roster or Seating Order.");
+				}
+			}
+
+			private static PublicGroupPartition? RestorePublicGroupPartition(
+				GameSessionDto dto,
+				RoleLockIn roleLockIn)
+			{
+				var prejudicedManipulatorReachable = roleLockIn.RoleComposition.Any(
+					card => card.PrintedRole == MainRoleType.PrejudicedManipulator);
+				if (prejudicedManipulatorReachable !=
+					(dto.PublicGroupPartition is not null))
+				{
+					throw new InvalidOperationException(
+						"The stable recovery snapshot has an invalid Public Group Partition coordinate.");
+				}
+				if (dto.PublicGroupPartition is null)
+				{
+					return null;
+				}
+
+				try
+				{
+					return dto.PublicGroupPartition.ToValue(
+						dto.Players.Select(player => player.Id));
+				}
+				catch (ArgumentException exception)
+				{
+					throw new InvalidOperationException(
+						"The stable recovery snapshot has an invalid Public Group Partition coordinate.",
+						exception);
+				}
 			}
 
 			private static (

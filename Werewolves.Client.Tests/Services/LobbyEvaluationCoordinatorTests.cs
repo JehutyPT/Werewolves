@@ -4,6 +4,7 @@ using Werewolves.Client.Services;
 using Werewolves.Client.Tests.Helpers;
 using Werewolves.Core.GameLogic.Simulation;
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Simulation;
 using Xunit;
 
@@ -102,13 +103,13 @@ public class LobbyEvaluationCoordinatorTests
 	[Theory]
 	[InlineData(true)]
 	[InlineData(false)]
-	public async Task AcceptedThiefLockIn_PlayerReorderCancelsEvaluationAndReturnsToLockIn(
+	public async Task AcceptedThiefLockIn_PlayerReorderPreservesSetupAndRestartsOrdinalEvaluation(
 		bool moveUp)
 	{
 		var lobby = CreateLobby(
 			MainRoleType.Thief,
 			MainRoleType.SimpleWerewolf,
-			MainRoleType.SimpleVillager,
+			MainRoleType.PrejudicedManipulator,
 			MainRoleType.SimpleVillager,
 			MainRoleType.SimpleVillager,
 			MainRoleType.SimpleVillager,
@@ -117,8 +118,16 @@ public class LobbyEvaluationCoordinatorTests
 		manager.TryReplaceStagedRoleLockIn(
 			lobby,
 			expectedCurrentVersion: 0,
-			offer1: MainRoleType.SimpleVillager,
+			offer1: MainRoleType.PrejudicedManipulator,
 			offer2: MainRoleType.SimpleVillager).Should().BeTrue();
+		var acceptedLockIn = lobby.AcceptedRoleLockIn;
+		var rosterIds = lobby.PlayerRoster.Select(player => player.Id).ToArray();
+		var partition = PublicGroupPartition.Create(
+			rosterIds,
+			[rosterIds[0], rosterIds[2]],
+			[rosterIds[1], rosterIds[3], rosterIds[4]]);
+		manager.TryReplaceStagedPublicGroupPartition(lobby, partition).Should().BeTrue();
+		var originalScenario = lobby.CreateSimulationScenario().ToCanonical();
 		var evaluator = new ControlledEvaluator();
 		using var coordinator = new LobbyEvaluationCoordinator(
 			lobby,
@@ -136,10 +145,19 @@ public class LobbyEvaluationCoordinatorTests
 
 		(moveUp ? lobby.MovePlayerUp(1) : lobby.MovePlayerDown(0)).Should().BeTrue();
 
-		lobby.RequiresRoleLockIn.Should().BeTrue();
-		coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.NotApplicable);
+		lobby.AcceptedRoleLockIn.Should().BeSameAs(acceptedLockIn);
+		lobby.AcceptedPublicGroupPartition.Should().BeSameAs(partition);
+		lobby.RequiresRoleLockIn.Should().BeFalse();
+		lobby.RequiresPublicGroupPartition.Should().BeFalse();
+		lobby.TryCreateSimulationScenario(out var reorderedScenario).Should().BeTrue();
+		reorderedScenario.ToCanonical().Should().NotBe(originalScenario);
 		call.CancellationToken.IsCancellationRequested.Should().BeTrue();
-		evaluator.CallCount.Should().Be(1);
+		var replacementCall = await evaluator.NextCallAsync();
+		replacementCall.Identity.Scenario.Should().Be(reorderedScenario.ToCanonical());
+		coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.Pending);
+		coordinator.State.Identity!.Scenario.Should().Be(reorderedScenario.ToCanonical());
+		coordinator.TryRequestLobbyExit().Should().BeFalse();
+		evaluator.CallCount.Should().Be(2);
 	}
 
 	[Fact]
@@ -1077,7 +1095,7 @@ public class LobbyEvaluationCoordinatorTests
 	}
 
 	[Theory]
-	[InlineData("safety-screening@26")]
+	[InlineData("safety-screening@27")]
 	[InlineData("safety-screening@21")]
 	[InlineData("core-simulator@1")]
 	[InlineData("foreign-simulator@1")]

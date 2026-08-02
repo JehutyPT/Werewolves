@@ -1,0 +1,130 @@
+@inject LobbySetupState Lobby
+@inject GameClientManager Game
+
+<main class="ww-app-shell"
+	  data-testid="@ModeratorUiTestIds.PublicGroupPartitionPage"
+	  aria-labelledby="public-group-partition-title">
+	<section class="ww-lobby-header">
+		<div>
+			<p class="ww-step-label">@ClientStrings.PublicGroupPartition_StepLabel</p>
+			<h1 id="public-group-partition-title">@ClientStrings.PublicGroupPartition_Title</h1>
+			<p class="ww-page-copy">@ClientStrings.PublicGroupPartition_Description</p>
+		</div>
+	</section>
+
+	<section class="ww-role-group"
+			 data-testid="@ModeratorUiTestIds.PublicGroupPartitionPlayerList"
+			 aria-label="@ClientStrings.PublicGroupPartition_ListAria">
+		<div class="ww-role-list">
+			@foreach (var player in Lobby.PlayerRoster)
+			{
+				<div class="ww-role-row"
+					 data-testid="@ModeratorUiTestIds.PublicGroupPartitionPlayer"
+					 @key="player.Id">
+					<span class="ww-role-label">@player.Name</span>
+					<div class="ww-option-list" role="group" aria-label="@player.Name">
+						<button type="button"
+								class="ww-option-btn @(_firstGroupPlayerIds.Contains(player.Id) ? "ww-option-btn--selected" : "")"
+								data-testid="@ModeratorUiTestIds.PublicGroupPartitionFirstChoice"
+								aria-label="@Format(ClientStrings.PublicGroupPartition_PlayerChoiceAriaFormat, player.Name, ClientStrings.PublicGroupPartition_FirstGroupLabel)"
+								aria-pressed="@(_firstGroupPlayerIds.Contains(player.Id) ? "true" : "false")"
+								@onclick="() => AssignToFirstGroup(player.Id)">@ClientStrings.PublicGroupPartition_FirstGroupLabel</button>
+						<button type="button"
+								class="ww-option-btn @(_secondGroupPlayerIds.Contains(player.Id) ? "ww-option-btn--selected" : "")"
+								data-testid="@ModeratorUiTestIds.PublicGroupPartitionSecondChoice"
+								aria-label="@Format(ClientStrings.PublicGroupPartition_PlayerChoiceAriaFormat, player.Name, ClientStrings.PublicGroupPartition_SecondGroupLabel)"
+								aria-pressed="@(_secondGroupPlayerIds.Contains(player.Id) ? "true" : "false")"
+								@onclick="() => AssignToSecondGroup(player.Id)">@ClientStrings.PublicGroupPartition_SecondGroupLabel</button>
+					</div>
+				</div>
+			}
+		</div>
+	</section>
+
+	<footer class="ww-action-bar">
+		@if (!string.IsNullOrEmpty(_validationError))
+		{
+			<p class="ww-validation ww-validation--role" role="alert">@_validationError</p>
+		}
+		<div class="ww-action-pair">
+			<button type="button"
+					class="ww-secondary-button"
+					data-testid="@ModeratorUiTestIds.PublicGroupPartitionBack"
+					@onclick="Back">@ClientStrings.Common_Back</button>
+			<button type="button"
+					class="ww-btn-primary"
+					data-testid="@ModeratorUiTestIds.PublicGroupPartitionCommit"
+					@onclick="Commit">@ClientStrings.PublicGroupPartition_CommitButton</button>
+		</div>
+	</footer>
+</main>
+
+@using Werewolves.Core.StateModels.Models
+
+@code {
+	[Parameter]
+	public EventCallback OnBack { get; set; }
+
+	[Parameter]
+	public EventCallback OnAccepted { get; set; }
+
+	private readonly HashSet<Guid> _firstGroupPlayerIds = [];
+	private readonly HashSet<Guid> _secondGroupPlayerIds = [];
+	private string? _validationError;
+
+	protected override void OnInitialized()
+	{
+		if (Lobby.AcceptedPublicGroupPartition is not { } accepted)
+		{
+			return;
+		}
+
+		_firstGroupPlayerIds.UnionWith(accepted.FirstGroupPlayerIds);
+		_secondGroupPlayerIds.UnionWith(accepted.SecondGroupPlayerIds);
+	}
+
+	private void AssignToFirstGroup(Guid playerId)
+	{
+		_secondGroupPlayerIds.Remove(playerId);
+		_firstGroupPlayerIds.Add(playerId);
+		_validationError = null;
+	}
+
+	private void AssignToSecondGroup(Guid playerId)
+	{
+		_firstGroupPlayerIds.Remove(playerId);
+		_secondGroupPlayerIds.Add(playerId);
+		_validationError = null;
+	}
+
+	private Task Back() => OnBack.InvokeAsync();
+
+	private Task Commit()
+	{
+		PublicGroupPartition replacement;
+		try
+		{
+			replacement = PublicGroupPartition.Create(
+				Lobby.PlayerRoster.Select(player => player.Id),
+				_firstGroupPlayerIds,
+				_secondGroupPlayerIds);
+		}
+		catch (ArgumentException)
+		{
+			_validationError = ClientStrings.PublicGroupPartition_IncompleteValidation;
+			return Task.CompletedTask;
+		}
+
+		if (!Game.TryReplaceStagedPublicGroupPartition(Lobby, replacement))
+		{
+			_validationError = ClientStrings.PublicGroupPartition_SaveFailedValidation;
+			return Task.CompletedTask;
+		}
+
+		_validationError = null;
+		return OnAccepted.InvokeAsync();
+	}
+
+	private static string Format(string format, params object[] args) =>
+		string.Format(CultureInfo.CurrentCulture, format, args);
+}

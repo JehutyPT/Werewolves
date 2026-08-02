@@ -30,6 +30,7 @@ public interface IGameSession
     public int RoleInPlayCount(MainRoleType type);
 	public RoleLockIn RoleLockIn => throw new NotSupportedException(
 		"This session projection does not expose a Role Lock-In.");
+	public PublicGroupPartition? PublicGroupPartition => null;
 	public IReadOnlyList<PhysicalCharacterCardState>
 		GetModeratorPhysicalCharacterCards() => [];
 
@@ -74,6 +75,8 @@ internal class GameSession : IGameSession
 	public Guid Id => _gameSessionKernel.Id;
 	public IEnumerable<GameLogEntryBase> GameHistoryLog => _gameSessionKernel.GetAllLogEntries();
 	public RoleLockIn RoleLockIn => _gameSessionKernel.GetRoleLockIn();
+	public PublicGroupPartition? PublicGroupPartition =>
+		_gameSessionKernel.GetPublicGroupPartition();
 
 	internal GameSession(Guid id, ModeratorInstruction initialInstruction, GameSessionConfig config, IStateChangeObserver? stateChangeObserver = null)
 	{

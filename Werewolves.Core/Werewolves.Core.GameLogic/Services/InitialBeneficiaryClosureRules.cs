@@ -136,6 +136,8 @@ internal static class InitialBeneficiaryClosureRules
 		"white-werewolf-beneficiary";
 	private const string PiperDeferredResultIdentifier =
 		"piper-beneficiary";
+	private const string PrejudicedManipulatorDeferredResultIdentifier =
+		"prejudiced-manipulator-beneficiary";
 	private const string LoversDeferredResultIdentifier =
 		"lovers-beneficiary";
 	internal const int CrossFactionLoversBeneficiaryPrecedence = 1;
@@ -244,6 +246,7 @@ internal static class InitialBeneficiaryClosureRules
 				MainRoleType.Cupid,
 				MainRoleType.WhiteWerewolf,
 				MainRoleType.Piper,
+				MainRoleType.PrejudicedManipulator,
 				MainRoleType.WolfHound
 			}
 			.Where(role => session.RoleInPlayCount(role) > 0)
@@ -453,14 +456,21 @@ internal static class InitialBeneficiaryClosureRules
 					MainRoleType.WhiteWerewolf,
 					Faction.WhiteWerewolf,
 					WhiteWerewolfDeferredResultIdentifier),
-				CreateCurrentExclusiveBeneficiaryResult(
-					session,
-					initialAgentGroupBoundary,
-					factionHistory,
-					MainRoleType.Piper,
-					Faction.Piper,
-					PiperDeferredResultIdentifier),
-				CreateCurrentLoversResult(
+					CreateCurrentExclusiveBeneficiaryResult(
+						session,
+						initialAgentGroupBoundary,
+						factionHistory,
+						MainRoleType.Piper,
+						Faction.Piper,
+						PiperDeferredResultIdentifier),
+					CreateCurrentExclusiveBeneficiaryResult(
+						session,
+						initialAgentGroupBoundary,
+						factionHistory,
+						MainRoleType.PrejudicedManipulator,
+						Faction.PrejudicedManipulator,
+						PrejudicedManipulatorDeferredResultIdentifier),
+					CreateCurrentLoversResult(
 					session,
 					initialAgentGroupBoundary,
 					history)
@@ -503,9 +513,10 @@ internal static class InitialBeneficiaryClosureRules
 			.ToArray();
 		foreach (var prerequisiteRole in new[]
 		         {
-			         MainRoleType.WhiteWerewolf,
-			         MainRoleType.Piper,
-			         MainRoleType.WolfHound
+				         MainRoleType.WhiteWerewolf,
+				         MainRoleType.Piper,
+				         MainRoleType.PrejudicedManipulator,
+				         MainRoleType.WolfHound
 		         })
 		{
 			if (session.RoleInPlayCount(prerequisiteRole) > 0 &&
@@ -553,13 +564,19 @@ internal static class InitialBeneficiaryClosureRules
 				continue;
 			}
 
-			if (role == MainRoleType.Piper)
-			{
-				candidates.Add(Faction.Piper);
-				continue;
-			}
+				if (role == MainRoleType.Piper)
+				{
+					candidates.Add(Faction.Piper);
+					continue;
+				}
 
-			var werewolfAgency =
+				if (role == MainRoleType.PrejudicedManipulator)
+				{
+					candidates.Add(Faction.PrejudicedManipulator);
+					continue;
+				}
+
+				var werewolfAgency =
 				projectionAtInitialGroup.Agents[playerId][Faction.Werewolf];
 			if (werewolfAgency == FactionAgentKnowledge.Unknown)
 			{

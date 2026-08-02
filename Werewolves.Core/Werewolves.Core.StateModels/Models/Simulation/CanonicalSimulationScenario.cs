@@ -15,6 +15,7 @@ public sealed class CanonicalSimulationScenario : IEquatable<CanonicalSimulation
 	public ThiefOfferBranchPolicy? ThiefOfferBranchPolicy { get; }
 
 	public IReadOnlyList<MainRoleType> ActorSetupCards { get; }
+	public CanonicalPublicGroupPartition? PublicGroupPartition { get; }
 
 	public SimulationRuleState RuleState { get; }
 
@@ -24,6 +25,7 @@ public sealed class CanonicalSimulationScenario : IEquatable<CanonicalSimulation
 		MainRoleType? offer1Role,
 		MainRoleType? offer2Role,
 		ThiefOfferBranchPolicy? thiefOfferBranchPolicy,
+		CanonicalPublicGroupPartition? publicGroupPartition,
 		MainRoleType[] actorSetupCards,
 		SimulationRuleState ruleState)
 	{
@@ -32,6 +34,7 @@ public sealed class CanonicalSimulationScenario : IEquatable<CanonicalSimulation
 		Offer1Role = offer1Role;
 		Offer2Role = offer2Role;
 		ThiefOfferBranchPolicy = thiefOfferBranchPolicy;
+		PublicGroupPartition = publicGroupPartition;
 		_actorSetupCards = actorSetupCards;
 		ActorSetupCards = Array.AsReadOnly(_actorSetupCards);
 		RuleState = ruleState;
@@ -47,6 +50,7 @@ public sealed class CanonicalSimulationScenario : IEquatable<CanonicalSimulation
 			scenario.Offer1Role,
 			scenario.Offer2Role,
 			scenario.ThiefOfferBranchPolicy,
+			scenario.PublicGroupPartition,
 			scenario.ActorSetupCards.Cards
 				.OrderBy(role => role.ToString(), StringComparer.Ordinal)
 				.ToArray(),
@@ -74,20 +78,38 @@ public sealed class CanonicalSimulationScenario : IEquatable<CanonicalSimulation
 		}
 
 		var parts = value.Split('|');
-		var hasOffers = parts.Length is 5 or 6;
-		var hasThiefPolicy = parts.Length == 6;
-		var actorPartIndex = hasThiefPolicy ? 4 : hasOffers ? 3 : 2;
-		var rulesPartIndex = actorPartIndex + 1;
-		if (parts.Length is not 4 and not 5 and not 6
-			|| !parts[0].StartsWith("players=", StringComparison.Ordinal)
-			|| (hasOffers && (!parts[2].StartsWith("offers=[", StringComparison.Ordinal)
-				|| !parts[2].EndsWith(']')))
-			|| (hasThiefPolicy && (!parts[3].StartsWith("thief=[", StringComparison.Ordinal)
-				|| !parts[3].EndsWith(']')))
-			|| !parts[actorPartIndex].StartsWith("actor=[", StringComparison.Ordinal)
-			|| !parts[actorPartIndex].EndsWith(']')
-			|| !parts[rulesPartIndex].StartsWith("rules=[", StringComparison.Ordinal)
-			|| !parts[rulesPartIndex].EndsWith(']'))
+		if (parts.Length is < 4 or > 7 ||
+			!parts[0].StartsWith("players=", StringComparison.Ordinal))
+		{
+			return false;
+		}
+
+		var nextPartIndex = 2;
+		string? offersPart = null;
+		string? thiefPolicyPart = null;
+		string? publicGroupPartitionPart = null;
+		if (nextPartIndex < parts.Length &&
+			parts[nextPartIndex].StartsWith("offers=[", StringComparison.Ordinal) &&
+			parts[nextPartIndex].EndsWith(']'))
+		{
+			offersPart = parts[nextPartIndex++];
+		}
+		if (nextPartIndex < parts.Length &&
+			parts[nextPartIndex].StartsWith("thief=[", StringComparison.Ordinal) &&
+			parts[nextPartIndex].EndsWith(']'))
+		{
+			thiefPolicyPart = parts[nextPartIndex++];
+		}
+		if (nextPartIndex < parts.Length &&
+			CanonicalPublicGroupPartition.HasCanonicalEnvelope(parts[nextPartIndex]))
+		{
+			publicGroupPartitionPart = parts[nextPartIndex++];
+		}
+		if (nextPartIndex + 2 != parts.Length ||
+			!parts[nextPartIndex].StartsWith("actor=[", StringComparison.Ordinal) ||
+			!parts[nextPartIndex].EndsWith(']') ||
+			!parts[nextPartIndex + 1].StartsWith("rules=[", StringComparison.Ordinal) ||
+			!parts[nextPartIndex + 1].EndsWith(']'))
 		{
 			return false;
 		}
@@ -108,17 +130,21 @@ public sealed class CanonicalSimulationScenario : IEquatable<CanonicalSimulation
 		}
 
 		if (!TryParseOffers(
-				hasOffers ? parts[2] : null,
+				offersPart,
 				out var offer1Role,
 				out var offer2Role)
 			|| !TryParseThiefOfferBranchPolicy(
-				hasThiefPolicy ? parts[3] : null,
+				thiefPolicyPart,
 				roleComposition,
 				offer1Role,
 				offer2Role,
 				out var thiefOfferBranchPolicy)
-			|| !TryParseActorSetupCards(parts[actorPartIndex], out var actorSetupCards)
-			|| !TryParseRuleState(parts[rulesPartIndex], out var ruleState))
+			|| !TryParsePublicGroupPartition(
+				publicGroupPartitionPart,
+				playerCount,
+				out var publicGroupPartition)
+			|| !TryParseActorSetupCards(parts[nextPartIndex], out var actorSetupCards)
+			|| !TryParseRuleState(parts[nextPartIndex + 1], out var ruleState))
 		{
 			return false;
 		}
@@ -129,6 +155,7 @@ public sealed class CanonicalSimulationScenario : IEquatable<CanonicalSimulation
 			offer1Role,
 			offer2Role,
 			thiefOfferBranchPolicy,
+			publicGroupPartition,
 			actorSetupCards,
 			ruleState);
 		return string.Equals(value, scenario.ToString(), StringComparison.Ordinal);
@@ -144,7 +171,10 @@ public sealed class CanonicalSimulationScenario : IEquatable<CanonicalSimulation
 		var thiefPolicy = ThiefOfferBranchPolicy is { } policy
 			? $"|thief=[{policy}]"
 			: string.Empty;
-		return $"players={PlayerCount.ToString(CultureInfo.InvariantCulture)}|{RoleComposition}{offers}{thiefPolicy}|actor=[{actorCards}]|rules=[{ruleState}]";
+		var publicGroupPartition = PublicGroupPartition is { } partition
+			? $"|{partition}"
+			: string.Empty;
+		return $"players={PlayerCount.ToString(CultureInfo.InvariantCulture)}|{RoleComposition}{offers}{thiefPolicy}{publicGroupPartition}|actor=[{actorCards}]|rules=[{ruleState}]";
 	}
 
 	public bool Equals(CanonicalSimulationScenario? other) =>
@@ -154,6 +184,7 @@ public sealed class CanonicalSimulationScenario : IEquatable<CanonicalSimulation
 		&& Offer1Role == other.Offer1Role
 		&& Offer2Role == other.Offer2Role
 		&& Equals(ThiefOfferBranchPolicy, other.ThiefOfferBranchPolicy)
+		&& Equals(PublicGroupPartition, other.PublicGroupPartition)
 		&& _actorSetupCards.SequenceEqual(other._actorSetupCards)
 		&& RuleState == other.RuleState;
 
@@ -168,6 +199,7 @@ public sealed class CanonicalSimulationScenario : IEquatable<CanonicalSimulation
 		hash.Add(Offer1Role);
 		hash.Add(Offer2Role);
 		hash.Add(ThiefOfferBranchPolicy);
+		hash.Add(PublicGroupPartition);
 		foreach (var role in _actorSetupCards)
 		{
 			hash.Add(role);
@@ -219,6 +251,29 @@ public sealed class CanonicalSimulationScenario : IEquatable<CanonicalSimulation
 			return false;
 		}
 
+		return true;
+	}
+
+	private static bool TryParsePublicGroupPartition(
+		string? value,
+		int playerCount,
+		out CanonicalPublicGroupPartition? publicGroupPartition)
+	{
+		publicGroupPartition = null;
+		if (value is null)
+		{
+			return true;
+		}
+
+		if (!CanonicalPublicGroupPartition.TryParse(
+				value,
+				playerCount,
+				out var parsed))
+		{
+			return false;
+		}
+
+		publicGroupPartition = parsed;
 		return true;
 	}
 
