@@ -472,6 +472,43 @@ public sealed class ActorBorrowedStutteringJudgeTests
 			.WithMessage("*Actor borrowed Role Power*");
 	}
 
+	[Theory]
+	[InlineData(JudgeVoteRecoveryPresentationTamper.PublicAnnouncement)]
+	[InlineData(JudgeVoteRecoveryPresentationTamper.PrivateInstruction)]
+	[InlineData(JudgeVoteRecoveryPresentationTamper.EmptySelectionOptionLabel)]
+	public void BorrowedStutteringJudge_TamperedRecordDayVotePresentationIsRejectedWithoutSessionMutation(
+		JudgeVoteRecoveryPresentationTamper tamper)
+	{
+		var fixture = CreateCommittedJudgeObservationBoundary();
+		var pending = fixture.Session.PendingModeratorInstruction.Should()
+			.BeOfType<SelectPlayersInstruction>().Subject;
+		pending.PublicAnnouncement.Should().BeNull();
+		pending.PrivateInstruction.Should().Be(
+			GameStrings.VoteStartsModeratorInstruction);
+		pending.EmptySelectionOptionLabel.Should().Be(
+			GameStrings.DayVoteNoEliminationOption);
+		var tampered = RecoveryPayloadTestDriver
+			.Parse(fixture.Session.Serialize())
+			.RewritePendingPlayerSelectionPresentation(
+				tamper == JudgeVoteRecoveryPresentationTamper.PublicAnnouncement
+					? "Tampered public announcement."
+					: pending.PublicAnnouncement,
+				tamper == JudgeVoteRecoveryPresentationTamper.PrivateInstruction
+					? "Tampered private instruction."
+					: pending.PrivateInstruction,
+				tamper == JudgeVoteRecoveryPresentationTamper.EmptySelectionOptionLabel
+					? "Tampered empty-selection label."
+					: pending.EmptySelectionOptionLabel)
+			.Serialize();
+		var service = new GameService();
+
+		Action rehydrateTampered = () => service.RehydrateSession(tampered);
+
+		rehydrateTampered.Should().Throw<InvalidOperationException>()
+			.WithMessage("*Stuttering Judge recovery cursor*");
+		service.GetGameStateView(fixture.Session.Id).Should().BeNull();
+	}
+
 	[Fact]
 	public void BorrowedStutteringJudge_RecoveryRejectsTwoSpendTamperWithDifferentActiveActivation()
 	{
@@ -924,5 +961,11 @@ public sealed class ActorBorrowedStutteringJudgeTests
 	private sealed class TestHookSubPhaseKey : IHookSubPhaseKey;
 	private sealed class TestGameFlowManagerKey : IGameFlowManagerKey;
 	private sealed class TestPhaseManagerKey : IPhaseManagerKey;
+	public enum JudgeVoteRecoveryPresentationTamper
+	{
+		PublicAnnouncement,
+		PrivateInstruction,
+		EmptySelectionOptionLabel
+	}
 	private sealed record CommittedJudgeObservationBoundary(GameSession Session);
 }

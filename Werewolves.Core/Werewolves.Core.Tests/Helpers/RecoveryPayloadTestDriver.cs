@@ -483,6 +483,7 @@ internal sealed class RecoveryPayloadTestDriver
 	}
 
 	internal RecoveryPayloadTestDriver RewritePendingPlayerSelectionPresentation(
+		string? publicAnnouncement,
 		string? privateInstruction,
 		string? emptySelectionOptionLabel)
 	{
@@ -497,7 +498,7 @@ internal sealed class RecoveryPayloadTestDriver
 			pending.Semantic,
 			pending.SelectablePlayerIds.ToHashSet(),
 			pending.CountConstraint,
-			pending.PublicAnnouncement,
+			publicAnnouncement,
 			privateInstruction,
 			pending.AffectedPlayerIds,
 			pending.RoleIdentification,

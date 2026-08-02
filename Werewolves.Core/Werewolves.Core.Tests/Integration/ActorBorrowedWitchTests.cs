@@ -127,6 +127,7 @@ public sealed class ActorBorrowedWitchTests
 		if (pending is SelectPlayersInstruction selection)
 		{
 			driver.RewritePendingPlayerSelectionPresentation(
+				selection.PublicAnnouncement,
 				tamper is
 					WitchRecoveryPresentationTamper.HealingPrivateInstruction or
 					WitchRecoveryPresentationTamper.PoisonPrivateInstruction
