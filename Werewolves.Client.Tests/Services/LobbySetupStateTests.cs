@@ -85,6 +85,34 @@ public class LobbySetupStateTests
 		scenario.RuleState.Should().Be(SimulationRuleState.Default);
 	}
 
+	[Theory]
+	[InlineData(MainRoleType.Actor)]
+	[InlineData(MainRoleType.PrejudicedManipulator)]
+	public void TryCreateSimulationScenario_BeforeConditionalRoleLockIn_FailsClosed(
+		MainRoleType conditionalRole)
+	{
+		var state = LobbySetupMetadataFixture.StateWithRoles(
+			conditionalRole,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager);
+		foreach (var playerName in PlayerNames.DefaultFive)
+		{
+			state.AddPlayer(playerName);
+		}
+		state.IncrementRole(conditionalRole);
+		state.IncrementRole(MainRoleType.SimpleWerewolf);
+		for (var index = 0; index < 3; index++)
+		{
+			state.IncrementRole(MainRoleType.SimpleVillager);
+		}
+
+		var created = state.TryCreateSimulationScenario(out var scenario);
+
+		state.AcceptedRoleLockIn.Should().BeNull();
+		created.Should().BeFalse();
+		scenario.Should().BeNull();
+	}
+
 	[Fact]
 	public void TryCreateSimulationScenario_WithReachableManipulatorAndNoPartition_FailsClosed()
 	{

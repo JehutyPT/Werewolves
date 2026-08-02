@@ -240,6 +240,11 @@ public sealed class CanonicalSimulationScenario : IEquatable<CanonicalSimulation
 
 			cards.Add(role);
 		}
+		if (cards.Count !=
+			global::Werewolves.Core.StateModels.Models.ActorSetupCards.RequiredCount)
+		{
+			return false;
+		}
 
 		actorSetupCards = cards.ToArray();
 		var sortedCards = actorSetupCards

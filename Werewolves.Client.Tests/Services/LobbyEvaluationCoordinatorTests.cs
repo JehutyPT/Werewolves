@@ -100,6 +100,65 @@ public class LobbyEvaluationCoordinatorTests
 			.Which.ToCanonical().Should().Be(new SimulationScenario(accepted).ToCanonical());
 	}
 
+	[Fact]
+	public void ActorDraft_WaitsForAcceptedLockInAndSetupThenClassifiesItsExactScenario()
+	{
+		var lobby = CreateLobby(
+			MainRoleType.Actor,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager);
+		var local = new RecordingLocalStore(bytes: null);
+		var evaluator = new RecordingEvaluator(new CouldNotEvaluateLobbyEvaluation());
+		var classifiedScenarios = new List<SimulationScenario>();
+		using var coordinator = new LobbyEvaluationCoordinator(
+			lobby,
+			local,
+			evaluator,
+			SafetyScreeningSettings,
+			TimeProvider.System,
+			(scenario, _) =>
+			{
+				classifiedScenarios.Add(scenario);
+				return new LobbyScenarioSupport(
+					RulesValid: true,
+					AppSupported: false,
+					SimulatorSupported: false);
+			});
+
+		coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.NotApplicable);
+		classifiedScenarios.Should().BeEmpty();
+		local.ReadCount.Should().Be(0);
+		evaluator.CallCount.Should().Be(0);
+
+		var manager = new GameClientManager();
+		manager.TryEnsureStagedRoleLockIn(lobby).Should().BeTrue();
+
+		coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.NotApplicable);
+		classifiedScenarios.Should().BeEmpty();
+		local.ReadCount.Should().Be(0);
+		evaluator.CallCount.Should().Be(0);
+
+		manager.TryReplaceStagedActorSetupCards(
+			lobby,
+			expectedCurrentVersion: 0,
+			[
+				MainRoleType.Cupid,
+				MainRoleType.Witch,
+				MainRoleType.Hunter
+			]).Should().BeTrue();
+		var expectedScenario = new SimulationScenario(
+			lobby.AcceptedRoleLockIn!,
+			lobby.AcceptedActorSetupCards);
+
+		coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.NotApplicable);
+		classifiedScenarios.Should().ContainSingle()
+			.Which.ToCanonical().Should().Be(expectedScenario.ToCanonical());
+		local.ReadCount.Should().Be(0);
+		evaluator.CallCount.Should().Be(0);
+	}
+
 	[Theory]
 	[InlineData(true)]
 	[InlineData(false)]

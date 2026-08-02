@@ -594,7 +594,8 @@ internal static class GameFlowManager
 
 	        if (nextInstructionToSend.Semantic is
 	            ModeratorInstructionSemantic.ObserveStutteringJudgeSignal or
-	            ModeratorInstructionSemantic.ChooseThiefOffer)
+	            ModeratorInstructionSemantic.ChooseThiefOffer or
+	            ModeratorInstructionSemantic.ChooseActorSetupCard)
 	        {
 		        return true;
 	        }

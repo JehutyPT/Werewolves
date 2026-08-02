@@ -104,8 +104,12 @@ public sealed class GameClientManager
 		{
 			var proposedActorSetupCards =
 				lobby.GetRetainedActorSetupCardsForRoleLockIn(replacement);
-			var proposedPartition = replacement.RoleComposition.Any(
-				card => card.PrintedRole == MainRoleType.PrejudicedManipulator)
+			var actorSetupIsPending = replacement.RoleComposition.Any(
+					card => card.PrintedRole == MainRoleType.Actor) &&
+				proposedActorSetupCards.Cards.Count == 0;
+			var proposedPartition = !actorSetupIsPending &&
+				replacement.RoleComposition.Any(
+					card => card.PrintedRole == MainRoleType.PrejudicedManipulator)
 				? lobby.AcceptedPublicGroupPartition
 				: null;
 			PersistStagedLobbyBeforeApply(

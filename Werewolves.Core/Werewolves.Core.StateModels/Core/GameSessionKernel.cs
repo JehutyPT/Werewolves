@@ -185,16 +185,13 @@ namespace Werewolves.Core.StateModels.Core
 				MainRoleType.Actor,
 				selectedCard.Id,
 				selectedCard.PrintedRole);
-			AddEntryAndUpdateState(new ActorSetupCardSpendCommittedLogEntry
+			AddEntryAndUpdateState(new ActorSetupCardSpendCommandLogEntry
 			{
 				Timestamp = DateTimeOffset.UtcNow,
 				TurnNumber = TurnNumber,
-				CurrentPhase = CurrentPhase
+				CurrentPhase = CurrentPhase,
+				Activation = committedActivation
 			});
-			_actorSetupCardSpendActivationIds.Add(
-				selectedCard.Id,
-				activationId);
-			_activeActorBorrowedRolePowerActivation = committedActivation;
 			activation = committedActivation;
 			return true;
 		}
@@ -208,20 +205,20 @@ namespace Werewolves.Core.StateModels.Core
 
 		internal bool TryExpireActorBorrowedRolePowerActivation()
 		{
-			if (_activeActorBorrowedRolePowerActivation is null ||
+			if (_activeActorBorrowedRolePowerActivation is not { } activation ||
 				CurrentPhase != GamePhase.Night)
 			{
 				return false;
 			}
 
 			AddEntryAndUpdateState(
-				new ActorBorrowedRolePowerActivationExpiredLogEntry
+				new ActorBorrowedRolePowerActivationExpiryCommandLogEntry
 				{
 					Timestamp = DateTimeOffset.UtcNow,
 					TurnNumber = TurnNumber,
-					CurrentPhase = CurrentPhase
+					CurrentPhase = CurrentPhase,
+					ExpectedActivation = activation
 				});
-			_activeActorBorrowedRolePowerActivation = null;
 			return true;
 		}
 

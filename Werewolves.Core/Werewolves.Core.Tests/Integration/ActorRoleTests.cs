@@ -64,6 +64,85 @@ public sealed class ActorRoleTests
 	}
 
 	[Fact]
+	public void KnownHolder_PendingSetupCardChoice_RoundTripRestoresExactPrivateContinuationWithoutCommittingAChoice()
+	{
+		var (session, start, actorId) = CreateActorSession(holderKnown: true);
+		IGameHookListener listener = CreateActorRole();
+		var wake = Advance(listener, session, start.CreateResponse()).Instruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var choice = Advance(listener, session, wake.CreateResponse()).Instruction
+			.Should().BeOfType<SelectOptionsInstruction>().Subject;
+		session.SetPendingModeratorInstruction(RecoveryKey, choice);
+		session.CaptureRecoveryBoundary(RecoveryKey);
+
+		var recovered = new GameSession(session.Serialize());
+		var recoveredChoice = recovered.PendingModeratorInstruction
+			.Should().BeOfType<SelectOptionsInstruction>().Subject;
+		IGameHookListener recoveredListener = CreateActorRole();
+
+		recoveredChoice.InstructionId.Should().Be(choice.InstructionId);
+		recoveredChoice.Semantic.Should().Be(
+			ModeratorInstructionSemantic.ChooseActorSetupCard);
+		recoveredChoice.SelectionRange.Should().Be(
+			NumberRangeConstraint.SingleOptional);
+		recoveredChoice.PublicAnnouncement.Should().BeNull();
+		recoveredChoice.PrivateInstruction.Should().Be(
+			GameStrings.ActorSetupCardSelectionInstruction);
+		recoveredChoice.AffectedPlayerIds.Should().Equal(actorId);
+		recoveredChoice.Options.Select(option => option.Id).Should().Equal(
+			SeerCard.Id.ToString("D"),
+			CupidCard.Id.ToString("D"),
+			WitchCard.Id.ToString("D"));
+		recoveredListener.TryResolvePendingInstructionContinuation(
+			GameHook.NightMainActionLoop,
+			recovered,
+			recoveredChoice,
+			out var listenerState).Should().BeTrue();
+		listenerState.Should().Be(
+			ActorRoleState.AwaitingSetupCardChoice.ToString());
+		recovered.RestoreTransientContinuation(
+			RecoveryKey,
+			GameHook.NightMainActionLoop.ToString(),
+			recoveredListener.Id,
+			listenerState);
+
+		var sleep = Advance(
+			recoveredListener,
+			recovered,
+			recoveredChoice.CreateResponse()).Instruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+
+		sleep.Semantic.Should().Be(ModeratorInstructionSemantic.PutRoleToSleep);
+		recovered.GetModeratorSpentActorSetupCards().Should().BeEmpty();
+		recovered.GetModeratorActiveActorBorrowedRolePowerActivation().Should()
+			.BeNull();
+	}
+
+	[Theory]
+	[InlineData(PendingChoiceTamper.RequiredSelection)]
+	[InlineData(PendingChoiceTamper.ReplacedOptionId)]
+	[InlineData(PendingChoiceTamper.ReorderedOptions)]
+	[InlineData(PendingChoiceTamper.PublicAnnouncement)]
+	[InlineData(PendingChoiceTamper.WrongPrivateInstruction)]
+	public void PendingSetupCardChoice_TamperedCanonicalShapeIsRejected(
+		PendingChoiceTamper tamper)
+	{
+		var (session, start, _) = CreateActorSession(holderKnown: true);
+		IGameHookListener listener = CreateActorRole();
+		var wake = Advance(listener, session, start.CreateResponse()).Instruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var choice = Advance(listener, session, wake.CreateResponse()).Instruction
+			.Should().BeOfType<SelectOptionsInstruction>().Subject;
+		var tampered = CreateTamperedPendingChoice(choice, tamper);
+
+		listener.TryResolvePendingInstructionContinuation(
+			GameHook.NightMainActionLoop,
+			session,
+			tampered,
+			out _).Should().BeFalse();
+	}
+
+	[Fact]
 	public void SetupCardChoice_Declined_SleepsWithoutSpendingOrActivating()
 	{
 		var (session, start, actorId) = CreateActorSession(holderKnown: true);
@@ -442,6 +521,47 @@ public sealed class ActorRoleTests
 			new VillagerRolePowerSuppressionPolicy(
 				AllowAllRolePowerAvailabilityPolicy.Instance)));
 
+	private static SelectOptionsInstruction CreateTamperedPendingChoice(
+		SelectOptionsInstruction choice,
+		PendingChoiceTamper tamper)
+	{
+		var options = choice.Options.ToArray();
+		var selectionRange = choice.SelectionRange;
+		var publicAnnouncement = choice.PublicAnnouncement;
+		var privateInstruction = choice.PrivateInstruction;
+		switch (tamper)
+		{
+			case PendingChoiceTamper.RequiredSelection:
+				selectionRange = NumberRangeConstraint.Single;
+				break;
+			case PendingChoiceTamper.ReplacedOptionId:
+				options[0] = new ModeratorOption(
+					"00000000-0000-0000-0000-000000000149",
+					options[0].Label);
+				break;
+			case PendingChoiceTamper.ReorderedOptions:
+				options = options.Reverse().ToArray();
+				break;
+			case PendingChoiceTamper.PublicAnnouncement:
+				publicAnnouncement = GameStrings.NightStartsPrompt;
+				break;
+			case PendingChoiceTamper.WrongPrivateInstruction:
+				privateInstruction = GameStrings.ThiefOfferSelectionInstruction;
+				break;
+			default:
+				throw new ArgumentOutOfRangeException(nameof(tamper), tamper, null);
+		}
+
+		return new SelectOptionsInstruction(
+			choice.Semantic,
+			options,
+			selectionRange,
+			publicAnnouncement,
+			privateInstruction,
+			choice.AffectedPlayerIds,
+			choice.InstructionId);
+	}
+
 	private static HookListenerActionResult Advance(
 		IGameHookListener listener,
 		GameSession session,
@@ -539,4 +659,13 @@ public sealed class ActorRoleTests
 	private sealed class TestSubPhaseManagerKey : ISubPhaseManagerKey;
 	private sealed class TestHookSubPhaseKey : IHookSubPhaseKey;
 	private sealed class TestGameFlowManagerKey : IGameFlowManagerKey;
+
+	public enum PendingChoiceTamper
+	{
+		RequiredSelection,
+		ReplacedOptionId,
+		ReorderedOptions,
+		PublicAnnouncement,
+		WrongPrivateInstruction
+	}
 }

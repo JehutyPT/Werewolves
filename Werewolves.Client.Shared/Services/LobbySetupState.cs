@@ -261,7 +261,10 @@ public class LobbySetupState
 
 	public bool TryCreateSimulationScenario(out SimulationScenario scenario)
 	{
-		if (RequiresRoleLockIn || RequiresActorSetupCards || RequiresPublicGroupPartition)
+		if (RequiresRoleLockIn ||
+			RequiresConditionalRoleLockIn ||
+			RequiresActorSetupCards ||
+			RequiresPublicGroupPartition)
 		{
 			scenario = null!;
 			return false;
@@ -440,10 +443,12 @@ public class LobbySetupState
 
 	internal void ApplyAcceptedRoleLockIn(RoleLockIn replacement)
 	{
-		AcceptedActorSetupCards =
+		var retainedActorSetupCards =
 			GetRetainedActorSetupCardsForRoleLockIn(replacement);
+		AcceptedActorSetupCards = retainedActorSetupCards;
 		AcceptedRoleLockIn = replacement;
-		if (!IsPrejudicedManipulatorReachable(replacement))
+		if (!IsPrejudicedManipulatorReachable(replacement) ||
+			IsActorReachable(replacement) && retainedActorSetupCards.Cards.Count == 0)
 		{
 			AcceptedPublicGroupPartition = null;
 		}
@@ -640,6 +645,11 @@ public class LobbySetupState
 	private static bool IsActorReachable(RoleLockIn roleLockIn) =>
 		roleLockIn.RoleComposition.Any(
 			card => card.PrintedRole == MainRoleType.Actor);
+
+	private bool RequiresConditionalRoleLockIn =>
+		AcceptedRoleLockIn is null &&
+		(GetRoleCount(MainRoleType.Actor) > 0 ||
+			GetRoleCount(MainRoleType.PrejudicedManipulator) > 0);
 
 	private bool HasBlockingRoleLockInIssues(
 		RoleLockIn roleLockIn,

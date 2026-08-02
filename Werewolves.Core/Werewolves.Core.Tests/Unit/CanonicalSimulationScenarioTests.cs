@@ -234,6 +234,8 @@ public class CanonicalSimulationScenarioTests
 	[Theory]
 	[InlineData("players=05|roles=[Seer=1]|actor=[]|rules=[]")]
 	[InlineData("players=5|roles=[Seer=1]|actor=[Seer,Cupid]|rules=[]")]
+	[InlineData("players=5|roles=[Seer=1]|actor=[Cupid,Seer]|rules=[]")]
+	[InlineData("players=5|roles=[Seer=1]|actor=[Cupid,Elder,Fox,Seer]|rules=[]")]
 	[InlineData("players=5|roles=[Seer=1]|actor=[1]|rules=[]")]
 	[InlineData("players=5|roles=[Seer=1]|actor=[UnknownRole]|rules=[]")]
 	[InlineData("players=5|roles=[Seer=1]|actor=[]|rules=[newMoonEnabled]")]

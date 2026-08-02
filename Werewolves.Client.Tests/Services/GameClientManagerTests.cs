@@ -295,6 +295,139 @@ public class GameClientManagerTests
 	}
 
 	[Fact]
+	public void RoleLockInReplacement_AddingActorClearsPartitionAndRecoversAtActorGate()
+	{
+		var store = new ToggleThrowSaveStore();
+		var lobby = CreateActorAndPrejudicedManipulatorLobby();
+		lobby.DecrementRole(MainRoleType.Actor);
+		lobby.IncrementRole(MainRoleType.SimpleVillager);
+		var manager = new GameClientManager(new GameService(), saveStore: store);
+		manager.TryEnsureStagedRoleLockIn(lobby).Should().BeTrue();
+		var partition = PublicGroupPartition.Create(
+			lobby.PlayerRoster.Select(player => player.Id),
+			lobby.PlayerRoster.Take(2).Select(player => player.Id),
+			lobby.PlayerRoster.Skip(2).Select(player => player.Id));
+		manager.TryReplaceStagedPublicGroupPartition(lobby, partition)
+			.Should().BeTrue();
+		lobby.DecrementRole(MainRoleType.SimpleVillager);
+		lobby.IncrementRole(MainRoleType.Actor);
+		var replacement = RoleLockIn.CreateFromPrintedRoles(
+			version: 2,
+			playerCount: lobby.PlayerRoster.Count,
+			lobby.GetSelectedRoles());
+		var scenarioChanges = 0;
+		lobby.SimulationScenarioChanged += (_, _) => scenarioChanges++;
+
+		manager.TryReplaceStagedRoleLockIn(
+			lobby,
+			expectedCurrentVersion: 1,
+			replacement).Should().BeTrue();
+
+		lobby.AcceptedRoleLockIn.Should().BeSameAs(replacement);
+		lobby.AcceptedActorSetupCards.Should().Be(ActorSetupCards.None);
+		lobby.AcceptedPublicGroupPartition.Should().BeNull();
+		lobby.RequiresActorSetupCards.Should().BeTrue();
+		lobby.RequiresPublicGroupPartition.Should().BeFalse();
+		scenarioChanges.Should().Be(1);
+		var persisted = LocalRecoveryPayloadCodec.Deserialize(store.Load()!)
+			.Should().BeOfType<StagedLobbyRecoveryPayload>().Which;
+		persisted.RoleLockIn.Version.Should().Be(2);
+		persisted.ActorSetupCards.Should().Be(ActorSetupCards.None);
+		persisted.PublicGroupPartition.Should().BeNull();
+
+		var recoveredLobby = CreateActorAndPrejudicedManipulatorLobby(withPlayers: false);
+		var recovered = new GameClientManager(
+			new GameService(),
+			saveStore: store,
+			lobbySetupState: recoveredLobby);
+
+		recovered.HasActiveSession.Should().BeFalse();
+		recoveredLobby.AcceptedRoleLockIn!.Version.Should().Be(2);
+		recoveredLobby.AcceptedActorSetupCards.Should().Be(ActorSetupCards.None);
+		recoveredLobby.AcceptedPublicGroupPartition.Should().BeNull();
+		recoveredLobby.RequiresActorSetupCards.Should().BeTrue();
+		recoveredLobby.RequiresPublicGroupPartition.Should().BeFalse();
+	}
+
+	[Fact]
+	public void RoleLockInReplacement_InvalidatingActorCardsClearsPartitionAtomicallyAndRecovers()
+	{
+		var store = new ToggleThrowSaveStore();
+		var lobby = CreateActorAndPrejudicedManipulatorLobby();
+		var manager = new GameClientManager(new GameService(), saveStore: store);
+		manager.TryEnsureStagedRoleLockIn(lobby).Should().BeTrue();
+		manager.TryReplaceStagedActorSetupCards(
+			lobby,
+			expectedCurrentVersion: 0,
+			[
+				MainRoleType.Cupid,
+				MainRoleType.Witch,
+				MainRoleType.Hunter
+			]).Should().BeTrue();
+		var partition = PublicGroupPartition.Create(
+			lobby.PlayerRoster.Select(player => player.Id),
+			lobby.PlayerRoster.Take(2).Select(player => player.Id),
+			lobby.PlayerRoster.Skip(2).Select(player => player.Id));
+		manager.TryReplaceStagedPublicGroupPartition(lobby, partition)
+			.Should().BeTrue();
+		var acceptedRoleLockIn = lobby.AcceptedRoleLockIn;
+		var acceptedActorSetupCards = lobby.AcceptedActorSetupCards;
+		var acceptedPartition = lobby.AcceptedPublicGroupPartition;
+		var acceptedBytes = store.Load();
+
+		lobby.DecrementRole(MainRoleType.SimpleVillager);
+		lobby.IncrementRole(MainRoleType.Cupid);
+		var replacement = RoleLockIn.CreateFromPrintedRoles(
+			version: 2,
+			playerCount: lobby.PlayerRoster.Count,
+			lobby.GetSelectedRoles());
+		var scenarioChanges = 0;
+		lobby.SimulationScenarioChanged += (_, _) => scenarioChanges++;
+		store.ThrowOnSave = true;
+
+		manager.TryReplaceStagedRoleLockIn(
+			lobby,
+			expectedCurrentVersion: 1,
+			replacement).Should().BeFalse();
+
+		lobby.AcceptedRoleLockIn.Should().BeSameAs(acceptedRoleLockIn);
+		lobby.AcceptedActorSetupCards.Should().BeSameAs(acceptedActorSetupCards);
+		lobby.AcceptedPublicGroupPartition.Should().BeSameAs(acceptedPartition);
+		store.Load().Should().Be(acceptedBytes);
+		scenarioChanges.Should().Be(0);
+
+		store.ThrowOnSave = false;
+		manager.TryReplaceStagedRoleLockIn(
+			lobby,
+			expectedCurrentVersion: 1,
+			replacement).Should().BeTrue();
+
+		lobby.AcceptedRoleLockIn.Should().BeSameAs(replacement);
+		lobby.AcceptedActorSetupCards.Should().Be(ActorSetupCards.None);
+		lobby.AcceptedPublicGroupPartition.Should().BeNull();
+		lobby.RequiresActorSetupCards.Should().BeTrue();
+		lobby.RequiresPublicGroupPartition.Should().BeFalse();
+		scenarioChanges.Should().Be(1);
+		var persisted = LocalRecoveryPayloadCodec.Deserialize(store.Load()!)
+			.Should().BeOfType<StagedLobbyRecoveryPayload>().Which;
+		persisted.RoleLockIn.Version.Should().Be(2);
+		persisted.ActorSetupCards.Should().Be(ActorSetupCards.None);
+		persisted.PublicGroupPartition.Should().BeNull();
+
+		var recoveredLobby = CreateActorAndPrejudicedManipulatorLobby(withPlayers: false);
+		_ = new GameClientManager(
+			new GameService(),
+			saveStore: store,
+			lobbySetupState: recoveredLobby);
+
+		recoveredLobby.AcceptedRoleLockIn!.Version.Should().Be(2);
+		recoveredLobby.AcceptedActorSetupCards.Should().Be(ActorSetupCards.None);
+		recoveredLobby.AcceptedPublicGroupPartition.Should().BeNull();
+		recoveredLobby.RequiresActorSetupCards.Should().BeTrue();
+		recoveredLobby.RequiresPublicGroupPartition.Should().BeFalse();
+	}
+
+	[Fact]
 	public void PrintedRoleOffers_StageRecoverAndStartTheExactAcceptedPartition()
 	{
 		using var saveDirectory = TemporaryDirectory.Create();

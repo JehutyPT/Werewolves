@@ -81,8 +81,8 @@ internal sealed class ActorRole : NightRoleHookListener<ActorRoleState>
 		    pendingInstruction is SelectOptionsInstruction
 		    {
 			    Semantic: ModeratorInstructionSemantic.ChooseActorSetupCard
-		    } &&
-		    HasExpectedAffectedRoleHolders(session, pendingInstruction))
+		    } selection &&
+		    HasExpectedPendingSetupCardChoice(session, selection))
 		{
 			listenerState = ActorRoleState.AwaitingSetupCardChoice.ToString();
 			return true;
@@ -104,6 +104,24 @@ internal sealed class ActorRole : NightRoleHookListener<ActorRoleState>
 			session,
 			pendingInstruction,
 			out listenerState);
+	}
+
+	private bool HasExpectedPendingSetupCardChoice(
+		GameSession session,
+		SelectOptionsInstruction selection)
+	{
+		var expectedOptionIds = session.GetModeratorRemainingActorSetupCards()
+			.Select(card => card.Id.ToString("D"));
+
+		return selection.SelectionRange == NumberRangeConstraint.SingleOptional &&
+			selection.PublicAnnouncement is null &&
+			StringComparer.Ordinal.Equals(
+				selection.PrivateInstruction,
+				GameStrings.ActorSetupCardSelectionInstruction) &&
+			selection.Options.Select(option => option.Id).SequenceEqual(
+				expectedOptionIds,
+				StringComparer.Ordinal) &&
+			HasExpectedAffectedRoleHolders(session, selection);
 	}
 
 	internal static bool TryValidateCommittedRecoveryBoundary(
