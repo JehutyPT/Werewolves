@@ -237,7 +237,10 @@ internal class SimpleWerewolfRole : StandardNightRoleHookListener
         if (!GetLivingKnownNonAgents(session).Contains(victimId))
         {
             throw new InvalidOperationException(
-                "The Werewolf victim must be a living known non-Agent.");
+                session.GetModeratorActiveActorBorrowedRolePowerActivation()
+                    ?.SourceRole == MainRoleType.LittleGirl
+                    ? "The borrowed Role Power response is invalid or no longer available."
+                    : "The Werewolf victim must be a living known non-Agent.");
         }
 
         session.PerformNightAction(NightActionType.WerewolfVictimSelection, victimId);
@@ -289,27 +292,41 @@ internal class SimpleWerewolfRole : StandardNightRoleHookListener
 		    .Where(player =>
 		        player.State.CurrentRole == MainRoleType.LittleGirl)
 		    .ToArray();
-		if (livingHolders.Length == 0)
+		var activation =
+			session.GetModeratorActiveActorBorrowedRolePowerActivation();
+		var hasBorrowedPower =
+			activation?.SourceRole == MainRoleType.LittleGirl;
+		var executionCount =
+			livingHolders.Length + (hasBorrowedPower ? 1 : 0);
+		if (executionCount == 0)
 		{
 		    return null;
 		}
 
-		if (livingHolders.Length != 1)
+		if (executionCount != 1)
 		{
 		    throw new InvalidOperationException(
-		        "Little Girl spying requires exactly one living current Role holder.");
+		        "Little Girl spying requires exactly one active execution.");
 		}
 
-		var holder = livingHolders.Single();
-		var instance = RolePowerInstance.CreateCurrent(
-			session,
-		    holder,
-		    MainRoleType.LittleGirl,
-		    LittleGirlRole.SpyingPower);
+		var actingPlayer = hasBorrowedPower
+			? session.GetPlayer(activation!.ActingPlayerId)
+			: livingHolders.Single();
+		var instance = hasBorrowedPower
+			? RolePowerInstance.CreateBorrowed(
+				session,
+				actingPlayer,
+				MainRoleType.LittleGirl,
+				LittleGirlRole.SpyingPower)
+			: RolePowerInstance.CreateCurrent(
+				session,
+				actingPlayer,
+				MainRoleType.LittleGirl,
+				LittleGirlRole.SpyingPower);
 		return _availabilityGateway.Evaluate(
 		        new RolePowerAttempt(
 		            session,
-		            holder,
+		            actingPlayer,
 		            MainRoleType.LittleGirl,
 		            LittleGirlRole.SpyingPower,
 		            instance))

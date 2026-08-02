@@ -961,6 +961,38 @@ internal sealed class RecoveryPayloadTestDriver
 		return this;
 	}
 
+	internal RecoveryPayloadTestDriver AppendPublicRolePowerCommit(
+		GameLogEntryBase entry)
+	{
+		ArgumentNullException.ThrowIfNull(entry);
+		if (entry is not RecurringRolePowerCommittedLogEntry and
+			not TargetPrivateRolePowerCommittedLogEntry and
+			not IOneUseRolePowerCommittedLogEntry)
+		{
+			throw new ArgumentException(
+				"The recovery test entry is not a public Role Power commit.",
+				nameof(entry));
+		}
+
+		_payload.GameHistoryLog.Add(entry);
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver
+		RemoveLatestActorBorrowedRolePowerMarker()
+	{
+		var markerIndex = _payload.GameHistoryLog.FindLastIndex(entry =>
+			entry is ActorBorrowedRolePowerCommittedLogEntry);
+		if (markerIndex < 0)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no Actor borrowed Role Power marker.");
+		}
+
+		_payload.GameHistoryLog.RemoveAt(markerIndex);
+		return this;
+	}
+
 	internal string Serialize() =>
 		JsonSerializer.Serialize(_payload, SerializationOptions);
 

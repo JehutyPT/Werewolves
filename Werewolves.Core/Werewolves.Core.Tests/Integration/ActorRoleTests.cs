@@ -216,6 +216,210 @@ public sealed class ActorRoleTests
 	}
 
 	[Fact]
+	public void BorrowedSeer_PrivateCheckSurvivesNextOpeningExpiryAndCannotReplay()
+	{
+		var (session, start, actorId) = CreateActorSession(holderKnown: true);
+		var activation = PerformSpendOpening(
+			CreateActorRole(),
+			session,
+			start,
+			SeerCard.Id);
+		var werewolf = session.GetPlayers().Single(player =>
+			player.Name == "Werewolf");
+		ArrangeKnownWerewolfAgentGroup(session, werewolf.Id);
+		var policy = new RecordingPolicy(RolePowerAvailabilityResult.Allowed);
+		IGameHookListener listener = new SeerRole(
+			new RolePowerAvailabilityGateway(policy));
+		var nightOrder = GameFlowManager.HookListeners[GameHook.NightMainActionLoop];
+
+		nightOrder.IndexOf(ListenerIdentifier.Listener(MainRoleType.Actor)).Should()
+			.BeLessThan(nightOrder.IndexOf(listener.Id));
+		var wake = Advance(listener, session, start.CreateResponse()).Instruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		wake.Semantic.Should().Be(ModeratorInstructionSemantic.WakeRole);
+		wake.PublicAnnouncement.Should().Be(
+			GameStrings.RoleWakesUp.Format(GameStrings.ActorRoleName));
+		wake.AffectedPlayerIds.Should().Equal(actorId);
+		var targetSelection = Advance(listener, session, wake.CreateResponse())
+			.Instruction.Should().BeOfType<SelectPlayersInstruction>().Subject;
+
+		targetSelection.Semantic.Should().Be(
+			ModeratorInstructionSemantic.SelectSeerTarget);
+		targetSelection.CountConstraint.Should().Be(NumberRangeConstraint.Single);
+		targetSelection.SelectablePlayerIds.Should().BeEquivalentTo(
+			session.GetPlayers()
+				.Where(player => player.Id != actorId)
+				.Select(player => player.Id));
+		targetSelection.AffectedPlayerIds.Should().Equal(actorId);
+		targetSelection.PublicAnnouncement.Should().Contain(
+			GameStrings.ActorRoleName);
+		targetSelection.PublicAnnouncement.Should().NotContain(
+			GameStrings.SeerRoleName);
+		targetSelection.PrivateInstruction.Should().Be(
+			GameStrings.SeerNightActionPrompt);
+		var attempt = policy.ObservedAttempts.Should().ContainSingle().Subject;
+		attempt.ActingPlayer.Id.Should().Be(actorId);
+		attempt.ActingPlayer.State.CurrentRole.Should().Be(MainRoleType.Actor);
+		attempt.SourceRole.Should().Be(MainRoleType.Seer);
+		attempt.PowerInstance.Id.Should().Be(activation.ActivationId);
+		attempt.PowerInstance.Origin.Should().Be(RolePowerInstanceOrigin.Borrowed);
+		var logCountBeforeCheck = session.GameHistoryLog.Count();
+		session.SetPendingModeratorInstruction(RecoveryKey, targetSelection);
+
+		var feedback = GameFlowManager.HandleInput(
+				session,
+				targetSelection.CreateResponse([werewolf.Id]),
+				SupportedRoleCatalog.Admissions).ModeratorInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+
+		feedback.Semantic.Should().Be(ModeratorInstructionSemantic.RevealSeerResult);
+		feedback.PublicAnnouncement.Should().BeNull();
+		feedback.PrivateInstruction.Should().Be(
+			GameStrings.SeerResultWerewolfTeam.Format(werewolf.Name));
+		feedback.AffectedPlayerIds.Should().Equal(actorId);
+		var publicCommit = session.GameHistoryLog.Skip(logCountBeforeCheck)
+			.Should().ContainSingle().Subject;
+		publicCommit.Should().NotBeAssignableTo<NightActionLogEntry>();
+		publicCommit.ToString().Should().NotContain(MainRoleType.Seer.ToString());
+		publicCommit.ToString().Should().NotContain(activation.ActivationId.ToString());
+		publicCommit.ToString().Should().NotContain(werewolf.Id.ToString());
+		session.GameHistoryLog.OfType<TargetPrivateRolePowerCommittedLogEntry>()
+			.Should().BeEmpty();
+		session.GameHistoryLog.OfType<RoleIdentificationLogEntry>()
+			.Should().NotContain(entry => entry.Role == MainRoleType.Seer);
+		session.GetPlayerState(actorId).CurrentRole.Should().Be(MainRoleType.Actor);
+
+		var recovered = new GameSession(session.Serialize());
+		GameFlowManager.RestoreDurableContinuation(
+			recovered,
+			SupportedRoleCatalog.Admissions);
+		var recoveredFeedback = recovered.PendingModeratorInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		recoveredFeedback.InstructionId.Should().Be(feedback.InstructionId);
+		var sleep = GameFlowManager.HandleInput(
+				recovered,
+				recoveredFeedback.CreateResponse(),
+				SupportedRoleCatalog.Admissions).ModeratorInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+
+		sleep.Semantic.Should().Be(ModeratorInstructionSemantic.PutRoleToSleep);
+		sleep.PublicAnnouncement.Should().Be(
+			GameStrings.RoleGoesToSleepSingle.Format(GameStrings.ActorRoleName));
+		sleep.AffectedPlayerIds.Should().Equal(actorId);
+		recovered.GameHistoryLog.Skip(logCountBeforeCheck).Should().ContainSingle();
+		recovered.GameHistoryLog.OfType<TargetPrivateRolePowerCommittedLogEntry>()
+			.Should().BeEmpty();
+		recovered.GetPlayerState(actorId).CurrentRole.Should().Be(MainRoleType.Actor);
+		var learnedCheck = recovered.GetActorBorrowedSeerCheckCommits()
+			.Should().ContainSingle().Subject;
+		Advance(listener, recovered, sleep.CreateResponse()).Outcome.Should()
+			.Be(HookListenerOutcome.Complete);
+		recovered.ClearCurrentListenerCache(HookKey);
+		recovered.TransitionMainPhase(GamePhase.Dawn);
+		recovered.TransitionMainPhase(GamePhase.Day);
+		recovered.TransitionMainPhase(GamePhase.Night);
+		recovered.TryEnterSubPhaseStage(
+			SubPhaseKey,
+			GameHook.NightMainActionLoop.ToString()).Should().BeTrue();
+
+		IGameHookListener nextActor = CreateActorRole();
+		var nextActorWake = Advance(
+			nextActor,
+			recovered,
+			start.CreateResponse()).Instruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		recovered.GetModeratorActiveActorBorrowedRolePowerActivation().Should()
+			.BeNull();
+		recovered.GameHistoryLog
+			.OfType<ActorBorrowedRolePowerActivationExpiredLogEntry>().Should()
+			.ContainSingle();
+		var nextActorChoice = Advance(
+			nextActor,
+			recovered,
+			nextActorWake.CreateResponse()).Instruction
+			.Should().BeOfType<SelectOptionsInstruction>().Subject;
+		var nextActorSleep = Advance(
+			nextActor,
+			recovered,
+			nextActorChoice.CreateResponse()).Instruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		Advance(nextActor, recovered, nextActorSleep.CreateResponse()).Outcome
+			.Should().Be(HookListenerOutcome.Complete);
+		recovered.ClearCurrentListenerCache(HookKey);
+		var historyCountBeforeExpiredSource = recovered.GameHistoryLog.Count();
+
+		var expiredSource = Advance(
+			listener,
+			recovered,
+			start.CreateResponse());
+
+		expiredSource.Outcome.Should().Be(HookListenerOutcome.Skip);
+		expiredSource.Instruction.Should().BeNull();
+		recovered.GameHistoryLog.Should().HaveCount(
+			historyCountBeforeExpiredSource);
+		recovered.GetActorBorrowedSeerCheckCommits().Should()
+			.Equal(learnedCheck);
+		recovered.GameHistoryLog
+			.OfType<ActorBorrowedRolePowerCommittedLogEntry>().Should()
+			.ContainSingle();
+		recovered.GetModeratorSpentActorSetupCards().Should().Equal(SeerCard);
+		policy.ObservedAttempts.Should().ContainSingle();
+	}
+
+	[Fact]
+	public void BorrowedSeer_NoOtherLivingTarget_OmitsSelectorAndCompletesThroughActorSleepWithoutCommit()
+	{
+		var (session, start, actorId) = CreateActorSession(holderKnown: true);
+		var activation = PerformSpendOpening(
+			CreateActorRole(),
+			session,
+			start,
+			SeerCard.Id);
+		foreach (var playerId in session.GetPlayers()
+			         .Where(player => player.Id != actorId)
+			         .Select(player => player.Id))
+		{
+			session.EliminatePlayer(
+				playerId,
+				EliminationReason.EventElimination);
+		}
+
+		var policy = new RecordingPolicy(RolePowerAvailabilityResult.Allowed);
+		IGameHookListener listener = new SeerRole(
+			new RolePowerAvailabilityGateway(policy));
+		var logCountBeforeSourceSlot = session.GameHistoryLog.Count();
+		var wake = Advance(listener, session, start.CreateResponse()).Instruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+
+		wake.Semantic.Should().Be(ModeratorInstructionSemantic.WakeRole);
+		wake.PublicAnnouncement.Should().Be(
+			GameStrings.RoleWakesUp.Format(GameStrings.ActorRoleName));
+		wake.AffectedPlayerIds.Should().Equal(actorId);
+		var sleep = Advance(listener, session, wake.CreateResponse()).Instruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+
+		sleep.Semantic.Should().Be(ModeratorInstructionSemantic.PutRoleToSleep);
+		sleep.PublicAnnouncement.Should().Be(
+			GameStrings.RoleGoesToSleepSingle.Format(GameStrings.ActorRoleName));
+		sleep.AffectedPlayerIds.Should().Equal(actorId);
+		var attempt = policy.ObservedAttempts.Should().ContainSingle().Subject;
+		attempt.ActingPlayer.Id.Should().Be(actorId);
+		attempt.SourceRole.Should().Be(MainRoleType.Seer);
+		attempt.PowerInstance.Id.Should().Be(activation.ActivationId);
+		session.GetActorBorrowedSeerCheckCommits().Should().BeEmpty();
+		session.GameHistoryLog.Skip(logCountBeforeSourceSlot)
+			.OfType<ActorBorrowedRolePowerCommittedLogEntry>().Should().BeEmpty();
+		session.GameHistoryLog.Skip(logCountBeforeSourceSlot)
+			.OfType<NightActionLogEntry>().Should().NotContain(entry =>
+				entry.ActionType == NightActionType.SeerCheck);
+
+		var completion = Advance(listener, session, sleep.CreateResponse());
+
+		completion.Outcome.Should().Be(HookListenerOutcome.Complete);
+		completion.Instruction.Should().BeNull();
+	}
+
+	[Fact]
 	public void CommittedSpend_RoundTripResolvesActorSleepWithoutReplayingTheSpend()
 	{
 		var (session, start, actorId) = CreateActorSession(holderKnown: true);
@@ -651,9 +855,52 @@ public sealed class ActorRoleTests
 				AnnouncementInstructionId = Guid.NewGuid()
 			});
 		session.TransitionMainPhase(GamePhase.Night);
-		session.TryEnterSubPhaseStage(
-			SubPhaseKey,
-			GameHook.NightMainActionLoop.ToString()).Should().BeTrue();
+			session.TryEnterSubPhaseStage(
+				SubPhaseKey,
+				GameHook.NightMainActionLoop.ToString()).Should().BeTrue();
+	}
+
+	private static void ArrangeKnownWerewolfAgentGroup(
+		GameSession session,
+		Guid werewolfId)
+	{
+		var boundary = new FactionFactEffectiveBoundary(
+			session.TurnNumber,
+			session.GetCurrentPhase(),
+			session.GameHistoryLog.Count());
+		session.CommitFactionFactBatch(context =>
+			new FactionFactsCommittedLogEntry
+			{
+				Timestamp = context.Timestamp,
+				TurnNumber = context.TurnNumber,
+				CurrentPhase = context.CurrentPhase,
+				Source = new FactionFactSource(
+					FactionFactSourceKind.ScheduledObservation,
+					FactionFactSource
+						.WerewolfFactionAgentGroupObservationIdentifier),
+				Facts =
+				[
+					.. session.GetPlayers().Select(player => FactionFact.Agent(
+						player.Id,
+						Faction.Werewolf,
+						player.Id == werewolfId
+							? FactionAgentKnowledge.KnownAgent
+							: FactionAgentKnowledge.KnownNonAgent,
+						boundary))
+				]
+			});
+	}
+
+	private sealed class RecordingPolicy(RolePowerAvailabilityResult result)
+		: IRolePowerAvailabilityPolicy
+	{
+		internal List<RolePowerAttempt> ObservedAttempts { get; } = [];
+
+		public RolePowerAvailabilityResult Evaluate(RolePowerAttempt attempt)
+		{
+			ObservedAttempts.Add(attempt);
+			return result;
+		}
 	}
 
 	private sealed class TestSubPhaseManagerKey : ISubPhaseManagerKey;

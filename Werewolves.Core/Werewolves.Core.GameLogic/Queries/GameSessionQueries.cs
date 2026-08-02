@@ -348,6 +348,21 @@ internal static class GameSessionQueries
         return GetCommittedLoversPairFromHistory(session.GameHistoryLog);
     }
 
+	internal static IReadOnlyList<Guid>? GetCommittedLoversPlayerIds(
+		GameSession session)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		var nativePair = GetCommittedLoversPair(session);
+		var actorPairs = session.GetActorBorrowedCupidLoversCommits();
+		if ((nativePair is not null ? 1 : 0) + actorPairs.Count > 1)
+		{
+			throw new InvalidOperationException(
+				"The Session contains multiple Lovers pair commitments.");
+		}
+
+		return nativePair?.PlayerIds ?? actorPairs.SingleOrDefault()?.PlayerIds;
+	}
+
     internal static LoversPairCommittedLogEntry?
         GetCommittedLoversPairFromHistory(
             IEnumerable<GameLogEntryBase> history)
@@ -647,6 +662,80 @@ internal static class GameSessionQueries
                 filter: entry => entry.JudgePlayerId == judgePlayerId)
             .Any();
 
+    internal static bool HasStutteringJudgeSignalBeenEstablished(
+        IGameSession session,
+        RolePowerInstanceIdentity powerIdentity)
+    {
+        const string consecutiveVotePowerIdentifier =
+            "stuttering-judge-consecutive-vote";
+        if (!powerIdentity.IsValid ||
+            powerIdentity.SourceRole != MainRoleType.StutteringJudge ||
+            powerIdentity.PowerInstanceOrigin !=
+                RolePowerInstanceOrigin.Borrowed ||
+            !StringComparer.Ordinal.Equals(
+                powerIdentity.SourcePowerIdentifier,
+                consecutiveVotePowerIdentifier) ||
+            session is not GameSession concreteSession)
+        {
+            return false;
+        }
+
+        var activation =
+            concreteSession.GetModeratorActiveActorBorrowedRolePowerActivation();
+        if (activation is null ||
+            activation.ActingPlayerId != powerIdentity.ActingPlayerId ||
+            activation.SourceRole != powerIdentity.SourceRole ||
+            activation.ActivationId != powerIdentity.PowerInstanceId ||
+            activation.Origin != powerIdentity.PowerInstanceOrigin)
+        {
+            return false;
+        }
+
+        return concreteSession
+            .GetActorBorrowedStutteringJudgeSignalSetupCommits()
+            .Any(commit =>
+                commit.PowerIdentity == powerIdentity &&
+                commit.TurnNumber == session.TurnNumber &&
+                commit.CurrentPhase == GamePhase.Night);
+    }
+
+    internal static bool HasStutteringJudgeSignalBeenObserved(
+        IGameSession session,
+        RolePowerInstanceIdentity powerIdentity)
+    {
+        const string consecutiveVotePowerIdentifier =
+            "stuttering-judge-consecutive-vote";
+        if (!powerIdentity.IsValid ||
+            powerIdentity.SourceRole != MainRoleType.StutteringJudge ||
+            powerIdentity.PowerInstanceOrigin !=
+                RolePowerInstanceOrigin.Borrowed ||
+            !StringComparer.Ordinal.Equals(
+                powerIdentity.SourcePowerIdentifier,
+                consecutiveVotePowerIdentifier) ||
+            session is not GameSession concreteSession)
+        {
+            return false;
+        }
+
+        var activation =
+            concreteSession.GetModeratorActiveActorBorrowedRolePowerActivation();
+        if (activation is null ||
+            activation.ActingPlayerId != powerIdentity.ActingPlayerId ||
+            activation.SourceRole != powerIdentity.SourceRole ||
+            activation.ActivationId != powerIdentity.PowerInstanceId ||
+            activation.Origin != powerIdentity.PowerInstanceOrigin)
+        {
+            return false;
+        }
+
+        return concreteSession
+            .GetActorBorrowedStutteringJudgeSignalObservationCommits()
+            .Any(commit =>
+                commit.PowerIdentity == powerIdentity &&
+                commit.TurnNumber == session.TurnNumber &&
+                commit.CurrentPhase == GamePhase.Day);
+    }
+
     internal static bool HasUnreportedStutteringJudgeSignalObservation(
         IGameSession session)
     {
@@ -656,7 +745,13 @@ internal static class GameSessionQueries
         }
 
         var currentTurn = NumberRangeConstraint.Exact(session.TurnNumber);
-        return FindLogEntries<StutteringJudgeSignalDidNotOccurLogEntry>(
+        return session is GameSession concreteSession &&
+               concreteSession
+                   .GetActorBorrowedStutteringJudgeSignalObservationCommits()
+                   .Any(commit =>
+                       commit.TurnNumber == session.TurnNumber &&
+                       commit.CurrentPhase == GamePhase.Day) ||
+               FindLogEntries<StutteringJudgeSignalDidNotOccurLogEntry>(
                    session,
                    currentTurn,
                    GamePhase.Day)
@@ -704,14 +799,25 @@ internal static class GameSessionQueries
         IGameSession session,
         OneUseRolePowerResourceIdentity resourceIdentity) =>
         session.GameHistoryLog
-            .Any(entry =>
-                (entry is IOneUseRolePowerCommittedLogEntry oneUse &&
-                 oneUse.ResourceIdentity == resourceIdentity) ||
-                (entry is TargetPrivateRolePowerCommittedLogEntry
-                 {
-                     SpentResourceIdentity: { } spentResource
-                 } &&
-                 spentResource == resourceIdentity));
+	            .Any(entry =>
+	                (entry is IOneUseRolePowerCommittedLogEntry oneUse &&
+	                 oneUse.ResourceIdentity == resourceIdentity) ||
+	                (entry is TargetPrivateRolePowerCommittedLogEntry
+	                 {
+	                     SpentResourceIdentity: { } spentResource
+	                 } &&
+	                 spentResource == resourceIdentity)) ||
+	        session is GameSession concreteSession &&
+	        (concreteSession.GetActorBorrowedFoxCheckCommits()
+	             .Any(commit =>
+	                 commit.SpentResourceIdentity == resourceIdentity) ||
+	         concreteSession.GetActorBorrowedWitchPotionUseCommits()
+	             .Any(commit =>
+	                 commit.SpentResourceIdentity == resourceIdentity) ||
+	         concreteSession
+	             .GetActorBorrowedStutteringJudgeSignalObservationCommits()
+	             .Any(commit =>
+	                 commit.SpentResourceIdentity == resourceIdentity));
 
     internal static IEnumerable<IPlayer> GetPlayersEliminatedThisDawn(IGameSession session)
         => FindLogEntries<PlayerEliminatedLogEntry>(

@@ -86,7 +86,7 @@ internal static class NightInteractionResolver
 						infection));
 			}
 
-		var committedAttempts = GetCommittedNightAttempts(nightActions);
+		var committedAttempts = GetCommittedNightAttempts(session, nightActions);
 		var defenderTargets = GetDefenderTargets(committedAttempts);
 		var elderRole = GetElderRole(session);
 		var elderProtectionConsumedThisResolution = new HashSet<Guid>();
@@ -293,16 +293,33 @@ internal static class NightInteractionResolver
 	private static CommittedNightAttempt[] GetCommittedNightAttempts(
 		GameSession session) =>
 		GetCommittedNightAttempts(
+			session,
 			GameSessionQueries.GetOrderedNightActionsThisNight(
 				session,
 				DawnResolutionActionTypes));
 
 	private static CommittedNightAttempt[] GetCommittedNightAttempts(
+		GameSession session,
 		IEnumerable<NightActionLogEntry> nightActions) =>
 		nightActions
 			.SelectMany(log =>
 				(log.TargetIds ?? []).Select(targetId =>
 					new CommittedNightAttempt(log.ActionType, targetId)))
+			.Concat(session.GetActorBorrowedDefenderProtectionCommits()
+				.Where(commit =>
+					commit.TurnNumber == session.TurnNumber &&
+					commit.CurrentPhase == GamePhase.Night)
+				.Select(commit => new CommittedNightAttempt(
+					NightActionType.DefenderProtect,
+					commit.TargetPlayerId)))
+			.Concat(session.GetActorBorrowedWitchPotionUseCommits()
+				.Where(commit =>
+					commit.TurnNumber == session.TurnNumber &&
+					commit.CurrentPhase == GamePhase.Night)
+				.Select(commit => new CommittedNightAttempt(
+					ActorBorrowedWitchPotionUseCommit.GetActionType(
+						commit.SpentResourceIdentity),
+					commit.TargetPlayerId)))
 			.ToArray();
 
 	private static HashSet<Guid> GetDefenderTargets(

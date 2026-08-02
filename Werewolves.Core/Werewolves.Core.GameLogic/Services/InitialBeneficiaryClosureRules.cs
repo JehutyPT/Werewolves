@@ -42,10 +42,13 @@ internal sealed class InitialBeneficiaryClosureDeferredResult
 	private InitialBeneficiaryClosureDeferredResult(
 		string identifier,
 		bool isComplete,
-		IReadOnlyCollection<FactionFact> facts)
+		IReadOnlyCollection<FactionFact> facts,
+		IReadOnlyCollection<Guid> privatelyEstablishedBeneficiaryPlayerIds)
 	{
 		ArgumentException.ThrowIfNullOrWhiteSpace(identifier);
 		ArgumentNullException.ThrowIfNull(facts);
+		ArgumentNullException.ThrowIfNull(
+			privatelyEstablishedBeneficiaryPlayerIds);
 		if (facts.Any(fact =>
 			fact is null || fact.Type != FactionFactType.Beneficiary))
 		{
@@ -60,10 +63,22 @@ internal sealed class InitialBeneficiaryClosureDeferredResult
 				"An incomplete deferred result cannot contain facts.",
 				nameof(facts));
 		}
+		if (!isComplete && privatelyEstablishedBeneficiaryPlayerIds.Count != 0 ||
+			privatelyEstablishedBeneficiaryPlayerIds.Any(
+				playerId => playerId == Guid.Empty) ||
+			privatelyEstablishedBeneficiaryPlayerIds.Distinct().Count() !=
+			privatelyEstablishedBeneficiaryPlayerIds.Count)
+		{
+			throw new ArgumentException(
+				"Private Initial Beneficiary Closure coverage must contain distinct Player identifiers only for a complete result.",
+				nameof(privatelyEstablishedBeneficiaryPlayerIds));
+		}
 
 		Identifier = identifier;
 		IsComplete = isComplete;
 		Facts = Array.AsReadOnly(facts.ToArray());
+		PrivatelyEstablishedBeneficiaryPlayerIds = Array.AsReadOnly(
+			privatelyEstablishedBeneficiaryPlayerIds.ToArray());
 	}
 
 	public string Identifier { get; }
@@ -72,14 +87,22 @@ internal sealed class InitialBeneficiaryClosureDeferredResult
 
 	public IReadOnlyList<FactionFact> Facts { get; }
 
+	public IReadOnlyList<Guid> PrivatelyEstablishedBeneficiaryPlayerIds { get; }
+
 	public static InitialBeneficiaryClosureDeferredResult Pending(
 		string identifier) =>
-		new(identifier, isComplete: false, []);
+		new(identifier, isComplete: false, [], []);
 
 	public static InitialBeneficiaryClosureDeferredResult Complete(
 		string identifier,
 		IReadOnlyCollection<FactionFact> facts) =>
-		new(identifier, isComplete: true, facts);
+		new(identifier, isComplete: true, facts, []);
+
+	internal static InitialBeneficiaryClosureDeferredResult
+		CompleteWithPrivateBeneficiaryCoverage(
+			string identifier,
+			IReadOnlyCollection<Guid> playerIds) =>
+		new(identifier, isComplete: true, [], playerIds);
 }
 
 internal sealed class InitialBeneficiaryClosureRequest
@@ -204,7 +227,8 @@ internal static class InitialBeneficiaryClosureRules
 			return InitialBeneficiaryClosureResult.Incomplete;
 		}
 
-		session.CommitFactionFactBatch(context =>
+		FactionFactsCommittedLogEntry CreateClosureEntry(
+			GameFactContext context) =>
 			new FactionFactsCommittedLogEntry
 			{
 				Timestamp = context.Timestamp,
@@ -214,7 +238,40 @@ internal static class InitialBeneficiaryClosureRules
 					FactionFactSourceKind.InitialBeneficiaryClosure,
 					SourceIdentifier),
 				Facts = facts
-			});
+			};
+
+		var history = session.GameHistoryLog.ToArray();
+		var actorPair = GetInitialActorBorrowedCupidPair(session, history);
+		if (actorPair is
+			{
+				Disposition: ActorBorrowedCupidLoversDisposition
+					.DeferredToInitialBeneficiaryClosure
+			})
+		{
+			var playerIds = session.GetPlayers()
+				.Select(player => player.Id)
+				.ToArray();
+			var disposition =
+				ActorBorrowedCupidLoversCommit.ClassifyInitialDisposition(
+					actorPair,
+					playerIds,
+					history.OfType<IFactionFactBatchLogEntry>().ToArray(),
+					request.InitialAgentGroupBoundary,
+					playerId => session.GetPlayerState(playerId).CurrentRole);
+			if (disposition is null)
+			{
+				return InitialBeneficiaryClosureResult.Incomplete;
+			}
+
+			session.CommitActorBorrowedCupidInitialBeneficiaryClosure(
+				CreateClosureEntry,
+				actorPair,
+				disposition.Value);
+		}
+		else
+		{
+			session.CommitFactionFactBatch(CreateClosureEntry);
+		}
 		return InitialBeneficiaryClosureResult.Committed;
 	}
 
@@ -319,7 +376,9 @@ internal static class InitialBeneficiaryClosureRules
 		}
 
 		var projection = FactionFactProjection.Create(
-			committedHistory.OfType<IFactionFactBatchLogEntry>(),
+			committedHistory
+				.OfType<IFactionFactBatchLogEntry>()
+				.Concat(session.GetActorBorrowedCupidLoversCommits()),
 			playerIds);
 		return playerIds.All(playerId =>
 			       projection.Beneficiaries[playerId].IsKnown &&
@@ -379,11 +438,19 @@ internal static class InitialBeneficiaryClosureRules
 			return false;
 		}
 
+		var privatelyEstablishedBeneficiaryPlayerIds = request.DeferredResults
+			.SelectMany(result =>
+				result.PrivatelyEstablishedBeneficiaryPlayerIds)
+			.ToHashSet();
 		var deferredFacts = request.DeferredResults
 			.SelectMany(result => result.Facts)
+			.Where(fact =>
+				!privatelyEstablishedBeneficiaryPlayerIds.Contains(fact.PlayerId))
 			.ToArray();
-		var deferredBeneficiaryPlayerIds = deferredFacts
-			.Select(fact => fact.PlayerId)
+		var deferredBeneficiaryPlayerIds = request.DeferredResults
+			.SelectMany(result =>
+				result.Facts.Select(fact => fact.PlayerId)
+					.Concat(result.PrivatelyEstablishedBeneficiaryPlayerIds))
 			.ToHashSet();
 		var facts = new List<FactionFact>();
 		foreach (var playerId in playerIds)
@@ -485,12 +552,23 @@ internal static class InitialBeneficiaryClosureRules
 			FactionFactEffectiveBoundary initialAgentGroupBoundary,
 			IReadOnlyCollection<GameLogEntryBase> history)
 	{
-		if (session.RoleInPlayCount(MainRoleType.Cupid) == 0)
+		var actorPair = GetInitialActorBorrowedCupidPair(session, history);
+		var nativePair =
+			GameSessionQueries.GetCommittedLoversPairFromHistory(history);
+		if (actorPair is not null && nativePair is not null)
+		{
+			throw new InvalidOperationException(
+				"Initial Beneficiary Closure cannot classify multiple Lovers pairs.");
+		}
+
+		if (actorPair is null &&
+			session.RoleInPlayCount(MainRoleType.Cupid) == 0)
 		{
 			return null;
 		}
 
-		if (!GameSessionQueries.IsCompleteLivingRoleHolderSetKnown(
+		if (actorPair is null &&
+			!GameSessionQueries.IsCompleteLivingRoleHolderSetKnown(
 			    session,
 			    MainRoleType.Cupid))
 		{
@@ -498,16 +576,15 @@ internal static class InitialBeneficiaryClosureRules
 				LoversDeferredResultIdentifier);
 		}
 
-		var pair =
-			GameSessionQueries.GetCommittedLoversPairFromHistory(history);
-		if (pair is null)
+		if (actorPair is null && nativePair is null)
 		{
 			return InitialBeneficiaryClosureDeferredResult.Complete(
 				LoversDeferredResultIdentifier,
 				[]);
 		}
 
-		ValidateLoversPairStatuses(session, pair);
+		var pairPlayerIds = actorPair?.PlayerIds ?? nativePair!.PlayerIds;
+		ValidateLoversPairStatuses(session, pairPlayerIds);
 		var factionHistory = history
 			.OfType<IFactionFactBatchLogEntry>()
 			.ToArray();
@@ -532,7 +609,33 @@ internal static class InitialBeneficiaryClosureRules
 		var playerIds = session.GetPlayers()
 			.Select(player => player.Id)
 			.ToArray();
-		var linkBoundary = GetLoversLinkBoundary(session, pair);
+		if (actorPair is not null)
+		{
+			var disposition =
+				ActorBorrowedCupidLoversCommit.ClassifyInitialDisposition(
+					actorPair,
+					playerIds,
+					factionHistory,
+					initialAgentGroupBoundary,
+					playerId => session.GetPlayerState(playerId).CurrentRole);
+			if (disposition is null)
+			{
+				return InitialBeneficiaryClosureDeferredResult.Pending(
+					LoversDeferredResultIdentifier);
+			}
+
+			return disposition ==
+				ActorBorrowedCupidLoversDisposition.CrossFaction
+					? InitialBeneficiaryClosureDeferredResult
+						.CompleteWithPrivateBeneficiaryCoverage(
+							LoversDeferredResultIdentifier,
+							actorPair.PlayerIds)
+					: InitialBeneficiaryClosureDeferredResult.Complete(
+						LoversDeferredResultIdentifier,
+						[]);
+		}
+
+		var linkBoundary = GetLoversLinkBoundary(session, nativePair!);
 		var projectionAtLink = FactionFactProjection.Create(
 			factionHistory,
 			playerIds,
@@ -542,7 +645,7 @@ internal static class InitialBeneficiaryClosureRules
 			playerIds,
 			initialAgentGroupBoundary);
 		var candidates = new List<Faction>(2);
-		foreach (var playerId in pair.PlayerIds)
+		foreach (var playerId in nativePair!.PlayerIds)
 		{
 			var projected = projectionAtLink.Beneficiaries[playerId];
 			if (projected.IsKnown)
@@ -592,7 +695,7 @@ internal static class InitialBeneficiaryClosureRules
 
 		var facts = candidates[0] == candidates[1]
 			? []
-			: pair.PlayerIds
+			: nativePair.PlayerIds
 				.Select(playerId => FactionFact.Beneficiary(
 					playerId,
 					Faction.CrossFactionLovers,
@@ -602,6 +705,41 @@ internal static class InitialBeneficiaryClosureRules
 		return InitialBeneficiaryClosureDeferredResult.Complete(
 			LoversDeferredResultIdentifier,
 			facts);
+	}
+
+	private static ActorBorrowedCupidLoversCommit?
+		GetInitialActorBorrowedCupidPair(
+			GameSession session,
+			IReadOnlyCollection<GameLogEntryBase> history)
+	{
+		var pairs = session.GetActorBorrowedCupidLoversCommits()
+			.Where(commit => commit.TurnNumber == 1)
+			.ToArray();
+		if (pairs.Length == 0)
+		{
+			return null;
+		}
+
+		if (pairs is not [var pair])
+		{
+			throw new InvalidOperationException(
+				"Initial Beneficiary Closure cannot classify multiple Actor borrowed Cupid pairs.");
+		}
+
+		var committedHistory = history.ToArray();
+		if (pair.PublicMarkerLogIndex < 0 ||
+			pair.PublicMarkerLogIndex >= committedHistory.Length ||
+			committedHistory[pair.PublicMarkerLogIndex] is not
+				ActorBorrowedRolePowerCommittedLogEntry marker ||
+			marker.Timestamp != pair.Timestamp ||
+			marker.TurnNumber != pair.TurnNumber ||
+			marker.CurrentPhase != pair.CurrentPhase)
+		{
+			throw new InvalidOperationException(
+				"The Actor borrowed Cupid pair boundary does not match committed history.");
+		}
+
+		return pair;
 	}
 
 	private static FactionFactEffectiveBoundary GetLoversLinkBoundary(
@@ -620,9 +758,9 @@ internal static class InitialBeneficiaryClosureRules
 
 	private static void ValidateLoversPairStatuses(
 		GameSession session,
-		LoversPairCommittedLogEntry pair)
+		IReadOnlyCollection<Guid> playerIds)
 	{
-		if (pair.PlayerIds.Any(playerId =>
+		if (playerIds.Any(playerId =>
 			    !session.GetPlayerState(playerId)
 				    .HasStatusEffect(StatusEffectTypes.Lovers)))
 		{

@@ -85,6 +85,44 @@ internal sealed record RolePowerInstance(
 			RolePowerInstanceOrigin.Swapped);
 	}
 
+	internal static RolePowerInstance CreateBorrowed(
+		GameSession session,
+		IPlayer actingPlayer,
+		MainRoleType sourceRole,
+		RolePowerDefinition sourcePower)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		ArgumentNullException.ThrowIfNull(actingPlayer);
+		ArgumentNullException.ThrowIfNull(sourcePower);
+		var activation =
+			session.GetModeratorActiveActorBorrowedRolePowerActivation();
+		var selectedCard = activation is null
+			? null
+			: session.GetModeratorSpentActorSetupCards()
+				.SingleOrDefault(card => card.Id == activation.SelectedCardId);
+		var sessionActor = session.GetPlayers()
+			.SingleOrDefault(player => player.Id == actingPlayer.Id);
+		if (activation is null ||
+		    selectedCard is null ||
+		    !ReferenceEquals(sessionActor, actingPlayer) ||
+		    actingPlayer.Id != activation.ActingPlayerId ||
+		    actingPlayer.State.Health != PlayerHealth.Alive ||
+		    actingPlayer.State.CurrentRole != MainRoleType.Actor ||
+		    activation.ActingRole != MainRoleType.Actor ||
+		    activation.SourceRole != sourceRole ||
+		    selectedCard.PrintedRole != sourceRole)
+		{
+			throw new InvalidOperationException(
+				"The borrowed Role Power activation does not match its acting Player and source Role.");
+		}
+
+		return new RolePowerInstance(
+			activation.ActivationId,
+			sourceRole,
+			sourcePower,
+			RolePowerInstanceOrigin.Borrowed);
+	}
+
 	internal static RolePowerInstanceIdentity CreateCurrentIdentity(
 		IGameSession session,
 		IPlayer actingPlayer,
