@@ -128,8 +128,10 @@ public sealed class SimulationScenario : IEquatable<SimulationScenario>
 				nameof(partition));
 		}
 
-		var actorCards = actorSetupCards?.Cards.ToArray() ?? [];
-		if (actorCards.Any(role => !Enum.IsDefined(role)))
+		var normalizedActorSetupCards = actorSetupCards ??
+			global::Werewolves.Core.StateModels.Models.ActorSetupCards.None;
+		var actorCards = normalizedActorSetupCards.Cards.ToArray();
+		if (actorCards.Any(card => !Enum.IsDefined(card.PrintedRole)))
 		{
 			throw new ArgumentOutOfRangeException(
 				nameof(actorSetupCards),
@@ -148,7 +150,9 @@ public sealed class SimulationScenario : IEquatable<SimulationScenario>
 				? global::Werewolves.Core.StateModels.Models.Simulation
 					.ThiefOfferBranchPolicy.Create(branchOffer1, branchOffer2)
 				: null;
-		_actorSetupCards = new ActorSetupCards(actorCards);
+		_actorSetupCards = new ActorSetupCards(
+			normalizedActorSetupCards.Version,
+			actorCards);
 		if (publicGroupPartition is not null &&
 			publicGroupPartition.PlayerCount != playerCount)
 		{

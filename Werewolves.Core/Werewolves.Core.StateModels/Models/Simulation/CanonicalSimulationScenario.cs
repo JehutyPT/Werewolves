@@ -51,7 +51,7 @@ public sealed class CanonicalSimulationScenario : IEquatable<CanonicalSimulation
 			scenario.Offer2Role,
 			scenario.ThiefOfferBranchPolicy,
 			scenario.PublicGroupPartition,
-			scenario.ActorSetupCards.Cards
+			scenario.ActorSetupCards.PrintedRoles
 				.OrderBy(role => role.ToString(), StringComparer.Ordinal)
 				.ToArray(),
 			scenario.RuleState);

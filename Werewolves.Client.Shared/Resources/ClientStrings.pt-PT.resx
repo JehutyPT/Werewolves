@@ -625,6 +625,39 @@
   <data name="ThiefRoleLockIn_SaveFailedValidation" xml:space="preserve">
     <value>Não foi possível guardar esta configuração de ofertas. Verifique as cartas selecionadas e tente novamente.</value>
   </data>
+  <data name="ActorSetup_StepLabel" xml:space="preserve">
+    <value>Cartas de preparação do Ator</value>
+  </data>
+  <data name="ActorSetup_Title" xml:space="preserve">
+    <value>Preparar as cartas do Ator</value>
+  </data>
+  <data name="ActorSetup_Description" xml:space="preserve">
+    <value>Selecione exatamente três papéis elegíveis para colocar virados para baixo, fora da composição de papéis.</value>
+  </data>
+  <data name="ActorSetup_ListAria" xml:space="preserve">
+    <value>Papéis elegíveis para as cartas do Ator</value>
+  </data>
+  <data name="ActorSetup_CardChoiceAriaFormat" xml:space="preserve">
+    <value>Selecionar {0} como carta do Ator</value>
+  </data>
+  <data name="ActorSetup_SelectionCountFormat" xml:space="preserve">
+    <value>{0} de {1} cartas selecionadas</value>
+  </data>
+  <data name="ActorSetup_CommitButton" xml:space="preserve">
+    <value>Guardar cartas do Ator</value>
+  </data>
+  <data name="ActorSetup_IncompleteValidation" xml:space="preserve">
+    <value>Selecione exatamente três papéis elegíveis diferentes.</value>
+  </data>
+  <data name="ActorSetup_SaveFailedValidation" xml:space="preserve">
+    <value>Não foi possível guardar estas cartas do Ator. Verifique a seleção e tente novamente.</value>
+  </data>
+  <data name="ActorSetup_SummaryTitle" xml:space="preserve">
+    <value>Cartas do Ator guardadas</value>
+  </data>
+  <data name="RoleSelection_ReviewActorSetupButton" xml:space="preserve">
+    <value>Rever ou alterar cartas do Ator</value>
+  </data>
   <data name="PublicGroupPartition_StepLabel" xml:space="preserve">
     <value>Configuração pública da mesa</value>
   </data>

@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
@@ -15,6 +16,11 @@ namespace Werewolves.Core.StateModels.Core
 		private readonly RoleLockIn _roleLockIn;
 		private readonly PublicGroupPartition? _publicGroupPartition;
 		private readonly Dictionary<Guid, PhysicalCharacterCardState> _physicalCardStates = new();
+		private readonly ActorSetupCards _actorSetupCards = ActorSetupCards.None;
+		private readonly Dictionary<Guid, Guid>
+			_actorSetupCardSpendActivationIds = [];
+		private ActorBorrowedRolePowerActivation?
+			_activeActorBorrowedRolePowerActivation;
 		private readonly IStateChangeObserver? _stateChangeObserver;
 
 		/// <summary>
@@ -43,6 +49,18 @@ namespace Werewolves.Core.StateModels.Core
 		internal IReadOnlyList<Guid> GetPlayerSeatingOrder() => _playerSeatingOrder.AsReadOnly();
 		internal RoleLockIn GetRoleLockIn() => _roleLockIn;
 		internal PublicGroupPartition? GetPublicGroupPartition() => _publicGroupPartition;
+		internal ActorSetupCards GetActorSetupCards() => _actorSetupCards;
+		internal IReadOnlyList<PhysicalCharacterCard> GetRemainingActorSetupCards() =>
+			OrderActorSetupCards(_actorSetupCards.Cards
+				.Where(card =>
+					!_actorSetupCardSpendActivationIds.ContainsKey(card.Id)));
+		internal IReadOnlyList<PhysicalCharacterCard> GetSpentActorSetupCards() =>
+			OrderActorSetupCards(_actorSetupCards.Cards
+				.Where(card =>
+					_actorSetupCardSpendActivationIds.ContainsKey(card.Id)));
+		internal ActorBorrowedRolePowerActivation?
+			GetActiveActorBorrowedRolePowerActivation() =>
+			_activeActorBorrowedRolePowerActivation;
 		internal IReadOnlyList<PhysicalCharacterCardState> GetPhysicalCharacterCardStates() =>
 			_roleLockIn.RoleComposition
 				.Select(card => _physicalCardStates[card.Id])
@@ -79,6 +97,7 @@ namespace Werewolves.Core.StateModels.Core
 
 			_roleLockIn = config.RoleLockIn;
 			_publicGroupPartition = config.PublicGroupPartition;
+			_actorSetupCards = config.ActorSetupCards;
 			foreach (var card in _roleLockIn.DealPool)
 			{
 				_physicalCardStates.Add(
@@ -114,6 +133,96 @@ namespace Werewolves.Core.StateModels.Core
 			_stateChangeObserver?.OnMainPhaseChanged(GamePhase.Night);
 			_stateChangeObserver?.OnTurnNumberChanged(1);
 			CaptureRecoveryBoundary();
+		}
+
+		private static IReadOnlyList<PhysicalCharacterCard> OrderActorSetupCards(
+			IEnumerable<PhysicalCharacterCard> cards) =>
+			cards
+				.OrderBy(card => card.PrintedRole)
+				.ThenBy(card => card.Id)
+				.ToArray();
+
+		internal bool TrySpendActorSetupCard(
+			Guid actingPlayerId,
+			Guid selectedCardId,
+			out ActorBorrowedRolePowerActivation? activation)
+		{
+			activation = null;
+			if (actingPlayerId == Guid.Empty ||
+				selectedCardId == Guid.Empty ||
+				CurrentPhase != GamePhase.Night ||
+				_activeActorBorrowedRolePowerActivation is not null ||
+				!_players.TryGetValue(actingPlayerId, out var actor))
+			{
+				return false;
+			}
+			var actorState = ((IPlayer)actor).State;
+			if (actorState.Health != PlayerHealth.Alive ||
+				actorState.CurrentRole != MainRoleType.Actor)
+			{
+				return false;
+			}
+
+			var selectedCard = _actorSetupCards.Cards
+				.SingleOrDefault(card => card.Id == selectedCardId);
+			if (selectedCard is null ||
+				_actorSetupCardSpendActivationIds.ContainsKey(selectedCardId) ||
+				!selectedCard.PrintedRole.IsEligibleActorSetupCard())
+			{
+				return false;
+			}
+
+			Guid activationId;
+			do
+			{
+				activationId = Guid.NewGuid();
+			}
+			while (IsReservedActorBorrowedActivationId(activationId));
+
+			var committedActivation = new ActorBorrowedRolePowerActivation(
+				activationId,
+				actingPlayerId,
+				MainRoleType.Actor,
+				selectedCard.Id,
+				selectedCard.PrintedRole);
+			AddEntryAndUpdateState(new ActorSetupCardSpendCommittedLogEntry
+			{
+				Timestamp = DateTimeOffset.UtcNow,
+				TurnNumber = TurnNumber,
+				CurrentPhase = CurrentPhase
+			});
+			_actorSetupCardSpendActivationIds.Add(
+				selectedCard.Id,
+				activationId);
+			_activeActorBorrowedRolePowerActivation = committedActivation;
+			activation = committedActivation;
+			return true;
+		}
+
+		private bool IsReservedActorBorrowedActivationId(Guid candidate) =>
+			candidate == Guid.Empty ||
+			candidate == Id ||
+			_players.ContainsKey(candidate) ||
+			_actorSetupCards.Cards.Any(card => card.Id == candidate) ||
+			_actorSetupCardSpendActivationIds.ContainsValue(candidate);
+
+		internal bool TryExpireActorBorrowedRolePowerActivation()
+		{
+			if (_activeActorBorrowedRolePowerActivation is null ||
+				CurrentPhase != GamePhase.Night)
+			{
+				return false;
+			}
+
+			AddEntryAndUpdateState(
+				new ActorBorrowedRolePowerActivationExpiredLogEntry
+				{
+					Timestamp = DateTimeOffset.UtcNow,
+					TurnNumber = TurnNumber,
+					CurrentPhase = CurrentPhase
+				});
+			_activeActorBorrowedRolePowerActivation = null;
+			return true;
 		}
 
 			internal void AddEntryAndUpdateState(GameLogEntryBase entry)
@@ -263,6 +372,24 @@ namespace Werewolves.Core.StateModels.Core
 					PublicGroupPartition = _publicGroupPartition is null
 						? null
 						: PublicGroupPartitionDto.FromValue(_publicGroupPartition),
+					ActorSetupCards = ActorSetupCardsDto.FromValue(
+						_actorSetupCards),
+					ActorSetupCardSpends = OrderActorSetupCards(
+							_actorSetupCards.Cards)
+						.Where(card =>
+							_actorSetupCardSpendActivationIds.ContainsKey(card.Id))
+						.Select(card => new ActorSetupCardSpendDto
+						{
+							CardId = card.Id,
+							ActivationId =
+								_actorSetupCardSpendActivationIds[card.Id]
+						})
+						.ToList(),
+					ActiveActorBorrowedRolePowerActivation =
+						_activeActorBorrowedRolePowerActivation is null
+							? null
+							: ActorBorrowedRolePowerActivationDto.FromValue(
+								_activeActorBorrowedRolePowerActivation),
 					PhysicalCharacterCards = GetPhysicalCharacterCardStates()
 					.Select(state => new PhysicalCharacterCardStateDto
 					{
@@ -321,6 +448,10 @@ namespace Werewolves.Core.StateModels.Core
 				ValidateRecoveryRoster(dto, _roleLockIn);
 				_playerSeatingOrder = dto.SeatingOrder.ToList();
 				_publicGroupPartition = RestorePublicGroupPartition(dto, _roleLockIn);
+				_actorSetupCards = RestoreActorSetupCards(
+					dto,
+					_roleLockIn);
+				RestoreActorRuntimeState(dto);
 				var cardsById = _roleLockIn.RoleComposition
 				.ToDictionary(card => card.Id);
 			if (dto.PhysicalCharacterCards.Count != cardsById.Count ||
@@ -402,6 +533,7 @@ namespace Werewolves.Core.StateModels.Core
 				ValidatePhysicalCharacterCardProjectionMatchesHistory();
 				ValidateFactionProjectionMatchesHistory();
 				ValidateLoversPairProjectionMatchesHistory();
+				ValidateActorRuntimeState();
 
 				_recoveryBoundary = CreateDto();
 			}
@@ -459,6 +591,121 @@ namespace Werewolves.Core.StateModels.Core
 					throw new InvalidOperationException(
 						"The stable recovery snapshot has an invalid Public Group Partition coordinate.",
 						exception);
+				}
+			}
+
+			private static ActorSetupCards RestoreActorSetupCards(
+				GameSessionDto dto,
+				RoleLockIn roleLockIn)
+			{
+				try
+				{
+					var setup = dto.ActorSetupCards?.ToValue()
+						?? throw new InvalidOperationException();
+					_ = GameSessionConfig.TryGetRoleLockInPhysicalSetupIssues(
+						roleLockIn.PlayerCount,
+						roleLockIn.DealPool
+							.Select(card => card.PrintedRole)
+							.ToArray(),
+						roleLockIn.Offer1?.PrintedRole,
+						roleLockIn.Offer2?.PrintedRole,
+						setup,
+						out var issues);
+					if (issues.Any(issue => issue.Type is
+						GameConfigValidationErrorType.UnexpectedActorSetupCards or
+						GameConfigValidationErrorType.ActorSetupCardCountMismatch or
+						GameConfigValidationErrorType.DuplicateActorSetupCardSource or
+						GameConfigValidationErrorType.ActorSetupCardInRoleComposition or
+						GameConfigValidationErrorType.IneligibleActorSetupCard))
+					{
+						throw new InvalidOperationException();
+					}
+					return setup;
+				}
+				catch (Exception exception) when (
+					exception is ArgumentException or InvalidOperationException)
+				{
+					throw new InvalidOperationException(
+						"The stable recovery snapshot has invalid Actor Setup Cards.");
+				}
+			}
+
+			private void RestoreActorRuntimeState(GameSessionDto dto)
+			{
+				var spends = dto.ActorSetupCardSpends
+					?? throw new InvalidOperationException(
+						"The stable recovery snapshot has invalid Actor runtime state.");
+				var setupCardIds = _actorSetupCards.Cards
+					.Select(card => card.Id)
+					.ToHashSet();
+				if (spends.Any(spend =>
+						spend.CardId == Guid.Empty ||
+						spend.ActivationId == Guid.Empty ||
+						!setupCardIds.Contains(spend.CardId)) ||
+					spends.Select(spend => spend.CardId).Distinct().Count() !=
+						spends.Count ||
+					spends.Select(spend => spend.ActivationId).Distinct().Count() !=
+						spends.Count)
+				{
+					throw new InvalidOperationException(
+						"The stable recovery snapshot has invalid Actor runtime state.");
+				}
+
+				foreach (var spend in spends)
+				{
+					_actorSetupCardSpendActivationIds.Add(
+						spend.CardId,
+						spend.ActivationId);
+				}
+
+				try
+				{
+					_activeActorBorrowedRolePowerActivation =
+						dto.ActiveActorBorrowedRolePowerActivation?.ToValue();
+				}
+				catch (ArgumentException)
+				{
+					throw new InvalidOperationException(
+						"The stable recovery snapshot has invalid Actor runtime state.");
+				}
+			}
+
+			private void ValidateActorRuntimeState()
+			{
+				var history = _gameHistoryLog.GetAllLogEntries();
+				var spendCount = history
+					.OfType<ActorSetupCardSpendCommittedLogEntry>()
+					.Count();
+				var expiryCount = history
+					.OfType<ActorBorrowedRolePowerActivationExpiredLogEntry>()
+					.Count();
+				var expectedExpiryCount =
+					_actorSetupCardSpendActivationIds.Count -
+					(_activeActorBorrowedRolePowerActivation is null ? 0 : 1);
+				if (spendCount != _actorSetupCardSpendActivationIds.Count ||
+					expiryCount != expectedExpiryCount)
+				{
+					throw new InvalidOperationException(
+						"The stable recovery snapshot has invalid Actor runtime state.");
+				}
+
+				if (_activeActorBorrowedRolePowerActivation is not { } active)
+				{
+					return;
+				}
+
+				var selectedCard = _actorSetupCards.Cards.SingleOrDefault(
+					card => card.Id == active.SelectedCardId);
+				if (!_players.ContainsKey(active.ActingPlayerId) ||
+					selectedCard is null ||
+					selectedCard.PrintedRole != active.SourceRole ||
+					!_actorSetupCardSpendActivationIds.TryGetValue(
+						active.SelectedCardId,
+						out var spendActivationId) ||
+					spendActivationId != active.ActivationId)
+				{
+					throw new InvalidOperationException(
+						"The stable recovery snapshot has invalid Actor runtime state.");
 				}
 			}
 
@@ -975,23 +1222,10 @@ namespace Werewolves.Core.StateModels.Core
 					$"Unsupported domain recovery cursor '{cursor.Kind}' version '{cursor.Version}'.");
 			}
 
-			if (!Enum.IsDefined(cursor.CommittedActionType) ||
-			    cursor.CommittedActionType == NightActionType.Unknown ||
-                cursor.CommittedTargetIds == null ||
-                cursor.Kind ==
-                    DomainRecoveryCursorKind.TargetPrivateRolePowerCommit &&
-                cursor.CommittedTargetIds.Count != 0 ||
-                cursor.Kind !=
-                    DomainRecoveryCursorKind.TargetPrivateRolePowerCommit &&
-                cursor.CommittedTargetIds.Count == 0 ||
-			    cursor.CommittedTargetIds.Any(targetId =>
-				    targetId == Guid.Empty) ||
-			    cursor.CommittedTargetIds.Distinct().Count() !=
-				    cursor.CommittedTargetIds.Count ||
-			    !Enum.IsDefined(cursor.NextInstructionSemantic) ||
-			    cursor.NextInstructionSemantic ==
-				    ModeratorInstructionSemantic.Unspecified ||
-			    cursor.NextInstructionId == Guid.Empty)
+			if (!Enum.IsDefined(cursor.NextInstructionSemantic) ||
+				cursor.NextInstructionSemantic ==
+					ModeratorInstructionSemantic.Unspecified ||
+				cursor.NextInstructionId == Guid.Empty)
 			{
 				throw new InvalidOperationException(
 					"The domain recovery cursor is structurally invalid.");
@@ -1008,6 +1242,32 @@ namespace Werewolves.Core.StateModels.Core
 			{
 				throw new InvalidOperationException(
 					"The domain recovery cursor does not match its Pending Instruction.");
+			}
+
+			if (cursor.Kind == DomainRecoveryCursorKind.ActorSetupCardSpendCommit)
+			{
+				return ValidateActorSetupCardSpendRecoveryCursor(
+					dto,
+					cursor,
+					pendingModeratorInstruction);
+			}
+
+			if (!Enum.IsDefined(cursor.CommittedActionType) ||
+			    cursor.CommittedActionType == NightActionType.Unknown ||
+				cursor.CommittedTargetIds == null ||
+                cursor.Kind ==
+                    DomainRecoveryCursorKind.TargetPrivateRolePowerCommit &&
+                cursor.CommittedTargetIds.Count != 0 ||
+                cursor.Kind !=
+                    DomainRecoveryCursorKind.TargetPrivateRolePowerCommit &&
+                cursor.CommittedTargetIds.Count == 0 ||
+			    cursor.CommittedTargetIds.Any(targetId =>
+				    targetId == Guid.Empty) ||
+			    cursor.CommittedTargetIds.Distinct().Count() !=
+				    cursor.CommittedTargetIds.Count)
+			{
+				throw new InvalidOperationException(
+					"The domain recovery cursor is structurally invalid.");
 			}
 
 			if (cursor.Kind ==
@@ -1173,7 +1433,77 @@ namespace Werewolves.Core.StateModels.Core
 			}
 
 			return cursor;
+		}
+
+		private static DomainRecoveryCursor
+			ValidateActorSetupCardSpendRecoveryCursor(
+				GameSessionDto dto,
+				DomainRecoveryCursor cursor,
+				ModeratorInstruction pendingModeratorInstruction)
+		{
+			ActorBorrowedRolePowerActivation active;
+			try
+			{
+				active = dto.ActiveActorBorrowedRolePowerActivation?.ToValue()
+					?? throw new InvalidOperationException();
 			}
+			catch (Exception exception) when (
+				exception is ArgumentException or InvalidOperationException)
+			{
+				throw new InvalidOperationException(
+					"The Actor spend recovery cursor is structurally invalid.");
+			}
+
+			var setupCard = dto.ActorSetupCards?.Cards?.SingleOrDefault(
+				card => card.Id == cursor.ActorSetupCardId);
+			var spends = dto.ActorSetupCardSpends;
+			var actingPlayer = dto.Players.SingleOrDefault(
+				player => player.Id == cursor.ActingPlayerId);
+			var latestSpendMarker = dto.GameHistoryLog
+				.OfType<ActorSetupCardSpendCommittedLogEntry>()
+				.LastOrDefault();
+			if (cursor.CommittedActionType != NightActionType.Unknown ||
+				cursor.CommittedTargetIds is not { Count: 0 } ||
+				cursor.ActingPlayerId == Guid.Empty ||
+				cursor.SourceRole is not { } sourceRole ||
+				!sourceRole.IsEligibleActorSetupCard() ||
+				!string.IsNullOrEmpty(cursor.SourcePowerIdentifier) ||
+				cursor.PowerInstanceId != Guid.Empty ||
+				cursor.PowerInstanceOrigin is not null ||
+				cursor.OneUseResourceId != Guid.Empty ||
+				cursor.ActorSetupCardId == Guid.Empty ||
+				cursor.ActorBorrowedActivationId == Guid.Empty ||
+				setupCard is null ||
+				setupCard.PrintedRole != sourceRole ||
+				spends is null ||
+				spends.Count(spend =>
+					spend.CardId == cursor.ActorSetupCardId &&
+					spend.ActivationId == cursor.ActorBorrowedActivationId) != 1 ||
+				active.ActivationId != cursor.ActorBorrowedActivationId ||
+				active.ActingPlayerId != cursor.ActingPlayerId ||
+				active.ActingRole != MainRoleType.Actor ||
+				active.SelectedCardId != cursor.ActorSetupCardId ||
+				active.SourceRole != sourceRole ||
+				actingPlayer is not
+				{
+					MainRole: MainRoleType.Actor,
+					Health: PlayerHealth.Alive
+				} ||
+				pendingModeratorInstruction.Semantic !=
+					ModeratorInstructionSemantic.PutRoleToSleep ||
+				pendingModeratorInstruction.AffectedPlayerIds is not { Count: 1 } ||
+				pendingModeratorInstruction.AffectedPlayerIds[0] !=
+					cursor.ActingPlayerId ||
+				latestSpendMarker is null ||
+				latestSpendMarker.CurrentPhase != GamePhase.Night ||
+				latestSpendMarker.TurnNumber != dto.TurnNumber)
+			{
+				throw new InvalidOperationException(
+					"The Actor spend recovery cursor does not match committed state.");
+			}
+
+			return cursor;
+		}
 
 		private static bool IsCurrentRolePowerIdentity(
 			GameSessionDto dto,

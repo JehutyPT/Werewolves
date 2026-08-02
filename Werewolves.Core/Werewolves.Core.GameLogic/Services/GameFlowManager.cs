@@ -625,6 +625,11 @@ internal static class GameFlowManager
             return true;
         }
 
+		if (HasNewActorRuntimeCommit(session, startingLogCount))
+		{
+			return true;
+		}
+
 		if (HasNewThiefOfferCommit(session, startingLogCount))
 		{
 			return true;
@@ -691,6 +696,15 @@ internal static class GameFlowManager
             .OfType<TargetPrivateRolePowerCommittedLogEntry>()
             .Any();
 
+	private static bool HasNewActorRuntimeCommit(
+		GameSession session,
+		int startingLogCount) =>
+		session.GameHistoryLog
+			.Skip(startingLogCount)
+			.Any(entry =>
+				entry is ActorSetupCardSpendCommittedLogEntry or
+					ActorBorrowedRolePowerActivationExpiredLogEntry);
+
 	private static bool HasNewThiefOfferCommit(
 		GameSession session,
 		int startingLogCount) =>
@@ -747,6 +761,10 @@ internal static class GameFlowManager
             .Skip(startingLogCount)
             .OfType<TargetPrivateRolePowerCommittedLogEntry>()
             .ToArray();
+		var newActorSetupCardSpendEntries = session.GameHistoryLog
+			.Skip(startingLogCount)
+			.OfType<ActorSetupCardSpendCommittedLogEntry>()
+			.ToArray();
         var newLoversPairEntries =
             GameSessionQueries.GetCommittedLoversPairsSince(
                 session,
@@ -755,12 +773,52 @@ internal static class GameFlowManager
             (newCommittedEntries.Length > 0 ? 1 : 0) +
             (newRecurringEntries.Length > 0 ? 1 : 0) +
             (newTargetPrivateEntries.Length > 0 ? 1 : 0) +
+			(newActorSetupCardSpendEntries.Length > 0 ? 1 : 0) +
             (newLoversPairEntries.Count > 0 ? 1 : 0);
         if (domainCommitKinds > 1)
         {
             throw new InvalidOperationException(
                 "One accepted response cannot produce multiple domain commits.");
         }
+
+		if (newActorSetupCardSpendEntries.Length > 0)
+		{
+			if (newActorSetupCardSpendEntries is not [_])
+			{
+				throw new InvalidOperationException(
+					"One accepted response must produce exactly one correlated Actor setup-card spend.");
+			}
+
+			if (!ActorRole.TryValidateCommittedRecoveryBoundary(
+				    session,
+				    startingInstruction,
+				    input,
+				    nextInstruction,
+				    out var activation) ||
+			    activation is null)
+			{
+				throw new InvalidOperationException(
+					"One accepted response must produce exactly one correlated Actor setup-card spend.");
+			}
+
+			return new DomainRecoveryCursor
+			{
+				Version = DomainRecoveryCursor.CurrentVersion,
+				Kind = DomainRecoveryCursorKind.ActorSetupCardSpendCommit,
+				CommittedActionType = NightActionType.Unknown,
+				ActingPlayerId = activation.ActingPlayerId,
+				SourceRole = activation.SourceRole,
+				SourcePowerIdentifier = string.Empty,
+				PowerInstanceId = Guid.Empty,
+				PowerInstanceOrigin = null,
+				OneUseResourceId = Guid.Empty,
+				ActorSetupCardId = activation.SelectedCardId,
+				ActorBorrowedActivationId = activation.ActivationId,
+				CommittedTargetIds = [],
+				NextInstructionSemantic = nextInstruction.Semantic,
+				NextInstructionId = nextInstruction.InstructionId
+			};
+		}
 
         if (newLoversPairEntries.Count > 0)
         {
@@ -970,6 +1028,7 @@ internal static class GameFlowManager
             ModeratorInstructionSemantic.ObserveStutteringJudgeSignal or
             ModeratorInstructionSemantic.ChooseWolfHoundAlignment or
             ModeratorInstructionSemantic.ChooseThiefOffer or
+			ModeratorInstructionSemantic.ChooseActorSetupCard or
             ModeratorInstructionSemantic.AnnounceDawnVictims or
             ModeratorInstructionSemantic.AssignDawnVictimRoles or
             ModeratorInstructionSemantic.AssignDayVoteTargetRole or
@@ -1167,6 +1226,12 @@ internal static class GameFlowManager
 					ThiefOfferRules.HasValidCommittedChoice(
 						session,
 						thiefPlayerId),
+				ModeratorInstructionSemantic.ChooseActorSetupCard
+					when cursor.ObservedRole == MainRoleType.Actor &&
+						 continuationRole == MainRoleType.Actor =>
+					ActorRole.HasExpectedDeclinedChoiceSleep(
+						session,
+						pendingInstruction),
                 ModeratorInstructionSemantic.RecognizeLovers
                     when cursor.ObservedRole == Cupid &&
                          continuationRole == Cupid =>

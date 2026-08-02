@@ -97,7 +97,7 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 			5,
 			[MainRoleType.SimpleWerewolf, MainRoleType.Seer, MainRoleType.WildChild,
 				MainRoleType.SimpleVillager, MainRoleType.SimpleVillager],
-			new ActorSetupCards([MainRoleType.Cupid, MainRoleType.Defender, MainRoleType.Elder]));
+			ruleState: new SimulationRuleState(NewMoonEnabled: true));
 
 		var result = evaluator.Evaluate(
 			scenario,
@@ -107,7 +107,8 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 		var stopped = result.Should().BeOfType<SimulatorUnsupportedLobbyEvaluation>().Subject.SimulatorSupport;
 		stopped.Scenario.Should().BeSameAs(scenario);
 		stopped.IsSupported.Should().BeFalse();
-		stopped.HasUnsupportedActorSetupCards.Should().BeTrue();
+		stopped.HasUnsupportedActorSetupCards.Should().BeFalse();
+		stopped.HasUnsupportedRuleState.Should().BeTrue();
 		calls.Should().Be(0);
 		MarkTestCompleted();
 	}

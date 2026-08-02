@@ -16,7 +16,7 @@ public sealed class LocalRecoveryPayloadCodecTests
 	};
 
 	[Fact]
-	public void StagedLobbySchema2_RoundTripsExactTypedSetupAggregate()
+	public void StagedLobbySchema3_RoundTripsExactTypedSetupAggregate()
 	{
 		GameSessionPlayerConfig[] roster =
 		[
@@ -34,7 +34,7 @@ public sealed class LocalRecoveryPayloadCodecTests
 			new(Id(104), MainRoleType.SimpleVillager),
 			new(Id(105), MainRoleType.SimpleVillager),
 			new(Id(106), MainRoleType.PrejudicedManipulator),
-			new(Id(107), MainRoleType.SimpleVillager)
+			new(Id(107), MainRoleType.Actor)
 		];
 		var roleLockIn = new RoleLockIn(
 			version: 7,
@@ -47,10 +47,18 @@ public sealed class LocalRecoveryPayloadCodecTests
 			roster.Select(player => player.Id),
 			[roster[0].Id, roster[3].Id],
 			[roster[1].Id, roster[2].Id, roster[4].Id]);
+		var actorSetupCards = new ActorSetupCards(
+			version: 9,
+			[
+				new PhysicalCharacterCard(Id(301), MainRoleType.Cupid),
+				new PhysicalCharacterCard(Id(302), MainRoleType.Witch),
+				new PhysicalCharacterCard(Id(303), MainRoleType.Hunter)
+			]);
 
 		var serialized = LocalRecoveryPayloadCodec.SerializeStagedLobby(
 			roster,
 			roleLockIn,
+			actorSetupCards,
 			partition);
 		var recovered = LocalRecoveryPayloadCodec.Deserialize(serialized)
 			.Should().BeOfType<StagedLobbyRecoveryPayload>()
@@ -70,6 +78,11 @@ public sealed class LocalRecoveryPayloadCodecTests
 			.Should().Be((cards[5].Id, cards[5].PrintedRole));
 		(recovered.RoleLockIn.Offer2!.Id, recovered.RoleLockIn.Offer2.PrintedRole)
 			.Should().Be((cards[6].Id, cards[6].PrintedRole));
+		recovered.ActorSetupCards.Version.Should().Be(9);
+		recovered.ActorSetupCards.Cards
+			.Select(card => (card.Id, card.PrintedRole))
+			.Should().Equal(actorSetupCards.Cards
+				.Select(card => (card.Id, card.PrintedRole)));
 		recovered.PublicGroupPartition.Should().NotBeNull();
 		recovered.PublicGroupPartition!.FirstGroupPlayerIds
 			.Should().BeEquivalentTo(partition.FirstGroupPlayerIds);
@@ -78,7 +91,7 @@ public sealed class LocalRecoveryPayloadCodecTests
 	}
 
 	[Fact]
-	public void ActiveGameSchema2_RoundTripsExactSessionJson()
+	public void ActiveGameSchema3_RoundTripsExactSessionJson()
 	{
 		const string serializedSession = "{\"game\":\"exact-session-json\"}";
 
@@ -90,12 +103,12 @@ public sealed class LocalRecoveryPayloadCodecTests
 		using var document = System.Text.Json.JsonDocument.Parse(serialized);
 
 		document.RootElement.GetProperty("schemaVersion").GetInt32()
-			.Should().Be(2);
+			.Should().Be(3);
 		recovered.SerializedSession.Should().Be(serializedSession);
 	}
 
 	[Fact]
-	public void StagedLobbySchema2_WithNoPartition_RoundTripsNullWithoutDefaulting()
+	public void StagedLobbySchema3_WithNoConditionalArtifacts_RoundTripsNoneWithoutDefaulting()
 	{
 		GameSessionPlayerConfig[] roster =
 		[
@@ -119,12 +132,14 @@ public sealed class LocalRecoveryPayloadCodecTests
 		var serialized = LocalRecoveryPayloadCodec.SerializeStagedLobby(
 			roster,
 			roleLockIn,
+			ActorSetupCards.None,
 			publicGroupPartition: null);
 		var recovered = LocalRecoveryPayloadCodec.Deserialize(serialized)
 			.Should().BeOfType<StagedLobbyRecoveryPayload>()
 			.Subject;
 
 		recovered.PublicGroupPartition.Should().BeNull();
+		recovered.ActorSetupCards.Should().Be(ActorSetupCards.None);
 	}
 
 	[Theory]
@@ -141,18 +156,53 @@ public sealed class LocalRecoveryPayloadCodecTests
 	}
 
 	[Theory]
+	[InlineData(true)]
+	[InlineData(false)]
+	public void OtherwiseValidSchema2Payload_IsRejected(bool stagedLobby)
+	{
+		var schema3Payload = stagedLobby
+			? CreateSchema3StagedLobbyPayload()
+			: LocalRecoveryPayloadCodec.SerializeActiveGame(
+				"{\"opaque\":\"session-json\"}");
+		var envelope = JsonNode.Parse(schema3Payload)!;
+		envelope["schemaVersion"] = 2;
+		if (stagedLobby)
+		{
+			envelope["stagedLobby"]!.AsObject().Remove("actorSetupCards");
+		}
+
+		var act = () => LocalRecoveryPayloadCodec.Deserialize(
+			envelope.ToJsonString());
+
+		act.Should().Throw<InvalidOperationException>();
+	}
+
+	[Fact]
+	public void Schema3StagedLobby_RequiresExplicitActorSetupArtifact()
+	{
+		var envelope = JsonNode.Parse(CreateSchema3StagedLobbyPayload())!;
+		envelope["stagedLobby"]!.AsObject()
+			.Remove("actorSetupCards").Should().BeTrue();
+
+		var act = () => LocalRecoveryPayloadCodec.Deserialize(
+			envelope.ToJsonString());
+
+		act.Should().Throw<InvalidOperationException>();
+	}
+
+	[Theory]
 	[InlineData("StagedLobby", true, true)]
 	[InlineData("ActiveGame", true, true)]
 	[InlineData("StagedLobby", false, true)]
 	[InlineData("ActiveGame", true, false)]
 	[InlineData("StagedLobby", false, false)]
 	[InlineData("ActiveGame", false, false)]
-	public void Schema2Envelope_RequiresExactDiscriminatedUnion(
+	public void Schema3Envelope_RequiresExactDiscriminatedUnion(
 		string kind,
 		bool includeStagedLobby,
 		bool includeActiveGame)
 	{
-		var payload = CreateSchema2Envelope(
+		var payload = CreateSchema3Envelope(
 			kind,
 			includeStagedLobby,
 			includeActiveGame);
@@ -162,18 +212,18 @@ public sealed class LocalRecoveryPayloadCodecTests
 		act.Should().Throw<InvalidOperationException>();
 	}
 
-	private static string CreateSchema2Envelope(
+	private static string CreateSchema3Envelope(
 		string kind,
 		bool includeStagedLobby,
 		bool includeActiveGame)
 	{
-		var stagedEnvelope = JsonNode.Parse(CreateSchema2StagedLobbyPayload())!;
+		var stagedEnvelope = JsonNode.Parse(CreateSchema3StagedLobbyPayload())!;
 		var activeEnvelope = JsonNode.Parse(
 			LocalRecoveryPayloadCodec.SerializeActiveGame(
 				"{\"valid\":\"session-json\"}"))!;
 		return new JsonObject
 		{
-			["schemaVersion"] = 2,
+			["schemaVersion"] = 3,
 			["kind"] = kind,
 			["stagedLobby"] = includeStagedLobby
 				? stagedEnvelope["stagedLobby"]!.DeepClone()
@@ -184,7 +234,7 @@ public sealed class LocalRecoveryPayloadCodecTests
 		}.ToJsonString();
 	}
 
-	private static string CreateSchema2StagedLobbyPayload()
+	private static string CreateSchema3StagedLobbyPayload()
 	{
 		GameSessionPlayerConfig[] roster =
 		[
@@ -207,6 +257,7 @@ public sealed class LocalRecoveryPayloadCodecTests
 		return LocalRecoveryPayloadCodec.SerializeStagedLobby(
 			roster,
 			roleLockIn,
+			ActorSetupCards.None,
 			publicGroupPartition: null);
 	}
 

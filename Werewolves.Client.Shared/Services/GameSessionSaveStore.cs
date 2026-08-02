@@ -35,6 +35,7 @@ internal abstract record LocalRecoveryPayload;
 internal sealed record StagedLobbyRecoveryPayload(
 	IReadOnlyList<GameSessionPlayerConfig> PlayerRoster,
 	RoleLockIn RoleLockIn,
+	ActorSetupCards ActorSetupCards,
 	PublicGroupPartition? PublicGroupPartition) : LocalRecoveryPayload;
 
 internal sealed record ActiveGameRecoveryPayload(
@@ -42,7 +43,7 @@ internal sealed record ActiveGameRecoveryPayload(
 
 internal static class LocalRecoveryPayloadCodec
 {
-	private const int CurrentSchemaVersion = 2;
+	private const int CurrentSchemaVersion = 3;
 	private const string StagedLobbyKind = "StagedLobby";
 	private const string ActiveGameKind = "ActiveGame";
 	private static readonly JsonSerializerOptions JsonOptions = new()
@@ -53,10 +54,12 @@ internal static class LocalRecoveryPayloadCodec
 	public static string SerializeStagedLobby(
 		IReadOnlyList<GameSessionPlayerConfig> playerRoster,
 		RoleLockIn roleLockIn,
+		ActorSetupCards actorSetupCards,
 		PublicGroupPartition? publicGroupPartition)
 	{
 		ArgumentNullException.ThrowIfNull(playerRoster);
 		ArgumentNullException.ThrowIfNull(roleLockIn);
+		ArgumentNullException.ThrowIfNull(actorSetupCards);
 		return JsonSerializer.Serialize(
 			new RecoveryEnvelopeDto(
 				CurrentSchemaVersion,
@@ -66,6 +69,7 @@ internal static class LocalRecoveryPayloadCodec
 						.Select(GameSessionPlayerConfigDto.FromValue)
 						.ToArray(),
 					RoleLockInDto.FromRoleLockIn(roleLockIn),
+					ActorSetupCardsDto.FromValue(actorSetupCards),
 					publicGroupPartition is null
 						? null
 						: PublicGroupPartitionDto.FromValue(publicGroupPartition)),
@@ -95,7 +99,7 @@ internal static class LocalRecoveryPayloadCodec
 		{
 			SchemaVersion: CurrentSchemaVersion,
 				Kind: StagedLobbyKind,
-				StagedLobby: not null,
+				StagedLobby: { ActorSetupCards: not null },
 				ActiveGame: null
 			})
 		{
@@ -105,6 +109,7 @@ internal static class LocalRecoveryPayloadCodec
 			return new StagedLobbyRecoveryPayload(
 				playerRoster,
 				envelope.StagedLobby.RoleLockIn.ToRoleLockIn(),
+				envelope.StagedLobby.ActorSetupCards.ToValue(),
 				envelope.StagedLobby.PublicGroupPartition?.ToValue(
 					playerRoster.Select(player => player.Id)));
 		}
@@ -133,6 +138,7 @@ internal static class LocalRecoveryPayloadCodec
 	private sealed record StagedLobbyDto(
 		IReadOnlyList<GameSessionPlayerConfigDto> PlayerRoster,
 		RoleLockInDto RoleLockIn,
+		ActorSetupCardsDto ActorSetupCards,
 		PublicGroupPartitionDto? PublicGroupPartition);
 
 	private sealed record ActiveGameDto(string SerializedSession);
@@ -170,6 +176,26 @@ internal static class LocalRecoveryPayloadCodec
 	private sealed record PhysicalCharacterCardDto(
 		Guid Id,
 		MainRoleType PrintedRole);
+
+	private sealed record ActorSetupCardsDto(
+		long Version,
+		IReadOnlyList<PhysicalCharacterCardDto> Cards)
+	{
+		public static ActorSetupCardsDto FromValue(ActorSetupCards actorSetupCards) =>
+			new(
+				actorSetupCards.Version,
+				actorSetupCards.Cards
+					.Select(card => new PhysicalCharacterCardDto(
+						card.Id,
+						card.PrintedRole))
+					.ToArray());
+
+		public ActorSetupCards ToValue() =>
+			new(
+				Version,
+				Cards.Select(card =>
+					new PhysicalCharacterCard(card.Id, card.PrintedRole)));
+	}
 
 	private sealed record GameSessionPlayerConfigDto(Guid Id, string Name)
 	{

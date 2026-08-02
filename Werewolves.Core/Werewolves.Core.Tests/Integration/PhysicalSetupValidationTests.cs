@@ -152,6 +152,99 @@ public class PhysicalSetupValidationTests : DiagnosticTestBase
 	}
 
 	[Fact]
+	public void ActorSetupCardEligibility_IsTheExactRulesAllowlist()
+	{
+		var eligibleRoles = Enum.GetValues<MainRoleType>()
+			.Where(role => role.IsEligibleActorSetupCard());
+
+		eligibleRoles.Should().BeEquivalentTo(new[]
+		{
+			MainRoleType.Seer,
+			MainRoleType.Cupid,
+			MainRoleType.Witch,
+			MainRoleType.Hunter,
+			MainRoleType.LittleGirl,
+			MainRoleType.Defender,
+			MainRoleType.Elder,
+			MainRoleType.Scapegoat,
+			MainRoleType.VillageIdiot,
+			MainRoleType.Fox,
+			MainRoleType.BearTamer,
+			MainRoleType.StutteringJudge,
+			MainRoleType.KnightWithRustySword
+		});
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void TryGetConfigIssues_WithDuplicateActorSetupSources_ReturnsDistinctSourceFailure()
+	{
+		var hasIssues = GameSessionConfig.TryGetConfigIssues(
+			CreatePlayerNames(5),
+			CreateActorRoleComposition(),
+			new ActorSetupCards(
+				[MainRoleType.Cupid, MainRoleType.Cupid, MainRoleType.Elder]),
+			out var issues);
+
+		hasIssues.Should().BeTrue();
+		issues.Should().ContainSingle(issue =>
+			issue.Type == GameConfigValidationErrorType.DuplicateActorSetupCardSource);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void TryGetConfigIssues_WithActorUnreachableAndSetupArtifact_ReturnsExtraneousArtifactFailure()
+	{
+		var roleComposition = new List<MainRoleType>
+		{
+			MainRoleType.BigBadWolf,
+			MainRoleType.Seer,
+			MainRoleType.Cupid,
+			MainRoleType.Witch,
+			MainRoleType.Hunter
+		};
+
+		var hasIssues = GameSessionConfig.TryGetConfigIssues(
+			CreatePlayerNames(5),
+			roleComposition,
+			new ActorSetupCards(
+				[MainRoleType.Defender, MainRoleType.Elder, MainRoleType.Fox]),
+			out var issues);
+
+		hasIssues.Should().BeTrue();
+		issues.Should().ContainSingle(issue =>
+			issue.Type == GameConfigValidationErrorType.UnexpectedActorSetupCards);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void TryGetRoleLockInPhysicalSetupIssues_WithSourceInUnchosenOffer_ReturnsFullCompositionOverlapFailure()
+	{
+		MainRoleType[] dealPoolRoles =
+		[
+			MainRoleType.Thief,
+			MainRoleType.BigBadWolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager
+		];
+
+		var hasIssues = GameSessionConfig.TryGetRoleLockInPhysicalSetupIssues(
+			playerCount: 5,
+			dealPoolRoles,
+			offer1Role: MainRoleType.Actor,
+			offer2Role: MainRoleType.Seer,
+			new ActorSetupCards(
+				[MainRoleType.Seer, MainRoleType.Cupid, MainRoleType.Elder]),
+			out var issues);
+
+		hasIssues.Should().BeTrue();
+		issues.Should().ContainSingle(issue =>
+			issue.Type == GameConfigValidationErrorType.ActorSetupCardInRoleComposition);
+		MarkTestCompleted();
+	}
+
+	[Fact]
 	public void TryGetConfigIssues_WithoutHardAlignedWerewolf_ReturnsCoverageFailure()
 	{
 		var roleComposition = new List<MainRoleType>
@@ -377,6 +470,8 @@ public class PhysicalSetupValidationTests : DiagnosticTestBase
 	[InlineData(GameConfigValidationErrorType.ActorSetupCardCountMismatch)]
 	[InlineData(GameConfigValidationErrorType.ActorSetupCardInRoleComposition)]
 	[InlineData(GameConfigValidationErrorType.IneligibleActorSetupCard)]
+	[InlineData(GameConfigValidationErrorType.DuplicateActorSetupCardSource)]
+	[InlineData(GameConfigValidationErrorType.UnexpectedActorSetupCards)]
 	[InlineData(GameConfigValidationErrorType.MissingHardAlignedWerewolf)]
 	[InlineData(GameConfigValidationErrorType.MissingHardAlignedVillager)]
 	public void GetDisplayMessage_ForPhysicalSetupFailure_UsesResourceBackedCopy(

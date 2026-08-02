@@ -161,12 +161,18 @@ public static class SimulationStartStateDeriver
 		var assignedRoles = startState.RoleAssignments
 			.Select(assignment => assignment.Role)
 			.ToList();
+		var actorSetupCards = startState.CanonicalScenario.ActorSetupCards.Count == 0
+			? ActorSetupCards.None
+			: ActorSetupCards.CreateFromPrintedRoles(
+				version: 1,
+				startState.CanonicalScenario.ActorSetupCards);
 		if (startState.CanonicalScenario.Offer1Role is not { } offer1Role ||
 			startState.CanonicalScenario.Offer2Role is not { } offer2Role)
 		{
 			return new GameSessionConfig(
 				playerRoster,
 				assignedRoles,
+				actorSetupCards,
 				publicGroupPartition: publicGroupPartition);
 		}
 		if (!assignedRoles.Contains(MainRoleType.Thief))
@@ -189,6 +195,7 @@ public static class SimulationStartStateDeriver
 				dealPoolCardIds: dealPoolCards.Select(card => card.Id),
 				offer1CardId: offer1.Id,
 				offer2CardId: offer2.Id),
+			actorSetupCards,
 			publicGroupPartition: publicGroupPartition);
 	}
 }

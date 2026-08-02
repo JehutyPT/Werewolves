@@ -937,6 +937,7 @@ public class SerializationTests : DiagnosticTestBase
                 MainRoleType.SimpleVillager,
                 MainRoleType.SimpleVillager
             ],
+			ActorSetupCards = ActorSetupCardsDto.FromValue(ActorSetupCards.None),
             PendingInstruction = new ConfirmationInstruction(
                 publicAnnouncement: GameStrings.NightActionsCompletePrompt),
             PhaseStateCache = new GamePhaseStateCacheDto
@@ -1051,6 +1052,7 @@ public class SerializationTests : DiagnosticTestBase
                 MainRoleType.SimpleVillager,
                 MainRoleType.SimpleVillager
             ],
+			ActorSetupCards = ActorSetupCardsDto.FromValue(ActorSetupCards.None),
             PendingInstruction = new SelectPlayersInstruction(
                 [alivePlayerId, votedPlayerId, bystanderId],
                 NumberRangeConstraint.SingleOptional,

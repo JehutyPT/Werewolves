@@ -96,6 +96,22 @@
 		</section>
 	}
 
+	@if (Lobby.AcceptedActorSetupCards.Version > 0)
+	{
+		<section class="ww-role-group"
+				 data-testid="@ModeratorUiTestIds.ActorSetupSummary"
+				 aria-labelledby="actor-setup-summary-title">
+			<div class="ww-section-head">
+				<h2 id="actor-setup-summary-title">@ClientStrings.ActorSetup_SummaryTitle</h2>
+			</div>
+			<p class="ww-page-copy">@RoleSummary(Lobby.AcceptedActorSetupCards.PrintedRoles)</p>
+			<button type="button"
+					class="ww-secondary-button"
+					data-testid="@ModeratorUiTestIds.ActorSetupReview"
+					@onclick="ConfigureActorSetupCards">@ClientStrings.RoleSelection_ReviewActorSetupButton</button>
+		</section>
+	}
+
 	@if (Lobby.AcceptedPublicGroupPartition is not null)
 	{
 		<section class="ww-role-group"
@@ -173,6 +189,9 @@
 	public EventCallback OnConfigureRoleLockIn { get; set; }
 
 	[Parameter]
+	public EventCallback OnConfigureActorSetupCards { get; set; }
+
+	[Parameter]
 	public EventCallback OnConfigurePublicGroupPartition { get; set; }
 
 	private List<string> _validationErrors = new();
@@ -189,6 +208,11 @@
 
 	private bool IsCountMatching => Lobby.TotalSelectedRoleCount == Lobby.ExpectedRoleCount;
 	private bool IsRoleSelectionValid => !Lobby.HasRoleConfigIssues(out _);
+	private bool HasPendingConditionalSetup =>
+		Lobby.RequiresActorSetupCards ||
+		Lobby.RequiresPublicGroupPartition ||
+		(Lobby.AcceptedRoleLockIn is null && Lobby.GetSelectedRoles().Any(role =>
+			role is MainRoleType.Actor or MainRoleType.PrejudicedManipulator));
 	private RoleLockIn? CurrentThiefRoleLockIn =>
 		!Lobby.RequiresRoleLockIn &&
 		Lobby.AcceptedRoleLockIn is { Offer1: not null, Offer2: not null } accepted
@@ -256,6 +280,9 @@
 		return OnConfigureRoleLockIn.InvokeAsync();
 	}
 
+	private Task ConfigureActorSetupCards() =>
+		OnConfigureActorSetupCards.InvokeAsync();
+
 	private Task ConfigurePublicGroupPartition() =>
 		OnConfigurePublicGroupPartition.InvokeAsync();
 
@@ -268,6 +295,11 @@
 		}
 
 		_validationErrors.Clear();
+		if (HasPendingConditionalSetup)
+		{
+			return OnStartGame.InvokeAsync();
+		}
+
 		var attemptedState = Evaluation.State;
 		if (!Evaluation.TryRequestLobbyExit())
 		{

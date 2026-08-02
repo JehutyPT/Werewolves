@@ -10,6 +10,21 @@ namespace Werewolves.Client.Tests.Resources;
 
 public class ClientStringsTests
 {
+	private static readonly string[] ActorSetupUiResourceKeys =
+	[
+		nameof(ClientStrings.ActorSetup_StepLabel),
+		nameof(ClientStrings.ActorSetup_Title),
+		nameof(ClientStrings.ActorSetup_Description),
+		nameof(ClientStrings.ActorSetup_ListAria),
+		nameof(ClientStrings.ActorSetup_CardChoiceAriaFormat),
+		nameof(ClientStrings.ActorSetup_SelectionCountFormat),
+		nameof(ClientStrings.ActorSetup_CommitButton),
+		nameof(ClientStrings.ActorSetup_IncompleteValidation),
+		nameof(ClientStrings.ActorSetup_SaveFailedValidation),
+		nameof(ClientStrings.ActorSetup_SummaryTitle),
+		nameof(ClientStrings.RoleSelection_ReviewActorSetupButton)
+	];
+
 	private static readonly string[] PublicGroupPartitionUiResourceKeys =
 	[
 		nameof(ClientStrings.PublicGroupPartition_StepLabel),
@@ -91,6 +106,7 @@ public class ClientStringsTests
 		nameof(ClientStrings.Victory_ReturnToLobbyButton),
 		nameof(ClientStrings.Victory_WindowDawn),
 		nameof(ClientStrings.Victory_WindowPreNight),
+		.. ActorSetupUiResourceKeys,
 		.. PublicGroupPartitionUiResourceKeys
 	];
 
@@ -117,19 +133,33 @@ public class ClientStringsTests
 	[Theory]
 	[InlineData("en-US", "ClientStrings.resx")]
 	[InlineData("pt-PT", "ClientStrings.pt-PT.resx")]
+	public void ActorSetupStrings_ExposeEveryCurrentCultureThroughGeneratedAccessors(
+		string cultureName,
+		string resourceFileName) =>
+		AssertResourceAccessors(cultureName, resourceFileName, ActorSetupUiResourceKeys);
+
+	[Theory]
+	[InlineData("en-US", "ClientStrings.resx")]
+	[InlineData("pt-PT", "ClientStrings.pt-PT.resx")]
 	public void PublicGroupPartitionStrings_ExposeEveryCurrentCultureThroughGeneratedAccessors(
 		string cultureName,
-		string resourceFileName)
+		string resourceFileName) =>
+		AssertResourceAccessors(cultureName, resourceFileName, PublicGroupPartitionUiResourceKeys);
+
+	private static void AssertResourceAccessors(
+		string cultureName,
+		string resourceFileName,
+		IReadOnlyCollection<string> resourceKeys)
 	{
 		var expectedValues = LoadResourceValues(
 			resourceFileName,
-			PublicGroupPartitionUiResourceKeys);
+			resourceKeys);
 		var previousCulture = ClientStrings.Culture;
 		try
 		{
 			ClientStrings.Culture = CultureInfo.GetCultureInfo(cultureName);
 
-			foreach (var key in PublicGroupPartitionUiResourceKeys)
+			foreach (var key in resourceKeys)
 			{
 				GetClientStringAccessorValue(key).Should().Be(expectedValues[key]);
 			}

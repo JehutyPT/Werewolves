@@ -7,6 +7,9 @@ public static class ModeratorUiTestIds
 	public const string DashboardStatusBar = "dashboard-status-bar";
 	public const string DashboardActionZone = "dashboard-action-zone";
 	public const string InstructionBlock = "instruction-block";
+	public const string SelectOptionsList = "select-options-list";
+	public const string SelectOptionsOption = "select-options-option";
+	public const string HoldButton = "hold-button";
 	public const string AbandonGameButton = "abandon-game-button";
 	public const string LobbyEvaluationPanel = "lobby-evaluation-panel";
 	public const string LobbyEvaluationSummary = "lobby-evaluation-summary";
@@ -26,6 +29,14 @@ public static class ModeratorUiTestIds
 	public const string ThiefRoleLockInBack = "thief-role-lock-in-back";
 	public const string ThiefRoleLockInReview = "thief-role-lock-in-review";
 	public const string ThiefRoleLockInSummary = "thief-role-lock-in-summary";
+	public const string ActorSetupPage = "actor-setup-page";
+	public const string ActorSetupList = "actor-setup-list";
+	public const string ActorSetupCard = "actor-setup-card";
+	public const string ActorSetupSelectionCount = "actor-setup-selection-count";
+	public const string ActorSetupCommit = "actor-setup-commit";
+	public const string ActorSetupBack = "actor-setup-back";
+	public const string ActorSetupReview = "actor-setup-review";
+	public const string ActorSetupSummary = "actor-setup-summary";
 	public const string PublicGroupPartitionPage = "public-group-partition-page";
 	public const string PublicGroupPartitionPlayerList = "public-group-partition-player-list";
 	public const string PublicGroupPartitionPlayer = "public-group-partition-player";

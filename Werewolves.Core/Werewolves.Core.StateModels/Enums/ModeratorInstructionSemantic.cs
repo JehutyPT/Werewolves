@@ -56,5 +56,6 @@ public enum ModeratorInstructionSemantic
 	ChooseThiefOffer = 48,
 	ResolveDevotedServantVoteWindow = 49,
 	RecordDevotedServantAcquiredCard = 50,
-	AnnounceVillagerRolePowerSuppression = 51
+	AnnounceVillagerRolePowerSuppression = 51,
+	ChooseActorSetupCard = 52
 }

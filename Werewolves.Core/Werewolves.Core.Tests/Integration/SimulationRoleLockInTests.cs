@@ -109,6 +109,72 @@ public class SimulationRoleLockInTests
 	}
 
 	[Fact]
+	public void CreateGameSessionConfig_WithActorSetupArtifact_BindsExactlyTheCanonicalSourceRoles()
+	{
+		MainRoleType[] roles =
+		[
+			MainRoleType.Actor,
+			MainRoleType.BigBadWolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager
+		];
+		var setupArtifact = new ActorSetupCards(
+			version: 8,
+			[
+				new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.Seer),
+				new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.Cupid),
+				new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.Elder)
+			]);
+		var scenario = new SimulationScenario(5, roles, setupArtifact);
+		var startState = CreateStartState(scenario, roles);
+
+		var config = startState.CreateGameSessionConfig();
+
+		config.ActorSetupCards.Version.Should().Be(1);
+		config.ActorSetupCards.PrintedRoles.Should().Equal(
+			scenario.ToCanonical().ActorSetupCards);
+		config.ActorSetupCards.Cards.Select(card => card.PrintedRole).Should().Equal(
+			scenario.ToCanonical().ActorSetupCards);
+		config.ActorSetupCards.Cards.Select(card => card.Id)
+			.Should().NotContain(Guid.Empty)
+			.And.OnlyHaveUniqueItems();
+	}
+
+	[Fact]
+	public void CreateGameSessionConfig_WithActorReachableOnlyInOffer_PropagatesSetupAlongsideTheFullRoleLockIn()
+	{
+		MainRoleType[] dealPool =
+		[
+			MainRoleType.Thief,
+			MainRoleType.BigBadWolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager
+		];
+		var scenario = new SimulationScenario(
+			playerCount: 5,
+			roleCompositionCards: dealPool.Concat(
+				[MainRoleType.Actor, MainRoleType.Seer]),
+			dealPoolCards: dealPool,
+			offer1Role: MainRoleType.Actor,
+			offer2Role: MainRoleType.Seer,
+			new ActorSetupCards(
+				[MainRoleType.Cupid, MainRoleType.Elder, MainRoleType.Fox]));
+		var startState = CreateStartState(scenario, dealPool);
+
+		var config = startState.CreateGameSessionConfig();
+
+		config.RoleLockIn.Offer1!.PrintedRole.Should().Be(MainRoleType.Actor);
+		config.RoleLockIn.Offer2!.PrintedRole.Should().Be(MainRoleType.Seer);
+		config.ActorSetupCards.PrintedRoles.Should().Equal(
+			scenario.ToCanonical().ActorSetupCards);
+		config.ActorSetupCards.Cards.Select(card => card.Id)
+			.Should().NotContain(Guid.Empty)
+			.And.OnlyHaveUniqueItems();
+	}
+
+	[Fact]
 	public void CreateGameSessionConfig_WithCanonicalPublicGroupPartition_MapsSeatsToRunRosterAndRetainsSamePrintedOffers()
 	{
 		MainRoleType[] dealPool =
@@ -178,5 +244,36 @@ public class SimulationRoleLockInTests
 		config.PublicGroupPartition.SecondGroupPlayerIds.Should().BeEquivalentTo(
 			canonicalPartition.SecondGroupSeatNumbers.Select(seatNumber =>
 				config.PlayerRoster[seatNumber - 1].Id));
+	}
+
+	private static SimulationStartState CreateStartState(
+		SimulationScenario scenario,
+		IReadOnlyList<MainRoleType> assignedRoles)
+	{
+		var identity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+		var assignments = assignedRoles
+			.Select((role, index) =>
+				new SimulationPlayerRoleAssignment(index + 1, role))
+			.ToArray();
+		var factionFacts = assignments.Select(assignment =>
+		{
+			var isWerewolf = assignment.Role is MainRoleType.SimpleWerewolf
+				or MainRoleType.BigBadWolf
+				or MainRoleType.AccursedWolfFather
+				or MainRoleType.WhiteWerewolf;
+			return new SimulationPlayerFactionFacts(
+				assignment.SeatNumber,
+				FactionBeneficiaryKnowledge.Known(
+					isWerewolf ? Faction.Werewolf : Faction.Villager),
+				Enum.GetValues<Faction>().ToDictionary(
+					faction => faction,
+					faction => isWerewolf && faction == Faction.Werewolf
+						? FactionAgentKnowledge.KnownAgent
+						: FactionAgentKnowledge.KnownNonAgent));
+		}).ToArray();
+
+		return new SimulationStartState(identity, assignments, factionFacts);
 	}
 }
