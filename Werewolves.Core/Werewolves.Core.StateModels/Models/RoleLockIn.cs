@@ -49,6 +49,70 @@ public sealed class RoleLockIn
 	public PhysicalCharacterCard? Offer1 { get; }
 	public PhysicalCharacterCard? Offer2 { get; }
 
+	public static bool IsOfferEligible(MainRoleType printedRole) =>
+		Enum.IsDefined(printedRole) &&
+		printedRole is not MainRoleType.Thief
+			and not MainRoleType.TwoSisters
+			and not MainRoleType.ThreeBrothers;
+
+	public static RoleLockIn CreateFromPrintedRoles(
+		long version,
+		int playerCount,
+		IEnumerable<MainRoleType> roleComposition)
+	{
+		ArgumentNullException.ThrowIfNull(roleComposition);
+		var inventory = roleComposition
+			.Select(role => new PhysicalCharacterCard(Guid.NewGuid(), role))
+			.ToArray();
+
+		return new RoleLockIn(
+			version,
+			playerCount,
+			inventory,
+			inventory.Select(card => card.Id));
+	}
+
+	public static RoleLockIn CreateFromPrintedRoles(
+		long version,
+		int playerCount,
+		IEnumerable<MainRoleType> roleComposition,
+		MainRoleType offer1,
+		MainRoleType offer2)
+	{
+		ArgumentNullException.ThrowIfNull(roleComposition);
+		var dealPoolRoles = roleComposition.ToList();
+		if (!dealPoolRoles.Remove(offer1))
+		{
+			throw new ArgumentException(
+				"Offer1 must match a printed Role in the Role Composition.",
+				nameof(offer1));
+		}
+		if (!dealPoolRoles.Remove(offer2))
+		{
+			throw new ArgumentException(
+				"Offer2 must match another printed Role in the Role Composition.",
+				nameof(offer2));
+		}
+
+		var dealPool = dealPoolRoles
+			.Select(role => new PhysicalCharacterCard(Guid.NewGuid(), role))
+			.ToArray();
+		var offer1Card = new PhysicalCharacterCard(Guid.NewGuid(), offer1);
+		var offer2Card = new PhysicalCharacterCard(Guid.NewGuid(), offer2);
+		var inventory = dealPool
+			.Append(offer1Card)
+			.Append(offer2Card)
+			.ToArray();
+
+		return new RoleLockIn(
+			version,
+			playerCount,
+			inventory,
+			dealPool.Select(card => card.Id),
+			offer1Card.Id,
+			offer2Card.Id);
+	}
+
 	public RoleLockIn(
 		long version,
 		int playerCount,
@@ -141,17 +205,17 @@ public sealed class RoleLockIn
 					nameof(offer2CardId));
 			}
 
-			if (offer1.PrintedRole == MainRoleType.Thief)
+			if (!IsOfferEligible(offer1.PrintedRole))
 			{
 				throw new ArgumentException(
-					"Thief cannot occupy an offer slot.",
+					"Thief and grouped Roles cannot occupy an offer slot.",
 					nameof(offer1CardId));
 			}
 
-			if (offer2.PrintedRole == MainRoleType.Thief)
+			if (!IsOfferEligible(offer2.PrintedRole))
 			{
 				throw new ArgumentException(
-					"Thief cannot occupy an offer slot.",
+					"Thief and grouped Roles cannot occupy an offer slot.",
 					nameof(offer2CardId));
 			}
 		}
@@ -167,20 +231,6 @@ public sealed class RoleLockIn
 			throw new ArgumentException(
 				"Every Physical Character Card must occupy exactly one locked zone.",
 				nameof(dealPoolCardIds));
-		}
-
-		if (offer1 is { PrintedRole: MainRoleType.TwoSisters or MainRoleType.ThreeBrothers })
-		{
-			throw new ArgumentException(
-				"Grouped Roles are Deal-Pool-only and cannot be offered.",
-				nameof(offer1CardId));
-		}
-
-		if (offer2 is { PrintedRole: MainRoleType.TwoSisters or MainRoleType.ThreeBrothers })
-		{
-			throw new ArgumentException(
-				"Grouped Roles are Deal-Pool-only and cannot be offered.",
-				nameof(offer2CardId));
 		}
 
 		ValidateReachableRoleCounts(dealPool);

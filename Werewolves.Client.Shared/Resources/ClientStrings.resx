@@ -592,4 +592,40 @@
   <data name="Dashboard_AbandonGameButton" xml:space="preserve">
     <value>Abandon game</value>
   </data>
+  <data name="RoleSelection_ConfigureRoleLockInButton" xml:space="preserve">
+    <value>Continue to Thief offers</value>
+  </data>
+  <data name="RoleSelection_ReviewRoleLockInButton" xml:space="preserve">
+    <value>Review or change offers</value>
+  </data>
+  <data name="ThiefRoleLockIn_StepLabel" xml:space="preserve">
+    <value>Thief offer Role Lock-In</value>
+  </data>
+  <data name="ThiefRoleLockIn_Title" xml:space="preserve">
+    <value>Ordered Thief offer cards</value>
+  </data>
+  <data name="ThiefRoleLockIn_Description" xml:space="preserve">
+    <value>Record the printed Role in each ordered offer slot. The remaining cards form the Deal Pool.</value>
+  </data>
+  <data name="ThiefRoleLockIn_Offer1Label" xml:space="preserve">
+    <value>Offer 1</value>
+  </data>
+  <data name="ThiefRoleLockIn_Offer2Label" xml:space="preserve">
+    <value>Offer 2</value>
+  </data>
+  <data name="ThiefRoleLockIn_CommitButton" xml:space="preserve">
+    <value>Save Role Lock-In</value>
+  </data>
+  <data name="ThiefRoleLockIn_SummaryTitle" xml:space="preserve">
+    <value>Locked Thief offers</value>
+  </data>
+  <data name="ThiefRoleLockIn_DealPoolLabel" xml:space="preserve">
+    <value>Locked Thief Deal Pool</value>
+  </data>
+  <data name="ThiefRoleLockIn_IncompleteValidation" xml:space="preserve">
+    <value>Choose one printed Role for each offer.</value>
+  </data>
+  <data name="ThiefRoleLockIn_SaveFailedValidation" xml:space="preserve">
+    <value>This offer partition could not be saved. Check the selected cards and try again.</value>
+  </data>
 </root>

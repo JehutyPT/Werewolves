@@ -229,6 +229,38 @@ public class LobbySetupStateTests
 	}
 
 	[Fact]
+	public void ThiefDraft_SameSingleOptionalRoleCanFillBothMutuallyExclusiveOffers()
+	{
+		var state = LobbySetupMetadataFixture.StateWithRoles(
+			MainRoleType.Thief,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.Witch,
+			MainRoleType.Hunter,
+			MainRoleType.Seer);
+		for (var index = 0; index < 5; index++)
+		{
+			state.AddPlayer(PlayerNames.GeneratedPlayer(index));
+		}
+		state.IncrementRole(MainRoleType.Thief);
+		state.IncrementRole(MainRoleType.SimpleWerewolf);
+		state.IncrementRole(MainRoleType.SimpleVillager);
+		state.IncrementRole(MainRoleType.Witch);
+		state.IncrementRole(MainRoleType.Hunter);
+
+		state.IncrementRole(MainRoleType.Seer);
+		state.IncrementRole(MainRoleType.Seer);
+
+		var seer = state.GetRoleInfo(MainRoleType.Seer);
+		seer.Count.Should().Be(2);
+		seer.Affordance.Should().Be(RoleAffordance.Stepper);
+		seer.CanIncrement.Should().BeFalse();
+		state.TotalSelectedRoleCount.Should().Be(state.ExpectedRoleCount);
+		state.HasRoleConfigIssues(out var issues).Should().BeFalse();
+		issues.Should().BeEmpty();
+	}
+
+	[Fact]
 	public void IncrementRole_StepperRole_IncrementsByOne()
 	{
 		var state = LobbySetupMetadataFixture.DefaultState();

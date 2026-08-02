@@ -80,6 +80,129 @@ public class GameClientManagerTests
 		ReadRecoveryKind(saveStore.Load()).Should().Be("ActiveGame");
 	}
 
+	[Fact]
+	public void PrintedRoleOffers_StageRecoverAndStartTheExactAcceptedPartition()
+	{
+		using var saveDirectory = TemporaryDirectory.Create();
+		var saveStore = new FileGameSessionSaveStore(saveDirectory.Path);
+		var lobby = CreateThiefLobby();
+		lobby.IncrementRole(MainRoleType.Thief);
+		lobby.IncrementRole(MainRoleType.SimpleWerewolf);
+		for (var index = 0; index < 5; index++)
+		{
+			lobby.IncrementRole(MainRoleType.SimpleVillager);
+		}
+		var manager = new GameClientManager(new GameService(), saveStore: saveStore);
+
+		manager.TryReplaceStagedRoleLockIn(
+			lobby,
+			expectedCurrentVersion: 0,
+			offer1: MainRoleType.SimpleVillager,
+			offer2: MainRoleType.SimpleVillager).Should().BeTrue();
+		lobby.AcceptedRoleLockIn.Should().NotBeNull();
+		var staged = lobby.AcceptedRoleLockIn!;
+		staged.Offer1!.PrintedRole.Should().Be(MainRoleType.SimpleVillager);
+		staged.Offer2!.PrintedRole.Should().Be(MainRoleType.SimpleVillager);
+		staged.Offer1.Id.Should().NotBe(staged.Offer2.Id);
+
+		var recoveredLobby = CreateThiefLobby(withPlayers: false);
+		var recovered = new GameClientManager(
+			new GameService(),
+			saveStore: new FileGameSessionSaveStore(saveDirectory.Path),
+			lobbySetupState: recoveredLobby);
+		recoveredLobby.AcceptedRoleLockIn.Should().NotBeNull();
+		var recoveredLockIn = recoveredLobby.AcceptedRoleLockIn!;
+		recoveredLockIn.RoleComposition.Select(card => card.Id)
+			.Should().Equal(staged.RoleComposition.Select(card => card.Id));
+
+		recovered.StartGame(recoveredLobby);
+
+		var published = recovered.CurrentSession!.RoleLockIn;
+		published.RoleComposition.Select(card => card.Id)
+			.Should().Equal(staged.RoleComposition.Select(card => card.Id));
+		published.DealPool.Select(card => card.PrintedRole).Should().BeEquivalentTo(
+			staged.DealPool.Select(card => card.PrintedRole));
+		published.Offer1!.PrintedRole.Should().Be(MainRoleType.SimpleVillager);
+		published.Offer2!.PrintedRole.Should().Be(MainRoleType.SimpleVillager);
+		recovered.CurrentSession.GetModeratorPhysicalCharacterCards().Should().OnlyContain(
+			card => card.OwnerPlayerId == null &&
+				(card.Zone == PhysicalCharacterCardZone.DealPool ||
+					card.Zone == PhysicalCharacterCardZone.Offer1 ||
+					card.Zone == PhysicalCharacterCardZone.Offer2));
+	}
+
+	[Fact]
+	public void StartGame_AfterAcceptedThiefCompositionBecomesNonThief_ReplacesImplicitlyAtNextVersion()
+	{
+		var store = new RecordingSaveStore();
+		var lobby = CreateThiefLobby();
+		lobby.IncrementRole(MainRoleType.Thief);
+		lobby.IncrementRole(MainRoleType.SimpleWerewolf);
+		for (var index = 0; index < 5; index++)
+		{
+			lobby.IncrementRole(MainRoleType.SimpleVillager);
+		}
+		var manager = new GameClientManager(new GameService(), saveStore: store);
+		manager.TryReplaceStagedRoleLockIn(
+			lobby,
+			expectedCurrentVersion: 0,
+			offer1: MainRoleType.SimpleVillager,
+			offer2: MainRoleType.SimpleVillager).Should().BeTrue();
+		var acceptedThiefLockIn = lobby.AcceptedRoleLockIn!;
+
+		lobby.DecrementRole(MainRoleType.Thief);
+		lobby.DecrementRole(MainRoleType.SimpleVillager);
+		lobby.RequiresRoleLockIn.Should().BeFalse();
+
+		manager.StartGame(lobby);
+
+		manager.HasActiveSession.Should().BeTrue();
+		store.SavedPayloads.Select(ReadRecoveryKind).Should().Equal(
+			"StagedLobby",
+			"StagedLobby",
+			"ActiveGame");
+		var replacement = lobby.AcceptedRoleLockIn!;
+		replacement.Should().NotBeSameAs(acceptedThiefLockIn);
+		replacement.Version.Should().Be(2);
+		replacement.Offer1.Should().BeNull();
+		replacement.Offer2.Should().BeNull();
+		replacement.RoleComposition.Select(card => card.PrintedRole).Should().BeEquivalentTo(new[]
+		{
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager
+		});
+		manager.CurrentSession!.RoleLockIn.RoleComposition.Select(card => card.Id)
+			.Should().Equal(replacement.RoleComposition.Select(card => card.Id));
+	}
+
+	[Fact]
+	public void PrintedRoleOffers_WhenStagedPersistenceFails_CommitNothing()
+	{
+		var lobby = CreateThiefLobby();
+		lobby.IncrementRole(MainRoleType.Thief);
+		lobby.IncrementRole(MainRoleType.SimpleWerewolf);
+		for (var index = 0; index < 5; index++)
+		{
+			lobby.IncrementRole(MainRoleType.SimpleVillager);
+		}
+		var manager = new GameClientManager(
+			new GameService(),
+			saveStore: new ThrowingSaveStore());
+
+		manager.TryReplaceStagedRoleLockIn(
+			lobby,
+			expectedCurrentVersion: 0,
+			offer1: MainRoleType.SimpleVillager,
+			offer2: MainRoleType.SimpleVillager).Should().BeFalse();
+
+		lobby.AcceptedRoleLockIn.Should().BeNull();
+		manager.StagedRoleLockIn.Should().BeNull();
+		manager.HasActiveSession.Should().BeFalse();
+	}
+
 	[Theory]
 	[InlineData(true)]
 	[InlineData(false)]

@@ -1,0 +1,197 @@
+@inject LobbySetupState Lobby
+@inject GameClientManager Game
+
+<main class="ww-app-shell"
+	  data-testid="@ModeratorUiTestIds.ThiefRoleLockInPage"
+	  aria-labelledby="thief-role-lock-in-title">
+	<section class="ww-lobby-header">
+		<div>
+			<p class="ww-step-label">@ClientStrings.ThiefRoleLockIn_StepLabel</p>
+			<h1 id="thief-role-lock-in-title">@ClientStrings.ThiefRoleLockIn_Title</h1>
+			<p class="ww-page-copy">@ClientStrings.ThiefRoleLockIn_Description</p>
+		</div>
+	</section>
+
+	<section class="ww-role-group"
+			 data-testid="@ModeratorUiTestIds.ThiefOffer1Options"
+			 role="group"
+			 aria-labelledby="thief-offer-1-label">
+		<div class="ww-section-head">
+			<h2 id="thief-offer-1-label">@ClientStrings.ThiefRoleLockIn_Offer1Label</h2>
+		</div>
+		<div class="ww-option-list">
+			@foreach (var role in OfferCandidates)
+			{
+				<button type="button"
+						class="ww-option-btn @(_offer1 == role ? "ww-option-btn--selected" : "")"
+						aria-pressed="@(_offer1 == role ? "true" : "false")"
+						disabled="@(!CanChoose(role, _offer2))"
+						@onclick="() => SelectOffer1(role)">@role.GetPublicName()</button>
+			}
+		</div>
+	</section>
+
+	<section class="ww-role-group"
+			 data-testid="@ModeratorUiTestIds.ThiefOffer2Options"
+			 role="group"
+			 aria-labelledby="thief-offer-2-label">
+		<div class="ww-section-head">
+			<h2 id="thief-offer-2-label">@ClientStrings.ThiefRoleLockIn_Offer2Label</h2>
+		</div>
+		<div class="ww-option-list">
+			@foreach (var role in OfferCandidates)
+			{
+				<button type="button"
+						class="ww-option-btn @(_offer2 == role ? "ww-option-btn--selected" : "")"
+						aria-pressed="@(_offer2 == role ? "true" : "false")"
+						disabled="@(!CanChoose(role, _offer1))"
+						@onclick="() => SelectOffer2(role)">@role.GetPublicName()</button>
+			}
+		</div>
+	</section>
+
+	@if (_offer1.HasValue && _offer2.HasValue)
+	{
+		<section class="ww-role-group" aria-labelledby="thief-deal-pool-label">
+			<div class="ww-section-head">
+				<h2 id="thief-deal-pool-label">@ClientStrings.ThiefRoleLockIn_DealPoolLabel</h2>
+			</div>
+			<p class="ww-page-copy">@DealPoolSummary</p>
+		</section>
+	}
+
+	<footer class="ww-action-bar">
+		@if (!string.IsNullOrEmpty(_validationError))
+		{
+			<p class="ww-validation ww-validation--role" role="alert">@_validationError</p>
+		}
+		<div class="ww-action-pair">
+			<button type="button"
+					class="ww-secondary-button"
+					data-testid="@ModeratorUiTestIds.ThiefRoleLockInBack"
+					@onclick="Back">@ClientStrings.Common_Back</button>
+			<button type="button"
+					class="ww-btn-primary"
+					data-testid="@ModeratorUiTestIds.ThiefRoleLockInCommit"
+					@onclick="Commit">@ClientStrings.ThiefRoleLockIn_CommitButton</button>
+		</div>
+	</footer>
+</main>
+
+@using Werewolves.Client.Services
+@using Werewolves.Client.Testing
+@using Werewolves.Core.StateModels.Enums
+@using Werewolves.Core.StateModels.Extensions
+@using Werewolves.Core.StateModels.Models
+
+@code {
+	[Parameter]
+	public EventCallback OnBack { get; set; }
+
+	[Parameter]
+	public EventCallback OnAccepted { get; set; }
+
+	private long _expectedVersion;
+	private MainRoleType? _offer1;
+	private MainRoleType? _offer2;
+	private string? _validationError;
+
+	protected override void OnInitialized()
+	{
+		var accepted = Lobby.AcceptedRoleLockIn;
+		_expectedVersion = accepted?.Version ?? 0;
+		_offer1 = accepted?.Offer1?.PrintedRole;
+		_offer2 = accepted?.Offer2?.PrintedRole;
+		if (_offer1.HasValue && !CanChoose(_offer1.Value, _offer2))
+		{
+			_offer1 = null;
+		}
+		if (_offer2.HasValue && !CanChoose(_offer2.Value, _offer1))
+		{
+			_offer2 = null;
+		}
+	}
+
+	private IReadOnlyList<MainRoleType> OfferCandidates => Lobby.GetSelectedRoles()
+		.Where(RoleLockIn.IsOfferEligible)
+		.Distinct()
+		.OrderBy(role => role.GetPublicName(), StringComparer.CurrentCulture)
+		.ToArray();
+
+	private bool CanSubmit =>
+		_offer1.HasValue &&
+		_offer2.HasValue &&
+		CanChoose(_offer1.Value, _offer2) &&
+		CanChoose(_offer2.Value, _offer1);
+
+	private string DealPoolSummary
+	{
+		get
+		{
+			var roles = Lobby.GetSelectedRoles();
+			if (_offer1.HasValue)
+			{
+				roles.Remove(_offer1.Value);
+			}
+			if (_offer2.HasValue)
+			{
+				roles.Remove(_offer2.Value);
+			}
+			return RoleSummary(roles);
+		}
+	}
+
+	private bool CanChoose(MainRoleType role, MainRoleType? otherOffer) =>
+		RoleLockIn.IsOfferEligible(role) &&
+		Lobby.GetRoleCount(role) >= (otherOffer == role ? 2 : 1);
+
+	private void SelectOffer1(MainRoleType role)
+	{
+		if (CanChoose(role, _offer2))
+		{
+			_offer1 = role;
+			_validationError = null;
+		}
+	}
+
+	private void SelectOffer2(MainRoleType role)
+	{
+		if (CanChoose(role, _offer1))
+		{
+			_offer2 = role;
+			_validationError = null;
+		}
+	}
+
+	private Task Back() => OnBack.InvokeAsync();
+
+	private Task Commit()
+	{
+		if (!CanSubmit)
+		{
+			_validationError = ClientStrings.ThiefRoleLockIn_IncompleteValidation;
+			return Task.CompletedTask;
+		}
+
+		if (!Game.TryReplaceStagedRoleLockIn(
+				Lobby,
+				_expectedVersion,
+				_offer1!.Value,
+				_offer2!.Value))
+		{
+			_validationError = ClientStrings.ThiefRoleLockIn_SaveFailedValidation;
+			return Task.CompletedTask;
+		}
+
+		_validationError = null;
+		return OnAccepted.InvokeAsync();
+	}
+
+	private static string RoleSummary(IEnumerable<MainRoleType> roles) =>
+		string.Join(", ", roles
+			.GroupBy(role => role)
+			.OrderBy(group => group.Key.GetPublicName(), StringComparer.CurrentCulture)
+			.Select(group => group.Count() == 1
+				? group.Key.GetPublicName()
+				: $"{group.Key.GetPublicName()} ×{group.Count()}"));
+}

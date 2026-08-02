@@ -17,5 +17,13 @@ public static class ModeratorUiTestIds
 	public const string LobbyEvaluationStatus = "lobby-evaluation-status";
 	public const string LobbyEvaluationTurnEntry = "lobby-evaluation-turn-entry";
 	public const string RoleSelectionStartGame = "role-selection-start-game";
+	public const string RoleSelectionConfigureRoleLockIn = "role-selection-configure-role-lock-in";
 	public const string RoleSelectionActionBar = "role-selection-action-bar";
+	public const string ThiefRoleLockInPage = "thief-role-lock-in-page";
+	public const string ThiefOffer1Options = "thief-offer-1-options";
+	public const string ThiefOffer2Options = "thief-offer-2-options";
+	public const string ThiefRoleLockInCommit = "thief-role-lock-in-commit";
+	public const string ThiefRoleLockInBack = "thief-role-lock-in-back";
+	public const string ThiefRoleLockInReview = "thief-role-lock-in-review";
+	public const string ThiefRoleLockInSummary = "thief-role-lock-in-summary";
 }

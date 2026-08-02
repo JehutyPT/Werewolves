@@ -53,6 +53,96 @@ public class LobbyEvaluationCoordinatorTests
 	}
 
 	[Fact]
+	public async Task ThiefDraft_WaitsForAcceptedLockInThenEvaluatesItsExactScenario()
+	{
+		var lobby = CreateLobby(
+			MainRoleType.Thief,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager);
+		var local = new RecordingLocalStore(bytes: null);
+		var evaluator = new RecordingEvaluator(new CouldNotEvaluateLobbyEvaluation());
+		using var coordinator = new LobbyEvaluationCoordinator(
+			lobby,
+			local,
+			evaluator,
+			SafetyScreeningSettings,
+			TimeProvider.System,
+			(_, _) => new LobbyScenarioSupport(
+				RulesValid: true,
+				AppSupported: true,
+				SimulatorSupported: true));
+
+		coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.NotApplicable);
+		local.ReadCount.Should().Be(0);
+		evaluator.CallCount.Should().Be(0);
+
+		var manager = new GameClientManager();
+		manager.TryReplaceStagedRoleLockIn(
+			lobby,
+			expectedCurrentVersion: 0,
+			offer1: MainRoleType.SimpleVillager,
+			offer2: MainRoleType.SimpleVillager).Should().BeTrue();
+		var accepted = lobby.AcceptedRoleLockIn!;
+
+		coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.Pending);
+		coordinator.State.Identity!.Scenario.Should().Be(
+			new SimulationScenario(accepted).ToCanonical());
+		coordinator.TryRequestLobbyExit().Should().BeFalse();
+		await WaitUntilAsync(() => evaluator.CallCount == 1);
+
+		local.ReadCount.Should().Be(1);
+		evaluator.Scenarios.Should().ContainSingle()
+			.Which.ToCanonical().Should().Be(new SimulationScenario(accepted).ToCanonical());
+	}
+
+	[Theory]
+	[InlineData(true)]
+	[InlineData(false)]
+	public async Task AcceptedThiefLockIn_PlayerReorderCancelsEvaluationAndReturnsToLockIn(
+		bool moveUp)
+	{
+		var lobby = CreateLobby(
+			MainRoleType.Thief,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager);
+		var manager = new GameClientManager();
+		manager.TryReplaceStagedRoleLockIn(
+			lobby,
+			expectedCurrentVersion: 0,
+			offer1: MainRoleType.SimpleVillager,
+			offer2: MainRoleType.SimpleVillager).Should().BeTrue();
+		var evaluator = new ControlledEvaluator();
+		using var coordinator = new LobbyEvaluationCoordinator(
+			lobby,
+			new RecordingLocalStore(bytes: null),
+			evaluator,
+			SafetyScreeningSettings,
+			TimeProvider.System,
+			(_, _) => new LobbyScenarioSupport(
+				RulesValid: true,
+				AppSupported: true,
+				SimulatorSupported: true));
+
+		coordinator.TryRequestLobbyExit().Should().BeFalse();
+		var call = await evaluator.NextCallAsync();
+
+		(moveUp ? lobby.MovePlayerUp(1) : lobby.MovePlayerDown(0)).Should().BeTrue();
+
+		lobby.RequiresRoleLockIn.Should().BeTrue();
+		coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.NotApplicable);
+		call.CancellationToken.IsCancellationRequested.Should().BeTrue();
+		evaluator.CallCount.Should().Be(1);
+	}
+
+	[Fact]
 	public async Task ThrowingReentrantCancellationCallback_CannotBlockReplacementProgress()
 	{
 		var pump = new ControlledContinuationPump();
@@ -1579,6 +1669,7 @@ public class LobbyEvaluationCoordinatorTests
 		: ILobbyTerminalEvaluator
 	{
 		public int CallCount { get; private set; }
+		public List<SimulationScenario> Scenarios { get; } = [];
 		public List<SimulatorCapability> Capabilities { get; } = [];
 		public List<LobbyEvaluationDepth> Depths { get; } = [];
 
@@ -1590,6 +1681,7 @@ public class LobbyEvaluationCoordinatorTests
 		{
 			cancellationToken.ThrowIfCancellationRequested();
 			CallCount++;
+			Scenarios.Add(scenario);
 			Capabilities.Add(capability);
 			Depths.Add(depth);
 			return Task.FromResult(result);
