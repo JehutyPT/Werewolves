@@ -46,6 +46,7 @@ public sealed class RoleKnowledgeFlowBunitTests
 	[InlineData(MainRoleType.WhiteWerewolf)]
 	[InlineData(MainRoleType.Fox)]
 	[InlineData(MainRoleType.DevotedServant)]
+	[InlineData(MainRoleType.Elder)]
 	public void SingleOptionalRoleLobby_UsesCatalogMetadataAsPortugueseToggle(
 		MainRoleType role)
 	{
@@ -69,6 +70,7 @@ public sealed class RoleKnowledgeFlowBunitTests
 			MainRoleType.WhiteWerewolf => GameStrings.WhiteWerewolfRoleName,
 			MainRoleType.Fox => GameStrings.FoxRoleName,
 			MainRoleType.DevotedServant => GameStrings.DevotedServantRoleName,
+			MainRoleType.Elder => GameStrings.ElderRoleName,
 			_ => throw new InvalidOperationException(
 				$"Unexpected Single-Optional Role {role}.")
 		};

@@ -581,15 +581,20 @@ internal static class GameSessionQueries
         ArgumentNullException.ThrowIfNull(session);
         var expectedLivingRoleHolderCount =
             GetExpectedLivingRoleHolderCount(session, role);
-        var livingRoleHolders = session.GetPlayers()
+		var livingRoleHolders = session.GetPlayers()
             .Where(player =>
                 player.State.CurrentRole == role &&
                 player.State.Health == PlayerHealth.Alive)
-            .ToArray();
-        return livingRoleHolders.Length == expectedLivingRoleHolderCount &&
-               livingRoleHolders.All(player =>
-                   player.State.ModeratorKnownRole == role);
-    }
+			.ToArray();
+		var latestIdentification = session.GameHistoryLog
+			.OfType<RoleIdentificationLogEntry>()
+			.LastOrDefault(entry => entry.Role == role);
+		return (livingRoleHolders.Length == expectedLivingRoleHolderCount &&
+		        livingRoleHolders.All(player =>
+			        player.State.ModeratorKnownRole == role)) ||
+		       (livingRoleHolders.Length == 0 &&
+		        latestIdentification is { PlayerIds.Count: 0 });
+	}
 
     internal static int GetCommittedLogIndex(
         IGameSession session,
@@ -674,6 +679,26 @@ internal static class GameSessionQueries
                 NumberRangeConstraint.Exact(session.TurnNumber),
                 GamePhase.Dawn)
             .Any();
+
+	internal static VillagerRolePowerSuppressionCommittedLogEntry?
+		GetVillagerRolePowerSuppression(IGameSession session) =>
+		session.GameHistoryLog
+			.OfType<VillagerRolePowerSuppressionCommittedLogEntry>()
+			.SingleOrDefault();
+
+	internal static bool IsVillagerRolePowerSuppressionActive(
+		IGameSession session) =>
+		GetVillagerRolePowerSuppression(session) is not null;
+
+	internal static bool
+		IsVillagerRolePowerSuppressionAnnouncementAcknowledged(
+			IGameSession session,
+			Guid announcementInstructionId) =>
+		session.GameHistoryLog
+			.OfType<
+				VillagerRolePowerSuppressionAnnouncementAcknowledgedLogEntry>()
+			.Any(entry =>
+				entry.AnnouncementInstructionId == announcementInstructionId);
 
     internal static bool IsOneUseRolePowerResourceCommitted(
         IGameSession session,

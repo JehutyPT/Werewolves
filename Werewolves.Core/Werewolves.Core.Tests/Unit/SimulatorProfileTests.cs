@@ -64,16 +64,18 @@ public class SimulatorProfileTests
 			.Append(ModeratorInstructionSemantic.RecognizeLovers)
 			.Append(ModeratorInstructionSemantic.ChooseThiefOffer)
 			.Append(ModeratorInstructionSemantic.ResolveDevotedServantVoteWindow)
-			.Append(ModeratorInstructionSemantic.RecordDevotedServantAcquiredCard);
+			.Append(ModeratorInstructionSemantic.RecordDevotedServantAcquiredCard)
+			.Append(ModeratorInstructionSemantic
+				.AnnounceVillagerRolePowerSuppression);
 		var safety = SimulatorCapability.SafetyScreening;
 		var probability = SimulatorCapability.FullProbability;
 
-		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "26"));
+		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "27"));
 		probability.Identity.Should().Be(new SimulatorProfileIdentity("full-probability", "4"));
 		BaselineRandomDecisionStrategy.Identity.Should()
 			.Be(new DecisionStrategyIdentity("baseline-random", "3-splitmix64"));
 		BaselineRandomDecisionStrategy.SafetyScreeningIdentity.Should()
-			.Be(new DecisionStrategyIdentity("baseline-random", "12-splitmix64"));
+			.Be(new DecisionStrategyIdentity("baseline-random", "13-splitmix64"));
 		safety.SupportedRoles.Should().Equal(
 			MainRoleType.SimpleWerewolf,
 			MainRoleType.BigBadWolf,
@@ -85,8 +87,9 @@ public class SimulatorProfileTests
 			MainRoleType.ThreeBrothers,
 			MainRoleType.Witch,
 			MainRoleType.Hunter,
-	        MainRoleType.LittleGirl,
+			MainRoleType.LittleGirl,
 			MainRoleType.Defender,
+			MainRoleType.Elder,
 			MainRoleType.StutteringJudge,
 			MainRoleType.Scapegoat,
 			MainRoleType.VillageIdiot,
@@ -219,6 +222,15 @@ public class SimulatorProfileTests
 		defenderBeneficiary.Should().Be(Faction.Villager);
 		safety.IsFactionAgent(
 				MainRoleType.Defender,
+				Faction.Werewolf)
+			.Should().BeFalse();
+		safety.TryGetBeneficiaryFaction(
+				MainRoleType.Elder,
+				out var elderBeneficiary)
+			.Should().BeTrue();
+		elderBeneficiary.Should().Be(Faction.Villager);
+		safety.IsFactionAgent(
+				MainRoleType.Elder,
 				Faction.Werewolf)
 			.Should().BeFalse();
 		safety.TryGetBeneficiaryFaction(

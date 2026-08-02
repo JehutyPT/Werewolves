@@ -257,6 +257,7 @@ internal sealed class KnightWithTheRustySwordRole
 			DiseasePower);
 		var execution = _availabilityGateway.Evaluate(
 			new RolePowerAttempt(
+				session,
 				triggeringKnight,
 				MainRoleType.KnightWithRustySword,
 				DiseasePower,

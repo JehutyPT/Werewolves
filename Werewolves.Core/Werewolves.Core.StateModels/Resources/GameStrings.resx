@@ -337,6 +337,10 @@
     <value>Ancião</value>
     <comment/>
   </data>
+  <data name="VillagerRolePowerSuppressionAnnouncement" xml:space="preserve">
+    <value>Todos os poderes dos papéis de Aldeão ficam suprimidos até ao fim da partida.</value>
+    <comment/>
+  </data>
   <data name="ScapegoatRoleName" xml:space="preserve">
     <value>Bode Expiatório</value>
     <comment/>

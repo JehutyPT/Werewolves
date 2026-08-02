@@ -272,6 +272,7 @@ internal sealed class AccursedWolfFatherRole
 		var instance = CreatePowerInstance(session, holder);
 		var availability = _availabilityGateway.Evaluate(
 			new RolePowerAttempt(
+				session,
 				holder,
 				MainRoleType.AccursedWolfFather,
 				InfectionPower,

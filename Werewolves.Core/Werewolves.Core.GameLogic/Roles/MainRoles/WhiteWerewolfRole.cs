@@ -320,6 +320,7 @@ internal sealed class WhiteWerewolfRole
 		var holder = GetHolder(session);
 		var availability = _availabilityGateway.Evaluate(
 			new RolePowerAttempt(
+				session,
 				holder,
 				MainRoleType.WhiteWerewolf,
 				SoloAttackPower,

@@ -10,6 +10,8 @@ internal enum NightSubPhaseStage
 
 internal enum DawnSubPhaseStage
 {
+	RequestElderRoleIdentification,
+	RecordElderRoleIdentification,
     CheckForVictims,
     ResolveEliminationCascade,
     EnsureVictoryFactsReady

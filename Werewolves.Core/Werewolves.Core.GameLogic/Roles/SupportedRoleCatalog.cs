@@ -104,11 +104,15 @@ public static class SupportedRoleCatalog
 						MainRoleType.KnightWithRustySword,
 						() => new KnightWithTheRustySwordRole(
 							rolePowerAvailabilityGateway)),
-					RoleAdmission.Active(
-						MainRoleType.Fox,
-						() => new FoxRole(
-							rolePowerAvailabilityGateway)),
-				RoleAdmission.Passive(MainRoleType.SimpleVillager),
+						RoleAdmission.Active(
+							MainRoleType.Fox,
+							() => new FoxRole(
+								rolePowerAvailabilityGateway)),
+						RoleAdmission.Active(
+							MainRoleType.Elder,
+							() => new ElderRole(
+								rolePowerAvailabilityGateway)),
+					RoleAdmission.Passive(MainRoleType.SimpleVillager),
 				RoleAdmission.Passive(MainRoleType.VillagerVillager),
 				RoleAdmission.Passive(MainRoleType.Angel)
 			]);

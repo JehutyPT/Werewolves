@@ -111,6 +111,7 @@ internal sealed class HunterRole :
 
 		var availability = _availabilityGateway.Evaluate(
 			new RolePowerAttempt(
+				session,
 				hunter,
 				MainRoleType.Hunter,
 				FinalShotPower,

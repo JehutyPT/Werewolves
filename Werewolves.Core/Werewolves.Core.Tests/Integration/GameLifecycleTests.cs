@@ -4,6 +4,7 @@ using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
+using Werewolves.Core.StateModels.Resources;
 using Werewolves.Core.Tests.Helpers;
 using Xunit;
 using Xunit.Abstractions;
@@ -49,6 +50,12 @@ public class GameLifecycleTests : DiagnosticTestBase
         bearTamer.Group.Should().Be(MainRoleType.BearTamer.GetRoleGroup());
         bearTamer.GroupDisplayName.Should().Be(MainRoleType.BearTamer.GetRoleGroup().GetDisplayName());
         bearTamer.CountConstraint.Should().Be(NumberRangeConstraint.SingleOptional);
+
+        var elder = metadata.AvailableRoles.Single(role => role.Role == MainRoleType.Elder);
+        elder.DisplayName.Should().Be(GameStrings.ElderRoleName);
+        elder.Group.Should().Be(RoleGroup.Villagers);
+        elder.GroupDisplayName.Should().Be(RoleGroup.Villagers.GetDisplayName());
+        elder.CountConstraint.Should().Be(NumberRangeConstraint.SingleOptional);
 
         MarkTestCompleted();
     }
@@ -100,9 +107,7 @@ public class GameLifecycleTests : DiagnosticTestBase
     {
         // Arrange
         var gameService = new GameLogic.Services.GameService();
-        var unsupportedRole = Enum.GetValues<MainRoleType>()
-            .Except(SupportedRoleCatalog.Roles)
-            .First();
+        const MainRoleType unsupportedRole = MainRoleType.PrejudicedManipulator;
         var config = new GameSessionConfig(
             ["Alice", "Bob", "Charlie", "Diana", "Eve"],
             [

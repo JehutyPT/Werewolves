@@ -1,5 +1,6 @@
 using FluentAssertions;
 using FluentAssertions.Execution;
+using Werewolves.Core.GameLogic.Models.InternalMessages;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
@@ -750,7 +751,8 @@ public sealed class WitchNightResolutionTests : DiagnosticTestBase
 			builder.GetCurrentInstruction());
 		finishNight.Semantic.Should().Be(
 			ModeratorInstructionSemantic.FinishNightActions);
-		builder.Process(finishNight.CreateResponse()).IsSuccess.Should().BeTrue();
+		CompleteNightResolution(builder, finishNight)
+			.IsSuccess.Should().BeTrue();
 		builder.GetGameState()!.GameHistoryLog
 			.OfType<PhaseTransitionLogEntry>()
 			.Should().Contain(entry => entry.CurrentPhase == GamePhase.Dawn);
@@ -767,7 +769,31 @@ public sealed class WitchNightResolutionTests : DiagnosticTestBase
 			werewolf,
 			collectiveTarget,
 			arrangeAfterCollective);
-		builder.Process(finishNight.CreateResponse());
+		CompleteNightResolution(builder, finishNight);
+	}
+
+	private static ProcessResult CompleteNightResolution(
+		GameTestBuilder builder,
+		ConfirmationInstruction finishNight)
+	{
+		var result = builder.Process(finishNight.CreateResponse());
+		if (result.ModeratorInstruction is not SelectPlayersInstruction
+			{
+				Semantic: ModeratorInstructionSemantic.IdentifyRoleHolders,
+				RoleIdentification: MainRoleType.Elder
+			} identification)
+		{
+			return result;
+		}
+
+		var livingElderIds = builder.GetGameState()!.GetPlayers()
+			.Where(player =>
+				player.State.Health == PlayerHealth.Alive &&
+				player.State.CurrentRole == MainRoleType.Elder)
+			.Select(player => player.Id)
+			.ToHashSet();
+		return builder.Process(
+			identification.CreateResponse(livingElderIds));
 	}
 
 	private static ConfirmationInstruction PrepareNightResolution(

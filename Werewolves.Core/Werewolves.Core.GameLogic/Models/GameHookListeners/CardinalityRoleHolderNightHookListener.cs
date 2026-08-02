@@ -273,6 +273,7 @@ internal abstract class CardinalityRoleHolderNightHookListener
 					power);
 				return _availabilityGateway.Evaluate(
 					new RolePowerAttempt(
+						session,
 						participant,
 						(MainRoleType)Id,
 						power,

@@ -597,6 +597,59 @@ public sealed class ThiefRoleTests
 		session.RoleInPlayCount(MainRoleType.Hunter).Should().Be(1);
 	}
 
+	[Fact]
+	public void FirstNight_OfferOnlyElderAcquired_ResistsLaterWerewolfAttackWithoutReidentification()
+	{
+		var (service, gameId, holder, _, start) = StartKnownThief(
+			MainRoleType.Elder,
+			MainRoleType.Seer);
+		var session = service.GetGameStateView(gameId)!;
+		var werewolfId = session.GetPlayers().ElementAt(1).Id;
+		var choice = ReachChoice(service, gameId, start, holder.Id);
+		var thiefSleep = InstructionAssert
+			.ExpectSuccessWithType<ConfirmationInstruction>(
+				service.ProcessInstruction(
+					gameId,
+					choice.CreateResponse(ThiefOfferOptionIds.Offer1)));
+
+		var werewolfWake = InstructionAssert
+			.ExpectSuccessWithType<ConfirmationInstruction>(
+				service.ProcessInstruction(
+					gameId,
+					thiefSleep.CreateResponse()));
+		werewolfWake.AffectedPlayerIds.Should().Equal(werewolfId);
+		var victim = InstructionAssert
+			.ExpectSuccessWithType<SelectPlayersInstruction>(
+				service.ProcessInstruction(
+					gameId,
+					werewolfWake.CreateResponse()));
+		var werewolfSleep = InstructionAssert
+			.ExpectSuccessWithType<ConfirmationInstruction>(
+				service.ProcessInstruction(
+					gameId,
+					victim.CreateResponse([holder.Id])));
+		var finishNight = InstructionAssert
+			.ExpectSuccessWithType<ConfirmationInstruction>(
+				service.ProcessInstruction(
+					gameId,
+					werewolfSleep.CreateResponse()));
+
+		var afterResolution = service.ProcessInstruction(
+			gameId,
+			finishNight.CreateResponse());
+
+		afterResolution.IsSuccess.Should().BeTrue();
+		holder.State.CurrentRole.Should().Be(MainRoleType.Elder);
+		holder.State.ModeratorKnownRole.Should().Be(MainRoleType.Elder);
+		holder.State.Health.Should().Be(PlayerHealth.Alive);
+		holder.State.HasStatusEffect(StatusEffectTypes.ElderProtectionLost)
+			.Should().BeTrue();
+		session.GameHistoryLog.OfType<RoleIdentificationLogEntry>()
+			.Should().NotContain(entry => entry.Role == MainRoleType.Elder);
+		session.GameHistoryLog.OfType<DawnVictimDeterminedLogEntry>()
+			.Should().NotContain(entry => entry.PlayerId == holder.Id);
+	}
+
 	private static SelectOptionsInstruction ReachChoice(
 		GameService service,
 		Guid gameId,

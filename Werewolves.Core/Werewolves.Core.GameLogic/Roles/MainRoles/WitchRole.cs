@@ -372,6 +372,7 @@ internal sealed class WitchRole : NightRoleHookListener<WitchRoleState>
 		var resource = new OneUseRolePowerResource(resourceId, instance);
 		return _availabilityGateway.Evaluate(
 				new RolePowerAttempt(
+					session,
 					witch,
 					MainRoleType.Witch,
 					PotionsPower,
