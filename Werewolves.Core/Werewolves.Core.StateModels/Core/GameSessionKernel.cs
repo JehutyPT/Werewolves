@@ -19,8 +19,25 @@ namespace Werewolves.Core.StateModels.Core
 		private readonly ActorSetupCards _actorSetupCards = ActorSetupCards.None;
 		private readonly Dictionary<Guid, Guid>
 			_actorSetupCardSpendActivationIds = [];
+		private readonly byte[] _actorBorrowedRolePowerCommitmentKey;
 		private ActorBorrowedRolePowerActivation?
 			_activeActorBorrowedRolePowerActivation;
+		private readonly List<ActorBorrowedSeerCheckCommit>
+			_actorBorrowedSeerCheckCommits = [];
+		private readonly List<ActorBorrowedDefenderProtectionCommit>
+			_actorBorrowedDefenderProtectionCommits = [];
+		private readonly List<ActorBorrowedFoxCheckCommit>
+			_actorBorrowedFoxCheckCommits = [];
+		private readonly List<ActorBorrowedWitchPotionUseCommit>
+			_actorBorrowedWitchPotionUseCommits = [];
+		private readonly List<ActorBorrowedWitchPotionDeclineCommit>
+			_actorBorrowedWitchPotionDeclineCommits = [];
+		private readonly List<ActorBorrowedCupidLoversCommit>
+			_actorBorrowedCupidLoversCommits = [];
+		private readonly List<ActorBorrowedStutteringJudgeSignalSetupCommit>
+			_actorBorrowedStutteringJudgeSignalSetupCommits = [];
+		private readonly List<ActorBorrowedStutteringJudgeSignalObservationCommit>
+			_actorBorrowedStutteringJudgeSignalObservationCommits = [];
 		private readonly IStateChangeObserver? _stateChangeObserver;
 
 		/// <summary>
@@ -61,6 +78,30 @@ namespace Werewolves.Core.StateModels.Core
 		internal ActorBorrowedRolePowerActivation?
 			GetActiveActorBorrowedRolePowerActivation() =>
 			_activeActorBorrowedRolePowerActivation;
+		internal IReadOnlyList<ActorBorrowedSeerCheckCommit>
+			GetActorBorrowedSeerCheckCommits() =>
+			_actorBorrowedSeerCheckCommits.AsReadOnly();
+		internal IReadOnlyList<ActorBorrowedDefenderProtectionCommit>
+			GetActorBorrowedDefenderProtectionCommits() =>
+			_actorBorrowedDefenderProtectionCommits.AsReadOnly();
+		internal IReadOnlyList<ActorBorrowedFoxCheckCommit>
+			GetActorBorrowedFoxCheckCommits() =>
+			_actorBorrowedFoxCheckCommits.AsReadOnly();
+		internal IReadOnlyList<ActorBorrowedWitchPotionUseCommit>
+			GetActorBorrowedWitchPotionUseCommits() =>
+			_actorBorrowedWitchPotionUseCommits.AsReadOnly();
+		internal IReadOnlyList<ActorBorrowedWitchPotionDeclineCommit>
+			GetActorBorrowedWitchPotionDeclineCommits() =>
+			_actorBorrowedWitchPotionDeclineCommits.AsReadOnly();
+		internal IReadOnlyList<ActorBorrowedCupidLoversCommit>
+			GetActorBorrowedCupidLoversCommits() =>
+			_actorBorrowedCupidLoversCommits.AsReadOnly();
+		internal IReadOnlyList<ActorBorrowedStutteringJudgeSignalSetupCommit>
+			GetActorBorrowedStutteringJudgeSignalSetupCommits() =>
+			_actorBorrowedStutteringJudgeSignalSetupCommits.AsReadOnly();
+		internal IReadOnlyList<ActorBorrowedStutteringJudgeSignalObservationCommit>
+			GetActorBorrowedStutteringJudgeSignalObservationCommits() =>
+			_actorBorrowedStutteringJudgeSignalObservationCommits.AsReadOnly();
 		internal IReadOnlyList<PhysicalCharacterCardState> GetPhysicalCharacterCardStates() =>
 			_roleLockIn.RoleComposition
 				.Select(card => _physicalCardStates[card.Id])
@@ -85,6 +126,8 @@ namespace Werewolves.Core.StateModels.Core
 
 			_pendingModeratorInstruction = initialInstruction;
 			config.EnforceValidity();
+			_actorBorrowedRolePowerCommitmentKey =
+				ActorBorrowedRolePowerCommitment.CreateKey();
 
 				foreach (var playerConfig in config.PlayerRoster)
 				{
@@ -222,7 +265,220 @@ namespace Werewolves.Core.StateModels.Core
 			return true;
 		}
 
-			internal void AddEntryAndUpdateState(GameLogEntryBase entry)
+		internal void CommitActorBorrowedSeerCheck(
+			RolePowerInstanceIdentity powerIdentity,
+			Guid targetPlayerId,
+			FactionAgentKnowledge targetAgentKnowledge)
+		{
+			var activation = _activeActorBorrowedRolePowerActivation
+				?? throw new InvalidOperationException(
+					"The borrowed Role Power activation is unavailable.");
+			AddEntryAndUpdateState(new ActorBorrowedSeerCheckCommandLogEntry
+			{
+				Timestamp = DateTimeOffset.UtcNow,
+				TurnNumber = TurnNumber,
+				CurrentPhase = CurrentPhase,
+				PowerIdentity = powerIdentity,
+				ActorSetupCardId = activation.SelectedCardId,
+				TargetPlayerId = targetPlayerId,
+				TargetAgentKnowledge = targetAgentKnowledge
+			});
+		}
+
+		internal void CommitActorBorrowedDefenderProtection(
+			RolePowerInstanceIdentity powerIdentity,
+			Guid targetPlayerId)
+		{
+			var activation = _activeActorBorrowedRolePowerActivation
+				?? throw new InvalidOperationException(
+					"The borrowed Role Power activation is unavailable.");
+			AddEntryAndUpdateState(
+				new ActorBorrowedDefenderProtectionCommandLogEntry
+				{
+					Timestamp = DateTimeOffset.UtcNow,
+					TurnNumber = TurnNumber,
+					CurrentPhase = CurrentPhase,
+					PowerIdentity = powerIdentity,
+					ActorSetupCardId = activation.SelectedCardId,
+					TargetPlayerId = targetPlayerId
+				});
+		}
+
+		internal void CommitActorBorrowedFoxCheck(
+			RolePowerInstanceIdentity powerIdentity,
+			Guid centerPlayerId,
+			FactionAgentKnowledge neighborhoodAgentKnowledge,
+			OneUseRolePowerResourceIdentity? spentResourceIdentity)
+		{
+				var activation = _activeActorBorrowedRolePowerActivation
+					?? throw new InvalidOperationException(
+						"The borrowed Role Power activation is unavailable.");
+
+				AddEntryAndUpdateState(new ActorBorrowedFoxCheckCommandLogEntry
+			{
+				Timestamp = DateTimeOffset.UtcNow,
+				TurnNumber = TurnNumber,
+				CurrentPhase = CurrentPhase,
+				PowerIdentity = powerIdentity,
+				ActorSetupCardId = activation.SelectedCardId,
+				CenterPlayerId = centerPlayerId,
+				NeighborhoodAgentKnowledge = neighborhoodAgentKnowledge,
+				SpentResourceIdentity = spentResourceIdentity
+			});
+		}
+
+		internal void CommitActorBorrowedWitchPotionUse(
+			RolePowerInstanceIdentity powerIdentity,
+			OneUseRolePowerResourceIdentity spentResourceIdentity,
+			Guid targetPlayerId)
+		{
+			var activation = _activeActorBorrowedRolePowerActivation
+				?? throw new InvalidOperationException(
+					"The borrowed Role Power activation is unavailable.");
+			AddEntryAndUpdateState(
+				new ActorBorrowedWitchPotionUseCommandLogEntry
+				{
+					Timestamp = DateTimeOffset.UtcNow,
+					TurnNumber = TurnNumber,
+					CurrentPhase = CurrentPhase,
+					PowerIdentity = powerIdentity,
+					ActorSetupCardId = activation.SelectedCardId,
+					SpentResourceIdentity = spentResourceIdentity,
+					TargetPlayerId = targetPlayerId
+				});
+		}
+
+		internal void CommitActorBorrowedWitchPotionDecline(
+			RolePowerInstanceIdentity powerIdentity,
+			OneUseRolePowerResourceIdentity offeredResourceIdentity)
+		{
+			var activation = _activeActorBorrowedRolePowerActivation
+				?? throw new InvalidOperationException(
+					"The borrowed Role Power activation is unavailable.");
+			AddEntryAndUpdateState(
+				new ActorBorrowedWitchPotionDeclineCommandLogEntry
+				{
+					Timestamp = DateTimeOffset.UtcNow,
+					TurnNumber = TurnNumber,
+					CurrentPhase = CurrentPhase,
+					PowerIdentity = powerIdentity,
+					ActorSetupCardId = activation.SelectedCardId,
+					OfferedResourceIdentity = offeredResourceIdentity
+				});
+		}
+
+		internal void CommitActorBorrowedStutteringJudgeSignalSetup(
+			RolePowerInstanceIdentity powerIdentity)
+		{
+			var activation = _activeActorBorrowedRolePowerActivation
+				?? throw new InvalidOperationException(
+					"The borrowed Role Power activation is unavailable.");
+			AddEntryAndUpdateState(
+				new ActorBorrowedStutteringJudgeSignalSetupCommandLogEntry
+				{
+					Timestamp = DateTimeOffset.UtcNow,
+					TurnNumber = TurnNumber,
+					CurrentPhase = CurrentPhase,
+					PowerIdentity = powerIdentity,
+					ActorSetupCardId = activation.SelectedCardId
+				});
+		}
+
+		internal void CommitActorBorrowedStutteringJudgeSignalObservation(
+			RolePowerInstanceIdentity powerIdentity,
+			bool signalOccurred,
+			OneUseRolePowerResourceIdentity? spentResourceIdentity)
+		{
+			powerIdentity.EnforceValidity();
+			var setup = _actorBorrowedStutteringJudgeSignalSetupCommits
+				.SingleOrDefault(commit => commit.PowerIdentity == powerIdentity)
+				?? throw new InvalidOperationException(
+					"The Actor borrowed Stuttering Judge signal setup is unavailable.");
+			AddEntryAndUpdateState(
+				new ActorBorrowedStutteringJudgeSignalObservationCommandLogEntry
+				{
+					Timestamp = DateTimeOffset.UtcNow,
+					TurnNumber = TurnNumber,
+					CurrentPhase = CurrentPhase,
+					PowerIdentity = powerIdentity,
+					ActorSetupCardId = setup.ActorSetupCardId,
+					SignalOccurred = signalOccurred,
+					SpentResourceIdentity = spentResourceIdentity
+				});
+		}
+
+		internal void CommitActorBorrowedCupidLovers(
+			RolePowerInstanceIdentity powerIdentity,
+			IReadOnlyCollection<Guid> playerIds,
+			ActorBorrowedCupidLoversDisposition disposition)
+		{
+			ArgumentNullException.ThrowIfNull(playerIds);
+			powerIdentity.EnforceValidity();
+			if (playerIds.Count != 2 ||
+				playerIds.Any(playerId => playerId == Guid.Empty) ||
+				playerIds.Distinct().Count() != 2)
+			{
+				throw new ArgumentException(
+					"The Lovers pair requires exactly two distinct Players.",
+					nameof(playerIds));
+			}
+
+			var activation = _activeActorBorrowedRolePowerActivation
+				?? throw new InvalidOperationException(
+					"The borrowed Role Power activation is unavailable.");
+			var selectedCard = _actorSetupCards.Cards.SingleOrDefault(card =>
+				card.Id == activation.SelectedCardId);
+			var canonicalPlayerIds = playerIds.Order().ToArray();
+			if (CurrentPhase != GamePhase.Night ||
+				powerIdentity.ActingPlayerId != activation.ActingPlayerId ||
+				powerIdentity.SourceRole != MainRoleType.Cupid ||
+				powerIdentity.SourceRole != activation.SourceRole ||
+				!StringComparer.Ordinal.Equals(
+					powerIdentity.SourcePowerIdentifier,
+					ActorBorrowedCupidLoversCommit
+						.ExpectedSourcePowerIdentifier) ||
+				powerIdentity.PowerInstanceId != activation.ActivationId ||
+				powerIdentity.PowerInstanceOrigin !=
+					RolePowerInstanceOrigin.Borrowed ||
+				selectedCard?.PrintedRole != MainRoleType.Cupid ||
+				!_actorSetupCardSpendActivationIds.TryGetValue(
+					activation.SelectedCardId,
+					out var spentActivationId) ||
+				spentActivationId != activation.ActivationId ||
+				!_players.TryGetValue(
+					powerIdentity.ActingPlayerId,
+					out var actor) ||
+				((IPlayer)actor).State is not
+				{
+					Health: PlayerHealth.Alive,
+					CurrentRole: MainRoleType.Actor
+				} ||
+				canonicalPlayerIds.Any(playerId =>
+					!_players.TryGetValue(playerId, out var player) ||
+					((IPlayer)player).State.Health != PlayerHealth.Alive) ||
+				_actorBorrowedCupidLoversCommits.Count > 0 ||
+				_gameHistoryLog.GetAllLogEntries()
+					.OfType<LoversPairCommittedLogEntry>()
+					.Any())
+			{
+				throw new InvalidOperationException(
+					"The Actor borrowed Cupid Lovers commit is stale or invalid.");
+			}
+
+			AddEntryAndUpdateState(new ActorBorrowedCupidLoversCommandLogEntry
+			{
+				Timestamp = DateTimeOffset.UtcNow,
+				TurnNumber = TurnNumber,
+				CurrentPhase = CurrentPhase,
+				PowerIdentity = powerIdentity,
+				ActorSetupCardId = activation.SelectedCardId,
+				FirstPlayerId = canonicalPlayerIds[0],
+				SecondPlayerId = canonicalPlayerIds[1],
+				Disposition = disposition
+			});
+		}
+
+				internal void AddEntryAndUpdateState(GameLogEntryBase entry)
 			{
 				_gameHistoryLog.PreflightLogEntry(entry, _players.Keys);
 				entry.Apply(new SessionMutator(this));
@@ -382,11 +638,51 @@ namespace Werewolves.Core.StateModels.Core
 								_actorSetupCardSpendActivationIds[card.Id]
 						})
 						.ToList(),
+					ActorBorrowedRolePowerCommitmentKey =
+						ActorBorrowedRolePowerCommitment.EncodeKey(
+							_actorBorrowedRolePowerCommitmentKey),
 					ActiveActorBorrowedRolePowerActivation =
 						_activeActorBorrowedRolePowerActivation is null
 							? null
 							: ActorBorrowedRolePowerActivationDto.FromValue(
 								_activeActorBorrowedRolePowerActivation),
+					ActorBorrowedSeerCheckCommits =
+						_actorBorrowedSeerCheckCommits
+							.Select(ActorBorrowedSeerCheckCommitDto.FromValue)
+							.ToList(),
+					ActorBorrowedDefenderProtectionCommits =
+						_actorBorrowedDefenderProtectionCommits
+							.Select(
+								ActorBorrowedDefenderProtectionCommitDto.FromValue)
+							.ToList(),
+					ActorBorrowedFoxCheckCommits =
+						_actorBorrowedFoxCheckCommits
+							.Select(ActorBorrowedFoxCheckCommitDto.FromValue)
+							.ToList(),
+					ActorBorrowedWitchPotionUseCommits =
+						_actorBorrowedWitchPotionUseCommits
+							.Select(
+								ActorBorrowedWitchPotionUseCommitDto.FromValue)
+							.ToList(),
+					ActorBorrowedWitchPotionDeclineCommits =
+						_actorBorrowedWitchPotionDeclineCommits
+							.Select(
+								ActorBorrowedWitchPotionDeclineCommitDto.FromValue)
+							.ToList(),
+					ActorBorrowedCupidLoversCommits =
+						_actorBorrowedCupidLoversCommits
+							.Select(ActorBorrowedCupidLoversCommitDto.FromValue)
+							.ToList(),
+					ActorBorrowedStutteringJudgeSignalSetupCommits =
+						_actorBorrowedStutteringJudgeSignalSetupCommits
+							.Select(
+								ActorBorrowedStutteringJudgeSignalSetupCommitDto.FromValue)
+							.ToList(),
+					ActorBorrowedStutteringJudgeSignalObservationCommits =
+						_actorBorrowedStutteringJudgeSignalObservationCommits
+							.Select(
+								ActorBorrowedStutteringJudgeSignalObservationCommitDto.FromValue)
+							.ToList(),
 					PhysicalCharacterCards = GetPhysicalCharacterCardStates()
 					.Select(state => new PhysicalCharacterCardStateDto
 					{
@@ -448,6 +744,8 @@ namespace Werewolves.Core.StateModels.Core
 				_actorSetupCards = RestoreActorSetupCards(
 					dto,
 					_roleLockIn);
+				_actorBorrowedRolePowerCommitmentKey =
+					RestoreActorBorrowedRolePowerCommitmentKey(dto);
 				RestoreActorRuntimeState(dto);
 				var cardsById = _roleLockIn.RoleComposition
 				.ToDictionary(card => card.Id);
@@ -627,6 +925,40 @@ namespace Werewolves.Core.StateModels.Core
 				}
 			}
 
+			private static byte[] RestoreActorBorrowedRolePowerCommitmentKey(
+				GameSessionDto dto)
+			{
+				if (ActorBorrowedRolePowerCommitment.TryDecodeKey(
+						dto.ActorBorrowedRolePowerCommitmentKey,
+						out var key))
+				{
+					return key;
+				}
+
+				var privateCommitCount =
+					(dto.ActorBorrowedSeerCheckCommits?.Count ?? 0) +
+					(dto.ActorBorrowedDefenderProtectionCommits?.Count ?? 0) +
+					(dto.ActorBorrowedFoxCheckCommits?.Count ?? 0) +
+					(dto.ActorBorrowedWitchPotionUseCommits?.Count ?? 0) +
+					(dto.ActorBorrowedWitchPotionDeclineCommits?.Count ?? 0) +
+					(dto.ActorBorrowedCupidLoversCommits?.Count ?? 0) +
+					(dto.ActorBorrowedStutteringJudgeSignalSetupCommits?.Count ?? 0) +
+					(dto.ActorBorrowedStutteringJudgeSignalObservationCommits?.Count ?? 0);
+				var publicMarkerCount = dto.GameHistoryLog?
+					.OfType<ActorBorrowedRolePowerCommittedLogEntry>()
+					.Count() ?? 0;
+				if (string.IsNullOrWhiteSpace(
+						dto.ActorBorrowedRolePowerCommitmentKey) &&
+					privateCommitCount == 0 &&
+					publicMarkerCount == 0)
+				{
+					return ActorBorrowedRolePowerCommitment.CreateKey();
+				}
+
+				throw new InvalidOperationException(
+					"The stable recovery snapshot has invalid Actor borrowed Role Power integrity state.");
+			}
+
 			private void RestoreActorRuntimeState(GameSessionDto dto)
 			{
 				var spends = dto.ActorSetupCardSpends
@@ -665,6 +997,81 @@ namespace Werewolves.Core.StateModels.Core
 					throw new InvalidOperationException(
 						"The stable recovery snapshot has invalid Actor runtime state.");
 				}
+
+				if (dto.ActorBorrowedSeerCheckCommits is null ||
+					dto.ActorBorrowedDefenderProtectionCommits is null ||
+					dto.ActorBorrowedFoxCheckCommits is null ||
+					dto.ActorBorrowedWitchPotionUseCommits is null ||
+					dto.ActorBorrowedWitchPotionDeclineCommits is null ||
+					dto.ActorBorrowedCupidLoversCommits is null ||
+					dto.ActorBorrowedStutteringJudgeSignalSetupCommits is null ||
+					dto.ActorBorrowedStutteringJudgeSignalObservationCommits is null)
+				{
+					throw new InvalidOperationException(
+						"The stable recovery snapshot has invalid Actor runtime state.");
+				}
+				try
+				{
+					foreach (var commitDto in dto.ActorBorrowedSeerCheckCommits)
+					{
+						var commit = commitDto.ToValue();
+						commit.EnforceValidity();
+						_actorBorrowedSeerCheckCommits.Add(commit);
+					}
+					foreach (var commitDto in
+						dto.ActorBorrowedDefenderProtectionCommits)
+					{
+						var commit = commitDto.ToValue();
+						commit.EnforceValidity();
+						_actorBorrowedDefenderProtectionCommits.Add(commit);
+					}
+					foreach (var commitDto in dto.ActorBorrowedFoxCheckCommits)
+					{
+						var commit = commitDto.ToValue();
+						commit.EnforceValidity();
+						_actorBorrowedFoxCheckCommits.Add(commit);
+					}
+					foreach (var commitDto in
+						dto.ActorBorrowedWitchPotionUseCommits)
+					{
+						var commit = commitDto.ToValue();
+						commit.EnforceValidity();
+						_actorBorrowedWitchPotionUseCommits.Add(commit);
+					}
+					foreach (var commitDto in
+						dto.ActorBorrowedWitchPotionDeclineCommits)
+					{
+						var commit = commitDto.ToValue();
+						commit.EnforceValidity();
+						_actorBorrowedWitchPotionDeclineCommits.Add(commit);
+					}
+					foreach (var commitDto in dto.ActorBorrowedCupidLoversCommits)
+					{
+						var commit = commitDto.ToValue();
+						commit.EnforceValidity();
+						_actorBorrowedCupidLoversCommits.Add(commit);
+					}
+					foreach (var commitDto in
+						dto.ActorBorrowedStutteringJudgeSignalSetupCommits)
+					{
+						var commit = commitDto.ToValue();
+						commit.EnforceValidity();
+						_actorBorrowedStutteringJudgeSignalSetupCommits.Add(commit);
+					}
+					foreach (var commitDto in
+						dto.ActorBorrowedStutteringJudgeSignalObservationCommits)
+					{
+						var commit = commitDto.ToValue();
+						commit.EnforceValidity();
+						_actorBorrowedStutteringJudgeSignalObservationCommits.Add(commit);
+					}
+				}
+				catch (Exception exception) when (
+					exception is ArgumentException or InvalidOperationException)
+				{
+					throw new InvalidOperationException(
+						"The stable recovery snapshot has invalid Actor runtime state.");
+				}
 			}
 
 			private void ValidateActorRuntimeState()
@@ -685,6 +1092,7 @@ namespace Werewolves.Core.StateModels.Core
 					throw new InvalidOperationException(
 						"The stable recovery snapshot has invalid Actor runtime state.");
 				}
+				ValidateActorBorrowedRolePowerCommitProjection(history);
 
 				if (_activeActorBorrowedRolePowerActivation is not { } active)
 				{
@@ -703,6 +1111,209 @@ namespace Werewolves.Core.StateModels.Core
 				{
 					throw new InvalidOperationException(
 						"The stable recovery snapshot has invalid Actor runtime state.");
+				}
+			}
+
+			private void ValidateActorBorrowedRolePowerCommitProjection(
+				IReadOnlyList<GameLogEntryBase> history)
+			{
+				var commits = _actorBorrowedSeerCheckCommits
+					.Cast<IActorBorrowedRolePowerCommit>()
+					.Concat(_actorBorrowedDefenderProtectionCommits)
+					.Concat(_actorBorrowedFoxCheckCommits)
+					.Concat(_actorBorrowedWitchPotionUseCommits)
+					.Concat(_actorBorrowedWitchPotionDeclineCommits)
+					.Concat(_actorBorrowedCupidLoversCommits)
+					.Concat(_actorBorrowedStutteringJudgeSignalSetupCommits)
+					.Concat(_actorBorrowedStutteringJudgeSignalObservationCommits)
+					.ToArray();
+				var coordinates = commits
+					.Select(commit => commit.Coordinate)
+					.ToArray();
+				if (history.Any(entry =>
+						TryGetCommittedRolePowerIdentity(entry, out var identity) &&
+						identity.PowerInstanceOrigin ==
+							RolePowerInstanceOrigin.Borrowed &&
+						_players.TryGetValue(
+							identity.ActingPlayerId,
+							out var actingPlayer) &&
+						((IPlayer)actingPlayer).State.CurrentRole ==
+							MainRoleType.Actor) ||
+					history.OfType<ActorBorrowedRolePowerCommittedLogEntry>()
+						.Count() != coordinates.Length ||
+					_actorBorrowedSeerCheckCommits
+						.Select(commit => commit.PowerIdentity)
+						.Distinct().Count() !=
+						_actorBorrowedSeerCheckCommits.Count ||
+					_actorBorrowedDefenderProtectionCommits
+						.Select(commit => commit.PowerIdentity)
+						.Distinct().Count() !=
+						_actorBorrowedDefenderProtectionCommits.Count ||
+					_actorBorrowedFoxCheckCommits
+						.Select(commit => commit.PowerIdentity)
+						.Distinct().Count() !=
+						_actorBorrowedFoxCheckCommits.Count ||
+					_actorBorrowedWitchPotionUseCommits
+						.Select(commit => commit.SpentResourceIdentity)
+						.Distinct().Count() !=
+						_actorBorrowedWitchPotionUseCommits.Count ||
+					_actorBorrowedWitchPotionDeclineCommits
+						.Select(commit => commit.OfferedResourceIdentity)
+						.Distinct().Count() !=
+						_actorBorrowedWitchPotionDeclineCommits.Count ||
+					_actorBorrowedWitchPotionUseCommits
+						.Select(commit => commit.SpentResourceIdentity)
+						.Intersect(
+							_actorBorrowedWitchPotionDeclineCommits.Select(commit =>
+								commit.OfferedResourceIdentity))
+						.Any() ||
+					_actorBorrowedCupidLoversCommits
+						.Select(commit => commit.PowerIdentity)
+						.Distinct().Count() !=
+						_actorBorrowedCupidLoversCommits.Count ||
+					_actorBorrowedStutteringJudgeSignalSetupCommits
+						.Select(commit => commit.PowerIdentity)
+						.Distinct().Count() !=
+						_actorBorrowedStutteringJudgeSignalSetupCommits.Count ||
+					_actorBorrowedStutteringJudgeSignalObservationCommits
+						.Select(commit => commit.PowerIdentity)
+						.Distinct().Count() !=
+						_actorBorrowedStutteringJudgeSignalObservationCommits.Count ||
+					coordinates
+						.Select(coordinate => coordinate.PublicMarkerLogIndex)
+						.Distinct().Count() != coordinates.Length)
+				{
+					throw new InvalidOperationException(
+						"The stable recovery snapshot has invalid Actor borrowed Role Power state.");
+				}
+
+				foreach (var commit in commits)
+				{
+					var coordinate = commit.Coordinate;
+					coordinate.EnforceValidity();
+					var selectedCard = _actorSetupCards.Cards.SingleOrDefault(card =>
+						card.Id == coordinate.ActorSetupCardId);
+					if (coordinate.PublicMarkerLogIndex >= history.Count ||
+						history[coordinate.PublicMarkerLogIndex] is not
+							ActorBorrowedRolePowerCommittedLogEntry marker ||
+						marker.Timestamp != coordinate.Timestamp ||
+						marker.TurnNumber != coordinate.TurnNumber ||
+						marker.CurrentPhase != coordinate.CurrentPhase ||
+					!ActorBorrowedRolePowerCommitment.Matches(
+							_actorBorrowedRolePowerCommitmentKey,
+							commit,
+							marker.IntegrityCommitment) ||
+						selectedCard?.PrintedRole !=
+							coordinate.PowerIdentity.SourceRole ||
+						!_actorSetupCardSpendActivationIds.TryGetValue(
+							coordinate.ActorSetupCardId,
+							out var activationId) ||
+						activationId != coordinate.PowerIdentity.PowerInstanceId ||
+						!_players.ContainsKey(
+							coordinate.PowerIdentity.ActingPlayerId))
+					{
+						throw new InvalidOperationException(
+							"The stable recovery snapshot has invalid Actor borrowed Role Power state.");
+					}
+				}
+
+				foreach (var observation in
+					_actorBorrowedStutteringJudgeSignalObservationCommits)
+				{
+					var setup = _actorBorrowedStutteringJudgeSignalSetupCommits
+						.SingleOrDefault(commit =>
+							commit.PowerIdentity == observation.PowerIdentity);
+					if (setup is null ||
+						setup.ActorSetupCardId != observation.ActorSetupCardId ||
+						setup.TurnNumber != observation.TurnNumber ||
+						setup.CurrentPhase != GamePhase.Night ||
+						observation.CurrentPhase != GamePhase.Day)
+					{
+						throw new InvalidOperationException(
+							"The stable recovery snapshot has invalid Actor borrowed Stuttering Judge signal state.");
+					}
+				}
+
+				if (_actorBorrowedSeerCheckCommits.Any(commit =>
+						!_players.ContainsKey(commit.TargetPlayerId)) ||
+					_actorBorrowedDefenderProtectionCommits.Any(commit =>
+						!_players.ContainsKey(commit.TargetPlayerId)) ||
+					_actorBorrowedFoxCheckCommits.Any(commit =>
+						!_players.ContainsKey(commit.CenterPlayerId)) ||
+					_actorBorrowedWitchPotionUseCommits.Any(commit =>
+						!_players.ContainsKey(commit.TargetPlayerId)) ||
+					_actorBorrowedCupidLoversCommits.Any(commit =>
+						!_players.ContainsKey(commit.FirstPlayerId) ||
+						!_players.ContainsKey(commit.SecondPlayerId)))
+				{
+					throw new InvalidOperationException(
+						"The stable recovery snapshot has invalid Actor borrowed Role Power state.");
+				}
+
+				foreach (var commit in _actorBorrowedCupidLoversCommits
+					.Where(commit => commit.TurnNumber == 1))
+				{
+					var closureEntries = history
+						.Select((entry, index) => (entry, index))
+						.Where(candidate =>
+							candidate.entry is FactionFactsCommittedLogEntry
+							{
+								Source.Kind: FactionFactSourceKind
+									.InitialBeneficiaryClosure
+							})
+						.ToArray();
+					if (closureEntries.Length == 0)
+					{
+						if (commit.Disposition !=
+							ActorBorrowedCupidLoversDisposition
+								.DeferredToInitialBeneficiaryClosure)
+						{
+							throw new InvalidOperationException(
+								"The stable recovery snapshot has an Actor borrowed Cupid classification without its Initial Beneficiary Closure.");
+						}
+
+						continue;
+					}
+
+					if (closureEntries is not [var closure] ||
+						closure.index <= commit.PublicMarkerLogIndex ||
+						commit.Disposition ==
+						ActorBorrowedCupidLoversDisposition
+							.DeferredToInitialBeneficiaryClosure)
+					{
+						throw new InvalidOperationException(
+							"The stable recovery snapshot has invalid Actor borrowed Cupid Initial Beneficiary Closure state.");
+					}
+				}
+			}
+
+			private static bool TryGetCommittedRolePowerIdentity(
+				GameLogEntryBase entry,
+				out RolePowerInstanceIdentity identity)
+			{
+				switch (entry)
+				{
+					case RecurringRolePowerCommittedLogEntry recurring:
+						identity = recurring.PowerIdentity;
+						return true;
+					case TargetPrivateRolePowerCommittedLogEntry targetPrivate:
+						identity = targetPrivate.PowerIdentity;
+						return true;
+					case LoversPairCommittedLogEntry loversPair:
+						identity = loversPair.PowerIdentity;
+						return true;
+					case IOneUseRolePowerCommittedLogEntry oneUse:
+						var resource = oneUse.ResourceIdentity;
+						identity = new RolePowerInstanceIdentity(
+							resource.ActingPlayerId,
+							resource.SourceRole,
+							resource.SourcePowerIdentifier,
+							resource.PowerInstanceId,
+							resource.PowerInstanceOrigin);
+						return true;
+					default:
+						identity = default;
+						return false;
 				}
 			}
 
@@ -1046,7 +1657,8 @@ namespace Werewolves.Core.StateModels.Core
 				var projection = FactionFactProjection.Create(
 					_gameHistoryLog
 						.GetAllLogEntries()
-						.OfType<IFactionFactBatchLogEntry>(),
+						.OfType<IFactionFactBatchLogEntry>()
+						.Concat(_actorBorrowedCupidLoversCommits),
 					_playerSeatingOrder);
 				foreach (var playerId in _playerSeatingOrder)
 				{
@@ -1067,19 +1679,31 @@ namespace Werewolves.Core.StateModels.Core
 			private void ValidateLoversPairProjectionMatchesHistory()
 			{
 				var history = _gameHistoryLog.GetAllLogEntries().ToList();
-				var pair = history
+				var nativePairs = history
 					.OfType<LoversPairCommittedLogEntry>()
-					.SingleOrDefault();
-				var relationshipCleared = pair is not null && history
-					.Skip(history.IndexOf(pair) + 1)
+					.ToArray();
+				if (nativePairs.Length + _actorBorrowedCupidLoversCommits.Count > 1)
+				{
+					throw new InvalidOperationException(
+						"The stable recovery snapshot has multiple Lovers pair commitments.");
+				}
+
+				var nativePair = nativePairs.SingleOrDefault();
+				var actorPair = _actorBorrowedCupidLoversCommits.SingleOrDefault();
+				var pairPlayerIds = nativePair?.PlayerIds ?? actorPair?.PlayerIds;
+				var pairLogIndex = nativePair is not null
+					? history.IndexOf(nativePair)
+					: actorPair?.PublicMarkerLogIndex ?? -1;
+				var relationshipCleared = pairPlayerIds is not null && history
+					.Skip(pairLogIndex + 1)
 					.OfType<PermanentRoleSwapCommittedLogEntry>()
 					.Any(entry =>
-						pair.PlayerIds.Contains(entry.PlayerId) &&
+						pairPlayerIds.Contains(entry.PlayerId) &&
 						entry.StateChanges.RelationshipEffectsToClear.Contains(
 							StatusEffectTypes.Lovers));
 				var expectedLoverIds = relationshipCleared
 					? []
-					: pair?.PlayerIds.ToHashSet() ?? [];
+					: pairPlayerIds?.ToHashSet() ?? [];
 
 				var actualLoverIds = _playerSeatingOrder
 					.Where(playerId =>
@@ -1241,6 +1865,21 @@ namespace Werewolves.Core.StateModels.Core
 					"The domain recovery cursor does not match its Pending Instruction.");
 			}
 
+			if (cursor.Kind == DomainRecoveryCursorKind
+				.ActorBorrowedStutteringJudgeSignalObservationCommit)
+			{
+				return ValidateActorBorrowedStutteringJudgeSignalObservationRecoveryCursor(
+					dto,
+					cursor,
+					pendingModeratorInstruction);
+			}
+
+			if (cursor.CommittedDayActionType is not null)
+			{
+				throw new InvalidOperationException(
+					"The domain recovery cursor is structurally invalid.");
+			}
+
 			if (cursor.Kind == DomainRecoveryCursorKind.ActorSetupCardSpendCommit)
 			{
 				return ValidateActorSetupCardSpendRecoveryCursor(
@@ -1249,15 +1888,37 @@ namespace Werewolves.Core.StateModels.Core
 					pendingModeratorInstruction);
 			}
 
+			if (cursor.Kind == DomainRecoveryCursorKind
+				.ActorBorrowedWitchPotionUseCommit)
+			{
+				return ValidateActorBorrowedWitchPotionUseRecoveryCursor(
+					dto,
+					cursor,
+					pendingModeratorInstruction);
+			}
+
+			if (cursor.Kind == DomainRecoveryCursorKind
+				.ActorBorrowedWitchPotionDeclineCommit)
+			{
+				return ValidateActorBorrowedWitchPotionDeclineRecoveryCursor(
+					dto,
+					cursor,
+					pendingModeratorInstruction);
+			}
+
+			var isTargetPrivate = cursor.Kind ==
+				DomainRecoveryCursorKind.TargetPrivateRolePowerCommit;
+			var isBorrowedTargetPrivate = isTargetPrivate &&
+				cursor.PowerInstanceOrigin == RolePowerInstanceOrigin.Borrowed;
 			if (!Enum.IsDefined(cursor.CommittedActionType) ||
 			    cursor.CommittedActionType == NightActionType.Unknown ||
 				cursor.CommittedTargetIds == null ||
-                cursor.Kind ==
-                    DomainRecoveryCursorKind.TargetPrivateRolePowerCommit &&
-                cursor.CommittedTargetIds.Count != 0 ||
-                cursor.Kind !=
-                    DomainRecoveryCursorKind.TargetPrivateRolePowerCommit &&
-                cursor.CommittedTargetIds.Count == 0 ||
+				isBorrowedTargetPrivate &&
+				cursor.CommittedTargetIds.Count != 1 ||
+				isTargetPrivate && !isBorrowedTargetPrivate &&
+				cursor.CommittedTargetIds.Count != 0 ||
+				!isTargetPrivate &&
+				cursor.CommittedTargetIds.Count == 0 ||
 			    cursor.CommittedTargetIds.Any(targetId =>
 				    targetId == Guid.Empty) ||
 			    cursor.CommittedTargetIds.Distinct().Count() !=
@@ -1303,8 +1964,19 @@ namespace Werewolves.Core.StateModels.Core
             if (cursor.Kind ==
                 DomainRecoveryCursorKind.TargetPrivateRolePowerCommit)
             {
+				if (cursor.PowerInstanceOrigin ==
+					RolePowerInstanceOrigin.Borrowed)
+				{
+					return ValidateActorBorrowedTargetPrivateRecoveryCursor(
+						dto,
+						cursor,
+						pendingModeratorInstruction);
+				}
+
                 if (cursor.PowerIdentity is not { } targetPrivatePowerIdentity ||
 					!targetPrivatePowerIdentity.IsValid ||
+					cursor.ActorSetupCardId != Guid.Empty ||
+					cursor.ActorBorrowedActivationId != Guid.Empty ||
 					!IsCurrentRolePowerIdentity(
 						dto,
 						targetPrivatePowerIdentity))
@@ -1354,6 +2026,15 @@ namespace Werewolves.Core.StateModels.Core
 			{
 				throw new InvalidOperationException(
 					"The domain recovery cursor is structurally invalid.");
+			}
+
+			if (cursorPowerIdentity.PowerInstanceOrigin ==
+				RolePowerInstanceOrigin.Borrowed)
+			{
+				return ValidateActorBorrowedRecurringRecoveryCursor(
+					dto,
+					cursor,
+					pendingModeratorInstruction);
 			}
 
 			if (cursor.SourceRole == MainRoleType.Cupid ||
@@ -1427,6 +2108,903 @@ namespace Werewolves.Core.StateModels.Core
 			{
 				throw new InvalidOperationException(
 					"The domain recovery cursor does not match the latest recurring native Role Power action.");
+			}
+
+			return cursor;
+		}
+
+		private static DomainRecoveryCursor
+			ValidateActorBorrowedWitchPotionUseRecoveryCursor(
+				GameSessionDto dto,
+				DomainRecoveryCursor cursor,
+				ModeratorInstruction pendingModeratorInstruction)
+		{
+			ActorBorrowedRolePowerActivation active;
+			ActorBorrowedWitchPotionUseCommit commit;
+			try
+			{
+				active = dto.ActiveActorBorrowedRolePowerActivation?.ToValue()
+					?? throw new InvalidOperationException();
+				var matchingCommitDtos =
+					dto.ActorBorrowedWitchPotionUseCommits?
+						.Where(candidate =>
+							candidate.PowerIdentity == cursor.PowerIdentity &&
+							candidate.SpentResourceIdentity ==
+								cursor.ResourceIdentity)
+						.ToArray();
+				if (matchingCommitDtos is not [var commitDto])
+				{
+					throw new InvalidOperationException();
+				}
+
+				commit = commitDto.ToValue();
+				commit.EnforceValidity();
+			}
+			catch (Exception exception) when (
+				exception is ArgumentException or InvalidOperationException)
+			{
+				throw new InvalidOperationException(
+					"The Actor borrowed Witch recovery cursor is structurally invalid.");
+			}
+
+			var powerIdentity = cursor.PowerIdentity;
+			var resourceIdentity = cursor.ResourceIdentity;
+			var setupCard = dto.ActorSetupCards?.Cards?.SingleOrDefault(card =>
+				card.Id == cursor.ActorSetupCardId);
+			var actingPlayer = dto.Players.SingleOrDefault(player =>
+				player.Id == cursor.ActingPlayerId);
+			var targetId = cursor.CommittedTargetIds is [var committedTargetId]
+				? committedTargetId
+				: Guid.Empty;
+			var targetPlayer = dto.Players.SingleOrDefault(player =>
+				player.Id == targetId);
+			var marker = commit.PublicMarkerLogIndex >= 0 &&
+				commit.PublicMarkerLogIndex < dto.GameHistoryLog.Count
+				? dto.GameHistoryLog[commit.PublicMarkerLogIndex] as
+					ActorBorrowedRolePowerCommittedLogEntry
+				: null;
+			var latestMarkerIndex = dto.GameHistoryLog.FindLastIndex(entry =>
+				entry is ActorBorrowedRolePowerCommittedLogEntry);
+			var committedActionType =
+				ActorBorrowedWitchPotionUseCommit.GetActionType(
+					commit.SpentResourceIdentity);
+			var resourceId = resourceIdentity?.OneUseResourceId ?? Guid.Empty;
+			var hasExpectedContinuation = committedActionType switch
+			{
+				NightActionType.WitchSave =>
+					(pendingModeratorInstruction is SelectPlayersInstruction
+					{
+						Semantic:
+							ModeratorInstructionSemantic.SelectWitchPoisonTarget,
+						CountConstraint: var countConstraint,
+						RoleIdentification: null,
+						AffectedPlayerIds: [var poisonAffectedPlayerId]
+					} &&
+					countConstraint == NumberRangeConstraint.SingleOptional &&
+					poisonAffectedPlayerId == cursor.ActingPlayerId) ||
+					pendingModeratorInstruction is ConfirmationInstruction
+					{
+						Semantic: ModeratorInstructionSemantic.PutRoleToSleep,
+						AffectedPlayerIds: [var healingSleepAffectedPlayerId]
+					} &&
+					healingSleepAffectedPlayerId == cursor.ActingPlayerId,
+				NightActionType.WitchKill =>
+					pendingModeratorInstruction is ConfirmationInstruction
+					{
+						Semantic: ModeratorInstructionSemantic.PutRoleToSleep,
+						AffectedPlayerIds: [var poisonSleepAffectedPlayerId]
+					} &&
+					poisonSleepAffectedPlayerId == cursor.ActingPlayerId,
+				_ => false
+			};
+			if (powerIdentity is not { IsValid: true } ||
+				powerIdentity.Value.PowerInstanceOrigin !=
+					RolePowerInstanceOrigin.Borrowed ||
+				cursor.SourceRole != MainRoleType.Witch ||
+				!StringComparer.Ordinal.Equals(
+					cursor.SourcePowerIdentifier,
+					ActorBorrowedWitchPotionUseCommit
+						.ExpectedSourcePowerIdentifier) ||
+				resourceIdentity is not { IsValid: true } ||
+				resourceId != ActorBorrowedWitchPotionUseCommit.HealingResourceId &&
+				resourceId != ActorBorrowedWitchPotionUseCommit.PoisonResourceId ||
+				cursor.CommittedActionType != committedActionType ||
+				cursor.ActorSetupCardId == Guid.Empty ||
+				cursor.ActorBorrowedActivationId == Guid.Empty ||
+				cursor.PowerInstanceId != cursor.ActorBorrowedActivationId ||
+				active.ActivationId != cursor.ActorBorrowedActivationId ||
+				active.ActingPlayerId != cursor.ActingPlayerId ||
+				active.ActingRole != MainRoleType.Actor ||
+				active.SelectedCardId != cursor.ActorSetupCardId ||
+				active.SourceRole != MainRoleType.Witch ||
+				setupCard?.PrintedRole != MainRoleType.Witch ||
+				dto.ActorSetupCardSpends is not { } spends ||
+				spends.Count(spend =>
+					spend.CardId == cursor.ActorSetupCardId &&
+					spend.ActivationId == cursor.ActorBorrowedActivationId) != 1 ||
+				actingPlayer is not
+				{
+					MainRole: MainRoleType.Actor,
+					Health: PlayerHealth.Alive
+				} ||
+				targetPlayer is not { Health: PlayerHealth.Alive } ||
+				commit.PowerIdentity != powerIdentity.Value ||
+				commit.ActorSetupCardId != cursor.ActorSetupCardId ||
+				commit.SpentResourceIdentity != resourceIdentity.Value ||
+				commit.TargetPlayerId != targetId ||
+				commit.TurnNumber != dto.TurnNumber ||
+				commit.CurrentPhase != GamePhase.Night ||
+				commit.PublicMarkerLogIndex != latestMarkerIndex ||
+				marker is null ||
+				marker.Timestamp != commit.Timestamp ||
+				marker.TurnNumber != commit.TurnNumber ||
+				marker.CurrentPhase != commit.CurrentPhase ||
+				dto.GameHistoryLog.Any(entry =>
+					TryGetCommittedRolePowerIdentity(entry, out var publicIdentity) &&
+					publicIdentity.PowerInstanceOrigin ==
+						RolePowerInstanceOrigin.Borrowed) ||
+				dto.GameHistoryLog
+					.OfType<NightActionLogEntry>()
+					.Any(entry =>
+						entry.TurnNumber == dto.TurnNumber &&
+						entry.CurrentPhase == GamePhase.Night &&
+						entry.ActionType is NightActionType.WitchSave or
+							NightActionType.WitchKill) ||
+				!hasExpectedContinuation)
+			{
+				throw new InvalidOperationException(
+					"The Actor borrowed Witch recovery cursor does not match committed state.");
+			}
+
+			return cursor;
+		}
+
+		private static DomainRecoveryCursor
+			ValidateActorBorrowedWitchPotionDeclineRecoveryCursor(
+				GameSessionDto dto,
+				DomainRecoveryCursor cursor,
+				ModeratorInstruction pendingModeratorInstruction)
+		{
+			ActorBorrowedRolePowerActivation active;
+			ActorBorrowedWitchPotionDeclineCommit commit;
+			try
+			{
+				active = dto.ActiveActorBorrowedRolePowerActivation?.ToValue()
+					?? throw new InvalidOperationException();
+				var matchingCommitDtos =
+					dto.ActorBorrowedWitchPotionDeclineCommits?
+						.Where(candidate =>
+							candidate.PowerIdentity == cursor.PowerIdentity &&
+							candidate.OfferedResourceIdentity ==
+								cursor.ResourceIdentity)
+						.ToArray();
+				if (matchingCommitDtos is not [var commitDto])
+				{
+					throw new InvalidOperationException();
+				}
+
+				commit = commitDto.ToValue();
+				commit.EnforceValidity();
+			}
+			catch (Exception exception) when (
+				exception is ArgumentException or InvalidOperationException)
+			{
+				throw new InvalidOperationException(
+					"The Actor borrowed Witch decline recovery cursor is structurally invalid.");
+			}
+
+			var powerIdentity = cursor.PowerIdentity;
+			var resourceIdentity = cursor.ResourceIdentity;
+			var setupCard = dto.ActorSetupCards?.Cards?.SingleOrDefault(card =>
+				card.Id == cursor.ActorSetupCardId);
+			var actingPlayer = dto.Players.SingleOrDefault(player =>
+				player.Id == cursor.ActingPlayerId);
+			var marker = commit.PublicMarkerLogIndex >= 0 &&
+				commit.PublicMarkerLogIndex < dto.GameHistoryLog.Count
+					? dto.GameHistoryLog[commit.PublicMarkerLogIndex] as
+						ActorBorrowedRolePowerCommittedLogEntry
+					: null;
+			var latestMarkerIndex = dto.GameHistoryLog.FindLastIndex(entry =>
+				entry is ActorBorrowedRolePowerCommittedLogEntry);
+			var committedActionType =
+				ActorBorrowedWitchPotionDeclineCommit.GetOfferedActionType(
+					commit.OfferedResourceIdentity);
+			var resourceId = resourceIdentity?.OneUseResourceId ?? Guid.Empty;
+			var hasExpectedContinuation = committedActionType switch
+			{
+				NightActionType.WitchSave =>
+					(pendingModeratorInstruction is SelectPlayersInstruction
+					{
+						Semantic:
+							ModeratorInstructionSemantic.SelectWitchPoisonTarget,
+						CountConstraint: var countConstraint,
+						RoleIdentification: null,
+						AffectedPlayerIds: [var poisonAffectedPlayerId]
+					} &&
+					countConstraint == NumberRangeConstraint.SingleOptional &&
+					poisonAffectedPlayerId == cursor.ActingPlayerId) ||
+					pendingModeratorInstruction is ConfirmationInstruction
+					{
+						Semantic: ModeratorInstructionSemantic.PutRoleToSleep,
+						AffectedPlayerIds: [var healingSleepAffectedPlayerId]
+					} &&
+					healingSleepAffectedPlayerId == cursor.ActingPlayerId,
+				NightActionType.WitchKill =>
+					pendingModeratorInstruction is ConfirmationInstruction
+					{
+						Semantic: ModeratorInstructionSemantic.PutRoleToSleep,
+						AffectedPlayerIds: [var poisonSleepAffectedPlayerId]
+					} &&
+					poisonSleepAffectedPlayerId == cursor.ActingPlayerId,
+				_ => false
+			};
+			if (powerIdentity is not { IsValid: true } ||
+				powerIdentity.Value.PowerInstanceOrigin !=
+					RolePowerInstanceOrigin.Borrowed ||
+				cursor.SourceRole != MainRoleType.Witch ||
+				!StringComparer.Ordinal.Equals(
+					cursor.SourcePowerIdentifier,
+					ActorBorrowedWitchPotionUseCommit
+						.ExpectedSourcePowerIdentifier) ||
+				resourceIdentity is not { IsValid: true } ||
+				resourceId != ActorBorrowedWitchPotionUseCommit.HealingResourceId &&
+				resourceId != ActorBorrowedWitchPotionUseCommit.PoisonResourceId ||
+				cursor.CommittedActionType != committedActionType ||
+				cursor.CommittedTargetIds is not { Count: 0 } ||
+				cursor.ActorSetupCardId == Guid.Empty ||
+				cursor.ActorBorrowedActivationId == Guid.Empty ||
+				cursor.PowerInstanceId != cursor.ActorBorrowedActivationId ||
+				active.ActivationId != cursor.ActorBorrowedActivationId ||
+				active.ActingPlayerId != cursor.ActingPlayerId ||
+				active.ActingRole != MainRoleType.Actor ||
+				active.SelectedCardId != cursor.ActorSetupCardId ||
+				active.SourceRole != MainRoleType.Witch ||
+				setupCard?.PrintedRole != MainRoleType.Witch ||
+				dto.ActorSetupCardSpends is not { } spends ||
+				spends.Count(spend =>
+					spend.CardId == cursor.ActorSetupCardId &&
+					spend.ActivationId == cursor.ActorBorrowedActivationId) != 1 ||
+				actingPlayer is not
+				{
+					MainRole: MainRoleType.Actor,
+					Health: PlayerHealth.Alive
+				} ||
+				commit.PowerIdentity != powerIdentity.Value ||
+				commit.ActorSetupCardId != cursor.ActorSetupCardId ||
+				commit.OfferedResourceIdentity != resourceIdentity.Value ||
+				commit.TurnNumber != dto.TurnNumber ||
+				commit.CurrentPhase != GamePhase.Night ||
+				commit.PublicMarkerLogIndex != latestMarkerIndex ||
+				marker is null ||
+				marker.Timestamp != commit.Timestamp ||
+				marker.TurnNumber != commit.TurnNumber ||
+				marker.CurrentPhase != commit.CurrentPhase ||
+				dto.ActorBorrowedWitchPotionUseCommits?.Any(candidate =>
+					candidate.SpentResourceIdentity == resourceIdentity.Value) == true ||
+				dto.GameHistoryLog.Any(entry =>
+					TryGetCommittedRolePowerIdentity(entry, out var publicIdentity) &&
+					publicIdentity.PowerInstanceOrigin ==
+						RolePowerInstanceOrigin.Borrowed) ||
+				dto.GameHistoryLog
+					.OfType<NightActionLogEntry>()
+					.Any(entry =>
+						entry.TurnNumber == dto.TurnNumber &&
+						entry.CurrentPhase == GamePhase.Night &&
+						entry.ActionType is NightActionType.WitchSave or
+							NightActionType.WitchKill) ||
+				!hasExpectedContinuation)
+			{
+				throw new InvalidOperationException(
+					"The Actor borrowed Witch decline recovery cursor does not match committed state.");
+			}
+
+			return cursor;
+		}
+
+		private static DomainRecoveryCursor
+			ValidateActorBorrowedStutteringJudgeSignalObservationRecoveryCursor(
+				GameSessionDto dto,
+				DomainRecoveryCursor cursor,
+				ModeratorInstruction pendingModeratorInstruction)
+		{
+			ActorBorrowedRolePowerActivation active;
+			ActorBorrowedStutteringJudgeSignalSetupCommit setup;
+			ActorBorrowedStutteringJudgeSignalObservationCommit observation;
+			try
+			{
+				active = dto.ActiveActorBorrowedRolePowerActivation?.ToValue()
+					?? throw new InvalidOperationException();
+				var matchingSetupDtos =
+					dto.ActorBorrowedStutteringJudgeSignalSetupCommits?
+						.Where(candidate =>
+							candidate.PowerIdentity == cursor.PowerIdentity)
+						.ToArray();
+				var matchingObservationDtos =
+					dto.ActorBorrowedStutteringJudgeSignalObservationCommits?
+						.Where(candidate =>
+							candidate.PowerIdentity == cursor.PowerIdentity)
+						.ToArray();
+				if (matchingSetupDtos is not [var setupDto] ||
+					matchingObservationDtos is not [var observationDto])
+				{
+					throw new InvalidOperationException();
+				}
+
+				setup = setupDto.ToValue();
+				observation = observationDto.ToValue();
+				setup.EnforceValidity();
+				observation.EnforceValidity();
+			}
+			catch (Exception exception) when (
+				exception is ArgumentException or InvalidOperationException)
+			{
+				throw new InvalidOperationException(
+					"The Actor borrowed Stuttering Judge recovery cursor is structurally invalid.");
+			}
+
+			var powerIdentity = cursor.PowerIdentity;
+			var resourceIdentity = cursor.ResourceIdentity;
+			var setupCard = dto.ActorSetupCards?.Cards?.SingleOrDefault(card =>
+				card.Id == cursor.ActorSetupCardId);
+			var actingPlayer = dto.Players.SingleOrDefault(player =>
+				player.Id == cursor.ActingPlayerId);
+			var marker = observation.PublicMarkerLogIndex <
+				dto.GameHistoryLog.Count
+				? dto.GameHistoryLog[observation.PublicMarkerLogIndex] as
+					ActorBorrowedRolePowerCommittedLogEntry
+				: null;
+			var latestMarkerIndex = dto.GameHistoryLog.FindLastIndex(entry =>
+				entry is ActorBorrowedRolePowerCommittedLogEntry);
+			var currentDayVoteOutcomeCount = dto.GameHistoryLog
+				.OfType<VoteOutcomeReportedLogEntry>()
+				.Count(entry =>
+					entry.CurrentPhase == GamePhase.Day &&
+					entry.TurnNumber == dto.TurnNumber);
+			var livingPlayerIds = dto.Players
+				.Where(player => player.Health == PlayerHealth.Alive)
+				.Select(player => player.Id)
+				.ToHashSet();
+			if (dto.PhaseStateCache.CurrentPhase != GamePhase.Day ||
+				dto.PhaseStateCache.SubPhase != "NormalVoting" ||
+				powerIdentity is not { IsValid: true } ||
+				powerIdentity.Value.PowerInstanceOrigin !=
+					RolePowerInstanceOrigin.Borrowed ||
+				cursor.SourceRole != MainRoleType.StutteringJudge ||
+				cursor.CommittedActionType != NightActionType.Unknown ||
+				cursor.CommittedDayActionType != DayPowerType.JudgeExtraVote ||
+				!StringComparer.Ordinal.Equals(
+					cursor.SourcePowerIdentifier,
+					ActorBorrowedStutteringJudgeSignalSetupCommit
+						.ExpectedSourcePowerIdentifier) ||
+				resourceIdentity is not { IsValid: true } ||
+				resourceIdentity.Value.OneUseResourceId !=
+					ActorBorrowedStutteringJudgeSignalObservationCommit
+						.ExpectedOneUseResourceId ||
+				cursor.ActorSetupCardId == Guid.Empty ||
+				cursor.ActorBorrowedActivationId == Guid.Empty ||
+				cursor.PowerInstanceId != cursor.ActorBorrowedActivationId ||
+				powerIdentity.Value.ActingPlayerId != cursor.ActingPlayerId ||
+				powerIdentity.Value.SourceRole != cursor.SourceRole ||
+				!StringComparer.Ordinal.Equals(
+					powerIdentity.Value.SourcePowerIdentifier,
+					cursor.SourcePowerIdentifier) ||
+				powerIdentity.Value.PowerInstanceId !=
+					cursor.ActorBorrowedActivationId ||
+				cursor.CommittedTargetIds is not { Count: 0 } ||
+				active.ActivationId != cursor.ActorBorrowedActivationId ||
+				active.ActingPlayerId != cursor.ActingPlayerId ||
+				active.ActingRole != MainRoleType.Actor ||
+				active.SelectedCardId != cursor.ActorSetupCardId ||
+				active.SourceRole != MainRoleType.StutteringJudge ||
+				setupCard?.PrintedRole != MainRoleType.StutteringJudge ||
+				dto.ActorSetupCardSpends is not { } spends ||
+				spends.Count(spend =>
+					spend.ActivationId == cursor.ActorBorrowedActivationId) != 1 ||
+				!spends.Any(spend =>
+					spend.ActivationId == cursor.ActorBorrowedActivationId &&
+					spend.CardId == cursor.ActorSetupCardId) ||
+				actingPlayer is not
+				{
+					MainRole: MainRoleType.Actor,
+					Health: PlayerHealth.Alive
+				} ||
+				setup.PowerIdentity != powerIdentity.Value ||
+				setup.ActorSetupCardId != cursor.ActorSetupCardId ||
+				setup.TurnNumber != dto.TurnNumber ||
+				setup.CurrentPhase != GamePhase.Night ||
+				observation.PowerIdentity != powerIdentity.Value ||
+				observation.ActorSetupCardId != cursor.ActorSetupCardId ||
+				!observation.SignalOccurred ||
+				observation.SpentResourceIdentity != resourceIdentity.Value ||
+				observation.TurnNumber != dto.TurnNumber ||
+				observation.CurrentPhase != GamePhase.Day ||
+				observation.PublicMarkerLogIndex != latestMarkerIndex ||
+				marker is null ||
+				marker.Timestamp != observation.Timestamp ||
+				marker.TurnNumber != observation.TurnNumber ||
+				marker.CurrentPhase != observation.CurrentPhase ||
+				currentDayVoteOutcomeCount != 0 ||
+				dto.GameHistoryLog.Any(entry =>
+					TryGetCommittedRolePowerIdentity(entry, out var publicIdentity) &&
+					publicIdentity.PowerInstanceOrigin ==
+						RolePowerInstanceOrigin.Borrowed) ||
+				dto.GameHistoryLog
+					.OfType<DayActionLogEntry>()
+					.Any(entry =>
+						entry.CurrentPhase == GamePhase.Day &&
+						entry.TurnNumber == dto.TurnNumber &&
+						entry.ActionType == DayPowerType.JudgeExtraVote) ||
+				pendingModeratorInstruction is not SelectPlayersInstruction
+				{
+					Semantic: ModeratorInstructionSemantic.RecordDayVote,
+					CountConstraint: var countConstraint,
+					RoleIdentification: null,
+					AffectedPlayerIds: null
+				} voteInstruction ||
+				countConstraint != NumberRangeConstraint.SingleOptional ||
+				!voteInstruction.SelectablePlayerIds.SetEquals(livingPlayerIds))
+			{
+				throw new InvalidOperationException(
+					"The Actor borrowed Stuttering Judge recovery cursor does not match committed state.");
+			}
+
+			return cursor;
+		}
+
+		private static DomainRecoveryCursor
+			ValidateActorBorrowedTargetPrivateRecoveryCursor(
+				GameSessionDto dto,
+				DomainRecoveryCursor cursor,
+				ModeratorInstruction pendingModeratorInstruction)
+		{
+			if (cursor.SourceRole == MainRoleType.Fox)
+			{
+				return ValidateActorBorrowedFoxTargetPrivateRecoveryCursor(
+					dto,
+					cursor,
+					pendingModeratorInstruction);
+			}
+
+			ActorBorrowedRolePowerActivation active;
+			ActorBorrowedSeerCheckCommit commit;
+			try
+			{
+				active = dto.ActiveActorBorrowedRolePowerActivation?.ToValue()
+					?? throw new InvalidOperationException();
+				var matchingCommitDtos = dto.ActorBorrowedSeerCheckCommits?
+					.Where(candidate =>
+						candidate.PowerIdentity.PowerInstanceId ==
+						cursor.PowerInstanceId)
+					.ToArray();
+				if (matchingCommitDtos is not [var commitDto])
+				{
+					throw new InvalidOperationException();
+				}
+
+				commit = commitDto.ToValue();
+				commit.EnforceValidity();
+			}
+			catch (Exception exception) when (
+				exception is ArgumentException or InvalidOperationException)
+			{
+				throw new InvalidOperationException(
+					"The Actor borrowed target-private recovery cursor is structurally invalid.");
+			}
+
+			var powerIdentity = cursor.PowerIdentity;
+			var setupCard = dto.ActorSetupCards?.Cards?.SingleOrDefault(card =>
+				card.Id == cursor.ActorSetupCardId);
+			var actingPlayer = dto.Players.SingleOrDefault(player =>
+				player.Id == cursor.ActingPlayerId);
+			var targetId = cursor.CommittedTargetIds.Single();
+			var targetPlayer = dto.Players.SingleOrDefault(player =>
+				player.Id == targetId);
+			var marker = commit.PublicMarkerLogIndex < dto.GameHistoryLog.Count
+				? dto.GameHistoryLog[commit.PublicMarkerLogIndex] as
+					ActorBorrowedRolePowerCommittedLogEntry
+				: null;
+			var latestMarkerIndex = dto.GameHistoryLog.FindLastIndex(entry =>
+				entry is ActorBorrowedRolePowerCommittedLogEntry);
+			if (powerIdentity is not { IsValid: true } ||
+				powerIdentity.Value.PowerInstanceOrigin !=
+					RolePowerInstanceOrigin.Borrowed ||
+				cursor.SourceRole != MainRoleType.Seer ||
+				cursor.CommittedActionType != NightActionType.SeerCheck ||
+				string.IsNullOrWhiteSpace(cursor.SourcePowerIdentifier) ||
+				cursor.OneUseResourceId != Guid.Empty ||
+				cursor.ActorSetupCardId == Guid.Empty ||
+				cursor.ActorBorrowedActivationId == Guid.Empty ||
+				cursor.PowerInstanceId != cursor.ActorBorrowedActivationId ||
+				active.ActivationId != cursor.ActorBorrowedActivationId ||
+				active.ActingPlayerId != cursor.ActingPlayerId ||
+				active.ActingRole != MainRoleType.Actor ||
+				active.SelectedCardId != cursor.ActorSetupCardId ||
+				active.SourceRole != MainRoleType.Seer ||
+				setupCard?.PrintedRole != MainRoleType.Seer ||
+				dto.ActorSetupCardSpends is not { } spends ||
+				spends.Count(spend =>
+					spend.CardId == cursor.ActorSetupCardId &&
+					spend.ActivationId == cursor.ActorBorrowedActivationId) != 1 ||
+				actingPlayer is not
+				{
+					MainRole: MainRoleType.Actor,
+					Health: PlayerHealth.Alive
+				} ||
+				targetPlayer is not { Health: PlayerHealth.Alive } ||
+				targetPlayer.FactionAgentKnowledge is not { } targetAgentFacts ||
+				!targetAgentFacts.TryGetValue(
+					Faction.Werewolf,
+					out var currentTargetKnowledge) ||
+				currentTargetKnowledge != commit.TargetAgentKnowledge ||
+				targetId == cursor.ActingPlayerId ||
+				commit.PowerIdentity != powerIdentity.Value ||
+				commit.ActorSetupCardId != cursor.ActorSetupCardId ||
+				commit.TargetPlayerId != targetId ||
+				commit.TurnNumber != dto.TurnNumber ||
+				commit.CurrentPhase != GamePhase.Night ||
+				commit.PublicMarkerLogIndex != latestMarkerIndex ||
+				marker is null ||
+				marker.Timestamp != commit.Timestamp ||
+				marker.TurnNumber != commit.TurnNumber ||
+				marker.CurrentPhase != commit.CurrentPhase ||
+				dto.GameHistoryLog.Any(entry =>
+					TryGetCommittedRolePowerIdentity(entry, out var publicIdentity) &&
+					publicIdentity.PowerInstanceOrigin ==
+						RolePowerInstanceOrigin.Borrowed) ||
+				dto.GameHistoryLog
+					.OfType<NightActionLogEntry>()
+					.Any(entry =>
+						entry.TurnNumber == dto.TurnNumber &&
+						entry.CurrentPhase == GamePhase.Night &&
+						entry.ActionType == NightActionType.SeerCheck) ||
+				pendingModeratorInstruction is not ConfirmationInstruction
+				{
+					Semantic: ModeratorInstructionSemantic.RevealSeerResult,
+					PublicAnnouncement: null,
+					PrivateInstruction: not null,
+					AffectedPlayerIds: { Count: 1 } affectedPlayerIds
+				} ||
+				affectedPlayerIds[0] != cursor.ActingPlayerId)
+			{
+				throw new InvalidOperationException(
+					"The Actor borrowed target-private recovery cursor does not match committed state.");
+			}
+
+			return cursor;
+		}
+
+		private static DomainRecoveryCursor
+			ValidateActorBorrowedFoxTargetPrivateRecoveryCursor(
+				GameSessionDto dto,
+				DomainRecoveryCursor cursor,
+				ModeratorInstruction pendingModeratorInstruction)
+		{
+			ActorBorrowedRolePowerActivation active;
+			ActorBorrowedFoxCheckCommit commit;
+			try
+			{
+				active = dto.ActiveActorBorrowedRolePowerActivation?.ToValue()
+					?? throw new InvalidOperationException();
+				var matchingCommitDtos = dto.ActorBorrowedFoxCheckCommits?
+					.Where(candidate =>
+						candidate.PowerIdentity.PowerInstanceId ==
+						cursor.PowerInstanceId)
+					.ToArray();
+				if (matchingCommitDtos is not [var commitDto])
+				{
+					throw new InvalidOperationException();
+				}
+
+				commit = commitDto.ToValue();
+				commit.EnforceValidity();
+			}
+			catch (Exception exception) when (
+				exception is ArgumentException or InvalidOperationException)
+			{
+				throw new InvalidOperationException(
+					"The Actor borrowed Fox recovery cursor is structurally invalid.");
+			}
+
+			var powerIdentity = cursor.PowerIdentity;
+			var setupCard = dto.ActorSetupCards?.Cards?.SingleOrDefault(card =>
+				card.Id == cursor.ActorSetupCardId);
+			var actingPlayer = dto.Players.SingleOrDefault(player =>
+				player.Id == cursor.ActingPlayerId);
+			var centerId = cursor.CommittedTargetIds.Single();
+			var centerPlayer = dto.Players.SingleOrDefault(player =>
+				player.Id == centerId);
+			var marker = commit.PublicMarkerLogIndex < dto.GameHistoryLog.Count
+				? dto.GameHistoryLog[commit.PublicMarkerLogIndex] as
+					ActorBorrowedRolePowerCommittedLogEntry
+				: null;
+			var latestMarkerIndex = dto.GameHistoryLog.FindLastIndex(entry =>
+				entry is ActorBorrowedRolePowerCommittedLogEntry);
+			var spentResourceId =
+				commit.SpentResourceIdentity?.OneUseResourceId ?? Guid.Empty;
+			if (powerIdentity is not { IsValid: true } ||
+				powerIdentity.Value.PowerInstanceOrigin !=
+					RolePowerInstanceOrigin.Borrowed ||
+				cursor.SourceRole != MainRoleType.Fox ||
+				cursor.CommittedActionType != NightActionType.FoxCheck ||
+				string.IsNullOrWhiteSpace(cursor.SourcePowerIdentifier) ||
+				cursor.OneUseResourceId != spentResourceId ||
+				commit.SpentResourceIdentity is { } spentResourceIdentity &&
+					cursor.ResourceIdentity != spentResourceIdentity ||
+				cursor.ActorSetupCardId == Guid.Empty ||
+				cursor.ActorBorrowedActivationId == Guid.Empty ||
+				cursor.PowerInstanceId != cursor.ActorBorrowedActivationId ||
+				active.ActivationId != cursor.ActorBorrowedActivationId ||
+				active.ActingPlayerId != cursor.ActingPlayerId ||
+				active.ActingRole != MainRoleType.Actor ||
+				active.SelectedCardId != cursor.ActorSetupCardId ||
+				active.SourceRole != MainRoleType.Fox ||
+				setupCard?.PrintedRole != MainRoleType.Fox ||
+				dto.ActorSetupCardSpends is not { } spends ||
+				spends.Count(spend =>
+					spend.CardId == cursor.ActorSetupCardId &&
+					spend.ActivationId == cursor.ActorBorrowedActivationId) != 1 ||
+				actingPlayer is not
+				{
+					MainRole: MainRoleType.Actor,
+					Health: PlayerHealth.Alive
+				} ||
+				centerPlayer is not { Health: PlayerHealth.Alive } ||
+				commit.PowerIdentity != powerIdentity.Value ||
+				commit.ActorSetupCardId != cursor.ActorSetupCardId ||
+				commit.CenterPlayerId != centerId ||
+				commit.TurnNumber != dto.TurnNumber ||
+				commit.CurrentPhase != GamePhase.Night ||
+				commit.PublicMarkerLogIndex != latestMarkerIndex ||
+				marker is null ||
+				marker.Timestamp != commit.Timestamp ||
+				marker.TurnNumber != commit.TurnNumber ||
+				marker.CurrentPhase != commit.CurrentPhase ||
+				dto.GameHistoryLog.Any(entry =>
+					TryGetCommittedRolePowerIdentity(entry, out var publicIdentity) &&
+					publicIdentity.PowerInstanceOrigin ==
+						RolePowerInstanceOrigin.Borrowed) ||
+				dto.GameHistoryLog
+					.OfType<NightActionLogEntry>()
+					.Any(entry =>
+						entry.TurnNumber == dto.TurnNumber &&
+						entry.CurrentPhase == GamePhase.Night &&
+						entry.ActionType == NightActionType.FoxCheck) ||
+				pendingModeratorInstruction is not ConfirmationInstruction
+				{
+					Semantic: ModeratorInstructionSemantic.RevealFoxResult,
+					PublicAnnouncement: null,
+					PrivateInstruction: not null,
+					AffectedPlayerIds: { Count: 1 } affectedPlayerIds
+				} ||
+				affectedPlayerIds[0] != cursor.ActingPlayerId)
+			{
+				throw new InvalidOperationException(
+					"The Actor borrowed Fox recovery cursor does not match committed state.");
+			}
+
+			return cursor;
+		}
+
+		private static DomainRecoveryCursor
+			ValidateActorBorrowedRecurringRecoveryCursor(
+				GameSessionDto dto,
+				DomainRecoveryCursor cursor,
+				ModeratorInstruction pendingModeratorInstruction)
+		{
+			if (cursor.SourceRole == MainRoleType.Cupid)
+			{
+				return ValidateActorBorrowedCupidRecurringRecoveryCursor(
+					dto,
+					cursor,
+					pendingModeratorInstruction);
+			}
+
+			ActorBorrowedRolePowerActivation active;
+			ActorBorrowedDefenderProtectionCommit commit;
+			try
+			{
+				active = dto.ActiveActorBorrowedRolePowerActivation?.ToValue()
+					?? throw new InvalidOperationException();
+				var matchingCommitDtos =
+					dto.ActorBorrowedDefenderProtectionCommits?
+						.Where(candidate =>
+							candidate.PowerIdentity.PowerInstanceId ==
+							cursor.PowerInstanceId)
+						.ToArray();
+				if (matchingCommitDtos is not [var commitDto])
+				{
+					throw new InvalidOperationException();
+				}
+
+				commit = commitDto.ToValue();
+				commit.EnforceValidity();
+			}
+			catch (Exception exception) when (
+				exception is ArgumentException or InvalidOperationException)
+			{
+				throw new InvalidOperationException(
+					"The Actor borrowed recurring recovery cursor is structurally invalid.");
+			}
+
+			var powerIdentity = cursor.PowerIdentity;
+			var setupCard = dto.ActorSetupCards?.Cards?.SingleOrDefault(card =>
+				card.Id == cursor.ActorSetupCardId);
+			var actingPlayer = dto.Players.SingleOrDefault(player =>
+				player.Id == cursor.ActingPlayerId);
+			var targetId = cursor.CommittedTargetIds.Single();
+			var targetPlayer = dto.Players.SingleOrDefault(player =>
+				player.Id == targetId);
+			var marker = commit.PublicMarkerLogIndex < dto.GameHistoryLog.Count
+				? dto.GameHistoryLog[commit.PublicMarkerLogIndex] as
+					ActorBorrowedRolePowerCommittedLogEntry
+				: null;
+			var latestMarkerIndex = dto.GameHistoryLog.FindLastIndex(entry =>
+				entry is ActorBorrowedRolePowerCommittedLogEntry);
+			if (powerIdentity is not { IsValid: true } ||
+				powerIdentity.Value.PowerInstanceOrigin !=
+					RolePowerInstanceOrigin.Borrowed ||
+				cursor.SourceRole != MainRoleType.Defender ||
+				cursor.CommittedActionType != NightActionType.DefenderProtect ||
+				string.IsNullOrWhiteSpace(cursor.SourcePowerIdentifier) ||
+				cursor.OneUseResourceId != Guid.Empty ||
+				cursor.ActorSetupCardId == Guid.Empty ||
+				cursor.ActorBorrowedActivationId == Guid.Empty ||
+				cursor.PowerInstanceId != cursor.ActorBorrowedActivationId ||
+				active.ActivationId != cursor.ActorBorrowedActivationId ||
+				active.ActingPlayerId != cursor.ActingPlayerId ||
+				active.ActingRole != MainRoleType.Actor ||
+				active.SelectedCardId != cursor.ActorSetupCardId ||
+				active.SourceRole != MainRoleType.Defender ||
+				setupCard?.PrintedRole != MainRoleType.Defender ||
+				dto.ActorSetupCardSpends is not { } spends ||
+				spends.Count(spend =>
+					spend.CardId == cursor.ActorSetupCardId &&
+					spend.ActivationId == cursor.ActorBorrowedActivationId) != 1 ||
+				actingPlayer is not
+				{
+					MainRole: MainRoleType.Actor,
+					Health: PlayerHealth.Alive
+				} ||
+				targetPlayer is not { Health: PlayerHealth.Alive } ||
+				commit.PowerIdentity != powerIdentity.Value ||
+				commit.ActorSetupCardId != cursor.ActorSetupCardId ||
+				commit.TargetPlayerId != targetId ||
+				commit.TurnNumber != dto.TurnNumber ||
+				commit.CurrentPhase != GamePhase.Night ||
+				commit.PublicMarkerLogIndex != latestMarkerIndex ||
+				marker is null ||
+				marker.Timestamp != commit.Timestamp ||
+				marker.TurnNumber != commit.TurnNumber ||
+				marker.CurrentPhase != commit.CurrentPhase ||
+				dto.GameHistoryLog.Any(entry =>
+					TryGetCommittedRolePowerIdentity(entry, out var publicIdentity) &&
+					publicIdentity.PowerInstanceOrigin ==
+						RolePowerInstanceOrigin.Borrowed) ||
+				dto.GameHistoryLog
+					.OfType<NightActionLogEntry>()
+					.Any(entry =>
+						entry.TurnNumber == dto.TurnNumber &&
+						entry.CurrentPhase == GamePhase.Night &&
+						entry.ActionType == NightActionType.DefenderProtect) ||
+				pendingModeratorInstruction is not ConfirmationInstruction
+				{
+					Semantic: ModeratorInstructionSemantic.PutRoleToSleep,
+					AffectedPlayerIds: { Count: 1 } affectedPlayerIds
+				} ||
+				affectedPlayerIds[0] != cursor.ActingPlayerId)
+			{
+				throw new InvalidOperationException(
+					"The Actor borrowed recurring recovery cursor does not match committed state.");
+			}
+
+			return cursor;
+		}
+
+		private static DomainRecoveryCursor
+			ValidateActorBorrowedCupidRecurringRecoveryCursor(
+				GameSessionDto dto,
+				DomainRecoveryCursor cursor,
+				ModeratorInstruction pendingModeratorInstruction)
+		{
+			ActorBorrowedRolePowerActivation active;
+			ActorBorrowedCupidLoversCommit commit;
+			try
+			{
+				active = dto.ActiveActorBorrowedRolePowerActivation?.ToValue()
+					?? throw new InvalidOperationException();
+				var matchingCommitDtos = dto.ActorBorrowedCupidLoversCommits?
+					.Where(candidate =>
+						candidate.PowerIdentity.PowerInstanceId ==
+						cursor.PowerInstanceId)
+					.ToArray();
+				if (matchingCommitDtos is not [var commitDto])
+				{
+					throw new InvalidOperationException();
+				}
+
+				commit = commitDto.ToValue();
+				commit.EnforceValidity();
+			}
+			catch (Exception exception) when (
+				exception is ArgumentException or InvalidOperationException)
+			{
+				throw new InvalidOperationException(
+					"The Actor borrowed Cupid recovery cursor is structurally invalid.");
+			}
+
+			var powerIdentity = cursor.PowerIdentity;
+			var setupCard = dto.ActorSetupCards?.Cards?.SingleOrDefault(card =>
+				card.Id == cursor.ActorSetupCardId);
+			var actingPlayer = dto.Players.SingleOrDefault(player =>
+				player.Id == cursor.ActingPlayerId);
+			var committedTargetIds = cursor.CommittedTargetIds.ToArray();
+			var targetPlayers = committedTargetIds
+				.Select(targetId => dto.Players.SingleOrDefault(player =>
+					player.Id == targetId))
+				.ToArray();
+			var marker = commit.PublicMarkerLogIndex < dto.GameHistoryLog.Count
+				? dto.GameHistoryLog[commit.PublicMarkerLogIndex] as
+					ActorBorrowedRolePowerCommittedLogEntry
+				: null;
+			var latestMarkerIndex = dto.GameHistoryLog.FindLastIndex(entry =>
+				entry is ActorBorrowedRolePowerCommittedLogEntry);
+			if (powerIdentity is not { IsValid: true } ||
+				powerIdentity.Value.PowerInstanceOrigin !=
+					RolePowerInstanceOrigin.Borrowed ||
+				cursor.SourceRole != MainRoleType.Cupid ||
+				cursor.CommittedActionType != NightActionType.CupidLink ||
+				!StringComparer.Ordinal.Equals(
+					cursor.SourcePowerIdentifier,
+					ActorBorrowedCupidLoversCommit
+						.ExpectedSourcePowerIdentifier) ||
+				cursor.OneUseResourceId != Guid.Empty ||
+				cursor.ActorSetupCardId == Guid.Empty ||
+				cursor.ActorBorrowedActivationId == Guid.Empty ||
+				cursor.PowerInstanceId != cursor.ActorBorrowedActivationId ||
+				active.ActivationId != cursor.ActorBorrowedActivationId ||
+				active.ActingPlayerId != cursor.ActingPlayerId ||
+				active.ActingRole != MainRoleType.Actor ||
+				active.SelectedCardId != cursor.ActorSetupCardId ||
+				active.SourceRole != MainRoleType.Cupid ||
+				setupCard?.PrintedRole != MainRoleType.Cupid ||
+				dto.ActorSetupCardSpends is not { } spends ||
+				spends.Count(spend =>
+					spend.CardId == cursor.ActorSetupCardId &&
+					spend.ActivationId == cursor.ActorBorrowedActivationId) != 1 ||
+				actingPlayer is not
+				{
+					MainRole: MainRoleType.Actor,
+					Health: PlayerHealth.Alive
+				} ||
+				committedTargetIds.Length != 2 ||
+				targetPlayers.Any(player => player is not
+					{ Health: PlayerHealth.Alive }) ||
+				commit.PowerIdentity != powerIdentity.Value ||
+				commit.ActorSetupCardId != cursor.ActorSetupCardId ||
+				!commit.PlayerIds.SequenceEqual(committedTargetIds) ||
+				commit.TurnNumber != dto.TurnNumber ||
+				commit.CurrentPhase != GamePhase.Night ||
+				commit.PublicMarkerLogIndex != latestMarkerIndex ||
+				marker is null ||
+				marker.Timestamp != commit.Timestamp ||
+				marker.TurnNumber != commit.TurnNumber ||
+				marker.CurrentPhase != commit.CurrentPhase ||
+				dto.GameHistoryLog.Any(entry =>
+					TryGetCommittedRolePowerIdentity(entry, out var publicIdentity) &&
+					publicIdentity.PowerInstanceOrigin ==
+						RolePowerInstanceOrigin.Borrowed) ||
+				dto.GameHistoryLog.OfType<LoversPairCommittedLogEntry>().Any() ||
+				pendingModeratorInstruction is not ConfirmationInstruction
+				{
+					Semantic: ModeratorInstructionSemantic.RecognizeLovers,
+					PublicAnnouncement: null,
+					PrivateInstruction: not null,
+					AffectedPlayerIds: { Count: 2 } affectedPlayerIds
+				} ||
+				!affectedPlayerIds.ToHashSet().SetEquals(committedTargetIds))
+			{
+				throw new InvalidOperationException(
+					"The Actor borrowed Cupid recovery cursor does not match committed state.");
 			}
 
 			return cursor;

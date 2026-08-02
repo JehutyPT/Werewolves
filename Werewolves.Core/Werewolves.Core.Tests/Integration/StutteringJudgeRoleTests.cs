@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Werewolves.Core.GameLogic.RolePowers;
+using Werewolves.Core.GameLogic.Roles;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
@@ -17,6 +18,8 @@ namespace Werewolves.Core.Tests.Integration;
 
 public sealed class StutteringJudgeRoleTests : DiagnosticTestBase
 {
+	private static readonly TestGameFlowManagerKey RecoveryKey = new();
+
 	public StutteringJudgeRoleTests(ITestOutputHelper output) : base(output) { }
 
 	[Fact]
@@ -223,6 +226,71 @@ public sealed class StutteringJudgeRoleTests : DiagnosticTestBase
 		MarkTestCompleted();
 	}
 
+	[Theory]
+	[InlineData(NativeSignalRecoveryTamper.PublicAnnouncement)]
+	[InlineData(NativeSignalRecoveryTamper.PrivateInstruction)]
+	[InlineData(NativeSignalRecoveryTamper.AffectedPlayer)]
+	public void FirstDay_SignalObservationRecoveryRejectsInvalidNativePresentation(
+		NativeSignalRecoveryTamper tamper)
+	{
+		var (builder, judge, _, _) = CreateGameAtFirstDay();
+		var signal = ReachSignalObservation(builder);
+		var session = (GameSession)builder.GetGameState()!;
+		var otherPlayerId = session.GetPlayers()
+			.First(player => player.Id != judge.Id).Id;
+		var publicAnnouncement = tamper ==
+			NativeSignalRecoveryTamper.PublicAnnouncement
+			? "tampered public announcement"
+			: signal.PublicAnnouncement;
+		var privateInstruction = tamper ==
+			NativeSignalRecoveryTamper.PrivateInstruction
+			? "tampered private instruction"
+			: signal.PrivateInstruction;
+		IReadOnlyList<Guid>? affectedPlayerIds = tamper ==
+			NativeSignalRecoveryTamper.AffectedPlayer
+			? [otherPlayerId]
+			: signal.AffectedPlayerIds;
+		var tampered = new SelectOptionsInstruction(
+			signal.Semantic,
+			signal.Options,
+			signal.SelectionRange,
+			publicAnnouncement,
+			privateInstruction,
+			affectedPlayerIds,
+			signal.InstructionId);
+		session.SetPendingModeratorInstruction(RecoveryKey, tampered);
+		session.CaptureRecoveryBoundary(RecoveryKey);
+		var recovered = new GameSession(session.Serialize());
+
+		var restore = () => GameFlowManager.RestoreDurableContinuation(
+			recovered,
+			SupportedRoleCatalog.Admissions);
+
+		restore.Should().Throw<InvalidOperationException>()
+			.WithMessage("*Stuttering Judge signal instruction*structurally invalid*");
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void FirstDay_SignalObservationRecoveryRejectsReportedVoteOutcome()
+	{
+		var (builder, _, _, _) = CreateGameAtFirstDay();
+		var signal = ReachSignalObservation(builder);
+		var session = (GameSession)builder.GetGameState()!;
+		session.PerformDayVote(null);
+		session.SetPendingModeratorInstruction(RecoveryKey, signal);
+		session.CaptureRecoveryBoundary(RecoveryKey);
+		var recovered = new GameSession(session.Serialize());
+
+		var restore = () => GameFlowManager.RestoreDurableContinuation(
+			recovered,
+			SupportedRoleCatalog.Admissions);
+
+		restore.Should().Throw<InvalidOperationException>()
+			.WithMessage("*Stuttering Judge signal instruction*structurally invalid*");
+		MarkTestCompleted();
+	}
+
 	[Fact]
 	public void FirstDay_PositiveSignalAtomicallySpendsPowerAndCommitsConsecutiveVoteBeforeResult()
 	{
@@ -333,6 +401,10 @@ public sealed class StutteringJudgeRoleTests : DiagnosticTestBase
 
 		recovered.InstructionId.Should().Be(signal.InstructionId);
 		recovered.Options.Should().Equal(signal.Options);
+		recovered.PublicAnnouncement.Should().BeNull();
+		recovered.PrivateInstruction.Should().Be(
+			GameStrings.StutteringJudgeSignalObservationInstruction);
+		recovered.AffectedPlayerIds.Should().Equal(judge.Id);
 		var result = service.ProcessInstruction(
 			gameId,
 			recovered.CreateResponse(
@@ -1056,6 +1128,15 @@ public sealed class StutteringJudgeRoleTests : DiagnosticTestBase
 		public RolePowerAvailabilityResult Evaluate(RolePowerAttempt attempt) =>
 			_decisions.Count > 0 && _decisions.Dequeue()
 				? RolePowerAvailabilityResult.Allowed
-				: RolePowerAvailabilityResult.Denied;
+					: RolePowerAvailabilityResult.Denied;
+	}
+
+	private sealed class TestGameFlowManagerKey : IGameFlowManagerKey;
+
+	public enum NativeSignalRecoveryTamper
+	{
+		PublicAnnouncement,
+		PrivateInstruction,
+		AffectedPlayer
 	}
 }

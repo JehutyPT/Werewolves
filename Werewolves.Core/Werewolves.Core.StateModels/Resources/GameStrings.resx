@@ -493,6 +493,10 @@
     <value>Ator, escolhe opcionalmente uma carta de preparação ainda disponível.</value>
     <comment/>
   </data>
+  <data name="ActorBorrowedRolePowerInvalidResponse" xml:space="preserve">
+    <value>A resposta ao poder de papel emprestado é inválida ou já não está disponível.</value>
+    <comment/>
+  </data>
   <data name="WolfHoundRoleName" xml:space="preserve">
     <value>Cão-Lobo</value>
     <comment/>

@@ -28,6 +28,11 @@ internal sealed class FoxRole
 	: NightRoleHookListener<FoxRoleState>,
 		ITargetPrivateRolePowerRecoveryCapability
 {
+	private sealed record ExecutionContext(
+		IPlayer ActingPlayer,
+		RolePowerInstance PowerInstance,
+		bool IsBorrowed);
+
 	private readonly RolePowerAvailabilityGateway _availabilityGateway;
 	private bool? _powerIsAvailable;
 
@@ -56,6 +61,18 @@ internal sealed class FoxRole
 	protected override FoxRoleState AsleepStateEnum => FoxRoleState.Asleep;
 
 	protected override bool HasNightPowers => true;
+
+	public override HookListenerActionResult Execute(
+		GameSession session,
+		ModeratorResponse input)
+	{
+		if (TryResolveBorrowedExecution(session, out _))
+		{
+			return ExecuteCore(session, input);
+		}
+
+		return base.Execute(session, input);
+	}
 
 	protected override List<RoleStateMachineStage> DefineStateMachineStages() =>
 	[
@@ -112,6 +129,72 @@ internal sealed class FoxRole
 		out string listenerState)
 	{
 		listenerState = string.Empty;
+		if (hook == GameHook.NightMainActionLoop &&
+			TryResolveBorrowedExecution(session, out var borrowedExecution))
+		{
+			switch (pendingInstruction)
+			{
+				case SelectPlayersInstruction
+					{
+						Semantic:
+						ModeratorInstructionSemantic.SelectFoxCenter
+					} centerSelection:
+					ValidateBorrowedCenterSelectionInstruction(
+						session,
+						borrowedExecution,
+						centerSelection);
+					listenerState =
+						FoxRoleState.AwaitingCenterSelection.ToString();
+					return true;
+				case ConfirmationInstruction
+					{
+						Semantic:
+						ModeratorInstructionSemantic.RevealFoxResult
+					} borrowedFeedback:
+					var commit = GetBorrowedFoxCheckCommit(
+						session,
+						borrowedExecution);
+					ValidateBorrowedCommit(
+						session,
+						borrowedExecution,
+						commit);
+					ValidateBorrowedFeedback(
+						borrowedExecution,
+						commit,
+						borrowedFeedback);
+					listenerState = FoxRoleState
+						.AwaitingResultAcknowledgement
+						.ToString();
+					return true;
+				case ConfirmationInstruction
+					{
+						Semantic:
+						ModeratorInstructionSemantic.PutRoleToSleep
+					} sleep:
+					var commits = GetBorrowedFoxCheckCommitsThisNight(
+							session,
+							CreatePowerIdentity(borrowedExecution))
+						.ToArray();
+					if (commits.Length > 1)
+					{
+						throw new InvalidOperationException(
+							"The Actor borrowed Fox sleep continuation has multiple committed checks.");
+					}
+
+					if (commits is [var committedCheck])
+					{
+						ValidateBorrowedCommit(
+							session,
+							borrowedExecution,
+							committedCheck);
+					}
+
+					ValidateBorrowedSleep(borrowedExecution, sleep);
+					listenerState = FoxRoleState.ReadyToSleep.ToString();
+					return true;
+			}
+		}
+
 		if (hook == GameHook.NightMainActionLoop &&
 			pendingInstruction is SelectPlayersInstruction
 			{
@@ -176,28 +259,70 @@ internal sealed class FoxRole
 			GameSession session,
 			ModeratorInstruction? startingInstruction,
 			ModeratorResponse input,
-			TargetPrivateRolePowerCommittedLogEntry committedEntry,
-			ModeratorInstruction nextInstruction) =>
-		TryValidateCommittedRecoveryBoundary(
+			TargetPrivateRolePowerRecoveryBoundary committedBoundary,
+			ModeratorInstruction nextInstruction)
+	{
+		if (committedBoundary.ActionType != NightActionType.FoxCheck)
+		{
+			return false;
+		}
+
+		if (!TryResolveBorrowedExecution(session, out var execution))
+		{
+			return TryValidateCommittedRecoveryBoundary(
+				session,
+				startingInstruction,
+				input,
+				committedBoundary,
+				nextInstruction);
+		}
+
+		var commit = GetBorrowedFoxCheckCommit(session, execution);
+		ValidateBorrowedRecoveryBoundary(
 			session,
-			startingInstruction,
-			input,
-			committedEntry,
-			nextInstruction);
+			execution,
+			commit,
+			committedBoundary);
+		if (startingInstruction is not SelectPlayersInstruction
+			{
+				Semantic: ModeratorInstructionSemantic.SelectFoxCenter
+			} centerSelection ||
+			input.InstructionId != centerSelection.InstructionId ||
+			input.Type != ExpectedInputType.PlayerSelection ||
+			input.SelectedPlayerIds is not { Count: 1 } selectedPlayerIds ||
+			selectedPlayerIds.Single() != commit.CenterPlayerId ||
+			!centerSelection.SelectablePlayerIds.Contains(
+				commit.CenterPlayerId) ||
+			nextInstruction is not ConfirmationInstruction
+			{
+				Semantic: ModeratorInstructionSemantic.RevealFoxResult
+			} feedback)
+		{
+			throw new InvalidOperationException(
+				"The Actor borrowed Fox commit does not match its accepted center and feedback continuation.");
+		}
+
+		ValidateBorrowedCenterSelectionInstruction(
+			session,
+			execution,
+			centerSelection);
+		ValidateBorrowedFeedback(execution, commit, feedback);
+		return true;
+	}
 
 	private static bool TryValidateCommittedRecoveryBoundary(
 		GameSession session,
 		ModeratorInstruction? startingInstruction,
 		ModeratorResponse input,
-		TargetPrivateRolePowerCommittedLogEntry committedEntry,
+		TargetPrivateRolePowerRecoveryBoundary committedBoundary,
 		ModeratorInstruction nextInstruction)
 	{
-		if (committedEntry.ActionType != NightActionType.FoxCheck)
+		if (committedBoundary.ActionType != NightActionType.FoxCheck)
 		{
 			return false;
 		}
 
-		ValidateOwnedCommit(session, committedEntry);
+		ValidateOwnedRecoveryBoundary(session, committedBoundary);
 		if (startingInstruction is not SelectPlayersInstruction
 			{
 				Semantic: ModeratorInstructionSemantic.SelectFoxCenter,
@@ -210,7 +335,7 @@ internal sealed class FoxRole
 			!centerSelection.SelectablePlayerIds.Contains(
 				selectedPlayerIds.Single()) ||
 			selectedPlayerIds.Single() == Guid.Empty ||
-			committedEntry.ActingPlayerId != affectedPlayerIds.Single() ||
+			committedBoundary.ActingPlayerId != affectedPlayerIds.Single() ||
 			nextInstruction is not ConfirmationInstruction
 			{
 				Semantic: ModeratorInstructionSemantic.RevealFoxResult
@@ -220,15 +345,26 @@ internal sealed class FoxRole
 				"The Fox target-private commit does not match its accepted check and feedback continuation.");
 		}
 
-		ValidateFeedback(committedEntry, feedback);
+		ValidateFeedback(committedBoundary, feedback);
 		return true;
 	}
 
 	void ITargetPrivateRolePowerRecoveryCapability
 		.ValidateRecoveryCursorIdentity(
 			GameSession session,
-			DomainRecoveryCursor cursor) =>
+			DomainRecoveryCursor cursor)
+	{
+		if (TryResolveBorrowedExecution(session, out var execution))
+		{
+			ValidateBorrowedRecoveryCursorIdentity(
+				session,
+				execution,
+				cursor);
+			return;
+		}
+
 		ValidateTargetPrivateRecoveryCursorIdentity(session, cursor);
+	}
 
 	private static void ValidateTargetPrivateRecoveryCursorIdentity(
 		GameSession session,
@@ -265,6 +401,18 @@ internal sealed class FoxRole
 		ModeratorResponse input)
 	{
 		_powerIsAvailable = null;
+		if (TryResolveBorrowedExecution(session, out var borrowedExecution))
+		{
+			if (!EvaluateAvailability(session, borrowedExecution))
+			{
+				return HookListenerActionResult.Complete(FoxRoleState.Asleep);
+			}
+
+			return PrepareWakeInstruction(
+				borrowedExecution,
+				FoxRoleState.Awake);
+		}
+
 		if (!GameSessionQueries.IsCompleteLivingRoleHolderSetKnown(
 				session,
 				MainRoleType.Fox))
@@ -272,32 +420,37 @@ internal sealed class FoxRole
 			return base.HandleRoleWakeupAndId(session, input);
 		}
 
-		var fox = GetFox(session);
-		if (!EvaluateAvailability(session, fox))
+		var execution = ResolveNativeExecution(session);
+		if (!EvaluateAvailability(session, execution))
 		{
 			return HookListenerActionResult.Complete(FoxRoleState.Asleep);
 		}
 
-		return PrepareWakeInstruction(fox, FoxRoleState.Awake);
+		return PrepareWakeInstruction(execution, FoxRoleState.Awake);
 	}
 
 	private HookListenerActionResult ContinueAfterWakeOrIdentification(
 		GameSession session,
 		ModeratorResponse input)
 	{
+		if (TryResolveBorrowedExecution(session, out _))
+		{
+			return HandleNightPowerUse(session, input);
+		}
+
 		if (!GameSessionQueries.IsCompleteLivingRoleHolderSetKnown(
 				session,
 				MainRoleType.Fox))
 		{
 			ProcessRoleIdentification(session, input);
-			var identifiedFox = GetFox(session);
-			if (!EvaluateAvailability(session, identifiedFox))
+			var identifiedExecution = ResolveNativeExecution(session);
+			if (!EvaluateAvailability(session, identifiedExecution))
 			{
 				return HookListenerActionResult.Complete(FoxRoleState.Asleep);
 			}
 
 			return PrepareWakeInstruction(
-				identifiedFox,
+				identifiedExecution,
 				FoxRoleState.AwaitingWakeAcknowledgement);
 		}
 
@@ -305,20 +458,23 @@ internal sealed class FoxRole
 	}
 
 	private HookListenerActionResult PrepareWakeInstruction(
-		IPlayer fox,
+		ExecutionContext execution,
 		FoxRoleState nextState) =>
 		HookListenerActionResult.NeedInput(
 			new ConfirmationInstruction(
 				ModeratorInstructionSemantic.WakeRole,
-				GameStrings.RoleWakesUp.Format(PublicName),
-				affectedPlayerIds: [fox.Id]),
+				GameStrings.RoleWakesUp.Format(
+					execution.IsBorrowed
+						? GameStrings.ActorRoleName
+						: PublicName),
+				affectedPlayerIds: [execution.ActingPlayer.Id]),
 			nextState);
 
 	protected override HookListenerActionResult HandleNightPowerUse(
 		GameSession session,
 		ModeratorResponse input)
 	{
-		var fox = GetFox(session);
+		var execution = ResolveExecution(session);
 		return HookListenerActionResult.NeedInput(
 			new SelectPlayersInstruction(
 				ModeratorInstructionSemantic.SelectFoxCenter,
@@ -328,7 +484,7 @@ internal sealed class FoxRole
 				NumberRangeConstraint.SingleOptional,
 				publicAnnouncement: null,
 				privateInstruction: GameStrings.FoxCenterSelectionInstruction,
-				affectedPlayerIds: [fox.Id])
+				affectedPlayerIds: [execution.ActingPlayer.Id])
 			{
 				EmptySelectionOptionLabel = GameStrings.DeclineOption
 			},
@@ -339,13 +495,15 @@ internal sealed class FoxRole
 		GameSession session,
 		ModeratorResponse input)
 	{
+		var execution = ResolveExecution(session);
 		if (input.SelectedPlayerIds is not { Count: <= 1 } selectedPlayerIds)
 		{
 			throw new InvalidOperationException(
-				"The Fox may select at most one living Player.");
+				execution.IsBorrowed
+					? GameStrings.ActorBorrowedRolePowerInvalidResponse
+					: "The Fox may select at most one living Player.");
 		}
 
-		var fox = GetFox(session);
 		if (selectedPlayerIds.Count == 0)
 		{
 			return PrepareSleepInstruction(session);
@@ -354,19 +512,23 @@ internal sealed class FoxRole
 		var livingPlayers = session.GetPlayers()
 			.WithHealth(PlayerHealth.Alive)
 			.ToArray();
+		var centerId = selectedPlayerIds.Single();
+		var center = livingPlayers.SingleOrDefault(player =>
+			player.Id == centerId);
+		if (center is null)
+		{
+			throw new InvalidOperationException(
+				execution.IsBorrowed
+					? GameStrings.ActorBorrowedRolePowerInvalidResponse
+					: "The Fox center selection is unavailable.");
+		}
+
 		if (livingPlayers.Any(player =>
 				player.State.GetFactionAgentKnowledge(Faction.Werewolf) ==
 				FactionAgentKnowledge.Unknown))
 		{
 			throw new InvalidOperationException(
 				"The current living Werewolf Faction Agent facts are incomplete.");
-		}
-
-		var center = session.GetPlayer(selectedPlayerIds.Single());
-		if (center.State.Health != PlayerHealth.Alive)
-		{
-			throw new InvalidOperationException(
-				"The Fox center selection is unavailable.");
 		}
 
 		var neighbors = GameSessionQueries.GetDirectionalLivingNeighbors(
@@ -386,37 +548,54 @@ internal sealed class FoxRole
 		var isAffirmative = checkedPlayerIds.Any(playerId =>
 			session.GetFactionAgentKnowledge(playerId, Faction.Werewolf) ==
 			FactionAgentKnowledge.KnownAgent);
-		var powerInstance = CreatePowerInstance(session, fox);
-		var powerIdentity = CreatePowerIdentity(fox, powerInstance);
+		var powerIdentity = CreatePowerIdentity(execution);
 		var spentResourceIdentity = isAffirmative
 			? (OneUseRolePowerResourceIdentity?)null
-			: CreateResourceIdentity(fox, powerInstance);
-		session.CommitTargetPrivateRolePowerNightAction(
-			NightActionType.FoxCheck,
-			powerIdentity,
-			spentResourceIdentity);
+			: CreateResourceIdentity(
+				execution.ActingPlayer,
+				execution.PowerInstance);
+		if (execution.IsBorrowed)
+		{
+			session.CommitActorBorrowedFoxCheck(
+				powerIdentity,
+				center.Id,
+				isAffirmative
+					? FactionAgentKnowledge.KnownAgent
+					: FactionAgentKnowledge.KnownNonAgent,
+				spentResourceIdentity);
+		}
+		else
+		{
+			session.CommitTargetPrivateRolePowerNightAction(
+				NightActionType.FoxCheck,
+				powerIdentity,
+				spentResourceIdentity);
+		}
 
 		return HookListenerActionResult.NeedInput(
 			new ConfirmationInstruction(
 				ModeratorInstructionSemantic.RevealFoxResult,
-				privateInstruction: isAffirmative
-					? GameStrings.FoxAffirmativeFeedbackInstruction
-					: GameStrings.FoxNegativeFeedbackInstruction,
-				affectedPlayerIds: [fox.Id]),
+					privateInstruction: isAffirmative
+						? GameStrings.FoxAffirmativeFeedbackInstruction
+						: GameStrings.FoxNegativeFeedbackInstruction,
+					affectedPlayerIds: [execution.ActingPlayer.Id]),
 			FoxRoleState.AwaitingResultAcknowledgement);
 	}
 
-	private bool EvaluateAvailability(GameSession session, IPlayer fox)
+	private bool EvaluateAvailability(
+		GameSession session,
+		ExecutionContext execution)
 	{
 		if (_powerIsAvailable is { } knownAvailability)
 		{
 			return knownAvailability;
 		}
 
-		var powerInstance = CreatePowerInstance(session, fox);
 		if (GameSessionQueries.IsOneUseRolePowerResourceCommitted(
 				session,
-				CreateResourceIdentity(fox, powerInstance)))
+				CreateResourceIdentity(
+					execution.ActingPlayer,
+					execution.PowerInstance)))
 		{
 			_powerIsAvailable = false;
 			return false;
@@ -425,13 +604,13 @@ internal sealed class FoxRole
 		var executionContext = _availabilityGateway.Evaluate(
 			new RolePowerAttempt(
 				session,
-				fox,
+				execution.ActingPlayer,
 				MainRoleType.Fox,
 				NeighborhoodCheckPower,
-				powerInstance,
+				execution.PowerInstance,
 				new OneUseRolePowerResource(
 					NeighborhoodCheckResourceId,
-					powerInstance)));
+					execution.PowerInstance)));
 		_powerIsAvailable =
 			executionContext.AvailabilityResult.IsAvailable;
 		return _powerIsAvailable.Value;
@@ -440,13 +619,54 @@ internal sealed class FoxRole
 	protected override HookListenerActionResult PrepareSleepInstruction(
 		GameSession session)
 	{
-		var fox = GetFox(session);
+		var execution = ResolveExecution(session);
 		return HookListenerActionResult.NeedInput(
 			new ConfirmationInstruction(
 				ModeratorInstructionSemantic.PutRoleToSleep,
-				GameStrings.RoleGoesToSleepSingle.Format(PublicName),
-				affectedPlayerIds: [fox.Id]),
+				GameStrings.RoleGoesToSleepSingle.Format(
+					execution.IsBorrowed
+						? GameStrings.ActorRoleName
+						: PublicName),
+				affectedPlayerIds: [execution.ActingPlayer.Id]),
 			FoxRoleState.ReadyToSleep);
+	}
+
+	private ExecutionContext ResolveExecution(GameSession session) =>
+		TryResolveBorrowedExecution(session, out var borrowed)
+			? borrowed
+			: ResolveNativeExecution(session);
+
+	private ExecutionContext ResolveNativeExecution(GameSession session)
+	{
+		var fox = GetFox(session);
+		return new ExecutionContext(
+			fox,
+			CreatePowerInstance(session, fox),
+			IsBorrowed: false);
+	}
+
+	private static bool TryResolveBorrowedExecution(
+		GameSession session,
+		out ExecutionContext execution)
+	{
+		var activation =
+			session.GetModeratorActiveActorBorrowedRolePowerActivation();
+		if (activation?.SourceRole != MainRoleType.Fox)
+		{
+			execution = null!;
+			return false;
+		}
+
+		var actor = session.GetPlayer(activation.ActingPlayerId);
+		execution = new ExecutionContext(
+			actor,
+			RolePowerInstance.CreateBorrowed(
+				session,
+				actor,
+				MainRoleType.Fox,
+				NeighborhoodCheckPower),
+			IsBorrowed: true);
+		return true;
 	}
 
 	private static RolePowerInstance CreatePowerInstance(
@@ -468,6 +688,12 @@ internal sealed class FoxRole
 			powerInstance.Id,
 			powerInstance.Origin);
 
+	private static RolePowerInstanceIdentity CreatePowerIdentity(
+		ExecutionContext execution) =>
+		CreatePowerIdentity(
+			execution.ActingPlayer,
+			execution.PowerInstance);
+
 	private static OneUseRolePowerResourceIdentity CreateResourceIdentity(
 		IPlayer fox,
 		RolePowerInstance powerInstance) =>
@@ -478,6 +704,193 @@ internal sealed class FoxRole
 			powerInstance.Id,
 			powerInstance.Origin,
 			NeighborhoodCheckResourceId);
+
+	private static IEnumerable<ActorBorrowedFoxCheckCommit>
+		GetBorrowedFoxCheckCommitsThisNight(
+			GameSession session,
+			RolePowerInstanceIdentity powerIdentity) =>
+		session.GetActorBorrowedFoxCheckCommits()
+			.Where(commit =>
+				commit.PowerIdentity == powerIdentity &&
+				commit.TurnNumber == session.TurnNumber &&
+				commit.CurrentPhase == GamePhase.Night);
+
+	private static ActorBorrowedFoxCheckCommit GetBorrowedFoxCheckCommit(
+		GameSession session,
+		ExecutionContext execution)
+	{
+		var commits = GetBorrowedFoxCheckCommitsThisNight(
+				session,
+				CreatePowerIdentity(execution))
+			.ToArray();
+		if (commits is not [var commit])
+		{
+			throw new InvalidOperationException(
+				"The Actor borrowed Fox continuation requires exactly one private commit.");
+		}
+
+		return commit;
+	}
+
+	private static void ValidateBorrowedRecoveryBoundary(
+		GameSession session,
+		ExecutionContext execution,
+		ActorBorrowedFoxCheckCommit commit,
+		TargetPrivateRolePowerRecoveryBoundary boundary)
+	{
+		ValidateBorrowedCommit(session, execution, commit);
+		if (boundary.CurrentPhase != GamePhase.Night ||
+			boundary.TurnNumber != session.TurnNumber ||
+			boundary.ActionType != NightActionType.FoxCheck ||
+			boundary.PowerIdentity != CreatePowerIdentity(execution) ||
+			boundary.PowerIdentity != commit.PowerIdentity ||
+			boundary.SpentResourceIdentity != commit.SpentResourceIdentity)
+		{
+			throw new InvalidOperationException(
+				"The Actor borrowed Fox target-private commit has an invalid Role Power identity.");
+		}
+	}
+
+	private static void ValidateBorrowedRecoveryCursorIdentity(
+		GameSession session,
+		ExecutionContext execution,
+		DomainRecoveryCursor cursor)
+	{
+		ArgumentNullException.ThrowIfNull(cursor);
+		var commit = GetBorrowedFoxCheckCommit(session, execution);
+		ValidateBorrowedCommit(session, execution, commit);
+		var activation =
+			session.GetModeratorActiveActorBorrowedRolePowerActivation()!;
+		var expectedResourceId =
+			commit.SpentResourceIdentity?.OneUseResourceId ?? Guid.Empty;
+		if (cursor.Kind != DomainRecoveryCursorKind.TargetPrivateRolePowerCommit ||
+			cursor.SourceRole != MainRoleType.Fox ||
+			cursor.CommittedActionType != NightActionType.FoxCheck ||
+			!StringComparer.Ordinal.Equals(
+				cursor.SourcePowerIdentifier,
+				NeighborhoodCheckPower.Identifier.Value) ||
+			cursor.PowerIdentity != CreatePowerIdentity(execution) ||
+			cursor.OneUseResourceId != expectedResourceId ||
+			cursor.ActorSetupCardId != activation.SelectedCardId ||
+			cursor.ActorBorrowedActivationId != activation.ActivationId ||
+			cursor.CommittedTargetIds is not { Count: 1 } centerIds ||
+			centerIds.Single() != commit.CenterPlayerId ||
+			cursor.NextInstructionSemantic !=
+				ModeratorInstructionSemantic.RevealFoxResult)
+		{
+			throw new InvalidOperationException(
+				"The Actor borrowed Fox recovery cursor has an invalid target-private Role Power identity.");
+		}
+	}
+
+	private static void ValidateBorrowedCommit(
+		GameSession session,
+		ExecutionContext execution,
+		ActorBorrowedFoxCheckCommit commit)
+	{
+		var activation =
+			session.GetModeratorActiveActorBorrowedRolePowerActivation();
+		var expectedPowerIdentity = CreatePowerIdentity(execution);
+		var expectedSpentResource = commit.NeighborhoodAgentKnowledge ==
+			FactionAgentKnowledge.KnownNonAgent
+				? CreateResourceIdentity(
+					execution.ActingPlayer,
+					execution.PowerInstance)
+				: (OneUseRolePowerResourceIdentity?)null;
+		var publicMarker = commit.PublicMarkerLogIndex >= 0
+			? session.GameHistoryLog.ElementAtOrDefault(
+				commit.PublicMarkerLogIndex)
+			: null;
+		if (!execution.IsBorrowed ||
+			activation?.SourceRole != MainRoleType.Fox ||
+			activation.ActingPlayerId != execution.ActingPlayer.Id ||
+			commit.PowerIdentity != expectedPowerIdentity ||
+			commit.ActorSetupCardId != activation.SelectedCardId ||
+			commit.CenterPlayerId == Guid.Empty ||
+			commit.NeighborhoodAgentKnowledge is not
+				(FactionAgentKnowledge.KnownAgent or
+				 FactionAgentKnowledge.KnownNonAgent) ||
+			commit.SpentResourceIdentity != expectedSpentResource ||
+			commit.TurnNumber != session.TurnNumber ||
+			commit.CurrentPhase != GamePhase.Night ||
+			publicMarker is not ActorBorrowedRolePowerCommittedLogEntry marker ||
+			marker.Timestamp != commit.Timestamp ||
+			marker.TurnNumber != commit.TurnNumber ||
+			marker.CurrentPhase != commit.CurrentPhase)
+		{
+			throw new InvalidOperationException(
+				"The Actor borrowed Fox recovery boundary requires one correlated private check and sanitized public marker.");
+		}
+
+		if (execution.ActingPlayer.State.Health != PlayerHealth.Alive ||
+			execution.ActingPlayer.State.CurrentRole != MainRoleType.Actor ||
+			session.GetPlayer(commit.CenterPlayerId).State.Health !=
+				PlayerHealth.Alive)
+		{
+			throw new InvalidOperationException(
+				"The Actor borrowed Fox check does not belong to the living Actor or a living center.");
+		}
+	}
+
+	private static void ValidateBorrowedCenterSelectionInstruction(
+		GameSession session,
+		ExecutionContext execution,
+		SelectPlayersInstruction selection)
+	{
+		if (selection.CountConstraint != NumberRangeConstraint.SingleOptional ||
+			selection.RoleIdentification is not null ||
+			selection.PublicAnnouncement is not null ||
+			selection.PrivateInstruction !=
+				GameStrings.FoxCenterSelectionInstruction ||
+			selection.EmptySelectionOptionLabel != GameStrings.DeclineOption ||
+			selection.AffectedPlayerIds is not { Count: 1 } affectedIds ||
+			affectedIds.Single() != execution.ActingPlayer.Id ||
+			!selection.SelectablePlayerIds.ToHashSet().SetEquals(
+				session.GetPlayers()
+					.WithHealth(PlayerHealth.Alive)
+					.ToIdSet()))
+		{
+			throw new InvalidOperationException(
+				"The Actor borrowed Fox center-selection instruction is invalid.");
+		}
+	}
+
+	private static void ValidateBorrowedFeedback(
+		ExecutionContext execution,
+		ActorBorrowedFoxCheckCommit commit,
+		ConfirmationInstruction feedback)
+	{
+		var expectedPrivateInstruction = commit.NeighborhoodAgentKnowledge ==
+			FactionAgentKnowledge.KnownAgent
+				? GameStrings.FoxAffirmativeFeedbackInstruction
+				: GameStrings.FoxNegativeFeedbackInstruction;
+		if (feedback.PublicAnnouncement is not null ||
+			!StringComparer.Ordinal.Equals(
+				feedback.PrivateInstruction,
+				expectedPrivateInstruction) ||
+			feedback.AffectedPlayerIds is not { Count: 1 } affectedIds ||
+			affectedIds.Single() != execution.ActingPlayer.Id)
+		{
+			throw new InvalidOperationException(
+				"The Actor borrowed Fox feedback does not match its private commit.");
+		}
+	}
+
+	private static void ValidateBorrowedSleep(
+		ExecutionContext execution,
+		ConfirmationInstruction sleep)
+	{
+		if (sleep.PublicAnnouncement !=
+				GameStrings.RoleGoesToSleepSingle.Format(
+					GameStrings.ActorRoleName) ||
+			sleep.PrivateInstruction is not null ||
+			sleep.AffectedPlayerIds is not { Count: 1 } affectedIds ||
+			affectedIds.Single() != execution.ActingPlayer.Id)
+		{
+			throw new InvalidOperationException(
+				"The Actor borrowed Fox sleep instruction is invalid.");
+		}
+	}
 
 	private static IEnumerable<TargetPrivateRolePowerCommittedLogEntry>
 		GetFoxCheckCommitsThisNight(GameSession session) =>
@@ -490,25 +903,39 @@ internal sealed class FoxRole
 		GameSession session,
 		TargetPrivateRolePowerCommittedLogEntry commit)
 	{
-		if (commit.ActionType != NightActionType.FoxCheck ||
-			commit.TargetIds is { Count: > 0 } ||
-			commit.SourceRole != MainRoleType.Fox ||
-			!StringComparer.Ordinal.Equals(
-				commit.SourcePowerIdentifier,
-				NeighborhoodCheckPower.Identifier.Value) ||
-			commit.PowerIdentity != CreatePowerIdentity(
-				session.GetPlayer(commit.ActingPlayerId),
-				CreatePowerInstance(
-					session,
-					session.GetPlayer(commit.ActingPlayerId))) ||
-			commit.CurrentPhase != GamePhase.Night ||
-			commit.TurnNumber != session.TurnNumber)
+		if (commit.TargetIds is { Count: > 0 })
 		{
 			throw new InvalidOperationException(
 				"The Fox target-private check commit has an invalid Role Power identity.");
 		}
 
-		var fox = session.GetPlayer(commit.ActingPlayerId);
+		ValidateOwnedRecoveryBoundary(
+			session,
+			TargetPrivateRolePowerRecoveryBoundary.FromCommittedEntry(commit));
+	}
+
+	private static void ValidateOwnedRecoveryBoundary(
+		GameSession session,
+		TargetPrivateRolePowerRecoveryBoundary boundary)
+	{
+		if (boundary.ActionType != NightActionType.FoxCheck ||
+			boundary.SourceRole != MainRoleType.Fox ||
+			!StringComparer.Ordinal.Equals(
+				boundary.SourcePowerIdentifier,
+				NeighborhoodCheckPower.Identifier.Value) ||
+			boundary.PowerIdentity != CreatePowerIdentity(
+				session.GetPlayer(boundary.ActingPlayerId),
+				CreatePowerInstance(
+					session,
+					session.GetPlayer(boundary.ActingPlayerId))) ||
+			boundary.CurrentPhase != GamePhase.Night ||
+			boundary.TurnNumber != session.TurnNumber)
+		{
+			throw new InvalidOperationException(
+				"The Fox target-private check commit has an invalid Role Power identity.");
+		}
+
+		var fox = session.GetPlayer(boundary.ActingPlayerId);
 		if (fox.State.Health != PlayerHealth.Alive ||
 			fox.State.CurrentRole != MainRoleType.Fox)
 		{
@@ -516,7 +943,7 @@ internal sealed class FoxRole
 				"The Fox target-private check commit does not belong to the living Role holder.");
 		}
 
-		if (commit.SpentResourceIdentity is { } spentResource &&
+		if (boundary.SpentResourceIdentity is { } spentResource &&
 			spentResource != CreateResourceIdentity(
 				fox,
 				CreatePowerInstance(session, fox)))
@@ -528,10 +955,17 @@ internal sealed class FoxRole
 
 	private static void ValidateFeedback(
 		TargetPrivateRolePowerCommittedLogEntry commit,
+		ConfirmationInstruction feedback) =>
+		ValidateFeedback(
+			TargetPrivateRolePowerRecoveryBoundary.FromCommittedEntry(commit),
+			feedback);
+
+	private static void ValidateFeedback(
+		TargetPrivateRolePowerRecoveryBoundary boundary,
 		ConfirmationInstruction feedback)
 	{
 		var expectedPrivateInstruction =
-			commit.SpentResourceIdentity == null
+			boundary.SpentResourceIdentity == null
 				? GameStrings.FoxAffirmativeFeedbackInstruction
 				: GameStrings.FoxNegativeFeedbackInstruction;
 		if (feedback.PublicAnnouncement != null ||
@@ -539,7 +973,7 @@ internal sealed class FoxRole
 				feedback.PrivateInstruction,
 				expectedPrivateInstruction) ||
 			feedback.AffectedPlayerIds is not { Count: 1 } affectedIds ||
-			affectedIds.Single() != commit.ActingPlayerId)
+			affectedIds.Single() != boundary.ActingPlayerId)
 		{
 			throw new InvalidOperationException(
 				"The Fox feedback does not match its committed target-private check.");

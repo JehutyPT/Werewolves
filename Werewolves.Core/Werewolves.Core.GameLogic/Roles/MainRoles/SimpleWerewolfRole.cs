@@ -230,14 +230,18 @@ internal class SimpleWerewolfRole : StandardNightRoleHookListener
         if (input.SelectedPlayerIds is not { Count: 1 })
         {
             throw new InvalidOperationException(
-                "Werewolf victim selection requires exactly one Player.");
+                GetInvalidModeratorResponseMessage(
+                    session,
+                    "Werewolf victim selection requires exactly one Player."));
         }
 
         var victimId = input.SelectedPlayerIds.Single();
         if (!GetLivingKnownNonAgents(session).Contains(victimId))
         {
             throw new InvalidOperationException(
-                "The Werewolf victim must be a living known non-Agent.");
+                GetInvalidModeratorResponseMessage(
+                    session,
+                    "The Werewolf victim must be a living known non-Agent."));
         }
 
         session.PerformNightAction(NightActionType.WerewolfVictimSelection, victimId);
@@ -284,36 +288,13 @@ internal class SimpleWerewolfRole : StandardNightRoleHookListener
 
 	private bool? EvaluateLittleGirlGuidanceAvailability(GameSession session)
 	{
-		var livingHolders = session.GetPlayers()
-		    .WithHealth(PlayerHealth.Alive)
-		    .Where(player =>
-		        player.State.CurrentRole == MainRoleType.LittleGirl)
-		    .ToArray();
-		if (livingHolders.Length == 0)
+		if (!LittleGirlRole.TryCreateSpyingAttempt(session, out var attempt))
 		{
-		    return null;
+			return null;
 		}
 
-		if (livingHolders.Length != 1)
-		{
-		    throw new InvalidOperationException(
-		        "Little Girl spying requires exactly one living current Role holder.");
-		}
-
-		var holder = livingHolders.Single();
-		var instance = RolePowerInstance.CreateCurrent(
-			session,
-		    holder,
-		    MainRoleType.LittleGirl,
-		    LittleGirlRole.SpyingPower);
-		return _availabilityGateway.Evaluate(
-		        new RolePowerAttempt(
-		            session,
-		            holder,
-		            MainRoleType.LittleGirl,
-		            LittleGirlRole.SpyingPower,
-		            instance))
-		    .AvailabilityResult.IsAvailable;
+		return _availabilityGateway.Evaluate(attempt)
+			.AvailabilityResult.IsAvailable;
 	}
 
     private static IReadOnlyList<IPlayer> GetLivingPlayers(GameSession session) =>
@@ -363,7 +344,7 @@ internal class SimpleWerewolfRole : StandardNightRoleHookListener
             .Select(player => player.Id)
             .ToHashSet();
 
-    private static FactionFactEffectiveBoundary
+    private FactionFactEffectiveBoundary
         CommitWerewolfAgentGroupObservation(
             GameSession session,
             ModeratorResponse input)
@@ -371,7 +352,9 @@ internal class SimpleWerewolfRole : StandardNightRoleHookListener
         if (input.SelectedPlayerIds is not { Count: > 0 } selectedPlayerIds)
         {
             throw new InvalidOperationException(
-                "Werewolf Agent-group observation requires a nonempty Player selection.");
+                GetInvalidModeratorResponseMessage(
+                    session,
+                    "Werewolf Agent-group observation requires a nonempty Player selection."));
         }
 
         var livingPlayers = GetLivingPlayers(session);
@@ -382,7 +365,9 @@ internal class SimpleWerewolfRole : StandardNightRoleHookListener
         if (!observedAgentIds.IsSubsetOf(livingPlayerIds))
         {
             throw new InvalidOperationException(
-                "Werewolf Agent-group observation may select only living Players.");
+                GetInvalidModeratorResponseMessage(
+                    session,
+                    "Werewolf Agent-group observation may select only living Players."));
         }
 
         var contradictedKnownFact = livingPlayers.Any(player =>
@@ -398,7 +383,9 @@ internal class SimpleWerewolfRole : StandardNightRoleHookListener
         if (contradictedKnownFact)
         {
             throw new InvalidOperationException(
-                "Werewolf Agent-group observation contradicts committed Faction facts.");
+                GetInvalidModeratorResponseMessage(
+                    session,
+                    "Werewolf Agent-group observation contradicts committed Faction facts."));
         }
 
         FactionFactEffectiveBoundary? committedBoundary = null;
@@ -434,6 +421,15 @@ internal class SimpleWerewolfRole : StandardNightRoleHookListener
                throw new InvalidOperationException(
                    "Werewolf Agent-group observation did not establish a boundary.");
     }
+
+    private string GetInvalidModeratorResponseMessage(
+        GameSession session,
+        string nativeMessage) =>
+        _littleGirlGuidanceAllowed == true &&
+        session.GetModeratorActiveActorBorrowedRolePowerActivation()
+            ?.SourceRole == MainRoleType.LittleGirl
+            ? GameStrings.ActorBorrowedRolePowerInvalidResponse
+            : nativeMessage;
 
     private static void TryCommitInitialBeneficiaryClosure(
         GameSession session,

@@ -63,7 +63,7 @@ internal static class RoleListenerDispatch
 		GameSession session,
 		ModeratorInstruction? startingInstruction,
 		ModeratorResponse input,
-		TargetPrivateRolePowerCommittedLogEntry committedEntry,
+		TargetPrivateRolePowerRecoveryBoundary committedBoundary,
 		ModeratorInstruction nextInstruction)
 	{
 		var listener = GetActiveListener(
@@ -75,7 +75,7 @@ internal static class RoleListenerDispatch
 			       session,
 			       startingInstruction,
 			       input,
-			       committedEntry,
+			       committedBoundary,
 			       nextInstruction);
 	}
 

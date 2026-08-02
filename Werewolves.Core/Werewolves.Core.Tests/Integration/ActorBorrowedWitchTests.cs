@@ -1,0 +1,802 @@
+using FluentAssertions;
+using Werewolves.Core.GameLogic.Interfaces;
+using Werewolves.Core.GameLogic.Models.InternalMessages;
+using Werewolves.Core.GameLogic.Queries;
+using Werewolves.Core.GameLogic.RolePowers;
+using Werewolves.Core.GameLogic.Roles;
+using Werewolves.Core.GameLogic.Roles.MainRoles;
+using Werewolves.Core.GameLogic.Services;
+using Werewolves.Core.StateModels.Core;
+using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Extensions;
+using Werewolves.Core.StateModels.Log;
+using Werewolves.Core.StateModels.Models;
+using Werewolves.Core.StateModels.Models.Instructions;
+using Werewolves.Core.StateModels.Resources;
+using Werewolves.Core.StateModels.Serialization;
+using Werewolves.Core.Tests.Helpers;
+using Xunit;
+
+namespace Werewolves.Core.Tests.Integration;
+
+public sealed class ActorBorrowedWitchTests
+{
+	private static readonly PhysicalCharacterCard WitchCard = new(
+		Guid.Parse("00000000-0000-0000-0000-000000000157"),
+		MainRoleType.Witch);
+	private static readonly PhysicalCharacterCard SeerCard = new(
+		Guid.Parse("00000000-0000-0000-0000-000000000158"),
+		MainRoleType.Seer);
+	private static readonly PhysicalCharacterCard FoxCard = new(
+		Guid.Parse("00000000-0000-0000-0000-000000000159"),
+		MainRoleType.Fox);
+	private static readonly TestSubPhaseManagerKey SubPhaseKey = new();
+	private static readonly TestHookSubPhaseKey HookKey = new();
+	private static readonly TestGameFlowManagerKey RecoveryKey = new();
+
+	[Theory]
+	[InlineData(WitchRecoveryPresentationTamper.HealingPrivateInstruction)]
+	[InlineData(WitchRecoveryPresentationTamper.HealingDeclineLabel)]
+	[InlineData(WitchRecoveryPresentationTamper.PoisonPrivateInstruction)]
+	[InlineData(WitchRecoveryPresentationTamper.PoisonDeclineLabel)]
+	[InlineData(WitchRecoveryPresentationTamper.SleepUndisclosedRosterInstruction)]
+	[InlineData(WitchRecoveryPresentationTamper.SleepDisclosedRosterInstruction)]
+	public void BorrowedWitch_TamperedPendingPresentationIsRejectedDuringStableRecovery(
+		WitchRecoveryPresentationTamper tamper)
+	{
+		var (session, start, _, attackTargetId) = CreateActorSession();
+		PerformSpendOpening(CreateActorRole(), session, start, WitchCard.Id);
+		session.PerformNightAction(
+			NightActionType.WerewolfVictimSelection,
+			attackTargetId);
+		IRolePowerAvailabilityPolicy policy = tamper switch
+		{
+			WitchRecoveryPresentationTamper.PoisonPrivateInstruction or
+				WitchRecoveryPresentationTamper.PoisonDeclineLabel =>
+				new HealingUnavailablePolicy(),
+			WitchRecoveryPresentationTamper.SleepUndisclosedRosterInstruction =>
+				new AllUnavailablePolicy(),
+			_ => AllowAllRolePowerAvailabilityPolicy.Instance
+		};
+		IGameHookListener witch = new WitchRole(
+			new RolePowerAvailabilityGateway(policy));
+		var wake = Advance(witch, session, start.CreateResponse()).Instruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var pending = Advance(witch, session, wake.CreateResponse()).Instruction
+			?? throw new InvalidOperationException(
+				"Expected a borrowed Witch instruction after wake.");
+
+		if (tamper is WitchRecoveryPresentationTamper.HealingPrivateInstruction or
+		    WitchRecoveryPresentationTamper.HealingDeclineLabel)
+		{
+			var healing = pending.Should()
+				.BeOfType<SelectPlayersInstruction>().Subject;
+			healing.Semantic.Should().Be(
+				ModeratorInstructionSemantic.SelectWitchHealingTarget);
+			healing.PrivateInstruction.Should().Be(
+				GameStrings.WitchHealingSelectionInstruction.Format(
+					session.GetPlayer(attackTargetId).Name));
+			healing.EmptySelectionOptionLabel.Should().Be(
+				GameStrings.DeclineOption);
+		}
+		else if (tamper is
+		         WitchRecoveryPresentationTamper.PoisonPrivateInstruction or
+		         WitchRecoveryPresentationTamper.PoisonDeclineLabel)
+		{
+			var poison = pending.Should()
+				.BeOfType<SelectPlayersInstruction>().Subject;
+			poison.Semantic.Should().Be(
+				ModeratorInstructionSemantic.SelectWitchPoisonTarget);
+			poison.PrivateInstruction.Should().Be(
+				GameStrings.WitchAttackTargetsAndPoisonSelectionInstruction.Format(
+					session.GetPlayer(attackTargetId).Name));
+			poison.EmptySelectionOptionLabel.Should().Be(
+				GameStrings.DeclineOption);
+		}
+		else if (tamper ==
+		         WitchRecoveryPresentationTamper.SleepUndisclosedRosterInstruction)
+		{
+			var sleep = pending.Should()
+				.BeOfType<ConfirmationInstruction>().Subject;
+			sleep.Semantic.Should().Be(
+				ModeratorInstructionSemantic.PutRoleToSleep);
+			sleep.PrivateInstruction.Should().Be(
+				GameStrings.WitchAttackTargetsInstruction.Format(
+					session.GetPlayer(attackTargetId).Name));
+		}
+		else
+		{
+			var healing = pending.Should()
+				.BeOfType<SelectPlayersInstruction>().Subject;
+			var poison = Advance(
+				witch,
+				session,
+				healing.CreateResponse([])).Instruction
+				.Should().BeOfType<SelectPlayersInstruction>().Subject;
+			pending = Advance(
+				witch,
+				session,
+				poison.CreateResponse([])).Instruction
+				.Should().BeOfType<ConfirmationInstruction>().Subject;
+			pending.PrivateInstruction.Should().BeNull();
+		}
+
+		session.SetPendingModeratorInstruction(RecoveryKey, pending);
+		session.CaptureRecoveryBoundary(RecoveryKey);
+		var driver = RecoveryPayloadTestDriver.Parse(session.Serialize());
+		if (pending is SelectPlayersInstruction selection)
+		{
+			driver.RewritePendingPlayerSelectionPresentation(
+				selection.PublicAnnouncement,
+				tamper is
+					WitchRecoveryPresentationTamper.HealingPrivateInstruction or
+					WitchRecoveryPresentationTamper.PoisonPrivateInstruction
+						? "Tampered source-identifying private instruction."
+						: selection.PrivateInstruction,
+				tamper is
+					WitchRecoveryPresentationTamper.HealingDeclineLabel or
+					WitchRecoveryPresentationTamper.PoisonDeclineLabel
+						? "Tampered decline label"
+						: selection.EmptySelectionOptionLabel);
+		}
+		else
+		{
+			driver.RewritePendingConfirmationPresentation(
+				"Tampered source-identifying private instruction.",
+				pending.SoundEffects);
+		}
+
+		var recovered = new GameSession(driver.Serialize());
+		Action restore = () => GameFlowManager.RestoreDurableContinuation(
+			recovered,
+			SupportedRoleCatalog.Admissions);
+
+		restore.Should().Throw<InvalidOperationException>()
+			.WithMessage("*pending Actor borrowed Witch*invalid*");
+	}
+
+	[Fact]
+	public void BorrowedWitch_SourceSlotOffersActorQualifiedHealingAndPoisonWithoutSourceLeak()
+	{
+		var (session, start, actorId, attackTargetId) = CreateActorSession();
+		var policy = new RecordingPolicy();
+		IGameHookListener witch = new WitchRole(
+			new RolePowerAvailabilityGateway(policy));
+		var activation = PerformSpendOpening(
+			CreateActorRole(),
+			session,
+			start,
+			WitchCard.Id);
+
+		policy.ObservedAttempts.Should().BeEmpty();
+		session.GameHistoryLog.OfType<OneUseRolePowerCommittedLogEntry>()
+			.Should().BeEmpty();
+		session.GameHistoryLog.OfType<NightActionLogEntry>().Should()
+			.NotContain(entry =>
+				entry.ActionType == NightActionType.WitchSave ||
+				entry.ActionType == NightActionType.WitchKill);
+		session.PerformNightAction(
+			NightActionType.WerewolfVictimSelection,
+			attackTargetId);
+
+		var wake = Advance(witch, session, start.CreateResponse()).Instruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+
+		wake.Semantic.Should().Be(ModeratorInstructionSemantic.WakeRole);
+		wake.PublicAnnouncement.Should().Be(
+			GameStrings.RoleWakesUp.Format(GameStrings.ActorRoleName));
+		wake.PublicAnnouncement.Should().NotContain(GameStrings.WitchRoleName);
+		wake.PrivateInstruction.Should().BeNull();
+		wake.AffectedPlayerIds.Should().Equal(actorId);
+
+		var healing = Advance(witch, session, wake.CreateResponse()).Instruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+
+		healing.Semantic.Should().Be(
+			ModeratorInstructionSemantic.SelectWitchHealingTarget);
+		healing.CountConstraint.Should().Be(NumberRangeConstraint.SingleOptional);
+		healing.SelectablePlayerIds.Should().Equal(attackTargetId);
+		healing.PublicAnnouncement.Should().BeNull();
+		healing.PrivateInstruction.Should().Be(
+			GameStrings.WitchHealingSelectionInstruction.Format(
+				session.GetPlayer(attackTargetId).Name));
+		healing.AffectedPlayerIds.Should().Equal(actorId);
+		healing.EmptySelectionOptionLabel.Should().Be(GameStrings.DeclineOption);
+
+		var poison = Advance(
+			witch,
+			session,
+			healing.CreateResponse([])).Instruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+
+		poison.Semantic.Should().Be(
+			ModeratorInstructionSemantic.SelectWitchPoisonTarget);
+		poison.CountConstraint.Should().Be(NumberRangeConstraint.SingleOptional);
+		poison.SelectablePlayerIds.Should()
+			.NotContain(actorId)
+			.And.Contain(attackTargetId);
+		poison.PublicAnnouncement.Should().BeNull();
+		poison.PrivateInstruction.Should().Be(
+			GameStrings.WitchPoisonSelectionInstruction);
+		poison.AffectedPlayerIds.Should().Equal(actorId);
+		poison.EmptySelectionOptionLabel.Should().Be(GameStrings.DeclineOption);
+
+		policy.ObservedAttempts.Select(CreateResourceIdentity).Should().Equal(
+			new OneUseRolePowerResourceIdentity(
+				actorId,
+				MainRoleType.Witch,
+				"witch-potions",
+				activation.ActivationId,
+				RolePowerInstanceOrigin.Borrowed,
+				WitchRole.HealingResourceId),
+			new OneUseRolePowerResourceIdentity(
+				actorId,
+				MainRoleType.Witch,
+				"witch-potions",
+				activation.ActivationId,
+				RolePowerInstanceOrigin.Borrowed,
+				WitchRole.PoisonResourceId));
+		session.GetPlayerState(actorId).CurrentRole.Should().Be(MainRoleType.Actor);
+		session.GameHistoryLog.OfType<RoleIdentificationLogEntry>().Should()
+			.NotContain(entry => entry.Role == MainRoleType.Witch);
+		session.GameHistoryLog.Select(entry => entry.ToString()).Should()
+			.NotContain(text =>
+				text.Contains(WitchCard.Id.ToString(), StringComparison.Ordinal) ||
+				text.Contains(activation.ActivationId.ToString(), StringComparison.Ordinal) ||
+				text.Contains(MainRoleType.Witch.ToString(), StringComparison.Ordinal));
+		session.GameHistoryLog.OfType<OneUseRolePowerCommittedLogEntry>()
+			.Should().BeEmpty();
+	}
+
+	[Fact]
+	public void BorrowedWitch_SpentResourcesSurviveNextOpeningExpiryAndCannotReactivate()
+	{
+		var (session, start, actorId, attackTargetId) = CreateActorSession();
+		var poisonTargetId = session.GetPlayers().Single(player =>
+			player.Name == "Villager 1").Id;
+		session.AssignRole(attackTargetId, MainRoleType.SimpleVillager);
+		session.AssignRole(poisonTargetId, MainRoleType.SimpleVillager);
+		var activation = PerformSpendOpening(
+			CreateActorRole(),
+			session,
+			start,
+			WitchCard.Id);
+		session.PerformNightAction(
+			NightActionType.WerewolfVictimSelection,
+			attackTargetId);
+		IGameHookListener witch = new WitchRole(
+			new RolePowerAvailabilityGateway(
+				AllowAllRolePowerAvailabilityPolicy.Instance));
+		var wake = Advance(witch, session, start.CreateResponse()).Instruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var healing = Advance(witch, session, wake.CreateResponse()).Instruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		var powerIdentity = new RolePowerInstanceIdentity(
+			actorId,
+			MainRoleType.Witch,
+			"witch-potions",
+			activation.ActivationId,
+			RolePowerInstanceOrigin.Borrowed);
+		var healingResourceIdentity = new OneUseRolePowerResourceIdentity(
+			actorId,
+			MainRoleType.Witch,
+			"witch-potions",
+			activation.ActivationId,
+			RolePowerInstanceOrigin.Borrowed,
+			WitchRole.HealingResourceId);
+		var poisonResourceIdentity = healingResourceIdentity with
+		{
+			OneUseResourceId = WitchRole.PoisonResourceId
+		};
+		var historyCountBeforeHealing = session.GameHistoryLog.Count();
+		session.SetPendingModeratorInstruction(RecoveryKey, healing);
+
+		var poison = GameFlowManager.HandleInput(
+				session,
+				healing.CreateResponse([attackTargetId]),
+				SupportedRoleCatalog.Admissions).ModeratorInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+
+		poison.Semantic.Should().Be(
+			ModeratorInstructionSemantic.SelectWitchPoisonTarget);
+		poison.CountConstraint.Should().Be(NumberRangeConstraint.SingleOptional);
+		poison.SelectablePlayerIds.Should()
+			.NotContain(actorId)
+			.And.NotContain(attackTargetId)
+			.And.Contain(poisonTargetId);
+		poison.PrivateInstruction.Should().Be(
+			GameStrings.WitchPoisonSelectionInstruction);
+		poison.AffectedPlayerIds.Should().Equal(actorId);
+		var healingUse = session.GetActorBorrowedWitchPotionUseCommits()
+			.Should().ContainSingle().Subject;
+		healingUse.PowerIdentity.Should().Be(powerIdentity);
+		healingUse.ActorSetupCardId.Should().Be(WitchCard.Id);
+		healingUse.SpentResourceIdentity.Should().Be(healingResourceIdentity);
+		healingUse.TargetPlayerId.Should().Be(attackTargetId);
+		healingUse.PublicMarkerLogIndex.Should().Be(historyCountBeforeHealing);
+		GetPotionAction(healingUse.SpentResourceIdentity).Should().Be(
+			NightActionType.WitchSave);
+		var healingMarker = session.GameHistoryLog.Skip(historyCountBeforeHealing)
+			.Should().ContainSingle().Subject;
+		healingMarker.Should().BeOfType<ActorBorrowedRolePowerCommittedLogEntry>();
+		healingMarker.Should().NotBeAssignableTo<NightActionLogEntry>();
+		GameSessionQueries.IsOneUseRolePowerResourceCommitted(
+			session,
+			healingResourceIdentity).Should().BeTrue();
+		GameSessionQueries.IsOneUseRolePowerResourceCommitted(
+			session,
+			poisonResourceIdentity).Should().BeFalse();
+
+		var recoveredAtPoison = new GameSession(session.Serialize());
+		GameFlowManager.RestoreDurableContinuation(
+			recoveredAtPoison,
+			SupportedRoleCatalog.Admissions);
+		var recoveredPoison = recoveredAtPoison.PendingModeratorInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		recoveredPoison.InstructionId.Should().Be(poison.InstructionId);
+		recoveredPoison.SelectablePlayerIds.Should()
+			.BeEquivalentTo(poison.SelectablePlayerIds);
+		recoveredAtPoison.GetActorBorrowedWitchPotionUseCommits().Should()
+			.Equal(healingUse);
+		recoveredAtPoison.GameHistoryLog
+			.OfType<ActorBorrowedRolePowerCommittedLogEntry>().Should()
+			.ContainSingle();
+		var historyCountBeforePoison = recoveredAtPoison.GameHistoryLog.Count();
+
+		var sleep = GameFlowManager.HandleInput(
+				recoveredAtPoison,
+				recoveredPoison.CreateResponse([poisonTargetId]),
+				SupportedRoleCatalog.Admissions).ModeratorInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+
+		sleep.Semantic.Should().Be(ModeratorInstructionSemantic.PutRoleToSleep);
+		sleep.PublicAnnouncement.Should().Be(
+			GameStrings.RoleGoesToSleepSingle.Format(GameStrings.ActorRoleName));
+		sleep.PrivateInstruction.Should().BeNull();
+		sleep.AffectedPlayerIds.Should().Equal(actorId);
+		var uses = recoveredAtPoison.GetActorBorrowedWitchPotionUseCommits();
+		uses.Should().HaveCount(2);
+		var poisonUse = uses.Single(use =>
+			use.SpentResourceIdentity == poisonResourceIdentity);
+		poisonUse.PowerIdentity.Should().Be(powerIdentity);
+		poisonUse.ActorSetupCardId.Should().Be(WitchCard.Id);
+		poisonUse.TargetPlayerId.Should().Be(poisonTargetId);
+		poisonUse.PublicMarkerLogIndex.Should().Be(historyCountBeforePoison);
+		GetPotionAction(poisonUse.SpentResourceIdentity).Should().Be(
+			NightActionType.WitchKill);
+		var poisonMarker = recoveredAtPoison.GameHistoryLog
+			.Skip(historyCountBeforePoison).Should().ContainSingle().Subject;
+		poisonMarker.Should().BeOfType<ActorBorrowedRolePowerCommittedLogEntry>();
+		poisonMarker.Should().NotBeAssignableTo<NightActionLogEntry>();
+		GameSessionQueries.IsOneUseRolePowerResourceCommitted(
+			recoveredAtPoison,
+			poisonResourceIdentity).Should().BeTrue();
+
+		var recoveredAtSleep = new GameSession(recoveredAtPoison.Serialize());
+		GameFlowManager.RestoreDurableContinuation(
+			recoveredAtSleep,
+			SupportedRoleCatalog.Admissions);
+		var recoveredSleep = recoveredAtSleep.PendingModeratorInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		recoveredSleep.InstructionId.Should().Be(sleep.InstructionId);
+		recoveredSleep.Semantic.Should().Be(
+			ModeratorInstructionSemantic.PutRoleToSleep);
+		recoveredSleep.PublicAnnouncement.Should().Be(
+			GameStrings.RoleGoesToSleepSingle.Format(GameStrings.ActorRoleName));
+		recoveredSleep.AffectedPlayerIds.Should().Equal(actorId);
+		recoveredAtSleep.GetActorBorrowedWitchPotionUseCommits().Should()
+			.Equal(uses);
+		recoveredAtSleep.GameHistoryLog
+			.OfType<ActorBorrowedRolePowerCommittedLogEntry>().Should().HaveCount(2);
+
+		GameFlowManager.HandleInput(
+			recoveredAtSleep,
+			recoveredSleep.CreateResponse(),
+			SupportedRoleCatalog.Admissions);
+		recoveredAtSleep.GetActorBorrowedWitchPotionUseCommits().Should()
+			.HaveCount(2);
+		recoveredAtSleep.GameHistoryLog
+			.OfType<ActorBorrowedRolePowerCommittedLogEntry>().Should().HaveCount(2);
+		recoveredAtSleep.GameHistoryLog
+			.OfType<OneUseRolePowerCommittedLogEntry>().Should().BeEmpty();
+		recoveredAtSleep.GameHistoryLog.OfType<NightActionLogEntry>().Should()
+			.NotContain(entry =>
+				entry.ActionType == NightActionType.WitchSave ||
+				entry.ActionType == NightActionType.WitchKill);
+		recoveredAtSleep.GameHistoryLog
+			.OfType<ActorBorrowedRolePowerCommittedLogEntry>()
+			.Select(entry => entry.ToString()).Should().OnlyContain(text =>
+				!text.Contains(MainRoleType.Witch.ToString(), StringComparison.Ordinal) &&
+				!text.Contains(WitchCard.Id.ToString(), StringComparison.Ordinal) &&
+				!text.Contains(activation.ActivationId.ToString(), StringComparison.Ordinal) &&
+				!text.Contains(WitchRole.HealingResourceId.ToString(), StringComparison.Ordinal) &&
+				!text.Contains(WitchRole.PoisonResourceId.ToString(), StringComparison.Ordinal) &&
+				!text.Contains(attackTargetId.ToString(), StringComparison.Ordinal) &&
+				!text.Contains(poisonTargetId.ToString(), StringComparison.Ordinal));
+		recoveredAtSleep.GetPlayerState(actorId).CurrentRole.Should().Be(
+			MainRoleType.Actor);
+		recoveredAtSleep.GameHistoryLog.OfType<RoleIdentificationLogEntry>().Should()
+			.NotContain(entry => entry.Role == MainRoleType.Witch);
+
+		NightInteractionResolver.ResolveNightPhase(recoveredAtSleep);
+		recoveredAtSleep.GameHistoryLog.OfType<DawnVictimDeterminedLogEntry>()
+			.Should().NotContain(entry => entry.PlayerId == attackTargetId)
+			.And.ContainSingle(entry =>
+				entry.PlayerId == poisonTargetId &&
+				entry.Reason == EliminationReason.WitchKill);
+		recoveredAtSleep.TransitionMainPhase(GamePhase.Dawn);
+		recoveredAtSleep.TransitionMainPhase(GamePhase.Day);
+		recoveredAtSleep.TransitionMainPhase(GamePhase.Night);
+		recoveredAtSleep.TryEnterSubPhaseStage(
+			SubPhaseKey,
+			GameHook.NightMainActionLoop.ToString()).Should().BeTrue();
+
+		IGameHookListener nextActor = CreateActorRole();
+		var nextActorWake = Advance(
+			nextActor,
+			recoveredAtSleep,
+			start.CreateResponse()).Instruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		recoveredAtSleep.GetModeratorActiveActorBorrowedRolePowerActivation()
+			.Should().BeNull();
+		var nextActorChoice = Advance(
+			nextActor,
+			recoveredAtSleep,
+			nextActorWake.CreateResponse()).Instruction
+			.Should().BeOfType<SelectOptionsInstruction>().Subject;
+		var nextActorSleep = Advance(
+			nextActor,
+			recoveredAtSleep,
+			nextActorChoice.CreateResponse()).Instruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		Advance(
+			nextActor,
+			recoveredAtSleep,
+			nextActorSleep.CreateResponse()).Outcome.Should()
+			.Be(HookListenerOutcome.Complete);
+		recoveredAtSleep.ClearCurrentListenerCache(HookKey);
+		var historyCountBeforeExpiredSource =
+			recoveredAtSleep.GameHistoryLog.Count();
+
+		var expiredSource = Advance(
+			witch,
+			recoveredAtSleep,
+			start.CreateResponse());
+
+		expiredSource.Outcome.Should().Be(HookListenerOutcome.Skip);
+		expiredSource.Instruction.Should().BeNull();
+		recoveredAtSleep.GameHistoryLog.Should().HaveCount(
+			historyCountBeforeExpiredSource);
+		recoveredAtSleep.GetActorBorrowedWitchPotionUseCommits().Should()
+			.Equal(uses);
+		GameSessionQueries.IsOneUseRolePowerResourceCommitted(
+			recoveredAtSleep,
+			healingResourceIdentity).Should().BeTrue();
+		GameSessionQueries.IsOneUseRolePowerResourceCommitted(
+			recoveredAtSleep,
+			poisonResourceIdentity).Should().BeTrue();
+		recoveredAtSleep.GameHistoryLog
+			.OfType<ActorBorrowedRolePowerCommittedLogEntry>().Should().HaveCount(2);
+		recoveredAtSleep.GetModeratorSpentActorSetupCards().Should()
+			.Equal(WitchCard);
+	}
+
+	[Fact]
+	public void BorrowedWitch_ExplicitPotionDeclinesAreDurableRecoverableUnspentAndPrivate()
+	{
+		var (session, start, actorId, attackTargetId) = CreateActorSession();
+		var activation = PerformSpendOpening(
+			CreateActorRole(),
+			session,
+			start,
+			WitchCard.Id);
+		session.PerformNightAction(
+			NightActionType.WerewolfVictimSelection,
+			attackTargetId);
+		IGameHookListener witch = new WitchRole(
+			new RolePowerAvailabilityGateway(
+				AllowAllRolePowerAvailabilityPolicy.Instance));
+		var wake = Advance(witch, session, start.CreateResponse()).Instruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var healing = Advance(witch, session, wake.CreateResponse()).Instruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		var powerIdentity = new RolePowerInstanceIdentity(
+			actorId,
+			MainRoleType.Witch,
+			"witch-potions",
+			activation.ActivationId,
+			RolePowerInstanceOrigin.Borrowed);
+		var healingResourceIdentity = new OneUseRolePowerResourceIdentity(
+			actorId,
+			MainRoleType.Witch,
+			"witch-potions",
+			activation.ActivationId,
+			RolePowerInstanceOrigin.Borrowed,
+			WitchRole.HealingResourceId);
+		var poisonResourceIdentity = healingResourceIdentity with
+		{
+			OneUseResourceId = WitchRole.PoisonResourceId
+		};
+		var historyCountBeforeHealingDecline = session.GameHistoryLog.Count();
+		session.SetPendingModeratorInstruction(RecoveryKey, healing);
+
+		var poison = GameFlowManager.HandleInput(
+				session,
+				healing.CreateResponse([]),
+				SupportedRoleCatalog.Admissions).ModeratorInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+
+		poison.Semantic.Should().Be(
+			ModeratorInstructionSemantic.SelectWitchPoisonTarget);
+		var healingDecline = session.GetActorBorrowedWitchPotionDeclineCommits()
+			.Should().ContainSingle().Subject;
+		healingDecline.PowerIdentity.Should().Be(powerIdentity);
+		healingDecline.ActorSetupCardId.Should().Be(WitchCard.Id);
+		healingDecline.OfferedResourceIdentity.Should().Be(
+			healingResourceIdentity);
+		healingDecline.PublicMarkerLogIndex.Should().Be(
+			historyCountBeforeHealingDecline);
+		session.GetActorBorrowedWitchPotionUseCommits().Should().BeEmpty();
+		session.GameHistoryLog.Skip(historyCountBeforeHealingDecline).Should()
+			.ContainSingle()
+			.Which.Should().BeOfType<ActorBorrowedRolePowerCommittedLogEntry>();
+		GameSessionQueries.IsOneUseRolePowerResourceCommitted(
+			session,
+			healingResourceIdentity).Should().BeFalse();
+		var healingDeclineCursor = session.GetDomainRecoveryCursor(RecoveryKey)!;
+		healingDeclineCursor.Kind.Should().Be(
+			DomainRecoveryCursorKind.ActorBorrowedWitchPotionDeclineCommit);
+		healingDeclineCursor.ResourceIdentity.Should().Be(
+			healingResourceIdentity);
+		healingDeclineCursor.CommittedTargetIds.Should().BeEmpty();
+
+		var recoveredAtPoison = new GameSession(session.Serialize());
+		GameFlowManager.RestoreDurableContinuation(
+			recoveredAtPoison,
+			SupportedRoleCatalog.Admissions);
+		var recoveredPoison = recoveredAtPoison.PendingModeratorInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		recoveredPoison.InstructionId.Should().Be(poison.InstructionId);
+		recoveredAtPoison.GetActorBorrowedWitchPotionDeclineCommits().Should()
+			.Equal(healingDecline);
+		var historyCountBeforePoisonDecline =
+			recoveredAtPoison.GameHistoryLog.Count();
+
+		var sleep = GameFlowManager.HandleInput(
+				recoveredAtPoison,
+				recoveredPoison.CreateResponse([]),
+				SupportedRoleCatalog.Admissions).ModeratorInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+
+		sleep.Semantic.Should().Be(ModeratorInstructionSemantic.PutRoleToSleep);
+		var declines = recoveredAtPoison
+			.GetActorBorrowedWitchPotionDeclineCommits();
+		declines.Should().HaveCount(2);
+		var poisonDecline = declines.Single(commit =>
+			commit.OfferedResourceIdentity == poisonResourceIdentity);
+		poisonDecline.PowerIdentity.Should().Be(powerIdentity);
+		poisonDecline.ActorSetupCardId.Should().Be(WitchCard.Id);
+		poisonDecline.PublicMarkerLogIndex.Should().Be(
+			historyCountBeforePoisonDecline);
+		recoveredAtPoison.GameHistoryLog.Skip(historyCountBeforePoisonDecline)
+			.Should().ContainSingle()
+			.Which.Should().BeOfType<ActorBorrowedRolePowerCommittedLogEntry>();
+		GameSessionQueries.IsOneUseRolePowerResourceCommitted(
+			recoveredAtPoison,
+			poisonResourceIdentity).Should().BeFalse();
+		var poisonDeclineCursor = recoveredAtPoison.GetDomainRecoveryCursor(
+			RecoveryKey)!;
+		poisonDeclineCursor.Kind.Should().Be(
+			DomainRecoveryCursorKind.ActorBorrowedWitchPotionDeclineCommit);
+		poisonDeclineCursor.ResourceIdentity.Should().Be(poisonResourceIdentity);
+		poisonDeclineCursor.CommittedTargetIds.Should().BeEmpty();
+
+		var recoveredAtSleep = new GameSession(recoveredAtPoison.Serialize());
+		GameFlowManager.RestoreDurableContinuation(
+			recoveredAtSleep,
+			SupportedRoleCatalog.Admissions);
+		var recoveredSleep = recoveredAtSleep.PendingModeratorInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		recoveredSleep.InstructionId.Should().Be(sleep.InstructionId);
+		recoveredAtSleep.GetActorBorrowedWitchPotionDeclineCommits().Should()
+			.Equal(declines);
+		recoveredAtSleep.GetActorBorrowedWitchPotionUseCommits().Should().BeEmpty();
+		recoveredAtSleep.GameHistoryLog
+			.OfType<ActorBorrowedRolePowerCommittedLogEntry>().Should().HaveCount(2);
+		recoveredAtSleep.GameHistoryLog
+			.OfType<OneUseRolePowerCommittedLogEntry>().Should().BeEmpty();
+		recoveredAtSleep.GameHistoryLog.OfType<NightActionLogEntry>().Should()
+			.NotContain(entry =>
+				entry.ActionType == NightActionType.WitchSave ||
+				entry.ActionType == NightActionType.WitchKill);
+		recoveredAtSleep.GameHistoryLog
+			.OfType<ActorBorrowedRolePowerCommittedLogEntry>()
+			.Select(entry => entry.ToString()).Should().OnlyContain(text =>
+				!text.Contains(MainRoleType.Witch.ToString(), StringComparison.Ordinal) &&
+				!text.Contains(WitchCard.Id.ToString(), StringComparison.Ordinal) &&
+				!text.Contains(activation.ActivationId.ToString(), StringComparison.Ordinal) &&
+				!text.Contains(WitchRole.HealingResourceId.ToString(), StringComparison.Ordinal) &&
+				!text.Contains(WitchRole.PoisonResourceId.ToString(), StringComparison.Ordinal));
+	}
+
+	[Fact]
+	public void BorrowedWitch_UnavailableHealingSlotCreatesNoImplicitDeclineOrMarker()
+	{
+		var (session, start, _, attackTargetId) = CreateActorSession();
+		PerformSpendOpening(CreateActorRole(), session, start, WitchCard.Id);
+		session.PerformNightAction(
+			NightActionType.WerewolfVictimSelection,
+			attackTargetId);
+		IGameHookListener witch = new WitchRole(
+			new RolePowerAvailabilityGateway(
+				new HealingUnavailablePolicy()));
+		var wake = Advance(witch, session, start.CreateResponse()).Instruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+
+		var poison = Advance(witch, session, wake.CreateResponse()).Instruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+
+		poison.Semantic.Should().Be(
+			ModeratorInstructionSemantic.SelectWitchPoisonTarget);
+		session.GetActorBorrowedWitchPotionDeclineCommits().Should().BeEmpty();
+		session.GetActorBorrowedWitchPotionUseCommits().Should().BeEmpty();
+		session.GameHistoryLog
+			.OfType<ActorBorrowedRolePowerCommittedLogEntry>().Should().BeEmpty();
+
+		session.SetPendingModeratorInstruction(RecoveryKey, poison);
+		GameFlowManager.HandleInput(
+			session,
+			poison.CreateResponse([]),
+			SupportedRoleCatalog.Admissions);
+
+		var decline = session.GetActorBorrowedWitchPotionDeclineCommits()
+			.Should().ContainSingle().Subject;
+		decline.OfferedResourceIdentity.OneUseResourceId.Should().Be(
+			WitchRole.PoisonResourceId);
+		session.GameHistoryLog
+			.OfType<ActorBorrowedRolePowerCommittedLogEntry>().Should()
+			.ContainSingle();
+	}
+
+	private static ActorRole CreateActorRole() => new(
+		new RolePowerAvailabilityGateway(
+			new VillagerRolePowerSuppressionPolicy(
+				AllowAllRolePowerAvailabilityPolicy.Instance)));
+
+	private static ActorBorrowedRolePowerActivation PerformSpendOpening(
+		IGameHookListener listener,
+		GameSession session,
+		StartGameConfirmationInstruction start,
+		Guid selectedCardId)
+	{
+		var wake = Advance(listener, session, start.CreateResponse()).Instruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var choice = Advance(listener, session, wake.CreateResponse()).Instruction
+			.Should().BeOfType<SelectOptionsInstruction>().Subject;
+		var sleep = Advance(
+			listener,
+			session,
+			choice.CreateResponse(selectedCardId.ToString("D"))).Instruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var activation = session
+			.GetModeratorActiveActorBorrowedRolePowerActivation()!;
+		Advance(listener, session, sleep.CreateResponse()).Outcome.Should()
+			.Be(HookListenerOutcome.Complete);
+		session.ClearCurrentListenerCache(HookKey);
+		return activation;
+	}
+
+	private static OneUseRolePowerResourceIdentity CreateResourceIdentity(
+		RolePowerAttempt attempt)
+	{
+		var resource = attempt.OneUseResource
+			?? throw new InvalidOperationException(
+				"The Witch availability attempt requires a one-use Resource.");
+		return new OneUseRolePowerResourceIdentity(
+			attempt.ActingPlayer.Id,
+			attempt.SourceRole,
+			attempt.SourcePower.Identifier.Value,
+			attempt.PowerInstance.Id,
+			attempt.PowerInstance.Origin,
+			resource.Id);
+	}
+
+	private static NightActionType GetPotionAction(
+		OneUseRolePowerResourceIdentity resourceIdentity) =>
+		resourceIdentity.OneUseResourceId switch
+		{
+			var id when id == WitchRole.HealingResourceId =>
+				NightActionType.WitchSave,
+			var id when id == WitchRole.PoisonResourceId =>
+				NightActionType.WitchKill,
+			_ => NightActionType.Unknown
+		};
+
+	private static (
+		GameSession Session,
+		StartGameConfirmationInstruction Start,
+		Guid ActorId,
+		Guid AttackTargetId) CreateActorSession()
+	{
+		var setup = new ActorSetupCards(
+			version: 7,
+			new[] { WitchCard, SeerCard, FoxCard });
+		var config = new GameSessionConfig(
+			[GameStrings.ActorRoleName, "Werewolf", "Villager 1", "Villager 2", "Villager 3"],
+			[
+				MainRoleType.Actor,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			],
+			setup);
+		var sessionId = Guid.NewGuid();
+		var start = new StartGameConfirmationInstruction(sessionId);
+		var session = new GameSession(sessionId, start, config);
+		var players = session.GetPlayers().ToArray();
+		var actorId = players[0].Id;
+		session.AssignRole(actorId, MainRoleType.Actor);
+		session.IdentifyRole([actorId], MainRoleType.Actor);
+		session.TryEnterSubPhaseStage(
+			SubPhaseKey,
+			GameHook.NightMainActionLoop.ToString()).Should().BeTrue();
+		return (session, start, actorId, players[4].Id);
+	}
+
+	private static HookListenerActionResult Advance(
+		IGameHookListener listener,
+		GameSession session,
+		ModeratorResponse response)
+	{
+		var result = listener.Execute(session, response);
+		if (result.Outcome != HookListenerOutcome.Skip)
+		{
+			session.TransitionListenerStateCache(
+				HookKey,
+				listener.Id,
+				result.NextListenerPhase!);
+		}
+
+		return result;
+	}
+
+	private sealed class RecordingPolicy : IRolePowerAvailabilityPolicy
+	{
+		internal List<RolePowerAttempt> ObservedAttempts { get; } = [];
+
+		public RolePowerAvailabilityResult Evaluate(RolePowerAttempt attempt)
+		{
+			ObservedAttempts.Add(attempt);
+			return RolePowerAvailabilityResult.Allowed;
+		}
+	}
+
+	private sealed class HealingUnavailablePolicy : IRolePowerAvailabilityPolicy
+	{
+		public RolePowerAvailabilityResult Evaluate(RolePowerAttempt attempt) =>
+			attempt.OneUseResource?.Id == WitchRole.HealingResourceId
+				? RolePowerAvailabilityResult.Denied
+				: RolePowerAvailabilityResult.Allowed;
+	}
+
+	private sealed class AllUnavailablePolicy : IRolePowerAvailabilityPolicy
+	{
+		public RolePowerAvailabilityResult Evaluate(RolePowerAttempt attempt) =>
+			RolePowerAvailabilityResult.Denied;
+	}
+
+	public enum WitchRecoveryPresentationTamper
+	{
+		HealingPrivateInstruction,
+		HealingDeclineLabel,
+		PoisonPrivateInstruction,
+		PoisonDeclineLabel,
+		SleepUndisclosedRosterInstruction,
+		SleepDisclosedRosterInstruction
+	}
+
+	private sealed class TestSubPhaseManagerKey : ISubPhaseManagerKey;
+	private sealed class TestHookSubPhaseKey : IHookSubPhaseKey;
+	private sealed class TestGameFlowManagerKey : IGameFlowManagerKey;
+}

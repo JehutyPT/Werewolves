@@ -125,6 +125,30 @@ internal class GameSession : IGameSession
     internal DomainRecoveryCursor? GetDomainRecoveryCursor(
         IGameFlowManagerKey key) =>
         _gameSessionKernel.DomainRecoveryCursor;
+	internal IReadOnlyList<ActorBorrowedSeerCheckCommit>
+		GetActorBorrowedSeerCheckCommits() =>
+		_gameSessionKernel.GetActorBorrowedSeerCheckCommits();
+	internal IReadOnlyList<ActorBorrowedDefenderProtectionCommit>
+		GetActorBorrowedDefenderProtectionCommits() =>
+		_gameSessionKernel.GetActorBorrowedDefenderProtectionCommits();
+	internal IReadOnlyList<ActorBorrowedFoxCheckCommit>
+		GetActorBorrowedFoxCheckCommits() =>
+		_gameSessionKernel.GetActorBorrowedFoxCheckCommits();
+	internal IReadOnlyList<ActorBorrowedWitchPotionUseCommit>
+		GetActorBorrowedWitchPotionUseCommits() =>
+		_gameSessionKernel.GetActorBorrowedWitchPotionUseCommits();
+	internal IReadOnlyList<ActorBorrowedWitchPotionDeclineCommit>
+		GetActorBorrowedWitchPotionDeclineCommits() =>
+		_gameSessionKernel.GetActorBorrowedWitchPotionDeclineCommits();
+	internal IReadOnlyList<ActorBorrowedCupidLoversCommit>
+		GetActorBorrowedCupidLoversCommits() =>
+		_gameSessionKernel.GetActorBorrowedCupidLoversCommits();
+	internal IReadOnlyList<ActorBorrowedStutteringJudgeSignalSetupCommit>
+		GetActorBorrowedStutteringJudgeSignalSetupCommits() =>
+		_gameSessionKernel.GetActorBorrowedStutteringJudgeSignalSetupCommits();
+	internal IReadOnlyList<ActorBorrowedStutteringJudgeSignalObservationCommit>
+		GetActorBorrowedStutteringJudgeSignalObservationCommits() =>
+		_gameSessionKernel.GetActorBorrowedStutteringJudgeSignalObservationCommits();
 	internal T? GetSubPhase<T>() where T : struct, Enum => _gameSessionKernel.PhaseStateCache.GetSubPhase<T>();
     internal string? GetSubPhaseId() => _gameSessionKernel.PhaseStateCache.GetSubPhaseId();
     internal ListenerIdentifier? GetCurrentListener() => _gameSessionKernel.PhaseStateCache.GetCurrentListener();
@@ -372,6 +396,72 @@ internal class GameSession : IGameSession
 	internal bool TryExpireActorBorrowedRolePowerActivation() =>
 		_gameSessionKernel.TryExpireActorBorrowedRolePowerActivation();
 
+	internal void CommitActorBorrowedSeerCheck(
+		RolePowerInstanceIdentity powerIdentity,
+		Guid targetPlayerId,
+		FactionAgentKnowledge targetAgentKnowledge) =>
+		_gameSessionKernel.CommitActorBorrowedSeerCheck(
+			powerIdentity,
+			targetPlayerId,
+			targetAgentKnowledge);
+
+	internal void CommitActorBorrowedDefenderProtection(
+		RolePowerInstanceIdentity powerIdentity,
+		Guid targetPlayerId) =>
+		_gameSessionKernel.CommitActorBorrowedDefenderProtection(
+			powerIdentity,
+			targetPlayerId);
+
+	internal void CommitActorBorrowedFoxCheck(
+		RolePowerInstanceIdentity powerIdentity,
+		Guid centerPlayerId,
+		FactionAgentKnowledge neighborhoodAgentKnowledge,
+		OneUseRolePowerResourceIdentity? spentResourceIdentity) =>
+		_gameSessionKernel.CommitActorBorrowedFoxCheck(
+			powerIdentity,
+			centerPlayerId,
+			neighborhoodAgentKnowledge,
+			spentResourceIdentity);
+
+	internal void CommitActorBorrowedWitchPotionUse(
+		RolePowerInstanceIdentity powerIdentity,
+		OneUseRolePowerResourceIdentity spentResourceIdentity,
+		Guid targetPlayerId) =>
+		_gameSessionKernel.CommitActorBorrowedWitchPotionUse(
+			powerIdentity,
+			spentResourceIdentity,
+			targetPlayerId);
+
+	internal void CommitActorBorrowedWitchPotionDecline(
+		RolePowerInstanceIdentity powerIdentity,
+		OneUseRolePowerResourceIdentity offeredResourceIdentity) =>
+		_gameSessionKernel.CommitActorBorrowedWitchPotionDecline(
+			powerIdentity,
+			offeredResourceIdentity);
+
+	internal void CommitActorBorrowedCupidLovers(
+		RolePowerInstanceIdentity powerIdentity,
+		IReadOnlyCollection<Guid> playerIds,
+		ActorBorrowedCupidLoversDisposition disposition) =>
+		_gameSessionKernel.CommitActorBorrowedCupidLovers(
+			powerIdentity,
+			playerIds,
+			disposition);
+
+	internal void CommitActorBorrowedStutteringJudgeSignalSetup(
+		RolePowerInstanceIdentity powerIdentity) =>
+		_gameSessionKernel.CommitActorBorrowedStutteringJudgeSignalSetup(
+			powerIdentity);
+
+	internal void CommitActorBorrowedStutteringJudgeSignalObservation(
+		RolePowerInstanceIdentity powerIdentity,
+		bool signalOccurred,
+		OneUseRolePowerResourceIdentity? spentResourceIdentity) =>
+		_gameSessionKernel.CommitActorBorrowedStutteringJudgeSignalObservation(
+			powerIdentity,
+			signalOccurred,
+			spentResourceIdentity);
+
 	internal void CommitGameFact<TEntry>(
 		Func<GameFactContext, TEntry> entryFactory)
 		where TEntry : GameLogEntryBase, IGameFactLogEntry
@@ -380,6 +470,27 @@ internal class GameSession : IGameSession
 	internal void CommitFactionFactBatch(
 		Func<GameFactContext, FactionFactsCommittedLogEntry> entryFactory) =>
 		CommitSessionEntry(entryFactory, "Faction fact batch");
+
+	internal void CommitActorBorrowedCupidInitialBeneficiaryClosure(
+		Func<GameFactContext, FactionFactsCommittedLogEntry> entryFactory,
+		ActorBorrowedCupidLoversCommit expectedDeferredCommit,
+		ActorBorrowedCupidLoversDisposition resolvedDisposition)
+	{
+		ArgumentNullException.ThrowIfNull(entryFactory);
+		ArgumentNullException.ThrowIfNull(expectedDeferredCommit);
+		CommitSessionEntry(
+			context => new
+				ActorBorrowedCupidInitialBeneficiaryClosureCommandLogEntry
+				{
+					Timestamp = context.Timestamp,
+					TurnNumber = context.TurnNumber,
+					CurrentPhase = context.CurrentPhase,
+					PublicClosureEntry = entryFactory(context),
+					ExpectedDeferredCommit = expectedDeferredCommit,
+					ResolvedDisposition = resolvedDisposition
+				},
+			"Actor borrowed Cupid Initial Beneficiary Closure");
+	}
 
 	internal bool TryRecordPhysicalCharacterCardOwnership(
 		long expectedRoleLockInVersion,

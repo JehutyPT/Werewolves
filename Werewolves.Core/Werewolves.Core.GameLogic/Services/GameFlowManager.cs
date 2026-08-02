@@ -600,8 +600,9 @@ internal static class GameFlowManager
 		        return true;
 	        }
 
-        if (startingInstruction?.Semantic ==
-            ModeratorInstructionSemantic.RevealFoxResult)
+        if (startingInstruction?.Semantic is
+            ModeratorInstructionSemantic.RevealFoxResult or
+            ModeratorInstructionSemantic.RevealSeerResult)
         {
             return true;
         }
@@ -620,6 +621,11 @@ internal static class GameFlowManager
         {
             return true;
         }
+
+		if (HasNewActorBorrowedRolePowerCommit(session, startingLogCount))
+		{
+			return true;
+		}
 
         if (HasNewRecurringRolePowerCommit(session, startingLogCount))
         {
@@ -694,8 +700,16 @@ internal static class GameFlowManager
         int startingLogCount) =>
         session.GameHistoryLog
             .Skip(startingLogCount)
-            .OfType<TargetPrivateRolePowerCommittedLogEntry>()
-            .Any();
+			.OfType<TargetPrivateRolePowerCommittedLogEntry>()
+			.Any();
+
+	private static bool HasNewActorBorrowedRolePowerCommit(
+		GameSession session,
+		int startingLogCount) =>
+		session.GameHistoryLog
+			.Skip(startingLogCount)
+			.OfType<ActorBorrowedRolePowerCommittedLogEntry>()
+			.Any();
 
 	private static bool HasNewActorRuntimeCommit(
 		GameSession session,
@@ -742,6 +756,165 @@ internal static class GameFlowManager
 			.OfType<EliminationCascadeCompletedLogEntry>()
 			.Any();
 
+	private static bool IsCorrelatedActorBorrowedMarker(
+		GameSession session,
+		ActorBorrowedRolePowerCommittedLogEntry marker,
+		IActorBorrowedRolePowerCommit privateCommit)
+	{
+		var coordinate = privateCommit.Coordinate;
+		return coordinate.PublicMarkerLogIndex >= 0 &&
+			coordinate.PublicMarkerLogIndex < session.GameHistoryLog.Count() &&
+			session.GameHistoryLog.ElementAt(
+				coordinate.PublicMarkerLogIndex) == marker &&
+			marker.Timestamp == coordinate.Timestamp &&
+			marker.TurnNumber == coordinate.TurnNumber &&
+			marker.CurrentPhase == coordinate.CurrentPhase;
+	}
+
+	private static bool IsCorrelatedActorBorrowedWitchPotionUse(
+		GameSession session,
+		ActorBorrowedRolePowerCommittedLogEntry marker,
+		ActorBorrowedWitchPotionUseCommit commit,
+		ModeratorInstruction? startingInstruction,
+		ModeratorResponse input,
+		ModeratorInstruction nextInstruction)
+	{
+		var actionType = ActorBorrowedWitchPotionUseCommit.GetActionType(
+			commit.SpentResourceIdentity);
+		var expectedStartingSemantic = actionType switch
+		{
+			NightActionType.WitchSave =>
+				ModeratorInstructionSemantic.SelectWitchHealingTarget,
+			NightActionType.WitchKill =>
+				ModeratorInstructionSemantic.SelectWitchPoisonTarget,
+			_ => ModeratorInstructionSemantic.Unspecified
+		};
+		var hasExpectedContinuation = actionType switch
+		{
+			NightActionType.WitchSave => nextInstruction.Semantic is
+				ModeratorInstructionSemantic.SelectWitchPoisonTarget or
+				ModeratorInstructionSemantic.PutRoleToSleep,
+			NightActionType.WitchKill => nextInstruction.Semantic ==
+				ModeratorInstructionSemantic.PutRoleToSleep,
+			_ => false
+		};
+		return IsCorrelatedActorBorrowedMarker(session, marker, commit) &&
+			session.GetCurrentPhase() == GamePhase.Night &&
+			startingInstruction is SelectPlayersInstruction
+			{
+				CountConstraint: var countConstraint,
+				RoleIdentification: null,
+				AffectedPlayerIds: [var affectedPlayerId]
+			} selection &&
+			selection.Semantic == expectedStartingSemantic &&
+			countConstraint == NumberRangeConstraint.SingleOptional &&
+			affectedPlayerId == commit.PowerIdentity.ActingPlayerId &&
+			selection.SelectablePlayerIds.Contains(commit.TargetPlayerId) &&
+			input.InstructionId == startingInstruction.InstructionId &&
+			input.SelectedPlayerIds is { Count: 1 } selectedPlayerIds &&
+			selectedPlayerIds.Single() == commit.TargetPlayerId &&
+			hasExpectedContinuation &&
+			nextInstruction.AffectedPlayerIds is [var nextAffectedPlayerId] &&
+			nextAffectedPlayerId == commit.PowerIdentity.ActingPlayerId;
+	}
+
+	private static bool IsCorrelatedActorBorrowedWitchPotionDecline(
+		GameSession session,
+		ActorBorrowedRolePowerCommittedLogEntry marker,
+		ActorBorrowedWitchPotionDeclineCommit commit,
+		ModeratorInstruction? startingInstruction,
+		ModeratorResponse input,
+		ModeratorInstruction nextInstruction)
+	{
+		var actionType =
+			ActorBorrowedWitchPotionDeclineCommit.GetOfferedActionType(
+				commit.OfferedResourceIdentity);
+		var expectedStartingSemantic = actionType switch
+		{
+			NightActionType.WitchSave =>
+				ModeratorInstructionSemantic.SelectWitchHealingTarget,
+			NightActionType.WitchKill =>
+				ModeratorInstructionSemantic.SelectWitchPoisonTarget,
+			_ => ModeratorInstructionSemantic.Unspecified
+		};
+		var hasExpectedContinuation = actionType switch
+		{
+			NightActionType.WitchSave => nextInstruction.Semantic is
+				ModeratorInstructionSemantic.SelectWitchPoisonTarget or
+				ModeratorInstructionSemantic.PutRoleToSleep,
+			NightActionType.WitchKill => nextInstruction.Semantic ==
+				ModeratorInstructionSemantic.PutRoleToSleep,
+			_ => false
+		};
+		return IsCorrelatedActorBorrowedMarker(session, marker, commit) &&
+			session.GetCurrentPhase() == GamePhase.Night &&
+			startingInstruction is SelectPlayersInstruction
+			{
+				CountConstraint: var countConstraint,
+				RoleIdentification: null,
+				AffectedPlayerIds: [var affectedPlayerId]
+			} selection &&
+			selection.Semantic == expectedStartingSemantic &&
+			selection.SelectablePlayerIds.Count > 0 &&
+			countConstraint == NumberRangeConstraint.SingleOptional &&
+			affectedPlayerId == commit.PowerIdentity.ActingPlayerId &&
+			input.InstructionId == startingInstruction.InstructionId &&
+			input.SelectedPlayerIds is { Count: 0 } &&
+			hasExpectedContinuation &&
+			nextInstruction.AffectedPlayerIds is [var nextAffectedPlayerId] &&
+			nextAffectedPlayerId == commit.PowerIdentity.ActingPlayerId;
+	}
+
+	private static bool IsCorrelatedActorBorrowedJudgeObservation(
+		GameSession session,
+		ActorBorrowedRolePowerCommittedLogEntry marker,
+		ActorBorrowedStutteringJudgeSignalObservationCommit commit,
+		ModeratorInstruction? startingInstruction,
+		ModeratorResponse input,
+		ModeratorInstruction nextInstruction)
+	{
+		var expectedOptionId = commit.SignalOccurred
+			? StutteringJudgeSignalOptionIds.Occurred
+			: StutteringJudgeSignalOptionIds.DidNotOccur;
+		return IsCorrelatedActorBorrowedMarker(session, marker, commit) &&
+			session.GetCurrentPhase() == GamePhase.Day &&
+			session.GetSubPhase<DaySubPhases>() == DaySubPhases.NormalVoting &&
+			GameSessionQueries.GetCurrentDayVoteOutcome(session) is null &&
+			startingInstruction is SelectOptionsInstruction
+			{
+				Semantic:
+					ModeratorInstructionSemantic.ObserveStutteringJudgeSignal,
+				SelectionRange: var selectionRange,
+				AffectedPlayerIds: [var affectedPlayerId]
+			} signalInstruction &&
+			selectionRange == NumberRangeConstraint.Single &&
+			affectedPlayerId == commit.PowerIdentity.ActingPlayerId &&
+			signalInstruction.Options
+				.Select(option => option.Id)
+				.SequenceEqual(
+					[
+						StutteringJudgeSignalOptionIds.Occurred,
+						StutteringJudgeSignalOptionIds.DidNotOccur
+					],
+					StringComparer.Ordinal) &&
+			input.InstructionId == startingInstruction.InstructionId &&
+			input.Type == ExpectedInputType.OptionSelection &&
+			input.SelectedOptionIds is [var selectedOptionId] &&
+			StringComparer.Ordinal.Equals(selectedOptionId, expectedOptionId) &&
+			nextInstruction is SelectPlayersInstruction
+			{
+				Semantic: ModeratorInstructionSemantic.RecordDayVote,
+				CountConstraint: var countConstraint,
+				RoleIdentification: null,
+				AffectedPlayerIds: null
+			} voteInstruction &&
+			countConstraint == NumberRangeConstraint.SingleOptional &&
+			voteInstruction.SelectablePlayerIds.SetEquals(
+				session.GetPlayers()
+					.WithHealth(PlayerHealth.Alive)
+					.Select(player => player.Id));
+	}
+
     private static DomainRecoveryCursor? CreateDomainRecoveryCursor(
         GameSession session,
         ModeratorInstruction? startingInstruction,
@@ -762,6 +935,42 @@ internal static class GameFlowManager
             .Skip(startingLogCount)
             .OfType<TargetPrivateRolePowerCommittedLogEntry>()
             .ToArray();
+		var newActorBorrowedEntries = session.GameHistoryLog
+			.Skip(startingLogCount)
+			.OfType<ActorBorrowedRolePowerCommittedLogEntry>()
+			.ToArray();
+		var newActorBorrowedSeerCommits = session
+			.GetActorBorrowedSeerCheckCommits()
+			.Where(commit => commit.PublicMarkerLogIndex >= startingLogCount)
+			.ToArray();
+		var newActorBorrowedDefenderCommits = session
+			.GetActorBorrowedDefenderProtectionCommits()
+			.Where(commit => commit.PublicMarkerLogIndex >= startingLogCount)
+			.ToArray();
+			var newActorBorrowedFoxCommits = session
+				.GetActorBorrowedFoxCheckCommits()
+				.Where(commit => commit.PublicMarkerLogIndex >= startingLogCount)
+				.ToArray();
+			var newActorBorrowedWitchPotionUseCommits = session
+				.GetActorBorrowedWitchPotionUseCommits()
+				.Where(commit => commit.PublicMarkerLogIndex >= startingLogCount)
+				.ToArray();
+			var newActorBorrowedWitchPotionDeclineCommits = session
+				.GetActorBorrowedWitchPotionDeclineCommits()
+				.Where(commit => commit.PublicMarkerLogIndex >= startingLogCount)
+				.ToArray();
+			var newActorBorrowedCupidCommits = session
+				.GetActorBorrowedCupidLoversCommits()
+				.Where(commit => commit.PublicMarkerLogIndex >= startingLogCount)
+				.ToArray();
+			var newActorBorrowedJudgeSetupCommits = session
+				.GetActorBorrowedStutteringJudgeSignalSetupCommits()
+				.Where(commit => commit.PublicMarkerLogIndex >= startingLogCount)
+				.ToArray();
+			var newActorBorrowedJudgeObservationCommits = session
+				.GetActorBorrowedStutteringJudgeSignalObservationCommits()
+				.Where(commit => commit.PublicMarkerLogIndex >= startingLogCount)
+				.ToArray();
 		var newActorSetupCardSpendEntries = session.GameHistoryLog
 			.Skip(startingLogCount)
 			.OfType<ActorSetupCardSpendCommittedLogEntry>()
@@ -774,6 +983,7 @@ internal static class GameFlowManager
             (newCommittedEntries.Length > 0 ? 1 : 0) +
             (newRecurringEntries.Length > 0 ? 1 : 0) +
             (newTargetPrivateEntries.Length > 0 ? 1 : 0) +
+			(newActorBorrowedEntries.Length > 0 ? 1 : 0) +
 			(newActorSetupCardSpendEntries.Length > 0 ? 1 : 0) +
             (newLoversPairEntries.Count > 0 ? 1 : 0);
         if (domainCommitKinds > 1)
@@ -866,11 +1076,12 @@ internal static class GameFlowManager
                     admissions,
                     (id, factory) =>
                         session.GetOrCreateListener(id, factory),
-                    session,
-                    startingInstruction,
-                    input,
-                    targetPrivateEntry,
-                    nextInstruction))
+					 session,
+					 startingInstruction,
+					 input,
+					 TargetPrivateRolePowerRecoveryBoundary
+						 .FromCommittedEntry(targetPrivateEntry),
+					 nextInstruction))
             {
                 throw new InvalidOperationException(
                     "One accepted response must produce exactly one correlated target-private Role Power commit.");
@@ -898,6 +1109,321 @@ internal static class GameFlowManager
                 NextInstructionId = nextInstruction.InstructionId
             };
         }
+
+		if (newActorBorrowedEntries.Length > 0)
+		{
+				var typedCommitCount = newActorBorrowedSeerCommits.Length +
+					newActorBorrowedDefenderCommits.Length +
+					newActorBorrowedFoxCommits.Length +
+					newActorBorrowedWitchPotionUseCommits.Length +
+					newActorBorrowedWitchPotionDeclineCommits.Length +
+					newActorBorrowedCupidCommits.Length +
+					newActorBorrowedJudgeSetupCommits.Length +
+					newActorBorrowedJudgeObservationCommits.Length;
+			if (newActorBorrowedEntries is not [var marker] ||
+				typedCommitCount != 1)
+			{
+				throw new InvalidOperationException(
+					"One accepted response must produce exactly one correlated private Actor borrowed Role Power commit.");
+			}
+
+			if (newActorBorrowedSeerCommits is [var seerCommit])
+			{
+				if (!IsCorrelatedActorBorrowedMarker(
+						 session,
+						 marker,
+						 seerCommit) ||
+					!RoleListenerDispatch
+						.TryValidateTargetPrivateCommittedRecoveryBoundary(
+							Listener(seerCommit.PowerIdentity.SourceRole),
+							admissions,
+							(id, factory) =>
+								session.GetOrCreateListener(id, factory),
+							session,
+							startingInstruction,
+							input,
+							TargetPrivateRolePowerRecoveryBoundary
+								.FromActorBorrowedSeerCheckCommit(seerCommit),
+							nextInstruction))
+				{
+					throw new InvalidOperationException(
+						"One accepted response must produce exactly one correlated Actor borrowed target-private Role Power commit.");
+				}
+
+				var identity = seerCommit.PowerIdentity;
+				return new DomainRecoveryCursor
+				{
+					Version = DomainRecoveryCursor.CurrentVersion,
+					Kind = DomainRecoveryCursorKind.TargetPrivateRolePowerCommit,
+					SourceRole = identity.SourceRole,
+					CommittedActionType = NightActionType.SeerCheck,
+					ActingPlayerId = identity.ActingPlayerId,
+					SourcePowerIdentifier = identity.SourcePowerIdentifier,
+					PowerInstanceId = identity.PowerInstanceId,
+					PowerInstanceOrigin = identity.PowerInstanceOrigin,
+					OneUseResourceId = Guid.Empty,
+					ActorSetupCardId = seerCommit.ActorSetupCardId,
+					ActorBorrowedActivationId = identity.PowerInstanceId,
+					CommittedTargetIds = [seerCommit.TargetPlayerId],
+					NextInstructionSemantic = nextInstruction.Semantic,
+					NextInstructionId = nextInstruction.InstructionId
+				};
+			}
+
+				if (newActorBorrowedFoxCommits is [var foxCommit])
+			{
+				if (!IsCorrelatedActorBorrowedMarker(
+						session,
+						marker,
+						foxCommit) ||
+					!RoleListenerDispatch
+						.TryValidateTargetPrivateCommittedRecoveryBoundary(
+							Listener(foxCommit.PowerIdentity.SourceRole),
+							admissions,
+							(id, factory) =>
+								session.GetOrCreateListener(id, factory),
+							session,
+							startingInstruction,
+							input,
+							TargetPrivateRolePowerRecoveryBoundary
+								.FromActorBorrowedFoxCheckCommit(foxCommit),
+							nextInstruction))
+				{
+					throw new InvalidOperationException(
+						"One accepted response must produce exactly one correlated Actor borrowed Fox check commit.");
+				}
+
+				var identity = foxCommit.PowerIdentity;
+				return new DomainRecoveryCursor
+				{
+					Version = DomainRecoveryCursor.CurrentVersion,
+					Kind = DomainRecoveryCursorKind.TargetPrivateRolePowerCommit,
+					SourceRole = identity.SourceRole,
+					CommittedActionType = NightActionType.FoxCheck,
+					ActingPlayerId = identity.ActingPlayerId,
+					SourcePowerIdentifier = identity.SourcePowerIdentifier,
+					PowerInstanceId = identity.PowerInstanceId,
+					PowerInstanceOrigin = identity.PowerInstanceOrigin,
+					OneUseResourceId = foxCommit.SpentResourceIdentity?
+						.OneUseResourceId ?? Guid.Empty,
+					ActorSetupCardId = foxCommit.ActorSetupCardId,
+					ActorBorrowedActivationId = identity.PowerInstanceId,
+					CommittedTargetIds = [foxCommit.CenterPlayerId],
+					NextInstructionSemantic = nextInstruction.Semantic,
+					NextInstructionId = nextInstruction.InstructionId
+					};
+				}
+
+				if (newActorBorrowedWitchPotionUseCommits is [var witchUse])
+				{
+					if (!IsCorrelatedActorBorrowedWitchPotionUse(
+							session,
+							marker,
+							witchUse,
+							startingInstruction,
+							input,
+							nextInstruction))
+					{
+						throw new InvalidOperationException(
+							"One accepted response must produce exactly one correlated Actor borrowed Witch potion use.");
+					}
+
+					var identity = witchUse.PowerIdentity;
+					return new DomainRecoveryCursor
+					{
+						Version = DomainRecoveryCursor.CurrentVersion,
+						Kind = DomainRecoveryCursorKind
+							.ActorBorrowedWitchPotionUseCommit,
+						SourceRole = identity.SourceRole,
+						CommittedActionType =
+							ActorBorrowedWitchPotionUseCommit.GetActionType(
+								witchUse.SpentResourceIdentity),
+						ActingPlayerId = identity.ActingPlayerId,
+						SourcePowerIdentifier = identity.SourcePowerIdentifier,
+						PowerInstanceId = identity.PowerInstanceId,
+						PowerInstanceOrigin = identity.PowerInstanceOrigin,
+						OneUseResourceId = witchUse.SpentResourceIdentity
+							.OneUseResourceId,
+						ActorSetupCardId = witchUse.ActorSetupCardId,
+						ActorBorrowedActivationId = identity.PowerInstanceId,
+						CommittedTargetIds = [witchUse.TargetPlayerId],
+						NextInstructionSemantic = nextInstruction.Semantic,
+						NextInstructionId = nextInstruction.InstructionId
+					};
+				}
+
+				if (newActorBorrowedWitchPotionDeclineCommits is
+					[var witchDecline])
+				{
+					if (!IsCorrelatedActorBorrowedWitchPotionDecline(
+							session,
+							marker,
+							witchDecline,
+							startingInstruction,
+							input,
+							nextInstruction))
+					{
+						throw new InvalidOperationException(
+							"One accepted response must produce exactly one correlated Actor borrowed Witch potion decline.");
+					}
+
+					var identity = witchDecline.PowerIdentity;
+					return new DomainRecoveryCursor
+					{
+						Version = DomainRecoveryCursor.CurrentVersion,
+						Kind = DomainRecoveryCursorKind
+							.ActorBorrowedWitchPotionDeclineCommit,
+						SourceRole = identity.SourceRole,
+						CommittedActionType =
+							ActorBorrowedWitchPotionDeclineCommit
+								.GetOfferedActionType(
+									witchDecline.OfferedResourceIdentity),
+						ActingPlayerId = identity.ActingPlayerId,
+						SourcePowerIdentifier = identity.SourcePowerIdentifier,
+						PowerInstanceId = identity.PowerInstanceId,
+						PowerInstanceOrigin = identity.PowerInstanceOrigin,
+						OneUseResourceId = witchDecline.OfferedResourceIdentity
+							.OneUseResourceId,
+						ActorSetupCardId = witchDecline.ActorSetupCardId,
+						ActorBorrowedActivationId = identity.PowerInstanceId,
+						CommittedTargetIds = [],
+						NextInstructionSemantic = nextInstruction.Semantic,
+						NextInstructionId = nextInstruction.InstructionId
+					};
+				}
+
+				if (newActorBorrowedJudgeSetupCommits is [var judgeSetupCommit])
+				{
+					if (!IsCorrelatedActorBorrowedMarker(
+							session,
+							marker,
+							judgeSetupCommit))
+					{
+						throw new InvalidOperationException(
+							"One accepted response must produce exactly one correlated Actor borrowed Stuttering Judge setup commit.");
+					}
+
+					return null;
+				}
+
+				if (newActorBorrowedJudgeObservationCommits is
+					[var judgeObservationCommit])
+				{
+					if (!IsCorrelatedActorBorrowedJudgeObservation(
+							session,
+							marker,
+							judgeObservationCommit,
+							startingInstruction,
+							input,
+							nextInstruction))
+					{
+						throw new InvalidOperationException(
+							"One accepted response must produce exactly one correlated Actor borrowed Stuttering Judge signal observation commit.");
+					}
+
+					if (!judgeObservationCommit.SignalOccurred)
+					{
+						return null;
+					}
+
+					var identity = judgeObservationCommit.PowerIdentity;
+					var judgeResourceIdentity = judgeObservationCommit
+						.SpentResourceIdentity!.Value;
+					return new DomainRecoveryCursor
+					{
+						Version = DomainRecoveryCursor.CurrentVersion,
+						Kind = DomainRecoveryCursorKind
+							.ActorBorrowedStutteringJudgeSignalObservationCommit,
+						SourceRole = identity.SourceRole,
+						CommittedActionType = NightActionType.Unknown,
+						CommittedDayActionType = DayPowerType.JudgeExtraVote,
+						ActingPlayerId = identity.ActingPlayerId,
+						SourcePowerIdentifier = identity.SourcePowerIdentifier,
+						PowerInstanceId = identity.PowerInstanceId,
+						PowerInstanceOrigin = identity.PowerInstanceOrigin,
+						OneUseResourceId = judgeResourceIdentity.OneUseResourceId,
+						ActorSetupCardId =
+							judgeObservationCommit.ActorSetupCardId,
+						ActorBorrowedActivationId = identity.PowerInstanceId,
+						CommittedTargetIds = [],
+						NextInstructionSemantic = nextInstruction.Semantic,
+						NextInstructionId = nextInstruction.InstructionId
+					};
+				}
+
+				if (newActorBorrowedCupidCommits is [var cupidCommit])
+				{
+					if (!IsCorrelatedActorBorrowedMarker(
+							session,
+							marker,
+							cupidCommit) ||
+						!CupidRole.TryValidateCommittedRecoveryBoundary(
+							session,
+							startingInstruction,
+							input,
+							cupidCommit,
+							nextInstruction))
+					{
+						throw new InvalidOperationException(
+							"One accepted response must produce exactly one correlated Actor borrowed Cupid Lovers commit.");
+					}
+
+					var identity = cupidCommit.PowerIdentity;
+					return new DomainRecoveryCursor
+					{
+						Version = DomainRecoveryCursor.CurrentVersion,
+						Kind = DomainRecoveryCursorKind.RecurringNativeRolePowerCommit,
+						SourceRole = identity.SourceRole,
+						CommittedActionType = NightActionType.CupidLink,
+						ActingPlayerId = identity.ActingPlayerId,
+						SourcePowerIdentifier = identity.SourcePowerIdentifier,
+						PowerInstanceId = identity.PowerInstanceId,
+						PowerInstanceOrigin = identity.PowerInstanceOrigin,
+						OneUseResourceId = Guid.Empty,
+						ActorSetupCardId = cupidCommit.ActorSetupCardId,
+						ActorBorrowedActivationId = identity.PowerInstanceId,
+						CommittedTargetIds = cupidCommit.PlayerIds.ToList(),
+						NextInstructionSemantic = nextInstruction.Semantic,
+						NextInstructionId = nextInstruction.InstructionId
+					};
+				}
+
+				var defenderCommit = newActorBorrowedDefenderCommits.Single();
+			if (!IsCorrelatedActorBorrowedMarker(
+					session,
+					marker,
+					defenderCommit) ||
+				!DefenderRole.TryValidateCommittedRecoveryBoundary(
+					session,
+					startingInstruction,
+					input,
+					defenderCommit,
+					nextInstruction))
+			{
+				throw new InvalidOperationException(
+					"One accepted response must produce exactly one correlated Actor borrowed Defender protection commit.");
+			}
+
+			var defenderIdentity = defenderCommit.PowerIdentity;
+			return new DomainRecoveryCursor
+			{
+				Version = DomainRecoveryCursor.CurrentVersion,
+				Kind = DomainRecoveryCursorKind.RecurringNativeRolePowerCommit,
+				SourceRole = defenderIdentity.SourceRole,
+				CommittedActionType = NightActionType.DefenderProtect,
+				ActingPlayerId = defenderIdentity.ActingPlayerId,
+				SourcePowerIdentifier =
+					defenderIdentity.SourcePowerIdentifier,
+				PowerInstanceId = defenderIdentity.PowerInstanceId,
+				PowerInstanceOrigin = defenderIdentity.PowerInstanceOrigin,
+				OneUseResourceId = Guid.Empty,
+				ActorSetupCardId = defenderCommit.ActorSetupCardId,
+				ActorBorrowedActivationId = defenderIdentity.PowerInstanceId,
+				CommittedTargetIds = [defenderCommit.TargetPlayerId],
+				NextInstructionSemantic = nextInstruction.Semantic,
+				NextInstructionId = nextInstruction.InstructionId
+			};
+		}
 
         if (newCommittedEntries.Length == 0)
         {
@@ -1071,16 +1597,17 @@ internal static class GameFlowManager
         }
 
         var continuationRole = (MainRoleType)currentListener;
-        var retainsLittleGirlGuidanceDecision =
-            acceptedObservationSemantic ==
-                ModeratorInstructionSemantic
-                    .ObserveWerewolfFactionAgentGroup ||
-            continuationRole == SimpleWerewolf &&
-            nextInstruction.Semantic is
-                ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup or
-                ModeratorInstructionSemantic.WakeRole;
-        bool? retainedLittleGirlGuidanceDecision = null;
-        if (retainsLittleGirlGuidanceDecision)
+		var cursor = new AcceptedObservationRecoveryCursor
+		{
+			Version = AcceptedObservationRecoveryCursor.CurrentVersion,
+			AcceptedObservationSemantic = acceptedObservationSemantic,
+			ObservedRole = observedRole,
+			ContinuationRole = continuationRole,
+			RetainedLittleGirlGuidanceDecision = null,
+			NextInstructionSemantic = nextInstruction.Semantic,
+			NextInstructionId = nextInstruction.InstructionId
+		};
+		if (RetainsLittleGirlGuidanceDecision(cursor))
         {
             if (!session.TryGetExistingListener<SimpleWerewolfRole>(
                     Listener(SimpleWerewolf),
@@ -1090,39 +1617,28 @@ internal static class GameFlowManager
                     "The accepted observation requires its Simple Werewolf listener.");
             }
 
-            retainedLittleGirlGuidanceDecision =
+			cursor.RetainedLittleGirlGuidanceDecision =
                 werewolfListener.LittleGirlGuidanceDecision;
         }
 
-        var cursor = new AcceptedObservationRecoveryCursor
-        {
-            Version = AcceptedObservationRecoveryCursor.CurrentVersion,
-            AcceptedObservationSemantic = acceptedObservationSemantic,
-            ObservedRole = observedRole,
-            ContinuationRole = continuationRole,
-            RetainedLittleGirlGuidanceDecision =
-                retainedLittleGirlGuidanceDecision,
-            NextInstructionSemantic = nextInstruction.Semantic,
-            NextInstructionId = nextInstruction.InstructionId
-        };
         ValidateAcceptedObservationRecoverySemantics(
             session,
             cursor,
             nextInstruction);
-        var continuation = ResolvePendingInstructionContinuation(
-            Listener(continuationRole),
-            NightMainActionLoop,
-            session,
-            nextInstruction,
-            admissions);
+		var continuation = ResolvePendingInstructionContinuation(
+			Listener(continuationRole),
+			NightMainActionLoop,
+			session,
+			nextInstruction,
+			admissions);
         if (continuation == null)
         {
             throw new InvalidOperationException(
                 $"Unsupported accepted observation continuation '{acceptedObservationSemantic}:{observedRole}:{continuationRole}:{nextInstruction.Semantic}'.");
         }
 
-        return cursor;
-    }
+		return cursor;
+	}
 
     private static bool TryGetAcceptedObservationRole(
         ModeratorInstruction? startingInstruction,
@@ -1247,21 +1763,17 @@ internal static class GameFlowManager
                 "The accepted observation recovery cursor does not match its committed observation.");
         }
 
-        var livingLittleGirlCount = session.GetPlayers()
-            .Count(player =>
-                player.State.Health == PlayerHealth.Alive &&
-                player.State.CurrentRole == LittleGirl);
-        if (livingLittleGirlCount > 1 ||
-            cursor.RetainedLittleGirlGuidanceDecision.HasValue !=
-            (RetainsLittleGirlGuidanceDecision(cursor) &&
-             livingLittleGirlCount == 1))
-        {
-            throw new InvalidOperationException(
-                "The accepted observation recovery cursor has an invalid retained Little Girl guidance decision.");
-        }
-    }
+		if (!LittleGirlRole.HasValidRetainedGuidanceDecision(
+				session,
+				RetainsLittleGirlGuidanceDecision(cursor),
+				cursor.RetainedLittleGirlGuidanceDecision))
+		{
+			throw new InvalidOperationException(
+				"The accepted observation recovery cursor has an invalid retained Little Girl guidance decision.");
+		}
+	}
 
-    private static bool HasCommittedRoleIdentification(
+	private static bool HasCommittedRoleIdentification(
         GameSession session,
         MainRoleType observedRole)
     {
@@ -1384,12 +1896,12 @@ internal static class GameFlowManager
             session,
             cursor,
             pendingInstruction);
-        var continuation = ResolvePendingInstructionContinuation(
-            Listener(continuationRole),
-            NightMainActionLoop,
-            session,
-            pendingInstruction,
-            admissions);
+		var continuation = ResolvePendingInstructionContinuation(
+			Listener(continuationRole),
+			NightMainActionLoop,
+			session,
+			pendingInstruction,
+			admissions);
         if (continuation == null)
         {
             throw new InvalidOperationException(
@@ -1467,10 +1979,57 @@ internal static class GameFlowManager
         var sourceRole = cursor.SourceRole
             ?? throw new InvalidOperationException(
                 "The domain recovery cursor is structurally invalid.");
+		if (cursor.Kind == DomainRecoveryCursorKind
+			.ActorBorrowedStutteringJudgeSignalObservationCommit)
+		{
+			var expectedVoteInstruction =
+				DayPhaseHandlers.CreateRecordDayVoteInstruction(session);
+			if (sourceRole != MainRoleType.StutteringJudge ||
+				cursor.CommittedActionType != NightActionType.Unknown ||
+				cursor.CommittedDayActionType != DayPowerType.JudgeExtraVote ||
+				session.GetCurrentPhase() != GamePhase.Day ||
+				session.GetSubPhase<DaySubPhases>() !=
+					DaySubPhases.NormalVoting ||
+				session.PendingModeratorInstruction is not
+					SelectPlayersInstruction pendingVoteInstruction ||
+				pendingVoteInstruction.Semantic !=
+					expectedVoteInstruction.Semantic ||
+				!StringComparer.Ordinal.Equals(
+					pendingVoteInstruction.PublicAnnouncement,
+					expectedVoteInstruction.PublicAnnouncement) ||
+				!StringComparer.Ordinal.Equals(
+					pendingVoteInstruction.PrivateInstruction,
+					expectedVoteInstruction.PrivateInstruction) ||
+				(pendingVoteInstruction.AffectedPlayerIds is null) !=
+					(expectedVoteInstruction.AffectedPlayerIds is null) ||
+				pendingVoteInstruction.AffectedPlayerIds is { } affectedPlayerIds &&
+					!affectedPlayerIds.SequenceEqual(
+						expectedVoteInstruction.AffectedPlayerIds!) ||
+				!pendingVoteInstruction.SoundEffects.SequenceEqual(
+					expectedVoteInstruction.SoundEffects) ||
+				!pendingVoteInstruction.SelectablePlayerIds.SetEquals(
+					expectedVoteInstruction.SelectablePlayerIds) ||
+				pendingVoteInstruction.CountConstraint !=
+					expectedVoteInstruction.CountConstraint ||
+				pendingVoteInstruction.RoleIdentification !=
+					expectedVoteInstruction.RoleIdentification ||
+				!StringComparer.Ordinal.Equals(
+					pendingVoteInstruction.EmptySelectionOptionLabel,
+					expectedVoteInstruction.EmptySelectionOptionLabel))
+			{
+				throw new InvalidOperationException(
+					"The Actor borrowed Stuttering Judge recovery cursor does not match the canonical Record Day Vote instruction.");
+			}
+
+			return;
+		}
+
         if (cursor.Kind is not
                 (DomainRecoveryCursorKind.OneUseRolePowerCommit or
                  DomainRecoveryCursorKind.RecurringNativeRolePowerCommit or
-                 DomainRecoveryCursorKind.TargetPrivateRolePowerCommit) ||
+                 DomainRecoveryCursorKind.TargetPrivateRolePowerCommit or
+				 DomainRecoveryCursorKind.ActorBorrowedWitchPotionUseCommit or
+				 DomainRecoveryCursorKind.ActorBorrowedWitchPotionDeclineCommit) ||
             session.GetCurrentPhase() != GamePhase.Night ||
             !IsNightStartSubPhase(session))
         {
@@ -1539,8 +2098,27 @@ internal static class GameFlowManager
                         $"Unsupported recurring Role Power continuation '{sourceRole}'.");
             }
 
-            var hasMatchingRecurringCommit =
-                sourceRole == MainRoleType.Cupid
+			var hasMatchingRecurringCommit =
+				sourceRole == MainRoleType.Cupid &&
+				cursor.PowerInstanceOrigin == RolePowerInstanceOrigin.Borrowed
+					? session.GetActorBorrowedCupidLoversCommits()
+						.Any(commit =>
+							commit.PowerIdentity == cursor.PowerIdentity &&
+							commit.CurrentPhase == GamePhase.Night &&
+							commit.TurnNumber == session.TurnNumber &&
+							commit.PlayerIds.SequenceEqual(
+								cursor.CommittedTargetIds))
+					: sourceRole == MainRoleType.Defender &&
+				cursor.PowerInstanceOrigin == RolePowerInstanceOrigin.Borrowed
+					? session.GetActorBorrowedDefenderProtectionCommits()
+						.Any(commit =>
+							commit.PowerIdentity == cursor.PowerIdentity &&
+							commit.CurrentPhase == GamePhase.Night &&
+							commit.TurnNumber == session.TurnNumber &&
+							cursor.CommittedTargetIds is
+								[var committedTargetId] &&
+							commit.TargetPlayerId == committedTargetId)
+					: sourceRole == MainRoleType.Cupid
                     ? GameSessionQueries.GetCommittedLoversPair(session) is
                         { } entry &&
                             cursor.CommittedActionType ==
@@ -1754,10 +2332,9 @@ internal static class GameFlowManager
                 "Required Faction facts are not ready.");
         }
 
-        var committedLoverIds =
-            GameSessionQueries.GetCommittedLoversPair(session)?
-            .PlayerIds
-            .ToHashSet() ?? [];
+		var committedLoverIds =
+			GameSessionQueries.GetCommittedLoversPlayerIds(session)?
+			.ToHashSet() ?? [];
         return session.GetPlayers()
             .WithHealth(PlayerHealth.Alive)
 			.Select(player => new LivingFactionBeneficiarySnapshot(

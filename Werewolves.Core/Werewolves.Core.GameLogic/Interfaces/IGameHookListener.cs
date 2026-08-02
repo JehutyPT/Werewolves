@@ -40,13 +40,64 @@ internal interface IGameHookListener
     ListenerIdentifier Id { get; }
 }
 
+internal sealed record TargetPrivateRolePowerRecoveryBoundary(
+	int TurnNumber,
+	GamePhase CurrentPhase,
+	NightActionType ActionType,
+	RolePowerInstanceIdentity PowerIdentity,
+	OneUseRolePowerResourceIdentity? SpentResourceIdentity)
+{
+	internal Guid ActingPlayerId => PowerIdentity.ActingPlayerId;
+	internal MainRoleType SourceRole => PowerIdentity.SourceRole;
+	internal string SourcePowerIdentifier =>
+		PowerIdentity.SourcePowerIdentifier;
+
+	internal static TargetPrivateRolePowerRecoveryBoundary FromCommittedEntry(
+		TargetPrivateRolePowerCommittedLogEntry entry)
+	{
+		ArgumentNullException.ThrowIfNull(entry);
+		return new(
+			entry.TurnNumber,
+			entry.CurrentPhase,
+			entry.ActionType,
+			entry.PowerIdentity,
+			entry.SpentResourceIdentity);
+	}
+
+	internal static TargetPrivateRolePowerRecoveryBoundary
+		FromActorBorrowedSeerCheckCommit(
+			ActorBorrowedSeerCheckCommit commit)
+	{
+		ArgumentNullException.ThrowIfNull(commit);
+		return new(
+			commit.TurnNumber,
+			commit.CurrentPhase,
+			NightActionType.SeerCheck,
+				commit.PowerIdentity,
+				SpentResourceIdentity: null);
+	}
+
+	internal static TargetPrivateRolePowerRecoveryBoundary
+		FromActorBorrowedFoxCheckCommit(
+			ActorBorrowedFoxCheckCommit commit)
+	{
+		ArgumentNullException.ThrowIfNull(commit);
+		return new(
+			commit.TurnNumber,
+			commit.CurrentPhase,
+			NightActionType.FoxCheck,
+			commit.PowerIdentity,
+			commit.SpentResourceIdentity);
+	}
+}
+
 internal interface ITargetPrivateRolePowerRecoveryCapability
 {
     bool TryValidateCommittedRecoveryBoundary(
         GameSession session,
         ModeratorInstruction? startingInstruction,
         ModeratorResponse input,
-        TargetPrivateRolePowerCommittedLogEntry committedEntry,
+        TargetPrivateRolePowerRecoveryBoundary committedBoundary,
         ModeratorInstruction nextInstruction);
 
     void ValidateRecoveryCursorIdentity(

@@ -16,6 +16,8 @@ public class GameLogEntryConverter : JsonConverter<GameLogEntryBase>
     {
 	        ["ActorBorrowedRolePowerActivationExpiredLogEntry"] =
 		        typeof(ActorBorrowedRolePowerActivationExpiredLogEntry),
+	        ["ActorBorrowedRolePowerCommittedLogEntry"] =
+		        typeof(ActorBorrowedRolePowerCommittedLogEntry),
 	        ["ActorSetupCardSpendCommittedLogEntry"] =
 		        typeof(ActorSetupCardSpendCommittedLogEntry),
 	        ["AngelExpiredLogEntry"] = typeof(AngelExpiredLogEntry),

@@ -150,7 +150,14 @@ internal static class DayVoteRules
 					GamePhase.Day,
 					entry =>
 						entry.ActionType == DayPowerType.JudgeExtraVote)
-				.Any();
+					.Any() ||
+			session is GameSession concreteSession &&
+			concreteSession
+				.GetActorBorrowedStutteringJudgeSignalObservationCommits()
+				.Any(commit =>
+					commit.SignalOccurred &&
+					commit.CurrentPhase == GamePhase.Day &&
+					commit.TurnNumber == session.TurnNumber);
 		var currentTurnVoteCount =
 			GameSessionQueries.FindLogEntries<VoteOutcomeReportedLogEntry>(
 					session,

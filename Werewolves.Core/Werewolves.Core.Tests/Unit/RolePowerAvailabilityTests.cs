@@ -7,6 +7,8 @@ using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
+using Werewolves.Core.StateModels.Models.Instructions;
+using Werewolves.Core.StateModels.Resources;
 using Werewolves.Core.StateModels.Serialization;
 using Xunit;
 
@@ -298,6 +300,86 @@ public sealed class RolePowerAvailabilityTests
 	}
 
 	[Fact]
+	public void CreateBorrowed_LivingActorAndMatchingSeerActivation_UsesActivationQualifiedIdentity()
+	{
+		var (session, actor, seerCard) = CreateBorrowedSeerFixture();
+		session.TrySpendActorSetupCard(actor.Id, seerCard.Id, out var activation)
+			.Should().BeTrue();
+		var sourcePower = new RolePowerDefinition(
+			new RolePowerIdentifier("seer-werewolf-detection"),
+			RolePowerCategory.Chosen);
+
+		var instance = RolePowerInstance.CreateBorrowed(
+			session,
+			actor,
+			MainRoleType.Seer,
+			sourcePower);
+
+		instance.Id.Should().Be(activation!.ActivationId);
+		instance.SourceRole.Should().Be(MainRoleType.Seer);
+		instance.SourcePower.Should().BeSameAs(sourcePower);
+		instance.Origin.Should().Be(RolePowerInstanceOrigin.Borrowed);
+		actor.State.CurrentRole.Should().Be(MainRoleType.Actor);
+	}
+
+	[Theory]
+	[InlineData(InvalidBorrowedFactoryCase.NoActiveActivation)]
+	[InlineData(InvalidBorrowedFactoryCase.ExpiredActivation)]
+	[InlineData(InvalidBorrowedFactoryCase.DifferentActingPlayer)]
+	[InlineData(InvalidBorrowedFactoryCase.SelectedCardSourceMismatch)]
+	[InlineData(InvalidBorrowedFactoryCase.ActorRoleChanged)]
+	[InlineData(InvalidBorrowedFactoryCase.ActorDead)]
+	public void CreateBorrowed_StaleOrMismatchedActorActivation_Rejects(
+		InvalidBorrowedFactoryCase invalidCase)
+	{
+		var (session, actor, seerCard) = CreateBorrowedSeerFixture();
+		IPlayer actingPlayer = actor;
+		var sourceRole = MainRoleType.Seer;
+		if (invalidCase != InvalidBorrowedFactoryCase.NoActiveActivation)
+		{
+			session.TrySpendActorSetupCard(actor.Id, seerCard.Id, out _)
+				.Should().BeTrue();
+		}
+
+		switch (invalidCase)
+		{
+			case InvalidBorrowedFactoryCase.NoActiveActivation:
+				break;
+			case InvalidBorrowedFactoryCase.ExpiredActivation:
+				session.TryExpireActorBorrowedRolePowerActivation().Should().BeTrue();
+				break;
+			case InvalidBorrowedFactoryCase.DifferentActingPlayer:
+				actingPlayer = session.GetPlayers().Skip(1).First();
+				break;
+			case InvalidBorrowedFactoryCase.SelectedCardSourceMismatch:
+				sourceRole = MainRoleType.Witch;
+				break;
+			case InvalidBorrowedFactoryCase.ActorRoleChanged:
+				session.AssignRole(actor.Id, MainRoleType.SimpleVillager);
+				break;
+			case InvalidBorrowedFactoryCase.ActorDead:
+				session.EliminatePlayer(
+					actor.Id,
+					EliminationReason.EventElimination);
+				break;
+			default:
+				throw new ArgumentOutOfRangeException(nameof(invalidCase));
+		}
+
+		var sourcePower = new RolePowerDefinition(
+			new RolePowerIdentifier("seer-werewolf-detection"),
+			RolePowerCategory.Chosen);
+		var act = () => RolePowerInstance.CreateBorrowed(
+			session,
+			actingPlayer,
+			sourceRole,
+			sourcePower);
+
+		act.Should().Throw<InvalidOperationException>()
+			.WithMessage("*borrowed Role Power activation*");
+	}
+
+	[Fact]
 	public void Evaluate_PolicyReturnsNull_RejectsIncompleteExecutionContext()
 	{
 		var gateway = new RolePowerAvailabilityGateway(new NullResultPolicy());
@@ -497,5 +579,50 @@ public sealed class RolePowerAvailabilityTests
 			throw new NotSupportedException();
 		public int RoleInPlayCount(MainRoleType type) => 0;
 		public string Serialize() => throw new NotSupportedException();
+	}
+
+	private static (GameSession Session, IPlayer Actor,
+		PhysicalCharacterCard SeerCard) CreateBorrowedSeerFixture()
+	{
+		var seerCard = new PhysicalCharacterCard(
+			Guid.Parse("30000000-0000-0000-0000-000000000001"),
+			MainRoleType.Seer);
+		var sessionId = Guid.NewGuid();
+		var session = new GameSession(
+			sessionId,
+			new StartGameConfirmationInstruction(sessionId),
+			new GameSessionConfig(
+				[GameStrings.ActorRoleName, "Werewolf", "Villager 1", "Villager 2", "Villager 3"],
+				[
+					MainRoleType.Actor,
+					MainRoleType.SimpleWerewolf,
+					MainRoleType.SimpleVillager,
+					MainRoleType.SimpleVillager,
+					MainRoleType.SimpleVillager
+				],
+				new ActorSetupCards(
+					version: 1,
+					[
+						seerCard,
+						new PhysicalCharacterCard(
+							Guid.Parse("30000000-0000-0000-0000-000000000002"),
+							MainRoleType.Cupid),
+						new PhysicalCharacterCard(
+							Guid.Parse("30000000-0000-0000-0000-000000000003"),
+							MainRoleType.Witch)
+					])));
+		var actor = session.GetPlayers().First();
+		session.AssignRole(actor.Id, MainRoleType.Actor);
+		return (session, actor, seerCard);
+	}
+
+	public enum InvalidBorrowedFactoryCase
+	{
+		NoActiveActivation,
+		ExpiredActivation,
+		DifferentActingPlayer,
+		SelectedCardSourceMismatch,
+		ActorRoleChanged,
+		ActorDead
 	}
 }
