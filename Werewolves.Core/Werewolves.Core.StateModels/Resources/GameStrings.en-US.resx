@@ -166,4 +166,7 @@
   <data name="ActorSetupCardSelectionInstruction" xml:space="preserve">
     <value>Actor, optionally choose one remaining setup card.</value>
   </data>
+  <data name="ActorBorrowedRolePowerInvalidResponse" xml:space="preserve">
+    <value>The borrowed Role Power response is invalid or no longer available.</value>
+  </data>
 </root>

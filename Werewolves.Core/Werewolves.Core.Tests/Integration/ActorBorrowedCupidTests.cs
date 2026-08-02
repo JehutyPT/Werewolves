@@ -164,6 +164,108 @@ public sealed class ActorBorrowedCupidTests
 			.BeEmpty();
 	}
 
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public void NightOneLoversClassification_NativeAndBorrowedPairsReachTheSameOutcomeInOneClosure(
+		bool crossFaction)
+	{
+		var native = CreateNativeFirstNightCupidSession();
+		var nativeLovers = SelectClassificationPair(
+			native.Session,
+			crossFaction);
+		native.Session.CommitLoversPair(
+			nativeLovers,
+			new RolePowerInstanceIdentity(
+				native.CupidId,
+				MainRoleType.Cupid,
+				CupidRole.LinkLoversPowerIdentifier.Value,
+				native.CupidId,
+				RolePowerInstanceOrigin.Native));
+		var nativeBoundary = CommitCompleteWerewolfAgentObservation(
+			native.Session,
+			native.WerewolfId);
+		var nativeHistoryCountBeforeClosure =
+			native.Session.GameHistoryLog.Count();
+
+		InitialBeneficiaryClosureRules.TryCommitCurrentSession(
+				native.Session,
+				nativeBoundary)
+			.Should().Be(InitialBeneficiaryClosureResult.Committed);
+
+		var (borrowedSession, start, _) = CreateFirstNightActorSession();
+		PerformSpendOpening(
+			CreateActorRole(),
+			borrowedSession,
+			start,
+			CupidCard.Id);
+		var borrowedLovers = SelectClassificationPair(
+			borrowedSession,
+			crossFaction);
+		IGameHookListener listener = new CupidRole(
+			new RolePowerAvailabilityGateway(
+				AllowAllRolePowerAvailabilityPolicy.Instance));
+		var wake = Advance(listener, borrowedSession, start.CreateResponse())
+			.Instruction.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var selection = Advance(
+			listener,
+			borrowedSession,
+			wake.CreateResponse()).Instruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		borrowedSession.SetPendingModeratorInstruction(RecoveryKey, selection);
+		GameFlowManager.HandleInput(
+			borrowedSession,
+			selection.CreateResponse(borrowedLovers.ToHashSet()),
+			SupportedRoleCatalog.Admissions);
+		var borrowedBoundary = CommitCompleteWerewolfAgentObservation(
+			borrowedSession,
+			borrowedSession.GetPlayers().Single(player =>
+				player.Name == "Werewolf").Id);
+		var borrowedHistoryCountBeforeClosure =
+			borrowedSession.GameHistoryLog.Count();
+
+		InitialBeneficiaryClosureRules.TryCommitCurrentSession(
+				borrowedSession,
+				borrowedBoundary)
+			.Should().Be(InitialBeneficiaryClosureResult.Committed);
+
+		var expectedFaction = crossFaction
+			? Faction.CrossFactionLovers
+			: Faction.Villager;
+		nativeLovers.Should().OnlyContain(playerId =>
+			native.Session.RequireKnownFactionBeneficiary(playerId) ==
+			expectedFaction);
+		borrowedLovers.Should().OnlyContain(playerId =>
+			borrowedSession.RequireKnownFactionBeneficiary(playerId) ==
+			expectedFaction);
+		native.Session.GameHistoryLog.Should().HaveCount(
+			nativeHistoryCountBeforeClosure + 1);
+		borrowedSession.GameHistoryLog.Should().HaveCount(
+			borrowedHistoryCountBeforeClosure + 1);
+		native.Session.GameHistoryLog
+			.OfType<FactionFactsCommittedLogEntry>().Should()
+			.ContainSingle(entry =>
+				entry.Source.Kind ==
+				FactionFactSourceKind.InitialBeneficiaryClosure);
+		borrowedSession.GameHistoryLog
+			.OfType<FactionFactsCommittedLogEntry>().Should()
+			.ContainSingle(entry =>
+				entry.Source.Kind ==
+				FactionFactSourceKind.InitialBeneficiaryClosure);
+		borrowedSession.GameHistoryLog
+			.OfType<ActorBorrowedRolePowerCommittedLogEntry>().Should()
+			.ContainSingle();
+		borrowedSession.GameHistoryLog
+			.OfType<FactionFactsCommittedLogEntry>()
+			.Where(entry =>
+				entry.Source.Kind !=
+				FactionFactSourceKind.InitialBeneficiaryClosure)
+			.SelectMany(entry => entry.Facts)
+			.Should().NotContain(fact =>
+				borrowedLovers.Contains(fact.PlayerId) &&
+				fact.Faction == Faction.CrossFactionLovers);
+	}
+
 	[Fact]
 	public void BorrowedCupid_LaterNightSourceSlotKeepsActorIdentityAndSelectsExactlyTwoLivingPlayers()
 	{
@@ -280,6 +382,59 @@ public sealed class ActorBorrowedCupidTests
 
 		completion.Outcome.Should().Be(HookListenerOutcome.Complete);
 		completion.Instruction.Should().BeNull();
+	}
+
+	[Fact]
+	public void BorrowedCupid_LaterNightSameFactionPairPreservesKnownBeneficiaries()
+	{
+		var (session, start, _) = CreateLaterNightActorSession();
+		PerformSpendOpening(
+			CreateActorRole(),
+			session,
+			start,
+			CupidCard.Id);
+		var lovers = session.GetPlayers()
+			.Where(player => player.Name.StartsWith(
+				"Villager",
+				StringComparison.Ordinal))
+			.Take(2)
+			.Select(player => player.Id)
+			.ToArray();
+		ArrangeKnownBeneficiaries(
+			session,
+			lovers.Select(playerId => (playerId, Faction.Villager)).ToArray());
+		IGameHookListener listener = new CupidRole(
+			new RolePowerAvailabilityGateway(
+				AllowAllRolePowerAvailabilityPolicy.Instance));
+		var wake = Advance(listener, session, start.CreateResponse()).Instruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var selection = Advance(listener, session, wake.CreateResponse())
+			.Instruction.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		var historyCountBeforeCommit = session.GameHistoryLog.Count();
+		session.SetPendingModeratorInstruction(RecoveryKey, selection);
+
+		var recognition = GameFlowManager.HandleInput(
+				session,
+				selection.CreateResponse(lovers.ToHashSet()),
+				SupportedRoleCatalog.Admissions).ModeratorInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+
+		recognition.Semantic.Should().Be(
+			ModeratorInstructionSemantic.RecognizeLovers);
+		session.GetActorBorrowedCupidLoversCommits()
+			.Should().ContainSingle()
+			.Which.Disposition.Should().Be(
+				ActorBorrowedCupidLoversDisposition.SameFaction);
+		lovers.Should().OnlyContain(playerId =>
+			session.RequireKnownFactionBeneficiary(playerId) == Faction.Villager);
+		lovers.Should().OnlyContain(playerId =>
+			session.GetPlayerState(playerId)
+				.HasStatusEffect(StatusEffectTypes.Lovers));
+		session.GameHistoryLog.Skip(historyCountBeforeCommit).Should()
+			.ContainSingle()
+			.Which.Should().BeOfType<ActorBorrowedRolePowerCommittedLogEntry>();
+		session.GameHistoryLog.Skip(historyCountBeforeCommit)
+			.OfType<FactionFactsCommittedLogEntry>().Should().BeEmpty();
 	}
 
 	[Fact]
@@ -608,6 +763,55 @@ public sealed class ActorBorrowedCupidTests
 			SubPhaseKey,
 			GameHook.NightMainActionLoop.ToString()).Should().BeTrue();
 		return (session, start, actorId);
+	}
+
+	private static (
+		GameSession Session,
+		Guid CupidId,
+		Guid WerewolfId) CreateNativeFirstNightCupidSession()
+	{
+		var config = new GameSessionConfig(
+			["Werewolf", "Cupid", "Villager 1", "Villager 2", "Villager 3"],
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Cupid,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+		var sessionId = Guid.NewGuid();
+		var session = new GameSession(
+			sessionId,
+			new StartGameConfirmationInstruction(sessionId),
+			config);
+		var players = session.GetPlayers().ToArray();
+		var cupidId = players.Single(player => player.Name == "Cupid").Id;
+		session.AssignRole(cupidId, MainRoleType.Cupid);
+		session.IdentifyRole([cupidId], MainRoleType.Cupid);
+		return (
+			session,
+			cupidId,
+			players.Single(player => player.Name == "Werewolf").Id);
+	}
+
+	private static Guid[] SelectClassificationPair(
+		GameSession session,
+		bool crossFaction)
+	{
+		var villagers = session.GetPlayers()
+			.Where(player => player.Name.StartsWith(
+				"Villager",
+				StringComparison.Ordinal))
+			.Take(2)
+			.Select(player => player.Id)
+			.ToArray();
+		return crossFaction
+			? [
+				session.GetPlayers().Single(player =>
+					player.Name == "Werewolf").Id,
+				villagers[0]
+			]
+			: villagers;
 	}
 
 	private static (

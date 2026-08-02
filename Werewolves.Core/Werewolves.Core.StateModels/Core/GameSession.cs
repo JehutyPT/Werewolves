@@ -441,10 +441,12 @@ internal class GameSession : IGameSession
 
 	internal void CommitActorBorrowedCupidLovers(
 		RolePowerInstanceIdentity powerIdentity,
-		IReadOnlyCollection<Guid> playerIds) =>
+		IReadOnlyCollection<Guid> playerIds,
+		ActorBorrowedCupidLoversDisposition disposition) =>
 		_gameSessionKernel.CommitActorBorrowedCupidLovers(
 			powerIdentity,
-			playerIds);
+			playerIds,
+			disposition);
 
 	internal void CommitActorBorrowedStutteringJudgeSignalSetup(
 		RolePowerInstanceIdentity powerIdentity) =>

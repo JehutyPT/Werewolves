@@ -495,10 +495,13 @@ internal sealed class FoxRole
 		GameSession session,
 		ModeratorResponse input)
 	{
+		var execution = ResolveExecution(session);
 		if (input.SelectedPlayerIds is not { Count: <= 1 } selectedPlayerIds)
 		{
 			throw new InvalidOperationException(
-				"The Fox may select at most one living Player.");
+				execution.IsBorrowed
+					? GameStrings.ActorBorrowedRolePowerInvalidResponse
+					: "The Fox may select at most one living Player.");
 		}
 
 		if (selectedPlayerIds.Count == 0)
@@ -506,26 +509,26 @@ internal sealed class FoxRole
 			return PrepareSleepInstruction(session);
 		}
 
-		var execution = ResolveExecution(session);
-
 		var livingPlayers = session.GetPlayers()
 			.WithHealth(PlayerHealth.Alive)
 			.ToArray();
+		var centerId = selectedPlayerIds.Single();
+		var center = livingPlayers.SingleOrDefault(player =>
+			player.Id == centerId);
+		if (center is null)
+		{
+			throw new InvalidOperationException(
+				execution.IsBorrowed
+					? GameStrings.ActorBorrowedRolePowerInvalidResponse
+					: "The Fox center selection is unavailable.");
+		}
+
 		if (livingPlayers.Any(player =>
 				player.State.GetFactionAgentKnowledge(Faction.Werewolf) ==
 				FactionAgentKnowledge.Unknown))
 		{
 			throw new InvalidOperationException(
 				"The current living Werewolf Faction Agent facts are incomplete.");
-		}
-
-		var center = session.GetPlayer(selectedPlayerIds.Single());
-		if (center.State.Health != PlayerHealth.Alive)
-		{
-			throw new InvalidOperationException(
-				execution.IsBorrowed
-					? "The borrowed Role Power response is invalid or no longer available."
-					: "The Fox center selection is unavailable.");
 		}
 
 		var neighbors = GameSessionQueries.GetDirectionalLivingNeighbors(

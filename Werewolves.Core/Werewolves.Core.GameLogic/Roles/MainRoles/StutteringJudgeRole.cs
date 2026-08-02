@@ -135,10 +135,27 @@ internal sealed class StutteringJudgeRole
 					    ModeratorInstructionSemantic
 						    .EstablishStutteringJudgeSignal
 			    } &&
-			    HasExpectedAffectedRoleHolders(session, pendingInstruction))
+			    (HasExpectedAffectedRoleHolders(session, pendingInstruction) ||
+			     HasValidBorrowedSignalSetupInstruction(
+				     session,
+				     pendingInstruction)))
 			{
 				listenerState =
 					StutteringJudgeRoleState.AwaitingSignalSetup.ToString();
+				return true;
+			}
+
+			if (pendingInstruction is ConfirmationInstruction
+			    {
+				    Semantic:
+					    ModeratorInstructionSemantic.PutRoleToSleep
+			    } &&
+			    HasValidBorrowedSignalSetupSleep(
+				    session,
+				    pendingInstruction))
+			{
+				listenerState =
+					StutteringJudgeRoleState.NightComplete.ToString();
 				return true;
 			}
 
@@ -159,6 +176,7 @@ internal sealed class StutteringJudgeRole
 		if (session.GetCurrentPhase() != GamePhase.Day ||
 		    session.GetSubPhase<DaySubPhases>() !=
 			    DaySubPhases.NormalVoting ||
+		    GameSessionQueries.GetCurrentDayVoteOutcome(session) != null ||
 		    pendingInstruction is not
 			    SelectOptionsInstruction signalInstruction ||
 		    signalInstruction.SelectionRange !=
@@ -176,15 +194,45 @@ internal sealed class StutteringJudgeRole
 				"The pending Stuttering Judge signal instruction is structurally invalid.");
 		}
 
-		if (TryResolveBorrowedDayExecution(session, out var borrowedExecution) &&
-			(signalInstruction.PublicAnnouncement != null ||
-			 signalInstruction.PrivateInstruction !=
-			 GameStrings.StutteringJudgeSignalObservationInstruction ||
-			 signalInstruction.AffectedPlayerIds is not [var affectedPlayerId] ||
-			 affectedPlayerId != borrowedExecution.ActingPlayer.Id))
+		IPlayer signalObserver;
+		if (session.GetModeratorActiveActorBorrowedRolePowerActivation()
+			    ?.SourceRole == MainRoleType.StutteringJudge)
+		{
+			if (!TryResolveBorrowedDayExecution(
+				    session,
+				    out var borrowedExecution))
+			{
+				throw new InvalidOperationException(
+					"The pending Actor borrowed Stuttering Judge signal instruction is stale.");
+			}
+
+			signalObserver = borrowedExecution.ActingPlayer;
+		}
+		else
+		{
+			var nativeObserver =
+				GetAliveRolePlayers(session)?.SingleOrDefault();
+			if (nativeObserver is null ||
+			    !GameSessionQueries.HasStutteringJudgeSignalBeenEstablished(
+				    session,
+				    nativeObserver.Id))
+			{
+				throw new InvalidOperationException(
+					"The pending Stuttering Judge signal instruction has no valid execution.");
+			}
+
+			signalObserver = nativeObserver;
+		}
+
+		if (signalInstruction.PublicAnnouncement != null ||
+			!StringComparer.Ordinal.Equals(
+				signalInstruction.PrivateInstruction,
+				GameStrings.StutteringJudgeSignalObservationInstruction) ||
+			signalInstruction.AffectedPlayerIds is not [var affectedPlayerId] ||
+			affectedPlayerId != signalObserver.Id)
 		{
 			throw new InvalidOperationException(
-				"The pending Actor borrowed Stuttering Judge signal instruction is structurally invalid.");
+				"The pending Stuttering Judge signal instruction is structurally invalid.");
 		}
 
 		listenerState =
@@ -640,36 +688,12 @@ internal sealed class StutteringJudgeRole
 
 	internal static bool HasValidEstablishedSignal(GameSession session)
 	{
-		if (TryResolveBorrowedExecution(session, out var borrowedExecution))
+		if (session.GetModeratorActiveActorBorrowedRolePowerActivation()
+			?.SourceRole == MainRoleType.StutteringJudge)
 		{
-			var activation = session
-				.GetModeratorActiveActorBorrowedRolePowerActivation()!;
-			var powerIdentity = CreatePowerIdentity(borrowedExecution);
-			var matchingSetups = session
-				.GetActorBorrowedStutteringJudgeSignalSetupCommits()
-				.Where(commit =>
-					commit.PowerIdentity == powerIdentity &&
-					commit.ActorSetupCardId == activation.SelectedCardId)
-				.ToArray();
-			var expectedPublicAnnouncement =
-				GameStrings.RoleGoesToSleepSingle.Format(
-					GameStrings.ActorRoleName);
-			return matchingSetups is [var setup] &&
-			       setup.TurnNumber == session.TurnNumber &&
-			       setup.CurrentPhase == GamePhase.Night &&
-			       session.PendingModeratorInstruction is
-				       ConfirmationInstruction
-				       {
-					       Semantic:
-						       ModeratorInstructionSemantic.PutRoleToSleep,
-					       PublicAnnouncement: var publicAnnouncement,
-					       PrivateInstruction: null,
-					       AffectedPlayerIds: [var affectedPlayerId]
-				       } &&
-			       StringComparer.Ordinal.Equals(
-				       publicAnnouncement,
-				       expectedPublicAnnouncement) &&
-			       affectedPlayerId == borrowedExecution.ActingPlayer.Id;
+			return HasValidBorrowedSignalSetupSleep(
+				session,
+				session.PendingModeratorInstruction);
 		}
 
 		var judges = session.GetPlayers()
@@ -683,5 +707,75 @@ internal sealed class StutteringJudgeRole
 		return judges is [var judge] &&
 		       entries is [var entry] &&
 		       entry.JudgePlayerId == judge.Id;
+	}
+
+	private static bool HasValidBorrowedSignalSetupSleep(
+		GameSession session,
+		ModeratorInstruction? pendingInstruction)
+	{
+		var expectedPublicAnnouncement =
+			GameStrings.RoleGoesToSleepSingle.Format(
+				GameStrings.ActorRoleName);
+		if (pendingInstruction is not ConfirmationInstruction
+		    {
+			    Semantic:
+				    ModeratorInstructionSemantic.PutRoleToSleep,
+			    PublicAnnouncement: var publicAnnouncement,
+			    PrivateInstruction: null,
+			    AffectedPlayerIds: [var affectedPlayerId]
+		    } ||
+		    !StringComparer.Ordinal.Equals(
+			    publicAnnouncement,
+			    expectedPublicAnnouncement))
+		{
+			return false;
+		}
+
+		if (!TryResolveBorrowedExecution(session, out var borrowedExecution))
+		{
+			return false;
+		}
+
+		var activation = session
+			.GetModeratorActiveActorBorrowedRolePowerActivation()!;
+		var powerIdentity = CreatePowerIdentity(borrowedExecution);
+		var matchingSetups = session
+			.GetActorBorrowedStutteringJudgeSignalSetupCommits()
+			.Where(commit =>
+				commit.PowerIdentity == powerIdentity &&
+				commit.ActorSetupCardId == activation.SelectedCardId)
+			.ToArray();
+		return matchingSetups is [var setup] &&
+		       setup.TurnNumber == session.TurnNumber &&
+		       setup.CurrentPhase == GamePhase.Night &&
+		       affectedPlayerId == borrowedExecution.ActingPlayer.Id;
+	}
+
+	private static bool HasValidBorrowedSignalSetupInstruction(
+		GameSession session,
+		ModeratorInstruction pendingInstruction)
+	{
+		if (session.GetCurrentPhase() != GamePhase.Night ||
+		    !TryResolveBorrowedExecution(session, out var borrowedExecution) ||
+		    GameSessionQueries.HasStutteringJudgeSignalBeenEstablished(
+			    session,
+			    CreatePowerIdentity(borrowedExecution)))
+		{
+			return false;
+		}
+
+		return pendingInstruction is ConfirmationInstruction
+		       {
+			       Semantic:
+				       ModeratorInstructionSemantic
+					       .EstablishStutteringJudgeSignal,
+			       PublicAnnouncement: null,
+			       PrivateInstruction: var privateInstruction,
+			       AffectedPlayerIds: [var affectedPlayerId]
+		       } &&
+		       StringComparer.Ordinal.Equals(
+			       privateInstruction,
+			       GameStrings.StutteringJudgeSignalSetupInstruction) &&
+		       affectedPlayerId == borrowedExecution.ActingPlayer.Id;
 	}
 }

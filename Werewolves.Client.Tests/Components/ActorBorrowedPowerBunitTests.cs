@@ -1,10 +1,10 @@
+using System.Globalization;
 using Bunit;
 using FluentAssertions;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Werewolves.Client.Components.Game.Views;
 using Werewolves.Client.Resources;
-using Werewolves.Client.Services;
 using Werewolves.Client.Testing;
 using Werewolves.Client.Tests.Helpers;
 using Werewolves.Core.StateModels.Enums;
@@ -14,45 +14,29 @@ using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Resources;
 using Xunit;
 using Html = Werewolves.Client.Tests.Helpers.ClientTestReferences.Html;
-using PlayerNames = Werewolves.Client.Tests.Helpers.ClientTestReferences.PlayerNames;
 
 namespace Werewolves.Client.Tests.Components;
 
 public sealed class ActorBorrowedPowerBunitTests
 {
-	private static readonly Guid ActorId =
-		Guid.Parse("72000000-0000-0000-0000-000000000001");
-	private static readonly Guid FirstTargetId =
-		Guid.Parse("72000000-0000-0000-0000-000000000002");
-	private static readonly Guid SecondTargetId =
-		Guid.Parse("72000000-0000-0000-0000-000000000003");
-	private static readonly Guid ThirdTargetId =
-		Guid.Parse("72000000-0000-0000-0000-000000000004");
-	private static readonly Guid InstructionId =
-		Guid.Parse("72000000-0000-0000-0000-000000000005");
-	private static readonly IReadOnlyList<Guid> SensitiveLineageIds =
-	[
-		Guid.Parse("72000000-0000-0000-0000-000000000101"),
-		Guid.Parse("72000000-0000-0000-0000-000000000102"),
-		Guid.Parse("72000000-0000-0000-0000-000000000103")
-	];
-
 	[Theory]
-	[InlineData(BorrowedFamily.Seer)]
-	[InlineData(BorrowedFamily.Cupid)]
-	[InlineData(BorrowedFamily.Witch)]
-	[InlineData(BorrowedFamily.LittleGirl)]
-	[InlineData(BorrowedFamily.Defender)]
-	[InlineData(BorrowedFamily.Fox)]
-	[InlineData(BorrowedFamily.StutteringJudge)]
+	[InlineData(ActorBorrowedPowerFamily.Seer)]
+	[InlineData(ActorBorrowedPowerFamily.Cupid)]
+	[InlineData(ActorBorrowedPowerFamily.Witch)]
+	[InlineData(ActorBorrowedPowerFamily.LittleGirl)]
+	[InlineData(ActorBorrowedPowerFamily.Defender)]
+	[InlineData(ActorBorrowedPowerFamily.Fox)]
+	[InlineData(ActorBorrowedPowerFamily.StutteringJudge)]
 	public async Task BorrowedFamily_RendersPortuguesePrivateContextWithoutPublicLineageLeak(
-		BorrowedFamily family)
+		ActorBorrowedPowerFamily family)
 	{
 		var timing = new ControlledHoldButtonTiming();
 		using var context = new ModeratorComponentTestContext();
+		CultureInfo.CurrentUICulture.Name.Should().Be(
+			ModeratorComponentTestContext.PortugueseCulture.Name);
 		context.Services.AddSingleton<IHoldButtonTiming>(timing);
 		var responses = new List<ModeratorResponse>();
-		var scenario = CreateScenario(family);
+		var scenario = ActorBorrowedInstructionFixture.Create(family);
 		var cut = context.RenderModeratorComponent<InstructionRenderer>(parameters =>
 			parameters
 				.Add(component => component.Instruction, scenario.Instruction)
@@ -64,18 +48,22 @@ public sealed class ActorBorrowedPowerBunitTests
 						responses.Add)));
 
 		scenario.Instruction.Semantic.Should().Be(ExpectedSemantic(family));
+		if (scenario.Instruction is SelectPlayersInstruction playerSelection)
+		{
+			playerSelection.RoleIdentification.Should().BeNull();
+		}
 		scenario.Instruction.PublicAnnouncement.Should().Be(
-			family == BorrowedFamily.LittleGirl
+			family == ActorBorrowedPowerFamily.LittleGirl
 				? GameStrings.RoleHoldersWakeUp.Format(
 					GameStrings.WerewolvesGroupName)
 				: null);
-		if (family == BorrowedFamily.LittleGirl)
+		if (family == ActorBorrowedPowerFamily.LittleGirl)
 		{
 			scenario.Instruction.AffectedPlayerIds.Should().BeNull();
 		}
 		else
 		{
-			scenario.Instruction.AffectedPlayerIds.Should().Equal(ActorId);
+			scenario.Instruction.AffectedPlayerIds.Should().Equal(scenario.ActorId);
 		}
 		AssertInstructionShape(family, scenario.Instruction);
 
@@ -113,7 +101,9 @@ public sealed class ActorBorrowedPowerBunitTests
 		foreach (var privateFact in new[]
 			{
 				GameStrings.ActorRoleName,
-				scenario.SourceRole.GetPublicName()
+				MainRoleType.Actor.ToString(),
+				scenario.SourceRole.GetPublicName(),
+				scenario.SourceRole.ToString()
 			}
 			.Concat(scenario.PrivateFragments)
 			.Concat(scenario.PrivateFacts)
@@ -121,17 +111,20 @@ public sealed class ActorBorrowedPowerBunitTests
 		{
 			publicText.Should().NotContain(privateFact);
 		}
-		foreach (var lineageId in SensitiveLineageIds)
+		foreach (var lineageId in scenario.SensitiveLineageIds)
 		{
-			cut.Markup.Contains(
-				lineageId.ToString("D"),
-				StringComparison.OrdinalIgnoreCase).Should().BeFalse();
+			foreach (var format in new[] { "D", "N" })
+			{
+				cut.Markup.Contains(
+					lineageId.ToString(format),
+					StringComparison.OrdinalIgnoreCase).Should().BeFalse();
+			}
 		}
 
 		if (family is not
-			(BorrowedFamily.Seer or
-			 BorrowedFamily.Cupid or
-			 BorrowedFamily.StutteringJudge))
+			(ActorBorrowedPowerFamily.Seer or
+			 ActorBorrowedPowerFamily.Cupid or
+			 ActorBorrowedPowerFamily.StutteringJudge))
 		{
 			responses.Should().BeEmpty();
 			return;
@@ -145,11 +138,11 @@ public sealed class ActorBorrowedPowerBunitTests
 
 		var response = responses.Should().ContainSingle().Subject;
 		response.InstructionId.Should().Be(scenario.Instruction.InstructionId);
-		response.Type.Should().Be(scenario.ResponseShape switch
+		response.Type.Should().Be(scenario.Instruction switch
 		{
-			ResponseShape.Confirmation => ExpectedInputType.Continue,
-			ResponseShape.Players => ExpectedInputType.PlayerSelection,
-			ResponseShape.Options => ExpectedInputType.OptionSelection,
+			ConfirmationInstruction => ExpectedInputType.Continue,
+			SelectPlayersInstruction => ExpectedInputType.PlayerSelection,
+			SelectOptionsInstruction => ExpectedInputType.OptionSelection,
 			_ => throw new ArgumentOutOfRangeException()
 		});
 		if (scenario.SelectedPlayerIds.Count > 0)
@@ -163,168 +156,34 @@ public sealed class ActorBorrowedPowerBunitTests
 		}
 	}
 
-	private static Scenario CreateScenario(BorrowedFamily family)
-	{
-		var roster = CreateRoster();
-		return family switch
-		{
-			BorrowedFamily.Seer => new(
-				MainRoleType.Seer,
-				new ConfirmationInstruction(
-					ModeratorInstructionSemantic.RevealSeerResult,
-					privateInstruction: GameStrings.SeerResultWerewolfTeam.Format(
-						PlayerNames.Catarina),
-					affectedPlayerIds: [ActorId],
-					instructionId: InstructionId),
-				roster,
-				[GameStrings.SeerResultWerewolfTeam.Format(PlayerNames.Catarina)],
-				[PlayerNames.Catarina],
-				ResponseShape.Confirmation,
-				[],
-				null),
-			BorrowedFamily.Cupid => new(
-				MainRoleType.Cupid,
-				new SelectPlayersInstruction(
-					ModeratorInstructionSemantic.SelectCupidLovers,
-					[FirstTargetId, SecondTargetId, ThirdTargetId],
-					NumberRangeConstraint.Exact(2),
-					privateInstruction: GameStrings.CupidTargetSelectionInstruction,
-					affectedPlayerIds: [ActorId],
-					instructionId: InstructionId),
-				roster,
-				[GameStrings.CupidTargetSelectionInstruction],
-				[PlayerNames.Catarina, PlayerNames.Eduardo],
-				ResponseShape.Players,
-				[FirstTargetId, SecondTargetId],
-				null),
-			BorrowedFamily.Witch => new(
-				MainRoleType.Witch,
-				new SelectPlayersInstruction(
-					ModeratorInstructionSemantic.SelectWitchHealingTarget,
-					[FirstTargetId],
-					NumberRangeConstraint.SingleOptional,
-					privateInstruction:
-						GameStrings.WitchHealingSelectionInstruction.Format(
-							PlayerNames.Catarina),
-					affectedPlayerIds: [ActorId],
-					instructionId: InstructionId)
-				{
-					EmptySelectionOptionLabel = GameStrings.DeclineOption
-				},
-				roster,
-				[GameStrings.WitchHealingSelectionInstruction.Format(
-					PlayerNames.Catarina)],
-				[PlayerNames.Catarina],
-				ResponseShape.Players,
-				[],
-				null),
-			BorrowedFamily.LittleGirl => new(
-				MainRoleType.LittleGirl,
-				new SelectPlayersInstruction(
-					ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup,
-					[ActorId, FirstTargetId, SecondTargetId, ThirdTargetId],
-					NumberRangeConstraint.AtLeast(1),
-					publicAnnouncement: GameStrings.RoleHoldersWakeUp.Format(
-						GameStrings.WerewolvesGroupName),
-					privateInstruction: LittleGirlPrivateInstruction,
-					instructionId: InstructionId),
-				roster,
-				[
-					GameStrings.WerewolfFactionAgentObservationPrompt,
-					GameStrings.LittleGirlOpeningGuidance
-				],
-				[PlayerNames.Catarina],
-				ResponseShape.Players,
-				[],
-				null),
-			BorrowedFamily.Defender => new(
-				MainRoleType.Defender,
-				new SelectPlayersInstruction(
-					ModeratorInstructionSemantic.SelectDefenderTarget,
-					[ActorId, FirstTargetId, SecondTargetId],
-					NumberRangeConstraint.Single,
-					privateInstruction:
-						GameStrings.DefenderTargetSelectionInstruction,
-					affectedPlayerIds: [ActorId],
-					instructionId: InstructionId),
-				roster,
-				[GameStrings.DefenderTargetSelectionInstruction],
-				[PlayerNames.Catarina],
-				ResponseShape.Players,
-				[],
-				null),
-			BorrowedFamily.Fox => new(
-				MainRoleType.Fox,
-				new ConfirmationInstruction(
-					ModeratorInstructionSemantic.RevealFoxResult,
-					privateInstruction:
-						GameStrings.FoxAffirmativeFeedbackInstruction,
-					affectedPlayerIds: [ActorId],
-					instructionId: InstructionId),
-				roster,
-				[GameStrings.FoxAffirmativeFeedbackInstruction],
-				[PlayerNames.Catarina],
-				ResponseShape.Confirmation,
-				[],
-				null),
-			BorrowedFamily.StutteringJudge => new(
-				MainRoleType.StutteringJudge,
-				new SelectOptionsInstruction(
-					ModeratorInstructionSemantic.ObserveStutteringJudgeSignal,
-					[
-						new ModeratorOption(
-							StutteringJudgeSignalOptionIds.Occurred,
-							GameStrings.StutteringJudgeSignalOccurredOption),
-						new ModeratorOption(
-							StutteringJudgeSignalOptionIds.DidNotOccur,
-							GameStrings.StutteringJudgeSignalDidNotOccurOption)
-					],
-					NumberRangeConstraint.Single,
-					privateInstruction:
-						GameStrings.StutteringJudgeSignalObservationInstruction,
-					affectedPlayerIds: [ActorId],
-					instructionId: InstructionId),
-				roster,
-				[GameStrings.StutteringJudgeSignalObservationInstruction],
-				[
-					GameStrings.StutteringJudgeSignalOccurredOption,
-					GameStrings.StutteringJudgeSignalDidNotOccurOption
-				],
-				ResponseShape.Options,
-				[],
-				StutteringJudgeSignalOptionIds.Occurred),
-			_ => throw new ArgumentOutOfRangeException(nameof(family))
-		};
-	}
-
 	private static void AssertInstructionShape(
-		BorrowedFamily family,
+		ActorBorrowedPowerFamily family,
 		ModeratorInstruction instruction)
 	{
 		switch (family)
 		{
-			case BorrowedFamily.Seer or BorrowedFamily.Fox:
+			case ActorBorrowedPowerFamily.Seer or ActorBorrowedPowerFamily.Fox:
 				instruction.Should().BeOfType<ConfirmationInstruction>();
 				return;
-			case BorrowedFamily.Cupid:
+			case ActorBorrowedPowerFamily.Cupid:
 				instruction.Should().BeOfType<SelectPlayersInstruction>()
 					.Which.CountConstraint.Should().Be(NumberRangeConstraint.Exact(2));
 				return;
-			case BorrowedFamily.Witch:
+			case ActorBorrowedPowerFamily.Witch:
 				var witch = instruction.Should()
 					.BeOfType<SelectPlayersInstruction>().Subject;
 				witch.CountConstraint.Should().Be(NumberRangeConstraint.SingleOptional);
 				witch.EmptySelectionOptionLabel.Should().Be(GameStrings.DeclineOption);
 				return;
-			case BorrowedFamily.LittleGirl:
+			case ActorBorrowedPowerFamily.LittleGirl:
 				instruction.Should().BeOfType<SelectPlayersInstruction>()
 					.Which.CountConstraint.Should().Be(NumberRangeConstraint.AtLeast(1));
 				return;
-			case BorrowedFamily.Defender:
+			case ActorBorrowedPowerFamily.Defender:
 				instruction.Should().BeOfType<SelectPlayersInstruction>()
 					.Which.CountConstraint.Should().Be(NumberRangeConstraint.Single);
 				return;
-			case BorrowedFamily.StutteringJudge:
+			case ActorBorrowedPowerFamily.StutteringJudge:
 				var options = instruction.Should()
 					.BeOfType<SelectOptionsInstruction>().Subject;
 				options.SelectionRange.Should().Be(NumberRangeConstraint.Single);
@@ -354,7 +213,7 @@ public sealed class ActorBorrowedPowerBunitTests
 
 	private static void SelectResponseValue(
 		IRenderedComponent<InstructionRenderer> cut,
-		Scenario scenario)
+		ActorBorrowedInstructionScenario scenario)
 	{
 		foreach (var playerId in scenario.SelectedPlayerIds)
 		{
@@ -385,76 +244,21 @@ public sealed class ActorBorrowedPowerBunitTests
 	}
 
 	private static ModeratorInstructionSemantic ExpectedSemantic(
-		BorrowedFamily family) => family switch
+		ActorBorrowedPowerFamily family) => family switch
 	{
-		BorrowedFamily.Seer => ModeratorInstructionSemantic.RevealSeerResult,
-		BorrowedFamily.Cupid => ModeratorInstructionSemantic.SelectCupidLovers,
-		BorrowedFamily.Witch =>
+		ActorBorrowedPowerFamily.Seer => ModeratorInstructionSemantic.RevealSeerResult,
+		ActorBorrowedPowerFamily.Cupid => ModeratorInstructionSemantic.SelectCupidLovers,
+		ActorBorrowedPowerFamily.Witch =>
 			ModeratorInstructionSemantic.SelectWitchHealingTarget,
-		BorrowedFamily.LittleGirl =>
+		ActorBorrowedPowerFamily.LittleGirl =>
 			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup,
-		BorrowedFamily.Defender =>
+		ActorBorrowedPowerFamily.Defender =>
 			ModeratorInstructionSemantic.SelectDefenderTarget,
-		BorrowedFamily.Fox => ModeratorInstructionSemantic.RevealFoxResult,
-		BorrowedFamily.StutteringJudge =>
+		ActorBorrowedPowerFamily.Fox => ModeratorInstructionSemantic.RevealFoxResult,
+		ActorBorrowedPowerFamily.StutteringJudge =>
 			ModeratorInstructionSemantic.ObserveStutteringJudgeSignal,
 		_ => throw new ArgumentOutOfRangeException(nameof(family))
 	};
 
-	private static string LittleGirlPrivateInstruction => string.Join(
-		Environment.NewLine + Environment.NewLine,
-		GameStrings.WerewolfFactionAgentObservationPrompt,
-		GameStrings.LittleGirlOpeningGuidance);
-
-	private static IReadOnlyList<DashboardRosterEntry> CreateRoster() =>
-	[
-		CreateRosterEntry(ActorId, 1, PlayerNames.Ana),
-		CreateRosterEntry(FirstTargetId, 2, PlayerNames.Catarina),
-		CreateRosterEntry(SecondTargetId, 3, PlayerNames.Eduardo),
-		CreateRosterEntry(ThirdTargetId, 4, PlayerNames.Filipe)
-	];
-
-	private static DashboardRosterEntry CreateRosterEntry(
-		Guid playerId,
-		int seatNumber,
-		string name) => new(
-		playerId,
-		seatNumber,
-		name,
-		DashboardRoster.UnknownRoleLabel,
-		IsRoleKnown: false,
-		DashboardRoster.HealthLabel(PlayerHealth.Alive),
-		IsDead: false,
-		StatusEffects: [],
-		DashboardRoster.NoStatusEffectsLabel);
-
 	private static string TestId(string value) => $"[data-testid='{value}']";
-
-	public enum BorrowedFamily
-	{
-		Seer,
-		Cupid,
-		Witch,
-		LittleGirl,
-		Defender,
-		Fox,
-		StutteringJudge
-	}
-
-	private enum ResponseShape
-	{
-		Confirmation,
-		Players,
-		Options
-	}
-
-	private sealed record Scenario(
-		MainRoleType SourceRole,
-		ModeratorInstruction Instruction,
-		IReadOnlyList<DashboardRosterEntry> Roster,
-		IReadOnlyList<string> PrivateFragments,
-		IReadOnlyList<string> PrivateFacts,
-		ResponseShape ResponseShape,
-		IReadOnlyList<Guid> SelectedPlayerIds,
-		string? SelectedOptionId);
 }

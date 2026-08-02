@@ -31,14 +31,15 @@ internal sealed record ActorBorrowedWitchPotionDeclineCommandLogEntry
 				"This Session Mutator does not project Actor borrowed Witch potion declines.");
 		}
 
-		var publicMarker = new ActorBorrowedRolePowerCommittedLogEntry
+		var integrityCommitment =
+			actorMutator.ApplyActorBorrowedWitchPotionDecline(this);
+		return new ActorBorrowedRolePowerCommittedLogEntry
 		{
 			Timestamp = Timestamp,
 			TurnNumber = TurnNumber,
-			CurrentPhase = CurrentPhase
+			CurrentPhase = CurrentPhase,
+			IntegrityCommitment = integrityCommitment
 		};
-		actorMutator.ApplyActorBorrowedWitchPotionDecline(this);
-		return publicMarker;
 	}
 
 	public override string ToString() =>

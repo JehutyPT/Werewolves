@@ -19,6 +19,7 @@ internal class GameSessionDto
 	public List<PhysicalCharacterCardStateDto> PhysicalCharacterCards { get; set; } = new();
 	public ActorSetupCardsDto? ActorSetupCards { get; set; }
 	public List<ActorSetupCardSpendDto>? ActorSetupCardSpends { get; set; } = new();
+	public string? ActorBorrowedRolePowerCommitmentKey { get; set; }
 	public ActorBorrowedRolePowerActivationDto?
 		ActiveActorBorrowedRolePowerActivation { get; set; }
 	public List<ActorBorrowedSeerCheckCommitDto> ActorBorrowedSeerCheckCommits

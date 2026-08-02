@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Models;
@@ -33,14 +34,15 @@ internal sealed record ActorBorrowedSeerCheckCommandLogEntry
 				"This Session Mutator does not project Actor borrowed Seer checks.");
 		}
 
-		var publicMarker = new ActorBorrowedRolePowerCommittedLogEntry
+		var integrityCommitment =
+			actorMutator.ApplyActorBorrowedSeerCheck(this);
+		return new ActorBorrowedRolePowerCommittedLogEntry
 		{
 			Timestamp = Timestamp,
 			TurnNumber = TurnNumber,
-			CurrentPhase = CurrentPhase
+			CurrentPhase = CurrentPhase,
+			IntegrityCommitment = integrityCommitment
 		};
-		actorMutator.ApplyActorBorrowedSeerCheck(this);
-		return publicMarker;
 	}
 
 	public override string ToString() => "ActorBorrowedSeerCheckCommand";
@@ -53,12 +55,21 @@ internal sealed record ActorBorrowedSeerCheckCommandLogEntry
 /// </summary>
 public sealed record ActorBorrowedRolePowerCommittedLogEntry : GameLogEntryBase
 {
+	/// <summary>
+	/// Opaque session-keyed commitment to the complete private commit. It carries
+	/// no independently enumerable Actor, source, action, target, resource, or
+	/// result fact.
+	/// </summary>
+	[JsonInclude]
+	internal string IntegrityCommitment { get; init; } = string.Empty;
+
 	internal override void EnforceValidity()
 	{
-		if (CurrentPhase is not (GamePhase.Night or GamePhase.Day))
+		if (CurrentPhase is not (GamePhase.Night or GamePhase.Day) ||
+			!ActorBorrowedRolePowerCommitment.IsWellFormed(IntegrityCommitment))
 		{
 			throw new InvalidOperationException(
-				"An Actor borrowed Role Power can only commit during Night or Day.");
+				"An Actor borrowed Role Power marker is structurally invalid.");
 		}
 	}
 

@@ -482,6 +482,32 @@ internal sealed class RecoveryPayloadTestDriver
 		return this;
 	}
 
+	internal RecoveryPayloadTestDriver RewritePendingPlayerSelectionPresentation(
+		string? privateInstruction,
+		string? emptySelectionOptionLabel)
+	{
+		if (_payload.PendingInstruction is not
+		    SelectPlayersInstruction pending)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no pending Player selection.");
+		}
+
+		_payload.PendingInstruction = new SelectPlayersInstruction(
+			pending.Semantic,
+			pending.SelectablePlayerIds.ToHashSet(),
+			pending.CountConstraint,
+			pending.PublicAnnouncement,
+			privateInstruction,
+			pending.AffectedPlayerIds,
+			pending.RoleIdentification,
+			pending.InstructionId)
+		{
+			EmptySelectionOptionLabel = emptySelectionOptionLabel
+		};
+		return this;
+	}
+
 	internal RecoveryPayloadTestDriver RewriteLatestStutteringJudgeAction(
 		DayPowerType actionType)
 	{
@@ -993,6 +1019,248 @@ internal sealed class RecoveryPayloadTestDriver
 		return this;
 	}
 
+	internal RecoveryPayloadTestDriver RetargetActorBorrowedDefenderCommit(
+		Guid targetPlayerId)
+	{
+		if (targetPlayerId == Guid.Empty)
+		{
+			throw new ArgumentException(
+				"A recovery test target Player identity cannot be empty.",
+				nameof(targetPlayerId));
+		}
+
+		_payload.ActorBorrowedDefenderProtectionCommits.Single().TargetPlayerId =
+			targetPlayerId;
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver MutateActorBorrowedPrivateCommit(
+		ActorBorrowedPrivateCommitMutation mutation)
+	{
+		RequireCursorlessStableBoundary();
+		switch (mutation)
+		{
+			case ActorBorrowedPrivateCommitMutation.SeerTarget:
+			{
+				var commit = _payload.ActorBorrowedSeerCheckCommits.Single();
+				commit.TargetPlayerId = RequireAlternatePlayerId(
+					commit.TargetPlayerId,
+					commit.PowerIdentity.ActingPlayerId);
+				break;
+			}
+			case ActorBorrowedPrivateCommitMutation.SeerResult:
+			{
+				var commit = _payload.ActorBorrowedSeerCheckCommits.Single();
+				commit.TargetAgentKnowledge = commit.TargetAgentKnowledge ==
+					FactionAgentKnowledge.KnownAgent
+						? FactionAgentKnowledge.KnownNonAgent
+						: FactionAgentKnowledge.KnownAgent;
+				break;
+			}
+			case ActorBorrowedPrivateCommitMutation.DefenderTarget:
+			{
+				var commit =
+					_payload.ActorBorrowedDefenderProtectionCommits.Single();
+				commit.TargetPlayerId = RequireAlternatePlayerId(
+					commit.TargetPlayerId);
+				break;
+			}
+			case ActorBorrowedPrivateCommitMutation.FoxCenter:
+			{
+				var commit = _payload.ActorBorrowedFoxCheckCommits.Single();
+				commit.CenterPlayerId = RequireAlternatePlayerId(
+					commit.CenterPlayerId);
+				break;
+			}
+			case ActorBorrowedPrivateCommitMutation.FoxResultAndResource:
+			{
+				var commit = _payload.ActorBorrowedFoxCheckCommits.Single();
+				if (commit.NeighborhoodAgentKnowledge ==
+					FactionAgentKnowledge.KnownAgent)
+				{
+					commit.NeighborhoodAgentKnowledge =
+						FactionAgentKnowledge.KnownNonAgent;
+					commit.SpentResourceIdentity = CreateResourceIdentity(
+						commit.PowerIdentity,
+						Guid.NewGuid());
+				}
+				else
+				{
+					commit.NeighborhoodAgentKnowledge =
+						FactionAgentKnowledge.KnownAgent;
+					commit.SpentResourceIdentity = null;
+				}
+				break;
+			}
+			case ActorBorrowedPrivateCommitMutation.WitchUseTarget:
+			{
+				var commit = _payload.ActorBorrowedWitchPotionUseCommits.Single();
+				commit.TargetPlayerId = RequireAlternatePlayerId(
+					commit.TargetPlayerId,
+					commit.PowerIdentity.ActingPlayerId);
+				break;
+			}
+			case ActorBorrowedPrivateCommitMutation.WitchUseResource:
+			{
+				var commit = _payload.ActorBorrowedWitchPotionUseCommits.Single();
+				commit.SpentResourceIdentity = commit.SpentResourceIdentity with
+				{
+					OneUseResourceId = AlternateWitchResourceId(
+						commit.SpentResourceIdentity.OneUseResourceId)
+				};
+				break;
+			}
+			case ActorBorrowedPrivateCommitMutation.WitchDeclineResource:
+			{
+				var commit =
+					_payload.ActorBorrowedWitchPotionDeclineCommits.Single();
+				commit.OfferedResourceIdentity = commit.OfferedResourceIdentity with
+				{
+					OneUseResourceId = AlternateWitchResourceId(
+						commit.OfferedResourceIdentity.OneUseResourceId)
+				};
+				break;
+			}
+			case ActorBorrowedPrivateCommitMutation.CupidPair:
+			{
+				var commit = _payload.ActorBorrowedCupidLoversCommits.Single();
+				var alternatePair = _payload.Players
+					.Select(player => player.Id)
+					.Where(playerId =>
+						playerId != commit.FirstPlayerId &&
+						playerId != commit.SecondPlayerId)
+					.Order()
+					.Take(2)
+					.ToArray();
+				if (alternatePair.Length != 2)
+				{
+					throw new InvalidOperationException(
+						"The recovery test payload has no alternate Lovers pair.");
+				}
+
+				commit.FirstPlayerId = alternatePair[0];
+				commit.SecondPlayerId = alternatePair[1];
+				foreach (var player in _payload.Players)
+				{
+					player.ActiveEffects = alternatePair.Contains(player.Id)
+						? player.ActiveEffects | StatusEffectTypes.Lovers
+						: player.ActiveEffects & ~StatusEffectTypes.Lovers;
+				}
+				break;
+			}
+			case ActorBorrowedPrivateCommitMutation.CupidDisposition:
+			{
+				var commit = _payload.ActorBorrowedCupidLoversCommits.Single();
+				commit.Disposition = commit.Disposition ==
+					ActorBorrowedCupidLoversDisposition.SameFaction
+						? ActorBorrowedCupidLoversDisposition.CrossFaction
+						: ActorBorrowedCupidLoversDisposition.SameFaction;
+				break;
+			}
+			case ActorBorrowedPrivateCommitMutation.JudgeSetupPowerLineage:
+			{
+				var commit = _payload
+					.ActorBorrowedStutteringJudgeSignalSetupCommits.Single();
+				var activationId = Guid.NewGuid();
+				commit.PowerIdentity = commit.PowerIdentity with
+				{
+					PowerInstanceId = activationId
+				};
+				_payload.ActorSetupCardSpends!.Single(spend =>
+					spend.CardId == commit.ActorSetupCardId).ActivationId = activationId;
+				var active = _payload.ActiveActorBorrowedRolePowerActivation
+					?? throw new InvalidOperationException(
+						"The recovery test payload has no active Actor activation.");
+				active.ActivationId = activationId;
+				break;
+			}
+			case ActorBorrowedPrivateCommitMutation.JudgeObservationSignalAndResource:
+			{
+				var commit = _payload
+					.ActorBorrowedStutteringJudgeSignalObservationCommits.Single();
+				commit.SignalOccurred = !commit.SignalOccurred;
+				commit.SpentResourceIdentity = commit.SignalOccurred
+					? CreateResourceIdentity(
+						commit.PowerIdentity,
+						ActorBorrowedStutteringJudgeSignalObservationCommit
+							.ExpectedOneUseResourceId)
+					: null;
+				break;
+			}
+			default:
+				throw new ArgumentOutOfRangeException(nameof(mutation));
+		}
+
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver InjectSecondActorSpendAsActiveActivation(
+		Guid selectedCardId,
+		Guid activationId)
+	{
+		if (selectedCardId == Guid.Empty || activationId == Guid.Empty)
+		{
+			throw new ArgumentException(
+				"The recovery test Actor spend requires stable card and activation identities.");
+		}
+
+		var cursor = RequireDomainCursor();
+		if (cursor.Kind != DomainRecoveryCursorKind
+				.ActorBorrowedStutteringJudgeSignalObservationCommit)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no Actor borrowed Judge observation cursor.");
+		}
+
+		var selectedCard = _payload.ActorSetupCards?.Cards?
+			.SingleOrDefault(card => card.Id == selectedCardId)
+			?? throw new InvalidOperationException(
+				"The recovery test payload has no selected Actor Setup Card.");
+		var spends = _payload.ActorSetupCardSpends
+			?? throw new InvalidOperationException(
+				"The recovery test payload has no Actor Setup Card spends.");
+		if (spends.Any(spend =>
+				spend.CardId == selectedCardId ||
+				spend.ActivationId == activationId))
+		{
+			throw new InvalidOperationException(
+				"The recovery test Actor spend is not fresh.");
+		}
+
+		var currentActive = _payload.ActiveActorBorrowedRolePowerActivation
+			?? throw new InvalidOperationException(
+				"The recovery test payload has no active Actor activation.");
+		spends.Add(new ActorSetupCardSpendDto
+		{
+			CardId = selectedCardId,
+			ActivationId = activationId
+		});
+		_payload.ActiveActorBorrowedRolePowerActivation =
+			new ActorBorrowedRolePowerActivationDto
+			{
+				ActivationId = activationId,
+				ActingPlayerId = currentActive.ActingPlayerId,
+				ActingRole = MainRoleType.Actor,
+				SelectedCardId = selectedCardId,
+				SourceRole = selectedCard.PrintedRole
+			};
+		var timestamp = _payload.GameHistoryLog.Last().Timestamp;
+		_payload.GameHistoryLog.Add(
+			new ActorBorrowedRolePowerActivationExpiredLogEntry
+			{
+				Timestamp = timestamp.AddTicks(1),
+				TurnNumber = _payload.TurnNumber,
+				CurrentPhase = GamePhase.Night
+			});
+		_payload.GameHistoryLog.Add(new ActorSetupCardSpendCommittedLogEntry
+		{
+			Timestamp = timestamp.AddTicks(2),
+			TurnNumber = _payload.TurnNumber,
+			CurrentPhase = GamePhase.Night
+		});
+		return this;
+	}
+
 	internal string Serialize() =>
 		JsonSerializer.Serialize(_payload, SerializationOptions);
 
@@ -1083,4 +1351,61 @@ internal sealed class RecoveryPayloadTestDriver
 		_payload.DomainRecoveryCursor
 		?? throw new InvalidOperationException(
 			"The recovery test payload has no committed domain continuation.");
+
+	private void RequireCursorlessStableBoundary()
+	{
+		if (!_payload.IsStableRecoveryBoundary ||
+			_payload.AcceptedObservationRecoveryCursor is not null ||
+			_payload.DomainRecoveryCursor is not null)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload is not a cursorless stable boundary.");
+		}
+	}
+
+	private Guid RequireAlternatePlayerId(
+		Guid currentPlayerId,
+		params Guid[] excludedPlayerIds)
+	{
+		var alternate = _payload.Players
+			.Select(player => player.Id)
+			.FirstOrDefault(playerId =>
+				playerId != currentPlayerId &&
+				!excludedPlayerIds.Contains(playerId));
+		return alternate != Guid.Empty
+			? alternate
+			: throw new InvalidOperationException(
+				"The recovery test payload has no alternate Player.");
+	}
+
+	private static Guid AlternateWitchResourceId(Guid resourceId) =>
+		resourceId == ActorBorrowedWitchPotionUseCommit.HealingResourceId
+			? ActorBorrowedWitchPotionUseCommit.PoisonResourceId
+			: ActorBorrowedWitchPotionUseCommit.HealingResourceId;
+
+	private static OneUseRolePowerResourceIdentity CreateResourceIdentity(
+		RolePowerInstanceIdentity powerIdentity,
+		Guid resourceId) => new(
+			powerIdentity.ActingPlayerId,
+			powerIdentity.SourceRole,
+			powerIdentity.SourcePowerIdentifier,
+			powerIdentity.PowerInstanceId,
+			powerIdentity.PowerInstanceOrigin,
+			resourceId);
+}
+
+public enum ActorBorrowedPrivateCommitMutation
+{
+	SeerTarget,
+	SeerResult,
+	DefenderTarget,
+	FoxCenter,
+	FoxResultAndResource,
+	WitchUseTarget,
+	WitchUseResource,
+	WitchDeclineResource,
+	CupidPair,
+	CupidDisposition,
+	JudgeSetupPowerLineage,
+	JudgeObservationSignalAndResource
 }

@@ -15,6 +15,7 @@ using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Resources;
 using Werewolves.Core.StateModels.Serialization;
+using Werewolves.Core.Tests.Helpers;
 using Xunit;
 
 namespace Werewolves.Core.Tests.Integration;
@@ -34,6 +35,7 @@ public sealed class ActorBorrowedStutteringJudgeTests
 	private static readonly TestSubPhaseManagerKey SubPhaseKey = new();
 	private static readonly TestHookSubPhaseKey HookKey = new();
 	private static readonly TestGameFlowManagerKey FlowKey = new();
+	private static readonly TestPhaseManagerKey PhaseKey = new();
 
 	[Fact]
 	public void BorrowedStutteringJudge_LaterNightSetupUsesActorAudienceAndActivationQualifiedCompletion()
@@ -100,6 +102,57 @@ public sealed class ActorBorrowedStutteringJudgeTests
 		session.GetPlayerState(actorId).CurrentRole.Should().Be(MainRoleType.Actor);
 		session.GetModeratorActiveActorBorrowedRolePowerActivation().Should()
 			.Be(activation);
+	}
+
+	[Fact]
+	public void BorrowedStutteringJudge_PendingSetupRecoversAtActorAudienceAndCommitsOnce()
+	{
+		var (session, start, actorId) = CreateLaterNightActorSession();
+		var activation = PerformSpendOpening(
+			CreateActorRole(),
+			session,
+			start,
+			StutteringJudgeCard.Id);
+		IGameHookListener listener = new StutteringJudgeRole(
+			new RolePowerAvailabilityGateway(
+				AllowAllRolePowerAvailabilityPolicy.Instance));
+		var wake = Advance(listener, session, start.CreateResponse()).Instruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var setup = Advance(listener, session, wake.CreateResponse()).Instruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		session.SetPendingModeratorInstruction(FlowKey, setup);
+		session.CaptureRecoveryBoundary(FlowKey);
+		var historyCountBeforeSetup = session.GameHistoryLog.Count();
+		var service = new GameService();
+
+		var gameId = service.RehydrateSession(session.Serialize());
+		var recoveredSetup = service.GetCurrentInstruction(gameId).Should()
+			.BeOfType<ConfirmationInstruction>().Subject;
+
+		recoveredSetup.InstructionId.Should().Be(setup.InstructionId);
+		recoveredSetup.Semantic.Should().Be(
+			ModeratorInstructionSemantic.EstablishStutteringJudgeSignal);
+		recoveredSetup.PublicAnnouncement.Should().BeNull();
+		recoveredSetup.PrivateInstruction.Should().Be(
+			GameStrings.StutteringJudgeSignalSetupInstruction);
+		recoveredSetup.AffectedPlayerIds.Should().Equal(actorId);
+
+		var sleep = service.ProcessInstruction(
+				gameId,
+				recoveredSetup.CreateResponse()).ModeratorInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var recovered = (GameSession)service.GetGameStateView(gameId)!;
+
+		sleep.Semantic.Should().Be(ModeratorInstructionSemantic.PutRoleToSleep);
+		sleep.PublicAnnouncement.Should().Be(
+			GameStrings.RoleGoesToSleepSingle.Format(GameStrings.ActorRoleName));
+		sleep.AffectedPlayerIds.Should().Equal(actorId);
+		recovered.GetActorBorrowedStutteringJudgeSignalSetupCommits().Should()
+			.ContainSingle(commit =>
+				commit.PowerIdentity.PowerInstanceId == activation.ActivationId);
+		recovered.GameHistoryLog.Skip(historyCountBeforeSetup)
+			.OfType<ActorBorrowedRolePowerCommittedLogEntry>().Should()
+			.ContainSingle();
 	}
 
 	[Fact]
@@ -346,6 +399,100 @@ public sealed class ActorBorrowedStutteringJudgeTests
 	}
 
 	[Fact]
+	public void BorrowedStutteringJudge_PendingObservationRejectsMismatchedActiveActivationOnRecovery()
+	{
+		var (session, start, actorId) = CreateLaterNightActorSession();
+		var activation = PerformSpendOpening(
+			CreateActorRole(),
+			session,
+			start,
+			StutteringJudgeCard.Id);
+		var powerIdentity = new RolePowerInstanceIdentity(
+			actorId,
+			MainRoleType.StutteringJudge,
+			"stuttering-judge-consecutive-vote",
+			activation.ActivationId,
+			RolePowerInstanceOrigin.Borrowed);
+		session.CommitActorBorrowedStutteringJudgeSignalSetup(powerIdentity);
+		session.TransitionMainPhase(GamePhase.Day);
+		session.SetPendingModeratorInstruction(FlowKey, start);
+		var debate = GameFlowManager.HandleInput(
+				session,
+				start.CreateResponse(),
+				SupportedRoleCatalog.Admissions).ModeratorInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var conductVote = GameFlowManager.HandleInput(
+				session,
+				debate.CreateResponse(),
+				SupportedRoleCatalog.Admissions).ModeratorInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var signal = GameFlowManager.HandleInput(
+				session,
+				conductVote.CreateResponse(),
+				SupportedRoleCatalog.Admissions).ModeratorInstruction
+			.Should().BeOfType<SelectOptionsInstruction>().Subject;
+		session.TransitionMainPhase(GamePhase.Night);
+		session.TryExpireActorBorrowedRolePowerActivation().Should().BeTrue();
+		session.TrySpendActorSetupCard(actorId, SeerCard.Id, out _).Should().BeTrue();
+		session.TransitionMainPhase(GamePhase.Day);
+		session.TransitionSubPhaseCache(PhaseKey, DaySubPhases.NormalVoting);
+		session.TryEnterSubPhaseStage(
+			SubPhaseKey,
+			GameHook.OnVoteConducted.ToString()).Should().BeTrue();
+		session.SetPendingModeratorInstruction(FlowKey, signal);
+		session.CaptureRecoveryBoundary(FlowKey);
+		var recovered = new GameSession(session.Serialize());
+
+		var rehydrate = () => GameFlowManager.RestoreDurableContinuation(
+			recovered,
+			SupportedRoleCatalog.Admissions);
+
+		rehydrate.Should().Throw<InvalidOperationException>()
+			.WithMessage("*Stuttering Judge signal instruction*");
+	}
+
+	[Fact]
+	public void BorrowedStutteringJudge_CursorlessObservationRejectsSignalAndResourceTamper()
+	{
+		var session = CreateCursorlessCommittedJudgeObservationSession();
+		session.GetDomainRecoveryCursor(FlowKey).Should().BeNull();
+		Action rehydrateUntampered = () =>
+			new GameSession(session.Serialize());
+		rehydrateUntampered.Should().NotThrow();
+		var tampered = RecoveryPayloadTestDriver
+			.Parse(session.Serialize())
+			.MutateActorBorrowedPrivateCommit(
+				ActorBorrowedPrivateCommitMutation
+					.JudgeObservationSignalAndResource)
+			.Serialize();
+
+		Action rehydrateTampered = () => new GameSession(tampered);
+
+		rehydrateTampered.Should().Throw<InvalidOperationException>()
+			.WithMessage("*Actor borrowed Role Power*");
+	}
+
+	[Fact]
+	public void BorrowedStutteringJudge_RecoveryRejectsTwoSpendTamperWithDifferentActiveActivation()
+	{
+		var fixture = CreateCommittedJudgeObservationBoundary();
+		Action rehydrateUntampered = () =>
+			new GameSession(fixture.Session.Serialize());
+		rehydrateUntampered.Should().NotThrow();
+		var tampered = RecoveryPayloadTestDriver
+			.Parse(fixture.Session.Serialize())
+			.InjectSecondActorSpendAsActiveActivation(
+				SeerCard.Id,
+				Guid.NewGuid())
+			.Serialize();
+
+		Action rehydrateTampered = () => new GameSession(tampered);
+
+		rehydrateTampered.Should().Throw<InvalidOperationException>()
+			.WithMessage("*Stuttering Judge recovery cursor*");
+	}
+
+	[Fact]
 	public void BorrowedStutteringJudge_SignalDidNotOccurPreservesPowerAndDoesNotScheduleRepeat()
 	{
 		var (session, start, actorId) = CreateLaterNightActorSession();
@@ -578,6 +725,56 @@ public sealed class ActorBorrowedStutteringJudgeTests
 			new VillagerRolePowerSuppressionPolicy(
 				AllowAllRolePowerAvailabilityPolicy.Instance)));
 
+	private static CommittedJudgeObservationBoundary
+		CreateCommittedJudgeObservationBoundary()
+	{
+		var (session, start, actorId) = CreateLaterNightActorSession();
+		var activation = PerformSpendOpening(
+			CreateActorRole(),
+			session,
+			start,
+			StutteringJudgeCard.Id);
+		var powerIdentity = new RolePowerInstanceIdentity(
+			actorId,
+			MainRoleType.StutteringJudge,
+			"stuttering-judge-consecutive-vote",
+			activation.ActivationId,
+			RolePowerInstanceOrigin.Borrowed);
+		session.CommitActorBorrowedStutteringJudgeSignalSetup(powerIdentity);
+		session.TransitionMainPhase(GamePhase.Day);
+		session.SetPendingModeratorInstruction(FlowKey, start);
+		var debate = GameFlowManager.HandleInput(
+				session,
+				start.CreateResponse(),
+				SupportedRoleCatalog.Admissions).ModeratorInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var conductVote = GameFlowManager.HandleInput(
+				session,
+				debate.CreateResponse(),
+				SupportedRoleCatalog.Admissions).ModeratorInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var signal = GameFlowManager.HandleInput(
+				session,
+				conductVote.CreateResponse(),
+				SupportedRoleCatalog.Admissions).ModeratorInstruction
+			.Should().BeOfType<SelectOptionsInstruction>().Subject;
+		_ = GameFlowManager.HandleInput(
+				session,
+				signal.CreateResponse(StutteringJudgeSignalOptionIds.Occurred),
+				SupportedRoleCatalog.Admissions).ModeratorInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+
+		return new CommittedJudgeObservationBoundary(session);
+	}
+
+	internal static GameSession
+		CreateCursorlessCommittedJudgeObservationSession()
+	{
+		var fixture = CreateCommittedJudgeObservationBoundary();
+		fixture.Session.CaptureRecoveryBoundary(FlowKey);
+		return fixture.Session;
+	}
+
 	private static void ActivateVillagerRolePowerSuppression(
 		GameSession session)
 	{
@@ -726,4 +923,6 @@ public sealed class ActorBorrowedStutteringJudgeTests
 	private sealed class TestSubPhaseManagerKey : ISubPhaseManagerKey;
 	private sealed class TestHookSubPhaseKey : IHookSubPhaseKey;
 	private sealed class TestGameFlowManagerKey : IGameFlowManagerKey;
+	private sealed class TestPhaseManagerKey : IPhaseManagerKey;
+	private sealed record CommittedJudgeObservationBoundary(GameSession Session);
 }

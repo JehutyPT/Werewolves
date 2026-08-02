@@ -437,13 +437,15 @@ internal sealed class DefenderRole
 		GameSession session,
 		ModeratorResponse input)
 	{
+		var execution = ResolveExecution(session);
 		if (input.SelectedPlayerIds is not { Count: 1 } selectedPlayerIds)
 		{
 			throw new InvalidOperationException(
-				"The Defender must select exactly one Player.");
+				execution.IsBorrowed
+					? GameStrings.ActorBorrowedRolePowerInvalidResponse
+					: "The Defender must select exactly one Player.");
 		}
 
-		var execution = ResolveExecution(session);
 		var powerIdentity = CreatePowerIdentity(execution);
 		var hasCommittedProtection = execution.IsBorrowed
 			? GetBorrowedProtectionCommitsThisNight(session, powerIdentity).Any()
@@ -451,7 +453,9 @@ internal sealed class DefenderRole
 		if (hasCommittedProtection)
 		{
 			throw new InvalidOperationException(
-				"Only one Defender protection may be committed per Night.");
+				execution.IsBorrowed
+					? GameStrings.ActorBorrowedRolePowerInvalidResponse
+					: "Only one Defender protection may be committed per Night.");
 		}
 
 		var targetId = selectedPlayerIds.Single();
@@ -459,7 +463,7 @@ internal sealed class DefenderRole
 		{
 			throw new InvalidOperationException(
 				execution.IsBorrowed
-					? "The borrowed Role Power response is invalid or no longer available."
+				? GameStrings.ActorBorrowedRolePowerInvalidResponse
 					: "The Defender target must be one legal living Player.");
 		}
 

@@ -76,6 +76,82 @@ public sealed class ActorBorrowedDefenderFoxTests
 	}
 
 	[Fact]
+	public void BorrowedDefender_MalformedSelectionUsesGenericErrorWithoutMutation()
+	{
+		var (session, start, actorId, _) = CreateActorSession();
+		var activation = PerformSpendOpening(
+			CreateActorRole(),
+			session,
+			start,
+			DefenderCard.Id);
+		IGameHookListener listener = new DefenderRole(
+			new RolePowerAvailabilityGateway(
+				AllowAllRolePowerAvailabilityPolicy.Instance));
+		var wake = Advance(listener, session, start.CreateResponse()).Instruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var selection = Advance(listener, session, wake.CreateResponse()).Instruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		var historyCount = session.GameHistoryLog.Count();
+		var malformed = new ModeratorResponse
+		{
+			InstructionId = selection.InstructionId,
+			Type = ExpectedInputType.PlayerSelection,
+			SelectedPlayerIds = selection.SelectablePlayerIds.Take(2).ToHashSet()
+		};
+
+		var act = () => Advance(listener, session, malformed);
+
+		act.Should().Throw<InvalidOperationException>().WithMessage(
+			GameStrings.ActorBorrowedRolePowerInvalidResponse);
+		session.GameHistoryLog.Should().HaveCount(historyCount);
+		session.GetActorBorrowedDefenderProtectionCommits().Should().BeEmpty();
+		session.GetModeratorActiveActorBorrowedRolePowerActivation().Should()
+			.Be(activation);
+		session.GetPlayerState(actorId).CurrentRole.Should().Be(MainRoleType.Actor);
+	}
+
+	[Fact]
+	public void BorrowedDefender_StaleSelectionAfterCommitUsesGenericErrorWithoutDuplicate()
+	{
+		var (session, start, actorId, _) = CreateActorSession();
+		var activation = PerformSpendOpening(
+			CreateActorRole(),
+			session,
+			start,
+			DefenderCard.Id);
+		IGameHookListener listener = new DefenderRole(
+			new RolePowerAvailabilityGateway(
+				AllowAllRolePowerAvailabilityPolicy.Instance));
+		var wake = Advance(listener, session, start.CreateResponse()).Instruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var selection = Advance(listener, session, wake.CreateResponse()).Instruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		var selectedTargets = selection.SelectablePlayerIds.Take(2).ToArray();
+		var powerIdentity = CreateBorrowedDefenderPowerIdentity(
+			actorId,
+			activation);
+		session.CommitActorBorrowedDefenderProtection(
+			powerIdentity,
+			selectedTargets[0]);
+		var committed = session.GetActorBorrowedDefenderProtectionCommits()
+			.Should().ContainSingle().Subject;
+		var historyCount = session.GameHistoryLog.Count();
+
+		var act = () => Advance(
+			listener,
+			session,
+			selection.CreateResponse([selectedTargets[1]]));
+
+		act.Should().Throw<InvalidOperationException>().WithMessage(
+			GameStrings.ActorBorrowedRolePowerInvalidResponse);
+		session.GameHistoryLog.Should().HaveCount(historyCount);
+		session.GetActorBorrowedDefenderProtectionCommits().Should()
+			.Equal(committed);
+		session.GetModeratorActiveActorBorrowedRolePowerActivation().Should()
+			.Be(activation);
+	}
+
+	[Fact]
 	public void BorrowedDefender_CommitRecoversAtActorSleepAndBlocksAttackWithoutPublicLeak()
 	{
 		var (session, start, actorId, _) = CreateActorSession();
@@ -164,57 +240,163 @@ public sealed class ActorBorrowedDefenderFoxTests
 	}
 
 	[Fact]
-	public void BorrowedDefender_PrivateHistoryIsActivationQualifiedAndGapResetsConsecutiveExclusion()
+	public void BorrowedDefender_EmittedSelectorExcludesPrecedingTargetAndGapRestoresIt()
 	{
-		var (session, _, actorId, littleGirlId) = CreateActorSession();
+		var (session, start, actorId, littleGirlId) = CreateActorSession();
 		var previousTargetId = session.GetPlayers().Single(player =>
 			player.Name == "Villager 1").Id;
-		var firstActivation = SpendActorSetupCard(
+		var activation = SpendActorSetupCard(
 			session,
 			actorId,
 			DefenderCard.Id);
-		var firstPowerIdentity = CreateBorrowedDefenderPowerIdentity(
-			actorId,
-			firstActivation);
-		session.CommitActorBorrowedDefenderProtection(
-			firstPowerIdentity,
-			previousTargetId);
-		session.TryExpireActorBorrowedRolePowerActivation().Should().BeTrue();
-		AdvanceToNextNight(session);
-		var freshActivationIdentity = firstPowerIdentity with
-		{
-			PowerInstanceId = Guid.Parse(
-				"00000000-0000-0000-0000-000000000146")
-		};
-
-		var sameActivationTargets = GetDefenderEligibleTargets(
+		IGameHookListener listener = new DefenderRole(
+			new RolePowerAvailabilityGateway(
+				AllowAllRolePowerAvailabilityPolicy.Instance));
+		var firstWake = Advance(
+			listener,
 			session,
-			firstPowerIdentity);
-		var newActivationTargets = GetDefenderEligibleTargets(
+			start.CreateResponse()).Instruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var firstSelection = Advance(
+			listener,
 			session,
-			freshActivationIdentity);
-
-		firstPowerIdentity.PowerInstanceId.Should().NotBe(
-			freshActivationIdentity.PowerInstanceId);
-		sameActivationTargets.Should().NotContain(previousTargetId);
-		newActivationTargets.Should().Contain(previousTargetId);
-		sameActivationTargets.Should().Contain(actorId);
-		newActivationTargets.Should().Contain(actorId);
-		sameActivationTargets.Should().NotContain(littleGirlId);
-		newActivationTargets.Should().NotContain(littleGirlId);
-
+			firstWake.CreateResponse()).Instruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		var firstSleep = Advance(
+			listener,
+			session,
+			firstSelection.CreateResponse([previousTargetId])).Instruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		Advance(listener, session, firstSleep.CreateResponse()).Outcome.Should()
+			.Be(HookListenerOutcome.Complete);
+		session.ClearCurrentListenerCache(HookKey);
 		AdvanceToNextNight(session);
+		session.TryEnterSubPhaseStage(
+			SubPhaseKey,
+			GameHook.NightMainActionLoop.ToString()).Should().BeTrue();
+		var wake = Advance(listener, session, start.CreateResponse()).Instruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var consecutiveSelection = Advance(
+			listener,
+			session,
+			wake.CreateResponse()).Instruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
 
-		GetDefenderEligibleTargets(session, firstPowerIdentity).Should()
+		consecutiveSelection.SelectablePlayerIds.Should()
+			.NotContain(previousTargetId)
+			.And.Contain(actorId)
+			.And.NotContain(littleGirlId);
+
+		session.ClearCurrentListenerCache(HookKey);
+		AdvanceToNextNight(session);
+		session.TryEnterSubPhaseStage(
+			SubPhaseKey,
+			GameHook.NightMainActionLoop.ToString()).Should().BeTrue();
+		var gapWake = Advance(
+			listener,
+			session,
+			start.CreateResponse()).Instruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var gapSelection = Advance(
+			listener,
+			session,
+			gapWake.CreateResponse()).Instruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+
+		gapSelection.SelectablePlayerIds.Should()
 			.Contain(previousTargetId)
 			.And.Contain(actorId)
 			.And.NotContain(littleGirlId);
 		var retainedCommit = session
 			.GetActorBorrowedDefenderProtectionCommits()
 			.Should().ContainSingle().Subject;
-		retainedCommit.PowerIdentity.Should().Be(firstPowerIdentity);
+		retainedCommit.PowerIdentity.ActingPlayerId.Should().Be(actorId);
+		retainedCommit.PowerIdentity.SourceRole.Should().Be(MainRoleType.Defender);
+		retainedCommit.PowerIdentity.PowerInstanceId.Should().Be(
+			activation.ActivationId);
+		retainedCommit.PowerIdentity.PowerInstanceOrigin.Should().Be(
+			RolePowerInstanceOrigin.Borrowed);
 		retainedCommit.TargetPlayerId.Should().Be(previousTargetId);
 		retainedCommit.TurnNumber.Should().Be(1);
+	}
+
+	[Fact]
+	public void BorrowedFox_MalformedSelectionUsesGenericErrorWithoutMutation()
+	{
+		var (session, start, actorId, _) = CreateActorSession();
+		var activation = PerformSpendOpening(
+			CreateActorRole(),
+			session,
+			start,
+			FoxCard.Id);
+		var werewolfId = session.GetPlayers().Single(player =>
+			player.Name == "Werewolf").Id;
+		ArrangeKnownWerewolfAgentGroup(session, werewolfId);
+		IGameHookListener listener = new FoxRole(
+			new RolePowerAvailabilityGateway(
+				AllowAllRolePowerAvailabilityPolicy.Instance));
+		var wake = Advance(listener, session, start.CreateResponse()).Instruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var selection = Advance(listener, session, wake.CreateResponse()).Instruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		var historyCount = session.GameHistoryLog.Count();
+		var malformed = new ModeratorResponse
+		{
+			InstructionId = selection.InstructionId,
+			Type = ExpectedInputType.PlayerSelection,
+			SelectedPlayerIds = selection.SelectablePlayerIds.Take(2).ToHashSet()
+		};
+
+		var act = () => Advance(listener, session, malformed);
+
+		act.Should().Throw<InvalidOperationException>().WithMessage(
+			GameStrings.ActorBorrowedRolePowerInvalidResponse);
+		session.GameHistoryLog.Should().HaveCount(historyCount);
+		session.GetActorBorrowedFoxCheckCommits().Should().BeEmpty();
+		session.GetModeratorActiveActorBorrowedRolePowerActivation().Should()
+			.Be(activation);
+		session.GetPlayerState(actorId).CurrentRole.Should().Be(MainRoleType.Actor);
+	}
+
+	[Fact]
+	public void BorrowedFox_UnknownCenterUsesGenericErrorWithoutMutation()
+	{
+		var (session, start, actorId, _) = CreateActorSession();
+		var activation = PerformSpendOpening(
+			CreateActorRole(),
+			session,
+			start,
+			FoxCard.Id);
+		var werewolfId = session.GetPlayers().Single(player =>
+			player.Name == "Werewolf").Id;
+		ArrangeKnownWerewolfAgentGroup(
+			session,
+			werewolfId,
+			omittedPlayerId: actorId);
+		IGameHookListener listener = new FoxRole(
+			new RolePowerAvailabilityGateway(
+				AllowAllRolePowerAvailabilityPolicy.Instance));
+		var wake = Advance(listener, session, start.CreateResponse()).Instruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var selection = Advance(listener, session, wake.CreateResponse()).Instruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		var historyCount = session.GameHistoryLog.Count();
+		var stale = new ModeratorResponse
+		{
+			InstructionId = selection.InstructionId,
+			Type = ExpectedInputType.PlayerSelection,
+			SelectedPlayerIds = new HashSet<Guid> { Guid.NewGuid() }
+		};
+
+		var act = () => Advance(listener, session, stale);
+
+		act.Should().Throw<InvalidOperationException>().WithMessage(
+			GameStrings.ActorBorrowedRolePowerInvalidResponse);
+		session.GameHistoryLog.Should().HaveCount(historyCount);
+		session.GetActorBorrowedFoxCheckCommits().Should().BeEmpty();
+		session.GetModeratorActiveActorBorrowedRolePowerActivation().Should()
+			.Be(activation);
+		session.GetPlayerState(actorId).CurrentRole.Should().Be(MainRoleType.Actor);
 	}
 
 	[Fact]
@@ -857,21 +1039,6 @@ public sealed class ActorBorrowedDefenderFoxTests
 			DefenderRole.ProtectionPowerIdentifier.Value,
 			activation.ActivationId,
 			RolePowerInstanceOrigin.Borrowed);
-
-	private static HashSet<Guid> GetDefenderEligibleTargets(
-		GameSession session,
-		RolePowerInstanceIdentity powerIdentity)
-	{
-		var method = typeof(DefenderRole).GetMethod(
-			"GetEligibleTargets",
-			System.Reflection.BindingFlags.NonPublic |
-			System.Reflection.BindingFlags.Static)
-			?? throw new InvalidOperationException(
-				"The Defender private target-history query is unavailable.");
-		return (HashSet<Guid>)method.Invoke(
-			null,
-			[session, powerIdentity])!;
-	}
 
 	private static void AdvanceToNextNight(GameSession session)
 	{

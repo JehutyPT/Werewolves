@@ -600,8 +600,9 @@ internal static class GameFlowManager
 		        return true;
 	        }
 
-        if (startingInstruction?.Semantic ==
-            ModeratorInstructionSemantic.RevealFoxResult)
+        if (startingInstruction?.Semantic is
+            ModeratorInstructionSemantic.RevealFoxResult or
+            ModeratorInstructionSemantic.RevealSeerResult)
         {
             return true;
         }
@@ -1596,16 +1597,17 @@ internal static class GameFlowManager
         }
 
         var continuationRole = (MainRoleType)currentListener;
-        var retainsLittleGirlGuidanceDecision =
-            acceptedObservationSemantic ==
-                ModeratorInstructionSemantic
-                    .ObserveWerewolfFactionAgentGroup ||
-            continuationRole == SimpleWerewolf &&
-            nextInstruction.Semantic is
-                ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup or
-                ModeratorInstructionSemantic.WakeRole;
-        bool? retainedLittleGirlGuidanceDecision = null;
-        if (retainsLittleGirlGuidanceDecision)
+		var cursor = new AcceptedObservationRecoveryCursor
+		{
+			Version = AcceptedObservationRecoveryCursor.CurrentVersion,
+			AcceptedObservationSemantic = acceptedObservationSemantic,
+			ObservedRole = observedRole,
+			ContinuationRole = continuationRole,
+			RetainedLittleGirlGuidanceDecision = null,
+			NextInstructionSemantic = nextInstruction.Semantic,
+			NextInstructionId = nextInstruction.InstructionId
+		};
+		if (RetainsLittleGirlGuidanceDecision(cursor))
         {
             if (!session.TryGetExistingListener<SimpleWerewolfRole>(
                     Listener(SimpleWerewolf),
@@ -1615,40 +1617,20 @@ internal static class GameFlowManager
                     "The accepted observation requires its Simple Werewolf listener.");
             }
 
-            retainedLittleGirlGuidanceDecision =
+			cursor.RetainedLittleGirlGuidanceDecision =
                 werewolfListener.LittleGirlGuidanceDecision;
         }
 
-        var cursor = new AcceptedObservationRecoveryCursor
-        {
-            Version = AcceptedObservationRecoveryCursor.CurrentVersion,
-            AcceptedObservationSemantic = acceptedObservationSemantic,
-            ObservedRole = observedRole,
-            ContinuationRole = continuationRole,
-            RetainedLittleGirlGuidanceDecision =
-                retainedLittleGirlGuidanceDecision,
-            NextInstructionSemantic = nextInstruction.Semantic,
-            NextInstructionId = nextInstruction.InstructionId
-        };
         ValidateAcceptedObservationRecoverySemantics(
             session,
             cursor,
             nextInstruction);
-		var continuation =
-			IsActorBorrowedStutteringJudgeSetupSleepContinuation(
-				session,
-				cursor,
-				nextInstruction)
-				? new PendingHookListenerContinuation(
-					NightMainActionLoop.ToString(),
-					Listener(StutteringJudge),
-					StutteringJudgeRoleState.NightComplete.ToString())
-				: ResolvePendingInstructionContinuation(
-					Listener(continuationRole),
-					NightMainActionLoop,
-					session,
-					nextInstruction,
-					admissions);
+		var continuation = ResolvePendingInstructionContinuation(
+			Listener(continuationRole),
+			NightMainActionLoop,
+			session,
+			nextInstruction,
+			admissions);
         if (continuation == null)
         {
             throw new InvalidOperationException(
@@ -1656,65 +1638,6 @@ internal static class GameFlowManager
         }
 
 		return cursor;
-	}
-
-	private static bool
-		IsActorBorrowedStutteringJudgeSetupSleepContinuation(
-			GameSession session,
-			AcceptedObservationRecoveryCursor cursor,
-			ModeratorInstruction pendingInstruction)
-	{
-		if (cursor.AcceptedObservationSemantic !=
-				ModeratorInstructionSemantic.EstablishStutteringJudgeSignal ||
-			cursor.ObservedRole != StutteringJudge ||
-			(cursor.ContinuationRole ?? cursor.ObservedRole) !=
-				StutteringJudge ||
-			pendingInstruction is not ConfirmationInstruction
-			{
-				Semantic: ModeratorInstructionSemantic.PutRoleToSleep,
-				PrivateInstruction: null,
-				AffectedPlayerIds: [var actorPlayerId]
-			})
-		{
-			return false;
-		}
-
-		var activation =
-			session.GetModeratorActiveActorBorrowedRolePowerActivation();
-		if (activation is not
-			{
-				SourceRole: MainRoleType.StutteringJudge,
-				Origin: RolePowerInstanceOrigin.Borrowed
-			} ||
-			activation.ActingPlayerId != actorPlayerId ||
-			session.GetPlayerState(actorPlayerId) is not
-			{
-				Health: PlayerHealth.Alive,
-				CurrentRole: MainRoleType.Actor
-			} ||
-			!session.GetModeratorSpentActorSetupCards().Any(card =>
-				card.Id == activation.SelectedCardId &&
-				card.PrintedRole == MainRoleType.StutteringJudge))
-		{
-			return false;
-		}
-
-		return session.GetActorBorrowedStutteringJudgeSignalSetupCommits()
-			.Where(commit =>
-				commit.ActorSetupCardId == activation.SelectedCardId &&
-				commit.PowerIdentity.ActingPlayerId ==
-					activation.ActingPlayerId &&
-				commit.PowerIdentity.SourceRole == activation.SourceRole &&
-				commit.PowerIdentity.PowerInstanceId ==
-					activation.ActivationId &&
-				commit.PowerIdentity.PowerInstanceOrigin == activation.Origin &&
-				StringComparer.Ordinal.Equals(
-					commit.PowerIdentity.SourcePowerIdentifier,
-					ActorBorrowedStutteringJudgeSignalSetupCommit
-						.ExpectedSourcePowerIdentifier) &&
-				commit.TurnNumber == session.TurnNumber &&
-				commit.CurrentPhase == GamePhase.Night)
-			.ToArray() is [_];
 	}
 
     private static bool TryGetAcceptedObservationRole(
@@ -1840,48 +1763,14 @@ internal static class GameFlowManager
                 "The accepted observation recovery cursor does not match its committed observation.");
         }
 
-		var hasApplicableLittleGirlSpyingExecution =
-			HasApplicableLittleGirlSpyingExecution(session);
-		if (cursor.RetainedLittleGirlGuidanceDecision.HasValue !=
-			(RetainsLittleGirlGuidanceDecision(cursor) &&
-			 hasApplicableLittleGirlSpyingExecution))
+		if (!LittleGirlRole.HasValidRetainedGuidanceDecision(
+				session,
+				RetainsLittleGirlGuidanceDecision(cursor),
+				cursor.RetainedLittleGirlGuidanceDecision))
 		{
 			throw new InvalidOperationException(
 				"The accepted observation recovery cursor has an invalid retained Little Girl guidance decision.");
 		}
-	}
-
-	private static bool HasApplicableLittleGirlSpyingExecution(
-		GameSession session)
-	{
-		var livingNativeHolderCount = session.GetPlayers()
-			.Count(player =>
-				player.State.Health == PlayerHealth.Alive &&
-				player.State.CurrentRole == LittleGirl);
-		var activation =
-			session.GetModeratorActiveActorBorrowedRolePowerActivation();
-		var hasBorrowedExecution = activation is
-			{
-				SourceRole: LittleGirl,
-				Origin: RolePowerInstanceOrigin.Borrowed
-			} &&
-			session.GetPlayerState(activation.ActingPlayerId) is
-			{
-				Health: PlayerHealth.Alive,
-				CurrentRole: MainRoleType.Actor
-			} &&
-			session.GetModeratorSpentActorSetupCards().Any(card =>
-				card.Id == activation.SelectedCardId &&
-				card.PrintedRole == LittleGirl);
-		var executionCount = livingNativeHolderCount +
-			(hasBorrowedExecution ? 1 : 0);
-		if (executionCount > 1)
-		{
-			throw new InvalidOperationException(
-				"Little Girl spying requires exactly one active execution.");
-		}
-
-		return executionCount == 1;
 	}
 
 	private static bool HasCommittedRoleIdentification(
@@ -2007,21 +1896,12 @@ internal static class GameFlowManager
             session,
             cursor,
             pendingInstruction);
-		var continuation =
-			IsActorBorrowedStutteringJudgeSetupSleepContinuation(
-				session,
-				cursor,
-				pendingInstruction)
-				? new PendingHookListenerContinuation(
-					NightMainActionLoop.ToString(),
-					Listener(StutteringJudge),
-					StutteringJudgeRoleState.NightComplete.ToString())
-				: ResolvePendingInstructionContinuation(
-					Listener(continuationRole),
-					NightMainActionLoop,
-					session,
-					pendingInstruction,
-					admissions);
+		var continuation = ResolvePendingInstructionContinuation(
+			Listener(continuationRole),
+			NightMainActionLoop,
+			session,
+			pendingInstruction,
+			admissions);
         if (continuation == null)
         {
             throw new InvalidOperationException(

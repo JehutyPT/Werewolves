@@ -248,16 +248,13 @@ internal static class InitialBeneficiaryClosureRules
 					.DeferredToInitialBeneficiaryClosure
 			})
 		{
-			var playerIds = session.GetPlayers()
-				.Select(player => player.Id)
-				.ToArray();
 			var disposition =
-				ActorBorrowedCupidLoversCommit.ClassifyInitialDisposition(
-					actorPair,
-					playerIds,
+				ClassifyInitialLoversDisposition(
+					session,
+					actorPair.PlayerIds,
+					actorPair.LinkBoundary,
 					history.OfType<IFactionFactBatchLogEntry>().ToArray(),
-					request.InitialAgentGroupBoundary,
-					playerId => session.GetPlayerState(playerId).CurrentRole);
+					request.InitialAgentGroupBoundary);
 			if (disposition is null)
 			{
 				return InitialBeneficiaryClosureResult.Incomplete;
@@ -606,96 +603,36 @@ internal static class InitialBeneficiaryClosureRules
 			}
 		}
 
-		var playerIds = session.GetPlayers()
-			.Select(player => player.Id)
-			.ToArray();
+		var linkBoundary = actorPair?.LinkBoundary ??
+			GetLoversLinkBoundary(session, nativePair!);
+		var disposition = ClassifyInitialLoversDisposition(
+			session,
+			pairPlayerIds,
+			linkBoundary,
+			factionHistory,
+			initialAgentGroupBoundary);
+		if (disposition is null)
+		{
+			return InitialBeneficiaryClosureDeferredResult.Pending(
+				LoversDeferredResultIdentifier);
+		}
+
+		if (disposition == ActorBorrowedCupidLoversDisposition.SameFaction)
+		{
+			return InitialBeneficiaryClosureDeferredResult.Complete(
+				LoversDeferredResultIdentifier,
+				[]);
+		}
+
 		if (actorPair is not null)
 		{
-			var disposition =
-				ActorBorrowedCupidLoversCommit.ClassifyInitialDisposition(
-					actorPair,
-					playerIds,
-					factionHistory,
-					initialAgentGroupBoundary,
-					playerId => session.GetPlayerState(playerId).CurrentRole);
-			if (disposition is null)
-			{
-				return InitialBeneficiaryClosureDeferredResult.Pending(
-					LoversDeferredResultIdentifier);
-			}
-
-			return disposition ==
-				ActorBorrowedCupidLoversDisposition.CrossFaction
-					? InitialBeneficiaryClosureDeferredResult
-						.CompleteWithPrivateBeneficiaryCoverage(
-							LoversDeferredResultIdentifier,
-							actorPair.PlayerIds)
-					: InitialBeneficiaryClosureDeferredResult.Complete(
-						LoversDeferredResultIdentifier,
-						[]);
+			return InitialBeneficiaryClosureDeferredResult
+				.CompleteWithPrivateBeneficiaryCoverage(
+					LoversDeferredResultIdentifier,
+					pairPlayerIds);
 		}
 
-		var linkBoundary = GetLoversLinkBoundary(session, nativePair!);
-		var projectionAtLink = FactionFactProjection.Create(
-			factionHistory,
-			playerIds,
-			linkBoundary);
-		var projectionAtInitialGroup = FactionFactProjection.Create(
-			factionHistory,
-			playerIds,
-			initialAgentGroupBoundary);
-		var candidates = new List<Faction>(2);
-		foreach (var playerId in nativePair!.PlayerIds)
-		{
-			var projected = projectionAtLink.Beneficiaries[playerId];
-			if (projected.IsKnown)
-			{
-				candidates.Add(projected.Faction!.Value);
-				continue;
-			}
-
-			var role = session.GetPlayerState(playerId).CurrentRole;
-			if (role == MainRoleType.WolfHound)
-			{
-				candidates.Add(Faction.Villager);
-				continue;
-			}
-
-			if (role == MainRoleType.WhiteWerewolf)
-			{
-				candidates.Add(Faction.WhiteWerewolf);
-				continue;
-			}
-
-				if (role == MainRoleType.Piper)
-				{
-					candidates.Add(Faction.Piper);
-					continue;
-				}
-
-				if (role == MainRoleType.PrejudicedManipulator)
-				{
-					candidates.Add(Faction.PrejudicedManipulator);
-					continue;
-				}
-
-				var werewolfAgency =
-				projectionAtInitialGroup.Agents[playerId][Faction.Werewolf];
-			if (werewolfAgency == FactionAgentKnowledge.Unknown)
-			{
-				return InitialBeneficiaryClosureDeferredResult.Pending(
-					LoversDeferredResultIdentifier);
-			}
-
-			candidates.Add(
-				werewolfAgency == FactionAgentKnowledge.KnownAgent
-					? Faction.Werewolf
-					: Faction.Villager);
-		}
-
-		var facts = candidates[0] == candidates[1]
-			? []
-			: nativePair.PlayerIds
+		var facts = pairPlayerIds
 				.Select(playerId => FactionFact.Beneficiary(
 					playerId,
 					Faction.CrossFactionLovers,
@@ -705,6 +642,82 @@ internal static class InitialBeneficiaryClosureRules
 		return InitialBeneficiaryClosureDeferredResult.Complete(
 			LoversDeferredResultIdentifier,
 			facts);
+	}
+
+	private static ActorBorrowedCupidLoversDisposition?
+		ClassifyInitialLoversDisposition(
+			GameSession session,
+			IReadOnlyCollection<Guid> pairPlayerIds,
+			FactionFactEffectiveBoundary linkBoundary,
+			IReadOnlyCollection<IFactionFactBatchLogEntry> factionHistory,
+			FactionFactEffectiveBoundary initialAgentGroupBoundary)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		ArgumentNullException.ThrowIfNull(pairPlayerIds);
+		ArgumentNullException.ThrowIfNull(linkBoundary);
+		ArgumentNullException.ThrowIfNull(factionHistory);
+		ArgumentNullException.ThrowIfNull(initialAgentGroupBoundary);
+		var playerIds = session.GetPlayers()
+			.Select(player => player.Id)
+			.ToArray();
+		if (pairPlayerIds.Count != 2 ||
+		    pairPlayerIds.Distinct().Count() != 2 ||
+		    pairPlayerIds.Any(playerId => !playerIds.Contains(playerId)))
+		{
+			throw new InvalidOperationException(
+				"The Lovers initial classification coordinate is invalid.");
+		}
+
+		var projectionAtLink = FactionFactProjection.Create(
+			factionHistory,
+			playerIds,
+			linkBoundary);
+		var projectionAtInitialGroup = FactionFactProjection.Create(
+			factionHistory,
+			playerIds,
+			initialAgentGroupBoundary);
+		var candidates = new List<Faction>(2);
+		foreach (var playerId in pairPlayerIds)
+		{
+			var projected = projectionAtLink.Beneficiaries[playerId];
+			if (projected.IsKnown)
+			{
+				candidates.Add(projected.Faction!.Value);
+				continue;
+			}
+
+			Faction? exclusiveRoleFaction =
+				session.GetPlayerState(playerId).CurrentRole switch
+				{
+					MainRoleType.WolfHound => Faction.Villager,
+					MainRoleType.WhiteWerewolf => Faction.WhiteWerewolf,
+					MainRoleType.Piper => Faction.Piper,
+					MainRoleType.PrejudicedManipulator =>
+						Faction.PrejudicedManipulator,
+					_ => null
+				};
+			if (exclusiveRoleFaction.HasValue)
+			{
+				candidates.Add(exclusiveRoleFaction.Value);
+				continue;
+			}
+
+			var werewolfAgency =
+				projectionAtInitialGroup.Agents[playerId][Faction.Werewolf];
+			if (werewolfAgency == FactionAgentKnowledge.Unknown)
+			{
+				return null;
+			}
+
+			candidates.Add(
+				werewolfAgency == FactionAgentKnowledge.KnownAgent
+					? Faction.Werewolf
+					: Faction.Villager);
+		}
+
+		return candidates[0] == candidates[1]
+			? ActorBorrowedCupidLoversDisposition.SameFaction
+			: ActorBorrowedCupidLoversDisposition.CrossFaction;
 	}
 
 	private static ActorBorrowedCupidLoversCommit?

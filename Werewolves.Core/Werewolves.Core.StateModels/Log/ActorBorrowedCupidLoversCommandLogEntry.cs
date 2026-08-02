@@ -24,6 +24,13 @@ internal sealed record ActorBorrowedCupidLoversCommandLogEntry
 			TurnNumber,
 			CurrentPhase,
 			PublicMarkerLogIndex: 0).EnforceValidity();
+		if (TurnNumber == 1 &&
+		    Disposition != ActorBorrowedCupidLoversDisposition
+			    .DeferredToInitialBeneficiaryClosure)
+		{
+			throw new InvalidOperationException(
+				"The Actor borrowed Cupid Lovers command has an invalid initial disposition.");
+		}
 	}
 
 	protected override GameLogEntryBase InnerApply(ISessionMutator mutator)
@@ -34,14 +41,15 @@ internal sealed record ActorBorrowedCupidLoversCommandLogEntry
 				"This Session Mutator does not project Actor borrowed Cupid Lovers commits.");
 		}
 
-		var publicMarker = new ActorBorrowedRolePowerCommittedLogEntry
+		var integrityCommitment =
+			actorMutator.ApplyActorBorrowedCupidLovers(this);
+		return new ActorBorrowedRolePowerCommittedLogEntry
 		{
 			Timestamp = Timestamp,
 			TurnNumber = TurnNumber,
-			CurrentPhase = CurrentPhase
+			CurrentPhase = CurrentPhase,
+			IntegrityCommitment = integrityCommitment
 		};
-		actorMutator.ApplyActorBorrowedCupidLovers(this);
-		return publicMarker;
 	}
 
 	public override string ToString() => "ActorBorrowedCupidLoversCommand";

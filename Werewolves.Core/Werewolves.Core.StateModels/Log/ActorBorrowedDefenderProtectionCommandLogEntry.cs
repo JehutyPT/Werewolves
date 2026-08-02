@@ -30,14 +30,15 @@ internal sealed record ActorBorrowedDefenderProtectionCommandLogEntry
 				"This Session Mutator does not project Actor borrowed Defender protections.");
 		}
 
-		var publicMarker = new ActorBorrowedRolePowerCommittedLogEntry
+		var integrityCommitment =
+			actorMutator.ApplyActorBorrowedDefenderProtection(this);
+		return new ActorBorrowedRolePowerCommittedLogEntry
 		{
 			Timestamp = Timestamp,
 			TurnNumber = TurnNumber,
-			CurrentPhase = CurrentPhase
+			CurrentPhase = CurrentPhase,
+			IntegrityCommitment = integrityCommitment
 		};
-		actorMutator.ApplyActorBorrowedDefenderProtection(this);
-		return publicMarker;
 	}
 
 	public override string ToString() =>

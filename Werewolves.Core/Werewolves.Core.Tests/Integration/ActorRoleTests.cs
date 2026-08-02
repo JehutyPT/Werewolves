@@ -367,6 +367,73 @@ public sealed class ActorRoleTests
 	}
 
 	[Fact]
+	public void BorrowedSeer_AcknowledgedFeedback_RoundTripRestoresExactActorSleepWithoutReplayingCheck()
+	{
+		var (session, start, actorId) = CreateActorSession(holderKnown: true);
+		PerformSpendOpening(
+			CreateActorRole(),
+			session,
+			start,
+			SeerCard.Id);
+		var werewolf = session.GetPlayers().Single(player =>
+			player.Name == "Werewolf");
+		ArrangeKnownWerewolfAgentGroup(session, werewolf.Id);
+		IGameHookListener listener = new SeerRole(
+			new RolePowerAvailabilityGateway(
+				AllowAllRolePowerAvailabilityPolicy.Instance));
+		var wake = Advance(listener, session, start.CreateResponse()).Instruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var targetSelection = Advance(listener, session, wake.CreateResponse())
+			.Instruction.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		session.SetPendingModeratorInstruction(RecoveryKey, targetSelection);
+		var feedback = GameFlowManager.HandleInput(
+				session,
+				targetSelection.CreateResponse([werewolf.Id]),
+				SupportedRoleCatalog.Admissions).ModeratorInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var committedCheck = session.GetActorBorrowedSeerCheckCommits()
+			.Should().ContainSingle().Subject;
+
+		var sleep = GameFlowManager.HandleInput(
+				session,
+				feedback.CreateResponse(),
+				SupportedRoleCatalog.Admissions).ModeratorInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+
+		sleep.Semantic.Should().Be(ModeratorInstructionSemantic.PutRoleToSleep);
+		sleep.InstructionId.Should().NotBe(feedback.InstructionId);
+		var historyCountAtSleep = session.GameHistoryLog.Count();
+		var recovered = new GameSession(session.Serialize());
+		GameFlowManager.RestoreDurableContinuation(
+			recovered,
+			SupportedRoleCatalog.Admissions);
+		var recoveredSleep = recovered.PendingModeratorInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+
+		recoveredSleep.Should().BeEquivalentTo(sleep);
+		recoveredSleep.Semantic.Should().Be(
+			ModeratorInstructionSemantic.PutRoleToSleep);
+		recoveredSleep.InstructionId.Should().NotBe(feedback.InstructionId);
+		recovered.GameHistoryLog.Should().HaveCount(historyCountAtSleep);
+		recovered.GetActorBorrowedSeerCheckCommits().Should()
+			.Equal(committedCheck);
+		recovered.GameHistoryLog
+			.OfType<ActorBorrowedRolePowerCommittedLogEntry>().Should()
+			.ContainSingle();
+
+		GameFlowManager.HandleInput(
+			recovered,
+			recoveredSleep.CreateResponse(),
+			SupportedRoleCatalog.Admissions);
+
+		recovered.GetActorBorrowedSeerCheckCommits().Should()
+			.Equal(committedCheck);
+		recovered.GameHistoryLog
+			.OfType<ActorBorrowedRolePowerCommittedLogEntry>().Should()
+			.ContainSingle();
+	}
+
+	[Fact]
 	public void BorrowedSeer_NoOtherLivingTarget_OmitsSelectorAndCompletesThroughActorSleepWithoutCommit()
 	{
 		var (session, start, actorId) = CreateActorSession(holderKnown: true);

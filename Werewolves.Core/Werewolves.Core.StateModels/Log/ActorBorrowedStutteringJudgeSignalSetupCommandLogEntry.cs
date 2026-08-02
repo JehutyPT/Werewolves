@@ -28,14 +28,15 @@ internal sealed record ActorBorrowedStutteringJudgeSignalSetupCommandLogEntry
 				"This Session Mutator does not project Actor borrowed Stuttering Judge signal setup.");
 		}
 
-		var publicMarker = new ActorBorrowedRolePowerCommittedLogEntry
+		var integrityCommitment =
+			actorMutator.ApplyActorBorrowedStutteringJudgeSignalSetup(this);
+		return new ActorBorrowedRolePowerCommittedLogEntry
 		{
 			Timestamp = Timestamp,
 			TurnNumber = TurnNumber,
-			CurrentPhase = CurrentPhase
+			CurrentPhase = CurrentPhase,
+			IntegrityCommitment = integrityCommitment
 		};
-		actorMutator.ApplyActorBorrowedStutteringJudgeSignalSetup(this);
-		return publicMarker;
 	}
 
 	public override string ToString() =>

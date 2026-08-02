@@ -14,6 +14,7 @@ using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Resources;
 using Werewolves.Core.StateModels.Serialization;
+using Werewolves.Core.Tests.Helpers;
 using Xunit;
 
 namespace Werewolves.Core.Tests.Integration;
@@ -32,6 +33,126 @@ public sealed class ActorBorrowedWitchTests
 	private static readonly TestSubPhaseManagerKey SubPhaseKey = new();
 	private static readonly TestHookSubPhaseKey HookKey = new();
 	private static readonly TestGameFlowManagerKey RecoveryKey = new();
+
+	[Theory]
+	[InlineData(WitchRecoveryPresentationTamper.HealingPrivateInstruction)]
+	[InlineData(WitchRecoveryPresentationTamper.HealingDeclineLabel)]
+	[InlineData(WitchRecoveryPresentationTamper.PoisonPrivateInstruction)]
+	[InlineData(WitchRecoveryPresentationTamper.PoisonDeclineLabel)]
+	[InlineData(WitchRecoveryPresentationTamper.SleepUndisclosedRosterInstruction)]
+	[InlineData(WitchRecoveryPresentationTamper.SleepDisclosedRosterInstruction)]
+	public void BorrowedWitch_TamperedPendingPresentationIsRejectedDuringStableRecovery(
+		WitchRecoveryPresentationTamper tamper)
+	{
+		var (session, start, _, attackTargetId) = CreateActorSession();
+		PerformSpendOpening(CreateActorRole(), session, start, WitchCard.Id);
+		session.PerformNightAction(
+			NightActionType.WerewolfVictimSelection,
+			attackTargetId);
+		IRolePowerAvailabilityPolicy policy = tamper switch
+		{
+			WitchRecoveryPresentationTamper.PoisonPrivateInstruction or
+				WitchRecoveryPresentationTamper.PoisonDeclineLabel =>
+				new HealingUnavailablePolicy(),
+			WitchRecoveryPresentationTamper.SleepUndisclosedRosterInstruction =>
+				new AllUnavailablePolicy(),
+			_ => AllowAllRolePowerAvailabilityPolicy.Instance
+		};
+		IGameHookListener witch = new WitchRole(
+			new RolePowerAvailabilityGateway(policy));
+		var wake = Advance(witch, session, start.CreateResponse()).Instruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var pending = Advance(witch, session, wake.CreateResponse()).Instruction
+			?? throw new InvalidOperationException(
+				"Expected a borrowed Witch instruction after wake.");
+
+		if (tamper is WitchRecoveryPresentationTamper.HealingPrivateInstruction or
+		    WitchRecoveryPresentationTamper.HealingDeclineLabel)
+		{
+			var healing = pending.Should()
+				.BeOfType<SelectPlayersInstruction>().Subject;
+			healing.Semantic.Should().Be(
+				ModeratorInstructionSemantic.SelectWitchHealingTarget);
+			healing.PrivateInstruction.Should().Be(
+				GameStrings.WitchHealingSelectionInstruction.Format(
+					session.GetPlayer(attackTargetId).Name));
+			healing.EmptySelectionOptionLabel.Should().Be(
+				GameStrings.DeclineOption);
+		}
+		else if (tamper is
+		         WitchRecoveryPresentationTamper.PoisonPrivateInstruction or
+		         WitchRecoveryPresentationTamper.PoisonDeclineLabel)
+		{
+			var poison = pending.Should()
+				.BeOfType<SelectPlayersInstruction>().Subject;
+			poison.Semantic.Should().Be(
+				ModeratorInstructionSemantic.SelectWitchPoisonTarget);
+			poison.PrivateInstruction.Should().Be(
+				GameStrings.WitchAttackTargetsAndPoisonSelectionInstruction.Format(
+					session.GetPlayer(attackTargetId).Name));
+			poison.EmptySelectionOptionLabel.Should().Be(
+				GameStrings.DeclineOption);
+		}
+		else if (tamper ==
+		         WitchRecoveryPresentationTamper.SleepUndisclosedRosterInstruction)
+		{
+			var sleep = pending.Should()
+				.BeOfType<ConfirmationInstruction>().Subject;
+			sleep.Semantic.Should().Be(
+				ModeratorInstructionSemantic.PutRoleToSleep);
+			sleep.PrivateInstruction.Should().Be(
+				GameStrings.WitchAttackTargetsInstruction.Format(
+					session.GetPlayer(attackTargetId).Name));
+		}
+		else
+		{
+			var healing = pending.Should()
+				.BeOfType<SelectPlayersInstruction>().Subject;
+			var poison = Advance(
+				witch,
+				session,
+				healing.CreateResponse([])).Instruction
+				.Should().BeOfType<SelectPlayersInstruction>().Subject;
+			pending = Advance(
+				witch,
+				session,
+				poison.CreateResponse([])).Instruction
+				.Should().BeOfType<ConfirmationInstruction>().Subject;
+			pending.PrivateInstruction.Should().BeNull();
+		}
+
+		session.SetPendingModeratorInstruction(RecoveryKey, pending);
+		session.CaptureRecoveryBoundary(RecoveryKey);
+		var driver = RecoveryPayloadTestDriver.Parse(session.Serialize());
+		if (pending is SelectPlayersInstruction selection)
+		{
+			driver.RewritePendingPlayerSelectionPresentation(
+				tamper is
+					WitchRecoveryPresentationTamper.HealingPrivateInstruction or
+					WitchRecoveryPresentationTamper.PoisonPrivateInstruction
+						? "Tampered source-identifying private instruction."
+						: selection.PrivateInstruction,
+				tamper is
+					WitchRecoveryPresentationTamper.HealingDeclineLabel or
+					WitchRecoveryPresentationTamper.PoisonDeclineLabel
+						? "Tampered decline label"
+						: selection.EmptySelectionOptionLabel);
+		}
+		else
+		{
+			driver.RewritePendingConfirmationPresentation(
+				"Tampered source-identifying private instruction.",
+				pending.SoundEffects);
+		}
+
+		var recovered = new GameSession(driver.Serialize());
+		Action restore = () => GameFlowManager.RestoreDurableContinuation(
+			recovered,
+			SupportedRoleCatalog.Admissions);
+
+		restore.Should().Throw<InvalidOperationException>()
+			.WithMessage("*pending Actor borrowed Witch*invalid*");
+	}
 
 	[Fact]
 	public void BorrowedWitch_SourceSlotOffersActorQualifiedHealingAndPoisonWithoutSourceLeak()
@@ -656,6 +777,22 @@ public sealed class ActorBorrowedWitchTests
 			attempt.OneUseResource?.Id == WitchRole.HealingResourceId
 				? RolePowerAvailabilityResult.Denied
 				: RolePowerAvailabilityResult.Allowed;
+	}
+
+	private sealed class AllUnavailablePolicy : IRolePowerAvailabilityPolicy
+	{
+		public RolePowerAvailabilityResult Evaluate(RolePowerAttempt attempt) =>
+			RolePowerAvailabilityResult.Denied;
+	}
+
+	public enum WitchRecoveryPresentationTamper
+	{
+		HealingPrivateInstruction,
+		HealingDeclineLabel,
+		PoisonPrivateInstruction,
+		PoisonDeclineLabel,
+		SleepUndisclosedRosterInstruction,
+		SleepDisclosedRosterInstruction
 	}
 
 	private sealed class TestSubPhaseManagerKey : ISubPhaseManagerKey;

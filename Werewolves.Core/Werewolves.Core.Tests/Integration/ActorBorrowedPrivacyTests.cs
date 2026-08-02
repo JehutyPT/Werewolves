@@ -1,3 +1,4 @@
+using System.Globalization;
 using FluentAssertions;
 using Werewolves.Core.GameLogic.Interfaces;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
@@ -17,9 +18,6 @@ namespace Werewolves.Core.Tests.Integration;
 
 public sealed class ActorBorrowedPrivacyTests
 {
-	private const string InvalidResponseMessage =
-		"The borrowed Role Power response is invalid or no longer available.";
-
 	private static readonly PhysicalCharacterCard[] SourceCards =
 	[
 		Card("00000000-0000-0000-0000-000000000251", MainRoleType.Seer),
@@ -42,17 +40,68 @@ public sealed class ActorBorrowedPrivacyTests
 	[InlineData(MainRoleType.LittleGirl)]
 	[InlineData(MainRoleType.Defender)]
 	[InlineData(MainRoleType.Fox)]
-	public void BorrowedSource_InvalidOrStaleResponseUsesNonIdentifyingError(
+	public void BorrowedSource_InvalidOrStaleResponseUsesLocalizedNonIdentifyingError(
 		MainRoleType sourceRole)
 	{
-		var fixture = CreateFixture(sourceRole);
-		var invalidSubmission = PrepareInvalidSubmission(fixture);
-		var historyCountBeforeSubmission = fixture.Session.GameHistoryLog.Count();
+		var originalCulture = CultureInfo.CurrentUICulture;
+		try
+		{
+			CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("pt-PT");
+			var expected = GameStrings.ActorBorrowedRolePowerInvalidResponse;
+			var english = GameStrings.ResourceManager.GetString(
+				nameof(GameStrings.ActorBorrowedRolePowerInvalidResponse),
+				CultureInfo.GetCultureInfo("en-US"));
+			var fixture = CreateFixture(sourceRole);
+			var invalidSubmission = PrepareInvalidSubmission(fixture);
+			var historyCountBeforeSubmission = fixture.Session.GameHistoryLog.Count();
 
-		invalidSubmission.Should().Throw<InvalidOperationException>()
-			.WithMessage(InvalidResponseMessage);
-		fixture.Session.GameHistoryLog.Should().HaveCount(
-			historyCountBeforeSubmission);
+			expected.Should().NotBeNullOrWhiteSpace().And.NotBe(english);
+			invalidSubmission.Should().Throw<InvalidOperationException>()
+				.WithMessage(expected);
+			fixture.Session.GameHistoryLog.Should().HaveCount(
+				historyCountBeforeSubmission);
+		}
+		finally
+		{
+			CultureInfo.CurrentUICulture = originalCulture;
+		}
+	}
+
+	[Theory]
+	[InlineData(BorrowedValidationBranch.SeerMissingSelection)]
+	[InlineData(BorrowedValidationBranch.SeerMultipleSelection)]
+	[InlineData(BorrowedValidationBranch.CupidMissingPendingSelection)]
+	[InlineData(BorrowedValidationBranch.CupidMalformedSelection)]
+	[InlineData(BorrowedValidationBranch.CupidAlreadyCommitted)]
+	[InlineData(BorrowedValidationBranch.WitchHealingMissingSelection)]
+	[InlineData(BorrowedValidationBranch.WitchHealingMultipleSelection)]
+	[InlineData(BorrowedValidationBranch.WitchHealingInvalidTarget)]
+	[InlineData(BorrowedValidationBranch.WitchPoisonMissingSelection)]
+	[InlineData(BorrowedValidationBranch.WitchPoisonMultipleSelection)]
+	[InlineData(BorrowedValidationBranch.WitchPoisonInvalidTarget)]
+	public void BorrowedSource_ReachableInvalidResponseBranchesUseLocalizedNonIdentifyingErrorWithoutMutation(
+		BorrowedValidationBranch branch)
+	{
+		var originalCulture = CultureInfo.CurrentUICulture;
+		try
+		{
+			CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("pt-PT");
+			var expected = GameStrings.ActorBorrowedRolePowerInvalidResponse;
+			var english = GameStrings.ResourceManager.GetString(
+				nameof(GameStrings.ActorBorrowedRolePowerInvalidResponse),
+				CultureInfo.GetCultureInfo("en-US"));
+			var submission = PrepareValidationSubmission(branch);
+			var serializedBefore = submission.Session.Serialize();
+
+			expected.Should().NotBeNullOrWhiteSpace().And.NotBe(english);
+			submission.Submit.Should().Throw<InvalidOperationException>()
+				.WithMessage(expected);
+			submission.Session.Serialize().Should().Be(serializedBefore);
+		}
+		finally
+		{
+			CultureInfo.CurrentUICulture = originalCulture;
+		}
 	}
 
 	[Fact]
@@ -121,6 +170,118 @@ public sealed class ActorBorrowedPrivacyTests
 			fixture.Session,
 			staleResponse);
 	}
+
+	private static ValidationSubmission PrepareValidationSubmission(
+		BorrowedValidationBranch branch)
+	{
+		var sourceRole = branch switch
+		{
+			BorrowedValidationBranch.SeerMissingSelection or
+				BorrowedValidationBranch.SeerMultipleSelection => MainRoleType.Seer,
+			BorrowedValidationBranch.CupidMissingPendingSelection or
+				BorrowedValidationBranch.CupidMalformedSelection or
+				BorrowedValidationBranch.CupidAlreadyCommitted => MainRoleType.Cupid,
+			BorrowedValidationBranch.WitchHealingMissingSelection or
+				BorrowedValidationBranch.WitchHealingMultipleSelection or
+				BorrowedValidationBranch.WitchHealingInvalidTarget or
+				BorrowedValidationBranch.WitchPoisonMissingSelection or
+				BorrowedValidationBranch.WitchPoisonMultipleSelection or
+				BorrowedValidationBranch.WitchPoisonInvalidTarget => MainRoleType.Witch,
+			_ => throw new ArgumentOutOfRangeException(nameof(branch))
+		};
+		var fixture = CreateFixture(sourceRole);
+		var selection = PrepareInstructionAfterWake<SelectPlayersInstruction>(
+			fixture);
+		var nonActorPlayerIds = fixture.Session.GetPlayers()
+			.Select(player => player.Id)
+			.Where(playerId => playerId != fixture.ActorId)
+			.ToArray();
+
+		if (sourceRole == MainRoleType.Seer)
+		{
+			var response = branch == BorrowedValidationBranch.SeerMissingSelection
+				? CreateUncheckedResponse(selection, null)
+				: CreateUncheckedResponse(
+					selection,
+					nonActorPlayerIds.Take(2).ToHashSet());
+			return CreateSubmission(fixture, response);
+		}
+
+		if (sourceRole == MainRoleType.Cupid)
+		{
+			var selectedPlayerIds = selection.SelectablePlayerIds
+				.Take(2)
+				.ToHashSet();
+			var response = branch ==
+			               BorrowedValidationBranch.CupidMalformedSelection
+				? CreateUncheckedResponse(
+					selection,
+					selectedPlayerIds.Take(1).ToHashSet())
+				: CreateUncheckedResponse(selection, selectedPlayerIds);
+			if (branch !=
+			    BorrowedValidationBranch.CupidMissingPendingSelection)
+			{
+				fixture.Session.SetPendingModeratorInstruction(FlowKey, selection);
+			}
+
+			if (branch == BorrowedValidationBranch.CupidAlreadyCommitted)
+			{
+				var beneficiaries = selectedPlayerIds
+					.Select(fixture.Session.RequireKnownFactionBeneficiary)
+					.ToArray();
+				fixture.Session.CommitActorBorrowedCupidLovers(
+					CreatePowerIdentity(fixture, "cupid-link-lovers"),
+					selectedPlayerIds,
+					beneficiaries[0] == beneficiaries[1]
+						? ActorBorrowedCupidLoversDisposition.SameFaction
+						: ActorBorrowedCupidLoversDisposition.CrossFaction);
+			}
+
+			return CreateSubmission(fixture, response);
+		}
+
+		if (branch is BorrowedValidationBranch.WitchPoisonMissingSelection or
+		    BorrowedValidationBranch.WitchPoisonMultipleSelection or
+		    BorrowedValidationBranch.WitchPoisonInvalidTarget)
+		{
+			selection = Advance(
+				fixture.Listener,
+				fixture.Session,
+				selection.CreateResponse([])).Instruction
+				.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		}
+
+		IReadOnlySet<Guid>? selectedForWitch = branch switch
+		{
+			BorrowedValidationBranch.WitchHealingMissingSelection or
+				BorrowedValidationBranch.WitchPoisonMissingSelection => null,
+			BorrowedValidationBranch.WitchHealingMultipleSelection or
+				BorrowedValidationBranch.WitchPoisonMultipleSelection =>
+				nonActorPlayerIds.Take(2).ToHashSet(),
+			BorrowedValidationBranch.WitchHealingInvalidTarget or
+				BorrowedValidationBranch.WitchPoisonInvalidTarget =>
+				new HashSet<Guid> { fixture.ActorId },
+			_ => throw new ArgumentOutOfRangeException(nameof(branch))
+		};
+		return CreateSubmission(
+			fixture,
+			CreateUncheckedResponse(selection, selectedForWitch));
+	}
+
+	private static ValidationSubmission CreateSubmission(
+		PrivacyFixture fixture,
+		ModeratorResponse response) => new(
+		fixture.Session,
+		() => Advance(fixture.Listener, fixture.Session, response));
+
+	private static ModeratorResponse CreateUncheckedResponse(
+		SelectPlayersInstruction selection,
+		IReadOnlySet<Guid>? selectedPlayerIds) => new()
+	{
+		InstructionId = selection.InstructionId,
+		Type = ExpectedInputType.PlayerSelection,
+		SelectedPlayerIds = selectedPlayerIds
+	};
 
 	private static void CommitBorrowedWitchHealing(
 		PrivacyFixture fixture,
@@ -327,6 +488,25 @@ public sealed class ActorBorrowedPrivacyTests
 		Guid ActorId,
 		ActorBorrowedRolePowerActivation Activation,
 		IGameHookListener Listener);
+
+	private sealed record ValidationSubmission(
+		GameSession Session,
+		Action Submit);
+
+	public enum BorrowedValidationBranch
+	{
+		SeerMissingSelection,
+		SeerMultipleSelection,
+		CupidMissingPendingSelection,
+		CupidMalformedSelection,
+		CupidAlreadyCommitted,
+		WitchHealingMissingSelection,
+		WitchHealingMultipleSelection,
+		WitchHealingInvalidTarget,
+		WitchPoisonMissingSelection,
+		WitchPoisonMultipleSelection,
+		WitchPoisonInvalidTarget
+	}
 
 	private sealed class TestSubPhaseManagerKey : ISubPhaseManagerKey;
 	private sealed class TestHookSubPhaseKey : IHookSubPhaseKey;

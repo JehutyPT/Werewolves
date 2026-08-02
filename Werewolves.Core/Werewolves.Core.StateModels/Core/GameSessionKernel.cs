@@ -19,6 +19,7 @@ namespace Werewolves.Core.StateModels.Core
 		private readonly ActorSetupCards _actorSetupCards = ActorSetupCards.None;
 		private readonly Dictionary<Guid, Guid>
 			_actorSetupCardSpendActivationIds = [];
+		private readonly byte[] _actorBorrowedRolePowerCommitmentKey;
 		private ActorBorrowedRolePowerActivation?
 			_activeActorBorrowedRolePowerActivation;
 		private readonly List<ActorBorrowedSeerCheckCommit>
@@ -125,6 +126,8 @@ namespace Werewolves.Core.StateModels.Core
 
 			_pendingModeratorInstruction = initialInstruction;
 			config.EnforceValidity();
+			_actorBorrowedRolePowerCommitmentKey =
+				ActorBorrowedRolePowerCommitment.CreateKey();
 
 				foreach (var playerConfig in config.PlayerRoster)
 				{
@@ -307,17 +310,11 @@ namespace Werewolves.Core.StateModels.Core
 			FactionAgentKnowledge neighborhoodAgentKnowledge,
 			OneUseRolePowerResourceIdentity? spentResourceIdentity)
 		{
-			var activation = _activeActorBorrowedRolePowerActivation
-				?? throw new InvalidOperationException(
-					"The borrowed Role Power activation is unavailable.");
-			if (GetCurrentFoxNeighborhoodAgentKnowledge(centerPlayerId) !=
-				neighborhoodAgentKnowledge)
-			{
-				throw new InvalidOperationException(
-					"The Actor borrowed Fox result does not match the current complete living Werewolf Agent facts.");
-			}
+				var activation = _activeActorBorrowedRolePowerActivation
+					?? throw new InvalidOperationException(
+						"The borrowed Role Power activation is unavailable.");
 
-			AddEntryAndUpdateState(new ActorBorrowedFoxCheckCommandLogEntry
+				AddEntryAndUpdateState(new ActorBorrowedFoxCheckCommandLogEntry
 			{
 				Timestamp = DateTimeOffset.UtcNow,
 				TurnNumber = TurnNumber,
@@ -412,7 +409,8 @@ namespace Werewolves.Core.StateModels.Core
 
 		internal void CommitActorBorrowedCupidLovers(
 			RolePowerInstanceIdentity powerIdentity,
-			IReadOnlyCollection<Guid> playerIds)
+			IReadOnlyCollection<Guid> playerIds,
+			ActorBorrowedCupidLoversDisposition disposition)
 		{
 			ArgumentNullException.ThrowIfNull(playerIds);
 			powerIdentity.EnforceValidity();
@@ -467,26 +465,6 @@ namespace Werewolves.Core.StateModels.Core
 					"The Actor borrowed Cupid Lovers commit is stale or invalid.");
 			}
 
-			var disposition =
-				ActorBorrowedCupidLoversDisposition
-					.DeferredToInitialBeneficiaryClosure;
-			if (TurnNumber > 1)
-			{
-				var beneficiaries = canonicalPlayerIds
-					.Select(playerId => ((IPlayer)_players[playerId]).State
-						.FactionBeneficiary)
-					.ToArray();
-				if (beneficiaries.Any(beneficiary => !beneficiary.IsKnown))
-				{
-					throw new InvalidOperationException(
-						"Required Faction facts are not ready.");
-				}
-
-				disposition = beneficiaries[0].Faction == beneficiaries[1].Faction
-					? ActorBorrowedCupidLoversDisposition.SameFaction
-					: ActorBorrowedCupidLoversDisposition.CrossFaction;
-			}
-
 			AddEntryAndUpdateState(new ActorBorrowedCupidLoversCommandLogEntry
 			{
 				Timestamp = DateTimeOffset.UtcNow,
@@ -500,59 +478,7 @@ namespace Werewolves.Core.StateModels.Core
 			});
 		}
 
-		private FactionAgentKnowledge GetCurrentFoxNeighborhoodAgentKnowledge(
-			Guid centerPlayerId)
-		{
-			if (!_players.TryGetValue(centerPlayerId, out var center) ||
-				((IPlayer)center).State.Health != PlayerHealth.Alive)
-			{
-				throw new InvalidOperationException(
-					"The Actor borrowed Fox center is not one living Player.");
-			}
-
-			var livingPlayerIds = _playerSeatingOrder
-				.Where(playerId =>
-					((IPlayer)_players[playerId]).State.Health ==
-					PlayerHealth.Alive)
-				.ToArray();
-			if (livingPlayerIds.Any(playerId =>
-					((IPlayer)_players[playerId]).State
-						.GetFactionAgentKnowledge(Faction.Werewolf) ==
-					FactionAgentKnowledge.Unknown))
-			{
-				throw new InvalidOperationException(
-					"The current living Werewolf Faction Agent facts are incomplete.");
-			}
-
-			var centerIndex = _playerSeatingOrder.IndexOf(centerPlayerId);
-			var checkedPlayerIds = new HashSet<Guid> { centerPlayerId };
-			foreach (var step in new[] { 1, -1 })
-			{
-				for (var offset = 1; offset < _playerSeatingOrder.Count; offset++)
-				{
-					var candidateIndex =
-						(centerIndex + step * offset + _playerSeatingOrder.Count) %
-						_playerSeatingOrder.Count;
-					var candidateId = _playerSeatingOrder[candidateIndex];
-					if (((IPlayer)_players[candidateId]).State.Health !=
-						PlayerHealth.Alive)
-					{
-						continue;
-					}
-
-					checkedPlayerIds.Add(candidateId);
-					break;
-				}
-			}
-
-			return checkedPlayerIds.Any(playerId =>
-				((IPlayer)_players[playerId]).State.GetFactionAgentKnowledge(
-					Faction.Werewolf) == FactionAgentKnowledge.KnownAgent)
-				? FactionAgentKnowledge.KnownAgent
-				: FactionAgentKnowledge.KnownNonAgent;
-		}
-
-			internal void AddEntryAndUpdateState(GameLogEntryBase entry)
+				internal void AddEntryAndUpdateState(GameLogEntryBase entry)
 			{
 				_gameHistoryLog.PreflightLogEntry(entry, _players.Keys);
 				entry.Apply(new SessionMutator(this));
@@ -712,6 +638,9 @@ namespace Werewolves.Core.StateModels.Core
 								_actorSetupCardSpendActivationIds[card.Id]
 						})
 						.ToList(),
+					ActorBorrowedRolePowerCommitmentKey =
+						ActorBorrowedRolePowerCommitment.EncodeKey(
+							_actorBorrowedRolePowerCommitmentKey),
 					ActiveActorBorrowedRolePowerActivation =
 						_activeActorBorrowedRolePowerActivation is null
 							? null
@@ -815,6 +744,8 @@ namespace Werewolves.Core.StateModels.Core
 				_actorSetupCards = RestoreActorSetupCards(
 					dto,
 					_roleLockIn);
+				_actorBorrowedRolePowerCommitmentKey =
+					RestoreActorBorrowedRolePowerCommitmentKey(dto);
 				RestoreActorRuntimeState(dto);
 				var cardsById = _roleLockIn.RoleComposition
 				.ToDictionary(card => card.Id);
@@ -992,6 +923,40 @@ namespace Werewolves.Core.StateModels.Core
 					throw new InvalidOperationException(
 						"The stable recovery snapshot has invalid Actor Setup Cards.");
 				}
+			}
+
+			private static byte[] RestoreActorBorrowedRolePowerCommitmentKey(
+				GameSessionDto dto)
+			{
+				if (ActorBorrowedRolePowerCommitment.TryDecodeKey(
+						dto.ActorBorrowedRolePowerCommitmentKey,
+						out var key))
+				{
+					return key;
+				}
+
+				var privateCommitCount =
+					(dto.ActorBorrowedSeerCheckCommits?.Count ?? 0) +
+					(dto.ActorBorrowedDefenderProtectionCommits?.Count ?? 0) +
+					(dto.ActorBorrowedFoxCheckCommits?.Count ?? 0) +
+					(dto.ActorBorrowedWitchPotionUseCommits?.Count ?? 0) +
+					(dto.ActorBorrowedWitchPotionDeclineCommits?.Count ?? 0) +
+					(dto.ActorBorrowedCupidLoversCommits?.Count ?? 0) +
+					(dto.ActorBorrowedStutteringJudgeSignalSetupCommits?.Count ?? 0) +
+					(dto.ActorBorrowedStutteringJudgeSignalObservationCommits?.Count ?? 0);
+				var publicMarkerCount = dto.GameHistoryLog?
+					.OfType<ActorBorrowedRolePowerCommittedLogEntry>()
+					.Count() ?? 0;
+				if (string.IsNullOrWhiteSpace(
+						dto.ActorBorrowedRolePowerCommitmentKey) &&
+					privateCommitCount == 0 &&
+					publicMarkerCount == 0)
+				{
+					return ActorBorrowedRolePowerCommitment.CreateKey();
+				}
+
+				throw new InvalidOperationException(
+					"The stable recovery snapshot has invalid Actor borrowed Role Power integrity state.");
 			}
 
 			private void RestoreActorRuntimeState(GameSessionDto dto)
@@ -1222,8 +1187,9 @@ namespace Werewolves.Core.StateModels.Core
 						"The stable recovery snapshot has invalid Actor borrowed Role Power state.");
 				}
 
-				foreach (var coordinate in coordinates)
+				foreach (var commit in commits)
 				{
+					var coordinate = commit.Coordinate;
 					coordinate.EnforceValidity();
 					var selectedCard = _actorSetupCards.Cards.SingleOrDefault(card =>
 						card.Id == coordinate.ActorSetupCardId);
@@ -1233,6 +1199,10 @@ namespace Werewolves.Core.StateModels.Core
 						marker.Timestamp != coordinate.Timestamp ||
 						marker.TurnNumber != coordinate.TurnNumber ||
 						marker.CurrentPhase != coordinate.CurrentPhase ||
+					!ActorBorrowedRolePowerCommitment.Matches(
+							_actorBorrowedRolePowerCommitmentKey,
+							commit,
+							marker.IntegrityCommitment) ||
 						selectedCard?.PrintedRole !=
 							coordinate.PowerIdentity.SourceRole ||
 						!_actorSetupCardSpendActivationIds.TryGetValue(
@@ -1280,9 +1250,6 @@ namespace Werewolves.Core.StateModels.Core
 						"The stable recovery snapshot has invalid Actor borrowed Role Power state.");
 				}
 
-				var publicFactionFacts = history
-					.OfType<IFactionFactBatchLogEntry>()
-					.ToArray();
 				foreach (var commit in _actorBorrowedCupidLoversCommits
 					.Where(commit => commit.TurnNumber == 1))
 				{
@@ -1317,92 +1284,7 @@ namespace Werewolves.Core.StateModels.Core
 						throw new InvalidOperationException(
 							"The stable recovery snapshot has invalid Actor borrowed Cupid Initial Beneficiary Closure state.");
 					}
-
-					var factionFactsBeforeClosure = history
-						.Take(closure.index)
-						.OfType<IFactionFactBatchLogEntry>()
-						.ToArray();
-					var initialGroupBoundary =
-						FindInitialCompleteWerewolfAgentGroupBoundary(
-							factionFactsBeforeClosure,
-							_playerSeatingOrder);
-					var expectedDisposition = initialGroupBoundary is null
-						? null
-						: ActorBorrowedCupidLoversCommit
-							.ClassifyInitialDisposition(
-								commit,
-								_playerSeatingOrder,
-								factionFactsBeforeClosure,
-								initialGroupBoundary,
-								playerId => _players.TryGetValue(
-									playerId,
-									out var player)
-										? ((IPlayer)player).State.CurrentRole
-										: null);
-					if (expectedDisposition != commit.Disposition)
-					{
-						throw new InvalidOperationException(
-							"The stable recovery snapshot has invalid Actor borrowed Cupid initial classification state.");
-					}
 				}
-
-				foreach (var commit in _actorBorrowedCupidLoversCommits
-					.Where(commit => commit.TurnNumber > 1))
-				{
-					var projectionAtLink = FactionFactProjection.Create(
-						publicFactionFacts,
-						_playerSeatingOrder,
-						commit.LinkBoundary);
-					var beneficiaries = commit.PlayerIds
-						.Select(playerId =>
-							projectionAtLink.Beneficiaries[playerId])
-						.ToArray();
-					var expectedDisposition =
-						beneficiaries.All(beneficiary => beneficiary.IsKnown)
-							? beneficiaries[0].Faction == beneficiaries[1].Faction
-								? ActorBorrowedCupidLoversDisposition.SameFaction
-								: ActorBorrowedCupidLoversDisposition.CrossFaction
-							: (ActorBorrowedCupidLoversDisposition?)null;
-					if (expectedDisposition is null ||
-						commit.Disposition != expectedDisposition)
-					{
-						throw new InvalidOperationException(
-							"The stable recovery snapshot has invalid Actor borrowed Cupid classification state.");
-					}
-				}
-			}
-
-			private static FactionFactEffectiveBoundary?
-				FindInitialCompleteWerewolfAgentGroupBoundary(
-					IReadOnlyCollection<IFactionFactBatchLogEntry> history,
-					IReadOnlyCollection<Guid> playerIds)
-			{
-				var candidateBoundaries = history
-					.SelectMany(entry => entry.Facts)
-					.Where(fact =>
-						fact.Type == FactionFactType.Agent &&
-						fact.Faction == Faction.Werewolf)
-					.Select(fact => fact.EffectiveBoundary)
-					.Distinct()
-					.OrderBy(
-						boundary => boundary,
-						Comparer<FactionFactEffectiveBoundary>.Create(
-							FactionFactProjection.CompareBoundaries));
-				foreach (var boundary in candidateBoundaries)
-				{
-					var projection = FactionFactProjection.Create(
-						history,
-						playerIds,
-						boundary);
-					if (playerIds.All(playerId =>
-						projection.Agents[playerId][Faction.Werewolf] !=
-						FactionAgentKnowledge.Unknown))
-					{
-						return boundary;
-					}
-				}
-
-				return null;
 			}
 
 			private static bool TryGetCommittedRolePowerIdentity(
@@ -2525,10 +2407,13 @@ namespace Werewolves.Core.StateModels.Core
 				DomainRecoveryCursor cursor,
 				ModeratorInstruction pendingModeratorInstruction)
 		{
+			ActorBorrowedRolePowerActivation active;
 			ActorBorrowedStutteringJudgeSignalSetupCommit setup;
 			ActorBorrowedStutteringJudgeSignalObservationCommit observation;
 			try
 			{
+				active = dto.ActiveActorBorrowedRolePowerActivation?.ToValue()
+					?? throw new InvalidOperationException();
 				var matchingSetupDtos =
 					dto.ActorBorrowedStutteringJudgeSignalSetupCommits?
 						.Where(candidate =>
@@ -2598,13 +2483,31 @@ namespace Werewolves.Core.StateModels.Core
 				cursor.ActorSetupCardId == Guid.Empty ||
 				cursor.ActorBorrowedActivationId == Guid.Empty ||
 				cursor.PowerInstanceId != cursor.ActorBorrowedActivationId ||
+				powerIdentity.Value.ActingPlayerId != cursor.ActingPlayerId ||
+				powerIdentity.Value.SourceRole != cursor.SourceRole ||
+				!StringComparer.Ordinal.Equals(
+					powerIdentity.Value.SourcePowerIdentifier,
+					cursor.SourcePowerIdentifier) ||
+				powerIdentity.Value.PowerInstanceId !=
+					cursor.ActorBorrowedActivationId ||
 				cursor.CommittedTargetIds is not { Count: 0 } ||
+				active.ActivationId != cursor.ActorBorrowedActivationId ||
+				active.ActingPlayerId != cursor.ActingPlayerId ||
+				active.ActingRole != MainRoleType.Actor ||
+				active.SelectedCardId != cursor.ActorSetupCardId ||
+				active.SourceRole != MainRoleType.StutteringJudge ||
 				setupCard?.PrintedRole != MainRoleType.StutteringJudge ||
 				dto.ActorSetupCardSpends is not { } spends ||
 				spends.Count(spend =>
-					spend.CardId == cursor.ActorSetupCardId &&
 					spend.ActivationId == cursor.ActorBorrowedActivationId) != 1 ||
-				actingPlayer is null ||
+				!spends.Any(spend =>
+					spend.ActivationId == cursor.ActorBorrowedActivationId &&
+					spend.CardId == cursor.ActorSetupCardId) ||
+				actingPlayer is not
+				{
+					MainRole: MainRoleType.Actor,
+					Health: PlayerHealth.Alive
+				} ||
 				setup.PowerIdentity != powerIdentity.Value ||
 				setup.ActorSetupCardId != cursor.ActorSetupCardId ||
 				setup.TurnNumber != dto.TurnNumber ||
@@ -2816,11 +2719,6 @@ namespace Werewolves.Core.StateModels.Core
 				: null;
 			var latestMarkerIndex = dto.GameHistoryLog.FindLastIndex(entry =>
 				entry is ActorBorrowedRolePowerCommittedLogEntry);
-			var hasCurrentNeighborhoodKnowledge =
-				TryGetFoxNeighborhoodAgentKnowledge(
-					dto,
-					centerId,
-					out var currentNeighborhoodKnowledge);
 			var spentResourceId =
 				commit.SpentResourceIdentity?.OneUseResourceId ?? Guid.Empty;
 			if (powerIdentity is not { IsValid: true } ||
@@ -2851,9 +2749,6 @@ namespace Werewolves.Core.StateModels.Core
 					Health: PlayerHealth.Alive
 				} ||
 				centerPlayer is not { Health: PlayerHealth.Alive } ||
-				!hasCurrentNeighborhoodKnowledge ||
-				currentNeighborhoodKnowledge !=
-					commit.NeighborhoodAgentKnowledge ||
 				commit.PowerIdentity != powerIdentity.Value ||
 				commit.ActorSetupCardId != cursor.ActorSetupCardId ||
 				commit.CenterPlayerId != centerId ||
@@ -2888,76 +2783,6 @@ namespace Werewolves.Core.StateModels.Core
 			}
 
 			return cursor;
-		}
-
-		private static bool TryGetFoxNeighborhoodAgentKnowledge(
-			GameSessionDto dto,
-			Guid centerPlayerId,
-			out FactionAgentKnowledge neighborhoodAgentKnowledge)
-		{
-			neighborhoodAgentKnowledge = FactionAgentKnowledge.Unknown;
-			var playersById = dto.Players
-				.GroupBy(player => player.Id)
-				.ToDictionary(group => group.Key, group => group.ToArray());
-			if (!playersById.TryGetValue(centerPlayerId, out var centerMatches) ||
-				centerMatches is not [{ Health: PlayerHealth.Alive }] ||
-				dto.SeatingOrder.IndexOf(centerPlayerId) < 0)
-			{
-				return false;
-			}
-
-			var livingPlayerIds = new List<Guid>();
-			foreach (var playerId in dto.SeatingOrder)
-			{
-				if (!playersById.TryGetValue(playerId, out var matches) ||
-					matches is not [var player])
-				{
-					return false;
-				}
-
-				if (player.Health != PlayerHealth.Alive)
-				{
-					continue;
-				}
-
-				if (player.FactionAgentKnowledge is not { } agentFacts ||
-					!agentFacts.TryGetValue(
-						Faction.Werewolf,
-						out var werewolfAgentKnowledge) ||
-					werewolfAgentKnowledge == FactionAgentKnowledge.Unknown)
-				{
-					return false;
-				}
-
-				livingPlayerIds.Add(playerId);
-			}
-
-			var centerIndex = dto.SeatingOrder.IndexOf(centerPlayerId);
-			var checkedPlayerIds = new HashSet<Guid> { centerPlayerId };
-			foreach (var step in new[] { 1, -1 })
-			{
-				for (var offset = 1; offset < dto.SeatingOrder.Count; offset++)
-				{
-					var candidateIndex =
-						(centerIndex + step * offset + dto.SeatingOrder.Count) %
-						dto.SeatingOrder.Count;
-					var candidateId = dto.SeatingOrder[candidateIndex];
-					if (!livingPlayerIds.Contains(candidateId))
-					{
-						continue;
-					}
-
-					checkedPlayerIds.Add(candidateId);
-					break;
-				}
-			}
-
-			neighborhoodAgentKnowledge = checkedPlayerIds.Any(playerId =>
-				playersById[playerId][0].FactionAgentKnowledge![Faction.Werewolf] ==
-				FactionAgentKnowledge.KnownAgent)
-				? FactionAgentKnowledge.KnownAgent
-				: FactionAgentKnowledge.KnownNonAgent;
-			return true;
 		}
 
 		private static DomainRecoveryCursor

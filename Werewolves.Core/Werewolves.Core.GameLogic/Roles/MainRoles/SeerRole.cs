@@ -301,15 +301,15 @@ internal class SeerRole : ImmediateFeedbackNightRoleHookListener,
 			if (input.SelectedPlayerIds is not { Count: 1 } selectedPlayerIds)
 			{
 				throw new InvalidOperationException(
-					"The Actor borrowed Seer must select exactly one living Player other than the Actor.");
+					GameStrings.ActorBorrowedRolePowerInvalidResponse);
 			}
 
 			var borrowedTargetId = selectedPlayerIds.Single();
 			if (!GetBorrowedPotentialTargets(session, execution.ActingPlayer.Id)
 				    .Contains(borrowedTargetId))
 			{
-				throw new InvalidOperationException(
-					"The borrowed Role Power response is invalid or no longer available.");
+					throw new InvalidOperationException(
+						GameStrings.ActorBorrowedRolePowerInvalidResponse);
 			}
 
 			var targetKnowledge = session.GetFactionAgentKnowledge(

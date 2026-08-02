@@ -56,23 +56,23 @@ internal interface IActorSessionMutator
 		ActorSetupCardSpendCommandLogEntry entry);
 	void ApplyActorBorrowedRolePowerActivationExpiry(
 		ActorBorrowedRolePowerActivationExpiryCommandLogEntry entry);
-	void ApplyActorBorrowedSeerCheck(
+	string ApplyActorBorrowedSeerCheck(
 		ActorBorrowedSeerCheckCommandLogEntry entry);
-	void ApplyActorBorrowedDefenderProtection(
+	string ApplyActorBorrowedDefenderProtection(
 		ActorBorrowedDefenderProtectionCommandLogEntry entry);
-	void ApplyActorBorrowedFoxCheck(
+	string ApplyActorBorrowedFoxCheck(
 		ActorBorrowedFoxCheckCommandLogEntry entry);
-	void ApplyActorBorrowedWitchPotionUse(
+	string ApplyActorBorrowedWitchPotionUse(
 		ActorBorrowedWitchPotionUseCommandLogEntry entry);
-	void ApplyActorBorrowedWitchPotionDecline(
+	string ApplyActorBorrowedWitchPotionDecline(
 		ActorBorrowedWitchPotionDeclineCommandLogEntry entry);
-	void ApplyActorBorrowedCupidLovers(
+	string ApplyActorBorrowedCupidLovers(
 		ActorBorrowedCupidLoversCommandLogEntry entry);
 	void ApplyActorBorrowedCupidInitialBeneficiaryClosure(
 		ActorBorrowedCupidInitialBeneficiaryClosureCommandLogEntry entry);
-	void ApplyActorBorrowedStutteringJudgeSignalSetup(
+	string ApplyActorBorrowedStutteringJudgeSignalSetup(
 		ActorBorrowedStutteringJudgeSignalSetupCommandLogEntry entry);
-	void ApplyActorBorrowedStutteringJudgeSignalObservation(
+	string ApplyActorBorrowedStutteringJudgeSignalObservation(
 		ActorBorrowedStutteringJudgeSignalObservationCommandLogEntry entry);
 }
 
@@ -550,7 +550,7 @@ internal partial class GameSessionKernel
 			kernel._activeActorBorrowedRolePowerActivation = null;
 		}
 
-		public void ApplyActorBorrowedSeerCheck(
+		public string ApplyActorBorrowedSeerCheck(
 			ActorBorrowedSeerCheckCommandLogEntry entry)
 		{
 			ArgumentNullException.ThrowIfNull(entry);
@@ -607,9 +607,12 @@ internal partial class GameSessionKernel
 				markerLogIndex);
 			commit.EnforceValidity();
 			kernel._actorBorrowedSeerCheckCommits.Add(commit);
+			return ActorBorrowedRolePowerCommitment.Create(
+				kernel._actorBorrowedRolePowerCommitmentKey,
+				commit);
 		}
 
-		public void ApplyActorBorrowedDefenderProtection(
+		public string ApplyActorBorrowedDefenderProtection(
 			ActorBorrowedDefenderProtectionCommandLogEntry entry)
 		{
 			ArgumentNullException.ThrowIfNull(entry);
@@ -661,9 +664,12 @@ internal partial class GameSessionKernel
 				markerLogIndex);
 			commit.EnforceValidity();
 			kernel._actorBorrowedDefenderProtectionCommits.Add(commit);
+			return ActorBorrowedRolePowerCommitment.Create(
+				kernel._actorBorrowedRolePowerCommitmentKey,
+				commit);
 		}
 
-		public void ApplyActorBorrowedFoxCheck(
+		public string ApplyActorBorrowedFoxCheck(
 			ActorBorrowedFoxCheckCommandLogEntry entry)
 		{
 			ArgumentNullException.ThrowIfNull(entry);
@@ -698,9 +704,6 @@ internal partial class GameSessionKernel
 				} ||
 				!kernel._players.TryGetValue(entry.CenterPlayerId, out var center) ||
 				((IPlayer)center).State.Health != PlayerHealth.Alive ||
-				entry.NeighborhoodAgentKnowledge !=
-					kernel.GetCurrentFoxNeighborhoodAgentKnowledge(
-						entry.CenterPlayerId) ||
 				kernel._actorBorrowedFoxCheckCommits.Any(commit =>
 					commit.PowerIdentity == identity))
 			{
@@ -720,9 +723,12 @@ internal partial class GameSessionKernel
 				markerLogIndex);
 			commit.EnforceValidity();
 			kernel._actorBorrowedFoxCheckCommits.Add(commit);
+			return ActorBorrowedRolePowerCommitment.Create(
+				kernel._actorBorrowedRolePowerCommitmentKey,
+				commit);
 		}
 
-		public void ApplyActorBorrowedWitchPotionUse(
+		public string ApplyActorBorrowedWitchPotionUse(
 			ActorBorrowedWitchPotionUseCommandLogEntry entry)
 		{
 			ArgumentNullException.ThrowIfNull(entry);
@@ -810,9 +816,12 @@ internal partial class GameSessionKernel
 				markerLogIndex);
 			commit.EnforceValidity();
 			kernel._actorBorrowedWitchPotionUseCommits.Add(commit);
+			return ActorBorrowedRolePowerCommitment.Create(
+				kernel._actorBorrowedRolePowerCommitmentKey,
+				commit);
 		}
 
-		public void ApplyActorBorrowedWitchPotionDecline(
+		public string ApplyActorBorrowedWitchPotionDecline(
 			ActorBorrowedWitchPotionDeclineCommandLogEntry entry)
 		{
 			ArgumentNullException.ThrowIfNull(entry);
@@ -884,9 +893,12 @@ internal partial class GameSessionKernel
 				markerLogIndex);
 			commit.EnforceValidity();
 			kernel._actorBorrowedWitchPotionDeclineCommits.Add(commit);
+			return ActorBorrowedRolePowerCommitment.Create(
+				kernel._actorBorrowedRolePowerCommitmentKey,
+				commit);
 		}
 
-		public void ApplyActorBorrowedCupidLovers(
+		public string ApplyActorBorrowedCupidLovers(
 			ActorBorrowedCupidLoversCommandLogEntry entry)
 		{
 			ArgumentNullException.ThrowIfNull(entry);
@@ -898,19 +910,6 @@ internal partial class GameSessionKernel
 					card.Id == active.SelectedCardId);
 			var markerLogIndex = kernel._gameHistoryLog.GetAllLogEntries().Count;
 			var playerIds = new[] { entry.FirstPlayerId, entry.SecondPlayerId };
-			var beneficiaryFacts = playerIds
-				.Select(playerId => kernel._players.TryGetValue(playerId, out var player)
-					? ((IPlayer)player).State.FactionBeneficiary
-					: FactionBeneficiaryKnowledge.Unknown)
-				.ToArray();
-			var expectedDisposition = entry.TurnNumber == 1
-				? ActorBorrowedCupidLoversDisposition
-					.DeferredToInitialBeneficiaryClosure
-				: beneficiaryFacts.All(fact => fact.IsKnown)
-					? beneficiaryFacts[0].Faction == beneficiaryFacts[1].Faction
-						? ActorBorrowedCupidLoversDisposition.SameFaction
-						: ActorBorrowedCupidLoversDisposition.CrossFaction
-					: (ActorBorrowedCupidLoversDisposition?)null;
 			if (active is null ||
 				entry.CurrentPhase != kernel.CurrentPhase ||
 				entry.TurnNumber != kernel.TurnNumber ||
@@ -940,8 +939,12 @@ internal partial class GameSessionKernel
 				playerIds.Any(playerId =>
 					!kernel._players.TryGetValue(playerId, out var player) ||
 					((IPlayer)player).State.Health != PlayerHealth.Alive) ||
-				expectedDisposition is null ||
-				entry.Disposition != expectedDisposition ||
+				entry.TurnNumber == 1 &&
+				entry.Disposition != ActorBorrowedCupidLoversDisposition
+					.DeferredToInitialBeneficiaryClosure ||
+				entry.TurnNumber > 1 &&
+				entry.Disposition == ActorBorrowedCupidLoversDisposition
+					.DeferredToInitialBeneficiaryClosure ||
 				kernel._actorBorrowedCupidLoversCommits.Count > 0 ||
 				kernel._gameHistoryLog.GetAllLogEntries()
 					.OfType<LoversPairCommittedLogEntry>()
@@ -976,6 +979,9 @@ internal partial class GameSessionKernel
 				StatusEffectTypes.Lovers,
 				isActive: true);
 			kernel._actorBorrowedCupidLoversCommits.Add(commit);
+			return ActorBorrowedRolePowerCommitment.Create(
+				kernel._actorBorrowedRolePowerCommitmentKey,
+				commit);
 		}
 
 		public void ApplyActorBorrowedCupidInitialBeneficiaryClosure(
@@ -988,26 +994,11 @@ internal partial class GameSessionKernel
 			var history = kernel._gameHistoryLog.GetAllLogEntries();
 			var commitIndex = kernel._actorBorrowedCupidLoversCommits
 				.FindIndex(commit => commit == expected);
-			var initialGroupBoundary =
-				FindInitialCompleteWerewolfAgentGroupBoundary(
-					history.OfType<IFactionFactBatchLogEntry>(),
-					kernel._playerSeatingOrder);
-			var expectedDisposition = initialGroupBoundary is null
-				? null
-				: ActorBorrowedCupidLoversCommit.ClassifyInitialDisposition(
-					expected,
-					kernel._playerSeatingOrder,
-					history.OfType<IFactionFactBatchLogEntry>().ToArray(),
-					initialGroupBoundary,
-					playerId => kernel._players.TryGetValue(playerId, out var player)
-						? ((IPlayer)player).State.CurrentRole
-						: null);
 			if (entry.TurnNumber != kernel.TurnNumber ||
 				entry.CurrentPhase != kernel.CurrentPhase ||
 				entry.TurnNumber != 1 ||
 				entry.CurrentPhase != GamePhase.Night ||
 				commitIndex < 0 ||
-				expectedDisposition != entry.ResolvedDisposition ||
 				history.OfType<FactionFactsCommittedLogEntry>().Any(candidate =>
 					candidate.Source.Kind ==
 					FactionFactSourceKind.InitialBeneficiaryClosure) ||
@@ -1053,41 +1044,7 @@ internal partial class GameSessionKernel
 			}
 		}
 
-		private static FactionFactEffectiveBoundary?
-			FindInitialCompleteWerewolfAgentGroupBoundary(
-				IEnumerable<IFactionFactBatchLogEntry> history,
-				IReadOnlyCollection<Guid> playerIds)
-		{
-			var factHistory = history.ToArray();
-			var candidateBoundaries = factHistory
-				.SelectMany(candidate => candidate.Facts)
-				.Where(fact =>
-					fact.Type == FactionFactType.Agent &&
-					fact.Faction == Faction.Werewolf)
-				.Select(fact => fact.EffectiveBoundary)
-				.Distinct()
-				.OrderBy(
-					boundary => boundary,
-					Comparer<FactionFactEffectiveBoundary>.Create(
-						FactionFactProjection.CompareBoundaries));
-			foreach (var boundary in candidateBoundaries)
-			{
-				var projection = FactionFactProjection.Create(
-					factHistory,
-					playerIds,
-					boundary);
-				if (playerIds.All(playerId =>
-					projection.Agents[playerId][Faction.Werewolf] !=
-					FactionAgentKnowledge.Unknown))
-				{
-					return boundary;
-				}
-			}
-
-			return null;
-		}
-
-		public void ApplyActorBorrowedStutteringJudgeSignalSetup(
+		public string ApplyActorBorrowedStutteringJudgeSignalSetup(
 			ActorBorrowedStutteringJudgeSignalSetupCommandLogEntry entry)
 		{
 			ArgumentNullException.ThrowIfNull(entry);
@@ -1136,9 +1093,12 @@ internal partial class GameSessionKernel
 				markerLogIndex);
 			commit.EnforceValidity();
 			kernel._actorBorrowedStutteringJudgeSignalSetupCommits.Add(commit);
+			return ActorBorrowedRolePowerCommitment.Create(
+				kernel._actorBorrowedRolePowerCommitmentKey,
+				commit);
 		}
 
-		public void ApplyActorBorrowedStutteringJudgeSignalObservation(
+		public string ApplyActorBorrowedStutteringJudgeSignalObservation(
 			ActorBorrowedStutteringJudgeSignalObservationCommandLogEntry entry)
 		{
 			ArgumentNullException.ThrowIfNull(entry);
@@ -1201,6 +1161,9 @@ internal partial class GameSessionKernel
 					markerLogIndex);
 			commit.EnforceValidity();
 			kernel._actorBorrowedStutteringJudgeSignalObservationCommits.Add(commit);
+			return ActorBorrowedRolePowerCommitment.Create(
+				kernel._actorBorrowedRolePowerCommitmentKey,
+				commit);
 		}
 
 		public void ApplyThiefOfferDecline(ThiefOfferDeclinedLogEntry entry)

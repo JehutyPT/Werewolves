@@ -153,7 +153,10 @@ internal sealed class WitchRole : NightRoleHookListener<WitchRoleState>
 					ValidateBorrowedPotionUseCommits(
 						session,
 						borrowedExecution);
-					ValidateBorrowedSleep(borrowedExecution, sleep);
+					ValidateBorrowedSleep(
+						session,
+						borrowedExecution,
+						sleep);
 					listenerState = WitchRoleState.ReadyToSleep.ToString();
 					return true;
 			}
@@ -321,16 +324,20 @@ internal sealed class WitchRole : NightRoleHookListener<WitchRoleState>
 		GameSession session,
 		ModeratorResponse input)
 	{
+		var execution = ResolveExecution(session);
 		var selectedPlayerIds = input.SelectedPlayerIds
 			?? throw new InvalidOperationException(
-				"Witch healing requires a Player selection response.");
+				execution.IsBorrowed
+					? GameStrings.ActorBorrowedRolePowerInvalidResponse
+					: "Witch healing requires a Player selection response.");
 		if (selectedPlayerIds.Count > 1)
 		{
 			throw new InvalidOperationException(
-				"The Witch may heal at most one attacked Player.");
+				execution.IsBorrowed
+					? GameStrings.ActorBorrowedRolePowerInvalidResponse
+					: "The Witch may heal at most one attacked Player.");
 		}
 
-		var execution = ResolveExecution(session);
 		var targetId = selectedPlayerIds.SingleOrDefault();
 		if (execution.IsBorrowed &&
 		    selectedPlayerIds.Count == 1 &&
@@ -338,7 +345,7 @@ internal sealed class WitchRole : NightRoleHookListener<WitchRoleState>
 			    .Any(player => player.Id == targetId))
 		{
 			throw new InvalidOperationException(
-				"The Actor borrowed Witch healing target must be physically attacked this Night.");
+				GameStrings.ActorBorrowedRolePowerInvalidResponse);
 		}
 
 		var nextInstruction = PreparePoisonOrSleep(
@@ -369,16 +376,20 @@ internal sealed class WitchRole : NightRoleHookListener<WitchRoleState>
 		GameSession session,
 		ModeratorResponse input)
 	{
+		var execution = ResolveExecution(session);
 		var selectedPlayerIds = input.SelectedPlayerIds
 			?? throw new InvalidOperationException(
-				"Witch poison requires a Player selection response.");
+				execution.IsBorrowed
+					? GameStrings.ActorBorrowedRolePowerInvalidResponse
+					: "Witch poison requires a Player selection response.");
 		if (selectedPlayerIds.Count > 1)
 		{
 			throw new InvalidOperationException(
-				"The Witch may poison at most one living Player.");
+				execution.IsBorrowed
+					? GameStrings.ActorBorrowedRolePowerInvalidResponse
+					: "The Witch may poison at most one living Player.");
 		}
 
-		var execution = ResolveExecution(session);
 		if (execution.IsBorrowed && selectedPlayerIds.Count == 1)
 		{
 			var targetId = selectedPlayerIds.Single();
@@ -391,7 +402,7 @@ internal sealed class WitchRole : NightRoleHookListener<WitchRoleState>
 			    targetId == healedTargetId)
 			{
 				throw new InvalidOperationException(
-					"The Actor borrowed Witch poison target must be one legal living Player.");
+					GameStrings.ActorBorrowedRolePowerInvalidResponse);
 			}
 		}
 
@@ -609,6 +620,8 @@ internal sealed class WitchRole : NightRoleHookListener<WitchRoleState>
 	{
 		if (wake.AffectedPlayerIds is not { Count: 1 } affectedPlayerIds ||
 		    affectedPlayerIds.Single() != execution.ActingPlayer.Id ||
+		    wake.PrivateInstruction is not null ||
+		    wake.SoundEffects.Count != 0 ||
 		    !StringComparer.Ordinal.Equals(
 			    wake.PublicAnnouncement,
 			    GameStrings.RoleWakesUp.Format(GameStrings.ActorRoleName)))
@@ -625,15 +638,26 @@ internal sealed class WitchRole : NightRoleHookListener<WitchRoleState>
 	{
 		var (healedTargetId, poisonedTargetId) =
 			ValidateBorrowedPotionUseCommits(session, execution);
-		var expectedTargets =
-			GameSessionQueries.GetPhysicalAttackTargetsThisNight(session)
-				.Select(player => player.Id)
-				.ToHashSet();
+		var attackTargets =
+			GameSessionQueries.GetPhysicalAttackTargetsThisNight(session);
+		var expectedTargets = attackTargets
+			.Select(player => player.Id)
+			.ToHashSet();
+		var expectedPrivateInstruction =
+			GameStrings.WitchHealingSelectionInstruction.Format(
+				string.Join(", ", attackTargets.Select(player => player.Name)));
 		if (healedTargetId.HasValue ||
 		    poisonedTargetId.HasValue ||
 		    selection.CountConstraint != NumberRangeConstraint.SingleOptional ||
 		    selection.RoleIdentification.HasValue ||
 		    selection.PublicAnnouncement is not null ||
+		    !StringComparer.Ordinal.Equals(
+			    selection.PrivateInstruction,
+			    expectedPrivateInstruction) ||
+		    !StringComparer.Ordinal.Equals(
+			    selection.EmptySelectionOptionLabel,
+			    GameStrings.DeclineOption) ||
+		    selection.SoundEffects.Count != 0 ||
 		    selection.AffectedPlayerIds is not { Count: 1 } affectedPlayerIds ||
 		    affectedPlayerIds.Single() != execution.ActingPlayer.Id ||
 		    !selection.SelectablePlayerIds.SetEquals(expectedTargets))
@@ -656,9 +680,27 @@ internal sealed class WitchRole : NightRoleHookListener<WitchRoleState>
 				player.Id != healedTargetId)
 			.Select(player => player.Id)
 			.ToHashSet();
+		var attackTargets =
+			GameSessionQueries.GetPhysicalAttackTargetsThisNight(session);
+		var attackRosterWasDisclosed = HasBorrowedPotionDecision(
+			session,
+			execution,
+			HealingResourceId);
+		var expectedPrivateInstruction =
+			attackRosterWasDisclosed || attackTargets.Count == 0
+				? GameStrings.WitchPoisonSelectionInstruction
+				: GameStrings.WitchAttackTargetsAndPoisonSelectionInstruction.Format(
+					string.Join(", ", attackTargets.Select(player => player.Name)));
 		if (selection.CountConstraint != NumberRangeConstraint.SingleOptional ||
 		    selection.RoleIdentification.HasValue ||
 		    selection.PublicAnnouncement is not null ||
+		    !StringComparer.Ordinal.Equals(
+			    selection.PrivateInstruction,
+			    expectedPrivateInstruction) ||
+		    !StringComparer.Ordinal.Equals(
+			    selection.EmptySelectionOptionLabel,
+			    GameStrings.DeclineOption) ||
+		    selection.SoundEffects.Count != 0 ||
 		    selection.AffectedPlayerIds is not { Count: 1 } affectedPlayerIds ||
 		    affectedPlayerIds.Single() != execution.ActingPlayer.Id ||
 		    !selection.SelectablePlayerIds.SetEquals(expectedTargets))
@@ -669,11 +711,28 @@ internal sealed class WitchRole : NightRoleHookListener<WitchRoleState>
 	}
 
 	private static void ValidateBorrowedSleep(
+		GameSession session,
 		ExecutionContext execution,
 		ConfirmationInstruction sleep)
 	{
+		var attackTargets =
+			GameSessionQueries.GetPhysicalAttackTargetsThisNight(session);
+		var attackRosterWasDisclosed = HasBorrowedPotionDecision(
+			session,
+			execution,
+			HealingResourceId,
+			PoisonResourceId);
+		var expectedPrivateInstruction =
+			!attackRosterWasDisclosed && attackTargets.Count > 0
+				? GameStrings.WitchAttackTargetsInstruction.Format(
+					string.Join(", ", attackTargets.Select(player => player.Name)))
+				: null;
 		if (sleep.AffectedPlayerIds is not { Count: 1 } affectedPlayerIds ||
 		    affectedPlayerIds.Single() != execution.ActingPlayer.Id ||
+		    !StringComparer.Ordinal.Equals(
+			    sleep.PrivateInstruction,
+			    expectedPrivateInstruction) ||
+		    sleep.SoundEffects.Count != 0 ||
 		    !StringComparer.Ordinal.Equals(
 			    sleep.PublicAnnouncement,
 			    GameStrings.RoleGoesToSleepSingle.Format(
@@ -682,6 +741,26 @@ internal sealed class WitchRole : NightRoleHookListener<WitchRoleState>
 			throw new InvalidOperationException(
 				"The pending Actor borrowed Witch sleep instruction is invalid.");
 		}
+	}
+
+	private static bool HasBorrowedPotionDecision(
+		GameSession session,
+		ExecutionContext execution,
+		params Guid[] resourceIds)
+	{
+		var powerIdentity = CreatePowerIdentity(execution);
+		return session.GetActorBorrowedWitchPotionUseCommits().Any(commit =>
+				commit.PowerIdentity == powerIdentity &&
+				commit.TurnNumber == session.TurnNumber &&
+				commit.CurrentPhase == GamePhase.Night &&
+				resourceIds.Contains(
+					commit.SpentResourceIdentity.OneUseResourceId)) ||
+		       session.GetActorBorrowedWitchPotionDeclineCommits().Any(commit =>
+				       commit.PowerIdentity == powerIdentity &&
+				       commit.TurnNumber == session.TurnNumber &&
+				       commit.CurrentPhase == GamePhase.Night &&
+				       resourceIds.Contains(
+					       commit.OfferedResourceIdentity.OneUseResourceId));
 	}
 
 	private static (Guid? HealedTargetId, Guid? PoisonedTargetId)
@@ -801,7 +880,7 @@ internal sealed class WitchRole : NightRoleHookListener<WitchRoleState>
 		{
 			throw new InvalidOperationException(
 				execution.IsBorrowed
-					? "The borrowed Role Power response is invalid or no longer available."
+				? GameStrings.ActorBorrowedRolePowerInvalidResponse
 					: "The selected Witch potion resource is already spent.");
 		}
 

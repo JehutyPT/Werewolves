@@ -98,6 +98,98 @@ public sealed class ActorBorrowedLittleGirlTests
 	}
 
 	[Fact]
+	public void BorrowedLittleGirl_InvalidObservationResponsesUseGenericErrorWithoutMutation()
+	{
+		var (session, start, actorId, _) = CreateActorSession();
+		var activation = PerformSpendOpening(
+			CreateActorRole(),
+			session,
+			start,
+			LittleGirlCard.Id);
+		IGameHookListener listener = new SimpleWerewolfRole(
+			new RolePowerAvailabilityGateway(
+				AllowAllRolePowerAvailabilityPolicy.Instance));
+		var observation = Advance(listener, session, start.CreateResponse())
+			.Instruction.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		var historyCount = session.GameHistoryLog.Count();
+		var invalidResponses = new[]
+		{
+			new ModeratorResponse
+			{
+				InstructionId = observation.InstructionId,
+				Type = ExpectedInputType.PlayerSelection,
+				SelectedPlayerIds = new HashSet<Guid>()
+			},
+			new ModeratorResponse
+			{
+				InstructionId = observation.InstructionId,
+				Type = ExpectedInputType.PlayerSelection,
+				SelectedPlayerIds = new HashSet<Guid> { Guid.NewGuid() }
+			}
+		};
+
+		foreach (var invalidResponse in invalidResponses)
+		{
+			var act = () => Advance(listener, session, invalidResponse);
+
+			act.Should().Throw<InvalidOperationException>().WithMessage(
+				GameStrings.ActorBorrowedRolePowerInvalidResponse);
+			session.GameHistoryLog.Should().HaveCount(historyCount);
+			session.GetPlayers().Should().AllSatisfy(player =>
+				session.GetFactionAgentKnowledge(
+						player.Id,
+						Faction.Werewolf)
+					.Should().Be(FactionAgentKnowledge.Unknown));
+			session.GetModeratorActiveActorBorrowedRolePowerActivation().Should()
+				.Be(activation);
+			session.GetPlayerState(actorId).CurrentRole.Should().Be(
+				MainRoleType.Actor);
+		}
+	}
+
+	[Fact]
+	public void BorrowedLittleGirl_MalformedVictimSelectionUsesGenericErrorWithoutMutation()
+	{
+		var (session, start, actorId, werewolfId) = CreateActorSession();
+		var activation = PerformSpendOpening(
+			CreateActorRole(),
+			session,
+			start,
+			LittleGirlCard.Id);
+		IGameHookListener listener = new SimpleWerewolfRole(
+			new RolePowerAvailabilityGateway(
+				AllowAllRolePowerAvailabilityPolicy.Instance));
+		var observation = Advance(listener, session, start.CreateResponse())
+			.Instruction.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		var victimSelection = Advance(
+			listener,
+			session,
+			observation.CreateResponse([werewolfId])).Instruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		var historyCount = session.GameHistoryLog.Count();
+		var malformed = new ModeratorResponse
+		{
+			InstructionId = victimSelection.InstructionId,
+			Type = ExpectedInputType.PlayerSelection,
+			SelectedPlayerIds = victimSelection.SelectablePlayerIds
+				.Take(2)
+				.ToHashSet()
+		};
+
+		var act = () => Advance(listener, session, malformed);
+
+		act.Should().Throw<InvalidOperationException>().WithMessage(
+			GameStrings.ActorBorrowedRolePowerInvalidResponse);
+		session.GameHistoryLog.Should().HaveCount(historyCount);
+		session.GameHistoryLog.OfType<NightActionLogEntry>().Should()
+			.NotContain(entry =>
+				entry.ActionType == NightActionType.WerewolfVictimSelection);
+		session.GetModeratorActiveActorBorrowedRolePowerActivation().Should()
+			.Be(activation);
+		session.GetPlayerState(actorId).CurrentRole.Should().Be(MainRoleType.Actor);
+	}
+
+	[Fact]
 	public void BorrowedLittleGirl_KnownWerewolfMembership_DecoratesWholeCollectiveIntervalWithOneDecision()
 	{
 		var (session, start, actorId, werewolfId) = CreateActorSession();
@@ -281,6 +373,63 @@ public sealed class ActorBorrowedLittleGirlTests
 			entry.ToString().Should().NotContain(LittleGirlCard.Id.ToString());
 			entry.ToString().Should().NotContain(activation.ActivationId.ToString());
 		}
+	}
+
+	[Fact]
+	public void BorrowedLittleGirl_DeniedGuidanceRecoveryRetainsDecisionWithoutReevaluation()
+	{
+		var (session, start, actorId, werewolfId) = CreateActorSession();
+		var activation = PerformSpendOpening(
+			CreateActorRole(),
+			session,
+			start,
+			LittleGirlCard.Id);
+		var policy = new RecordingPolicy(RolePowerAvailabilityResult.Denied);
+		IGameHookListener listener = session.GetOrCreateListener(
+			ListenerIdentifier.Listener(MainRoleType.SimpleWerewolf),
+			() => new SimpleWerewolfRole(
+				new RolePowerAvailabilityGateway(policy)));
+		var observation = Advance(listener, session, start.CreateResponse())
+			.Instruction.Should().BeOfType<SelectPlayersInstruction>().Subject;
+
+		observation.Semantic.Should().Be(
+			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
+		observation.PrivateInstruction.Should().Be(
+			GameStrings.WerewolfFactionAgentObservationPrompt);
+		policy.ObservedAttempts.Should().ContainSingle();
+		session.SetPendingModeratorInstruction(RecoveryKey, observation);
+		var victimSelection = GameFlowManager.HandleInput(
+				session,
+				observation.CreateResponse([werewolfId]),
+				SupportedRoleCatalog.Admissions).ModeratorInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+
+		var recovered = new GameSession(session.Serialize());
+		recovered.GetOrCreateListener(
+			ListenerIdentifier.Listener(MainRoleType.SimpleWerewolf),
+			() => new SimpleWerewolfRole(
+				new RolePowerAvailabilityGateway(policy)));
+		GameFlowManager.RestoreDurableContinuation(
+			recovered,
+			SupportedRoleCatalog.Admissions);
+		var recoveredVictimSelection = recovered.PendingModeratorInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		var victimId = recoveredVictimSelection.SelectablePlayerIds.First();
+		var sleep = GameFlowManager.HandleInput(
+				recovered,
+				recoveredVictimSelection.CreateResponse([victimId]),
+				SupportedRoleCatalog.Admissions).ModeratorInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+
+		recoveredVictimSelection.InstructionId.Should().Be(
+			victimSelection.InstructionId);
+		sleep.Semantic.Should().Be(ModeratorInstructionSemantic.PutRoleToSleep);
+		sleep.PrivateInstruction.Should().BeNull();
+		policy.ObservedAttempts.Should().ContainSingle();
+		recovered.GetModeratorActiveActorBorrowedRolePowerActivation().Should()
+			.Be(activation);
+		recovered.GetPlayerState(actorId).CurrentRole.Should().Be(
+			MainRoleType.Actor);
 	}
 
 	private static ActorRole CreateActorRole() => new(

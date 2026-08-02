@@ -354,7 +354,7 @@ internal sealed class CupidRole
 		if (session.GetCurrentPhase() != GamePhase.Night)
 		{
 			throw new InvalidOperationException(
-				"The Actor borrowed Cupid may commit one Lovers pair at its Night source slot.");
+				GameStrings.ActorBorrowedRolePowerInvalidResponse);
 		}
 
 		if (session.PendingModeratorInstruction is not
@@ -365,7 +365,7 @@ internal sealed class CupidRole
 		    pendingSelection.InstructionId != input.InstructionId)
 		{
 			throw new InvalidOperationException(
-				"The Actor borrowed Cupid selection no longer belongs to its instructed source slot.");
+				GameStrings.ActorBorrowedRolePowerInvalidResponse);
 		}
 
 		ValidateBorrowedSelectionInstruction(
@@ -383,7 +383,7 @@ internal sealed class CupidRole
 			    pendingSelection.SelectablePlayerIds))
 		{
 			throw new InvalidOperationException(
-				"The Actor borrowed Cupid must select exactly two distinct living Players.");
+				GameStrings.ActorBorrowedRolePowerInvalidResponse);
 		}
 
 		var powerIdentity = CreatePowerIdentity(execution);
@@ -391,14 +391,43 @@ internal sealed class CupidRole
 			    commit.PowerIdentity == powerIdentity))
 		{
 			throw new InvalidOperationException(
-				"The Actor borrowed Cupid power already committed its Lovers pair.");
+				GameStrings.ActorBorrowedRolePowerInvalidResponse);
 		}
 
+		var disposition = ResolveBorrowedLoversDisposition(
+			session,
+			selectedPlayerIds);
 		session.CommitActorBorrowedCupidLovers(
 			powerIdentity,
-			selectedPlayerIds);
+			selectedPlayerIds,
+			disposition);
 		return PrepareLoversRecognitionInstruction(
 			selectedPlayerIds.Order().ToArray());
+	}
+
+	private static ActorBorrowedCupidLoversDisposition
+		ResolveBorrowedLoversDisposition(
+			GameSession session,
+			IReadOnlyCollection<Guid> playerIds)
+	{
+		if (session.TurnNumber == 1)
+		{
+			return ActorBorrowedCupidLoversDisposition
+				.DeferredToInitialBeneficiaryClosure;
+		}
+
+		var beneficiaries = playerIds
+			.Select(session.GetFactionBeneficiaryKnowledge)
+			.ToArray();
+		if (beneficiaries.Any(beneficiary => !beneficiary.IsKnown))
+		{
+			throw new InvalidOperationException(
+				"Required Faction facts are not ready.");
+		}
+
+		return beneficiaries[0].Faction == beneficiaries[1].Faction
+			? ActorBorrowedCupidLoversDisposition.SameFaction
+			: ActorBorrowedCupidLoversDisposition.CrossFaction;
 	}
 
 	private HookListenerActionResult BeginCall(
@@ -890,7 +919,7 @@ internal sealed class CupidRole
 			    livingPlayerIds))
 		{
 			throw new InvalidOperationException(
-				"The borrowed Role Power response is invalid or no longer available.");
+				GameStrings.ActorBorrowedRolePowerInvalidResponse);
 		}
 	}
 

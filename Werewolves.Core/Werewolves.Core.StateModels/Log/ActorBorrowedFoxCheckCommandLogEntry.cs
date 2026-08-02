@@ -37,14 +37,14 @@ internal sealed record ActorBorrowedFoxCheckCommandLogEntry
 				"This Session Mutator does not project Actor borrowed Fox checks.");
 		}
 
-		var publicMarker = new ActorBorrowedRolePowerCommittedLogEntry
+		var integrityCommitment = actorMutator.ApplyActorBorrowedFoxCheck(this);
+		return new ActorBorrowedRolePowerCommittedLogEntry
 		{
 			Timestamp = Timestamp,
 			TurnNumber = TurnNumber,
-			CurrentPhase = CurrentPhase
+			CurrentPhase = CurrentPhase,
+			IntegrityCommitment = integrityCommitment
 		};
-		actorMutator.ApplyActorBorrowedFoxCheck(this);
-		return publicMarker;
 	}
 
 	public override string ToString() => "ActorBorrowedFoxCheckCommand";
