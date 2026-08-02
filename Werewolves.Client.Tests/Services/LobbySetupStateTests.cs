@@ -85,6 +85,34 @@ public class LobbySetupStateTests
 		scenario.RuleState.Should().Be(SimulationRuleState.Default);
 	}
 
+	[Theory]
+	[InlineData(MainRoleType.Actor)]
+	[InlineData(MainRoleType.PrejudicedManipulator)]
+	public void TryCreateSimulationScenario_BeforeConditionalRoleLockIn_FailsClosed(
+		MainRoleType conditionalRole)
+	{
+		var state = LobbySetupMetadataFixture.StateWithRoles(
+			conditionalRole,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager);
+		foreach (var playerName in PlayerNames.DefaultFive)
+		{
+			state.AddPlayer(playerName);
+		}
+		state.IncrementRole(conditionalRole);
+		state.IncrementRole(MainRoleType.SimpleWerewolf);
+		for (var index = 0; index < 3; index++)
+		{
+			state.IncrementRole(MainRoleType.SimpleVillager);
+		}
+
+		var created = state.TryCreateSimulationScenario(out var scenario);
+
+		state.AcceptedRoleLockIn.Should().BeNull();
+		created.Should().BeFalse();
+		scenario.Should().BeNull();
+	}
+
 	[Fact]
 	public void TryCreateSimulationScenario_WithReachableManipulatorAndNoPartition_FailsClosed()
 	{
@@ -101,6 +129,119 @@ public class LobbySetupStateTests
 		state.AcceptedPublicGroupPartition.Should().BeNull();
 		created.Should().BeFalse();
 		scenario.Should().BeNull();
+	}
+
+	[Fact]
+	public void ActorAndManipulatorReachable_RequireActorSetupBeforePublicGroupPartition()
+	{
+		var state = CreateStateWithAcceptedRoleLockIn(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.WildChild,
+			MainRoleType.Actor,
+			MainRoleType.PrejudicedManipulator);
+
+		state.RequiresActorSetupCards.Should().BeTrue();
+		state.RequiresPublicGroupPartition.Should().BeFalse(
+			"Actor Setup Cards precede the existing partition gate");
+		state.TryCreateSimulationScenario(out _).Should().BeFalse();
+
+		var actorSetupCards = ActorSetupCards.CreateFromPrintedRoles(
+			version: 1,
+			[
+				MainRoleType.Cupid,
+				MainRoleType.Witch,
+				MainRoleType.Hunter
+			]);
+		state.CanReplaceActorSetupCards(
+			expectedCurrentVersion: 0,
+			actorSetupCards).Should().BeTrue();
+		state.ApplyAcceptedActorSetupCards(actorSetupCards);
+
+		state.RequiresActorSetupCards.Should().BeFalse();
+		state.RequiresPublicGroupPartition.Should().BeTrue();
+		state.TryCreateSimulationScenario(out _).Should().BeFalse();
+
+		AcceptCurrentRosterPartition(state);
+
+		state.TryCreateSimulationScenario(out var scenario).Should().BeTrue();
+		scenario.ActorSetupCards.Should().Be(actorSetupCards);
+	}
+
+	[Fact]
+	public void ActorSetupReplacement_RequiresNextVersionAndStopsAfterLobbyExit()
+	{
+		var state = CreateStateWithAcceptedRoleLockIn(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.Actor);
+		var accepted = ActorSetupCards.CreateFromPrintedRoles(
+			version: 1,
+			[
+				MainRoleType.Cupid,
+				MainRoleType.Witch,
+				MainRoleType.Hunter
+			]);
+		state.CanReplaceActorSetupCards(0, accepted).Should().BeTrue();
+		state.ApplyAcceptedActorSetupCards(accepted);
+		var next = ActorSetupCards.CreateFromPrintedRoles(
+			version: 2,
+			[
+				MainRoleType.Seer,
+				MainRoleType.Defender,
+				MainRoleType.Elder
+			]);
+		var skipped = ActorSetupCards.CreateFromPrintedRoles(
+			version: 3,
+			next.PrintedRoles);
+
+		state.CanReplaceActorSetupCards(0, next).Should().BeFalse();
+		state.CanReplaceActorSetupCards(1, skipped).Should().BeFalse();
+		state.AcceptedActorSetupCards.Should().BeSameAs(accepted);
+
+		state.FinalizeRoleLockIn(state.AcceptedRoleLockIn!);
+
+		state.CanReplaceActorSetupCards(1, next).Should().BeFalse();
+		state.AcceptedActorSetupCards.Should().BeSameAs(accepted);
+	}
+
+	[Fact]
+	public void RoleLockInReplacement_WhenActorBecomesUnreachable_ClearsActorSetup()
+	{
+		var state = CreateStateWithAcceptedRoleLockIn(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.Actor);
+		var actorSetupCards = ActorSetupCards.CreateFromPrintedRoles(
+			version: 1,
+			[
+				MainRoleType.Cupid,
+				MainRoleType.Witch,
+				MainRoleType.Hunter
+			]);
+		state.CanReplaceActorSetupCards(0, actorSetupCards).Should().BeTrue();
+		state.ApplyAcceptedActorSetupCards(actorSetupCards);
+		var replacement = RoleLockIn.CreateFromPrintedRoles(
+			version: 2,
+			playerCount: state.PlayerRoster.Count,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+
+		state.CanReplaceRoleLockIn(1, replacement).Should().BeTrue();
+		state.ApplyAcceptedRoleLockIn(replacement);
+
+		state.AcceptedActorSetupCards.Should().Be(ActorSetupCards.None);
+		state.RequiresActorSetupCards.Should().BeFalse();
+		state.TryCreateSimulationScenario(out _).Should().BeTrue();
 	}
 
 	[Fact]
@@ -254,7 +395,11 @@ public class LobbySetupStateTests
 		var scenarioChanges = 0;
 		state.SimulationScenarioChanged += (_, _) => scenarioChanges++;
 
-		state.RestoreAcceptedRoleLockIn(roster, roleLockIn, partition);
+		state.RestoreAcceptedRoleLockIn(
+			roster,
+			roleLockIn,
+			ActorSetupCards.None,
+			partition);
 
 		state.PlayerRoster.Select(player => player.Id).Should().Equal(
 			roster.Select(player => player.Id));

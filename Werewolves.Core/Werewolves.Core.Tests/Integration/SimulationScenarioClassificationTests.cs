@@ -201,11 +201,17 @@ public class SimulationScenarioClassificationTests : DiagnosticTestBase
 	}
 
 	[Fact]
-	public void Classify_WithUnsupportedActorArtifact_StopsAfterSimulatorGateAndPreservesInput()
+	public void Classify_WithActorSetupArtifactAndAppUnadmittedActor_StopsAfterAppGateAndPreservesInput()
 	{
 		var scenario = new SimulationScenario(
 			5,
-			CreateSupportedScenario().RoleCompositionCards,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Actor,
+				MainRoleType.WildChild,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			],
 			new ActorSetupCards(
 				[MainRoleType.Cupid, MainRoleType.Defender, MainRoleType.Elder]));
 
@@ -214,12 +220,11 @@ public class SimulationScenarioClassificationTests : DiagnosticTestBase
 			SimulatorCapability.FullProbability);
 
 		classification.RulesValidity.IsValid.Should().BeTrue();
-		classification.AppSupport!.IsSupported.Should().BeTrue();
-		classification.SimulatorSupport.Should().NotBeNull();
-		classification.SimulatorSupport!.IsSupported.Should().BeFalse();
-		classification.SimulatorSupport.Scenario.Should().BeSameAs(scenario);
-		classification.SimulatorSupport.HasUnsupportedActorSetupCards.Should().BeTrue();
-		classification.SimulatorSupport.HasUnsupportedRuleState.Should().BeFalse();
+		classification.RulesValidity.Errors.Should().BeEmpty();
+		classification.AppSupport.Should().NotBeNull();
+		classification.AppSupport!.IsSupported.Should().BeFalse();
+		classification.AppSupport.Scenario.Should().BeSameAs(scenario);
+		classification.SimulatorSupport.Should().BeNull();
 		classification.AlreadyDecided.Should().BeNull();
 		classification.Cacheability.Should().BeNull();
 		MarkTestCompleted();

@@ -14,6 +14,10 @@ public class GameLogEntryConverter : JsonConverter<GameLogEntryBase>
 
     private static readonly Dictionary<string, Type> TypeMap = new()
     {
+	        ["ActorBorrowedRolePowerActivationExpiredLogEntry"] =
+		        typeof(ActorBorrowedRolePowerActivationExpiredLogEntry),
+	        ["ActorSetupCardSpendCommittedLogEntry"] =
+		        typeof(ActorSetupCardSpendCommittedLogEntry),
 	        ["AngelExpiredLogEntry"] = typeof(AngelExpiredLogEntry),
 	        ["AssignRoleLogEntry"] = typeof(AssignRoleLogEntry),
 	        ["BearTamerGrowlOccurredLogEntry"] = typeof(BearTamerGrowlOccurredLogEntry),

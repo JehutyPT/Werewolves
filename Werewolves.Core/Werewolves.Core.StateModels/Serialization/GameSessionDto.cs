@@ -17,6 +17,10 @@ internal class GameSessionDto
 	public RoleLockInDto? RoleLockIn { get; set; }
 	public PublicGroupPartitionDto? PublicGroupPartition { get; set; }
 	public List<PhysicalCharacterCardStateDto> PhysicalCharacterCards { get; set; } = new();
+	public ActorSetupCardsDto? ActorSetupCards { get; set; }
+	public List<ActorSetupCardSpendDto>? ActorSetupCardSpends { get; set; } = new();
+	public ActorBorrowedRolePowerActivationDto?
+		ActiveActorBorrowedRolePowerActivation { get; set; }
 
     // Derived state restored directly during Rehydration.
     public List<PlayerDto> Players { get; set; } = new();
@@ -116,6 +120,55 @@ internal sealed class PhysicalCharacterCardStateDto
 	public Guid? OwnerPlayerId { get; set; }
 }
 
+internal sealed class ActorSetupCardsDto
+{
+	public long Version { get; set; }
+	public List<PhysicalCharacterCard>? Cards { get; set; } = new();
+
+	internal static ActorSetupCardsDto FromValue(ActorSetupCards setup) => new()
+	{
+		Version = setup.Version,
+		Cards = setup.Cards.ToList()
+	};
+
+	internal ActorSetupCards ToValue() => new(
+		Version,
+		Cards ?? throw new InvalidOperationException(
+			"The stable recovery snapshot has no Actor Setup Card inventory."));
+}
+
+internal sealed class ActorSetupCardSpendDto
+{
+	public Guid CardId { get; set; }
+	public Guid ActivationId { get; set; }
+}
+
+internal sealed class ActorBorrowedRolePowerActivationDto
+{
+	public Guid ActivationId { get; set; }
+	public Guid ActingPlayerId { get; set; }
+	public MainRoleType ActingRole { get; set; }
+	public Guid SelectedCardId { get; set; }
+	public MainRoleType SourceRole { get; set; }
+
+	internal static ActorBorrowedRolePowerActivationDto FromValue(
+		ActorBorrowedRolePowerActivation activation) => new()
+	{
+		ActivationId = activation.ActivationId,
+		ActingPlayerId = activation.ActingPlayerId,
+		ActingRole = activation.ActingRole,
+		SelectedCardId = activation.SelectedCardId,
+		SourceRole = activation.SourceRole
+	};
+
+	internal ActorBorrowedRolePowerActivation ToValue() => new(
+		ActivationId,
+		ActingPlayerId,
+		ActingRole,
+		SelectedCardId,
+		SourceRole);
+}
+
 internal sealed class PublicGroupPartitionDto
 {
 	public List<Guid> FirstGroupPlayerIds { get; set; } = new();
@@ -159,7 +212,8 @@ internal enum DomainRecoveryCursorKind
 {
     OneUseRolePowerCommit = 1,
     RecurringNativeRolePowerCommit = 2,
-    TargetPrivateRolePowerCommit = 3
+	TargetPrivateRolePowerCommit = 3,
+	ActorSetupCardSpendCommit = 4
 }
 
 /// <summary>
@@ -181,6 +235,10 @@ internal sealed class DomainRecoveryCursor
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public RolePowerInstanceOrigin? PowerInstanceOrigin { get; set; }
     public Guid OneUseResourceId { get; set; }
+	[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+	public Guid ActorSetupCardId { get; set; }
+	[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+	public Guid ActorBorrowedActivationId { get; set; }
     public List<Guid> CommittedTargetIds { get; set; } = new();
     public ModeratorInstructionSemantic NextInstructionSemantic { get; set; }
     public Guid NextInstructionId { get; set; }

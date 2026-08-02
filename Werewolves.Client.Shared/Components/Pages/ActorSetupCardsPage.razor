@@ -1,0 +1,128 @@
+@inject LobbySetupState Lobby
+@inject GameClientManager Game
+
+<main class="ww-app-shell"
+	  data-testid="@ModeratorUiTestIds.ActorSetupPage"
+	  aria-labelledby="actor-setup-title">
+	<section class="ww-lobby-header">
+		<div>
+			<p class="ww-step-label">@ClientStrings.ActorSetup_StepLabel</p>
+			<h1 id="actor-setup-title">@ClientStrings.ActorSetup_Title</h1>
+			<p class="ww-page-copy">@ClientStrings.ActorSetup_Description</p>
+		</div>
+	</section>
+
+	<section class="ww-role-group"
+			 data-testid="@ModeratorUiTestIds.ActorSetupList"
+			 aria-label="@ClientStrings.ActorSetup_ListAria">
+		<div class="ww-role-list">
+			@foreach (var role in _eligibleSourceRoles)
+			{
+				<button type="button"
+						@key="role"
+						class="ww-option-btn @(_selectedRoles.Contains(role) ? "ww-option-btn--selected" : "")"
+						data-testid="@ModeratorUiTestIds.ActorSetupCard"
+						aria-label="@Format(ClientStrings.ActorSetup_CardChoiceAriaFormat, role.GetPublicName())"
+						aria-pressed="@(_selectedRoles.Contains(role) ? "true" : "false")"
+						@onclick="() => ToggleRole(role)">@role.GetPublicName()</button>
+			}
+		</div>
+	</section>
+
+	<footer class="ww-action-bar">
+		<p class="ww-selection-count"
+		   data-testid="@ModeratorUiTestIds.ActorSetupSelectionCount">@SelectionCountLabel</p>
+		@if (!string.IsNullOrEmpty(_validationError))
+		{
+			<p class="ww-validation ww-validation--role" role="alert">@_validationError</p>
+		}
+		<div class="ww-action-pair">
+			<button type="button"
+					class="ww-secondary-button"
+					data-testid="@ModeratorUiTestIds.ActorSetupBack"
+					@onclick="Back">@ClientStrings.Common_Back</button>
+			<button type="button"
+					class="ww-btn-primary"
+					data-testid="@ModeratorUiTestIds.ActorSetupCommit"
+					@onclick="Commit">@ClientStrings.ActorSetup_CommitButton</button>
+		</div>
+	</footer>
+</main>
+
+@using Werewolves.Core.StateModels.Enums
+@using Werewolves.Core.StateModels.Extensions
+@using Werewolves.Core.StateModels.Models
+
+@code {
+	[Parameter]
+	public EventCallback OnBack { get; set; }
+
+	[Parameter]
+	public EventCallback OnAccepted { get; set; }
+
+	private readonly HashSet<MainRoleType> _selectedRoles = [];
+	private IReadOnlyList<MainRoleType> _eligibleSourceRoles = [];
+	private long _expectedCurrentVersion;
+	private string? _validationError;
+
+	protected override void OnInitialized()
+	{
+		var accepted = Lobby.AcceptedActorSetupCards;
+		_expectedCurrentVersion = accepted.Version;
+		_selectedRoles.UnionWith(accepted.PrintedRoles);
+
+		var roleComposition = Lobby.AcceptedRoleLockIn?.RoleComposition
+			.Select(card => card.PrintedRole)
+			.ToHashSet() ?? [];
+		_eligibleSourceRoles = Enum.GetValues<MainRoleType>()
+			.Where(role => role.IsEligibleActorSetupCard())
+			.Where(role => !roleComposition.Contains(role))
+			.OrderBy(role => role.GetPublicName(), StringComparer.CurrentCulture)
+			.ToArray();
+	}
+
+	private string SelectionCountLabel => Format(
+		ClientStrings.ActorSetup_SelectionCountFormat,
+		_selectedRoles.Count,
+		ActorSetupCards.RequiredCount);
+
+	private void ToggleRole(MainRoleType role)
+	{
+		if (!_selectedRoles.Remove(role) &&
+			_selectedRoles.Count < ActorSetupCards.RequiredCount)
+		{
+			_selectedRoles.Add(role);
+		}
+
+		_validationError = null;
+	}
+
+	private Task Back() => OnBack.InvokeAsync();
+
+	private Task Commit()
+	{
+		if (_selectedRoles.Count != ActorSetupCards.RequiredCount)
+		{
+			_validationError = ClientStrings.ActorSetup_IncompleteValidation;
+			return Task.CompletedTask;
+		}
+
+		var printedRoles = _selectedRoles
+			.OrderBy(role => role.ToString(), StringComparer.Ordinal)
+			.ToArray();
+		if (!Game.TryReplaceStagedActorSetupCards(
+			Lobby,
+			_expectedCurrentVersion,
+			printedRoles))
+		{
+			_validationError = ClientStrings.ActorSetup_SaveFailedValidation;
+			return Task.CompletedTask;
+		}
+
+		_validationError = null;
+		return OnAccepted.InvokeAsync();
+	}
+
+	private static string Format(string format, params object[] args) =>
+		string.Format(CultureInfo.CurrentCulture, format, args);
+}

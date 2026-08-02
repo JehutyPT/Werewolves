@@ -628,6 +628,39 @@
   <data name="ThiefRoleLockIn_SaveFailedValidation" xml:space="preserve">
     <value>This offer partition could not be saved. Check the selected cards and try again.</value>
   </data>
+  <data name="ActorSetup_StepLabel" xml:space="preserve">
+    <value>Actor setup cards</value>
+  </data>
+  <data name="ActorSetup_Title" xml:space="preserve">
+    <value>Prepare the Actor cards</value>
+  </data>
+  <data name="ActorSetup_Description" xml:space="preserve">
+    <value>Select exactly three eligible Roles to place face down outside the Role Composition.</value>
+  </data>
+  <data name="ActorSetup_ListAria" xml:space="preserve">
+    <value>Eligible Actor setup Roles</value>
+  </data>
+  <data name="ActorSetup_CardChoiceAriaFormat" xml:space="preserve">
+    <value>Select {0} as an Actor setup card</value>
+  </data>
+  <data name="ActorSetup_SelectionCountFormat" xml:space="preserve">
+    <value>{0} of {1} cards selected</value>
+  </data>
+  <data name="ActorSetup_CommitButton" xml:space="preserve">
+    <value>Save Actor cards</value>
+  </data>
+  <data name="ActorSetup_IncompleteValidation" xml:space="preserve">
+    <value>Select exactly three different eligible Roles.</value>
+  </data>
+  <data name="ActorSetup_SaveFailedValidation" xml:space="preserve">
+    <value>These Actor cards could not be saved. Check the selection and try again.</value>
+  </data>
+  <data name="ActorSetup_SummaryTitle" xml:space="preserve">
+    <value>Actor cards saved</value>
+  </data>
+  <data name="RoleSelection_ReviewActorSetupButton" xml:space="preserve">
+    <value>Review or change Actor cards</value>
+  </data>
   <data name="PublicGroupPartition_StepLabel" xml:space="preserve">
     <value>Public table setup</value>
   </data>

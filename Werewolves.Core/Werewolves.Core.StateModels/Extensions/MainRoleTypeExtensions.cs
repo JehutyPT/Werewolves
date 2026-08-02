@@ -52,11 +52,19 @@ public static class MainRoleTypeExtensions
 		or MainRoleType.Actor;
 
 	public static bool IsEligibleActorSetupCard(this MainRoleType role) =>
-		role.IsHardAlignedVillager()
-		&& role is not MainRoleType.SimpleVillager
-			and not MainRoleType.VillagerVillager
-			and not MainRoleType.TwoSisters
-			and not MainRoleType.ThreeBrothers;
+		role is MainRoleType.Seer
+			or MainRoleType.Cupid
+			or MainRoleType.Witch
+			or MainRoleType.Hunter
+			or MainRoleType.LittleGirl
+			or MainRoleType.Defender
+			or MainRoleType.Elder
+			or MainRoleType.Scapegoat
+			or MainRoleType.VillageIdiot
+			or MainRoleType.Fox
+			or MainRoleType.BearTamer
+			or MainRoleType.StutteringJudge
+			or MainRoleType.KnightWithRustySword;
 
     /// <summary>
     /// Gets the role group that the specified role belongs to.

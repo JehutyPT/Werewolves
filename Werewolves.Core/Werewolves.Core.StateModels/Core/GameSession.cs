@@ -33,6 +33,13 @@ public interface IGameSession
 	public PublicGroupPartition? PublicGroupPartition => null;
 	public IReadOnlyList<PhysicalCharacterCardState>
 		GetModeratorPhysicalCharacterCards() => [];
+	public ActorSetupCards GetModeratorActorSetupCards() => ActorSetupCards.None;
+	public IReadOnlyList<PhysicalCharacterCard>
+		GetModeratorRemainingActorSetupCards() => [];
+	public IReadOnlyList<PhysicalCharacterCard>
+		GetModeratorSpentActorSetupCards() => [];
+	public ActorBorrowedRolePowerActivation?
+		GetModeratorActiveActorBorrowedRolePowerActivation() => null;
 
     /// <summary>
     /// Serializes the latest stable main-phase recovery snapshot for Rehydration.
@@ -77,6 +84,8 @@ internal class GameSession : IGameSession
 	public RoleLockIn RoleLockIn => _gameSessionKernel.GetRoleLockIn();
 	public PublicGroupPartition? PublicGroupPartition =>
 		_gameSessionKernel.GetPublicGroupPartition();
+	public ActorSetupCards GetModeratorActorSetupCards() =>
+		_gameSessionKernel.GetActorSetupCards();
 
 	internal GameSession(Guid id, ModeratorInstruction initialInstruction, GameSessionConfig config, IStateChangeObserver? stateChangeObserver = null)
 	{
@@ -321,6 +330,18 @@ internal class GameSession : IGameSession
 	public IReadOnlyList<PhysicalCharacterCardState>
 		GetModeratorPhysicalCharacterCards() =>
 		_gameSessionKernel.GetPhysicalCharacterCardStates();
+
+	public IReadOnlyList<PhysicalCharacterCard>
+		GetModeratorRemainingActorSetupCards() =>
+		_gameSessionKernel.GetRemainingActorSetupCards();
+
+	public IReadOnlyList<PhysicalCharacterCard>
+		GetModeratorSpentActorSetupCards() =>
+		_gameSessionKernel.GetSpentActorSetupCards();
+
+	public ActorBorrowedRolePowerActivation?
+		GetModeratorActiveActorBorrowedRolePowerActivation() =>
+		_gameSessionKernel.GetActiveActorBorrowedRolePowerActivation();
     
     /// <summary>
     /// To support GameSession rehydration
@@ -337,6 +358,19 @@ internal class GameSession : IGameSession
         new("Required Faction facts are not ready.");
 
 	#region Internal Command API
+
+	internal bool TrySpendActorSetupCard(
+		Guid actingPlayerId,
+		Guid selectedCardId,
+		[NotNullWhen(true)]
+		out ActorBorrowedRolePowerActivation? activation) =>
+		_gameSessionKernel.TrySpendActorSetupCard(
+			actingPlayerId,
+			selectedCardId,
+			out activation);
+
+	internal bool TryExpireActorBorrowedRolePowerActivation() =>
+		_gameSessionKernel.TryExpireActorBorrowedRolePowerActivation();
 
 	internal void CommitGameFact<TEntry>(
 		Func<GameFactContext, TEntry> entryFactory)

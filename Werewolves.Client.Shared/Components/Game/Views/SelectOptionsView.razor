@@ -1,12 +1,16 @@
 @using Werewolves.Core.StateModels.Models
 @using Werewolves.Core.StateModels.Models.Instructions
 
-<div class="ww-option-list" role="group" aria-label="@ClientStrings.SelectOptions_Title">
+<div class="ww-option-list"
+	 data-testid="@ModeratorUiTestIds.SelectOptionsList"
+	 role="group"
+	 aria-label="@ClientStrings.SelectOptions_Title">
 	@foreach (var option in Instruction.Options)
 	{
 		<button type="button"
 				@key="option.Id"
 				class="@OptionClass(option.Id)"
+				data-testid="@ModeratorUiTestIds.SelectOptionsOption"
 				aria-pressed="@AriaPressed(option.Id)"
 				@onclick="() => ToggleOption(option.Id)">@option.Label</button>
 	}

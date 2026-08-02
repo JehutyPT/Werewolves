@@ -489,6 +489,10 @@
     <value>Actor</value>
     <comment/>
   </data>
+  <data name="ActorSetupCardSelectionInstruction" xml:space="preserve">
+    <value>Actor, escolhe opcionalmente uma carta de preparação ainda disponível.</value>
+    <comment/>
+  </data>
   <data name="WolfHoundRoleName" xml:space="preserve">
     <value>Cão-Lobo</value>
     <comment/>
@@ -547,6 +551,14 @@
   </data>
   <data name="IneligibleActorSetupCardValidationError" xml:space="preserve">
     <value>As cartas de preparação do Actor têm de ser papéis de Aldeão com alinhamento fixo e poderes individuais utilizáveis.</value>
+    <comment/>
+  </data>
+  <data name="DuplicateActorSetupCardSourceValidationError" xml:space="preserve">
+    <value>As 3 cartas de preparação do Actor têm de representar papéis de origem distintos.</value>
+    <comment/>
+  </data>
+  <data name="UnexpectedActorSetupCardsValidationError" xml:space="preserve">
+    <value>Não pode haver cartas de preparação do Actor quando o Actor não está acessível.</value>
     <comment/>
   </data>
   <data name="MissingHardAlignedWerewolfValidationError" xml:space="preserve">

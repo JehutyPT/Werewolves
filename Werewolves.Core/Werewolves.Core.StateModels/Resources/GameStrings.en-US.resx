@@ -163,4 +163,7 @@
   <data name="ThiefOfferSelectionInstruction" xml:space="preserve">
     <value>Thief, choose one offered card or decline when allowed.</value>
   </data>
+  <data name="ActorSetupCardSelectionInstruction" xml:space="preserve">
+    <value>Actor, optionally choose one remaining setup card.</value>
+  </data>
 </root>

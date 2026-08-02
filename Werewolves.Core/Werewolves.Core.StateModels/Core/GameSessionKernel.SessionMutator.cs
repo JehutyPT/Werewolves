@@ -49,11 +49,20 @@ internal interface IDevotedServantSessionMutator
 		DevotedServantRoleTakenCommittedLogEntry entry);
 }
 
+internal interface IActorSessionMutator
+{
+	void ApplyActorSetupCardSpend(
+		ActorSetupCardSpendCommandLogEntry entry);
+	void ApplyActorBorrowedRolePowerActivationExpiry(
+		ActorBorrowedRolePowerActivationExpiryCommandLogEntry entry);
+}
+
 internal partial class GameSessionKernel
 {
 	private class SessionMutator(GameSessionKernel kernel)
 		: ISessionMutator,
-		  IDevotedServantSessionMutator
+		  IDevotedServantSessionMutator,
+		  IActorSessionMutator
 	{
 		/// <summary>
 		/// Represents a key used to allow access to mutate persistent state, player's, game state (i.e. main phase) or game logs.
@@ -452,6 +461,64 @@ internal partial class GameSessionKernel
 					  acquired.OwnerPlayerId is null &&
 					  targetState.PhysicalCharacterCardId is null &&
 					  targetState.PhysicalCharacterCardRole is null;
+		}
+
+		public void ApplyActorSetupCardSpend(
+			ActorSetupCardSpendCommandLogEntry entry)
+		{
+			ArgumentNullException.ThrowIfNull(entry);
+			var activation = entry.Activation;
+			if (!kernel._players.TryGetValue(
+					activation.ActingPlayerId,
+					out var actor))
+			{
+				throw new InvalidOperationException(
+					"The Actor setup-card spend is stale or invalid.");
+			}
+
+			var actorState = ((IPlayer)actor).State;
+			var selectedCard = kernel._actorSetupCards.Cards
+				.SingleOrDefault(card =>
+					card.Id == activation.SelectedCardId);
+			if (entry.CurrentPhase != kernel.CurrentPhase ||
+				entry.TurnNumber != kernel.TurnNumber ||
+				kernel.CurrentPhase != GamePhase.Night ||
+				kernel._activeActorBorrowedRolePowerActivation is not null ||
+				actorState.Health != PlayerHealth.Alive ||
+				actorState.CurrentRole != MainRoleType.Actor ||
+				activation.ActingRole != MainRoleType.Actor ||
+				selectedCard is null ||
+				selectedCard.PrintedRole != activation.SourceRole ||
+				kernel._actorSetupCardSpendActivationIds.ContainsKey(
+					activation.SelectedCardId) ||
+				kernel.IsReservedActorBorrowedActivationId(
+					activation.ActivationId))
+			{
+				throw new InvalidOperationException(
+					"The Actor setup-card spend is stale or invalid.");
+			}
+
+			kernel._actorSetupCardSpendActivationIds.Add(
+				activation.SelectedCardId,
+				activation.ActivationId);
+			kernel._activeActorBorrowedRolePowerActivation = activation;
+		}
+
+		public void ApplyActorBorrowedRolePowerActivationExpiry(
+			ActorBorrowedRolePowerActivationExpiryCommandLogEntry entry)
+		{
+			ArgumentNullException.ThrowIfNull(entry);
+			if (entry.CurrentPhase != kernel.CurrentPhase ||
+				entry.TurnNumber != kernel.TurnNumber ||
+				kernel.CurrentPhase != GamePhase.Night ||
+				kernel._activeActorBorrowedRolePowerActivation !=
+					entry.ExpectedActivation)
+			{
+				throw new InvalidOperationException(
+					"The Actor borrowed Role Power activation expiry is stale or invalid.");
+			}
+
+			kernel._activeActorBorrowedRolePowerActivation = null;
 		}
 
 		public void ApplyThiefOfferDecline(ThiefOfferDeclinedLogEntry entry)

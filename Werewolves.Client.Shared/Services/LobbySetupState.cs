@@ -58,13 +58,21 @@ public class LobbySetupState
 	public IReadOnlyList<string> PlayerNames => Array.AsReadOnly(
 		_playerRoster.Select(player => player.Name).ToArray());
 	public RoleLockIn? AcceptedRoleLockIn { get; private set; }
+	public ActorSetupCards AcceptedActorSetupCards { get; private set; } =
+		ActorSetupCards.None;
 	public PublicGroupPartition? AcceptedPublicGroupPartition { get; private set; }
 	public bool RequiresRoleLockIn =>
 		_acceptedRoleLockInRequiresReplacement ||
 		GetRoleCount(MainRoleType.Thief) > 0 && AcceptedRoleLockIn is null;
+	public bool RequiresActorSetupCards =>
+		AcceptedRoleLockIn is { } acceptedRoleLockIn &&
+		!_acceptedRoleLockInRequiresReplacement &&
+		IsActorReachable(acceptedRoleLockIn) &&
+		AcceptedActorSetupCards.Cards.Count == 0;
 	public bool RequiresPublicGroupPartition =>
 		AcceptedRoleLockIn is { } acceptedRoleLockIn &&
 		!_acceptedRoleLockInRequiresReplacement &&
+		!RequiresActorSetupCards &&
 		IsPrejudicedManipulatorReachable(acceptedRoleLockIn) &&
 		AcceptedPublicGroupPartition is null;
 	internal bool AcceptedRoleLockInRequiresReplacement =>
@@ -85,7 +93,7 @@ public class LobbySetupState
 			GameSessionConfig.TryGetRoleLockInConfigIssues(
 				playerNames,
 				acceptedRoleLockIn,
-				ActorSetupCards.None,
+				AcceptedActorSetupCards,
 				out configIssues);
 		}
 		else
@@ -103,7 +111,8 @@ public class LobbySetupState
 		}
 		issues = configIssues
 			.Where(issue => issue.Type is not GameConfigValidationErrorType.TooFewPlayers
-				and not GameConfigValidationErrorType.NonUniquePlayerNames)
+				and not GameConfigValidationErrorType.NonUniquePlayerNames
+				and not GameConfigValidationErrorType.ActorSetupCardCountMismatch)
 			.ToList();
 
 		return issues.Count > 0;
@@ -242,6 +251,7 @@ public class LobbySetupState
 			!_acceptedRoleLockInRequiresReplacement
 			? new SimulationScenario(
 				acceptedRoleLockIn,
+				AcceptedActorSetupCards,
 				publicGroupPartition: AcceptedPublicGroupPartition is { } publicGroupPartition
 					? CanonicalPublicGroupPartition.Project(
 						_playerRoster.Select(player => player.Id).ToArray(),
@@ -251,7 +261,10 @@ public class LobbySetupState
 
 	public bool TryCreateSimulationScenario(out SimulationScenario scenario)
 	{
-		if (RequiresRoleLockIn || RequiresPublicGroupPartition)
+		if (RequiresRoleLockIn ||
+			RequiresConditionalRoleLockIn ||
+			RequiresActorSetupCards ||
+			RequiresPublicGroupPartition)
 		{
 			scenario = null!;
 			return false;
@@ -274,6 +287,7 @@ public class LobbySetupState
 		_playerRoster.Clear();
 		_roleCounts.Clear();
 		AcceptedRoleLockIn = null;
+		AcceptedActorSetupCards = ActorSetupCards.None;
 		AcceptedPublicGroupPartition = null;
 		_roleLockInFinalized = false;
 		_acceptedRoleLockInRequiresReplacement = false;
@@ -375,11 +389,10 @@ public class LobbySetupState
 						selectedRoles,
 						offer1,
 						offer2);
-					if (!GameSessionConfig.TryGetRoleLockInConfigIssues(
-							GetPlayerNames(),
+					if (!HasBlockingRoleLockInIssues(
 							candidate,
 							ActorSetupCards.None,
-							out _))
+							allowMissingActorSetup: true))
 					{
 						return true;
 					}
@@ -420,22 +433,69 @@ public class LobbySetupState
 			return false;
 		}
 
-		return !GameSessionConfig.TryGetRoleLockInConfigIssues(
-			GetPlayerNames(),
+		var retainedActorSetupCards =
+			GetRetainedActorSetupCardsForRoleLockIn(replacement);
+		return !HasBlockingRoleLockInIssues(
 			replacement,
-			ActorSetupCards.None,
-			out _);
+			retainedActorSetupCards,
+			allowMissingActorSetup: true);
 	}
 
 	internal void ApplyAcceptedRoleLockIn(RoleLockIn replacement)
 	{
+		var retainedActorSetupCards =
+			GetRetainedActorSetupCardsForRoleLockIn(replacement);
+		AcceptedActorSetupCards = retainedActorSetupCards;
 		AcceptedRoleLockIn = replacement;
-		if (!IsPrejudicedManipulatorReachable(replacement))
+		if (!IsPrejudicedManipulatorReachable(replacement) ||
+			IsActorReachable(replacement) && retainedActorSetupCards.Cards.Count == 0)
 		{
 			AcceptedPublicGroupPartition = null;
 		}
 		ApplyRoleComposition(replacement);
 		_acceptedRoleLockInRequiresReplacement = false;
+		OnSimulationScenarioChanged();
+	}
+
+	internal ActorSetupCards GetRetainedActorSetupCardsForRoleLockIn(
+		RoleLockIn replacement)
+	{
+		ArgumentNullException.ThrowIfNull(replacement);
+		if (AcceptedActorSetupCards.Cards.Count == 0 ||
+			!IsActorReachable(replacement) ||
+			HasBlockingRoleLockInIssues(
+				replacement,
+				AcceptedActorSetupCards,
+				allowMissingActorSetup: false))
+		{
+			return ActorSetupCards.None;
+		}
+
+		return AcceptedActorSetupCards;
+	}
+
+	internal bool CanReplaceActorSetupCards(
+		long expectedCurrentVersion,
+		ActorSetupCards replacement)
+	{
+		ArgumentNullException.ThrowIfNull(replacement);
+		return !_roleLockInFinalized &&
+			AcceptedRoleLockIn is { } acceptedRoleLockIn &&
+			!_acceptedRoleLockInRequiresReplacement &&
+			IsActorReachable(acceptedRoleLockIn) &&
+			expectedCurrentVersion == AcceptedActorSetupCards.Version &&
+			expectedCurrentVersion != long.MaxValue &&
+			replacement.Version == expectedCurrentVersion + 1 &&
+			!HasBlockingRoleLockInIssues(
+				acceptedRoleLockIn,
+				replacement,
+				allowMissingActorSetup: false);
+	}
+
+	internal void ApplyAcceptedActorSetupCards(ActorSetupCards replacement)
+	{
+		ArgumentNullException.ThrowIfNull(replacement);
+		AcceptedActorSetupCards = replacement;
 		OnSimulationScenarioChanged();
 	}
 
@@ -464,13 +524,22 @@ public class LobbySetupState
 	internal void RestoreAcceptedRoleLockIn(
 		IReadOnlyList<GameSessionPlayerConfig> playerRoster,
 		RoleLockIn roleLockIn,
+		ActorSetupCards actorSetupCards,
 		PublicGroupPartition? publicGroupPartition)
 	{
 		ArgumentNullException.ThrowIfNull(playerRoster);
 		ArgumentNullException.ThrowIfNull(roleLockIn);
+		ArgumentNullException.ThrowIfNull(actorSetupCards);
 		var roster = playerRoster.ToArray();
 		try
 		{
+			if (roster.Any(player => player is null) ||
+				roster.Select(player => player.Id).Distinct().Count() != roster.Length)
+			{
+				throw new ArgumentException(
+					"A staged Lobby roster requires distinct stable Player identities.",
+					nameof(playerRoster));
+			}
 			if (roleLockIn.RoleComposition.Any(
 				card => !_availableRoleMetadata.ContainsKey(card.PrintedRole)))
 			{
@@ -479,11 +548,37 @@ public class LobbySetupState
 					nameof(roleLockIn));
 			}
 
-			_ = new GameSessionConfig(
-				roster,
+			var actorSetupIsPending =
+				IsActorReachable(roleLockIn) && actorSetupCards.Cards.Count == 0;
+			GameSessionConfig.TryGetRoleLockInConfigIssues(
+				roster.Select(player => player.Name).ToList(),
 				roleLockIn,
-				ActorSetupCards.None,
-				publicGroupPartition);
+				actorSetupCards,
+				out var configIssues);
+			var blockingIssues = configIssues
+				.Where(issue =>
+					!actorSetupIsPending ||
+					issue.Type != GameConfigValidationErrorType.ActorSetupCardCountMismatch)
+				.ToArray();
+			if (blockingIssues.Length > 0)
+			{
+				throw new InvalidOperationException(
+					"The staged Role Lock-In is invalid: " +
+					string.Join(", ", blockingIssues.Select(issue => issue.Message)));
+			}
+
+			var prejudicedManipulatorReachable =
+				IsPrejudicedManipulatorReachable(roleLockIn);
+			if (publicGroupPartition is not null &&
+				(!prejudicedManipulatorReachable || actorSetupIsPending ||
+				!roster.Select(player => player.Id).ToHashSet().SetEquals(
+					publicGroupPartition.FirstGroupPlayerIds.Concat(
+						publicGroupPartition.SecondGroupPlayerIds))))
+			{
+				throw new ArgumentException(
+					"The staged Public Group Partition is invalid or out of order.",
+					nameof(publicGroupPartition));
+			}
 		}
 		catch (Exception exception) when (
 			exception is ArgumentException or InvalidOperationException)
@@ -498,6 +593,7 @@ public class LobbySetupState
 		_issuedPlayerIds.UnionWith(roster.Select(player => player.Id));
 		ApplyRoleComposition(roleLockIn);
 		AcceptedRoleLockIn = roleLockIn;
+		AcceptedActorSetupCards = actorSetupCards;
 		AcceptedPublicGroupPartition = publicGroupPartition;
 		_roleLockInFinalized = false;
 		_acceptedRoleLockInRequiresReplacement = false;
@@ -545,6 +641,30 @@ public class LobbySetupState
 	private static bool IsPrejudicedManipulatorReachable(RoleLockIn roleLockIn) =>
 		roleLockIn.RoleComposition.Any(
 			card => card.PrintedRole == MainRoleType.PrejudicedManipulator);
+
+	private static bool IsActorReachable(RoleLockIn roleLockIn) =>
+		roleLockIn.RoleComposition.Any(
+			card => card.PrintedRole == MainRoleType.Actor);
+
+	private bool RequiresConditionalRoleLockIn =>
+		AcceptedRoleLockIn is null &&
+		(GetRoleCount(MainRoleType.Actor) > 0 ||
+			GetRoleCount(MainRoleType.PrejudicedManipulator) > 0);
+
+	private bool HasBlockingRoleLockInIssues(
+		RoleLockIn roleLockIn,
+		ActorSetupCards actorSetupCards,
+		bool allowMissingActorSetup)
+	{
+		GameSessionConfig.TryGetRoleLockInConfigIssues(
+			GetPlayerNames(),
+			roleLockIn,
+			actorSetupCards,
+			out var issues);
+		return issues.Any(issue =>
+			!allowMissingActorSetup ||
+			issue.Type != GameConfigValidationErrorType.ActorSetupCardCountMismatch);
+	}
 
 	private bool HasExactCurrentRoster(PublicGroupPartition partition) =>
 		_playerRoster.Select(player => player.Id).ToHashSet().SetEquals(

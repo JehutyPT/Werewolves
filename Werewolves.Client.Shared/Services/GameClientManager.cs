@@ -102,13 +102,20 @@ public sealed class GameClientManager
 
 		try
 		{
-			var proposedPartition = replacement.RoleComposition.Any(
-				card => card.PrintedRole == MainRoleType.PrejudicedManipulator)
+			var proposedActorSetupCards =
+				lobby.GetRetainedActorSetupCardsForRoleLockIn(replacement);
+			var actorSetupIsPending = replacement.RoleComposition.Any(
+					card => card.PrintedRole == MainRoleType.Actor) &&
+				proposedActorSetupCards.Cards.Count == 0;
+			var proposedPartition = !actorSetupIsPending &&
+				replacement.RoleComposition.Any(
+					card => card.PrintedRole == MainRoleType.PrejudicedManipulator)
 				? lobby.AcceptedPublicGroupPartition
 				: null;
 			PersistStagedLobbyBeforeApply(
 				lobby.PlayerRoster,
 				replacement,
+				proposedActorSetupCards,
 				proposedPartition,
 				() => lobby.ApplyAcceptedRoleLockIn(replacement));
 		}
@@ -116,6 +123,69 @@ public sealed class GameClientManager
 		{
 			return false;
 		}
+		return true;
+	}
+
+	public bool TryReplaceStagedActorSetupCards(
+		LobbySetupState lobby,
+		long expectedCurrentVersion,
+		IReadOnlyList<MainRoleType> printedRoles)
+	{
+		ArgumentNullException.ThrowIfNull(lobby);
+		ArgumentNullException.ThrowIfNull(printedRoles);
+		if (expectedCurrentVersion == long.MaxValue)
+		{
+			return false;
+		}
+
+		ActorSetupCards replacement;
+		try
+		{
+			replacement = ActorSetupCards.CreateFromPrintedRoles(
+				expectedCurrentVersion + 1,
+				printedRoles);
+		}
+		catch (ArgumentException)
+		{
+			return false;
+		}
+
+		return TryReplaceStagedActorSetupCards(
+			lobby,
+			expectedCurrentVersion,
+			replacement);
+	}
+
+	internal bool TryReplaceStagedActorSetupCards(
+		LobbySetupState lobby,
+		long expectedCurrentVersion,
+		ActorSetupCards replacement)
+	{
+		ArgumentNullException.ThrowIfNull(lobby);
+		ArgumentNullException.ThrowIfNull(replacement);
+		if (HasActiveSession ||
+			!lobby.CanReplaceActorSetupCards(
+				expectedCurrentVersion,
+				replacement))
+		{
+			return false;
+		}
+
+		var roleLockIn = lobby.AcceptedRoleLockIn!;
+		try
+		{
+			PersistStagedLobbyBeforeApply(
+				lobby.PlayerRoster,
+				roleLockIn,
+				replacement,
+				lobby.AcceptedPublicGroupPartition,
+				() => lobby.ApplyAcceptedActorSetupCards(replacement));
+		}
+		catch (Exception)
+		{
+			return false;
+		}
+
 		return true;
 	}
 
@@ -141,6 +211,7 @@ public sealed class GameClientManager
 			PersistStagedLobbyBeforeApply(
 				lobby.PlayerRoster,
 				roleLockIn,
+				lobby.AcceptedActorSetupCards,
 				replacement,
 				() => lobby.ApplyAcceptedPublicGroupPartition(replacement));
 		}
@@ -172,6 +243,7 @@ public sealed class GameClientManager
 			PersistStagedLobbyBeforeApply(
 				proposedRoster,
 				roleLockIn,
+				lobby.AcceptedActorSetupCards,
 				lobby.AcceptedPublicGroupPartition,
 				() =>
 				{
@@ -210,6 +282,7 @@ public sealed class GameClientManager
 			PersistStagedLobbyBeforeApply(
 				proposedRoster,
 				roleLockIn,
+				lobby.AcceptedActorSetupCards,
 				lobby.AcceptedPublicGroupPartition,
 				() =>
 				{
@@ -370,7 +443,7 @@ public sealed class GameClientManager
 		var config = new GameSessionConfig(
 			lobby.PlayerRoster,
 			acceptedRoleLockIn,
-			ActorSetupCards.None,
+			lobby.AcceptedActorSetupCards,
 			lobby.AcceptedPublicGroupPartition);
 		return StartGame(config, lobby);
 	}
@@ -378,6 +451,7 @@ public sealed class GameClientManager
 	private void PersistStagedLobbyBeforeApply(
 		IReadOnlyList<GameSessionPlayerConfig> proposedPlayerRoster,
 		RoleLockIn roleLockIn,
+		ActorSetupCards actorSetupCards,
 		PublicGroupPartition? publicGroupPartition,
 		Action apply)
 	{
@@ -385,12 +459,14 @@ public sealed class GameClientManager
 		var payload = LocalRecoveryPayloadCodec.SerializeStagedLobby(
 			playerRoster,
 			roleLockIn,
+			actorSetupCards,
 			publicGroupPartition);
 		_saveStore.Save(payload);
 		apply();
 		_stagedLobby = new StagedLobbyRecoveryPayload(
 			playerRoster,
 			roleLockIn,
+			actorSetupCards,
 			publicGroupPartition);
 		OnStateChanged();
 	}
@@ -547,6 +623,7 @@ public sealed class GameClientManager
 					_lobbySetupState?.RestoreAcceptedRoleLockIn(
 						stagedLobby.PlayerRoster,
 						stagedLobby.RoleLockIn,
+						stagedLobby.ActorSetupCards,
 						stagedLobby.PublicGroupPartition);
 					_stagedLobby = stagedLobby;
 					break;

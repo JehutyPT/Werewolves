@@ -195,6 +195,10 @@ public class GameSessionConfig
 		AddRoleCompositionIssues(
 			players.Count,
 			roles,
+			issues);
+		AddActorSetupIssues(
+			roles,
+			roles.Contains(MainRoleType.Actor),
 			actorSetupCards,
 			issues);
 
@@ -221,7 +225,12 @@ public class GameSessionConfig
 
 		issues = new List<GameConfigValidationError>();
 		AddPlayerCountIssues(playerCount, issues);
-		AddRoleCompositionIssues(playerCount, roles, actorSetupCards, issues);
+		AddRoleCompositionIssues(playerCount, roles, issues);
+		AddActorSetupIssues(
+			roles,
+			roles.Contains(MainRoleType.Actor),
+			actorSetupCards,
+			issues);
 		return issues.Count > 0;
 	}
 
@@ -266,6 +275,16 @@ public class GameSessionConfig
 		ActorSetupCards actorSetupCards,
 		List<GameConfigValidationError> issues)
 	{
+		var completeRoleComposition = dealPoolRoles
+			.Concat(offer1Role is { } firstOffer ? [firstOffer] : [])
+			.Concat(offer2Role is { } secondOffer ? [secondOffer] : [])
+			.ToArray();
+		AddActorSetupIssues(
+			completeRoleComposition,
+			completeRoleComposition.Contains(MainRoleType.Actor),
+			actorSetupCards,
+			issues);
+
 		var reachableRoleSets = offer1Role is null
 			? new[] { dealPoolRoles.ToArray() }
 			: new[]
@@ -285,9 +304,11 @@ public class GameSessionConfig
 			AddRoleCompositionIssues(
 				playerCount,
 				reachableRoles,
-				actorSetupCards,
 				reachableIssues);
-			foreach (var issue in reachableIssues.Where(issue => !issues.Contains(issue)))
+			foreach (var issue in reachableIssues.Where(issue =>
+				!issues.Any(existing =>
+					existing.Type == issue.Type &&
+					existing.Message == issue.Message)))
 			{
 				issues.Add(issue);
 			}
@@ -315,7 +336,6 @@ public class GameSessionConfig
 	private static void AddRoleCompositionIssues(
 		int playerCount,
 		IReadOnlyList<MainRoleType> roles,
-		ActorSetupCards actorSetupCards,
 		List<GameConfigValidationError> issues)
 	{
 		var actualPlayerRoleCountDiff = roles.Count - playerCount;
@@ -332,41 +352,6 @@ public class GameSessionConfig
 			issues.Add(new GameConfigValidationError(
 				GameConfigValidationErrorType.MissingHardAlignedVillager,
 				"Role Composition requires at least one hard-aligned Villager Role."));
-		}
-
-		if (roles.Contains(MainRoleType.Actor)
-			&& actorSetupCards.Cards.Count != global::Werewolves.Core.StateModels.Models.ActorSetupCards.RequiredCount)
-		{
-			issues.Add(new GameConfigValidationError(
-				GameConfigValidationErrorType.ActorSetupCardCountMismatch,
-				"Actor requires exactly three separate setup cards."));
-		}
-
-		if (roles.Contains(MainRoleType.Actor))
-		{
-			var overlappingActorSetupCards = actorSetupCards.Cards
-				.Intersect(roles)
-				.Distinct()
-				.ToArray();
-
-			if (overlappingActorSetupCards.Length > 0)
-			{
-				issues.Add(new GameConfigValidationError(
-					GameConfigValidationErrorType.ActorSetupCardInRoleComposition,
-					$"Actor setup cards must stay outside the Role Composition: {string.Join(", ", overlappingActorSetupCards)}."));
-			}
-
-			var ineligibleActorSetupCards = actorSetupCards.Cards
-				.Where(role => !role.IsEligibleActorSetupCard())
-				.Distinct()
-				.ToArray();
-
-			if (ineligibleActorSetupCards.Length > 0)
-			{
-				issues.Add(new GameConfigValidationError(
-					GameConfigValidationErrorType.IneligibleActorSetupCard,
-					$"Actor setup cards must be hard-aligned Villager Roles with actionable individual powers: {string.Join(", ", ineligibleActorSetupCards)}."));
-			}
 		}
 
 		// Role count checks
@@ -551,6 +536,55 @@ public class GameSessionConfig
 		}
 	}
 
+	private static void AddActorSetupIssues(
+		IReadOnlyList<MainRoleType> completeRoleComposition,
+		bool actorReachable,
+		ActorSetupCards actorSetupCards,
+		List<GameConfigValidationError> issues)
+	{
+		if (!actorReachable)
+		{
+			if (actorSetupCards.Cards.Count > 0)
+			{
+				issues.Add(new GameConfigValidationError(
+					GameConfigValidationErrorType.UnexpectedActorSetupCards,
+					"Actor Setup Cards are invalid when Actor is unreachable."));
+			}
+
+			return;
+		}
+
+		if (actorSetupCards.Cards.Count !=
+			global::Werewolves.Core.StateModels.Models.ActorSetupCards.RequiredCount)
+		{
+			issues.Add(new GameConfigValidationError(
+				GameConfigValidationErrorType.ActorSetupCardCountMismatch,
+				"Actor requires exactly three separate setup cards."));
+		}
+
+		if (actorSetupCards.PrintedRoles.Distinct().Count() !=
+			actorSetupCards.PrintedRoles.Count)
+		{
+			issues.Add(new GameConfigValidationError(
+				GameConfigValidationErrorType.DuplicateActorSetupCardSource,
+				"Actor requires three distinct source Roles."));
+		}
+
+		if (actorSetupCards.PrintedRoles.Intersect(completeRoleComposition).Any())
+		{
+			issues.Add(new GameConfigValidationError(
+				GameConfigValidationErrorType.ActorSetupCardInRoleComposition,
+				"Actor Setup Cards must stay outside the full Role Composition."));
+		}
+
+		if (actorSetupCards.PrintedRoles.Any(role => !role.IsEligibleActorSetupCard()))
+		{
+			issues.Add(new GameConfigValidationError(
+				GameConfigValidationErrorType.IneligibleActorSetupCard,
+				"Actor Setup Cards must use one of the directly allowed source Roles."));
+		}
+	}
+
 	private static IReadOnlyList<GameSessionPlayerConfig> CreatePlayerRoster(
 		List<string> playerNames)
 	{
@@ -598,6 +632,8 @@ public enum GameConfigValidationErrorType
 	ActorSetupCardCountMismatch,
 	ActorSetupCardInRoleComposition,
 	IneligibleActorSetupCard,
+	DuplicateActorSetupCardSource,
+	UnexpectedActorSetupCards,
 	MissingHardAlignedWerewolf,
 	MissingHardAlignedVillager,
 	PublicGroupPartitionMismatch

@@ -101,7 +101,7 @@ public class CanonicalSimulationScenarioTests
 		{
 			MainRoleType.Seer,
 			MainRoleType.Cupid,
-			MainRoleType.Cupid
+			MainRoleType.Elder
 		};
 		var scenario = new SimulationScenario(
 			5,
@@ -118,11 +118,11 @@ public class CanonicalSimulationScenarioTests
 		canonical.RoleComposition.CardCount.Should().Be(5);
 		canonical.ActorSetupCards.Should().Equal(
 			MainRoleType.Cupid,
-			MainRoleType.Cupid,
+			MainRoleType.Elder,
 			MainRoleType.Seer);
 		canonical.RuleState.NewMoonEnabled.Should().BeTrue();
 		canonical.ToString().Should().Be(
-			"players=5|roles=[Seer=1,SimpleVillager=2,SimpleWerewolf=1,WildChild=1]|actor=[Cupid,Cupid,Seer]|rules=[NewMoonEnabled]");
+			"players=5|roles=[Seer=1,SimpleVillager=2,SimpleWerewolf=1,WildChild=1]|actor=[Cupid,Elder,Seer]|rules=[NewMoonEnabled]");
 		parsed.Should().Be(canonical);
 	}
 
@@ -143,7 +143,8 @@ public class CanonicalSimulationScenarioTests
 		var differentArtifact = new SimulationScenario(
 			5,
 			roles,
-			new ActorSetupCards([MainRoleType.Seer])).ToCanonical();
+			new ActorSetupCards(
+				[MainRoleType.Seer, MainRoleType.Cupid, MainRoleType.Elder])).ToCanonical();
 		var differentRuleState = new SimulationScenario(
 			5,
 			roles,
@@ -170,7 +171,7 @@ public class CanonicalSimulationScenarioTests
 		{
 			MainRoleType.Cupid,
 			MainRoleType.Defender,
-			MainRoleType.Cupid
+			MainRoleType.Elder
 		};
 		var first = new SimulationScenario(
 			5,
@@ -185,9 +186,56 @@ public class CanonicalSimulationScenarioTests
 		second.GetHashCode().Should().Be(first.GetHashCode());
 	}
 
+	[Fact]
+	public void ToCanonical_WithReboundReorderedAndReversionedActorArtifact_UsesOnlySourceRoleSetIdentity()
+	{
+		MainRoleType[] roles =
+		[
+			MainRoleType.Actor,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager
+		];
+		PhysicalCharacterCard[] firstCards =
+		[
+			new(Guid.NewGuid(), MainRoleType.Seer),
+			new(Guid.NewGuid(), MainRoleType.Cupid),
+			new(Guid.NewGuid(), MainRoleType.Elder)
+		];
+		PhysicalCharacterCard[] reboundCards =
+		[
+			new(Guid.NewGuid(), MainRoleType.Elder),
+			new(Guid.NewGuid(), MainRoleType.Seer),
+			new(Guid.NewGuid(), MainRoleType.Cupid)
+		];
+		var firstArtifact = new ActorSetupCards(version: 2, firstCards);
+		var reboundArtifact = new ActorSetupCards(version: 17, reboundCards);
+
+		var firstScenario = new SimulationScenario(5, roles, firstArtifact);
+		var reboundScenario = new SimulationScenario(5, roles.Reverse(), reboundArtifact);
+		var changedMembership = new SimulationScenario(
+			5,
+			roles,
+			new ActorSetupCards(
+				[MainRoleType.Seer, MainRoleType.Cupid, MainRoleType.Fox]));
+
+		firstScenario.ActorSetupCards.Should().Be(firstArtifact);
+		firstScenario.ToCanonical().Should().Be(reboundScenario.ToCanonical());
+		firstScenario.Should().Be(reboundScenario);
+		firstScenario.GetHashCode().Should().Be(reboundScenario.GetHashCode());
+		firstScenario.ToCanonical().ActorSetupCards.Should().Equal(
+			MainRoleType.Cupid,
+			MainRoleType.Elder,
+			MainRoleType.Seer);
+		changedMembership.Should().NotBe(firstScenario);
+	}
+
 	[Theory]
 	[InlineData("players=05|roles=[Seer=1]|actor=[]|rules=[]")]
 	[InlineData("players=5|roles=[Seer=1]|actor=[Seer,Cupid]|rules=[]")]
+	[InlineData("players=5|roles=[Seer=1]|actor=[Cupid,Seer]|rules=[]")]
+	[InlineData("players=5|roles=[Seer=1]|actor=[Cupid,Elder,Fox,Seer]|rules=[]")]
 	[InlineData("players=5|roles=[Seer=1]|actor=[1]|rules=[]")]
 	[InlineData("players=5|roles=[Seer=1]|actor=[UnknownRole]|rules=[]")]
 	[InlineData("players=5|roles=[Seer=1]|actor=[]|rules=[newMoonEnabled]")]
