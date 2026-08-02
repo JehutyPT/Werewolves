@@ -13,7 +13,13 @@
 }
 else if (_currentStep == LobbyStep.RoleSelection)
 {
-	<RoleSelectionPage OnBack="ShowRoster" OnStartGame="HandleStartGame" />
+	<RoleSelectionPage OnBack="ShowRoster"
+				   OnConfigureRoleLockIn="ShowRoleLockIn"
+				   OnStartGame="HandleStartGame" />
+}
+else if (_currentStep == LobbyStep.RoleLockIn)
+{
+	<ThiefRoleLockInPage OnBack="ShowRoleSelection" OnAccepted="ShowRoleSelection" />
 }
 else if (_currentStep == LobbyStep.Labs)
 {
@@ -64,6 +70,11 @@ else
 		MoveTo(LobbyStep.Roster);
 	}
 
+	private void ShowRoleLockIn()
+	{
+		MoveTo(LobbyStep.RoleLockIn);
+	}
+
 	private void ShowLabs()
 	{
 		MoveTo(LobbyStep.Labs);
@@ -99,7 +110,7 @@ else
 		_currentStep = step;
 		WakeLock.MoveTo(step switch
 		{
-			LobbyStep.Roster or LobbyStep.RoleSelection => GameplayWakeLockArea.Lobby,
+				LobbyStep.Roster or LobbyStep.RoleSelection or LobbyStep.RoleLockIn => GameplayWakeLockArea.Lobby,
 			LobbyStep.Dashboard => GameplayWakeLockArea.Dashboard,
 			_ => GameplayWakeLockArea.None
 		});
@@ -113,9 +124,10 @@ else
 
 	private enum LobbyStep
 	{
-		Roster,
-		RoleSelection,
-		Labs,
+			Roster,
+			RoleSelection,
+			RoleLockIn,
+			Labs,
 		Dashboard,
 		Victory
 	}

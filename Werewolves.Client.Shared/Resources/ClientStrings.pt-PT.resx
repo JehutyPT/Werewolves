@@ -589,4 +589,40 @@
   <data name="Victory_WindowPreNight" xml:space="preserve">
     <value>Vitória decidida antes da noite.</value>
   </data>
+  <data name="RoleSelection_ConfigureRoleLockInButton" xml:space="preserve">
+    <value>Continuar para as ofertas do Ladrão</value>
+  </data>
+  <data name="RoleSelection_ReviewRoleLockInButton" xml:space="preserve">
+    <value>Rever ou alterar ofertas</value>
+  </data>
+  <data name="ThiefRoleLockIn_StepLabel" xml:space="preserve">
+    <value>Configuração de papéis</value>
+  </data>
+  <data name="ThiefRoleLockIn_Title" xml:space="preserve">
+    <value>Ofertas do Ladrão</value>
+  </data>
+  <data name="ThiefRoleLockIn_Description" xml:space="preserve">
+    <value>Registe o papel impresso em cada oferta ordenada. As cartas restantes formam o monte de distribuição.</value>
+  </data>
+  <data name="ThiefRoleLockIn_Offer1Label" xml:space="preserve">
+    <value>Oferta 1</value>
+  </data>
+  <data name="ThiefRoleLockIn_Offer2Label" xml:space="preserve">
+    <value>Oferta 2</value>
+  </data>
+  <data name="ThiefRoleLockIn_CommitButton" xml:space="preserve">
+    <value>Guardar configuração</value>
+  </data>
+  <data name="ThiefRoleLockIn_SummaryTitle" xml:space="preserve">
+    <value>Ofertas do Ladrão guardadas</value>
+  </data>
+  <data name="ThiefRoleLockIn_DealPoolLabel" xml:space="preserve">
+    <value>Monte de distribuição</value>
+  </data>
+  <data name="ThiefRoleLockIn_IncompleteValidation" xml:space="preserve">
+    <value>Escolha um papel impresso para cada oferta.</value>
+  </data>
+  <data name="ThiefRoleLockIn_SaveFailedValidation" xml:space="preserve">
+    <value>Não foi possível guardar esta configuração de ofertas. Verifique as cartas selecionadas e tente novamente.</value>
+  </data>
 </root>

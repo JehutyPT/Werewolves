@@ -39,10 +39,11 @@
 										disabled="@(!info.CanDecrement)"
 										@onclick="() => DecrementRole(role)">−</button>
 								<span class="ww-stepper-count" aria-label="@Format(ClientStrings.RoleSelection_RoleCountAriaFormat, info.Count, info.DisplayName)">@info.Count</span>
-								<button type="button"
-										class="ww-stepper-btn"
-										aria-label="@Format(ClientStrings.RoleSelection_AddRoleAriaFormat, info.DisplayName)"
-										@onclick="() => IncrementRole(role)">+</button>
+							<button type="button"
+									class="ww-stepper-btn"
+									aria-label="@Format(ClientStrings.RoleSelection_AddRoleAriaFormat, info.DisplayName)"
+									disabled="@(!info.CanIncrement)"
+									@onclick="() => IncrementRole(role)">+</button>
 							</div>
 						}
 						else
@@ -65,6 +66,33 @@
 					</div>
 				}
 			</div>
+		</section>
+	}
+
+	@if (CurrentThiefRoleLockIn is { } roleLockIn)
+	{
+		<section class="ww-role-group"
+				 data-testid="@ModeratorUiTestIds.ThiefRoleLockInSummary"
+				 aria-labelledby="thief-role-lock-in-summary-title">
+			<div class="ww-section-head">
+				<h2 id="thief-role-lock-in-summary-title">@ClientStrings.ThiefRoleLockIn_SummaryTitle</h2>
+			</div>
+			<p class="ww-page-copy">
+				<strong>@ClientStrings.ThiefRoleLockIn_Offer1Label:</strong>
+				@roleLockIn.Offer1!.PrintedRole.GetPublicName()
+			</p>
+			<p class="ww-page-copy">
+				<strong>@ClientStrings.ThiefRoleLockIn_Offer2Label:</strong>
+				@roleLockIn.Offer2!.PrintedRole.GetPublicName()
+			</p>
+			<p class="ww-page-copy">
+				<strong>@ClientStrings.ThiefRoleLockIn_DealPoolLabel:</strong>
+				@RoleSummary(roleLockIn.DealPool.Select(card => card.PrintedRole))
+			</p>
+			<button type="button"
+					class="ww-secondary-button"
+					data-testid="@ModeratorUiTestIds.ThiefRoleLockInReview"
+					@onclick="ConfigureRoleLockIn">@ClientStrings.RoleSelection_ReviewRoleLockInButton</button>
 		</section>
 	}
 
@@ -92,17 +120,29 @@
 		}
 		<div class="ww-action-pair">
 			<button type="button" class="ww-secondary-button" @onclick="Back">@ClientStrings.Common_Back</button>
-			<button type="button"
-					class="ww-btn-primary"
-					data-testid="@ModeratorUiTestIds.RoleSelectionStartGame"
-					disabled="@(!CanStartGame)"
-					@onclick="StartGame">@ClientStrings.RoleSelection_StartGameButton</button>
+			@if (Lobby.RequiresRoleLockIn)
+			{
+				<button type="button"
+						class="ww-btn-primary"
+						data-testid="@ModeratorUiTestIds.RoleSelectionConfigureRoleLockIn"
+						disabled="@(!IsRoleSelectionValid)"
+						@onclick="ConfigureRoleLockIn">@ClientStrings.RoleSelection_ConfigureRoleLockInButton</button>
+			}
+			else
+			{
+				<button type="button"
+						class="ww-btn-primary"
+						data-testid="@ModeratorUiTestIds.RoleSelectionStartGame"
+						disabled="@(!IsRoleSelectionValid)"
+						@onclick="StartGame">@ClientStrings.RoleSelection_StartGameButton</button>
+			}
 		</div>
 	</footer>
 </main>
 
 @using Werewolves.Core.StateModels.Enums
 @using Werewolves.Core.StateModels.Extensions
+@using Werewolves.Core.StateModels.Models
 @using Werewolves.Core.StateModels.Models.Simulation
 @using Werewolves.Core.GameLogic.Simulation
 @using Werewolves.Client.Testing
@@ -113,6 +153,9 @@
 
 	[Parameter]
 	public EventCallback OnStartGame { get; set; }
+
+	[Parameter]
+	public EventCallback OnConfigureRoleLockIn { get; set; }
 
 	private List<string> _validationErrors = new();
 	private LobbyEvaluationState _evaluationState = LobbyEvaluationState.NotApplicable();
@@ -127,7 +170,12 @@
 	}
 
 	private bool IsCountMatching => Lobby.TotalSelectedRoleCount == Lobby.ExpectedRoleCount;
-	private bool CanStartGame => !Lobby.HasRoleConfigIssues(out _);
+	private bool IsRoleSelectionValid => !Lobby.HasRoleConfigIssues(out _);
+	private RoleLockIn? CurrentThiefRoleLockIn =>
+		!Lobby.RequiresRoleLockIn &&
+		Lobby.AcceptedRoleLockIn is { Offer1: not null, Offer2: not null } accepted
+			? accepted
+			: null;
 	private bool ShouldRenderEvaluationPanel =>
 		_evaluationState.Kind is
 			LobbyEvaluationStateKind.AlreadyDecided or
@@ -177,6 +225,18 @@
 	}
 
 	private Task Back() => OnBack.InvokeAsync();
+
+	private Task ConfigureRoleLockIn()
+	{
+		if (Lobby.HasRoleConfigIssues(out var issues))
+		{
+			_validationErrors = issues.Select(GameConfigValidationExtensions.GetDisplayMessage).ToList();
+			return Task.CompletedTask;
+		}
+
+		_validationErrors.Clear();
+		return OnConfigureRoleLockIn.InvokeAsync();
+	}
 
 	private Task StartGame()
 	{
@@ -267,4 +327,12 @@
 
 	private static string Format(string format, params object[] args) =>
 		string.Format(CultureInfo.CurrentCulture, format, args);
+
+	private static string RoleSummary(IEnumerable<MainRoleType> roles) =>
+		string.Join(", ", roles
+			.GroupBy(role => role)
+			.OrderBy(group => group.Key.GetPublicName(), StringComparer.CurrentCulture)
+			.Select(group => group.Count() == 1
+				? group.Key.GetPublicName()
+				: $"{group.Key.GetPublicName()} ×{group.Count()}"));
 }

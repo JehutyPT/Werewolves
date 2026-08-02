@@ -140,25 +140,32 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 				return;
 			}
 
-			var scenario = _lobby.CreateSimulationScenario();
-			var support = _classify(scenario, _capability);
-			if (!support.RulesValid || !support.AppSupported)
+			if (!_lobby.TryCreateSimulationScenario(out var scenario))
 			{
 				replacement = null;
 				nextState = LobbyEvaluationState.NotApplicable();
 			}
-			else if (!support.SimulatorSupported)
-			{
-				replacement = null;
-				nextState = LobbyEvaluationState.SimulatorUnavailable();
-			}
 			else
 			{
-				var identity = new SimulationCompatibilityIdentity(
-					scenario.ToCanonical(),
-					_capability.Identity);
-				replacement = new EvaluationRequest(scenario, identity);
-				nextState = LobbyEvaluationState.Pending(identity);
+				var support = _classify(scenario, _capability);
+				if (!support.RulesValid || !support.AppSupported)
+				{
+					replacement = null;
+					nextState = LobbyEvaluationState.NotApplicable();
+				}
+				else if (!support.SimulatorSupported)
+				{
+					replacement = null;
+					nextState = LobbyEvaluationState.SimulatorUnavailable();
+				}
+				else
+				{
+					var identity = new SimulationCompatibilityIdentity(
+						scenario.ToCanonical(),
+						_capability.Identity);
+					replacement = new EvaluationRequest(scenario, identity);
+					nextState = LobbyEvaluationState.Pending(identity);
+				}
 			}
 
 			previous = _currentRequest;

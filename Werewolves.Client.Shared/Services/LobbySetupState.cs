@@ -55,6 +55,9 @@ public class LobbySetupState
 
 	public IReadOnlyList<string> PlayerNames => _playerNames;
 	public RoleLockIn? AcceptedRoleLockIn { get; private set; }
+	public bool RequiresRoleLockIn =>
+		GetRoleCount(MainRoleType.Thief) > 0 &&
+		(AcceptedRoleLockIn is null || _acceptedRoleLockInRequiresReplacement);
 	internal bool AcceptedRoleLockInRequiresReplacement =>
 		_acceptedRoleLockInRequiresReplacement;
 
@@ -65,7 +68,29 @@ public class LobbySetupState
 
 	public bool HasRoleConfigIssues(out List<GameConfigValidationError> issues)
 	{
-		GameSessionConfig.TryGetConfigIssues(_playerNames, GetSelectedRoles(), out var configIssues);
+		List<GameConfigValidationError> configIssues;
+		if (AcceptedRoleLockIn is { } acceptedRoleLockIn &&
+			!_acceptedRoleLockInRequiresReplacement)
+		{
+			GameSessionConfig.TryGetRoleLockInConfigIssues(
+				_playerNames,
+				acceptedRoleLockIn,
+				ActorSetupCards.None,
+				out configIssues);
+		}
+		else
+		{
+			var selectedRoles = GetSelectedRoles();
+			GameSessionConfig.TryGetConfigIssues(
+				_playerNames,
+				selectedRoles,
+				out configIssues);
+			if (selectedRoles.Contains(MainRoleType.Thief) &&
+				HasValidThiefRoleLockInPartition(selectedRoles))
+			{
+				configIssues = [];
+			}
+		}
 		issues = configIssues
 			.Where(issue => issue.Type is not GameConfigValidationErrorType.TooFewPlayers
 				and not GameConfigValidationErrorType.NonUniquePlayerNames)
@@ -116,7 +141,7 @@ public class LobbySetupState
 		}
 
 		(_playerNames[index - 1], _playerNames[index]) = (_playerNames[index], _playerNames[index - 1]);
-		OnLobbyDraftChanged(simulationScenarioChanged: false);
+		OnLobbyDraftChanged(simulationScenarioChanged: AcceptedRoleLockIn is not null);
 		return true;
 	}
 
@@ -128,7 +153,7 @@ public class LobbySetupState
 		}
 
 		(_playerNames[index], _playerNames[index + 1]) = (_playerNames[index + 1], _playerNames[index]);
-		OnLobbyDraftChanged(simulationScenarioChanged: false);
+		OnLobbyDraftChanged(simulationScenarioChanged: AcceptedRoleLockIn is not null);
 		return true;
 	}
 
@@ -140,7 +165,7 @@ public class LobbySetupState
 	public void IncrementRole(MainRoleType role)
 	{
 		var constraint = GetAvailableRoleMetadata(role).CountConstraint;
-		var (affordance, batchSize) = ClassifyConstraint(constraint);
+		var (affordance, batchSize, maximum) = GetRoleSelectionPolicy(role, constraint);
 		var current = GetRoleCount(role);
 
 		if (affordance == RoleAffordance.Toggle)
@@ -153,7 +178,7 @@ public class LobbySetupState
 		}
 		else
 		{
-			if (current < constraint.Maximum)
+			if (current < maximum)
 			{
 				_roleCounts[role] = current + 1;
 				OnLobbyDraftChanged();
@@ -168,7 +193,7 @@ public class LobbySetupState
 			return;
 
 		var constraint = GetAvailableRoleMetadata(role).CountConstraint;
-		var (affordance, _) = ClassifyConstraint(constraint);
+		var (affordance, _, _) = GetRoleSelectionPolicy(role, constraint);
 
 		if (affordance == RoleAffordance.Toggle)
 			_roleCounts[role] = 0;
@@ -194,6 +219,18 @@ public class LobbySetupState
 			!_acceptedRoleLockInRequiresReplacement
 			? new SimulationScenario(acceptedRoleLockIn)
 			: new SimulationScenario(_playerNames.Count, GetSelectedRoles());
+
+	public bool TryCreateSimulationScenario(out SimulationScenario scenario)
+	{
+		if (RequiresRoleLockIn)
+		{
+			scenario = null!;
+			return false;
+		}
+
+		scenario = CreateSimulationScenario();
+		return true;
+	}
 
 	public void Reset()
 	{
@@ -224,11 +261,11 @@ public class LobbySetupState
 	{
 		var roleMetadata = GetAvailableRoleMetadata(role);
 		var constraint = roleMetadata.CountConstraint;
-		var (affordance, batchSize) = ClassifyConstraint(constraint);
+		var (affordance, batchSize, maximum) = GetRoleSelectionPolicy(role, constraint);
 		var count = GetRoleCount(role);
 		var canIncrement = affordance == RoleAffordance.Toggle
 			? count == 0
-			: count < constraint.Maximum;
+			: count < maximum;
 		var canDecrement = count > 0;
 
 		return new RoleInfo(
@@ -268,6 +305,59 @@ public class LobbySetupState
 		if (!constraint.IsOptional)
 			return (RoleAffordance.Stepper, 1);
 		return (RoleAffordance.Toggle, constraint.Minimum);
+	}
+
+	private (RoleAffordance Affordance, int BatchSize, int Maximum)
+		GetRoleSelectionPolicy(
+			MainRoleType role,
+			NumberRangeConstraint constraint)
+	{
+		if (GetRoleCount(MainRoleType.Thief) > 0 &&
+			constraint == NumberRangeConstraint.SingleOptional &&
+			RoleLockIn.IsOfferEligible(role))
+		{
+			return (RoleAffordance.Stepper, BatchSize: 1, Maximum: 2);
+		}
+
+		var (affordance, batchSize) = ClassifyConstraint(constraint);
+		return (affordance, batchSize, constraint.Maximum);
+	}
+
+	private bool HasValidThiefRoleLockInPartition(
+		IReadOnlyCollection<MainRoleType> selectedRoles)
+	{
+		var offerCandidates = selectedRoles
+			.Where(RoleLockIn.IsOfferEligible)
+			.Distinct()
+			.ToArray();
+		foreach (var offer1 in offerCandidates)
+		{
+			foreach (var offer2 in offerCandidates)
+			{
+				try
+				{
+					var candidate = RoleLockIn.CreateFromPrintedRoles(
+						version: 1,
+						_playerNames.Count,
+						selectedRoles,
+						offer1,
+						offer2);
+					if (!GameSessionConfig.TryGetRoleLockInConfigIssues(
+							_playerNames,
+							candidate,
+							ActorSetupCards.None,
+							out _))
+					{
+						return true;
+					}
+				}
+				catch (ArgumentException)
+				{
+				}
+			}
+		}
+
+		return false;
 	}
 
 	private LobbySetupRoleMetadata GetAvailableRoleMetadata(MainRoleType role)

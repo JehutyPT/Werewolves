@@ -130,6 +130,46 @@ public class RoleLockInTests
 	}
 
 	[Fact]
+	public void FromPrintedRoles_SamePrintedOffersCreateACompleteCoreOwnedPartition()
+	{
+		MainRoleType[] selectedRoles =
+		[
+			MainRoleType.Thief,
+			MainRoleType.BigBadWolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.Witch,
+			MainRoleType.Hunter,
+			MainRoleType.Seer,
+			MainRoleType.Seer
+		];
+
+		var roleLockIn = RoleLockIn.CreateFromPrintedRoles(
+			version: 4,
+			playerCount: 5,
+			selectedRoles,
+			offer1: MainRoleType.Seer,
+			offer2: MainRoleType.Seer);
+
+		roleLockIn.Version.Should().Be(4);
+		roleLockIn.RoleComposition.Select(card => card.PrintedRole)
+			.Should().BeEquivalentTo(selectedRoles);
+		roleLockIn.DealPool.Select(card => card.PrintedRole).Should().BeEquivalentTo(
+			[
+				MainRoleType.Thief,
+				MainRoleType.BigBadWolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.Witch,
+				MainRoleType.Hunter
+			]);
+		roleLockIn.Offer1!.PrintedRole.Should().Be(MainRoleType.Seer);
+		roleLockIn.Offer2!.PrintedRole.Should().Be(MainRoleType.Seer);
+		roleLockIn.RoleComposition.Select(card => card.Id)
+			.Should().OnlyHaveUniqueItems()
+			.And.NotContain(Guid.Empty);
+		roleLockIn.Offer1.Id.Should().NotBe(roleLockIn.Offer2.Id);
+	}
+
+	[Fact]
 	public void RoleLockIn_WithDuplicatePhysicalInstanceIdentity_IsRejected()
 	{
 		var duplicateId = Guid.Parse("60000000-0000-0000-0000-000000000001");

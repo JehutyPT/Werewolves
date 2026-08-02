@@ -57,6 +57,39 @@ public sealed class GameClientManager
 	public bool TryReplaceStagedRoleLockIn(
 		LobbySetupState lobby,
 		long expectedCurrentVersion,
+		MainRoleType offer1,
+		MainRoleType offer2)
+	{
+		ArgumentNullException.ThrowIfNull(lobby);
+		if (expectedCurrentVersion == long.MaxValue)
+		{
+			return false;
+		}
+
+		RoleLockIn replacement;
+		try
+		{
+			replacement = RoleLockIn.CreateFromPrintedRoles(
+				expectedCurrentVersion + 1,
+				lobby.PlayerNames.Count,
+				lobby.GetSelectedRoles(),
+				offer1,
+				offer2);
+		}
+		catch (ArgumentException)
+		{
+			return false;
+		}
+
+		return TryReplaceStagedRoleLockIn(
+			lobby,
+			expectedCurrentVersion,
+			replacement);
+	}
+
+	public bool TryReplaceStagedRoleLockIn(
+		LobbySetupState lobby,
+		long expectedCurrentVersion,
 		RoleLockIn replacement)
 	{
 		ArgumentNullException.ThrowIfNull(lobby);
@@ -89,13 +122,14 @@ public sealed class GameClientManager
 	public StartGameConfirmationInstruction StartGame(LobbySetupState lobby)
 	{
 		ArgumentNullException.ThrowIfNull(lobby);
-		if (lobby.AcceptedRoleLockInRequiresReplacement)
+		if (lobby.RequiresRoleLockIn)
 		{
 			throw new InvalidOperationException(
 				"Lobby Exit requires a fresh accepted Role Lock-In after Lobby edits.");
 		}
 		GameSessionConfig config;
-		if (lobby.AcceptedRoleLockIn is { } acceptedRoleLockIn)
+		if (lobby.AcceptedRoleLockIn is { } acceptedRoleLockIn &&
+			!lobby.AcceptedRoleLockInRequiresReplacement)
 		{
 			config = new GameSessionConfig(
 				lobby.PlayerNames.ToList(),
@@ -103,11 +137,21 @@ public sealed class GameClientManager
 		}
 		else
 		{
+			var expectedCurrentVersion = lobby.AcceptedRoleLockIn?.Version ?? 0;
+			if (expectedCurrentVersion == long.MaxValue)
+			{
+				throw new InvalidOperationException(
+					"Lobby Exit could not finalize the current Role Lock-In.");
+			}
+			var replacement = RoleLockIn.CreateFromPrintedRoles(
+				expectedCurrentVersion + 1,
+				lobby.PlayerNames.Count,
+				lobby.GetSelectedRoles());
 			config = new GameSessionConfig(
 				lobby.PlayerNames.ToList(),
-				lobby.GetSelectedRoles());
+				replacement);
 			if (!lobby.CanReplaceRoleLockIn(
-				expectedCurrentVersion: 0,
+				expectedCurrentVersion,
 				config.RoleLockIn))
 			{
 				throw new InvalidOperationException(
