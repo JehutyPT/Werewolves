@@ -1,4 +1,7 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using FluentAssertions;
+using Werewolves.Core.GameLogic.Interfaces;
 using Werewolves.Core.GameLogic.Models.EliminationCascades;
 using Werewolves.Core.GameLogic.RolePowers;
 using Werewolves.Core.GameLogic.Services;
@@ -7,7 +10,9 @@ using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
+using Werewolves.Core.StateModels.Models.Simulation;
 using Werewolves.Core.StateModels.Resources;
+using Werewolves.Core.StateModels.Serialization;
 using Werewolves.Core.Tests.Helpers;
 using Xunit;
 using Xunit.Abstractions;
@@ -16,6 +21,19 @@ namespace Werewolves.Core.Tests.Integration;
 
 public sealed class ScapegoatRoleTests : DiagnosticTestBase
 {
+	private static readonly TestGameFlowManagerKey RecoveryFlowKey = new();
+	private static readonly JsonSerializerOptions RecoverySerializationOptions =
+		new()
+		{
+			Converters =
+			{
+				new GameResultConverter(),
+				new GameLogEntryConverter(),
+				new ModeratorInstructionConverter(),
+				new JsonStringEnumConverter()
+			}
+		};
+
 	public ScapegoatRoleTests(ITestOutputHelper output) : base(output) { }
 
 	[Fact]
@@ -676,6 +694,112 @@ public sealed class ScapegoatRoleTests : DiagnosticTestBase
 		MarkTestCompleted();
 	}
 
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public void Recovery_NativeRestrictionLoggedAfterAcknowledgmentOrExpiry_IsRejected(
+		bool moveAfterExpiry)
+	{
+		var builder = CreateBuilder()
+			.WithPlayers(5)
+			.WithRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Scapegoat,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		var session = (GameSession)builder.GetGameState()!;
+		session.TransitionMainPhase(GamePhase.Day);
+		var candidatePlayerIds = session.GetPlayers()
+			.Select(player => player.Id)
+			.ToArray();
+		const string scopeId = "chronology-native-restriction";
+		var announcementInstructionId = Guid.Parse(
+			"00000000-0000-0000-0000-000000000143");
+		DayVoteRules.CommitVoterEligibilityRestriction(
+			session,
+			scopeId,
+			MainRoleType.Scapegoat,
+			candidatePlayerIds,
+			[candidatePlayerIds[0]],
+			session.TurnNumber + 1,
+			announcementInstructionId);
+		DayVoteRules.AcknowledgeVoterEligibilityRestrictionAnnouncement(
+			session,
+			scopeId,
+			announcementInstructionId);
+		if (moveAfterExpiry)
+		{
+			session.TransitionMainPhase(GamePhase.Night);
+			session.TransitionMainPhase(GamePhase.Day);
+			DayVoteRules.ExpireActiveVoterEligibilityRestriction(session);
+		}
+
+		session.CaptureRecoveryBoundary(RecoveryFlowKey);
+		var malformed = MoveNativeRestrictionAfterEvent(
+			session.Serialize(),
+			moveAfterExpiry);
+
+		var act = () => new GameService().RehydrateSession(malformed);
+
+		act.Should().Throw<InvalidOperationException>()
+			.WithMessage(
+				"*voter-eligibility restriction acknowledgment*stale*");
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void Recovery_BorrowedRestrictionOpaqueMarkerAfterAcknowledgment_IsRejected()
+	{
+		var snapshot = RecoveryPayloadTestDriver
+			.CreateActorBorrowedScapegoatPendingSnapshot(
+				ActorBorrowedScapegoatRecoveryStep.PermittedVoterSelection,
+				new DiagnosticStateObserver());
+		var fixtureService = new GameService();
+		var fixtureGameId = fixtureService.RehydrateSession(
+			snapshot.SerializedSession);
+		var session = fixtureService.GetGameStateView(fixtureGameId)
+			.Should().BeOfType<GameSession>().Subject;
+		var tieReplacement = session
+			.GetActorBorrowedScapegoatTieReplacementCommits()
+			.Should().ContainSingle().Subject;
+		var candidatePlayerIds = session.GetPlayers()
+			.Where(player => player.State.Health == PlayerHealth.Alive)
+			.Select(player => player.Id)
+			.ToArray();
+		var announcementInstructionId = Guid.Parse(
+			"00000000-0000-0000-0000-000000000144");
+		var acknowledgmentLogIndex = session.GameHistoryLog.Count();
+		DayVoteRules.AcknowledgeVoterEligibilityRestrictionAnnouncement(
+			session,
+			tieReplacement.CascadeScopeId,
+			announcementInstructionId);
+		session.CommitActorBorrowedScapegoatVoterRestriction(
+			tieReplacement.PowerIdentity,
+			tieReplacement.PublicMarkerLogIndex,
+			tieReplacement.CascadeScopeId,
+			candidatePlayerIds,
+			[candidatePlayerIds[0]],
+			session.TurnNumber + 1,
+			announcementInstructionId);
+		var restriction = session
+			.GetActorBorrowedScapegoatVoterRestrictionCommits()
+			.Should().ContainSingle().Subject;
+		restriction.PublicMarkerLogIndex.Should()
+			.BeGreaterThan(acknowledgmentLogIndex);
+		session.GameHistoryLog.ElementAt(restriction.PublicMarkerLogIndex)
+			.Should().BeOfType<ActorBorrowedRolePowerCommittedLogEntry>();
+		session.CaptureRecoveryBoundary(RecoveryFlowKey);
+
+		var act = () => new GameService().RehydrateSession(session.Serialize());
+
+		act.Should().Throw<InvalidOperationException>()
+			.WithMessage(
+				"*voter-eligibility restriction acknowledgment*stale*");
+		MarkTestCompleted();
+	}
+
 	[Fact]
 	public void SameDayConsecutiveVote_IgnoresFollowingDayRestriction()
 	{
@@ -938,6 +1062,35 @@ public sealed class ScapegoatRoleTests : DiagnosticTestBase
 		builder.Process(nightEnd.CreateResponse());
 	}
 
+	private static string MoveNativeRestrictionAfterEvent(
+		string serializedSession,
+		bool moveAfterExpiry)
+	{
+		var payload = JsonSerializer.Deserialize<GameSessionDto>(
+			serializedSession,
+			RecoverySerializationOptions)
+			?? throw new InvalidOperationException(
+				"The recovery test payload could not be deserialized.");
+		var restrictionIndex = payload.GameHistoryLog.FindIndex(
+			entry => entry is VoterEligibilityRestrictionCommittedLogEntry);
+		var eventIndex = payload.GameHistoryLog.FindLastIndex(entry =>
+			moveAfterExpiry
+				? entry is VoterEligibilityRestrictionExpiredLogEntry
+				: entry is
+					VoterEligibilityRestrictionAnnouncementAcknowledgedLogEntry);
+		if (restrictionIndex < 0 || eventIndex <= restrictionIndex)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload lacks the expected voter-restriction chronology.");
+		}
+
+		var restriction = payload.GameHistoryLog[restrictionIndex];
+		payload.GameHistoryLog.RemoveAt(restrictionIndex);
+		eventIndex--;
+		payload.GameHistoryLog.Insert(eventIndex + 1, restriction);
+		return JsonSerializer.Serialize(payload, RecoverySerializationOptions);
+	}
+
 	private sealed class RecordingAvailabilityPolicy(
 		RolePowerAvailabilityResult result)
 		: IRolePowerAvailabilityPolicy
@@ -950,6 +1103,8 @@ public sealed class ScapegoatRoleTests : DiagnosticTestBase
 			return result;
 		}
 	}
+
+	private sealed class TestGameFlowManagerKey : IGameFlowManagerKey;
 
 	private sealed class ScapegoatTriggeredReaction
 		: IEliminationCascadeReaction

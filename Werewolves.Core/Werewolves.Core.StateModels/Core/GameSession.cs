@@ -134,6 +134,30 @@ internal class GameSession : IGameSession
 	internal IReadOnlyList<ActorBorrowedFoxCheckCommit>
 		GetActorBorrowedFoxCheckCommits() =>
 		_gameSessionKernel.GetActorBorrowedFoxCheckCommits();
+	internal IReadOnlyList<ActorBorrowedBearTamerGrowlCommit>
+		GetActorBorrowedBearTamerGrowlCommits() =>
+		_gameSessionKernel.GetActorBorrowedBearTamerGrowlCommits();
+	internal IReadOnlyList<ActorBorrowedKnightRustySwordScheduleCommit>
+		GetActorBorrowedKnightRustySwordScheduleCommits() =>
+		_gameSessionKernel.GetActorBorrowedKnightRustySwordScheduleCommits();
+	internal IReadOnlyList<ActorBorrowedHunterFinalShotCommit>
+		GetActorBorrowedHunterFinalShotCommits() =>
+		_gameSessionKernel.GetActorBorrowedHunterFinalShotCommits();
+	internal IReadOnlyList<ActorBorrowedElderResistanceCommit>
+		GetActorBorrowedElderResistanceCommits() =>
+		_gameSessionKernel.GetActorBorrowedElderResistanceCommits();
+	internal IReadOnlyList<ActorBorrowedElderSuppressionCommit>
+		GetActorBorrowedElderSuppressionCommits() =>
+		_gameSessionKernel.GetActorBorrowedElderSuppressionCommits();
+	internal IReadOnlyList<ActorBorrowedScapegoatTieReplacementCommit>
+		GetActorBorrowedScapegoatTieReplacementCommits() =>
+		_gameSessionKernel.GetActorBorrowedScapegoatTieReplacementCommits();
+	internal IReadOnlyList<ActorBorrowedScapegoatVoterRestrictionCommit>
+		GetActorBorrowedScapegoatVoterRestrictionCommits() =>
+		_gameSessionKernel.GetActorBorrowedScapegoatVoterRestrictionCommits();
+	internal IReadOnlyList<ActorBorrowedVillageIdiotPardonCommit>
+		GetActorBorrowedVillageIdiotPardonCommits() =>
+		_gameSessionKernel.GetActorBorrowedVillageIdiotPardonCommits();
 	internal IReadOnlyList<ActorBorrowedWitchPotionUseCommit>
 		GetActorBorrowedWitchPotionUseCommits() =>
 		_gameSessionKernel.GetActorBorrowedWitchPotionUseCommits();
@@ -422,6 +446,89 @@ internal class GameSession : IGameSession
 			centerPlayerId,
 			neighborhoodAgentKnowledge,
 			spentResourceIdentity);
+
+	internal void CommitActorBorrowedBearTamerGrowl(
+		RolePowerInstanceIdentity powerIdentity) =>
+		_gameSessionKernel.CommitActorBorrowedBearTamerGrowl(powerIdentity);
+
+	internal void CommitActorBorrowedKnightRustySwordSchedule(
+		RolePowerInstanceIdentity powerIdentity,
+		Guid targetPlayerId,
+		int werewolfAttackEliminationLogIndex,
+		string cascadeScopeId) =>
+		_gameSessionKernel.CommitActorBorrowedKnightRustySwordSchedule(
+			powerIdentity,
+			targetPlayerId,
+			werewolfAttackEliminationLogIndex,
+			cascadeScopeId);
+
+	internal void CommitActorBorrowedVillageIdiotPardon(
+		RolePowerInstanceIdentity powerIdentity,
+		OneUseRolePowerResourceIdentity spentResourceIdentity) =>
+		_gameSessionKernel.CommitActorBorrowedVillageIdiotPardon(
+			powerIdentity,
+			spentResourceIdentity);
+
+	internal void CommitActorBorrowedHunterFinalShot(
+		RolePowerInstanceIdentity powerIdentity,
+		string cascadeScopeId,
+		IReadOnlyList<Guid> triggeringPlayerIds,
+		Guid targetPlayerId) =>
+		_gameSessionKernel.CommitActorBorrowedHunterFinalShot(
+			powerIdentity,
+			cascadeScopeId,
+			triggeringPlayerIds,
+			targetPlayerId);
+
+	internal void CommitActorBorrowedElderResistance(
+		RolePowerInstanceIdentity powerIdentity,
+		Guid targetPlayerId,
+		int triggeringNightActionLogIndex,
+		int? restoringWitchSaveLogIndex = null) =>
+		_gameSessionKernel.CommitActorBorrowedElderResistance(
+			powerIdentity,
+			targetPlayerId,
+			triggeringNightActionLogIndex,
+			restoringWitchSaveLogIndex);
+
+	internal void CommitActorBorrowedElderSuppression(
+		RolePowerInstanceIdentity powerIdentity,
+		int triggeringVoteOutcomeLogIndex,
+		string cascadeScopeId,
+		Guid announcementInstructionId) =>
+		_gameSessionKernel.CommitActorBorrowedElderSuppression(
+			powerIdentity,
+			triggeringVoteOutcomeLogIndex,
+			cascadeScopeId,
+			announcementInstructionId);
+
+	internal void CommitActorBorrowedScapegoatTieReplacement(
+		RolePowerInstanceIdentity powerIdentity,
+		int triggeringVoteOutcomeLogIndex,
+		int voteOrdinal,
+		string cascadeScopeId) =>
+		_gameSessionKernel.CommitActorBorrowedScapegoatTieReplacement(
+			powerIdentity,
+			triggeringVoteOutcomeLogIndex,
+			voteOrdinal,
+			cascadeScopeId);
+
+	internal void CommitActorBorrowedScapegoatVoterRestriction(
+		RolePowerInstanceIdentity powerIdentity,
+		int tieReplacementPublicMarkerLogIndex,
+		string cascadeScopeId,
+		IReadOnlyCollection<Guid> candidatePlayerIds,
+		IReadOnlyCollection<Guid> permittedVoterIds,
+		int appliesOnTurnNumber,
+		Guid announcementInstructionId) =>
+		_gameSessionKernel.CommitActorBorrowedScapegoatVoterRestriction(
+			powerIdentity,
+			tieReplacementPublicMarkerLogIndex,
+			cascadeScopeId,
+			candidatePlayerIds,
+			permittedVoterIds,
+			appliesOnTurnNumber,
+			announcementInstructionId);
 
 	internal void CommitActorBorrowedWitchPotionUse(
 		RolePowerInstanceIdentity powerIdentity,

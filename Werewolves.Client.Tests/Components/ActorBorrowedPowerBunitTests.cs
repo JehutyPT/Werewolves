@@ -27,7 +27,13 @@ public sealed class ActorBorrowedPowerBunitTests
 	[InlineData(ActorBorrowedPowerFamily.Defender)]
 	[InlineData(ActorBorrowedPowerFamily.Fox)]
 	[InlineData(ActorBorrowedPowerFamily.StutteringJudge)]
-	public async Task BorrowedFamily_RendersPortuguesePrivateContextWithoutPublicLineageLeak(
+	[InlineData(ActorBorrowedPowerFamily.Hunter)]
+	[InlineData(ActorBorrowedPowerFamily.Elder)]
+	[InlineData(ActorBorrowedPowerFamily.Scapegoat)]
+	[InlineData(ActorBorrowedPowerFamily.VillageIdiot)]
+	[InlineData(ActorBorrowedPowerFamily.BearTamer)]
+	[InlineData(ActorBorrowedPowerFamily.KnightWithRustySword)]
+	public async Task BorrowedFamily_RendersPortugueseAudienceContractWithoutLineageLeak(
 		ActorBorrowedPowerFamily family)
 	{
 		var timing = new ControlledHoldButtonTiming();
@@ -37,89 +43,21 @@ public sealed class ActorBorrowedPowerBunitTests
 		context.Services.AddSingleton<IHoldButtonTiming>(timing);
 		var responses = new List<ModeratorResponse>();
 		var scenario = ActorBorrowedInstructionFixture.Create(family);
-		var cut = context.RenderModeratorComponent<InstructionRenderer>(parameters =>
-			parameters
-				.Add(component => component.Instruction, scenario.Instruction)
-				.Add(component => component.Roster, scenario.Roster)
-				.Add(
-					component => component.OnResponse,
-					EventCallback.Factory.Create<ModeratorResponse>(
-						this,
-						responses.Add)));
 
 		scenario.Instruction.Semantic.Should().Be(ExpectedSemantic(family));
 		if (scenario.Instruction is SelectPlayersInstruction playerSelection)
 		{
 			playerSelection.RoleIdentification.Should().BeNull();
 		}
-		scenario.Instruction.PublicAnnouncement.Should().Be(
-			family == ActorBorrowedPowerFamily.LittleGirl
-				? GameStrings.RoleHoldersWakeUp.Format(
-					GameStrings.WerewolvesGroupName)
-				: null);
-		if (family == ActorBorrowedPowerFamily.LittleGirl)
-		{
-			scenario.Instruction.AffectedPlayerIds.Should().BeNull();
-		}
-		else
-		{
-			scenario.Instruction.AffectedPlayerIds.Should().Equal(scenario.ActorId);
-		}
 		AssertInstructionShape(family, scenario.Instruction);
-
-		ExpandPrivateInstruction(cut);
-		var blocks = cut.FindAll(TestId(ModeratorUiTestIds.InstructionBlock));
-		var privateBlock = blocks.Single(block => block.ClassList.Contains(
-			ClientTestReferences.Css.Classes.InstructionBlockPrivate));
-		privateBlock.QuerySelector(
-				$".{ClientTestReferences.Css.Classes.InstructionPrivate}")
-			.Should().NotBeNull();
-		foreach (var fragment in scenario.PrivateFragments)
-		{
-			privateBlock.TextContent.Should().Contain(fragment);
-		}
-
-		var publicBlocks = blocks.Where(block => block.ClassList.Contains(
-			ClientTestReferences.Css.Classes.InstructionBlockAnnouncement))
+		var renderedInstructions = scenario.Expectations
+			.Select(expectation => RenderAndAssertExpectation(
+				context,
+				expectation,
+				scenario,
+				responses))
 			.ToArray();
-		if (scenario.Instruction.PublicAnnouncement is null)
-		{
-			publicBlocks.Should().BeEmpty();
-		}
-		else
-		{
-			publicBlocks.Should().ContainSingle();
-			publicBlocks.Single().QuerySelector(
-					$".{ClientTestReferences.Css.Classes.InstructionAnnouncement}")
-				.Should().NotBeNull();
-			publicBlocks.Single().TextContent.Should().Contain(
-				scenario.Instruction.PublicAnnouncement);
-		}
-
-		var publicText = string.Concat(publicBlocks.Select(block =>
-			block.TextContent));
-		foreach (var privateFact in new[]
-			{
-				GameStrings.ActorRoleName,
-				MainRoleType.Actor.ToString(),
-				scenario.SourceRole.GetPublicName(),
-				scenario.SourceRole.ToString()
-			}
-			.Concat(scenario.PrivateFragments)
-			.Concat(scenario.PrivateFacts)
-			.Distinct(StringComparer.CurrentCulture))
-		{
-			publicText.Should().NotContain(privateFact);
-		}
-		foreach (var lineageId in scenario.SensitiveLineageIds)
-		{
-			foreach (var format in new[] { "D", "N" })
-			{
-				cut.Markup.Contains(
-					lineageId.ToString(format),
-					StringComparison.OrdinalIgnoreCase).Should().BeFalse();
-			}
-		}
+		var cut = renderedInstructions[0];
 
 		if (family is not
 			(ActorBorrowedPowerFamily.Seer or
@@ -154,6 +92,120 @@ public sealed class ActorBorrowedPowerBunitTests
 		{
 			response.SelectedOptionIds.Should().Equal(scenario.SelectedOptionId);
 		}
+	}
+
+	private IRenderedComponent<InstructionRenderer> RenderAndAssertExpectation(
+		ModeratorComponentTestContext context,
+		ActorBorrowedInstructionExpectation expectation,
+		ActorBorrowedInstructionScenario scenario,
+		ICollection<ModeratorResponse> responses)
+	{
+		var cut = context.RenderModeratorComponent<InstructionRenderer>(parameters =>
+			parameters
+				.Add(component => component.Instruction, expectation.Instruction)
+				.Add(component => component.Roster, scenario.Roster)
+				.Add(
+					component => component.OnResponse,
+					EventCallback.Factory.Create<ModeratorResponse>(
+						this,
+						responses.Add)));
+
+		if (expectation.AffectedPlayerIds is null)
+		{
+			expectation.Instruction.AffectedPlayerIds.Should().BeNull();
+		}
+		else
+		{
+			expectation.Instruction.AffectedPlayerIds.Should().BeEquivalentTo(
+				expectation.AffectedPlayerIds);
+		}
+
+		if (expectation.PrivateFragments.Count > 0)
+		{
+			expectation.Instruction.PrivateInstruction.Should().NotBeNull();
+			ExpandPrivateInstruction(cut);
+		}
+		else
+		{
+			expectation.Instruction.PrivateInstruction.Should().BeNull();
+		}
+
+		var blocks = cut.FindAll(TestId(ModeratorUiTestIds.InstructionBlock));
+		var privateBlocks = blocks.Where(block => block.ClassList.Contains(
+			ClientTestReferences.Css.Classes.InstructionBlockPrivate)).ToArray();
+		if (expectation.PrivateFragments.Count == 0)
+		{
+			privateBlocks.Should().BeEmpty();
+		}
+		else
+		{
+			privateBlocks.Should().ContainSingle();
+			var privateBlock = privateBlocks.Single();
+			privateBlock.QuerySelector(
+					$".{ClientTestReferences.Css.Classes.InstructionPrivate}")
+				.Should().NotBeNull();
+			foreach (var fragment in expectation.PrivateFragments)
+			{
+				privateBlock.TextContent.Should().Contain(fragment);
+			}
+		}
+
+		var publicBlocks = blocks.Where(block => block.ClassList.Contains(
+			ClientTestReferences.Css.Classes.InstructionBlockAnnouncement))
+			.ToArray();
+		if (expectation.PublicFragments.Count == 0)
+		{
+			expectation.Instruction.PublicAnnouncement.Should().BeNull();
+			publicBlocks.Should().BeEmpty();
+		}
+		else
+		{
+			expectation.Instruction.PublicAnnouncement.Should().NotBeNull();
+			publicBlocks.Should().ContainSingle();
+			publicBlocks.Single().QuerySelector(
+					$".{ClientTestReferences.Css.Classes.InstructionAnnouncement}")
+				.Should().NotBeNull();
+			foreach (var fragment in expectation.PublicFragments)
+			{
+				publicBlocks.Single().TextContent.Should().Contain(fragment);
+			}
+		}
+
+		var publicText = string.Concat(publicBlocks.Select(block =>
+			block.TextContent));
+		var forbiddenPublicFacts = new[]
+			{
+				scenario.SourceRole.GetPublicName(),
+				scenario.SourceRole.ToString()
+			}
+			.Concat(expectation.PrivateFragments)
+			.Concat(expectation.ConfidentialPublicFragments);
+		if (!expectation.AllowsActorIdentityInPublic)
+		{
+			forbiddenPublicFacts = forbiddenPublicFacts.Concat(
+				[GameStrings.ActorRoleName, MainRoleType.Actor.ToString()]);
+		}
+
+		foreach (var confidentialFact in forbiddenPublicFacts
+			.Distinct(StringComparer.CurrentCulture))
+		{
+			publicText.Should().NotContain(confidentialFact);
+		}
+		foreach (var fragment in expectation.ForbiddenMarkupFragments)
+		{
+			cut.Markup.Should().NotContain(fragment);
+		}
+		foreach (var lineageId in scenario.SensitiveLineageIds)
+		{
+			foreach (var format in new[] { "D", "N" })
+			{
+				cut.Markup.Contains(
+					lineageId.ToString(format),
+					StringComparison.OrdinalIgnoreCase).Should().BeFalse();
+			}
+		}
+
+		return cut;
 	}
 
 	private static void AssertInstructionShape(
@@ -193,6 +245,27 @@ public sealed class ActorBorrowedPowerBunitTests
 							GameStrings.StutteringJudgeSignalOccurredOption),
 						(StutteringJudgeSignalOptionIds.DidNotOccur,
 							GameStrings.StutteringJudgeSignalDidNotOccurOption));
+				return;
+			case ActorBorrowedPowerFamily.Hunter:
+				var hunter = instruction.Should()
+					.BeOfType<SelectPlayersInstruction>().Subject;
+				hunter.CountConstraint.Should().Be(NumberRangeConstraint.Single);
+				hunter.EmptySelectionOptionLabel.Should().BeNull();
+				return;
+			case ActorBorrowedPowerFamily.Scapegoat:
+				instruction.Should().BeOfType<SelectPlayersInstruction>()
+					.Which.CountConstraint.Should().Be(
+						NumberRangeConstraint.AtLeast(1));
+				return;
+			case ActorBorrowedPowerFamily.BearTamer:
+				var bearTamer = instruction.Should()
+					.BeOfType<ConfirmationInstruction>().Subject;
+				bearTamer.SoundEffects.Should().Equal(SoundEffectsEnum.BearGrowl);
+				return;
+			case ActorBorrowedPowerFamily.Elder or
+				ActorBorrowedPowerFamily.VillageIdiot or
+				ActorBorrowedPowerFamily.KnightWithRustySword:
+				instruction.Should().BeOfType<ConfirmationInstruction>();
 				return;
 			default:
 				throw new ArgumentOutOfRangeException(nameof(family));
@@ -257,6 +330,18 @@ public sealed class ActorBorrowedPowerBunitTests
 		ActorBorrowedPowerFamily.Fox => ModeratorInstructionSemantic.RevealFoxResult,
 		ActorBorrowedPowerFamily.StutteringJudge =>
 			ModeratorInstructionSemantic.ObserveStutteringJudgeSignal,
+		ActorBorrowedPowerFamily.Hunter =>
+			ModeratorInstructionSemantic.SelectHunterFinalShotTarget,
+		ActorBorrowedPowerFamily.Elder =>
+			ModeratorInstructionSemantic.AnnounceVillagerRolePowerSuppression,
+		ActorBorrowedPowerFamily.Scapegoat =>
+			ModeratorInstructionSemantic.SelectScapegoatPermittedVoters,
+		ActorBorrowedPowerFamily.VillageIdiot =>
+			ModeratorInstructionSemantic.AnnounceVillageIdiotPardon,
+		ActorBorrowedPowerFamily.BearTamer =>
+			ModeratorInstructionSemantic.AnnounceBearTamerGrowl,
+		ActorBorrowedPowerFamily.KnightWithRustySword =>
+			ModeratorInstructionSemantic.AnnounceDawnVictims,
 		_ => throw new ArgumentOutOfRangeException(nameof(family))
 	};
 

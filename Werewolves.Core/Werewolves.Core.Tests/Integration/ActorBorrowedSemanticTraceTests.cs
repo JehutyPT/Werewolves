@@ -1,6 +1,9 @@
 using FluentAssertions;
 using Werewolves.Core.GameLogic.Interfaces;
+using Werewolves.Core.GameLogic.Models.EliminationCascades;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
+using Werewolves.Core.GameLogic.Models.StateMachine;
+using Werewolves.Core.GameLogic.Queries;
 using Werewolves.Core.GameLogic.RolePowers;
 using Werewolves.Core.GameLogic.Roles;
 using Werewolves.Core.GameLogic.Roles.MainRoles;
@@ -27,7 +30,13 @@ public sealed class ActorBorrowedSemanticTraceTests
 		MainRoleType.LittleGirl,
 		MainRoleType.Defender,
 		MainRoleType.Fox,
-		MainRoleType.StutteringJudge
+		MainRoleType.StutteringJudge,
+		MainRoleType.Hunter,
+		MainRoleType.Elder,
+		MainRoleType.Scapegoat,
+		MainRoleType.VillageIdiot,
+		MainRoleType.BearTamer,
+		MainRoleType.KnightWithRustySword
 	];
 
 	private static readonly PhysicalCharacterCard[] SourceCards =
@@ -38,14 +47,30 @@ public sealed class ActorBorrowedSemanticTraceTests
 		new(Guid.Parse("00000000-0000-0000-0000-000000000154"), MainRoleType.LittleGirl),
 		new(Guid.Parse("00000000-0000-0000-0000-000000000155"), MainRoleType.Defender),
 		new(Guid.Parse("00000000-0000-0000-0000-000000000156"), MainRoleType.Fox),
-		new(Guid.Parse("00000000-0000-0000-0000-000000000157"), MainRoleType.StutteringJudge)
+		new(Guid.Parse("00000000-0000-0000-0000-000000000157"), MainRoleType.StutteringJudge),
+		new(Guid.Parse("00000000-0000-0000-0000-000000000158"), MainRoleType.Hunter),
+		new(Guid.Parse("00000000-0000-0000-0000-000000000159"), MainRoleType.Elder),
+		new(Guid.Parse("00000000-0000-0000-0000-000000000160"), MainRoleType.Scapegoat),
+		new(Guid.Parse("00000000-0000-0000-0000-000000000161"), MainRoleType.VillageIdiot),
+		new(Guid.Parse("00000000-0000-0000-0000-000000000162"), MainRoleType.BearTamer),
+		new(Guid.Parse("00000000-0000-0000-0000-000000000163"), MainRoleType.KnightWithRustySword)
 	];
 
-	private static readonly RunSeedMaterial SeedMaterial = CreateSeedMaterial();
+	private static readonly RunSeedMaterial SeedMaterial = CreateSeedMaterial(
+		BaselineRandomDecisionStrategy.Identity);
+	private static readonly RunSeedMaterial ScapegoatSeedMaterial =
+		CreateSeedMaterial(
+			BaselineRandomDecisionStrategy.SafetyScreeningIdentity);
 
 	private static readonly HeadlessResponsePolicy ExactActorPolicy = new(
 		BaselineRandomDecisionStrategy.Identity,
-		SourceRoles.SelectMany(ExpectedTrace).Distinct());
+		SourceRoles
+			.Where(sourceRole => sourceRole != MainRoleType.Scapegoat)
+			.SelectMany(ExpectedTrace)
+			.Distinct());
+	private static readonly HeadlessResponsePolicy ExactScapegoatPolicy = new(
+		BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
+		ExpectedTrace(MainRoleType.Scapegoat));
 
 	private static readonly TestSubPhaseManagerKey SubPhaseKey = new();
 	private static readonly TestHookSubPhaseKey HookKey = new();
@@ -56,7 +81,11 @@ public sealed class ActorBorrowedSemanticTraceTests
 	{
 		var actualTraces = SourceRoles.ToDictionary(
 			sourceRole => sourceRole,
-			sourceRole => TraceSource(sourceRole, ExactActorPolicy));
+			sourceRole => TraceSource(
+				sourceRole,
+				sourceRole == MainRoleType.Scapegoat
+					? ExactScapegoatPolicy
+					: ExactActorPolicy));
 
 		foreach (var sourceRole in SourceRoles)
 		{
@@ -64,7 +93,9 @@ public sealed class ActorBorrowedSemanticTraceTests
 		}
 
 		actualTraces.Values.SelectMany(trace => trace).Distinct().Should()
-			.BeEquivalentTo(ExactActorPolicy.AdmittedSemantics);
+			.BeEquivalentTo(
+				ExactActorPolicy.AdmittedSemantics.Concat(
+					ExactScapegoatPolicy.AdmittedSemantics));
 	}
 
 	private static IReadOnlyList<ModeratorInstructionSemantic> TraceSource(
@@ -76,19 +107,727 @@ public sealed class ActorBorrowedSemanticTraceTests
 			.GetFactionBeneficiaryKnowledge(fixture.ActorId);
 		beneficiaryBefore.Should().Be(
 			FactionBeneficiaryKnowledge.Known(Faction.Villager));
-		var trace = TraceNightSource(fixture);
+		var trace = sourceRole switch
+		{
+			MainRoleType.Hunter => TraceHunterFinalShot(fixture),
+			MainRoleType.Elder => TraceElder(fixture),
+			MainRoleType.Scapegoat => TraceScapegoat(fixture),
+			MainRoleType.VillageIdiot => TraceVillageIdiot(fixture),
+			MainRoleType.BearTamer => TraceBearTamer(fixture),
+			MainRoleType.KnightWithRustySword => TraceKnight(fixture),
+			_ => TraceNightSource(fixture)
+		};
 		if (sourceRole == MainRoleType.StutteringJudge)
 		{
 			trace.AddRange(TraceStutteringJudgeDay(fixture));
 		}
+		if (sourceRole == MainRoleType.Hunter)
+		{
+			AssertHunterBorrowedAttemptIdentity(fixture);
+		}
+		if (sourceRole == MainRoleType.Elder)
+		{
+			AssertElderBorrowedAttemptIdentities(fixture);
+		}
+		if (sourceRole == MainRoleType.Scapegoat)
+		{
+			AssertScapegoatBorrowedAttemptIdentity(fixture);
+		}
+		if (sourceRole == MainRoleType.VillageIdiot)
+		{
+			AssertVillageIdiotBorrowedAttemptIdentity(fixture);
+		}
+		if (sourceRole == MainRoleType.BearTamer)
+		{
+			AssertBearTamerBorrowedAttemptIdentity(fixture);
+		}
+		if (sourceRole == MainRoleType.KnightWithRustySword)
+		{
+			AssertKnightBorrowedAttemptIdentity(fixture);
+		}
 
 		fixture.Session.GetPlayerState(fixture.ActorId).CurrentRole.Should().Be(
 			MainRoleType.Actor);
-		fixture.Session.GetModeratorActiveActorBorrowedRolePowerActivation()!
-			.SourceRole.Should().Be(sourceRole);
+		if (sourceRole == MainRoleType.KnightWithRustySword)
+		{
+			fixture.Session.GetModeratorActiveActorBorrowedRolePowerActivation()
+				.Should().BeNull();
+		}
+		else
+		{
+			fixture.Session.GetModeratorActiveActorBorrowedRolePowerActivation()!
+				.SourceRole.Should().Be(sourceRole);
+		}
 		fixture.Session.GetFactionBeneficiaryKnowledge(fixture.ActorId).Should()
 			.Be(beneficiaryBefore);
 		return trace;
+	}
+
+	private static List<ModeratorInstructionSemantic> TraceHunterFinalShot(
+		ActorFixture fixture)
+	{
+		fixture.Session.TransitionMainPhase(GamePhase.Day);
+		fixture.Session.RevealRoles(
+			new Dictionary<Guid, MainRoleType>
+			{
+				[fixture.ActorId] = MainRoleType.Actor
+			});
+		var scopeId = $"ActorSemantic:Hunter:{fixture.Session.TurnNumber}";
+		var scopeStartLogIndex = fixture.Session.GameHistoryLog.Count() - 1;
+		EliminationCascadeRuntimeStore.Configure(
+			fixture.Session,
+			[
+				new EliminationCascadeReactionBinding(
+					(IEliminationCascadeReaction)fixture.Listener,
+					EliminationCascadeReactionBoundary.Interactive)
+			]);
+		var cascade = EliminationCascadeStage.CascadeStage(
+			ActorSemanticCascadeStage.HunterFinalShot,
+			_ => new EliminationCascadeSeed(
+				scopeId,
+				scopeStartLogIndex,
+				[
+					new EliminationRequest(
+						fixture.ActorId,
+						EliminationReason.EventElimination)
+				]),
+			ModeratorInstructionSemantic.AssignDayVoteTargetRole);
+
+		var pending = cascade.Execute(
+				fixture.Session,
+				fixture.Start.CreateResponse())
+			.Should().BeOfType<StayInSubPhaseHandlerResult>().Subject;
+		pending.StageComplete.Should().BeFalse();
+		var finalShot = pending.ModeratorInstruction.Should()
+			.BeOfType<SelectPlayersInstruction>().Subject;
+		finalShot.Semantic.Should().Be(
+			ModeratorInstructionSemantic.SelectHunterFinalShotTarget);
+		fixture.Session.SetPendingModeratorInstruction(FlowKey, finalShot);
+
+		var finalShotResponse = CreateCheckedResponse(
+			fixture.Policy,
+			fixture.Strategy,
+			finalShot,
+			fixture.Session);
+		var targetRevealPending = cascade.Execute(
+				fixture.Session,
+				finalShotResponse)
+			.Should().BeOfType<StayInSubPhaseHandlerResult>().Subject;
+		targetRevealPending.StageComplete.Should().BeFalse();
+		var targetReveal = targetRevealPending.ModeratorInstruction.Should()
+			.BeOfType<AssignRolesInstruction>().Subject;
+		targetReveal.Semantic.Should().Be(
+			ModeratorInstructionSemantic.AssignEliminationCascadeRoles);
+		targetReveal.PlayersForAssignment.Should().Equal(
+			finalShotResponse.SelectedPlayerIds!);
+		fixture.Session.SetPendingModeratorInstruction(FlowKey, targetReveal);
+
+		var completed = cascade.Execute(
+				fixture.Session,
+				targetReveal.CreateResponse(
+					targetReveal.PlayersForAssignment.ToDictionary(
+						playerId => playerId,
+						playerId => fixture.Session
+							.GetPlayerState(playerId)
+							.CurrentRole!.Value)))
+			.Should().BeOfType<StayInSubPhaseHandlerResult>().Subject;
+		completed.StageComplete.Should().BeTrue();
+		completed.ModeratorInstruction.Should().BeNull();
+		return [finalShot.Semantic];
+	}
+
+	private static List<ModeratorInstructionSemantic> TraceElder(
+		ActorFixture fixture)
+	{
+		fixture.Session.PerformNightAction(
+			NightActionType.WerewolfVictimSelection,
+			fixture.ActorId);
+		fixture.Session.TransitionMainPhase(GamePhase.Dawn);
+		NightInteractionResolver.ResolveNightPhase(fixture.Session);
+		fixture.Session.GetPlayerState(fixture.ActorId).Health.Should().Be(
+			PlayerHealth.Alive);
+		fixture.Session.GetActorBorrowedElderResistanceCommits().Should()
+			.ContainSingle(commit =>
+				commit.PowerIdentity.ActingPlayerId == fixture.ActorId &&
+				commit.PowerIdentity.PowerInstanceId == fixture.ActivationId &&
+				commit.PowerIdentity.PowerInstanceOrigin ==
+					RolePowerInstanceOrigin.Borrowed);
+
+		fixture.Session.TransitionMainPhase(GamePhase.Day);
+		fixture.Session.PerformDayVote(fixture.ActorId);
+		fixture.Session.RevealRoles(
+			new Dictionary<Guid, MainRoleType>
+			{
+				[fixture.ActorId] = MainRoleType.Actor
+			});
+		var currentVote = GameSessionQueries.GetCurrentDayVoteOutcome(
+			fixture.Session);
+		currentVote.Should().NotBeNull();
+		var vote = currentVote!.Value;
+		var scopeId =
+			$"Day:{fixture.Session.TurnNumber}:Vote:{vote.VoteOrdinal}";
+		EliminationCascadeRuntimeStore.Configure(fixture.Session, []);
+		var cascade = EliminationCascadeStage.CascadeStage(
+			ActorSemanticCascadeStage.ElderVillageVote,
+			_ => new EliminationCascadeSeed(
+				scopeId,
+				vote.LogIndex,
+				[
+					new EliminationRequest(
+						fixture.ActorId,
+						EliminationReason.DayVote)
+				]),
+			ModeratorInstructionSemantic.AssignDayVoteTargetRole);
+		var cascadeComplete = cascade.Execute(
+				fixture.Session,
+				fixture.Start.CreateResponse())
+			.Should().BeOfType<StayInSubPhaseHandlerResult>().Subject;
+		cascadeComplete.StageComplete.Should().BeTrue();
+		cascadeComplete.ModeratorInstruction.Should().BeNull();
+		fixture.Session.GetPlayerState(fixture.ActorId).Health.Should().Be(
+			PlayerHealth.Dead);
+
+		fixture.Session.TryEnterSubPhaseStage(
+			SubPhaseKey,
+			GameHook.OnVoteConcluded.ToString()).Should().BeTrue();
+		var suppression = Advance(
+				fixture.Listener,
+				fixture.Session,
+				fixture.Start.CreateResponse())
+			.Instruction.Should().BeOfType<ConfirmationInstruction>().Subject;
+		suppression.Semantic.Should().Be(
+			ModeratorInstructionSemantic.AnnounceVillagerRolePowerSuppression);
+		fixture.Session.SetPendingModeratorInstruction(FlowKey, suppression);
+		Advance(
+				fixture.Listener,
+				fixture.Session,
+				CreateCheckedResponse(
+					fixture.Policy,
+					fixture.Strategy,
+					suppression,
+					fixture.Session))
+			.Outcome.Should().Be(HookListenerOutcome.Complete);
+		return [suppression.Semantic];
+	}
+
+	private static List<ModeratorInstructionSemantic> TraceScapegoat(
+		ActorFixture fixture)
+	{
+		fixture.Session.TransitionMainPhase(GamePhase.Day);
+		fixture.Session.SetPendingModeratorInstruction(FlowKey, fixture.Start);
+		var debate = GameFlowManager.HandleInput(
+				fixture.Session,
+				fixture.Start.CreateResponse(),
+				SupportedRoleCatalog.Admissions).ModeratorInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		debate.Semantic.Should().Be(
+			ModeratorInstructionSemantic.StartDayDebate);
+		var vote = GameFlowManager.HandleInput(
+				fixture.Session,
+				debate.CreateResponse(),
+				SupportedRoleCatalog.Admissions).ModeratorInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		vote.Semantic.Should().Be(ModeratorInstructionSemantic.RecordDayVote);
+
+		var reveal = GameFlowManager.HandleInput(
+				fixture.Session,
+				vote.CreateResponse([]),
+				SupportedRoleCatalog.Admissions).ModeratorInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		reveal.Semantic.Should().Be(
+			ModeratorInstructionSemantic.RevealScapegoatForTie);
+		var selection = GameFlowManager.HandleInput(
+				fixture.Session,
+				CreateCheckedResponse(
+					fixture.Policy,
+					fixture.Strategy,
+					reveal,
+					fixture.Session),
+				SupportedRoleCatalog.Admissions).ModeratorInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		selection.Semantic.Should().Be(
+			ModeratorInstructionSemantic.SelectScapegoatPermittedVoters);
+		var announcement = GameFlowManager.HandleInput(
+				fixture.Session,
+				CreateCheckedResponse(
+					fixture.Policy,
+					fixture.Strategy,
+					selection,
+					fixture.Session),
+				SupportedRoleCatalog.Admissions).ModeratorInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		announcement.Semantic.Should().Be(
+			ModeratorInstructionSemantic.AnnounceScapegoatPermittedVoters);
+		var continuation = GameFlowManager.HandleInput(
+				fixture.Session,
+				CreateCheckedResponse(
+					fixture.Policy,
+					fixture.Strategy,
+					announcement,
+					fixture.Session),
+				SupportedRoleCatalog.Admissions).ModeratorInstruction;
+		continuation.Should().NotBeNull();
+		new[]
+		{
+			debate.Semantic,
+			vote.Semantic,
+			reveal.Semantic,
+			selection.Semantic,
+			announcement.Semantic,
+			continuation!.Semantic
+		}.Should().NotContain(
+			ModeratorInstructionSemantic.ObserveScapegoatHolderForTie);
+		return
+		[
+			reveal.Semantic,
+			selection.Semantic,
+			announcement.Semantic
+		];
+	}
+
+	private static List<ModeratorInstructionSemantic> TraceVillageIdiot(
+		ActorFixture fixture)
+	{
+		fixture.Session.TransitionMainPhase(GamePhase.Day);
+		fixture.Session.SetPendingModeratorInstruction(FlowKey, fixture.Start);
+		var debate = GameFlowManager.HandleInput(
+				fixture.Session,
+				fixture.Start.CreateResponse(),
+				SupportedRoleCatalog.Admissions).ModeratorInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		debate.Semantic.Should().Be(
+			ModeratorInstructionSemantic.StartDayDebate);
+		var vote = GameFlowManager.HandleInput(
+				fixture.Session,
+				debate.CreateResponse(),
+				SupportedRoleCatalog.Admissions).ModeratorInstruction
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		vote.Semantic.Should().Be(ModeratorInstructionSemantic.RecordDayVote);
+		var reveal = GameFlowManager.HandleInput(
+				fixture.Session,
+				vote.CreateResponse([fixture.ActorId]),
+				SupportedRoleCatalog.Admissions).ModeratorInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		reveal.Semantic.Should().Be(
+			ModeratorInstructionSemantic.AssignDayVoteTargetRole);
+
+		var pardon = GameFlowManager.HandleInput(
+				fixture.Session,
+				reveal.CreateResponse(),
+				SupportedRoleCatalog.Admissions).ModeratorInstruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		pardon.Semantic.Should().Be(
+			ModeratorInstructionSemantic.AnnounceVillageIdiotPardon);
+		fixture.Session.GetPlayerState(fixture.ActorId).Health.Should().Be(
+			PlayerHealth.Alive);
+		fixture.Session.GetPlayerState(fixture.ActorId).DurableVotingPower
+			.Should().Be(0);
+		var continuation = GameFlowManager.HandleInput(
+				fixture.Session,
+				CreateCheckedResponse(
+					fixture.Policy,
+					fixture.Strategy,
+					pardon,
+					fixture.Session),
+				SupportedRoleCatalog.Admissions).ModeratorInstruction;
+		continuation.Should().NotBeNull();
+		return [pardon.Semantic];
+	}
+
+	private static List<ModeratorInstructionSemantic> TraceBearTamer(
+		ActorFixture fixture)
+	{
+		var sourceInput = fixture.Start.CreateResponse();
+		var night = Advance(
+			fixture.Listener,
+			fixture.Session,
+			sourceInput);
+		night.Outcome.Should().Be(HookListenerOutcome.Skip);
+		night.Instruction.Should().BeNull();
+		fixture.Session.GetPlayers().Should().OnlyContain(player =>
+			fixture.Session.GetFactionAgentKnowledge(
+				player.Id,
+				Faction.Werewolf) != FactionAgentKnowledge.Unknown);
+
+		fixture.Session.TransitionMainPhase(GamePhase.Dawn);
+		fixture.Session.TryEnterSubPhaseStage(
+			SubPhaseKey,
+			GameHook.DawnMainActionLoop.ToString()).Should().BeTrue();
+		var growl = Advance(
+				fixture.Listener,
+				fixture.Session,
+				sourceInput)
+			.Instruction.Should().BeOfType<ConfirmationInstruction>().Subject;
+		growl.Semantic.Should().Be(
+			ModeratorInstructionSemantic.AnnounceBearTamerGrowl);
+		fixture.Session.SetPendingModeratorInstruction(FlowKey, growl);
+		Advance(
+				fixture.Listener,
+				fixture.Session,
+				CreateCheckedResponse(
+					fixture.Policy,
+					fixture.Strategy,
+					growl,
+					fixture.Session))
+			.Outcome.Should().Be(HookListenerOutcome.Complete);
+		return [growl.Semantic];
+	}
+
+	private static List<ModeratorInstructionSemantic> TraceKnight(
+		ActorFixture fixture)
+	{
+		var players = fixture.Session.GetPlayers().ToArray();
+		players.Should().HaveCount(6);
+		var targetId = players[1].Id;
+		var otherWerewolfId = players[2].Id;
+
+		var initialNight = Advance(
+			fixture.Listener,
+			fixture.Session,
+			fixture.Start.CreateResponse());
+		initialNight.Outcome.Should().Be(HookListenerOutcome.Complete);
+		initialNight.Instruction.Should().BeNull();
+		fixture.Session.GetActorBorrowedKnightRustySwordScheduleCommits()
+			.Should().BeEmpty();
+
+		fixture.Session.ClearCurrentListenerCache(HookKey);
+		fixture.Session.PerformNightAction(
+			NightActionType.WerewolfVictimSelection,
+			fixture.ActorId);
+		fixture.Session.TransitionMainPhase(GamePhase.Dawn);
+		fixture.Session.SetPendingModeratorInstruction(FlowKey, fixture.Start);
+		fixture.Session.CaptureRecoveryBoundary(FlowKey);
+		AdvanceKnightDawnToDay(
+			fixture,
+			new Dictionary<Guid, MainRoleType>
+			{
+				[fixture.ActorId] = MainRoleType.Actor
+			},
+			tracedRustySwordTargetId: null).Should().BeEmpty();
+
+		var scheduled = fixture.Session
+			.GetActorBorrowedKnightRustySwordScheduleCommits()
+			.Should().ContainSingle().Subject;
+		scheduled.TargetPlayerId.Should().Be(targetId);
+		scheduled.TurnNumber.Should().Be(1);
+		scheduled.CurrentPhase.Should().Be(GamePhase.Dawn);
+
+		fixture.Session.TransitionMainPhase(GamePhase.Night);
+		fixture.Session.TryExpireActorBorrowedRolePowerActivation().Should()
+			.BeTrue();
+		CommitKnightFollowingNightAgentFacts(
+			fixture.Session,
+			otherWerewolfId);
+		fixture.Session.GetFactionAgentKnowledge(targetId, Faction.Werewolf)
+			.Should().Be(FactionAgentKnowledge.KnownNonAgent);
+		fixture.Session.GetFactionAgentKnowledge(
+				otherWerewolfId,
+				Faction.Werewolf)
+			.Should().Be(FactionAgentKnowledge.KnownAgent);
+
+		fixture.Session.TryEnterSubPhaseStage(
+			SubPhaseKey,
+			GameHook.NightMainActionLoop.ToString()).Should().BeTrue();
+		var followingNight = Advance(
+			fixture.Listener,
+			fixture.Session,
+			fixture.Start.CreateResponse());
+		followingNight.Outcome.Should().Be(HookListenerOutcome.Complete);
+		followingNight.Instruction.Should().BeNull();
+
+		fixture.Session.ClearCurrentListenerCache(HookKey);
+		EliminationCascadeRuntimeStore.Configure(
+			fixture.Session,
+			[
+				new EliminationCascadeReactionBinding(
+					(IEliminationCascadeReaction)fixture.Listener,
+					EliminationCascadeReactionBoundary.PreReveal)
+			]);
+		fixture.Session.TransitionMainPhase(GamePhase.Dawn);
+		fixture.Session.SetPendingModeratorInstruction(FlowKey, fixture.Start);
+		fixture.Session.CaptureRecoveryBoundary(FlowKey);
+		var trace = AdvanceKnightDawnToDay(
+			fixture,
+			new Dictionary<Guid, MainRoleType>
+			{
+				[targetId] = MainRoleType.SimpleWerewolf
+			},
+			targetId);
+
+		fixture.Session.GameHistoryLog.OfType<DawnVictimDeterminedLogEntry>()
+			.Should().ContainSingle(entry =>
+				entry.TurnNumber == 2 &&
+				entry.PlayerId == targetId &&
+				entry.Reason == EliminationReason.RustySword);
+		fixture.Session.GameHistoryLog.OfType<PlayerEliminatedLogEntry>()
+			.Should().ContainSingle(entry =>
+				entry.PlayerId == targetId &&
+				entry.Reason == EliminationReason.RustySword);
+		fixture.Session.GetPlayerState(targetId).Health.Should().Be(
+			PlayerHealth.Dead);
+		fixture.Session.GetPlayerState(otherWerewolfId).Health.Should().Be(
+			PlayerHealth.Alive);
+		return trace;
+	}
+
+	private static List<ModeratorInstructionSemantic> AdvanceKnightDawnToDay(
+		ActorFixture fixture,
+		IReadOnlyDictionary<Guid, MainRoleType> roleAssignments,
+		Guid? tracedRustySwordTargetId)
+	{
+		var trace = new List<ModeratorInstructionSemantic>();
+		ModeratorInstruction? instruction = GameFlowManager.HandleInput(
+			fixture.Session,
+			fixture.Start.CreateResponse(),
+			SupportedRoleCatalog.Admissions).ModeratorInstruction;
+		for (var step = 0; step < 30; step++)
+		{
+			if (instruction is ConfirmationInstruction sourceAnnouncement &&
+				IsBorrowedKnightRustySwordAnnouncement(
+					fixture,
+					sourceAnnouncement,
+					tracedRustySwordTargetId))
+			{
+				var targetId = tracedRustySwordTargetId!.Value;
+				sourceAnnouncement.AffectedPlayerIds.Should().Equal(targetId);
+				sourceAnnouncement.PublicAnnouncement.Should().Contain(
+					string.Format(
+						GameStrings.RustySwordDiseaseEliminationAnnouncement,
+						fixture.Session.GetPlayer(targetId).Name));
+				trace.Add(sourceAnnouncement.Semantic);
+				instruction = GameFlowManager.HandleInput(
+					fixture.Session,
+					CreateCheckedResponse(
+						fixture.Policy,
+						fixture.Strategy,
+						sourceAnnouncement,
+						fixture.Session),
+					SupportedRoleCatalog.Admissions).ModeratorInstruction;
+				continue;
+			}
+
+			if (fixture.Session.GetCurrentPhase() == GamePhase.Day)
+			{
+				return trace;
+			}
+
+			switch (instruction)
+			{
+				case FinishedGameConfirmationInstruction terminal:
+					throw new InvalidOperationException(
+						$"Knight Dawn reached terminal victory ({terminal.GameResult}).");
+				case ConfirmationInstruction confirmation:
+					instruction = GameFlowManager.HandleInput(
+						fixture.Session,
+						confirmation.CreateResponse(),
+						SupportedRoleCatalog.Admissions).ModeratorInstruction;
+					break;
+				case AssignRolesInstruction assignment:
+					instruction = GameFlowManager.HandleInput(
+						fixture.Session,
+						assignment.CreateResponse(
+							assignment.PlayersForAssignment.ToDictionary(
+								playerId => playerId,
+								playerId => roleAssignments.TryGetValue(
+									playerId,
+									out var role)
+										? role
+										: throw new InvalidOperationException(
+											$"Missing Knight Dawn Role assignment for {playerId}."))),
+						SupportedRoleCatalog.Admissions).ModeratorInstruction;
+					break;
+				case null:
+					throw new InvalidOperationException(
+						"Knight Dawn did not expose a pending Moderator Instruction.");
+				default:
+					throw new InvalidOperationException(
+						$"Unexpected Knight Dawn instruction {instruction.GetType().Name}.");
+			}
+		}
+
+		throw new InvalidOperationException(
+			"Knight Dawn did not transition to Day.");
+	}
+
+	private static bool IsBorrowedKnightRustySwordAnnouncement(
+		ActorFixture fixture,
+		ConfirmationInstruction instruction,
+		Guid? tracedRustySwordTargetId)
+	{
+		if (tracedRustySwordTargetId is not { } targetId ||
+			instruction.Semantic !=
+			ModeratorInstructionSemantic.AnnounceDawnVictims ||
+			!fixture.Session.GetActorBorrowedKnightRustySwordScheduleCommits()
+				.Any(commit => commit.TargetPlayerId == targetId))
+		{
+			return false;
+		}
+
+		var expectedAnnouncement = string.Format(
+			GameStrings.RustySwordDiseaseEliminationAnnouncement,
+			fixture.Session.GetPlayer(targetId).Name);
+		return instruction.AffectedPlayerIds?.ToHashSet()
+			.SetEquals(new[] { targetId }) == true &&
+			instruction.PublicAnnouncement?.Contains(
+				expectedAnnouncement,
+				StringComparison.Ordinal) == true;
+	}
+
+	private static void AssertHunterBorrowedAttemptIdentity(
+		ActorFixture fixture)
+	{
+		var attempts = fixture.RecordingPolicy.ObservedAttempts
+			.Where(attempt => attempt.SourceRole == MainRoleType.Hunter)
+			.ToArray();
+		attempts.Should().NotBeEmpty();
+		attempts.Should().OnlyContain(attempt =>
+			attempt.ActingPlayer.Id == fixture.ActorId &&
+			attempt.ActingPlayer.State.CurrentRole == MainRoleType.Actor &&
+			attempt.SourcePower.Identifier.Value ==
+				EliminationCascadeReactionIds.HunterFinalShot &&
+			attempt.SourcePower.Category == RolePowerCategory.Reactive &&
+			attempt.PowerInstance.Id == fixture.ActivationId &&
+			attempt.PowerInstance.SourceRole == MainRoleType.Hunter &&
+			attempt.PowerInstance.SourcePower == attempt.SourcePower &&
+			attempt.PowerInstance.Origin == RolePowerInstanceOrigin.Borrowed &&
+			attempt.OneUseResource == null);
+	}
+
+	private static void AssertElderBorrowedAttemptIdentities(
+		ActorFixture fixture)
+	{
+		var attempts = fixture.RecordingPolicy.ObservedAttempts
+			.Where(attempt => attempt.SourceRole == MainRoleType.Elder)
+			.ToArray();
+		attempts.Should().ContainSingle(attempt =>
+			attempt.SourcePower.Identifier.Value ==
+				"elder-werewolf-attack-resistance");
+		attempts.Should().ContainSingle(attempt =>
+			attempt.SourcePower.Identifier.Value ==
+				"elder-village-vote-suppression");
+		attempts.Should().OnlyContain(attempt =>
+			attempt.ActingPlayer.Id == fixture.ActorId &&
+			attempt.ActingPlayer.State.CurrentRole == MainRoleType.Actor &&
+			attempt.SourcePower.Category == RolePowerCategory.Reactive &&
+			attempt.PowerInstance.Id == fixture.ActivationId &&
+			attempt.PowerInstance.SourceRole == MainRoleType.Elder &&
+			attempt.PowerInstance.SourcePower == attempt.SourcePower &&
+			attempt.PowerInstance.Origin == RolePowerInstanceOrigin.Borrowed &&
+			attempt.OneUseResource == null);
+	}
+
+	private static void AssertScapegoatBorrowedAttemptIdentity(
+		ActorFixture fixture)
+	{
+		var attempts = fixture.RecordingPolicy.ObservedAttempts
+			.Where(attempt => attempt.SourceRole == MainRoleType.Scapegoat)
+			.ToArray();
+		attempts.Should().NotBeEmpty();
+		attempts.Should().OnlyContain(attempt =>
+			attempt.ActingPlayer.Id == fixture.ActorId &&
+			attempt.ActingPlayer.State.CurrentRole == MainRoleType.Actor &&
+			attempt.SourcePower.Identifier.Value ==
+				"scapegoat-tie-replacement" &&
+			attempt.SourcePower.Category == RolePowerCategory.Automatic &&
+			attempt.PowerInstance.Id == fixture.ActivationId &&
+			attempt.PowerInstance.SourceRole == MainRoleType.Scapegoat &&
+			attempt.PowerInstance.SourcePower == attempt.SourcePower &&
+			attempt.PowerInstance.Origin == RolePowerInstanceOrigin.Borrowed &&
+			attempt.OneUseResource == null);
+	}
+
+	private static void AssertVillageIdiotBorrowedAttemptIdentity(
+		ActorFixture fixture)
+	{
+		var attempts = fixture.RecordingPolicy.ObservedAttempts
+			.Where(attempt => attempt.SourceRole == MainRoleType.VillageIdiot)
+			.ToArray();
+		attempts.Should().NotBeEmpty();
+		attempts.Should().OnlyContain(attempt =>
+			attempt.ActingPlayer.Id == fixture.ActorId &&
+			attempt.ActingPlayer.State.CurrentRole == MainRoleType.Actor &&
+			attempt.SourcePower.Identifier.Value ==
+				ActorBorrowedVillageIdiotPardonCommit
+					.ExpectedSourcePowerIdentifier &&
+			attempt.SourcePower.Category == RolePowerCategory.Automatic &&
+			attempt.PowerInstance.Id == fixture.ActivationId &&
+			attempt.PowerInstance.SourceRole == MainRoleType.VillageIdiot &&
+			attempt.PowerInstance.SourcePower == attempt.SourcePower &&
+			attempt.PowerInstance.Origin == RolePowerInstanceOrigin.Borrowed &&
+			attempt.OneUseResource != null &&
+			attempt.OneUseResource.Id ==
+				ActorBorrowedVillageIdiotPardonCommit.ExpectedResourceId &&
+			attempt.OneUseResource.OwningPowerInstance == attempt.PowerInstance);
+		fixture.Session.GetActorBorrowedVillageIdiotPardonCommits().Should()
+			.ContainSingle(commit =>
+				commit.PowerIdentity.ActingPlayerId == fixture.ActorId &&
+				commit.PowerIdentity.PowerInstanceId == fixture.ActivationId &&
+				commit.PowerIdentity.PowerInstanceOrigin ==
+					RolePowerInstanceOrigin.Borrowed &&
+				commit.SpentResourceIdentity.OneUseResourceId ==
+					ActorBorrowedVillageIdiotPardonCommit.ExpectedResourceId);
+	}
+
+	private static void AssertBearTamerBorrowedAttemptIdentity(
+		ActorFixture fixture)
+	{
+		var attempts = fixture.RecordingPolicy.ObservedAttempts
+			.Where(attempt => attempt.SourceRole == MainRoleType.BearTamer)
+			.ToArray();
+		attempts.Should().NotBeEmpty();
+		attempts.Should().OnlyContain(attempt =>
+			attempt.ActingPlayer.Id == fixture.ActorId &&
+			attempt.ActingPlayer.State.CurrentRole == MainRoleType.Actor &&
+			attempt.SourcePower.Identifier.Value ==
+				ActorBorrowedBearTamerGrowlCommit
+					.ExpectedSourcePowerIdentifier &&
+			attempt.SourcePower.Category == RolePowerCategory.Automatic &&
+			attempt.PowerInstance.Id == fixture.ActivationId &&
+			attempt.PowerInstance.SourceRole == MainRoleType.BearTamer &&
+			attempt.PowerInstance.SourcePower == attempt.SourcePower &&
+			attempt.PowerInstance.Origin == RolePowerInstanceOrigin.Borrowed &&
+			attempt.OneUseResource == null);
+		fixture.Session.GetActorBorrowedBearTamerGrowlCommits().Should()
+			.ContainSingle(commit =>
+				commit.PowerIdentity.ActingPlayerId == fixture.ActorId &&
+				commit.PowerIdentity.PowerInstanceId == fixture.ActivationId &&
+				commit.PowerIdentity.PowerInstanceOrigin ==
+					RolePowerInstanceOrigin.Borrowed);
+	}
+
+	private static void AssertKnightBorrowedAttemptIdentity(
+		ActorFixture fixture)
+	{
+		var attempts = fixture.RecordingPolicy.ObservedAttempts
+			.Where(observed =>
+				observed.SourceRole == MainRoleType.KnightWithRustySword)
+			.ToArray();
+		var attempt = attempts.Should().ContainSingle().Subject;
+		attempt.ActingPlayer.Id.Should().Be(fixture.ActorId);
+		attempt.ActingPlayer.State.CurrentRole.Should().Be(MainRoleType.Actor);
+		attempt.SourcePower.Identifier.Value.Should().Be(
+			ActorBorrowedKnightRustySwordScheduleCommit
+				.ExpectedSourcePowerIdentifier);
+		attempt.SourcePower.Category.Should().Be(RolePowerCategory.Automatic);
+		attempt.PowerInstance.Id.Should().Be(fixture.ActivationId);
+		attempt.PowerInstance.SourceRole.Should().Be(
+			MainRoleType.KnightWithRustySword);
+		attempt.PowerInstance.SourcePower.Should().Be(attempt.SourcePower);
+		attempt.PowerInstance.Origin.Should().Be(
+			RolePowerInstanceOrigin.Borrowed);
+		attempt.OneUseResource.Should().BeNull();
+
+		fixture.Session.GetActorBorrowedKnightRustySwordScheduleCommits()
+			.Should().ContainSingle(commit =>
+				commit.PowerIdentity.ActingPlayerId == fixture.ActorId &&
+				commit.PowerIdentity.SourceRole ==
+					MainRoleType.KnightWithRustySword &&
+				commit.PowerIdentity.SourcePowerIdentifier ==
+					ActorBorrowedKnightRustySwordScheduleCommit
+						.ExpectedSourcePowerIdentifier &&
+				commit.PowerIdentity.PowerInstanceId == fixture.ActivationId &&
+				commit.PowerIdentity.PowerInstanceOrigin ==
+					RolePowerInstanceOrigin.Borrowed);
 	}
 
 	private static List<ModeratorInstructionSemantic> TraceNightSource(
@@ -126,6 +865,7 @@ public sealed class ActorBorrowedSemanticTraceTests
 			trace.Add(instruction.Semantic);
 			fixture.Session.SetPendingModeratorInstruction(FlowKey, instruction);
 			input = CreateCheckedResponse(
+				fixture.Policy,
 				fixture.Strategy,
 				instruction,
 				fixture.Session);
@@ -152,6 +892,7 @@ public sealed class ActorBorrowedSemanticTraceTests
 				SupportedRoleCatalog.Admissions).ModeratorInstruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		var conductResponse = CreateCheckedResponse(
+			fixture.Policy,
 			fixture.Strategy,
 			conductVote,
 			fixture.Session);
@@ -161,6 +902,7 @@ public sealed class ActorBorrowedSemanticTraceTests
 				SupportedRoleCatalog.Admissions).ModeratorInstruction
 			.Should().BeOfType<SelectOptionsInstruction>().Subject;
 		var signalResponse = CreateCheckedResponse(
+			fixture.Policy,
 			fixture.Strategy,
 			signal,
 			fixture.Session);
@@ -170,6 +912,7 @@ public sealed class ActorBorrowedSemanticTraceTests
 				SupportedRoleCatalog.Admissions).ModeratorInstruction
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
 		_ = CreateCheckedResponse(
+			fixture.Policy,
 			fixture.Strategy,
 			firstVote,
 			fixture.Session);
@@ -183,11 +926,12 @@ public sealed class ActorBorrowedSemanticTraceTests
 	}
 
 	private static ModeratorResponse CreateCheckedResponse(
+		HeadlessResponsePolicy policy,
 		BaselineRandomDecisionStrategy strategy,
 		ModeratorInstruction instruction,
 		GameSession session)
 	{
-		ExactActorPolicy.Admits(instruction.Semantic).Should().BeTrue();
+		policy.Admits(instruction.Semantic).Should().BeTrue();
 		var response = strategy.CreateResponse(instruction, session);
 		response.InstructionId.Should().Be(instruction.InstructionId);
 
@@ -239,15 +983,47 @@ public sealed class ActorBorrowedSemanticTraceTests
 			.Prepend(sourceCard)
 			.ToArray();
 		var setup = new ActorSetupCards(version: 7, setupCards);
+		List<string> playerNames =
+			sourceRole == MainRoleType.KnightWithRustySword
+				?
+				[
+					GameStrings.ActorRoleName,
+					"Clockwise Werewolf",
+					"Werewolf B",
+					"Villager 1",
+					"Villager 2",
+					"Villager 3"
+				]
+				:
+				[
+					GameStrings.ActorRoleName,
+					"Werewolf",
+					"Villager 1",
+					"Villager 2",
+					"Villager 3"
+				];
+		List<MainRoleType> roles =
+			sourceRole == MainRoleType.KnightWithRustySword
+				?
+				[
+					MainRoleType.Actor,
+					MainRoleType.SimpleWerewolf,
+					MainRoleType.SimpleWerewolf,
+					MainRoleType.SimpleVillager,
+					MainRoleType.SimpleVillager,
+					MainRoleType.SimpleVillager
+				]
+				:
+				[
+					MainRoleType.Actor,
+					MainRoleType.SimpleWerewolf,
+					MainRoleType.SimpleVillager,
+					MainRoleType.SimpleVillager,
+					MainRoleType.SimpleVillager
+				];
 		var config = new GameSessionConfig(
-			[GameStrings.ActorRoleName, "Werewolf", "Villager 1", "Villager 2", "Villager 3"],
-			[
-				MainRoleType.Actor,
-				MainRoleType.SimpleWerewolf,
-				MainRoleType.SimpleVillager,
-				MainRoleType.SimpleVillager,
-				MainRoleType.SimpleVillager
-			],
+			playerNames,
+			roles,
 			setup);
 		var sessionId = Guid.NewGuid();
 		var start = new StartGameConfirmationInstruction(sessionId);
@@ -255,6 +1031,28 @@ public sealed class ActorBorrowedSemanticTraceTests
 		var players = session.GetPlayers().ToArray();
 		var actorId = players[0].Id;
 		session.AssignRole(actorId, MainRoleType.Actor);
+		if (sourceRole is MainRoleType.Hunter or MainRoleType.Elder or
+			MainRoleType.Scapegoat or MainRoleType.VillageIdiot or
+			MainRoleType.BearTamer or MainRoleType.KnightWithRustySword)
+		{
+			session.AssignRole(players[1].Id, MainRoleType.SimpleWerewolf);
+			var firstVillagerIndex = 2;
+			if (sourceRole == MainRoleType.KnightWithRustySword)
+			{
+				session.AssignRole(players[2].Id, MainRoleType.SimpleWerewolf);
+				firstVillagerIndex = 3;
+			}
+			foreach (var player in players.Skip(firstVillagerIndex))
+			{
+				session.AssignRole(player.Id, MainRoleType.SimpleVillager);
+			}
+			var actorCard = session.GetModeratorPhysicalCharacterCards()
+				.Single(card => card.Card.PrintedRole == MainRoleType.Actor);
+			session.TryRecordPhysicalCharacterCardOwnership(
+				session.RoleLockIn.Version,
+				actorId,
+				actorCard.Card.Id).Should().BeTrue();
+		}
 		session.IdentifyRole([actorId], MainRoleType.Actor);
 		SeedKnownActorBeneficiary(session, actorId);
 
@@ -280,6 +1078,18 @@ public sealed class ActorBorrowedSemanticTraceTests
 		{
 			SeedKnownFactionFacts(session, players[1].Id);
 		}
+		if (sourceRole is MainRoleType.Scapegoat or MainRoleType.VillageIdiot or
+			MainRoleType.BearTamer)
+		{
+			SeedKnownFactionFacts(session, players[1].Id);
+		}
+		if (sourceRole == MainRoleType.KnightWithRustySword)
+		{
+			SeedKnightFactionFacts(
+				session,
+				players[1].Id,
+				players[2].Id);
+		}
 		if (sourceRole == MainRoleType.Witch)
 		{
 			session.PerformNightAction(
@@ -287,15 +1097,29 @@ public sealed class ActorBorrowedSemanticTraceTests
 				players[^1].Id);
 		}
 
-		var gateway = new RolePowerAvailabilityGateway(
-			AllowAllRolePowerAvailabilityPolicy.Instance);
+		var recordingPolicy = new RecordingPolicy();
+		var gateway = new RolePowerAvailabilityGateway(recordingPolicy);
+		var listener = CreateSourceListener(sourceRole, gateway);
+		if (sourceRole is MainRoleType.Elder or MainRoleType.Scapegoat or
+			MainRoleType.VillageIdiot or MainRoleType.KnightWithRustySword)
+		{
+			session.GetOrCreateListener(listener.Id, () => listener).Should()
+				.BeSameAs(listener);
+		}
 		return new ActorFixture(
 			sourceRole,
 			session,
 			start,
 			actorId,
-			CreateSourceListener(sourceRole, gateway),
-			CreateStrategy(policy));
+			activation.ActivationId,
+			listener,
+			policy,
+			CreateStrategy(
+				policy,
+				sourceRole == MainRoleType.Scapegoat
+					? ScapegoatSeedMaterial
+					: SeedMaterial),
+			recordingPolicy);
 	}
 
 	private static IGameHookListener CreateSourceListener(
@@ -310,24 +1134,33 @@ public sealed class ActorBorrowedSemanticTraceTests
 			MainRoleType.Defender => new DefenderRole(gateway),
 			MainRoleType.Fox => new FoxRole(gateway),
 			MainRoleType.StutteringJudge => new StutteringJudgeRole(gateway),
+			MainRoleType.Hunter => new HunterRole(gateway),
+			MainRoleType.Elder => new ElderRole(gateway),
+			MainRoleType.Scapegoat => new ScapegoatRole(gateway),
+			MainRoleType.VillageIdiot => new VillageIdiotRole(gateway),
+			MainRoleType.BearTamer => new BearTamerRole(gateway),
+			MainRoleType.KnightWithRustySword =>
+				new KnightWithTheRustySwordRole(gateway),
 			_ => throw new ArgumentOutOfRangeException(nameof(sourceRole))
 		};
 
 	private static BaselineRandomDecisionStrategy CreateStrategy(
-		HeadlessResponsePolicy policy)
+		HeadlessResponsePolicy policy,
+		RunSeedMaterial seedMaterial)
 	{
-		var random = new DeterministicRandomSource(SeedMaterial);
+		var random = new DeterministicRandomSource(seedMaterial);
 		var startState = SimulationStartStateDeriver.Derive(
-			SeedMaterial,
+			seedMaterial,
 			random);
 		return new BaselineRandomDecisionStrategy(
-			SeedMaterial,
+			seedMaterial,
 			startState,
 			policy,
 			random);
 	}
 
-	private static RunSeedMaterial CreateSeedMaterial()
+	private static RunSeedMaterial CreateSeedMaterial(
+		DecisionStrategyIdentity strategyIdentity)
 	{
 		var scenario = new SimulationScenario(
 			5,
@@ -341,8 +1174,11 @@ public sealed class ActorBorrowedSemanticTraceTests
 		return new RunSeedMaterial(
 			new SimulationCompatibilityIdentity(
 				scenario.ToCanonical(),
-				SimulatorCapability.FullProbability.Identity),
-			BaselineRandomDecisionStrategy.Identity,
+				strategyIdentity.Equals(
+						BaselineRandomDecisionStrategy.SafetyScreeningIdentity)
+					? SimulatorCapability.SafetyScreening.Identity
+					: SimulatorCapability.FullProbability.Identity),
+			strategyIdentity,
 			runNumber: 4);
 	}
 
@@ -398,6 +1234,33 @@ public sealed class ActorBorrowedSemanticTraceTests
 				ModeratorInstructionSemantic.ConductDayVote,
 				ModeratorInstructionSemantic.ObserveStutteringJudgeSignal,
 				ModeratorInstructionSemantic.RecordDayVote
+			],
+			MainRoleType.Hunter =>
+			[
+				ModeratorInstructionSemantic.SelectHunterFinalShotTarget
+			],
+			MainRoleType.Elder =>
+			[
+				ModeratorInstructionSemantic
+					.AnnounceVillagerRolePowerSuppression
+			],
+			MainRoleType.Scapegoat =>
+			[
+				ModeratorInstructionSemantic.RevealScapegoatForTie,
+				ModeratorInstructionSemantic.SelectScapegoatPermittedVoters,
+				ModeratorInstructionSemantic.AnnounceScapegoatPermittedVoters
+			],
+			MainRoleType.VillageIdiot =>
+			[
+				ModeratorInstructionSemantic.AnnounceVillageIdiotPardon
+			],
+			MainRoleType.BearTamer =>
+			[
+				ModeratorInstructionSemantic.AnnounceBearTamerGrowl
+			],
+			MainRoleType.KnightWithRustySword =>
+			[
+				ModeratorInstructionSemantic.AnnounceDawnVictims
 			],
 			_ => throw new ArgumentOutOfRangeException(nameof(sourceRole))
 		};
@@ -455,6 +1318,84 @@ public sealed class ActorBorrowedSemanticTraceTests
 			.Be(HookListenerOutcome.Complete);
 		session.ClearCurrentListenerCache(HookKey);
 		return activation;
+	}
+
+	private static void SeedKnightFactionFacts(
+		GameSession session,
+		Guid clockwiseWerewolfId,
+		Guid otherWerewolfId)
+	{
+		var knownAgentIds = new HashSet<Guid>
+		{
+			clockwiseWerewolfId,
+			otherWerewolfId
+		};
+		FactionFactEffectiveBoundary? agentBoundary = null;
+		session.CommitFactionFactBatch(context =>
+		{
+			var boundary = new FactionFactEffectiveBoundary(
+				context.TurnNumber,
+				context.CurrentPhase,
+				session.GameHistoryLog.Count());
+			agentBoundary = boundary;
+			return new FactionFactsCommittedLogEntry
+			{
+				Timestamp = context.Timestamp,
+				TurnNumber = context.TurnNumber,
+				CurrentPhase = context.CurrentPhase,
+				Source = new FactionFactSource(
+					FactionFactSourceKind.ScheduledObservation,
+					FactionFactSource
+						.WerewolfFactionAgentGroupObservationIdentifier),
+				Facts =
+				[
+					.. session.GetPlayers().Select(player => FactionFact.Agent(
+						player.Id,
+						Faction.Werewolf,
+						knownAgentIds.Contains(player.Id)
+							? FactionAgentKnowledge.KnownAgent
+							: FactionAgentKnowledge.KnownNonAgent,
+						boundary))
+				]
+			};
+		});
+
+		InitialBeneficiaryClosureRules.TryCommitCurrentSession(
+				session,
+				agentBoundary)
+			.Should().Be(InitialBeneficiaryClosureResult.Committed);
+	}
+
+	private static void CommitKnightFollowingNightAgentFacts(
+		GameSession session,
+		Guid currentWerewolfId)
+	{
+		session.CommitFactionFactBatch(context =>
+		{
+			var boundary = new FactionFactEffectiveBoundary(
+				context.TurnNumber,
+				context.CurrentPhase,
+				session.GameHistoryLog.Count());
+			return new FactionFactsCommittedLogEntry
+			{
+				Timestamp = context.Timestamp,
+				TurnNumber = context.TurnNumber,
+				CurrentPhase = context.CurrentPhase,
+				Source = new FactionFactSource(
+					FactionFactSourceKind.ExplicitTransition,
+					"test-actor-borrowed-knight-current-agent-transition"),
+				Facts =
+				[
+					.. session.GetPlayers().Select(player => FactionFact.Agent(
+						player.Id,
+						Faction.Werewolf,
+						player.Id == currentWerewolfId
+							? FactionAgentKnowledge.KnownAgent
+							: FactionAgentKnowledge.KnownNonAgent,
+						boundary))
+				]
+			};
+		});
 	}
 
 	private static void SeedKnownFactionFacts(
@@ -519,8 +1460,28 @@ public sealed class ActorBorrowedSemanticTraceTests
 		GameSession Session,
 		StartGameConfirmationInstruction Start,
 		Guid ActorId,
+		Guid ActivationId,
 		IGameHookListener Listener,
-		BaselineRandomDecisionStrategy Strategy);
+		HeadlessResponsePolicy Policy,
+		BaselineRandomDecisionStrategy Strategy,
+		RecordingPolicy RecordingPolicy);
+
+	private sealed class RecordingPolicy : IRolePowerAvailabilityPolicy
+	{
+		internal List<RolePowerAttempt> ObservedAttempts { get; } = [];
+
+		public RolePowerAvailabilityResult Evaluate(RolePowerAttempt attempt)
+		{
+			ObservedAttempts.Add(attempt);
+			return RolePowerAvailabilityResult.Allowed;
+		}
+	}
+
+	private enum ActorSemanticCascadeStage
+	{
+		HunterFinalShot,
+		ElderVillageVote
+	}
 
 	private sealed class TestSubPhaseManagerKey : ISubPhaseManagerKey;
 	private sealed class TestHookSubPhaseKey : IHookSubPhaseKey;

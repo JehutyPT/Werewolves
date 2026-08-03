@@ -34,6 +34,12 @@ internal sealed class BearTamerRole : NightRoleIdOnlyHookListener
 		GameSession session,
 		ModeratorResponse input)
 	{
+		if (session.GetCurrentPhase() == GamePhase.Dawn &&
+		    TryResolveBorrowedExecution(session, out _))
+		{
+			return ExecuteCore(session, input);
+		}
+
 		return session.GetCurrentPhase() switch
 		{
 			GamePhase.Night when session.TurnNumber == 1 =>
@@ -104,22 +110,15 @@ internal sealed class BearTamerRole : NightRoleIdOnlyHookListener
 				NightRoleIdOnlyState.Asleep);
 		}
 
-		var holder = GetAliveRolePlayers(session)?.SingleOrDefault()
-			?? throw new InvalidOperationException(
-				"No living Bear Tamer is available for the Dawn growl.");
-		var powerInstance = RolePowerInstance.CreateCurrent(
-			session,
-			holder,
-			MainRoleType.BearTamer,
-			GrowlPower);
-		var execution = _availabilityGateway.Evaluate(
+		var execution = ResolveExecution(session);
+		var availability = _availabilityGateway.Evaluate(
 			new RolePowerAttempt(
 				session,
-				holder,
+				execution.ActingPlayer,
 				MainRoleType.BearTamer,
 				GrowlPower,
-				powerInstance));
-		if (!execution.AvailabilityResult.IsAvailable)
+				execution.PowerInstance));
+		if (!availability.AvailabilityResult.IsAvailable)
 		{
 			return HookListenerActionResult.Complete(
 				NightRoleIdOnlyState.Asleep);
@@ -131,7 +130,7 @@ internal sealed class BearTamerRole : NightRoleIdOnlyHookListener
 			.ToHashSet();
 		var neighbors = GameSessionQueries.GetDirectionalLivingNeighbors(
 			session,
-			holder.Id);
+			execution.ActingPlayer.Id);
 		var distinctNeighborIds = new[]
 			{
 				neighbors.Clockwise?.Id,
@@ -147,19 +146,150 @@ internal sealed class BearTamerRole : NightRoleIdOnlyHookListener
 		}
 
 		return HookListenerActionResult.NeedInput(
-			new ConfirmationInstruction(
-				ModeratorInstructionSemantic.AnnounceBearTamerGrowl,
-				publicAnnouncement: null,
-				privateInstruction: GameStrings.BearTamerGrowlInstruction,
-				affectedPlayerIds: null,
-				soundEffects: [SoundEffectsEnum.BearGrowl]),
+			CreateGrowlAnnouncement(),
 			NightRoleIdOnlyState.Awake);
 	}
 
-	private static HookListenerActionResult CommitGrowl(
+	internal static void ValidateBorrowedPendingGrowlRecoveryInstruction(
+		GameSession session)
+	{
+		var pendingInstruction = session.PendingModeratorInstruction;
+		if (pendingInstruction?.Semantic !=
+				ModeratorInstructionSemantic.AnnounceBearTamerGrowl ||
+			!session.GetModeratorActorSetupCards().Cards.Any(card =>
+				card.PrintedRole == MainRoleType.BearTamer))
+		{
+			return;
+		}
+
+		var activation =
+			session.GetModeratorActiveActorBorrowedRolePowerActivation();
+		if (activation is not
+			{
+				ActingRole: MainRoleType.Actor,
+				SourceRole: MainRoleType.BearTamer
+			})
+		{
+			throw new InvalidOperationException(
+				"The pending Actor borrowed Role Power instruction does not match its recovery context.");
+		}
+
+		var actor = session.GetPlayer(activation.ActingPlayerId);
+		var selectedCard = session.GetModeratorActorSetupCards().Cards
+			.SingleOrDefault(card => card.Id == activation.SelectedCardId);
+		var hasCorrelatedCommit = session
+			.GetActorBorrowedBearTamerGrowlCommits()
+			.Any(commit =>
+				commit.PowerIdentity.ActingPlayerId ==
+					activation.ActingPlayerId &&
+				commit.PowerIdentity.PowerInstanceId ==
+					activation.ActivationId &&
+				commit.ActorSetupCardId == activation.SelectedCardId);
+		if (session.GetCurrentPhase() != GamePhase.Dawn ||
+			selectedCard?.PrintedRole != MainRoleType.BearTamer ||
+			actor.State.Health != PlayerHealth.Alive ||
+			actor.State.CurrentRole != MainRoleType.Actor ||
+			GameSessionQueries.HasBearTamerGrowlOccurredThisDawn(session) ||
+			hasCorrelatedCommit ||
+			!MatchesGrowlAnnouncement(pendingInstruction))
+		{
+			throw new InvalidOperationException(
+				"The pending Actor borrowed Role Power instruction does not match its recovery context.");
+		}
+	}
+
+	private static ConfirmationInstruction CreateGrowlAnnouncement(
+		Guid instructionId = default) =>
+		new(
+			ModeratorInstructionSemantic.AnnounceBearTamerGrowl,
+			publicAnnouncement: null,
+			privateInstruction: GameStrings.BearTamerGrowlInstruction,
+			affectedPlayerIds: null,
+			instructionId: instructionId,
+			soundEffects: [SoundEffectsEnum.BearGrowl]);
+
+	internal static bool MatchesGrowlAnnouncement(
+		ModeratorInstruction? instruction)
+	{
+		if (instruction is not ConfirmationInstruction announcement)
+		{
+			return false;
+		}
+
+		var expected = CreateGrowlAnnouncement(announcement.InstructionId);
+		return announcement.Semantic == expected.Semantic &&
+			announcement.InstructionId == expected.InstructionId &&
+			announcement.AffectedPlayerIds is null &&
+			StringComparer.Ordinal.Equals(
+				announcement.PublicAnnouncement,
+				expected.PublicAnnouncement) &&
+			StringComparer.Ordinal.Equals(
+				announcement.PrivateInstruction,
+				expected.PrivateInstruction) &&
+			announcement.SoundEffects.SequenceEqual(expected.SoundEffects);
+	}
+
+	private ExecutionContext ResolveExecution(GameSession session) =>
+		TryResolveBorrowedExecution(session, out var borrowed)
+			? borrowed
+			: ResolveNativeExecution(session);
+
+	private ExecutionContext ResolveNativeExecution(GameSession session)
+	{
+		var holder = GetAliveRolePlayers(session)?.SingleOrDefault()
+			?? throw new InvalidOperationException(
+				"No living Bear Tamer is available for the Dawn growl.");
+		return new ExecutionContext(
+			holder,
+			RolePowerInstance.CreateCurrent(
+				session,
+				holder,
+				MainRoleType.BearTamer,
+				GrowlPower),
+			IsBorrowed: false);
+	}
+
+	private static bool TryResolveBorrowedExecution(
+		GameSession session,
+		out ExecutionContext execution)
+	{
+		var activation =
+			session.GetModeratorActiveActorBorrowedRolePowerActivation();
+		if (activation?.SourceRole != MainRoleType.BearTamer)
+		{
+			execution = null!;
+			return false;
+		}
+
+		var actor = session.GetPlayer(activation.ActingPlayerId);
+		if (actor.State.Health != PlayerHealth.Alive ||
+		    actor.State.CurrentRole != MainRoleType.Actor)
+		{
+			execution = null!;
+			return false;
+		}
+
+		execution = new ExecutionContext(
+			actor,
+			RolePowerInstance.CreateBorrowed(
+				session,
+				actor,
+				MainRoleType.BearTamer,
+				GrowlPower),
+			IsBorrowed: true);
+		return true;
+	}
+
+	private HookListenerActionResult CommitGrowl(
 		GameSession session,
 		ModeratorResponse input)
 	{
+		var execution = ResolveExecution(session);
+		if (execution.IsBorrowed)
+		{
+			session.CommitActorBorrowedBearTamerGrowl(
+				CreatePowerIdentity(execution));
+		}
 		session.CommitGameFact(context =>
 			new BearTamerGrowlOccurredLogEntry
 			{
@@ -170,4 +300,17 @@ internal sealed class BearTamerRole : NightRoleIdOnlyHookListener
 		return HookListenerActionResult.Complete(
 			NightRoleIdOnlyState.Asleep);
 	}
+
+	private static RolePowerInstanceIdentity CreatePowerIdentity(
+		ExecutionContext execution) => new(
+			execution.ActingPlayer.Id,
+			MainRoleType.BearTamer,
+			GrowlPower.Identifier.Value,
+			execution.PowerInstance.Id,
+			execution.PowerInstance.Origin);
+
+	private sealed record ExecutionContext(
+		IPlayer ActingPlayer,
+		RolePowerInstance PowerInstance,
+		bool IsBorrowed);
 }

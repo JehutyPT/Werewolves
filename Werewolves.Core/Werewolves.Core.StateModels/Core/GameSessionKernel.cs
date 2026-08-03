@@ -28,6 +28,22 @@ namespace Werewolves.Core.StateModels.Core
 			_actorBorrowedDefenderProtectionCommits = [];
 		private readonly List<ActorBorrowedFoxCheckCommit>
 			_actorBorrowedFoxCheckCommits = [];
+		private readonly List<ActorBorrowedBearTamerGrowlCommit>
+			_actorBorrowedBearTamerGrowlCommits = [];
+		private readonly List<ActorBorrowedKnightRustySwordScheduleCommit>
+			_actorBorrowedKnightRustySwordScheduleCommits = [];
+		private readonly List<ActorBorrowedHunterFinalShotCommit>
+			_actorBorrowedHunterFinalShotCommits = [];
+		private readonly List<ActorBorrowedElderResistanceCommit>
+			_actorBorrowedElderResistanceCommits = [];
+		private readonly List<ActorBorrowedElderSuppressionCommit>
+			_actorBorrowedElderSuppressionCommits = [];
+		private readonly List<ActorBorrowedScapegoatTieReplacementCommit>
+			_actorBorrowedScapegoatTieReplacementCommits = [];
+		private readonly List<ActorBorrowedScapegoatVoterRestrictionCommit>
+			_actorBorrowedScapegoatVoterRestrictionCommits = [];
+		private readonly List<ActorBorrowedVillageIdiotPardonCommit>
+			_actorBorrowedVillageIdiotPardonCommits = [];
 		private readonly List<ActorBorrowedWitchPotionUseCommit>
 			_actorBorrowedWitchPotionUseCommits = [];
 		private readonly List<ActorBorrowedWitchPotionDeclineCommit>
@@ -87,6 +103,30 @@ namespace Werewolves.Core.StateModels.Core
 		internal IReadOnlyList<ActorBorrowedFoxCheckCommit>
 			GetActorBorrowedFoxCheckCommits() =>
 			_actorBorrowedFoxCheckCommits.AsReadOnly();
+		internal IReadOnlyList<ActorBorrowedBearTamerGrowlCommit>
+			GetActorBorrowedBearTamerGrowlCommits() =>
+			_actorBorrowedBearTamerGrowlCommits.AsReadOnly();
+		internal IReadOnlyList<ActorBorrowedKnightRustySwordScheduleCommit>
+			GetActorBorrowedKnightRustySwordScheduleCommits() =>
+			_actorBorrowedKnightRustySwordScheduleCommits.AsReadOnly();
+		internal IReadOnlyList<ActorBorrowedHunterFinalShotCommit>
+			GetActorBorrowedHunterFinalShotCommits() =>
+			_actorBorrowedHunterFinalShotCommits.AsReadOnly();
+		internal IReadOnlyList<ActorBorrowedElderResistanceCommit>
+			GetActorBorrowedElderResistanceCommits() =>
+			_actorBorrowedElderResistanceCommits.AsReadOnly();
+		internal IReadOnlyList<ActorBorrowedElderSuppressionCommit>
+			GetActorBorrowedElderSuppressionCommits() =>
+			_actorBorrowedElderSuppressionCommits.AsReadOnly();
+		internal IReadOnlyList<ActorBorrowedScapegoatTieReplacementCommit>
+			GetActorBorrowedScapegoatTieReplacementCommits() =>
+			_actorBorrowedScapegoatTieReplacementCommits.AsReadOnly();
+		internal IReadOnlyList<ActorBorrowedScapegoatVoterRestrictionCommit>
+			GetActorBorrowedScapegoatVoterRestrictionCommits() =>
+			_actorBorrowedScapegoatVoterRestrictionCommits.AsReadOnly();
+		internal IReadOnlyList<ActorBorrowedVillageIdiotPardonCommit>
+			GetActorBorrowedVillageIdiotPardonCommits() =>
+			_actorBorrowedVillageIdiotPardonCommits.AsReadOnly();
 		internal IReadOnlyList<ActorBorrowedWitchPotionUseCommit>
 			GetActorBorrowedWitchPotionUseCommits() =>
 			_actorBorrowedWitchPotionUseCommits.AsReadOnly();
@@ -325,6 +365,196 @@ namespace Werewolves.Core.StateModels.Core
 				NeighborhoodAgentKnowledge = neighborhoodAgentKnowledge,
 				SpentResourceIdentity = spentResourceIdentity
 			});
+		}
+
+		internal void CommitActorBorrowedBearTamerGrowl(
+			RolePowerInstanceIdentity powerIdentity)
+		{
+			var activation = _activeActorBorrowedRolePowerActivation
+				?? throw new InvalidOperationException(
+					"The borrowed Role Power activation is unavailable.");
+			AddEntryAndUpdateState(
+				new ActorBorrowedBearTamerGrowlCommandLogEntry
+				{
+					Timestamp = DateTimeOffset.UtcNow,
+					TurnNumber = TurnNumber,
+					CurrentPhase = CurrentPhase,
+					PowerIdentity = powerIdentity,
+					ActorSetupCardId = activation.SelectedCardId
+				});
+		}
+
+		internal void CommitActorBorrowedKnightRustySwordSchedule(
+			RolePowerInstanceIdentity powerIdentity,
+			Guid targetPlayerId,
+			int werewolfAttackEliminationLogIndex,
+			string cascadeScopeId)
+		{
+			var activation = _activeActorBorrowedRolePowerActivation
+				?? throw new InvalidOperationException(
+					"The borrowed Role Power activation is unavailable.");
+			AddEntryAndUpdateState(
+				new ActorBorrowedKnightRustySwordScheduleCommandLogEntry
+				{
+					Timestamp = DateTimeOffset.UtcNow,
+					TurnNumber = TurnNumber,
+					CurrentPhase = CurrentPhase,
+					PowerIdentity = powerIdentity,
+					ActorSetupCardId = activation.SelectedCardId,
+					TargetPlayerId = targetPlayerId,
+					WerewolfAttackEliminationLogIndex =
+						werewolfAttackEliminationLogIndex,
+					CascadeScopeId = cascadeScopeId
+				});
+		}
+
+		internal void CommitActorBorrowedVillageIdiotPardon(
+			RolePowerInstanceIdentity powerIdentity,
+			OneUseRolePowerResourceIdentity spentResourceIdentity)
+		{
+			var activation = _activeActorBorrowedRolePowerActivation
+				?? throw new InvalidOperationException(
+					"The borrowed Role Power activation is unavailable.");
+			AddEntryAndUpdateState(
+				new ActorBorrowedVillageIdiotPardonCommandLogEntry
+				{
+					Timestamp = DateTimeOffset.UtcNow,
+					TurnNumber = TurnNumber,
+					CurrentPhase = CurrentPhase,
+					PowerIdentity = powerIdentity,
+					ActorSetupCardId = activation.SelectedCardId,
+					SpentResourceIdentity = spentResourceIdentity
+				});
+		}
+
+		internal void CommitActorBorrowedHunterFinalShot(
+			RolePowerInstanceIdentity powerIdentity,
+			string cascadeScopeId,
+			IReadOnlyList<Guid> triggeringPlayerIds,
+			Guid targetPlayerId)
+		{
+			var activation = _activeActorBorrowedRolePowerActivation
+				?? throw new InvalidOperationException(
+					"The borrowed Role Power activation is unavailable.");
+			AddEntryAndUpdateState(
+				new ActorBorrowedHunterFinalShotCommandLogEntry
+				{
+					Timestamp = DateTimeOffset.UtcNow,
+					TurnNumber = TurnNumber,
+					CurrentPhase = CurrentPhase,
+					PowerIdentity = powerIdentity,
+					ActorSetupCardId = activation.SelectedCardId,
+					CascadeScopeId = cascadeScopeId,
+					TriggeringPlayerIds = triggeringPlayerIds.ToArray(),
+					TargetPlayerId = targetPlayerId
+				});
+		}
+
+		internal void CommitActorBorrowedElderResistance(
+			RolePowerInstanceIdentity powerIdentity,
+			Guid targetPlayerId,
+			int triggeringNightActionLogIndex,
+			int? restoringWitchSaveLogIndex)
+		{
+			var activation = _activeActorBorrowedRolePowerActivation
+				?? throw new InvalidOperationException(
+					"The borrowed Role Power activation is unavailable.");
+			AddEntryAndUpdateState(
+				new ActorBorrowedElderResistanceCommandLogEntry
+				{
+					Timestamp = DateTimeOffset.UtcNow,
+					TurnNumber = TurnNumber,
+					CurrentPhase = CurrentPhase,
+					PowerIdentity = powerIdentity,
+					ActorSetupCardId = activation.SelectedCardId,
+					TargetPlayerId = targetPlayerId,
+					TriggeringNightActionLogIndex =
+						triggeringNightActionLogIndex,
+					RestoringWitchSaveLogIndex =
+						restoringWitchSaveLogIndex
+				});
+		}
+
+		internal void CommitActorBorrowedElderSuppression(
+			RolePowerInstanceIdentity powerIdentity,
+			int triggeringVoteOutcomeLogIndex,
+			string cascadeScopeId,
+			Guid announcementInstructionId)
+		{
+			var activation = _activeActorBorrowedRolePowerActivation
+				?? throw new InvalidOperationException(
+					"The borrowed Role Power activation is unavailable.");
+			AddEntryAndUpdateState(
+				new ActorBorrowedElderSuppressionCommandLogEntry
+				{
+					Timestamp = DateTimeOffset.UtcNow,
+					TurnNumber = TurnNumber,
+					CurrentPhase = CurrentPhase,
+					PowerIdentity = powerIdentity,
+					ActorSetupCardId = activation.SelectedCardId,
+					TriggeringVoteOutcomeLogIndex =
+						triggeringVoteOutcomeLogIndex,
+					CascadeScopeId = cascadeScopeId,
+					AnnouncementInstructionId = announcementInstructionId
+				});
+		}
+
+		internal void CommitActorBorrowedScapegoatTieReplacement(
+			RolePowerInstanceIdentity powerIdentity,
+			int triggeringVoteOutcomeLogIndex,
+			int voteOrdinal,
+			string cascadeScopeId)
+		{
+			var activation = _activeActorBorrowedRolePowerActivation
+				?? throw new InvalidOperationException(
+					"The borrowed Role Power activation is unavailable.");
+			AddEntryAndUpdateState(
+				new ActorBorrowedScapegoatTieReplacementCommandLogEntry
+				{
+					Timestamp = DateTimeOffset.UtcNow,
+					TurnNumber = TurnNumber,
+					CurrentPhase = CurrentPhase,
+					PowerIdentity = powerIdentity,
+					ActorSetupCardId = activation.SelectedCardId,
+					TriggeringVoteOutcomeLogIndex =
+						triggeringVoteOutcomeLogIndex,
+					VoteOrdinal = voteOrdinal,
+					CascadeScopeId = cascadeScopeId
+				});
+		}
+
+		internal void CommitActorBorrowedScapegoatVoterRestriction(
+			RolePowerInstanceIdentity powerIdentity,
+			int tieReplacementPublicMarkerLogIndex,
+			string cascadeScopeId,
+			IReadOnlyCollection<Guid> candidatePlayerIds,
+			IReadOnlyCollection<Guid> permittedVoterIds,
+			int appliesOnTurnNumber,
+			Guid announcementInstructionId)
+		{
+			var activation = _activeActorBorrowedRolePowerActivation
+				?? throw new InvalidOperationException(
+					"The borrowed Role Power activation is unavailable.");
+			AddEntryAndUpdateState(
+				new ActorBorrowedScapegoatVoterRestrictionCommandLogEntry
+				{
+					Timestamp = DateTimeOffset.UtcNow,
+					TurnNumber = TurnNumber,
+					CurrentPhase = CurrentPhase,
+					PowerIdentity = powerIdentity,
+					ActorSetupCardId = activation.SelectedCardId,
+					TieReplacementPublicMarkerLogIndex =
+						tieReplacementPublicMarkerLogIndex,
+					CascadeScopeId = cascadeScopeId,
+					CandidatePlayerIds = candidatePlayerIds
+						.OrderBy(playerId => playerId)
+						.ToArray(),
+					PermittedVoterIds = permittedVoterIds
+						.OrderBy(playerId => playerId)
+						.ToArray(),
+					AppliesOnTurnNumber = appliesOnTurnNumber,
+					AnnouncementInstructionId = announcementInstructionId
+				});
 		}
 
 		internal void CommitActorBorrowedWitchPotionUse(
@@ -659,6 +889,50 @@ namespace Werewolves.Core.StateModels.Core
 						_actorBorrowedFoxCheckCommits
 							.Select(ActorBorrowedFoxCheckCommitDto.FromValue)
 							.ToList(),
+					ActorBorrowedBearTamerGrowlCommits =
+						_actorBorrowedBearTamerGrowlCommits
+							.Select(
+								ActorBorrowedBearTamerGrowlCommitDto.FromValue)
+							.ToList(),
+					ActorBorrowedKnightRustySwordScheduleCommits =
+						_actorBorrowedKnightRustySwordScheduleCommits
+							.Select(
+								ActorBorrowedKnightRustySwordScheduleCommitDto
+									.FromValue)
+							.ToList(),
+					ActorBorrowedHunterFinalShotCommits =
+						_actorBorrowedHunterFinalShotCommits
+							.Select(
+								ActorBorrowedHunterFinalShotCommitDto.FromValue)
+							.ToList(),
+					ActorBorrowedElderResistanceCommits =
+						_actorBorrowedElderResistanceCommits
+							.Select(
+								ActorBorrowedElderResistanceCommitDto.FromValue)
+							.ToList(),
+					ActorBorrowedElderSuppressionCommits =
+						_actorBorrowedElderSuppressionCommits
+							.Select(
+								ActorBorrowedElderSuppressionCommitDto.FromValue)
+							.ToList(),
+					ActorBorrowedScapegoatTieReplacementCommits =
+						_actorBorrowedScapegoatTieReplacementCommits
+							.Select(
+								ActorBorrowedScapegoatTieReplacementCommitDto
+									.FromValue)
+							.ToList(),
+					ActorBorrowedScapegoatVoterRestrictionCommits =
+						_actorBorrowedScapegoatVoterRestrictionCommits
+							.Select(
+								ActorBorrowedScapegoatVoterRestrictionCommitDto
+									.FromValue)
+							.ToList(),
+					ActorBorrowedVillageIdiotPardonCommits =
+						_actorBorrowedVillageIdiotPardonCommits
+							.Select(
+								ActorBorrowedVillageIdiotPardonCommitDto
+									.FromValue)
+							.ToList(),
 					ActorBorrowedWitchPotionUseCommits =
 						_actorBorrowedWitchPotionUseCommits
 							.Select(
@@ -939,6 +1213,14 @@ namespace Werewolves.Core.StateModels.Core
 					(dto.ActorBorrowedSeerCheckCommits?.Count ?? 0) +
 					(dto.ActorBorrowedDefenderProtectionCommits?.Count ?? 0) +
 					(dto.ActorBorrowedFoxCheckCommits?.Count ?? 0) +
+					(dto.ActorBorrowedBearTamerGrowlCommits?.Count ?? 0) +
+					(dto.ActorBorrowedKnightRustySwordScheduleCommits?.Count ?? 0) +
+					(dto.ActorBorrowedHunterFinalShotCommits?.Count ?? 0) +
+					(dto.ActorBorrowedElderResistanceCommits?.Count ?? 0) +
+					(dto.ActorBorrowedElderSuppressionCommits?.Count ?? 0) +
+					(dto.ActorBorrowedScapegoatTieReplacementCommits?.Count ?? 0) +
+					(dto.ActorBorrowedScapegoatVoterRestrictionCommits?.Count ?? 0) +
+					(dto.ActorBorrowedVillageIdiotPardonCommits?.Count ?? 0) +
 					(dto.ActorBorrowedWitchPotionUseCommits?.Count ?? 0) +
 					(dto.ActorBorrowedWitchPotionDeclineCommits?.Count ?? 0) +
 					(dto.ActorBorrowedCupidLoversCommits?.Count ?? 0) +
@@ -1001,6 +1283,14 @@ namespace Werewolves.Core.StateModels.Core
 				if (dto.ActorBorrowedSeerCheckCommits is null ||
 					dto.ActorBorrowedDefenderProtectionCommits is null ||
 					dto.ActorBorrowedFoxCheckCommits is null ||
+					dto.ActorBorrowedBearTamerGrowlCommits is null ||
+					dto.ActorBorrowedKnightRustySwordScheduleCommits is null ||
+					dto.ActorBorrowedHunterFinalShotCommits is null ||
+					dto.ActorBorrowedElderResistanceCommits is null ||
+					dto.ActorBorrowedElderSuppressionCommits is null ||
+					dto.ActorBorrowedScapegoatTieReplacementCommits is null ||
+					dto.ActorBorrowedScapegoatVoterRestrictionCommits is null ||
+					dto.ActorBorrowedVillageIdiotPardonCommits is null ||
 					dto.ActorBorrowedWitchPotionUseCommits is null ||
 					dto.ActorBorrowedWitchPotionDeclineCommits is null ||
 					dto.ActorBorrowedCupidLoversCommits is null ||
@@ -1030,6 +1320,62 @@ namespace Werewolves.Core.StateModels.Core
 						var commit = commitDto.ToValue();
 						commit.EnforceValidity();
 						_actorBorrowedFoxCheckCommits.Add(commit);
+					}
+					foreach (var commitDto in
+						dto.ActorBorrowedBearTamerGrowlCommits)
+					{
+						var commit = commitDto.ToValue();
+						commit.EnforceValidity();
+						_actorBorrowedBearTamerGrowlCommits.Add(commit);
+					}
+					foreach (var commitDto in
+						dto.ActorBorrowedKnightRustySwordScheduleCommits)
+					{
+						var commit = commitDto.ToValue();
+						commit.EnforceValidity();
+						_actorBorrowedKnightRustySwordScheduleCommits.Add(commit);
+					}
+					foreach (var commitDto in
+						dto.ActorBorrowedHunterFinalShotCommits)
+					{
+						var commit = commitDto.ToValue();
+						commit.EnforceValidity();
+						_actorBorrowedHunterFinalShotCommits.Add(commit);
+					}
+					foreach (var commitDto in
+						dto.ActorBorrowedElderResistanceCommits)
+					{
+						var commit = commitDto.ToValue();
+						commit.EnforceValidity();
+						_actorBorrowedElderResistanceCommits.Add(commit);
+					}
+					foreach (var commitDto in
+						dto.ActorBorrowedElderSuppressionCommits)
+					{
+						var commit = commitDto.ToValue();
+						commit.EnforceValidity();
+						_actorBorrowedElderSuppressionCommits.Add(commit);
+					}
+					foreach (var commitDto in
+						dto.ActorBorrowedScapegoatTieReplacementCommits)
+					{
+						var commit = commitDto.ToValue();
+						commit.EnforceValidity();
+						_actorBorrowedScapegoatTieReplacementCommits.Add(commit);
+					}
+					foreach (var commitDto in
+						dto.ActorBorrowedScapegoatVoterRestrictionCommits)
+					{
+						var commit = commitDto.ToValue();
+						commit.EnforceValidity();
+						_actorBorrowedScapegoatVoterRestrictionCommits.Add(commit);
+					}
+					foreach (var commitDto in
+						dto.ActorBorrowedVillageIdiotPardonCommits)
+					{
+						var commit = commitDto.ToValue();
+						commit.EnforceValidity();
+						_actorBorrowedVillageIdiotPardonCommits.Add(commit);
 					}
 					foreach (var commitDto in
 						dto.ActorBorrowedWitchPotionUseCommits)
@@ -1121,6 +1467,14 @@ namespace Werewolves.Core.StateModels.Core
 					.Cast<IActorBorrowedRolePowerCommit>()
 					.Concat(_actorBorrowedDefenderProtectionCommits)
 					.Concat(_actorBorrowedFoxCheckCommits)
+					.Concat(_actorBorrowedBearTamerGrowlCommits)
+					.Concat(_actorBorrowedKnightRustySwordScheduleCommits)
+					.Concat(_actorBorrowedHunterFinalShotCommits)
+					.Concat(_actorBorrowedElderResistanceCommits)
+					.Concat(_actorBorrowedElderSuppressionCommits)
+					.Concat(_actorBorrowedScapegoatTieReplacementCommits)
+					.Concat(_actorBorrowedScapegoatVoterRestrictionCommits)
+					.Concat(_actorBorrowedVillageIdiotPardonCommits)
 					.Concat(_actorBorrowedWitchPotionUseCommits)
 					.Concat(_actorBorrowedWitchPotionDeclineCommits)
 					.Concat(_actorBorrowedCupidLoversCommits)
@@ -1153,6 +1507,39 @@ namespace Werewolves.Core.StateModels.Core
 						.Select(commit => commit.PowerIdentity)
 						.Distinct().Count() !=
 						_actorBorrowedFoxCheckCommits.Count ||
+					_actorBorrowedBearTamerGrowlCommits
+						.Select(commit => commit.PowerIdentity)
+						.Distinct().Count() !=
+						_actorBorrowedBearTamerGrowlCommits.Count ||
+					!HasValidActorBorrowedBearTamerGrowlCommitSequence(history) ||
+					_actorBorrowedKnightRustySwordScheduleCommits
+						.Select(commit => commit.PowerIdentity)
+						.Distinct().Count() !=
+						_actorBorrowedKnightRustySwordScheduleCommits.Count ||
+					!HasValidActorBorrowedKnightRustySwordScheduleCommitSequence(
+						history) ||
+					_actorBorrowedHunterFinalShotCommits
+						.Select(commit => commit.PowerIdentity)
+						.Distinct().Count() !=
+						_actorBorrowedHunterFinalShotCommits.Count ||
+					!HasValidActorBorrowedElderResistanceCommitSequence() ||
+					_actorBorrowedElderSuppressionCommits
+						.Select(commit => commit.PowerIdentity)
+						.Distinct().Count() !=
+						_actorBorrowedElderSuppressionCommits.Count ||
+					_actorBorrowedScapegoatTieReplacementCommits
+						.Select(commit => commit.PowerIdentity)
+						.Distinct().Count() !=
+						_actorBorrowedScapegoatTieReplacementCommits.Count ||
+					_actorBorrowedScapegoatVoterRestrictionCommits
+						.Select(commit => commit.PowerIdentity)
+						.Distinct().Count() !=
+						_actorBorrowedScapegoatVoterRestrictionCommits.Count ||
+					!HasValidActorBorrowedScapegoatCommitSequence(history) ||
+					_actorBorrowedVillageIdiotPardonCommits
+						.Select(commit => commit.SpentResourceIdentity)
+						.Distinct().Count() !=
+						_actorBorrowedVillageIdiotPardonCommits.Count ||
 					_actorBorrowedWitchPotionUseCommits
 						.Select(commit => commit.SpentResourceIdentity)
 						.Distinct().Count() !=
@@ -1240,6 +1627,104 @@ namespace Werewolves.Core.StateModels.Core
 						!_players.ContainsKey(commit.TargetPlayerId)) ||
 					_actorBorrowedFoxCheckCommits.Any(commit =>
 						!_players.ContainsKey(commit.CenterPlayerId)) ||
+					_actorBorrowedHunterFinalShotCommits.Any(commit =>
+						!_players.ContainsKey(commit.TargetPlayerId) ||
+						!_players.TryGetValue(
+							commit.PowerIdentity.ActingPlayerId,
+							out var hunterActor) ||
+						((IPlayer)hunterActor).State is not
+						{
+							CurrentRole: MainRoleType.Actor,
+							Health: PlayerHealth.Dead
+						} ||
+						commit.TriggeringPlayerIds.Any(playerId =>
+							!_players.TryGetValue(
+								playerId,
+								out var triggeringPlayer) ||
+							((IPlayer)triggeringPlayer).State.Health !=
+								PlayerHealth.Dead) ||
+						!history
+							.OfType<EliminationCascadeBatchResolvedLogEntry>()
+							.Any(batch =>
+								StringComparer.Ordinal.Equals(
+									batch.ScopeId,
+									commit.CascadeScopeId) &&
+								batch.CommittedEliminations
+									.Select(elimination => elimination.PlayerId)
+									.SequenceEqual(commit.TriggeringPlayerIds))) ||
+					_actorBorrowedElderResistanceCommits.Any(commit =>
+						!_players.TryGetValue(
+							commit.PowerIdentity.ActingPlayerId,
+							out var elderActor) ||
+						((IPlayer)elderActor).State is not
+						{
+							CurrentRole: MainRoleType.Actor
+						} ||
+						commit.TargetPlayerId !=
+							commit.PowerIdentity.ActingPlayerId ||
+						commit.TriggeringNightActionLogIndex < 0 ||
+						commit.TriggeringNightActionLogIndex >= history.Count ||
+						commit.TriggeringNightActionLogIndex >=
+							commit.PublicMarkerLogIndex ||
+						commit.RestoringWitchSaveLogIndex is { } restorationLogIndex &&
+							(restorationLogIndex <=
+								commit.TriggeringNightActionLogIndex ||
+							 restorationLogIndex >= commit.PublicMarkerLogIndex ||
+							 restorationLogIndex >= history.Count)) ||
+					_actorBorrowedElderSuppressionCommits.Any(commit =>
+						!_players.TryGetValue(
+							commit.PowerIdentity.ActingPlayerId,
+							out var suppressionActor) ||
+						((IPlayer)suppressionActor).State is not
+						{
+							CurrentRole: MainRoleType.Actor,
+							Health: PlayerHealth.Dead,
+							PhysicalCharacterCardRole: MainRoleType.Actor,
+							PubliclyRevealedRole: MainRoleType.Actor
+						} ||
+						!HasQualifyingActorBorrowedElderSuppressionHistory(
+							history,
+							commit.PowerIdentity.ActingPlayerId,
+							commit.TurnNumber,
+							commit.TriggeringVoteOutcomeLogIndex,
+							commit.CascadeScopeId,
+							commit.PublicMarkerLogIndex) ||
+						history
+							.OfType<VillagerRolePowerSuppressionCommittedLogEntry>()
+							.Count() != 1 ||
+						commit.PublicMarkerLogIndex + 1 >= history.Count ||
+						history[commit.PublicMarkerLogIndex + 1] is not
+							VillagerRolePowerSuppressionCommittedLogEntry
+							{
+								CurrentPhase: GamePhase.Day,
+								AnnouncementInstructionId:
+									var announcementInstructionId
+							} suppressionFact ||
+						suppressionFact.TurnNumber != commit.TurnNumber ||
+						announcementInstructionId !=
+							commit.AnnouncementInstructionId) ||
+					_actorBorrowedVillageIdiotPardonCommits.Any(commit =>
+						!_players.TryGetValue(
+							commit.PowerIdentity.ActingPlayerId,
+							out var actor) ||
+						((IPlayer)actor).State is not
+						{
+							CurrentRole: MainRoleType.Actor,
+							DurableVotingPower: 0,
+							HasVotingRight: false
+						} ||
+						commit.PublicMarkerLogIndex + 1 >= history.Count ||
+						history[commit.PublicMarkerLogIndex + 1] is not
+							VotingRightChangedLogEntry
+							{
+								CurrentPhase: GamePhase.Day,
+								PlayerId: var affectedPlayerId,
+								HasVotingRight: false,
+								DurableVotingPower: 0
+							} votingConsequence ||
+						votingConsequence.TurnNumber != commit.TurnNumber ||
+						affectedPlayerId !=
+							commit.PowerIdentity.ActingPlayerId) ||
 					_actorBorrowedWitchPotionUseCommits.Any(commit =>
 						!_players.ContainsKey(commit.TargetPlayerId)) ||
 					_actorBorrowedCupidLoversCommits.Any(commit =>
@@ -1285,6 +1770,523 @@ namespace Werewolves.Core.StateModels.Core
 							"The stable recovery snapshot has invalid Actor borrowed Cupid Initial Beneficiary Closure state.");
 					}
 				}
+			}
+
+			private bool
+				HasValidActorBorrowedKnightRustySwordScheduleCommitSequence(
+					IReadOnlyList<GameLogEntryBase> history)
+			{
+				if (_actorBorrowedKnightRustySwordScheduleCommits.Count > 1)
+				{
+					return false;
+				}
+
+				foreach (var commit in
+					_actorBorrowedKnightRustySwordScheduleCommits)
+				{
+					var selectedCard = _actorSetupCards.Cards.SingleOrDefault(card =>
+						card.Id == commit.ActorSetupCardId);
+					if (!_players.ContainsKey(commit.TargetPlayerId) ||
+						selectedCard?.PrintedRole !=
+							MainRoleType.KnightWithRustySword ||
+						commit.PowerIdentity.SourceRole !=
+							MainRoleType.KnightWithRustySword ||
+						!StringComparer.Ordinal.Equals(
+							commit.PowerIdentity.SourcePowerIdentifier,
+							ActorBorrowedKnightRustySwordScheduleCommit
+								.ExpectedSourcePowerIdentifier) ||
+						commit.PowerIdentity.PowerInstanceOrigin !=
+							RolePowerInstanceOrigin.Borrowed ||
+						!HasQualifyingActorBorrowedKnightScheduleHistory(
+							history,
+							commit.PowerIdentity.ActingPlayerId,
+							commit.TurnNumber,
+							commit.WerewolfAttackEliminationLogIndex,
+							commit.CascadeScopeId,
+							commit.PublicMarkerLogIndex) ||
+						history.OfType<StatusEffectLogEntry>().Any(entry =>
+							entry.TurnNumber == commit.TurnNumber &&
+							entry.CurrentPhase == GamePhase.Dawn &&
+							entry.PlayerId == commit.TargetPlayerId &&
+							entry.EffectType ==
+								StatusEffectTypes.RustySwordDisease))
+					{
+						return false;
+					}
+				}
+
+				return true;
+			}
+
+			private static bool HasQualifyingActorBorrowedKnightScheduleHistory(
+				IReadOnlyList<GameLogEntryBase> history,
+				Guid actorId,
+				int turnNumber,
+				int werewolfAttackEliminationLogIndex,
+				string cascadeScopeId,
+				int markerLogIndex)
+			{
+				if (actorId == Guid.Empty ||
+					turnNumber < 1 ||
+					!StringComparer.Ordinal.Equals(
+						cascadeScopeId,
+						$"Dawn:{turnNumber}") ||
+					werewolfAttackEliminationLogIndex < 0 ||
+					werewolfAttackEliminationLogIndex >= markerLogIndex ||
+					markerLogIndex > history.Count ||
+					history[werewolfAttackEliminationLogIndex] is not
+						PlayerEliminatedLogEntry
+						{
+							CurrentPhase: GamePhase.Dawn,
+							PlayerId: var eliminatedPlayerId,
+							Reason: EliminationReason.WerewolfAttack
+						} eliminated ||
+					eliminated.TurnNumber != turnNumber ||
+					eliminatedPlayerId != actorId)
+				{
+					return false;
+				}
+
+				var determinationIndex = -1;
+				for (var index = 0;
+					index < werewolfAttackEliminationLogIndex;
+					index++)
+				{
+					if (history[index] is DawnVictimDeterminedLogEntry
+						{
+							CurrentPhase: GamePhase.Dawn,
+							PlayerId: var determinedPlayerId,
+							Reason: EliminationReason.WerewolfAttack
+						} determination &&
+						determination.TurnNumber == turnNumber &&
+						determinedPlayerId == actorId)
+					{
+						determinationIndex = index;
+					}
+				}
+
+				var expectedElimination = new EliminationCascadeElimination(
+					actorId,
+					EliminationReason.WerewolfAttack);
+				var batchIndex = -1;
+				var completionIndex = -1;
+				for (var index = werewolfAttackEliminationLogIndex + 1;
+					index < markerLogIndex;
+					index++)
+				{
+					if (batchIndex < 0 &&
+						history[index] is
+							EliminationCascadeBatchResolvedLogEntry batch &&
+						batch.CurrentPhase == GamePhase.Dawn &&
+						batch.TurnNumber == turnNumber &&
+						StringComparer.Ordinal.Equals(
+							batch.ScopeId,
+							cascadeScopeId) &&
+						batch.RequestedEliminations.Contains(
+							expectedElimination) &&
+						batch.CommittedEliminations.Contains(
+							expectedElimination))
+					{
+						batchIndex = index;
+						continue;
+					}
+
+					if (batchIndex >= 0 &&
+						history[index] is EliminationCascadeCompletedLogEntry
+						{
+							CurrentPhase: GamePhase.Dawn,
+							ScopeId: var completedScopeId
+						} completion &&
+						completion.TurnNumber == turnNumber &&
+						StringComparer.Ordinal.Equals(
+							completedScopeId,
+							cascadeScopeId))
+					{
+						completionIndex = index;
+						break;
+					}
+				}
+
+				return determinationIndex >= 0 &&
+					batchIndex > werewolfAttackEliminationLogIndex &&
+					completionIndex > batchIndex;
+			}
+
+			private bool HasValidActorBorrowedBearTamerGrowlCommitSequence(
+				IReadOnlyList<GameLogEntryBase> history)
+			{
+				if (_actorBorrowedBearTamerGrowlCommits.Count > 1)
+				{
+					return false;
+				}
+
+				foreach (var commit in _actorBorrowedBearTamerGrowlCommits)
+				{
+					var selectedCard = _actorSetupCards.Cards.SingleOrDefault(card =>
+						card.Id == commit.ActorSetupCardId);
+					var sameDawnGrowls = history
+						.Select((entry, index) => (entry, index))
+						.Where(candidate =>
+							candidate.entry is BearTamerGrowlOccurredLogEntry
+							{
+								CurrentPhase: GamePhase.Dawn
+							} growl &&
+							growl.TurnNumber == commit.TurnNumber)
+						.ToArray();
+					if (commit.PublicMarkerLogIndex + 1 >= history.Count ||
+						history[commit.PublicMarkerLogIndex] is not
+							ActorBorrowedRolePowerCommittedLogEntry marker ||
+						marker.Timestamp != commit.Timestamp ||
+						marker.TurnNumber != commit.TurnNumber ||
+						marker.CurrentPhase != GamePhase.Dawn ||
+						history[commit.PublicMarkerLogIndex + 1] is not
+							BearTamerGrowlOccurredLogEntry
+							{
+								CurrentPhase: GamePhase.Dawn
+							} growl ||
+						growl.TurnNumber != commit.TurnNumber ||
+						sameDawnGrowls is not [var soleGrowl] ||
+						soleGrowl.index != commit.PublicMarkerLogIndex + 1 ||
+						selectedCard?.PrintedRole != MainRoleType.BearTamer ||
+						commit.PowerIdentity.SourceRole != MainRoleType.BearTamer ||
+						!StringComparer.Ordinal.Equals(
+							commit.PowerIdentity.SourcePowerIdentifier,
+							ActorBorrowedBearTamerGrowlCommit
+								.ExpectedSourcePowerIdentifier) ||
+						commit.PowerIdentity.PowerInstanceOrigin !=
+							RolePowerInstanceOrigin.Borrowed ||
+						!_actorSetupCardSpendActivationIds.TryGetValue(
+							commit.ActorSetupCardId,
+							out var spentActivationId) ||
+						spentActivationId != commit.PowerIdentity.PowerInstanceId)
+					{
+						return false;
+					}
+				}
+
+				return true;
+			}
+
+			private bool HasValidActorBorrowedElderResistanceCommitSequence()
+			{
+				if (_actorBorrowedElderResistanceCommits
+						.Select(commit => (
+							commit.PowerIdentity,
+							commit.TriggeringNightActionLogIndex))
+						.Distinct().Count() !=
+					_actorBorrowedElderResistanceCommits.Count ||
+					_actorBorrowedElderResistanceCommits
+						.Where(commit =>
+							commit.RestoringWitchSaveLogIndex.HasValue)
+						.Select(commit => commit.RestoringWitchSaveLogIndex!.Value)
+						.Distinct().Count() !=
+					_actorBorrowedElderResistanceCommits.Count(commit =>
+						commit.RestoringWitchSaveLogIndex.HasValue))
+				{
+					return false;
+				}
+
+				foreach (var activationCommits in
+					_actorBorrowedElderResistanceCommits.GroupBy(commit =>
+						commit.PowerIdentity))
+				{
+					var orderedCommits = activationCommits
+						.OrderBy(commit => commit.PublicMarkerLogIndex)
+						.ToArray();
+					for (var index = 1; index < orderedCommits.Length; index++)
+					{
+						var previous = orderedCommits[index - 1];
+						var current = orderedCommits[index];
+						if (previous.RestoringWitchSaveLogIndex is null ||
+							previous.PublicMarkerLogIndex >=
+								current.TriggeringNightActionLogIndex)
+						{
+							return false;
+						}
+					}
+				}
+
+				return true;
+			}
+
+			private bool HasValidActorBorrowedScapegoatCommitSequence(
+				IReadOnlyList<GameLogEntryBase> history)
+			{
+				if (_actorBorrowedScapegoatTieReplacementCommits.Count > 1 ||
+					_actorBorrowedScapegoatVoterRestrictionCommits.Count > 1)
+				{
+					return false;
+				}
+
+				var tieReplacement =
+					_actorBorrowedScapegoatTieReplacementCommits.SingleOrDefault();
+				var restriction =
+					_actorBorrowedScapegoatVoterRestrictionCommits.SingleOrDefault();
+				if (tieReplacement is null)
+				{
+					return restriction is null;
+				}
+
+				if (tieReplacement.TriggeringVoteOutcomeLogIndex < 0 ||
+					tieReplacement.TriggeringVoteOutcomeLogIndex >=
+						tieReplacement.PublicMarkerLogIndex ||
+					tieReplacement.PublicMarkerLogIndex >= history.Count ||
+					history[tieReplacement.TriggeringVoteOutcomeLogIndex] is not
+						VoteOutcomeReportedLogEntry
+						{
+							CurrentPhase: GamePhase.Day,
+							ReportedOutcomePlayerId: var reportedOutcomePlayerId
+						} vote ||
+					vote.TurnNumber != tieReplacement.TurnNumber ||
+					reportedOutcomePlayerId != Guid.Empty)
+				{
+					return false;
+				}
+
+				var voteOrdinal = history
+					.Take(tieReplacement.TriggeringVoteOutcomeLogIndex + 1)
+					.OfType<VoteOutcomeReportedLogEntry>()
+					.Count(entry =>
+						entry.CurrentPhase == GamePhase.Day &&
+						entry.TurnNumber == tieReplacement.TurnNumber);
+				if (voteOrdinal != tieReplacement.VoteOrdinal ||
+					!StringComparer.Ordinal.Equals(
+						tieReplacement.CascadeScopeId,
+						$"Day:{tieReplacement.TurnNumber}:Vote:{voteOrdinal}") ||
+					history
+						.Skip(tieReplacement.TriggeringVoteOutcomeLogIndex + 1)
+						.Take(
+							tieReplacement.PublicMarkerLogIndex -
+							tieReplacement.TriggeringVoteOutcomeLogIndex - 1)
+						.OfType<VoteOutcomeReportedLogEntry>()
+						.Any(laterVote =>
+							laterVote.CurrentPhase == GamePhase.Day &&
+							laterVote.TurnNumber == tieReplacement.TurnNumber) ||
+					history.OfType<ScapegoatTieReplacementLogEntry>()
+						.Any(native => StringComparer.Ordinal.Equals(
+							native.ScopeId,
+							tieReplacement.CascadeScopeId)))
+				{
+					return false;
+				}
+
+				var actorPlayerId = tieReplacement.PowerIdentity.ActingPlayerId;
+				var revealIndex = FindLogIndex(
+					history,
+					tieReplacement.TriggeringVoteOutcomeLogIndex + 1,
+					tieReplacement.PublicMarkerLogIndex,
+					entry => entry is RoleRevealLogEntry reveal &&
+						reveal.CurrentPhase == GamePhase.Day &&
+						reveal.TurnNumber == tieReplacement.TurnNumber &&
+						reveal.RevealedRoles.TryGetValue(
+							actorPlayerId,
+							out var role) &&
+						role == MainRoleType.Actor);
+				var eliminationIndex = FindLogIndex(
+					history,
+					tieReplacement.PublicMarkerLogIndex + 1,
+					history.Count,
+					entry => entry is PlayerEliminatedLogEntry
+					{
+						CurrentPhase: GamePhase.Day,
+						PlayerId: var playerId,
+						Reason: EliminationReason.EventElimination
+					} elimination &&
+						elimination.TurnNumber == tieReplacement.TurnNumber &&
+						playerId == actorPlayerId);
+				var expectedElimination = new EliminationCascadeElimination(
+					actorPlayerId,
+					EliminationReason.EventElimination);
+				var batchIndex = FindLogIndex(
+					history,
+					eliminationIndex + 1,
+					history.Count,
+					entry => entry is EliminationCascadeBatchResolvedLogEntry batch &&
+						batch.CurrentPhase == GamePhase.Day &&
+						batch.TurnNumber == tieReplacement.TurnNumber &&
+						StringComparer.Ordinal.Equals(
+							batch.ScopeId,
+							tieReplacement.CascadeScopeId) &&
+						batch.RequestedEliminations is [var requested] &&
+						requested == expectedElimination &&
+						batch.CommittedEliminations is [var committed] &&
+						committed == expectedElimination);
+				if (revealIndex < 0 ||
+					eliminationIndex <= tieReplacement.PublicMarkerLogIndex ||
+					batchIndex <= eliminationIndex ||
+					!_players.TryGetValue(actorPlayerId, out var actor) ||
+					((IPlayer)actor).State is not
+					{
+						CurrentRole: MainRoleType.Actor,
+						PhysicalCharacterCardRole: MainRoleType.Actor,
+						PubliclyRevealedRole: MainRoleType.Actor,
+						Health: PlayerHealth.Dead
+					})
+				{
+					return false;
+				}
+
+				if (restriction is null)
+				{
+					return true;
+				}
+
+				var candidates = restriction.CandidatePlayerIds.ToHashSet();
+				var permitted = restriction.PermittedVoterIds.ToHashSet();
+				var eliminatedBeforeRestriction = history
+					.Take(restriction.PublicMarkerLogIndex)
+					.OfType<PlayerEliminatedLogEntry>()
+					.Select(elimination => elimination.PlayerId)
+					.ToHashSet();
+				var expectedCandidates = _players.Keys
+					.Where(playerId =>
+						!eliminatedBeforeRestriction.Contains(playerId))
+					.ToHashSet();
+				return restriction.PowerIdentity == tieReplacement.PowerIdentity &&
+					restriction.ActorSetupCardId ==
+						tieReplacement.ActorSetupCardId &&
+					restriction.TieReplacementPublicMarkerLogIndex ==
+						tieReplacement.PublicMarkerLogIndex &&
+					restriction.TurnNumber == tieReplacement.TurnNumber &&
+					restriction.CurrentPhase == tieReplacement.CurrentPhase &&
+					StringComparer.Ordinal.Equals(
+						restriction.CascadeScopeId,
+						tieReplacement.CascadeScopeId) &&
+					restriction.PublicMarkerLogIndex > batchIndex &&
+					restriction.PublicMarkerLogIndex < history.Count &&
+					restriction.CandidatePlayerIds.Count == candidates.Count &&
+					candidates.SetEquals(expectedCandidates) &&
+					restriction.PermittedVoterIds.Count == permitted.Count &&
+					permitted.Count > 0 &&
+					permitted.IsSubsetOf(candidates) &&
+					!history.OfType<VoterEligibilityRestrictionCommittedLogEntry>()
+						.Any(native => StringComparer.Ordinal.Equals(
+							native.ScopeId,
+							restriction.CascadeScopeId));
+			}
+
+			private static int FindLogIndex(
+				IReadOnlyList<GameLogEntryBase> history,
+				int startIndex,
+				int exclusiveUpperIndex,
+				Func<GameLogEntryBase, bool> predicate)
+			{
+				if (startIndex < 0 ||
+					exclusiveUpperIndex > history.Count ||
+					startIndex >= exclusiveUpperIndex)
+				{
+					return -1;
+				}
+
+				for (var index = startIndex; index < exclusiveUpperIndex; index++)
+				{
+					if (predicate(history[index]))
+					{
+						return index;
+					}
+				}
+
+				return -1;
+			}
+
+			private static bool
+				HasQualifyingActorBorrowedElderSuppressionHistory(
+					IReadOnlyList<GameLogEntryBase> history,
+					Guid actorPlayerId,
+					int turnNumber,
+					int voteOutcomeLogIndex,
+					string cascadeScopeId,
+					int exclusiveUpperLogIndex)
+			{
+				if (voteOutcomeLogIndex < 0 ||
+					voteOutcomeLogIndex >= exclusiveUpperLogIndex ||
+					exclusiveUpperLogIndex > history.Count ||
+					history[voteOutcomeLogIndex] is not
+						VoteOutcomeReportedLogEntry
+						{
+							CurrentPhase: GamePhase.Day,
+							ReportedOutcomePlayerId: var votedPlayerId
+						} vote ||
+					vote.TurnNumber != turnNumber ||
+					votedPlayerId != actorPlayerId)
+				{
+					return false;
+				}
+
+				var voteOrdinal = history
+					.Take(voteOutcomeLogIndex + 1)
+					.OfType<VoteOutcomeReportedLogEntry>()
+					.Count(entry =>
+						entry.CurrentPhase == GamePhase.Day &&
+						entry.TurnNumber == turnNumber);
+				if (!StringComparer.Ordinal.Equals(
+						cascadeScopeId,
+						$"Day:{turnNumber}:Vote:{voteOrdinal}"))
+				{
+					return false;
+				}
+
+				var correlatedHistory = history
+					.Skip(voteOutcomeLogIndex + 1)
+					.Take(exclusiveUpperLogIndex - voteOutcomeLogIndex - 1)
+					.ToArray();
+				if (correlatedHistory.Any(entry =>
+						entry is VoteOutcomeReportedLogEntry laterVote &&
+						laterVote.CurrentPhase == GamePhase.Day &&
+						laterVote.TurnNumber == turnNumber))
+				{
+					return false;
+				}
+
+				var revealIndex = Array.FindIndex(
+					correlatedHistory,
+					entry => entry is RoleRevealLogEntry reveal &&
+						reveal.CurrentPhase == GamePhase.Day &&
+						reveal.TurnNumber == turnNumber &&
+						reveal.RevealedRoles.TryGetValue(
+							actorPlayerId,
+							out var revealedRole) &&
+						revealedRole == MainRoleType.Actor);
+				var eliminationIndex = Array.FindIndex(
+					correlatedHistory,
+					entry => entry is PlayerEliminatedLogEntry
+					{
+						CurrentPhase: GamePhase.Day,
+						PlayerId: var eliminatedPlayerId,
+						Reason: EliminationReason.DayVote
+					} eliminated &&
+					eliminated.TurnNumber == turnNumber &&
+					eliminatedPlayerId == actorPlayerId);
+				var expectedElimination = new EliminationCascadeElimination(
+					actorPlayerId,
+					EliminationReason.DayVote);
+				var batchIndex = Array.FindIndex(
+					correlatedHistory,
+					entry => entry is EliminationCascadeBatchResolvedLogEntry batch &&
+						batch.CurrentPhase == GamePhase.Day &&
+						batch.TurnNumber == turnNumber &&
+						StringComparer.Ordinal.Equals(
+							batch.ScopeId,
+							cascadeScopeId) &&
+						batch.RequestedEliminations is [var requested] &&
+						requested == expectedElimination &&
+						batch.CommittedEliminations is [var committed] &&
+						committed == expectedElimination);
+				var completionIndex = Array.FindIndex(
+					correlatedHistory,
+					entry => entry is EliminationCascadeCompletedLogEntry
+					{
+						CurrentPhase: GamePhase.Day,
+						ScopeId: var completedScopeId
+					} completion &&
+					completion.TurnNumber == turnNumber &&
+					StringComparer.Ordinal.Equals(
+						completedScopeId,
+						cascadeScopeId));
+				return revealIndex >= 0 &&
+					eliminationIndex > revealIndex &&
+					batchIndex > eliminationIndex &&
+					completionIndex > batchIndex;
 			}
 
 			private static bool TryGetCommittedRolePowerIdentity(

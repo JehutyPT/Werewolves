@@ -83,15 +83,53 @@ internal static class DayVoteRules
 			});
 	}
 
-	internal static VoterEligibilityRestrictionCommittedLogEntry?
+	internal static VoterEligibilityRestriction?
 		GetVoterEligibilityRestriction(
 			IGameSession session,
-			string scopeId)
+			string scopeId,
+			IReadOnlyList<GameLogEntryBase>? precedingEntries = null)
 	{
 		ArgumentNullException.ThrowIfNull(session);
-		return session.GameHistoryLog
+		ArgumentException.ThrowIfNullOrWhiteSpace(scopeId);
+		IEnumerable<GameLogEntryBase> visibleEntries = precedingEntries is null
+			? session.GameHistoryLog
+			: precedingEntries;
+		var native = visibleEntries
 			.OfType<VoterEligibilityRestrictionCommittedLogEntry>()
 			.SingleOrDefault(entry => entry.ScopeId == scopeId);
+		var borrowed = session is GameSession concreteSession
+			? concreteSession.GetActorBorrowedScapegoatVoterRestrictionCommits()
+				.SingleOrDefault(commit =>
+					commit.CascadeScopeId == scopeId &&
+					(precedingEntries is null ||
+					 commit.PublicMarkerLogIndex >= 0 &&
+					 commit.PublicMarkerLogIndex < precedingEntries.Count &&
+					 precedingEntries[commit.PublicMarkerLogIndex] is
+						 ActorBorrowedRolePowerCommittedLogEntry))
+			: null;
+		if (native != null && borrowed != null)
+		{
+			throw new InvalidOperationException(
+				"The voter-eligibility restriction scope has both native and Actor-borrowed sources.");
+		}
+
+		return native is not null
+			? new VoterEligibilityRestriction(
+				native.ScopeId,
+				native.CandidatePlayerIds,
+				native.PermittedVoterIds,
+				native.AppliesOnTurnNumber,
+				native.AnnouncementInstructionId,
+				native.TurnNumber)
+			: borrowed is null
+				? null
+				: new VoterEligibilityRestriction(
+					borrowed.CascadeScopeId,
+					borrowed.CandidatePlayerIds,
+					borrowed.PermittedVoterIds,
+					borrowed.AppliesOnTurnNumber,
+					borrowed.AnnouncementInstructionId,
+					borrowed.TurnNumber);
 	}
 
 	internal static bool IsVoterEligibilityRestrictionAnnouncementAcknowledged(
@@ -107,17 +145,40 @@ internal static class DayVoteRules
 				entry.AnnouncementInstructionId == announcementInstructionId);
 	}
 
-	internal static VoterEligibilityRestrictionCommittedLogEntry?
+	internal static VoterEligibilityRestriction?
 		GetActiveVoterEligibilityRestriction(IGameSession session)
 	{
 		ArgumentNullException.ThrowIfNull(session);
-		return session.GameHistoryLog
+		var native = session.GameHistoryLog
 			.OfType<VoterEligibilityRestrictionCommittedLogEntry>()
-			.SingleOrDefault(entry =>
+			.Where(entry =>
 				entry.AppliesOnTurnNumber == session.TurnNumber &&
 				!session.GameHistoryLog
 					.OfType<VoterEligibilityRestrictionExpiredLogEntry>()
-					.Any(expiry => expiry.ScopeId == entry.ScopeId));
+					.Any(expiry => expiry.ScopeId == entry.ScopeId))
+			.Select(entry => new VoterEligibilityRestriction(
+				entry.ScopeId,
+				entry.CandidatePlayerIds,
+				entry.PermittedVoterIds,
+				entry.AppliesOnTurnNumber,
+				entry.AnnouncementInstructionId,
+				entry.TurnNumber));
+		var borrowed = session is GameSession concreteSession
+			? concreteSession.GetActorBorrowedScapegoatVoterRestrictionCommits()
+				.Where(commit =>
+					commit.AppliesOnTurnNumber == session.TurnNumber &&
+					!session.GameHistoryLog
+						.OfType<VoterEligibilityRestrictionExpiredLogEntry>()
+						.Any(expiry => expiry.ScopeId == commit.CascadeScopeId))
+				.Select(commit => new VoterEligibilityRestriction(
+					commit.CascadeScopeId,
+					commit.CandidatePlayerIds,
+					commit.PermittedVoterIds,
+					commit.AppliesOnTurnNumber,
+					commit.AnnouncementInstructionId,
+					commit.TurnNumber))
+			: Enumerable.Empty<VoterEligibilityRestriction>();
+		return native.Concat(borrowed).SingleOrDefault();
 	}
 
 	internal static IReadOnlyList<IPlayer> GetEffectiveVoters(
@@ -201,10 +262,13 @@ internal static class DayVoteRules
 					break;
 				case VoterEligibilityRestrictionAnnouncementAcknowledgedLogEntry
 					acknowledgment:
-					ValidateAcknowledgment(precedingEntries, acknowledgment);
+					ValidateAcknowledgment(
+						session,
+						precedingEntries,
+						acknowledgment);
 					break;
 				case VoterEligibilityRestrictionExpiredLogEntry expiry:
-					ValidateExpiry(precedingEntries, expiry);
+					ValidateExpiry(session, precedingEntries, expiry);
 					break;
 			}
 
@@ -226,14 +290,15 @@ internal static class DayVoteRules
 	}
 
 	private static void ValidateAcknowledgment(
-		IReadOnlyCollection<GameLogEntryBase> precedingEntries,
+		IGameSession session,
+		IReadOnlyList<GameLogEntryBase> precedingEntries,
 		VoterEligibilityRestrictionAnnouncementAcknowledgedLogEntry
 			acknowledgment)
 	{
-		var restriction = precedingEntries
-			.OfType<VoterEligibilityRestrictionCommittedLogEntry>()
-			.SingleOrDefault(existing =>
-				existing.ScopeId == acknowledgment.ScopeId);
+		var restriction = GetVoterEligibilityRestriction(
+			session,
+			acknowledgment.ScopeId,
+			precedingEntries);
 		if (restriction == null ||
 		    restriction.AnnouncementInstructionId !=
 		    acknowledgment.AnnouncementInstructionId ||
@@ -250,12 +315,14 @@ internal static class DayVoteRules
 	}
 
 	private static void ValidateExpiry(
-		IReadOnlyCollection<GameLogEntryBase> precedingEntries,
+		IGameSession session,
+		IReadOnlyList<GameLogEntryBase> precedingEntries,
 		VoterEligibilityRestrictionExpiredLogEntry expiry)
 	{
-		var restriction = precedingEntries
-			.OfType<VoterEligibilityRestrictionCommittedLogEntry>()
-			.SingleOrDefault(existing => existing.ScopeId == expiry.ScopeId);
+		var restriction = GetVoterEligibilityRestriction(
+			session,
+			expiry.ScopeId,
+			precedingEntries);
 		var acknowledged = precedingEntries
 			.OfType<VoterEligibilityRestrictionAnnouncementAcknowledgedLogEntry>()
 			.Any(existing => existing.ScopeId == expiry.ScopeId);
@@ -270,4 +337,16 @@ internal static class DayVoteRules
 				"The voter-eligibility restriction expiry is stale, premature, or duplicated.");
 		}
 	}
+
+	/// <summary>
+	/// Read-only restriction projection for either the native public fact or the
+	/// private Actor-borrowed Scapegoat commit.
+	/// </summary>
+	internal sealed record VoterEligibilityRestriction(
+		string ScopeId,
+		IReadOnlyCollection<Guid> CandidatePlayerIds,
+		IReadOnlyCollection<Guid> PermittedVoterIds,
+		int AppliesOnTurnNumber,
+		Guid AnnouncementInstructionId,
+		int TurnNumber);
 }

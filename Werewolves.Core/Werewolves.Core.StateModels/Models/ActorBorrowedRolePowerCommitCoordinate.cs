@@ -22,7 +22,8 @@ internal readonly record struct ActorBorrowedRolePowerCommitCoordinate(
 			ActorSetupCardId == Guid.Empty ||
 			Timestamp == default ||
 			TurnNumber < 1 ||
-			CurrentPhase is not (GamePhase.Night or GamePhase.Day) ||
+			CurrentPhase is not (
+				GamePhase.Night or GamePhase.Dawn or GamePhase.Day) ||
 			PublicMarkerLogIndex < 0)
 		{
 			throw new InvalidOperationException(

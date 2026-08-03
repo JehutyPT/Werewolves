@@ -6,6 +6,7 @@ using Werewolves.Core.GameLogic.RolePowers;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
+using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Resources;
@@ -62,10 +63,11 @@ internal sealed class KnightWithTheRustySwordRole
 		if (pendingInstruction?.Semantic ==
 		    ModeratorInstructionSemantic.AnnounceDawnVictims)
 		{
-			if (pendingInstruction is not ConfirmationInstruction confirmation ||
-			    confirmation.AffectedPlayerIds?.ToHashSet()
-				    .SetEquals(eliminatedPlayerIds) != true ||
-			    input.InstructionId != confirmation.InstructionId ||
+			if (!MatchesRustySwordDawnAnnouncement(
+					pendingInstruction,
+					pendingDawnVictims,
+					eliminatedPlayerIds) ||
+			    input.InstructionId != pendingInstruction.InstructionId ||
 			    input.Type != ExpectedInputType.Continue)
 			{
 				throw new InvalidOperationException(
@@ -75,6 +77,138 @@ internal sealed class KnightWithTheRustySwordRole
 			return EliminationCascadeReactionResult.Complete();
 		}
 
+		return EliminationCascadeReactionResult.NeedInput(
+			CreateRustySwordDawnAnnouncement(
+				pendingDawnVictims,
+				eliminatedPlayerIds));
+	}
+
+	internal static void
+		ValidateBorrowedPendingRustySwordRecoveryInstruction(
+			GameSession session)
+	{
+		ValidateBorrowedRustySwordScheduleRecovery(session);
+
+		var pendingInstruction = session.PendingModeratorInstruction;
+		if (session.GetCurrentPhase() != GamePhase.Dawn ||
+			pendingInstruction?.Semantic !=
+				ModeratorInstructionSemantic.AnnounceDawnVictims)
+		{
+			return;
+		}
+
+		var pendingDawnVictims = GameSessionQueries
+			.GetPendingDawnEliminations(session)
+			.ToArray();
+		if (!HasCorrelatedBorrowedRustySwordSchedule(
+				session,
+				pendingDawnVictims))
+		{
+			return;
+		}
+
+		var affectedPlayerIds = pendingDawnVictims
+			.Select(victim => victim.Player.Id)
+			.ToArray();
+		if (!MatchesRustySwordDawnAnnouncement(
+				pendingInstruction,
+				pendingDawnVictims,
+				affectedPlayerIds))
+		{
+			throw new InvalidOperationException(
+				"The pending Actor borrowed Role Power instruction does not match its recovery context.");
+		}
+	}
+
+	private static void ValidateBorrowedRustySwordScheduleRecovery(
+		GameSession session)
+	{
+		foreach (var schedule in
+			session.GetActorBorrowedKnightRustySwordScheduleCommits())
+		{
+			if (!IsExpectedBorrowedRustySwordScheduleTarget(
+					session,
+					schedule))
+			{
+				throw new InvalidOperationException(
+					"The stable recovery snapshot has invalid Actor borrowed Role Power state.");
+			}
+		}
+	}
+
+	private static bool IsExpectedBorrowedRustySwordScheduleTarget(
+		GameSession session,
+		ActorBorrowedKnightRustySwordScheduleCommit schedule)
+	{
+		var history = session.GameHistoryLog.ToArray();
+		if (!session.GetPlayers().Any(player =>
+				player.Id == schedule.PowerIdentity.ActingPlayerId) ||
+			!session.GetPlayers().Any(player =>
+				player.Id == schedule.TargetPlayerId) ||
+			schedule.PublicMarkerLogIndex < 0 ||
+			schedule.PublicMarkerLogIndex >= history.Length)
+		{
+			return false;
+		}
+
+		try
+		{
+			return GameSessionQueries.FindFirstClockwiseLivingKnownFactionAgent(
+				session,
+				schedule.PowerIdentity.ActingPlayerId,
+				Faction.Werewolf,
+				new FactionFactEffectiveBoundary(
+					schedule.TurnNumber,
+					GamePhase.Night,
+					int.MaxValue),
+				schedule.PublicMarkerLogIndex) == schedule.TargetPlayerId;
+		}
+		catch (InvalidOperationException)
+		{
+			return false;
+		}
+	}
+
+	private static bool HasCorrelatedBorrowedRustySwordSchedule(
+		GameSession session,
+		IReadOnlyCollection<PendingDawnElimination> pendingDawnVictims)
+	{
+		var rustySwordVictims = pendingDawnVictims
+			.Where(victim => victim.Reason == EliminationReason.RustySword)
+			.ToArray();
+		var schedules = session
+			.GetActorBorrowedKnightRustySwordScheduleCommits()
+			.ToArray();
+		if (rustySwordVictims is not [var rustySwordVictim] ||
+			schedules is not [var schedule])
+		{
+			return false;
+		}
+
+		var selectedCard = session.GetModeratorActorSetupCards().Cards
+			.SingleOrDefault(card => card.Id == schedule.ActorSetupCardId);
+		return schedule.TargetPlayerId == rustySwordVictim.Player.Id &&
+			schedule.TurnNumber == session.TurnNumber - 1 &&
+			schedule.CurrentPhase == GamePhase.Dawn &&
+			StringComparer.Ordinal.Equals(
+				schedule.CascadeScopeId,
+				$"Dawn:{schedule.TurnNumber}") &&
+			schedule.PowerIdentity.SourceRole ==
+				MainRoleType.KnightWithRustySword &&
+			StringComparer.Ordinal.Equals(
+				schedule.PowerIdentity.SourcePowerIdentifier,
+				ActorBorrowedKnightRustySwordScheduleCommit
+					.ExpectedSourcePowerIdentifier) &&
+			schedule.PowerIdentity.PowerInstanceOrigin ==
+				RolePowerInstanceOrigin.Borrowed &&
+			selectedCard?.PrintedRole == MainRoleType.KnightWithRustySword;
+	}
+
+	private static ConfirmationInstruction CreateRustySwordDawnAnnouncement(
+		IReadOnlyCollection<PendingDawnElimination> pendingDawnVictims,
+		IReadOnlyCollection<Guid> affectedPlayerIds,
+		Guid instructionId = default)
+	{
 		var victimNames = string.Join(
 			Environment.NewLine,
 			pendingDawnVictims.Select(victim =>
@@ -83,13 +217,41 @@ internal sealed class KnightWithTheRustySwordRole
 						.RustySwordDiseaseEliminationAnnouncement
 						.Format(victim.Player.Name)
 					: victim.Player.Name));
-		return EliminationCascadeReactionResult.NeedInput(
-			new ConfirmationInstruction(
-				ModeratorInstructionSemantic.AnnounceDawnVictims,
-				publicAnnouncement:
-					GameStrings.MultipleVictimEliminatedAnnounce.Format(
-						victimNames),
-				affectedPlayerIds: eliminatedPlayerIds.ToArray()));
+		return new ConfirmationInstruction(
+			ModeratorInstructionSemantic.AnnounceDawnVictims,
+			publicAnnouncement:
+				GameStrings.MultipleVictimEliminatedAnnounce.Format(
+					victimNames),
+			affectedPlayerIds: affectedPlayerIds.ToArray(),
+			instructionId: instructionId);
+	}
+
+	private static bool MatchesRustySwordDawnAnnouncement(
+		ModeratorInstruction? instruction,
+		IReadOnlyCollection<PendingDawnElimination> pendingDawnVictims,
+		IReadOnlyCollection<Guid> affectedPlayerIds)
+	{
+		if (instruction is not ConfirmationInstruction announcement)
+		{
+			return false;
+		}
+
+		var expected = CreateRustySwordDawnAnnouncement(
+			pendingDawnVictims,
+			affectedPlayerIds,
+			announcement.InstructionId);
+		return announcement.Semantic == expected.Semantic &&
+			announcement.InstructionId == expected.InstructionId &&
+			announcement.AffectedPlayerIds is not null &&
+			announcement.AffectedPlayerIds.SequenceEqual(
+				expected.AffectedPlayerIds!) &&
+			StringComparer.Ordinal.Equals(
+				announcement.PublicAnnouncement,
+				expected.PublicAnnouncement) &&
+			StringComparer.Ordinal.Equals(
+				announcement.PrivateInstruction,
+				expected.PrivateInstruction) &&
+			announcement.SoundEffects.SequenceEqual(expected.SoundEffects);
 	}
 
 	public override HookListenerActionResult Execute(
@@ -219,7 +381,11 @@ internal sealed class KnightWithTheRustySwordRole
 		var alreadyScheduled =
 			GameSessionQueries.HasActiveStatusEffectAppliedThisPhase(
 				session,
-				StatusEffectTypes.RustySwordDisease);
+				StatusEffectTypes.RustySwordDisease) ||
+			session.GetActorBorrowedKnightRustySwordScheduleCommits()
+				.Any(commit =>
+					commit.TurnNumber == session.TurnNumber &&
+					commit.CurrentPhase == GamePhase.Dawn);
 		if (alreadyScheduled)
 		{
 			return Complete();
@@ -229,95 +395,165 @@ internal sealed class KnightWithTheRustySwordRole
 			GameSessionQueries.GetDirectDawnEliminationPlayerIds(
 				session,
 				EliminationReason.WerewolfAttack);
-
-		var triggeringKnight = session.GetPlayers()
-			.SingleOrDefault(player =>
-				player.State.CurrentRole ==
-					MainRoleType.KnightWithRustySword &&
-				player.State.Health == PlayerHealth.Dead &&
-				directWerewolfAttackVictims.Contains(player.Id));
-		if (triggeringKnight == null)
+		if (directWerewolfAttackVictims.Count == 0)
 		{
 			return Complete();
 		}
 
+		var cascadeScopeId = $"Dawn:{session.TurnNumber}";
 		var cascadeCompleted = GameSessionQueries.IsEliminationCascadeComplete(
 			session,
-			$"Dawn:{session.TurnNumber}");
+			cascadeScopeId);
 		if (!cascadeCompleted)
 		{
 			throw new InvalidOperationException(
 				"The Knight disease cannot be scheduled before the triggering Dawn Elimination Cascade completes.");
 		}
 
-		var powerInstance = RolePowerInstance.CreateCurrent(
+		var execution = ResolveDiseaseExecution(
 			session,
-			triggeringKnight,
-			MainRoleType.KnightWithRustySword,
-			DiseasePower);
-		var execution = _availabilityGateway.Evaluate(
-			new RolePowerAttempt(
-				session,
-				triggeringKnight,
-				MainRoleType.KnightWithRustySword,
-				DiseasePower,
-				powerInstance));
-		if (!execution.AvailabilityResult.IsAvailable)
+			directWerewolfAttackVictims,
+			cascadeScopeId,
+			out var borrowedEliminationLogIndex);
+		if (execution is null ||
+			!execution.AvailabilityResult.IsAvailable)
 		{
 			return Complete();
 		}
 
 		var target = FindFirstEligibleClockwiseAgent(
 			session,
-			triggeringKnight.Id);
+			execution.ActingPlayer.Id);
 		if (target == null)
 		{
 			return Complete();
 		}
 
-		session.ApplyStatusEffect(
-			StatusEffectTypes.RustySwordDisease,
-			target.Id);
+		if (execution.PowerInstance.Origin == RolePowerInstanceOrigin.Borrowed)
+		{
+			session.CommitActorBorrowedKnightRustySwordSchedule(
+				CreatePowerIdentity(execution),
+				target.Id,
+				borrowedEliminationLogIndex ??
+					throw new InvalidOperationException(
+						"The borrowed Rusty Sword schedule has no triggering elimination."),
+				cascadeScopeId);
+		}
+		else
+		{
+			session.ApplyStatusEffect(
+				StatusEffectTypes.RustySwordDisease,
+				target.Id);
+		}
 		return Complete();
 	}
+
+	private RolePowerExecutionContext? ResolveDiseaseExecution(
+		GameSession session,
+		IReadOnlySet<Guid> directWerewolfAttackVictimIds,
+		string cascadeScopeId,
+		out int? borrowedEliminationLogIndex)
+	{
+		borrowedEliminationLogIndex = null;
+		var nativeKnight = session.GetPlayers()
+			.SingleOrDefault(player =>
+				player.State.CurrentRole ==
+					MainRoleType.KnightWithRustySword &&
+				player.State.Health == PlayerHealth.Dead &&
+				directWerewolfAttackVictimIds.Contains(player.Id));
+		if (nativeKnight != null)
+		{
+			return Evaluate(
+				nativeKnight,
+				RolePowerInstance.CreateCurrent(
+					session,
+					nativeKnight,
+					MainRoleType.KnightWithRustySword,
+					DiseasePower));
+		}
+
+		var activation =
+			session.GetModeratorActiveActorBorrowedRolePowerActivation();
+		if (activation is not
+			{
+				SourceRole: MainRoleType.KnightWithRustySword
+			})
+		{
+			return null;
+		}
+
+		var actor = session.GetPlayers().SingleOrDefault(player =>
+			player.Id == activation.ActingPlayerId &&
+			player.State.CurrentRole == MainRoleType.Actor &&
+			player.State.Health == PlayerHealth.Dead &&
+			directWerewolfAttackVictimIds.Contains(player.Id));
+		if (actor == null)
+		{
+			return null;
+		}
+
+		var history = session.GameHistoryLog.ToArray();
+		var eliminationLogIndex = Array.FindLastIndex(
+			history,
+			entry => entry is PlayerEliminatedLogEntry
+			{
+				CurrentPhase: GamePhase.Dawn,
+				PlayerId: var eliminatedPlayerId,
+				Reason: EliminationReason.WerewolfAttack
+			} eliminated &&
+			eliminated.TurnNumber == session.TurnNumber &&
+			eliminatedPlayerId == actor.Id);
+		if (eliminationLogIndex < 0)
+		{
+			return null;
+		}
+		borrowedEliminationLogIndex = eliminationLogIndex;
+
+		var powerInstance = RolePowerInstance.CreateBorrowedAfterElimination(
+			session,
+			actor,
+			MainRoleType.KnightWithRustySword,
+			DiseasePower,
+			new BorrowedPostEliminationRolePowerContext
+				.KnightRustySwordSchedule(
+					eliminationLogIndex,
+					cascadeScopeId));
+		return Evaluate(actor, powerInstance);
+
+		RolePowerExecutionContext Evaluate(
+			IPlayer actingPlayer,
+			RolePowerInstance instance) =>
+			_availabilityGateway.Evaluate(
+				new RolePowerAttempt(
+					session,
+					actingPlayer,
+					MainRoleType.KnightWithRustySword,
+					DiseasePower,
+					instance));
+	}
+
+	private static RolePowerInstanceIdentity CreatePowerIdentity(
+		RolePowerExecutionContext execution) => new(
+			execution.ActingPlayer.Id,
+			execution.SourceRole,
+			execution.SourcePower.Identifier.Value,
+			execution.PowerInstance.Id,
+			execution.PowerInstance.Origin);
 
 	private static IPlayer? FindFirstEligibleClockwiseAgent(
 		GameSession session,
 		Guid knightId)
 	{
-		var currentAgentIds = session
-			.RequireKnownFactionAgents(Faction.Werewolf)
-			.Select(player => player.Id)
-			.ToHashSet();
-		currentAgentIds.UnionWith(
-			GameSessionQueries.RequireKnownFactionAgentIdsAtBoundary(
+		var targetId =
+			GameSessionQueries.FindFirstClockwiseLivingKnownFactionAgent(
 				session,
+				knightId,
 				Faction.Werewolf,
 				new FactionFactEffectiveBoundary(
 					session.TurnNumber,
 					GamePhase.Night,
-					int.MaxValue)));
-
-		var visitedPlayerIds = new HashSet<Guid> { knightId };
-		var referencePlayerId = knightId;
-		while (true)
-		{
-			var candidate = GameSessionQueries.GetDirectionalLivingNeighbors(
-					session,
-					referencePlayerId)
-				.Clockwise;
-			if (candidate == null || !visitedPlayerIds.Add(candidate.Id))
-			{
-				return null;
-			}
-
-			if (currentAgentIds.Contains(candidate.Id))
-			{
-				return candidate;
-			}
-
-			referencePlayerId = candidate.Id;
-		}
+					int.MaxValue));
+		return targetId is { } id ? session.GetPlayer(id) : null;
 	}
 
 	private static HookListenerActionResult Complete() =>

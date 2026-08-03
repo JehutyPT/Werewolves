@@ -325,6 +325,10 @@
     <value>Caçador, escolhe exatamente um jogador vivo para eliminar com o teu último tiro.</value>
     <comment/>
   </data>
+  <data name="ActorBorrowedHunterFinalShotSelectionInstruction" xml:space="preserve">
+    <value>Ator, escolhe exatamente um jogador vivo para eliminar.</value>
+    <comment/>
+  </data>
   <data name="LittleGirlRoleName" xml:space="preserve">
     <value>Menina</value>
     <comment/>
@@ -379,6 +383,10 @@
   </data>
   <data name="VillageIdiotPardonAnnouncement" xml:space="preserve">
     <value>{0} é perdoado por ser o Idiota da Aldeia. Continua vivo, mas perde permanentemente o direito e o poder de voto.</value>
+    <comment/>
+  </data>
+  <data name="ActorBorrowedVillageIdiotPardonAnnouncement" xml:space="preserve">
+    <value>{0} é perdoado. Continua vivo, mas perde permanentemente o direito e o poder de voto.</value>
     <comment/>
   </data>
   <data name="TwoSistersRoleName" xml:space="preserve">

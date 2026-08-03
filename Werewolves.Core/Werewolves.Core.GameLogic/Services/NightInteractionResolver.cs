@@ -11,7 +11,16 @@ internal static class NightInteractionResolver
 {
 	private readonly record struct CommittedNightAttempt(
 		NightActionType ActionType,
-		Guid TargetId);
+		Guid TargetId,
+		int? TriggeringLogIndex);
+
+	private sealed record PendingBorrowedElderResistance(
+		RolePowerInstanceIdentity PowerIdentity,
+		Guid TargetPlayerId,
+		int TriggeringNightActionLogIndex)
+	{
+		internal int? RestoringWitchSaveLogIndex { get; set; }
+	}
 
 	private static readonly NightActionType[] DawnResolutionActionTypes =
 	[
@@ -59,37 +68,39 @@ internal static class NightInteractionResolver
 			GameSessionQueries.GetOrderedNightActionsThisNight(
 				session,
 				DawnResolutionActionTypes);
-			var infectionLogs = nightActions
-				.Where(entry =>
-					entry.ActionType ==
-						NightActionType.AccursedWolfFatherInfection)
-				.ToArray();
-			FactionFactEffectiveBoundary? infectionEffectiveBoundary = null;
-			if (infectionLogs.Length > 0)
+		var infectionLogs = nightActions
+			.Where(entry =>
+				entry.ActionType ==
+					NightActionType.AccursedWolfFatherInfection)
+			.ToArray();
+		FactionFactEffectiveBoundary? infectionEffectiveBoundary = null;
+		if (infectionLogs.Length > 0)
+		{
+			if (infectionLogs is not [var infection] ||
+			    infection.TargetIds is not [var infectionTarget] ||
+			    !GameSessionQueries.TryGetRetainedWerewolfVictimThisNight(
+				    session,
+				    out var retainedVictimId) ||
+			    infectionTarget != retainedVictimId)
 			{
-				if (infectionLogs is not [var infection] ||
-				    infection.TargetIds is not [var infectionTarget] ||
-				    !GameSessionQueries.TryGetRetainedWerewolfVictimThisNight(
-					    session,
-					    out var retainedVictimId) ||
-				    infectionTarget != retainedVictimId)
-				{
-					throw new InvalidOperationException(
-						"The Accursed Wolf-Father infection intent does not match one retained collective victim.");
-				}
-
-				infectionEffectiveBoundary = new FactionFactEffectiveBoundary(
-					infection.TurnNumber,
-					infection.CurrentPhase,
-					GameSessionQueries.GetCommittedLogIndex(
-						session,
-						infection));
+				throw new InvalidOperationException(
+					"The Accursed Wolf-Father infection intent does not match one retained collective victim.");
 			}
+
+			infectionEffectiveBoundary = new FactionFactEffectiveBoundary(
+				infection.TurnNumber,
+				infection.CurrentPhase,
+				GameSessionQueries.GetCommittedLogIndex(
+					session,
+					infection));
+		}
 
 		var committedAttempts = GetCommittedNightAttempts(session, nightActions);
 		var defenderTargets = GetDefenderTargets(committedAttempts);
 		var elderRole = GetElderRole(session);
 		var elderProtectionConsumedThisResolution = new HashSet<Guid>();
+		var pendingBorrowedElderResistances =
+			new List<PendingBorrowedElderResistance>();
 		var lethalPhysicalTargets = new HashSet<Guid>();
 		var orderedLethalTargets = new List<Guid>();
 
@@ -107,15 +118,39 @@ internal static class NightInteractionResolver
 				return;
 			}
 
-			if (player.State.MainRole == MainRoleType.Elder &&
-			    !player.State.HasStatusEffect(
-				    StatusEffectTypes.ElderProtectionLost) &&
-			    elderRole.IsResistanceAvailable(session, player))
+				var allowBorrowedActorResistance = attempt.ActionType is
+					NightActionType.WerewolfVictimSelection or
+					NightActionType.AccursedWolfFatherInfection or
+					NightActionType.WhiteWerewolfVictimSelection or
+					NightActionType.BigBadWolfVictimSelection;
+			var borrowedResistancePending =
+				pendingBorrowedElderResistances.Any(pending =>
+					pending.TargetPlayerId == player.Id);
+			if (!borrowedResistancePending &&
+				elderRole.TryResolveResistance(
+					session,
+					player,
+					allowBorrowedActorResistance,
+					out var resistance))
 			{
-				session.ApplyStatusEffect(
-					StatusEffectTypes.ElderProtectionLost,
-					player.Id);
-				elderProtectionConsumedThisResolution.Add(player.Id);
+				if (resistance.IsBorrowed)
+				{
+					var triggeringLogIndex = attempt.TriggeringLogIndex
+						?? throw new InvalidOperationException(
+							"The Actor borrowed Elder resistance requires one committed attack or infection.");
+					pendingBorrowedElderResistances.Add(
+						new PendingBorrowedElderResistance(
+						resistance.PowerIdentity,
+						player.Id,
+						triggeringLogIndex));
+				}
+				else
+				{
+					session.ApplyStatusEffect(
+						StatusEffectTypes.ElderProtectionLost,
+						player.Id);
+					elderProtectionConsumedThisResolution.Add(player.Id);
+				}
 				return;
 			}
 
@@ -218,6 +253,30 @@ internal static class NightInteractionResolver
 					StatusEffectTypes.ElderProtectionLost,
 					attempt.TargetId);
 			}
+			if (!lethalPhysicalBeforeHealing &&
+				attempt.TriggeringLogIndex is { } witchSaveLogIndex)
+			{
+				var borrowedResistance =
+					pendingBorrowedElderResistances.SingleOrDefault(pending =>
+						pending.TargetPlayerId == attempt.TargetId);
+				if (borrowedResistance is not null)
+				{
+					borrowedResistance.RestoringWitchSaveLogIndex =
+						witchSaveLogIndex;
+				}
+			}
+		}
+
+		foreach (var pending in pendingBorrowedElderResistances)
+		{
+			elderRole.CommitBorrowedResistance(
+				session,
+				new ElderResistanceExecution(
+					pending.PowerIdentity,
+					IsBorrowed: true),
+				pending.TargetPlayerId,
+				pending.TriggeringNightActionLogIndex,
+				pending.RestoringWitchSaveLogIndex);
 		}
 
 		var independentEliminationReasons =
@@ -301,17 +360,23 @@ internal static class NightInteractionResolver
 	private static CommittedNightAttempt[] GetCommittedNightAttempts(
 		GameSession session,
 		IEnumerable<NightActionLogEntry> nightActions) =>
-		nightActions
+			nightActions
 			.SelectMany(log =>
 				(log.TargetIds ?? []).Select(targetId =>
-					new CommittedNightAttempt(log.ActionType, targetId)))
+					new CommittedNightAttempt(
+						log.ActionType,
+						targetId,
+						GameSessionQueries.GetCommittedLogIndex(
+							session,
+							log))))
 			.Concat(session.GetActorBorrowedDefenderProtectionCommits()
 				.Where(commit =>
 					commit.TurnNumber == session.TurnNumber &&
 					commit.CurrentPhase == GamePhase.Night)
 				.Select(commit => new CommittedNightAttempt(
 					NightActionType.DefenderProtect,
-					commit.TargetPlayerId)))
+					commit.TargetPlayerId,
+					TriggeringLogIndex: null)))
 			.Concat(session.GetActorBorrowedWitchPotionUseCommits()
 				.Where(commit =>
 					commit.TurnNumber == session.TurnNumber &&
@@ -319,7 +384,18 @@ internal static class NightInteractionResolver
 				.Select(commit => new CommittedNightAttempt(
 					ActorBorrowedWitchPotionUseCommit.GetActionType(
 						commit.SpentResourceIdentity),
-					commit.TargetPlayerId)))
+					commit.TargetPlayerId,
+					TriggeringLogIndex: null)))
+			.Concat(session.GetActorBorrowedKnightRustySwordScheduleCommits()
+				.Where(commit =>
+					commit.TurnNumber == session.TurnNumber - 1 &&
+					commit.CurrentPhase == GamePhase.Dawn &&
+					session.GetPlayerState(commit.TargetPlayerId).Health ==
+						PlayerHealth.Alive)
+				.Select(commit => new CommittedNightAttempt(
+					NightActionType.RustySword,
+					commit.TargetPlayerId,
+					TriggeringLogIndex: null)))
 			.ToArray();
 
 	private static HashSet<Guid> GetDefenderTargets(

@@ -788,15 +788,19 @@ internal sealed class EliminationCascadeStage : SubPhaseStage
 					execution.AdmitReactionEliminations(
 						session,
 						result.Eliminations);
-				session.RecordEliminationCascadeReactionCompletion(
-					execution.ScopeId,
-					reaction.ReactionId,
-					triggeringEliminations
-						.Select(ToEliminationFact)
-						.ToArray(),
-					admittedEliminations
-						.Select(ToEliminationFact)
-						.ToArray());
+				if (result.Disposition ==
+					EliminationCascadeReactionResultDisposition.PublicCompletion)
+				{
+					session.RecordEliminationCascadeReactionCompletion(
+						execution.ScopeId,
+						reaction.ReactionId,
+						triggeringEliminations
+							.Select(ToEliminationFact)
+							.ToArray(),
+						admittedEliminations
+							.Select(ToEliminationFact)
+							.ToArray());
+				}
 			}
 
 			nextIndex++;
@@ -939,6 +943,28 @@ internal sealed class EliminationCascadeStage : SubPhaseStage
 			? execution
 			: throw new InvalidOperationException(
 				"No Elimination Cascade execution is active.");
+
+	internal static string GetActiveScopeId(GameSession session) =>
+		GetExecution(session).ScopeId;
+
+	internal static bool IsActiveInteractiveReactionBatch(
+		GameSession session,
+		string scopeId,
+		IReadOnlyList<Guid> triggeringPlayerIds)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		ArgumentException.ThrowIfNullOrWhiteSpace(scopeId);
+		ArgumentNullException.ThrowIfNull(triggeringPlayerIds);
+		return Executions.TryGetValue(session, out var execution) &&
+			StringComparer.Ordinal.Equals(execution.ScopeId, scopeId) &&
+			execution.CurrentFrame is
+			{
+				Progress: BatchProgress.InteractiveReactions
+			} frame &&
+			GetTriggeringEliminations(frame)
+				.Select(elimination => elimination.PlayerId)
+				.SequenceEqual(triggeringPlayerIds);
+	}
 
 	private static int GetReactionIndex(
 		BatchFrame frame,

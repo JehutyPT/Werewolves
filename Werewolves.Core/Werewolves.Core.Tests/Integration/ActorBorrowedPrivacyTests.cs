@@ -12,6 +12,7 @@ using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Resources;
+using Werewolves.Core.Tests.Helpers;
 using Xunit;
 
 namespace Werewolves.Core.Tests.Integration;
@@ -136,6 +137,576 @@ public sealed class ActorBorrowedPrivacyTests
 			.HaveCount(markerCount);
 		fixture.Session.GetActorBorrowedStutteringJudgeSignalSetupCommits()
 			.Should().HaveCount(commitCount);
+	}
+
+	[Fact]
+	public void RehydrateSession_BorrowedHunterTamperedPendingSelectorPresentationIsRejectedBeforeRegistrationWithoutObserverExposure()
+	{
+		var sourceObserver = new CountingStateChangeObserver();
+		var snapshot = RecoveryPayloadTestDriver
+			.CreateActorBorrowedHunterPendingSelectorSnapshot(sourceObserver);
+		var sourceNotificationCount = sourceObserver.NotificationCount;
+		var tampered = RecoveryPayloadTestDriver
+			.Parse(snapshot.SerializedSession)
+			.RewriteActorBorrowedHunterPendingSelectorPrivateInstruction(
+				"Tampered private Hunter selector presentation.")
+			.Serialize();
+		var service = new GameService();
+
+		Action rehydrate = () => service.RehydrateSession(tampered);
+
+		var failure = rehydrate.Should().Throw<InvalidOperationException>().Which;
+		AssertHunterRecoveryTextIsSourceSafe(failure.Message, snapshot);
+		service.GetCurrentInstruction(snapshot.SessionId).Should().BeNull();
+		service.GetGameStateView(snapshot.SessionId).Should().BeNull();
+		var unavailable = service.ProcessInstruction(
+			snapshot.SessionId,
+			snapshot.Selector.CreateResponse(
+				[snapshot.Selector.SelectablePlayerIds.First()]));
+		unavailable.IsSuccess.Should().BeFalse();
+		var publicError = unavailable.ModeratorInstruction.Should()
+			.BeOfType<ConfirmationInstruction>().Subject;
+		publicError.Semantic.Should().Be(
+			ModeratorInstructionSemantic.GameSessionNotFound);
+		AssertHunterRecoveryTextIsSourceSafe(
+			string.Concat(
+				publicError.PublicAnnouncement,
+				"\n",
+				publicError.PrivateInstruction),
+			snapshot);
+		sourceNotificationCount.Should().BeGreaterThan(0);
+		sourceObserver.NotificationCount.Should().Be(sourceNotificationCount);
+	}
+
+	[Fact]
+	public void RehydrateSession_BorrowedElderTamperedPendingSuppressionAnnouncementPresentationIsRejectedBeforeRegistrationWithoutObserverExposure()
+	{
+		var sourceObserver = new CountingStateChangeObserver();
+		var snapshot = RecoveryPayloadTestDriver
+			.CreateActorBorrowedElderPendingSuppressionAnnouncementSnapshot(
+				sourceObserver);
+		var sourceNotificationCount = sourceObserver.NotificationCount;
+		var tampered = RecoveryPayloadTestDriver
+			.Parse(snapshot.SerializedSession)
+			.RewriteActorBorrowedElderPendingSuppressionPublicAnnouncement(
+				"Tampered public suppression announcement.")
+			.Serialize();
+		var service = new GameService();
+
+		Action rehydrate = () => service.RehydrateSession(tampered);
+
+		var failure = rehydrate.Should().Throw<InvalidOperationException>().Which;
+		AssertElderRecoveryTextIsSourceSafe(failure.Message, snapshot);
+		service.GetCurrentInstruction(snapshot.SessionId).Should().BeNull();
+		service.GetGameStateView(snapshot.SessionId).Should().BeNull();
+		var unavailable = service.ProcessInstruction(
+			snapshot.SessionId,
+			snapshot.Announcement.CreateResponse());
+		unavailable.IsSuccess.Should().BeFalse();
+		var publicError = unavailable.ModeratorInstruction.Should()
+			.BeOfType<ConfirmationInstruction>().Subject;
+		publicError.Semantic.Should().Be(
+			ModeratorInstructionSemantic.GameSessionNotFound);
+		AssertElderRecoveryTextIsSourceSafe(
+			string.Concat(
+				publicError.PublicAnnouncement,
+				"\n",
+				publicError.PrivateInstruction),
+			snapshot);
+		sourceNotificationCount.Should().BeGreaterThan(0);
+		sourceObserver.NotificationCount.Should().Be(sourceNotificationCount);
+	}
+
+	[Theory]
+	[InlineData(ActorBorrowedScapegoatRecoveryStep.Reveal)]
+	[InlineData(ActorBorrowedScapegoatRecoveryStep.PermittedVoterSelection)]
+	[InlineData(ActorBorrowedScapegoatRecoveryStep.PermittedVoterAnnouncement)]
+	public void RehydrateSession_BorrowedScapegoatTamperedPendingPresentationIsRejectedBeforeRegistrationWithoutObserverExposure(
+		ActorBorrowedScapegoatRecoveryStep step)
+	{
+		var sourceObserver = new CountingStateChangeObserver();
+		var snapshot = RecoveryPayloadTestDriver
+			.CreateActorBorrowedScapegoatPendingSnapshot(step, sourceObserver);
+		var sourceNotificationCount = sourceObserver.NotificationCount;
+		var tampered = RecoveryPayloadTestDriver
+			.Parse(snapshot.SerializedSession)
+			.RewriteActorBorrowedScapegoatPendingPresentation(step)
+			.Serialize();
+		var service = new GameService();
+
+		Action rehydrate = () => service.RehydrateSession(tampered);
+
+		var failure = rehydrate.Should().Throw<InvalidOperationException>().Which;
+		AssertScapegoatRecoveryTextIsSourceSafe(failure.Message, snapshot);
+		service.GetCurrentInstruction(snapshot.SessionId).Should().BeNull();
+		service.GetGameStateView(snapshot.SessionId).Should().BeNull();
+		var unavailable = service.ProcessInstruction(
+			snapshot.SessionId,
+			CreateScapegoatRecoveryResponse(snapshot.PendingInstruction));
+		unavailable.IsSuccess.Should().BeFalse();
+		var publicError = unavailable.ModeratorInstruction.Should()
+			.BeOfType<ConfirmationInstruction>().Subject;
+		publicError.Semantic.Should().Be(
+			ModeratorInstructionSemantic.GameSessionNotFound);
+		AssertScapegoatRecoveryTextIsSourceSafe(
+			string.Concat(
+				publicError.PublicAnnouncement,
+				"\n",
+				publicError.PrivateInstruction),
+			snapshot);
+		sourceNotificationCount.Should().BeGreaterThan(0);
+		sourceObserver.NotificationCount.Should().Be(sourceNotificationCount);
+	}
+
+	[Fact]
+	public void RehydrateSession_BorrowedScapegoatPendingRevealWithoutCurrentActivationIsRejectedBeforeRegistrationWithoutObserverExposure()
+	{
+		var sourceObserver = new CountingStateChangeObserver();
+		var snapshot = RecoveryPayloadTestDriver
+			.CreateActorBorrowedScapegoatPendingSnapshot(
+				ActorBorrowedScapegoatRecoveryStep.Reveal,
+				sourceObserver);
+		var sourceNotificationCount = sourceObserver.NotificationCount;
+		var tampered = RecoveryPayloadTestDriver
+			.Parse(snapshot.SerializedSession)
+			.ExpireActorBorrowedScapegoatPendingRevealActivation()
+			.Serialize();
+		var service = new GameService();
+
+		Action rehydrate = () => service.RehydrateSession(tampered);
+
+		var failure = rehydrate.Should().Throw<InvalidOperationException>().Which;
+		failure.Message.Should().Be(
+			"The pending Actor borrowed Role Power instruction does not match its recovery context.");
+		AssertScapegoatRecoveryTextIsSourceSafe(failure.Message, snapshot);
+		service.GetCurrentInstruction(snapshot.SessionId).Should().BeNull();
+		service.GetGameStateView(snapshot.SessionId).Should().BeNull();
+		var unavailable = service.ProcessInstruction(
+			snapshot.SessionId,
+			CreateScapegoatRecoveryResponse(snapshot.PendingInstruction));
+		unavailable.IsSuccess.Should().BeFalse();
+		var publicError = unavailable.ModeratorInstruction.Should()
+			.BeOfType<ConfirmationInstruction>().Subject;
+		publicError.Semantic.Should().Be(
+			ModeratorInstructionSemantic.GameSessionNotFound);
+		AssertScapegoatRecoveryTextIsSourceSafe(
+			string.Concat(
+				publicError.PublicAnnouncement,
+				"\n",
+				publicError.PrivateInstruction),
+			snapshot);
+		sourceNotificationCount.Should().BeGreaterThan(0);
+		sourceObserver.NotificationCount.Should().Be(sourceNotificationCount);
+	}
+
+	[Fact]
+	public void RehydrateSession_BorrowedScapegoatPendingRevealWithDifferentCurrentActivationIsRejectedBeforeRegistrationWithoutObserverExposure()
+	{
+		var sourceObserver = new CountingStateChangeObserver();
+		var snapshot = RecoveryPayloadTestDriver
+			.CreateActorBorrowedScapegoatPendingSnapshot(
+				ActorBorrowedScapegoatRecoveryStep.Reveal,
+				sourceObserver);
+		var sourceNotificationCount = sourceObserver.NotificationCount;
+		var tampered = RecoveryPayloadTestDriver
+			.Parse(snapshot.SerializedSession)
+			.ReplaceActorBorrowedScapegoatPendingRevealActivation()
+			.Serialize();
+		var service = new GameService();
+
+		Action rehydrate = () => service.RehydrateSession(tampered);
+
+		var failure = rehydrate.Should().Throw<InvalidOperationException>().Which;
+		failure.Message.Should().Be(
+			"The pending Actor borrowed Role Power instruction does not match its recovery context.");
+		AssertScapegoatRecoveryTextIsSourceSafe(failure.Message, snapshot);
+		service.GetCurrentInstruction(snapshot.SessionId).Should().BeNull();
+		service.GetGameStateView(snapshot.SessionId).Should().BeNull();
+		var unavailable = service.ProcessInstruction(
+			snapshot.SessionId,
+			CreateScapegoatRecoveryResponse(snapshot.PendingInstruction));
+		unavailable.IsSuccess.Should().BeFalse();
+		var publicError = unavailable.ModeratorInstruction.Should()
+			.BeOfType<ConfirmationInstruction>().Subject;
+		publicError.Semantic.Should().Be(
+			ModeratorInstructionSemantic.GameSessionNotFound);
+		AssertScapegoatRecoveryTextIsSourceSafe(
+			string.Concat(
+				publicError.PublicAnnouncement,
+				"\n",
+				publicError.PrivateInstruction),
+			snapshot);
+		sourceNotificationCount.Should().BeGreaterThan(0);
+		sourceObserver.NotificationCount.Should().Be(sourceNotificationCount);
+	}
+
+	[Fact]
+	public void RehydrateSession_BorrowedVillageIdiotExpiredPendingPardonWithTamperedPresentationIsRejectedBeforeRegistrationWithoutObserverExposure()
+	{
+		var sourceObserver = new CountingStateChangeObserver();
+		var snapshot = RecoveryPayloadTestDriver
+			.CreateActorBorrowedVillageIdiotPendingPardonSnapshot(sourceObserver);
+		var sourceNotificationCount = sourceObserver.NotificationCount;
+		var tampered = RecoveryPayloadTestDriver
+			.Parse(snapshot.SerializedSession)
+			.ExpireActorBorrowedVillageIdiotPendingPardonActivation()
+			.RewriteActorBorrowedVillageIdiotPendingPardonPublicAnnouncement(
+				"Tampered public borrowed pardon announcement.")
+			.Serialize();
+		var service = new GameService();
+
+		Action rehydrate = () => service.RehydrateSession(tampered);
+
+		var failure = rehydrate.Should().Throw<InvalidOperationException>().Which;
+		AssertVillageIdiotRecoveryTextIsSourceSafe(failure.Message, snapshot);
+		service.GetCurrentInstruction(snapshot.SessionId).Should().BeNull();
+		service.GetGameStateView(snapshot.SessionId).Should().BeNull();
+		var unavailable = service.ProcessInstruction(
+			snapshot.SessionId,
+			snapshot.Pardon.CreateResponse());
+		unavailable.IsSuccess.Should().BeFalse();
+		var publicError = unavailable.ModeratorInstruction.Should()
+			.BeOfType<ConfirmationInstruction>().Subject;
+		publicError.Semantic.Should().Be(
+			ModeratorInstructionSemantic.GameSessionNotFound);
+		AssertVillageIdiotRecoveryTextIsSourceSafe(
+			string.Concat(
+				publicError.PublicAnnouncement,
+				"\n",
+				publicError.PrivateInstruction),
+			snapshot);
+		sourceNotificationCount.Should().BeGreaterThan(0);
+		sourceObserver.NotificationCount.Should().Be(sourceNotificationCount);
+	}
+
+	[Fact]
+	public void RehydrateSession_BorrowedVillageIdiotExpiredPendingPardonWithAuthenticatedHistoricalLineageIsRestoredWithoutObserverExposure()
+	{
+		var sourceObserver = new CountingStateChangeObserver();
+		var snapshot = RecoveryPayloadTestDriver
+			.CreateActorBorrowedVillageIdiotPendingPardonSnapshot(sourceObserver);
+		var sourceNotificationCount = sourceObserver.NotificationCount;
+		var expired = RecoveryPayloadTestDriver
+			.Parse(snapshot.SerializedSession)
+			.ExpireActorBorrowedVillageIdiotPendingPardonActivation()
+			.Serialize();
+		var service = new GameService();
+
+		var recoveredGameId = service.RehydrateSession(expired);
+
+		recoveredGameId.Should().Be(snapshot.SessionId);
+		var recoveredPardon = service.GetCurrentInstruction(recoveredGameId)
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		recoveredPardon.Should().BeEquivalentTo(snapshot.Pardon);
+		AssertVillageIdiotRecoveryTextIsSourceSafe(
+			string.Concat(
+				recoveredPardon.PublicAnnouncement,
+				"\n",
+				recoveredPardon.PrivateInstruction),
+			snapshot);
+		var recovered = service.GetGameStateView(recoveredGameId)
+			.Should().BeOfType<GameSession>().Subject;
+		var actorId = snapshot.Pardon.AffectedPlayerIds.Should()
+			.ContainSingle().Subject;
+		var actor = recovered.GetPlayerState(actorId);
+		actor.HasVotingRight.Should().BeFalse();
+		actor.DurableVotingPower.Should().Be(0);
+		recovered.GetModeratorActiveActorBorrowedRolePowerActivation()
+			.Should().BeNull();
+		recovered.GameHistoryLog
+			.OfType<ActorBorrowedRolePowerActivationExpiredLogEntry>()
+			.Should().ContainSingle();
+		recovered.GetActorBorrowedVillageIdiotPardonCommits()
+			.Should().ContainSingle();
+		recovered.GameHistoryLog
+			.OfType<ActorBorrowedRolePowerCommittedLogEntry>()
+			.Should().ContainSingle();
+		sourceNotificationCount.Should().BeGreaterThan(0);
+		sourceObserver.NotificationCount.Should().Be(sourceNotificationCount);
+	}
+
+	[Fact]
+	public void RehydrateSession_BorrowedVillageIdiotExpiredPendingPardonWithoutHistoricalLineageIsRejectedBeforeRegistrationWithoutObserverExposure()
+	{
+		var sourceObserver = new CountingStateChangeObserver();
+		var snapshot = RecoveryPayloadTestDriver
+			.CreateActorBorrowedVillageIdiotPendingPardonSnapshot(sourceObserver);
+		var sourceNotificationCount = sourceObserver.NotificationCount;
+		var stripped = RecoveryPayloadTestDriver
+			.Parse(snapshot.SerializedSession)
+			.ExpireActorBorrowedVillageIdiotPendingPardonActivation()
+			.RemoveActorBorrowedVillageIdiotPendingPardonLineage()
+			.Serialize();
+		var service = new GameService();
+
+		Action rehydrate = () => service.RehydrateSession(stripped);
+
+		var failure = rehydrate.Should().Throw<InvalidOperationException>().Which;
+		failure.Message.Should().Be(
+			"The pending Actor borrowed Role Power instruction does not match its recovery context.");
+		AssertVillageIdiotRecoveryTextIsSourceSafe(failure.Message, snapshot);
+		service.GetCurrentInstruction(snapshot.SessionId).Should().BeNull();
+		service.GetGameStateView(snapshot.SessionId).Should().BeNull();
+		var unavailable = service.ProcessInstruction(
+			snapshot.SessionId,
+			snapshot.Pardon.CreateResponse());
+		unavailable.IsSuccess.Should().BeFalse();
+		var publicError = unavailable.ModeratorInstruction.Should()
+			.BeOfType<ConfirmationInstruction>().Subject;
+		publicError.Semantic.Should().Be(
+			ModeratorInstructionSemantic.GameSessionNotFound);
+		AssertVillageIdiotRecoveryTextIsSourceSafe(
+			string.Concat(
+				publicError.PublicAnnouncement,
+				"\n",
+				publicError.PrivateInstruction),
+			snapshot);
+		sourceNotificationCount.Should().BeGreaterThan(0);
+		sourceObserver.NotificationCount.Should().Be(sourceNotificationCount);
+	}
+
+	[Theory]
+	[InlineData(ActorBorrowedBearTamerRecoveryTamper.PublicAnnouncement)]
+	[InlineData(ActorBorrowedBearTamerRecoveryTamper.PrivateGuidance)]
+	[InlineData(ActorBorrowedBearTamerRecoveryTamper.SoundEffect)]
+	public void RehydrateSession_BorrowedBearTamerTamperedPendingGrowlPresentationIsRejectedBeforeRegistrationWithoutObserverExposure(
+		ActorBorrowedBearTamerRecoveryTamper tamper)
+	{
+		var sourceObserver = new CountingStateChangeObserver();
+		var snapshot = RecoveryPayloadTestDriver
+			.CreateActorBorrowedBearTamerPendingGrowlSnapshot(sourceObserver);
+		var sourceNotificationCount = sourceObserver.NotificationCount;
+		var tampered = RecoveryPayloadTestDriver
+			.Parse(snapshot.SerializedSession)
+			.RewriteActorBorrowedBearTamerPendingGrowlPresentation(tamper)
+			.Serialize();
+		var service = new GameService();
+
+		Action rehydrate = () => service.RehydrateSession(tampered);
+
+		var failure = rehydrate.Should().Throw<InvalidOperationException>().Which;
+		AssertBearTamerRecoveryTextIsSourceSafe(failure.Message, snapshot);
+		service.GetCurrentInstruction(snapshot.SessionId).Should().BeNull();
+		service.GetGameStateView(snapshot.SessionId).Should().BeNull();
+		var unavailable = service.ProcessInstruction(
+			snapshot.SessionId,
+			snapshot.Growl.CreateResponse());
+		unavailable.IsSuccess.Should().BeFalse();
+		var publicError = unavailable.ModeratorInstruction.Should()
+			.BeOfType<ConfirmationInstruction>().Subject;
+		publicError.Semantic.Should().Be(
+			ModeratorInstructionSemantic.GameSessionNotFound);
+		AssertBearTamerRecoveryTextIsSourceSafe(
+			string.Concat(
+				publicError.PublicAnnouncement,
+				"\n",
+				publicError.PrivateInstruction),
+			snapshot);
+		sourceNotificationCount.Should().BeGreaterThan(0);
+		sourceObserver.NotificationCount.Should().Be(sourceNotificationCount);
+	}
+
+	[Fact]
+	public void RehydrateSession_BorrowedBearTamerPendingGrowlWithoutCurrentActivationIsRejectedBeforeRegistrationWithoutObserverExposure()
+	{
+		var sourceObserver = new CountingStateChangeObserver();
+		var snapshot = RecoveryPayloadTestDriver
+			.CreateActorBorrowedBearTamerPendingGrowlSnapshot(sourceObserver);
+		var sourceNotificationCount = sourceObserver.NotificationCount;
+		var tampered = RecoveryPayloadTestDriver
+			.Parse(snapshot.SerializedSession)
+			.ExpireActorBorrowedBearTamerPendingGrowlActivation()
+			.Serialize();
+		var service = new GameService();
+
+		Action rehydrate = () => service.RehydrateSession(tampered);
+
+		var failure = rehydrate.Should().Throw<InvalidOperationException>().Which;
+		failure.Message.Should().Be(
+			"The pending Actor borrowed Role Power instruction does not match its recovery context.");
+		AssertBearTamerRecoveryTextIsSourceSafe(failure.Message, snapshot);
+		service.GetCurrentInstruction(snapshot.SessionId).Should().BeNull();
+		service.GetGameStateView(snapshot.SessionId).Should().BeNull();
+		var unavailable = service.ProcessInstruction(
+			snapshot.SessionId,
+			snapshot.Growl.CreateResponse());
+		unavailable.IsSuccess.Should().BeFalse();
+		var publicError = unavailable.ModeratorInstruction.Should()
+			.BeOfType<ConfirmationInstruction>().Subject;
+		publicError.Semantic.Should().Be(
+			ModeratorInstructionSemantic.GameSessionNotFound);
+		AssertBearTamerRecoveryTextIsSourceSafe(
+			string.Concat(
+				publicError.PublicAnnouncement,
+				"\n",
+				publicError.PrivateInstruction),
+			snapshot);
+		sourceNotificationCount.Should().BeGreaterThan(0);
+		sourceObserver.NotificationCount.Should().Be(sourceNotificationCount);
+	}
+
+	[Fact]
+	public void RehydrateSession_BorrowedBearTamerPendingGrowlWithDifferentCurrentActivationIsRejectedBeforeRegistrationWithoutObserverExposure()
+	{
+		var sourceObserver = new CountingStateChangeObserver();
+		var snapshot = RecoveryPayloadTestDriver
+			.CreateActorBorrowedBearTamerPendingGrowlSnapshot(sourceObserver);
+		var sourceNotificationCount = sourceObserver.NotificationCount;
+		var tampered = RecoveryPayloadTestDriver
+			.Parse(snapshot.SerializedSession)
+			.ReplaceActorBorrowedBearTamerPendingGrowlActivation()
+			.Serialize();
+		var service = new GameService();
+
+		Action rehydrate = () => service.RehydrateSession(tampered);
+
+		var failure = rehydrate.Should().Throw<InvalidOperationException>().Which;
+		failure.Message.Should().Be(
+			"The pending Actor borrowed Role Power instruction does not match its recovery context.");
+		AssertBearTamerRecoveryTextIsSourceSafe(failure.Message, snapshot);
+		service.GetCurrentInstruction(snapshot.SessionId).Should().BeNull();
+		service.GetGameStateView(snapshot.SessionId).Should().BeNull();
+		var unavailable = service.ProcessInstruction(
+			snapshot.SessionId,
+			snapshot.Growl.CreateResponse());
+		unavailable.IsSuccess.Should().BeFalse();
+		var publicError = unavailable.ModeratorInstruction.Should()
+			.BeOfType<ConfirmationInstruction>().Subject;
+		publicError.Semantic.Should().Be(
+			ModeratorInstructionSemantic.GameSessionNotFound);
+		AssertBearTamerRecoveryTextIsSourceSafe(
+			string.Concat(
+				publicError.PublicAnnouncement,
+				"\n",
+				publicError.PrivateInstruction),
+			snapshot);
+		sourceNotificationCount.Should().BeGreaterThan(0);
+		sourceObserver.NotificationCount.Should().Be(sourceNotificationCount);
+	}
+
+	[Theory]
+	[InlineData(ActorBorrowedKnightRecoveryTamper.PublicAnnouncement)]
+	[InlineData(ActorBorrowedKnightRecoveryTamper.PrivateGuidance)]
+	[InlineData(ActorBorrowedKnightRecoveryTamper.AffectedPlayer)]
+	[InlineData(ActorBorrowedKnightRecoveryTamper.SoundEffect)]
+	public void RehydrateSession_BorrowedKnightTamperedPendingRustySwordAnnouncementPresentationIsRejectedBeforeRegistrationWithoutObserverExposure(
+		ActorBorrowedKnightRecoveryTamper tamper)
+	{
+		var sourceObserver = new CountingStateChangeObserver();
+		var snapshot = RecoveryPayloadTestDriver
+			.CreateActorBorrowedKnightPendingRustySwordAnnouncementSnapshot(
+				sourceObserver);
+		var sourceNotificationCount = sourceObserver.NotificationCount;
+		var tampered = RecoveryPayloadTestDriver
+			.Parse(snapshot.SerializedSession)
+			.RewriteActorBorrowedKnightPendingRustySwordAnnouncementPresentation(
+				tamper)
+			.Serialize();
+		var service = new GameService();
+
+		Action rehydrate = () => service.RehydrateSession(tampered);
+
+		var failure = rehydrate.Should().Throw<InvalidOperationException>().Which;
+		AssertKnightRecoveryTextIsSourceSafe(failure.Message, snapshot);
+		service.GetCurrentInstruction(snapshot.SessionId).Should().BeNull();
+		service.GetGameStateView(snapshot.SessionId).Should().BeNull();
+		var unavailable = service.ProcessInstruction(
+			snapshot.SessionId,
+			snapshot.Announcement.CreateResponse());
+		unavailable.IsSuccess.Should().BeFalse();
+		var publicError = unavailable.ModeratorInstruction.Should()
+			.BeOfType<ConfirmationInstruction>().Subject;
+		publicError.Semantic.Should().Be(
+			ModeratorInstructionSemantic.GameSessionNotFound);
+		AssertKnightRecoveryTextIsSourceSafe(
+			string.Concat(
+				publicError.PublicAnnouncement,
+				"\n",
+				publicError.PrivateInstruction),
+			snapshot);
+		sourceNotificationCount.Should().BeGreaterThan(0);
+		sourceObserver.NotificationCount.Should().Be(sourceNotificationCount);
+	}
+
+	private static void AssertHunterRecoveryTextIsSourceSafe(
+		string text,
+		ActorBorrowedHunterPendingRecoverySnapshot snapshot)
+	{
+		text.Should().NotContain(GameStrings.HunterRoleName)
+			.And.NotContain(MainRoleType.Hunter.ToString())
+			.And.NotContain(snapshot.ActorSetupCardId.ToString())
+			.And.NotContain(snapshot.ActivationId.ToString());
+	}
+
+	private static void AssertElderRecoveryTextIsSourceSafe(
+		string text,
+		ActorBorrowedElderPendingRecoverySnapshot snapshot)
+	{
+		text.Should().NotContain(GameStrings.ElderRoleName)
+			.And.NotContain(MainRoleType.Elder.ToString())
+			.And.NotContain("elder-village-vote-suppression")
+			.And.NotContain(snapshot.ActorSetupCardId.ToString())
+			.And.NotContain(snapshot.ActivationId.ToString())
+			.And.NotContain(StatusEffectTypes.ElderProtectionLost.ToString());
+	}
+
+	private static ModeratorResponse CreateScapegoatRecoveryResponse(
+		ModeratorInstruction instruction) => instruction switch
+	{
+		ConfirmationInstruction confirmation => confirmation.CreateResponse(),
+		SelectPlayersInstruction selection => selection.CreateResponse(
+			[selection.SelectablePlayerIds.First()]),
+		_ => throw new InvalidOperationException(
+			"The borrowed Scapegoat recovery fixture has an unsupported pending instruction.")
+	};
+
+	private static void AssertScapegoatRecoveryTextIsSourceSafe(
+		string text,
+		ActorBorrowedScapegoatPendingRecoverySnapshot snapshot)
+	{
+		text.Should().NotContain(GameStrings.ScapegoatRoleName)
+			.And.NotContain(MainRoleType.Scapegoat.ToString())
+			.And.NotContain("scapegoat-tie-replacement")
+			.And.NotContain(snapshot.ActorSetupCardId.ToString())
+			.And.NotContain(snapshot.ActivationId.ToString());
+	}
+
+	private static void AssertVillageIdiotRecoveryTextIsSourceSafe(
+		string text,
+		ActorBorrowedVillageIdiotPendingRecoverySnapshot snapshot)
+	{
+		text.Should().NotContain(GameStrings.VillageIdiotRoleName)
+			.And.NotContain(MainRoleType.VillageIdiot.ToString())
+			.And.NotContain("village-idiot-pardon")
+			.And.NotContain(snapshot.ActorSetupCardId.ToString())
+			.And.NotContain(snapshot.ActivationId.ToString())
+			.And.NotContain(snapshot.PardonResourceId.ToString());
+	}
+
+	private static void AssertBearTamerRecoveryTextIsSourceSafe(
+		string text,
+		ActorBorrowedBearTamerPendingRecoverySnapshot snapshot)
+	{
+		text.Should().NotContain(GameStrings.BearTamerRoleName)
+			.And.NotContain(MainRoleType.BearTamer.ToString())
+			.And.NotContain(GameStrings.BearTamerGrowlInstruction)
+			.And.NotContain("bear-tamer-growl")
+			.And.NotContain(SoundEffectsEnum.BearGrowl.ToString())
+			.And.NotContain(snapshot.ActorId.ToString())
+			.And.NotContain(snapshot.ActorSetupCardId.ToString())
+			.And.NotContain(snapshot.ActivationId.ToString());
+	}
+
+	private static void AssertKnightRecoveryTextIsSourceSafe(
+		string text,
+		ActorBorrowedKnightPendingRecoverySnapshot snapshot)
+	{
+		text.Should().NotContain(GameStrings.KnightWithRustySwordRoleName)
+			.And.NotContain(MainRoleType.KnightWithRustySword.ToString())
+			.And.NotContain("knight-rusty-sword-disease")
+			.And.NotContain(snapshot.ActorId.ToString())
+			.And.NotContain(snapshot.ActorSetupCardId.ToString())
+			.And.NotContain(snapshot.ActivationId.ToString());
 	}
 
 	private static Action PrepareInvalidSubmission(PrivacyFixture fixture)
@@ -492,6 +1063,33 @@ public sealed class ActorBorrowedPrivacyTests
 	private sealed record ValidationSubmission(
 		GameSession Session,
 		Action Submit);
+
+	private sealed class CountingStateChangeObserver : IStateChangeObserver
+	{
+		internal int NotificationCount { get; private set; }
+
+		public void OnLogEntryApplied(GameLogEntryBase entry) =>
+			NotificationCount++;
+
+		public void OnMainPhaseChanged(GamePhase newPhase) =>
+			NotificationCount++;
+
+		public void OnSubPhaseChanged(string? newSubPhase) =>
+			NotificationCount++;
+
+		public void OnSubPhaseStageChanged(string? newSubPhaseStage) =>
+			NotificationCount++;
+
+		public void OnListenerChanged(
+			ListenerIdentifier? listener,
+			string? listenerState) => NotificationCount++;
+
+		public void OnTurnNumberChanged(int newTurnNumber) =>
+			NotificationCount++;
+
+		public void OnPendingInstructionChanged(
+			ModeratorInstruction? instruction) => NotificationCount++;
+	}
 
 	public enum BorrowedValidationBranch
 	{

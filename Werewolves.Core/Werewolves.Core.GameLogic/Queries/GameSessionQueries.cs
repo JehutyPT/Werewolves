@@ -1,3 +1,4 @@
+using Werewolves.Core.GameLogic.Roles.MainRoles;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
@@ -552,6 +553,191 @@ internal static class GameSessionQueries
                 FactionAgentKnowledge.KnownAgent)
             .ToHashSet();
     }
+
+	internal static Guid? FindFirstClockwiseLivingKnownFactionAgent(
+		IGameSession session,
+		Guid referencePlayerId,
+		Faction faction,
+		FactionFactEffectiveBoundary historicalBoundary,
+		int? exclusiveEndLogIndex = null)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		if (!Enum.IsDefined(faction))
+		{
+			throw new ArgumentOutOfRangeException(nameof(faction));
+		}
+
+		var seatingOrder = session.GetPlayers()
+			.Select(player => player.Id)
+			.ToArray();
+		var referenceIndex = Array.IndexOf(seatingOrder, referencePlayerId);
+		if (referenceIndex < 0)
+		{
+			_ = session.GetPlayer(referencePlayerId);
+		}
+
+		var history = session.GameHistoryLog.ToArray();
+		var exclusiveEnd = exclusiveEndLogIndex ?? history.Length;
+		if (exclusiveEnd < 0 || exclusiveEnd > history.Length)
+		{
+			throw new ArgumentOutOfRangeException(nameof(exclusiveEndLogIndex));
+		}
+
+		var historyAtBoundary = history.Take(exclusiveEnd).ToArray();
+		var factionEntries = historyAtBoundary
+			.OfType<IFactionFactBatchLogEntry>()
+			.ToArray();
+		var latestProjection = FactionFactProjection.Create(
+			factionEntries,
+			seatingOrder);
+		var historicalProjection = FactionFactProjection.Create(
+			factionEntries,
+			seatingOrder,
+			historicalBoundary);
+		if (seatingOrder.Any(playerId =>
+				latestProjection.Agents[playerId][faction] ==
+					FactionAgentKnowledge.Unknown ||
+				historicalProjection.Agents[playerId][faction] ==
+					FactionAgentKnowledge.Unknown))
+		{
+			throw new InvalidOperationException(
+				"Faction Agent facts are not ready.");
+		}
+
+		var eliminatedPlayerIds = historyAtBoundary
+			.OfType<PlayerEliminatedLogEntry>()
+			.Select(entry => entry.PlayerId)
+			.ToHashSet();
+		for (var offset = 1; offset < seatingOrder.Length; offset++)
+		{
+			var candidateId = seatingOrder[
+				(referenceIndex + offset) % seatingOrder.Length];
+			if (!eliminatedPlayerIds.Contains(candidateId) &&
+				(latestProjection.Agents[candidateId][faction] ==
+						FactionAgentKnowledge.KnownAgent ||
+				 historicalProjection.Agents[candidateId][faction] ==
+						FactionAgentKnowledge.KnownAgent))
+			{
+				return candidateId;
+			}
+		}
+
+		return null;
+	}
+
+	internal static bool IsQualifyingActorBorrowedElderResistanceTrigger(
+		GameSession session,
+		int triggeringLogIndex,
+		int exclusiveUpperLogIndex,
+		int turnNumber,
+		Guid targetPlayerId)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		var history = session.GameHistoryLog.ToArray();
+		if (triggeringLogIndex < 0 ||
+			triggeringLogIndex >= exclusiveUpperLogIndex ||
+			exclusiveUpperLogIndex > history.Length)
+		{
+			return false;
+		}
+
+		var entry = history[triggeringLogIndex];
+		if (entry is not NightActionLogEntry
+			{
+				CurrentPhase: GamePhase.Night,
+				TargetIds: [var attackTargetId]
+			} nightAction ||
+			nightAction.TurnNumber != turnNumber ||
+			attackTargetId != targetPlayerId)
+		{
+			return false;
+		}
+
+		if (entry is OneUseRolePowerCommittedLogEntry
+			{
+				SourceRole: MainRoleType.AccursedWolfFather,
+				ActionType: NightActionType.AccursedWolfFatherInfection
+			} infection &&
+			StringComparer.Ordinal.Equals(
+				infection.SourcePowerIdentifier,
+				AccursedWolfFatherRole.InfectionPowerIdentifier.Value))
+		{
+			return true;
+		}
+
+		var defenderProtected = history
+			.Take(exclusiveUpperLogIndex)
+			.OfType<NightActionLogEntry>()
+			.Any(protection =>
+				protection.CurrentPhase == GamePhase.Night &&
+				protection.TurnNumber == turnNumber &&
+				protection.ActionType == NightActionType.DefenderProtect &&
+				protection.TargetIds is [var protectedPlayerId] &&
+				protectedPlayerId == targetPlayerId) ||
+			session.GetActorBorrowedDefenderProtectionCommits().Any(protection =>
+				protection.PublicMarkerLogIndex < exclusiveUpperLogIndex &&
+				protection.CurrentPhase == GamePhase.Night &&
+				protection.TurnNumber == turnNumber &&
+				protection.TargetPlayerId == targetPlayerId);
+		if (defenderProtected)
+		{
+			return false;
+		}
+
+		if (entry.GetType() == typeof(NightActionLogEntry) &&
+			nightAction.ActionType == NightActionType.WerewolfVictimSelection)
+		{
+			return true;
+		}
+
+		if (entry is not RecurringRolePowerCommittedLogEntry
+			{
+				PowerInstanceOrigin: RolePowerInstanceOrigin.Native
+			} recurringAttack ||
+			recurringAttack.PowerInstanceId != recurringAttack.ActingPlayerId)
+		{
+			return false;
+		}
+
+		return recurringAttack switch
+		{
+			{
+				ActionType: NightActionType.WhiteWerewolfVictimSelection,
+				SourceRole: MainRoleType.WhiteWerewolf
+			} when StringComparer.Ordinal.Equals(
+				recurringAttack.SourcePowerIdentifier,
+				"white-werewolf-solo-attack") => true,
+			{
+				ActionType: NightActionType.BigBadWolfVictimSelection,
+				SourceRole: MainRoleType.BigBadWolf
+			} when StringComparer.Ordinal.Equals(
+				recurringAttack.SourcePowerIdentifier,
+				"big-bad-wolf-additional-victim") => true,
+			_ => false
+		};
+	}
+
+	internal static bool IsQualifyingActorBorrowedElderResistanceRestoration(
+		IGameSession session,
+		int logIndex,
+		int turnNumber,
+		Guid targetPlayerId)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		var history = session.GameHistoryLog.ToArray();
+		return logIndex >= 0 &&
+			logIndex < history.Length &&
+			history[logIndex] is OneUseRolePowerCommittedLogEntry
+			{
+				CurrentPhase: GamePhase.Night,
+				SourceRole: MainRoleType.Witch,
+				SourcePowerIdentifier: "witch-potions",
+				ActionType: NightActionType.WitchSave,
+				TargetIds: [var healedTargetId]
+			} witchSave &&
+			witchSave.TurnNumber == turnNumber &&
+			healedTargetId == targetPlayerId;
+	}
 
     internal static int GetExpectedLivingRoleHolderCount(
         IGameSession session,
