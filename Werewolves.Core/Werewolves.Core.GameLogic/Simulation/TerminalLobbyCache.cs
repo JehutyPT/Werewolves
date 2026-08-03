@@ -135,45 +135,35 @@ public static partial class TerminalLobbyCache
 		SimulationResultEvidence evidence,
 		ThiefOfferBranchPolicy branchPolicy)
 	{
-		foreach (var branch in branchPolicy.Branches)
+		if (!TerminalLobbyEvaluator.TrySelectDegenerateThiefBranch(
+			evidence.Records,
+			branchPolicy,
+			out var completedRuns,
+			exactRecordCount: TerminalLobbyEvaluator.ScreeningAttemptCount))
 		{
-			var branchRecords = evidence.Records
-				.Where(record =>
-					branchPolicy.GetBranch(record.RunSeedMaterial.RunNumber) == branch)
-				.ToArray();
-			if (branchRecords.Length != TerminalLobbyEvaluator.ScreeningAttemptCount
-				|| branchRecords.Any(record =>
-					record is not CompletedSimulationRun { EndingTurn: 1 }))
-			{
-				continue;
-			}
-
-			var completedRuns = branchRecords
-				.Cast<CompletedSimulationRun>()
-				.ToArray();
-			var rows = evidence.PossibleGameResults.Select(result =>
-				new TerminalCacheGameResultFrequency(
-					result,
-					completedRuns.Count(run => run.GameResult.Equals(result)),
-					TerminalLobbyEvaluator.ScreeningAttemptCount));
-			var cells = completedRuns
-				.GroupBy(run => new
-				{
-					run.GameResult,
-					run.EndingTurn,
-					run.VictoryCheckWindow
-				})
-				.Select(group => new TerminalCacheTurnWindowFrequency(
-					group.Key.GameResult,
-					group.Key.EndingTurn,
-					group.Key.VictoryCheckWindow,
-					group.Count(),
-					TerminalLobbyEvaluator.ScreeningAttemptCount));
-			return new DegenerateTerminalCacheRecord(identity, rows, cells);
+			throw new ArgumentException(
+				"Terminal evidence does not contain a complete degenerate Thief branch.",
+				nameof(evidence));
 		}
 
-		throw new ArgumentException(
-			"Terminal evidence does not contain a complete degenerate Thief branch.",
-			nameof(evidence));
+		var rows = evidence.PossibleGameResults.Select(result =>
+			new TerminalCacheGameResultFrequency(
+				result,
+				completedRuns.Count(run => run.GameResult.Equals(result)),
+				TerminalLobbyEvaluator.ScreeningAttemptCount));
+		var cells = completedRuns
+			.GroupBy(run => new
+			{
+				run.GameResult,
+				run.EndingTurn,
+				run.VictoryCheckWindow
+			})
+			.Select(group => new TerminalCacheTurnWindowFrequency(
+				group.Key.GameResult,
+				group.Key.EndingTurn,
+				group.Key.VictoryCheckWindow,
+				group.Count(),
+				TerminalLobbyEvaluator.ScreeningAttemptCount));
+		return new DegenerateTerminalCacheRecord(identity, rows, cells);
 	}
 }
