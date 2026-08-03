@@ -162,7 +162,8 @@ public sealed class SimulatorCapability : SimulatorProfile
 			new(MainRoleType.Angel, Faction.Villager),
 			new(
 				MainRoleType.PrejudicedManipulator,
-				Faction.PrejudicedManipulator)
+				Faction.PrejudicedManipulator),
+			new(MainRoleType.Actor, Faction.Villager)
 	];
 
 	private static readonly SharedVictoryGameResult[] SafetyScreeningSharedVictoryCapabilities =
@@ -197,7 +198,7 @@ public sealed class SimulatorCapability : SimulatorProfile
 		SimulatorCapabilityRegistry.Production.FullProbability;
 
 	internal static SimulatorCapability CreateSafetyScreening() => new(
-		new SimulatorProfileIdentity("safety-screening", "28"),
+		new SimulatorProfileIdentity("safety-screening", "29"),
 		SafetyScreeningRoleDescriptors,
 		sharedVictoryCapabilities: SafetyScreeningSharedVictoryCapabilities,
 		headlessResponsePolicy: new HeadlessResponsePolicy(
@@ -254,9 +255,10 @@ public sealed class SimulatorCapability : SimulatorProfile
 					ModeratorInstructionSemantic
 						.ChooseAccursedWolfFatherInfection,
 					ModeratorInstructionSemantic
-						.AnnounceVillagerRolePowerSuppression
+						.AnnounceVillagerRolePowerSuppression,
+					ModeratorInstructionSemantic.ChooseActorSetupCard
 				]),
-		supportsActorSetupCards: false,
+		supportsActorSetupCards: true,
 		supportedRuleStates: [SimulationRuleState.Default]);
 
 	internal static SimulatorCapability CreateFullProbability() => new(

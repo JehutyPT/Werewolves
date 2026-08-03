@@ -10,10 +10,10 @@ namespace Werewolves.Core.Tests.Unit;
 public class SimulatorProfileTests
 {
 	[Fact]
-	public void SafetyScreeningCapability_UsesIssue140Identity()
+	public void SafetyScreeningCapability_UsesIssue144Identity()
 	{
 		SimulatorCapability.SafetyScreening.Identity.Should().Be(
-			new SimulatorProfileIdentity("safety-screening", "28"));
+			new SimulatorProfileIdentity("safety-screening", "29"));
 	}
 
 	[Fact]
@@ -46,7 +46,7 @@ public class SimulatorProfileTests
 			probability.SupportsRole(MainRoleType.PrejudicedManipulator)
 				.Should().BeFalse();
 			safety.HeadlessResponsePolicy.StrategyIdentity.Should().Be(
-				new DecisionStrategyIdentity("baseline-random", "13-splitmix64"));
+				new DecisionStrategyIdentity("baseline-random", "14-splitmix64"));
 			probability.Identity.Should().Be(
 				new SimulatorProfileIdentity("full-probability", "4"));
 			probability.HeadlessResponsePolicy.StrategyIdentity.Should().Be(
@@ -112,16 +112,17 @@ public class SimulatorProfileTests
 			.Append(ModeratorInstructionSemantic.ResolveDevotedServantVoteWindow)
 			.Append(ModeratorInstructionSemantic.RecordDevotedServantAcquiredCard)
 			.Append(ModeratorInstructionSemantic
-				.AnnounceVillagerRolePowerSuppression);
+				.AnnounceVillagerRolePowerSuppression)
+			.Append(ModeratorInstructionSemantic.ChooseActorSetupCard);
 		var safety = SimulatorCapability.SafetyScreening;
 		var probability = SimulatorCapability.FullProbability;
 
-		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "28"));
+		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "29"));
 		probability.Identity.Should().Be(new SimulatorProfileIdentity("full-probability", "4"));
 		BaselineRandomDecisionStrategy.Identity.Should()
 			.Be(new DecisionStrategyIdentity("baseline-random", "3-splitmix64"));
 		BaselineRandomDecisionStrategy.SafetyScreeningIdentity.Should()
-			.Be(new DecisionStrategyIdentity("baseline-random", "13-splitmix64"));
+			.Be(new DecisionStrategyIdentity("baseline-random", "14-splitmix64"));
 		safety.SupportedRoles.Should().Equal(
 			MainRoleType.SimpleWerewolf,
 			MainRoleType.BigBadWolf,
@@ -150,7 +151,8 @@ public class SimulatorProfileTests
 			MainRoleType.Thief,
 			MainRoleType.DevotedServant,
 			MainRoleType.Angel,
-			MainRoleType.PrejudicedManipulator);
+			MainRoleType.PrejudicedManipulator,
+			MainRoleType.Actor);
 		probability.SupportedRoles.Should().Equal(
 			MainRoleType.SimpleWerewolf,
 			MainRoleType.Seer,
@@ -158,6 +160,8 @@ public class SimulatorProfileTests
 			MainRoleType.SimpleVillager);
 		safety.SupportsRole(MainRoleType.DevotedServant).Should().BeTrue();
 		probability.SupportsRole(MainRoleType.DevotedServant).Should().BeFalse();
+		safety.SupportsRole(MainRoleType.Actor).Should().BeTrue();
+		probability.SupportsRole(MainRoleType.Actor).Should().BeFalse();
 		probability.SupportedRoles.Should().NotBeSameAs(safety.SupportedRoles);
 		safety.TryGetBeneficiaryFaction(
 				MainRoleType.Angel,
@@ -299,7 +303,16 @@ public class SimulatorProfileTests
 				MainRoleType.VillageIdiot,
 				Faction.Werewolf)
 			.Should().BeFalse();
-		safety.SupportsActorSetupCards.Should().BeFalse();
+		safety.TryGetBeneficiaryFaction(
+				MainRoleType.Actor,
+				out var actorBeneficiary)
+			.Should().BeTrue();
+		actorBeneficiary.Should().Be(Faction.Villager);
+		foreach (var faction in Enum.GetValues<Faction>())
+		{
+			safety.IsFactionAgent(MainRoleType.Actor, faction).Should().BeFalse();
+		}
+		safety.SupportsActorSetupCards.Should().BeTrue();
 		probability.SupportsActorSetupCards.Should().BeFalse();
 		safety.SupportsRuleState(SimulationRuleState.Default).Should().BeTrue();
 		probability.SupportsRuleState(SimulationRuleState.Default).Should().BeTrue();

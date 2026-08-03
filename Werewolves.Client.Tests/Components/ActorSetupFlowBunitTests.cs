@@ -15,6 +15,45 @@ namespace Werewolves.Client.Tests.Components;
 public sealed class ActorSetupFlowBunitTests
 {
 	[Fact]
+	public void ProductionRoute_DefaultMetadataMakesActorSelectableAndOpensRequiredSetup()
+	{
+		using var context = new ModeratorComponentTestContext();
+		var cut = context.RenderModeratorComponent<Routes>();
+
+		foreach (var playerName in new[] { "Ana", "Bruno", "Catarina", "Diana", "Eduardo" })
+		{
+			cut.Find("#player-name").Input(playerName);
+			cut.Find("form.ww-roster-form").Submit();
+		}
+		OpenRoleSelection(cut);
+
+		foreach (var (role, count) in new[]
+		{
+			(MainRoleType.Actor, 1),
+			(MainRoleType.SimpleWerewolf, 1),
+			(MainRoleType.SimpleVillager, 3)
+		})
+		{
+			var roleName = role.GetPublicName();
+			var addAriaLabel = string.Format(
+				ClientStrings.RoleSelection_AddRoleAriaFormat,
+				roleName);
+			for (var index = 0; index < count; index++)
+			{
+				cut.FindAll("button")
+					.Single(button =>
+						button.GetAttribute("aria-label") is { } ariaLabel &&
+						(ariaLabel == roleName || ariaLabel == addAriaLabel))
+					.Click();
+			}
+		}
+
+		cut.Find(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Click();
+
+		cut.FindAll(TestId(ModeratorUiTestIds.ActorSetupPage)).Should().ContainSingle();
+	}
+
+	[Fact]
 	public void ProductionRoute_ActorAndPrejudicedManipulatorOpenActorSetupFirst()
 	{
 		using var context = CreateActorContext();

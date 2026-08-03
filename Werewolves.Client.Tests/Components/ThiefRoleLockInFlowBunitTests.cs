@@ -88,10 +88,10 @@ public sealed class ThiefRoleLockInFlowBunitTests
 		cut.Markup.Should().NotContain(first.Offer1.Id.ToString());
 		cut.Markup.Should().NotContain(first.Offer2.Id.ToString());
 
-		cut.Find(TestId(ModeratorUiTestIds.ThiefRoleLockInReview)).Click();
+		OpenRoleLockInReview(cut);
 		cut.Find(TestId(ModeratorUiTestIds.ThiefRoleLockInBack)).Click();
 		lobby.AcceptedRoleLockIn.Should().BeSameAs(first);
-		cut.Find(TestId(ModeratorUiTestIds.ThiefRoleLockInReview)).Click();
+		OpenRoleLockInReview(cut);
 		ClickOffer(cut, ModeratorUiTestIds.ThiefOffer1Options, MainRoleType.Seer);
 		ClickOffer(cut, ModeratorUiTestIds.ThiefOffer2Options, MainRoleType.Witch);
 		cut.Find(TestId(ModeratorUiTestIds.ThiefRoleLockInCommit)).Click();
@@ -178,6 +178,14 @@ public sealed class ThiefRoleLockInFlowBunitTests
 			.QuerySelectorAll("button")
 			.Single(button => button.TextContent.Trim() == role.GetPublicName())
 			.Click();
+	}
+
+	private static void OpenRoleLockInReview(IRenderedComponent<Routes> cut)
+	{
+		cut.Find(TestId(ModeratorUiTestIds.ThiefRoleLockInReview)).Click();
+		cut.WaitForAssertion(() =>
+			cut.FindAll(TestId(ModeratorUiTestIds.ThiefRoleLockInPage))
+				.Should().ContainSingle());
 	}
 
 	private static string TestId(string value) => $"[data-testid='{value}']";

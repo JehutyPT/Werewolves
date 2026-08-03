@@ -184,6 +184,154 @@ public class SimulationExecutionTests : DiagnosticTestBase
 	}
 
 	[Fact]
+	public void ExecuteBatch_WithActorInDealPool_CompletesAllOneThousandFixedSeedSafetyAttempts()
+	{
+		var scenario = CreateDirectActorScenario();
+
+		var batch = ExecuteAndAssertCompleteActorSafetyBatch(scenario);
+
+		scenario.ThiefOfferBranchPolicy.Should().BeNull();
+		batch.Records.Should().HaveCount(
+			TerminalLobbyEvaluator.ScreeningAttemptCount);
+		MarkTestCompleted();
+	}
+
+	[Theory]
+	[InlineData(MainRoleType.Actor, MainRoleType.Seer)]
+	[InlineData(MainRoleType.Seer, MainRoleType.Actor)]
+	public void ExecuteBatch_WithActorInThiefOffer_CompletesOneThousandFixedSeedAttemptsPerLegalBranch(
+		MainRoleType offer1Role,
+		MainRoleType offer2Role)
+	{
+		var scenario = CreateOfferedActorScenario(
+			offer1Role,
+			offer2Role);
+
+		var batch = ExecuteAndAssertCompleteActorSafetyBatch(scenario);
+
+		scenario.ToCanonical().Offer1Role.Should().Be(offer1Role);
+		scenario.ToCanonical().Offer2Role.Should().Be(offer2Role);
+		scenario.ThiefOfferBranchPolicy!.Branches.Should().Equal(
+			ThiefOfferBranch.Offer1,
+			ThiefOfferBranch.Offer2,
+			ThiefOfferBranch.Decline);
+		batch.Records.Should().HaveCount(3_000);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void ExecuteBatch_WithActorAndThiefInDealPool_CompletesOneThousandFixedSeedAttemptsPerLegalBranch()
+	{
+		var scenario = CreateDealPoolActorThiefScenario();
+
+		var batch = ExecuteAndAssertCompleteActorSafetyBatch(scenario);
+
+		scenario.DealPoolCards.Should().Contain(MainRoleType.Actor)
+			.And.Contain(MainRoleType.Thief);
+		scenario.RoleCompositionCards.Count(role => role == MainRoleType.Actor)
+			.Should().Be(1);
+		scenario.ToCanonical().Offer1Role.Should().Be(MainRoleType.Seer);
+		scenario.ToCanonical().Offer2Role.Should().Be(MainRoleType.Witch);
+		scenario.ThiefOfferBranchPolicy!.Branches.Should().Equal(
+			ThiefOfferBranch.Offer1,
+			ThiefOfferBranch.Offer2,
+			ThiefOfferBranch.Decline);
+		batch.Records.Should().HaveCount(3_000);
+		MarkTestCompleted();
+	}
+
+	[Theory]
+	[InlineData(0, ThiefOfferOptionIds.Offer1, true)]
+	[InlineData(1, ThiefOfferOptionIds.Offer2, false)]
+	[InlineData(2, ThiefOfferOptionIds.Decline, false)]
+	public void HeadlessSafety_OfferOnlyActorBranch_EstablishesActorFactionFactsOnlyWhenAcquired(
+		long runNumber,
+		string expectedOptionId,
+		bool expectsActor)
+	{
+		var scenario = CreateOfferedActorScenario(
+			MainRoleType.Actor,
+			MainRoleType.Seer);
+		var identity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+		var material = new RunSeedMaterial(
+			identity,
+			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
+			runNumber);
+		var random = new DeterministicRandomSource(material);
+		var startState = SimulationStartStateDeriver.Derive(
+			material,
+			SimulatorCapability.SafetyScreening,
+			random);
+		var recorder = new RecordingDecisionStrategy(
+			new BaselineRandomDecisionStrategy(
+				material,
+				startState,
+				SimulatorCapability.SafetyScreening.HeadlessResponsePolicy,
+				random));
+
+		var execution = new HeadlessGameDriver(recorder).CompleteGameSession(
+			startState,
+			CancellationToken.None);
+
+		startState.RoleAssignments.Should().NotContain(assignment =>
+			assignment.Role == MainRoleType.Actor);
+		startState.CanonicalScenario.Offer1Role.Should().Be(MainRoleType.Actor);
+		startState.CanonicalScenario.ActorSetupCards.Should().Equal(
+			MainRoleType.Cupid,
+			MainRoleType.Defender,
+			MainRoleType.Elder);
+		var choice = recorder.Observations.Should().ContainSingle(observation =>
+			observation.Instruction.Semantic ==
+			ModeratorInstructionSemantic.ChooseThiefOffer).Subject;
+		choice.Response.SelectedOptionIds.Should().Equal(expectedOptionId);
+		var actorHolders = execution.Session.GetPlayers()
+			.Where(player => player.State.CurrentRole == MainRoleType.Actor)
+			.ToArray();
+		var actorSwaps = execution.Session.GameHistoryLog
+			.OfType<PermanentRoleSwapCommittedLogEntry>()
+			.Where(swap => swap.NewCurrentRole == MainRoleType.Actor)
+			.ToArray();
+
+		if (!expectsActor)
+		{
+			actorHolders.Should().BeEmpty();
+			actorSwaps.Should().BeEmpty();
+			MarkTestCompleted();
+			return;
+		}
+
+		var actor = actorHolders.Should().ContainSingle().Subject;
+		var actorSwap = actorSwaps.Should().ContainSingle().Subject;
+		actorSwap.PlayerId.Should().Be(actor.Id);
+		actorSwap.Source.Should().Be(PermanentRoleSwapFactionFacts.CreateSource(
+			actor.Id,
+			actorSwap.NewPowerInstanceId));
+		execution.Session.GetFactionBeneficiaryKnowledge(actor.Id).Should().Be(
+			FactionBeneficiaryKnowledge.Known(Faction.Villager));
+		foreach (var faction in FactionFactFactions.All)
+		{
+			execution.Session.GetFactionAgentKnowledge(actor.Id, faction)
+				.Should().Be(FactionAgentKnowledge.KnownNonAgent);
+		}
+		actorSwap.Facts.Should().ContainSingle(fact =>
+			fact.Type == FactionFactType.Beneficiary &&
+			fact.Faction == Faction.Villager &&
+			fact.BeneficiaryPrecedence == 0);
+		var agentFacts = actorSwap.Facts
+			.Where(fact => fact.Type == FactionFactType.Agent)
+			.ToArray();
+		agentFacts
+			.Should().HaveCount(FactionFactFactions.All.Count)
+			.And.OnlyContain(fact =>
+				fact.AgentKnowledge == FactionAgentKnowledge.KnownNonAgent);
+		agentFacts.Select(fact => fact.Faction).Should().BeEquivalentTo(
+			FactionFactFactions.All);
+		MarkTestCompleted();
+	}
+
+	[Fact]
 	public void ExecuteBatch_WithDealPoolPrejudicedManipulatorAndExactPartition_CompletesAllOneThousandAttempts()
 	{
 		var partition = CanonicalPublicGroupPartition.Create(
@@ -2161,6 +2309,115 @@ public class SimulationExecutionTests : DiagnosticTestBase
 			Observations.Add((instruction, response, session.TurnNumber));
 			return response;
 		}
+	}
+
+	private static SimulationScenario CreateDirectActorScenario() =>
+		new(
+			7,
+			[
+				MainRoleType.Actor,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			],
+			CreateActorSetupCards());
+
+	private static SimulationScenario CreateDealPoolActorThiefScenario()
+	{
+		MainRoleType[] dealPool =
+		[
+			MainRoleType.Thief,
+			MainRoleType.Actor,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager
+		];
+		return new SimulationScenario(
+			5,
+			dealPool.Concat([MainRoleType.Seer, MainRoleType.Witch]),
+			dealPool,
+			MainRoleType.Seer,
+			MainRoleType.Witch,
+			CreateActorSetupCards());
+	}
+
+	private static SimulationScenario CreateOfferedActorScenario(
+		MainRoleType offer1,
+		MainRoleType offer2)
+	{
+		MainRoleType[] dealPool =
+		[
+			MainRoleType.Thief,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager
+		];
+		return new SimulationScenario(
+			5,
+			dealPool.Concat([offer1, offer2]),
+			dealPool,
+			offer1,
+			offer2,
+			CreateActorSetupCards());
+	}
+
+	private static ActorSetupCards CreateActorSetupCards() =>
+		new([MainRoleType.Cupid, MainRoleType.Defender, MainRoleType.Elder]);
+
+	private static SimulationBatchSourceEvidence ExecuteAndAssertCompleteActorSafetyBatch(
+		SimulationScenario scenario)
+	{
+		SimulationScenarioClassifier.Classify(
+				scenario,
+				SimulatorCapability.SafetyScreening)
+			.RulesValidity.IsValid.Should().BeTrue();
+		var identity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+		var runCount = TerminalLobbyEvaluator.GetScreeningAttemptCount(
+			identity.Scenario);
+
+		var batch = new SimulationExecutor().ExecuteBatch(
+			scenario,
+			SimulatorCapability.SafetyScreening,
+			identity,
+			runCount);
+
+		scenario.ToCanonical().ActorSetupCards.Should().Equal(
+			MainRoleType.Cupid,
+			MainRoleType.Defender,
+			MainRoleType.Elder);
+		batch.CanonicalScenario.Should().Be(identity.Scenario);
+		batch.SimulatorProfile.Should().Be(
+			new SimulatorProfileIdentity("safety-screening", "29"));
+		batch.DecisionStrategy.Should().Be(
+			new DecisionStrategyIdentity("baseline-random", "14-splitmix64"));
+		batch.Records.Should().HaveCount(runCount);
+		batch.Records.Select(record => record.RunSeedMaterial).Should().Equal(
+			Enumerable.Range(0, runCount).Select(attempt =>
+				new RunSeedMaterial(
+					identity,
+					BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
+					attempt)));
+		batch.CompletedRunCount.Should().Be(runCount);
+		batch.IncompleteRunCount.Should().Be(0);
+		batch.Records.Should().OnlyContain(record =>
+			record is CompletedSimulationRun);
+		if (scenario.ThiefOfferBranchPolicy is { } branchPolicy)
+		{
+			batch.Records
+				.GroupBy(record => branchPolicy.GetBranch(
+					record.RunSeedMaterial.RunNumber))
+				.Should().HaveCount(branchPolicy.Branches.Count)
+				.And.OnlyContain(group =>
+					group.Count() == TerminalLobbyEvaluator.ScreeningAttemptCount);
+		}
+
+		return batch;
 	}
 
 	private static SimulationScenario CreateOfferBearingThiefScenario()

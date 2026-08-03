@@ -11,6 +11,7 @@ using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.GameLogic.Simulation;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
@@ -55,7 +56,6 @@ public sealed class ActorBorrowedSemanticTraceTests
 		new(Guid.Parse("00000000-0000-0000-0000-000000000162"), MainRoleType.BearTamer),
 		new(Guid.Parse("00000000-0000-0000-0000-000000000163"), MainRoleType.KnightWithRustySword)
 	];
-
 	private static readonly RunSeedMaterial SeedMaterial = CreateSeedMaterial(
 		BaselineRandomDecisionStrategy.Identity);
 	private static readonly RunSeedMaterial ScapegoatSeedMaterial =
@@ -96,6 +96,44 @@ public sealed class ActorBorrowedSemanticTraceTests
 			.BeEquivalentTo(
 				ExactActorPolicy.AdmittedSemantics.Concat(
 					ExactScapegoatPolicy.AdmittedSemantics));
+	}
+
+	[Theory]
+	[InlineData(MainRoleType.Seer, 4L)]
+	[InlineData(MainRoleType.Cupid, 1L)]
+	[InlineData(MainRoleType.Witch, 0L)]
+	[InlineData(MainRoleType.LittleGirl, 6L)]
+	[InlineData(MainRoleType.Defender, 0L)]
+	[InlineData(MainRoleType.Fox, 0L)]
+	[InlineData(MainRoleType.StutteringJudge, 1L)]
+	[InlineData(MainRoleType.Hunter, 45L)]
+	[InlineData(MainRoleType.Elder, 171L)]
+	[InlineData(MainRoleType.Scapegoat, 54L)]
+	[InlineData(MainRoleType.VillageIdiot, 63L)]
+	[InlineData(MainRoleType.BearTamer, 81L)]
+	[InlineData(MainRoleType.KnightWithRustySword, 108L)]
+	public void ProductionSafetyDriver_ExactThreeSetup_GenuinelySelectsAndExecutesEveryActorSource(
+		MainRoleType sourceRole,
+		long runNumber)
+	{
+		var setupRoles = CreateProductionActorSourceSetup(sourceRole);
+		var execution = ExecuteDirectProductionActorTrace(
+			setupRoles,
+			runNumber);
+
+		setupRoles.Should().HaveCount(ActorSetupCards.RequiredCount);
+		setupRoles.Should().OnlyHaveUniqueItems();
+		execution.Run.Should().BeOfType<CompletedSimulationRun>();
+		execution.Trace.UsesProductionBaseline.Should().BeTrue();
+		execution.Trace.SelectedSources.Should().StartWith(sourceRole);
+		execution.Trace.ActivatedSources.Should().Contain(sourceRole);
+		HasProductionSourceEvidence(execution, sourceRole).Should().BeTrue(
+			"the production trace must contain borrowed {0}'s native source anchor",
+			sourceRole);
+		execution.Trace.Observations.Should().Contain(observation =>
+			observation.Phase == GamePhase.Night &&
+			observation.TurnNumber > 1,
+			"the completed production schedule must continue into a later Night");
 	}
 
 	private static IReadOnlyList<ModeratorInstructionSemantic> TraceSource(
@@ -1159,6 +1197,111 @@ public sealed class ActorBorrowedSemanticTraceTests
 			random);
 	}
 
+	private static MainRoleType[] CreateProductionActorSourceSetup(
+		MainRoleType sourceRole) =>
+	[
+		sourceRole,
+		.. new[]
+			{
+				MainRoleType.Seer,
+				MainRoleType.Cupid,
+				MainRoleType.Defender,
+				MainRoleType.Witch
+			}
+			.Where(companion => companion != sourceRole)
+			.Take(2)
+	];
+
+	private static DirectProductionTraceExecution
+		ExecuteDirectProductionActorTrace(
+			IEnumerable<MainRoleType> sourceRoles,
+			long runNumber)
+	{
+		var desiredSources = sourceRoles.ToArray();
+		MainRoleType[] roles =
+		[
+			MainRoleType.Actor,
+			MainRoleType.SimpleWerewolf,
+			.. Enumerable.Repeat(MainRoleType.SimpleVillager, 16)
+		];
+		var scenario = new SimulationScenario(
+			roles.Length,
+			roles,
+			new ActorSetupCards(desiredSources));
+		var identity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+		var material = new RunSeedMaterial(
+			identity,
+			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
+			runNumber);
+		var random = new DeterministicRandomSource(material);
+		var startState = SimulationStartStateDeriver.Derive(
+			material,
+			SimulatorCapability.SafetyScreening,
+			random);
+		var productionStrategy = new BaselineRandomDecisionStrategy(
+			material,
+			startState,
+			SimulatorCapability.SafetyScreening.HeadlessResponsePolicy,
+			random);
+		var trace = new RecordingDecisionStrategy(productionStrategy);
+		var execution = new HeadlessGameDriver(trace).CompleteGameSession(
+			startState,
+			CancellationToken.None);
+		var history = execution.Session.GameHistoryLog.ToArray();
+		return new DirectProductionTraceExecution(
+			trace,
+			(GameSession)execution.Session,
+			SimulationExecutor.AdaptTerminalEvidence(material, history));
+	}
+
+	private static bool HasProductionSourceEvidence(
+		DirectProductionTraceExecution execution,
+		MainRoleType sourceRole)
+	{
+		var observations = execution.Trace.Observations;
+
+		return sourceRole switch
+		{
+			MainRoleType.Seer => HasSemantic(
+				ModeratorInstructionSemantic.SelectSeerTarget),
+			MainRoleType.Cupid => HasSemantic(
+				ModeratorInstructionSemantic.SelectCupidLovers),
+			MainRoleType.Witch => HasSemantic(
+				ModeratorInstructionSemantic.SelectWitchHealingTarget),
+			MainRoleType.LittleGirl => observations.Any(observation =>
+				observation.Instruction.Semantic ==
+					ModeratorInstructionSemantic.WakeRole &&
+				observation.Instruction.PrivateInstruction?.Contains(
+					GameStrings.LittleGirlOpeningGuidance,
+					StringComparison.Ordinal) == true),
+			MainRoleType.Defender => HasSemantic(
+				ModeratorInstructionSemantic.SelectDefenderTarget),
+			MainRoleType.Fox => HasSemantic(
+				ModeratorInstructionSemantic.SelectFoxCenter),
+			MainRoleType.StutteringJudge => HasSemantic(
+				ModeratorInstructionSemantic.EstablishStutteringJudgeSignal),
+			MainRoleType.Elder => execution.Session
+				.GetActorBorrowedElderResistanceCommits().Any(),
+			MainRoleType.Hunter => HasSemantic(
+				ModeratorInstructionSemantic.SelectHunterFinalShotTarget),
+			MainRoleType.VillageIdiot => HasSemantic(
+				ModeratorInstructionSemantic.AnnounceVillageIdiotPardon),
+			MainRoleType.BearTamer => HasSemantic(
+				ModeratorInstructionSemantic.AnnounceBearTamerGrowl),
+			MainRoleType.Scapegoat => execution.Session
+				.GetActorBorrowedScapegoatTieReplacementCommits().Any(),
+			MainRoleType.KnightWithRustySword => execution.Session
+				.GetActorBorrowedKnightRustySwordScheduleCommits().Any(),
+			_ => throw new ArgumentOutOfRangeException(nameof(sourceRole))
+		};
+
+		bool HasSemantic(ModeratorInstructionSemantic semantic) =>
+			observations.Any(observation =>
+				observation.Instruction.Semantic == semantic);
+	}
+
 	private static RunSeedMaterial CreateSeedMaterial(
 		DecisionStrategyIdentity strategyIdentity)
 	{
@@ -1465,6 +1608,66 @@ public sealed class ActorBorrowedSemanticTraceTests
 		HeadlessResponsePolicy Policy,
 		BaselineRandomDecisionStrategy Strategy,
 		RecordingPolicy RecordingPolicy);
+
+	private sealed record ProductionInstructionObservation(
+		ModeratorInstruction Instruction,
+		int TurnNumber,
+		GamePhase Phase);
+
+	private sealed record DirectProductionTraceExecution(
+		RecordingDecisionStrategy Trace,
+		GameSession Session,
+		SimulationRun Run);
+
+	private sealed class RecordingDecisionStrategy : IModeratorDecisionStrategy
+	{
+		private readonly IModeratorDecisionStrategy _inner;
+
+		internal RecordingDecisionStrategy(
+			IModeratorDecisionStrategy inner)
+		{
+			ArgumentNullException.ThrowIfNull(inner);
+			_inner = inner;
+			UsesProductionBaseline = inner is BaselineRandomDecisionStrategy;
+		}
+
+		internal bool UsesProductionBaseline { get; }
+		internal List<MainRoleType> SelectedSources { get; } = [];
+		internal HashSet<MainRoleType> ActivatedSources { get; } = [];
+		internal List<ProductionInstructionObservation> Observations { get; } = [];
+
+		public ModeratorResponse CreateResponse(
+			ModeratorInstruction instruction,
+			IGameSession session)
+		{
+			if (session is GameSession concreteSession &&
+			    concreteSession
+				    .GetModeratorActiveActorBorrowedRolePowerActivation() is
+				    { } activation)
+			{
+				ActivatedSources.Add(activation.SourceRole);
+			}
+
+			var productionResponse = _inner.CreateResponse(instruction, session);
+			Observations.Add(new ProductionInstructionObservation(
+				instruction,
+				session.TurnNumber,
+				session.GetCurrentPhase()));
+			if (instruction is SelectOptionsInstruction
+			    {
+				    Semantic: ModeratorInstructionSemantic.ChooseActorSetupCard
+			    } &&
+			    productionResponse.SelectedOptionIds is [var selectedOptionId])
+			{
+				var selectedCardId = Guid.Parse(selectedOptionId);
+				var selectedCard = session.GetModeratorActorSetupCards()
+					.Cards.Single(card => card.Id == selectedCardId);
+				SelectedSources.Add(selectedCard.PrintedRole);
+			}
+
+			return productionResponse;
+		}
+	}
 
 	private sealed class RecordingPolicy : IRolePowerAvailabilityPolicy
 	{

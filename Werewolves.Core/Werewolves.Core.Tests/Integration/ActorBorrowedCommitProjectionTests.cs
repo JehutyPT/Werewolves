@@ -328,6 +328,54 @@ public sealed class ActorBorrowedCommitProjectionTests
 			System.Reflection.BindingFlags.DeclaredOnly).Should().BeEmpty();
 	}
 
+	[Fact]
+	public void Observer_ActorSetupCardSpendReceivesOnlyPropertyFreePublicMarker()
+	{
+		var observer = new RecordingStateChangeObserver();
+		var fixture = CreateCommittedSeerSession(observer);
+
+		var marker = observer.LogEntries
+			.OfType<ActorSetupCardSpendCommittedLogEntry>()
+			.Should().ContainSingle().Subject;
+		var publicText = marker.ToString();
+		publicText.Should().Be("ActorSetupCardSpendCommitted")
+			.And.NotContain(SeerCard.Id.ToString())
+			.And.NotContain(fixture.PowerIdentity.SourceRole.ToString())
+			.And.NotContain(fixture.PowerIdentity.SourcePowerIdentifier)
+			.And.NotContain(fixture.PowerIdentity.PowerInstanceId.ToString())
+			.And.NotContain(fixture.PowerIdentity.ActingPlayerId.ToString())
+			.And.NotContain(fixture.TargetPlayerId.ToString());
+		marker.GetType().GetProperties(
+			System.Reflection.BindingFlags.Instance |
+			System.Reflection.BindingFlags.Public |
+			System.Reflection.BindingFlags.DeclaredOnly).Should().BeEmpty();
+	}
+
+	[Fact]
+	public void Observer_ActorBorrowedActivationExpiryReceivesOnlyPropertyFreePublicMarker()
+	{
+		var observer = new RecordingStateChangeObserver();
+		var fixture = CreateCommittedSeerSession(observer);
+		fixture.Session.TryExpireActorBorrowedRolePowerActivation()
+			.Should().BeTrue();
+
+		var marker = observer.LogEntries
+			.OfType<ActorBorrowedRolePowerActivationExpiredLogEntry>()
+			.Should().ContainSingle().Subject;
+		var publicText = marker.ToString();
+		publicText.Should().Be("ActorBorrowedRolePowerActivationExpired")
+			.And.NotContain(SeerCard.Id.ToString())
+			.And.NotContain(fixture.PowerIdentity.SourceRole.ToString())
+			.And.NotContain(fixture.PowerIdentity.SourcePowerIdentifier)
+			.And.NotContain(fixture.PowerIdentity.PowerInstanceId.ToString())
+			.And.NotContain(fixture.PowerIdentity.ActingPlayerId.ToString())
+			.And.NotContain(fixture.TargetPlayerId.ToString());
+		marker.GetType().GetProperties(
+			System.Reflection.BindingFlags.Instance |
+			System.Reflection.BindingFlags.Public |
+			System.Reflection.BindingFlags.DeclaredOnly).Should().BeEmpty();
+	}
+
 	private static GameSession CreateCommittedIssue143ActorSession(
 		ActorBorrowedPrivateCommitMutation mutation,
 		RecordingStateChangeObserver sourceObserver) => mutation switch
@@ -425,10 +473,6 @@ public sealed class ActorBorrowedCommitProjectionTests
 			actorCard.Card.Id).Should().BeTrue();
 		source.IdentifyRole([actorId], MainRoleType.Actor);
 		source.IdentifyRole([wolfFatherId], MainRoleType.AccursedWolfFather);
-		source.TrySpendActorSetupCard(
-			actorId,
-			ElderCard.Id,
-			out _).Should().BeTrue();
 		source.PerformNightAction(NightActionType.DefenderProtect, actorId);
 		source.SetPendingModeratorInstruction(RecoveryBoundaryKey.Instance, start);
 		source.CaptureRecoveryBoundary(RecoveryBoundaryKey.Instance);
@@ -442,9 +486,10 @@ public sealed class ActorBorrowedCommitProjectionTests
 				recoveredStart.CreateResponse())
 			.ModeratorInstruction.Should()
 			.BeOfType<ConfirmationInstruction>().Subject;
-		var werewolfObservation = service.ProcessInstruction(
-				gameId,
-				nightStart.CreateResponse())
+		var builder = GameTestBuilder.ForExistingGame(service, gameId);
+		builder.ConfirmNightStart().IsSuccess.Should().BeTrue();
+		var werewolfObservation = builder
+			.CompleteActorNightAction(actorId, ElderCard.Id)
 			.ModeratorInstruction.Should()
 			.BeOfType<SelectPlayersInstruction>().Subject;
 		var victimSelection = service.ProcessInstruction(

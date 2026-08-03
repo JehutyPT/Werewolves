@@ -5,6 +5,7 @@ using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.GameLogic.Simulation;
 using Werewolves.Core.GameLogic.Strategies;
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
@@ -102,7 +103,7 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 
 	[Theory]
 	[InlineData(0, ExpectedInputType.PlayerSelection)]
-	[InlineData(1, ExpectedInputType.Continue)]
+	[InlineData(3, ExpectedInputType.Continue)]
 	public void BaselineRandomDecisionStrategy_WithDevotedServantVoteWindow_DeterministicallyCoversContinueAndPublicUse(
 		long runNumber,
 		ExpectedInputType expectedResponseType)
@@ -745,6 +746,85 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 		MarkTestCompleted();
 	}
 
+	[Fact]
+	public void SafetyBaseline_WithActorSetupChoice_DeterministicallyCoversLegalSkipAndSingleSelection()
+	{
+		var scenario = new SimulationScenario(
+			5,
+			[
+				MainRoleType.Actor,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			],
+			new ActorSetupCards(
+				[MainRoleType.Cupid, MainRoleType.Defender, MainRoleType.Elder]));
+		var identity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+		var sessionMaterial = new RunSeedMaterial(
+			identity,
+			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
+			runNumber: 0);
+		var sessionStartState = SimulationStartStateDeriver.Derive(
+			sessionMaterial,
+			SimulatorCapability.SafetyScreening);
+		var config = sessionStartState.CreateGameSessionConfig();
+		var actorSeat = sessionStartState.RoleAssignments.Single(assignment =>
+			assignment.Role == MainRoleType.Actor).SeatNumber;
+		var service = new GameService();
+		var start = service.StartNewGame(config);
+		var session = service.GetGameStateView(start.GameGuid)!;
+		var instruction = new SelectOptionsInstruction(
+			ModeratorInstructionSemantic.ChooseActorSetupCard,
+			config.ActorSetupCards.Cards.Select(card => new ModeratorOption(
+				card.Id.ToString("D"),
+				card.PrintedRole.GetPublicName())).ToArray(),
+			NumberRangeConstraint.SingleOptional,
+			privateInstruction: GameStrings.ActorSetupCardSelectionInstruction,
+			affectedPlayerIds: [config.PlayerRoster[actorSeat - 1].Id]);
+		var selectedCounts = new List<int>();
+
+		for (var runNumber = 0; runNumber < 32; runNumber++)
+		{
+			var material = new RunSeedMaterial(
+				identity,
+				BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
+				runNumber);
+			var startState = SimulationStartStateDeriver.Derive(
+				material,
+				SimulatorCapability.SafetyScreening);
+			var first = new BaselineRandomDecisionStrategy(
+				material,
+				startState,
+				SimulatorCapability.SafetyScreening.HeadlessResponsePolicy)
+				.CreateResponse(instruction, session);
+			var replay = new BaselineRandomDecisionStrategy(
+				material,
+				startState,
+				SimulatorCapability.SafetyScreening.HeadlessResponsePolicy)
+				.CreateResponse(instruction, session);
+
+			first.Type.Should().Be(ExpectedInputType.OptionSelection);
+			first.InstructionId.Should().Be(instruction.InstructionId);
+			first.SelectedOptionIds.Should().HaveCountLessThanOrEqualTo(1);
+			first.SelectedOptionIds.Should().BeSubsetOf(
+				instruction.Options.Select(option => option.Id));
+			first.SelectedOptionIds.Should().Equal(replay.SelectedOptionIds);
+			selectedCounts.Add(first.SelectedOptionIds!.Count);
+		}
+
+		SimulatorCapability.SafetyScreening.HeadlessResponsePolicy.Admits(
+			ModeratorInstructionSemantic.ChooseActorSetupCard).Should().BeTrue();
+		SimulatorCapability.SafetyScreening.HeadlessResponsePolicy.StrategyIdentity
+			.Should().Be(new DecisionStrategyIdentity(
+				"baseline-random",
+				"14-splitmix64"));
+		selectedCounts.Should().Contain(0).And.Contain(1);
+		MarkTestCompleted();
+	}
+
 	[Theory]
 	[InlineData(0L, "wolf-hound-villagers")]
 	[InlineData(1L, "wolf-hound-werewolves")]
@@ -827,7 +907,7 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 			3L,
 			AccursedWolfFatherInfectionOptionIds.Decline)]
 		[InlineData(
-			2L,
+			1L,
 			AccursedWolfFatherInfectionOptionIds.Infect)]
 		public void BaselineRandomDecisionStrategy_WithAccursedWolfFatherInfection_CoversBothBranchesDeterministically(
 			long runNumber,

@@ -150,9 +150,10 @@ public sealed class TerminalLobbyEvaluator
 		{
 			return new CouldNotEvaluateLobbyEvaluation();
 		}
+		var screeningAttemptCount = GetScreeningAttemptCount(identity.Scenario);
 
 		if (!TryExecuteBatch(
-			scenario, capability, identity, ScreeningAttemptCount, cancellationToken, out var screening))
+			scenario, capability, identity, screeningAttemptCount, cancellationToken, out var screening))
 		{
 			return new CouldNotEvaluateLobbyEvaluation();
 		}
@@ -162,7 +163,7 @@ public sealed class TerminalLobbyEvaluator
 			screening,
 			identity,
 			simulatorSupport.Profile.HeadlessResponsePolicy.StrategyIdentity,
-			ScreeningAttemptCount))
+			screeningAttemptCount))
 		{
 			return new CouldNotEvaluateLobbyEvaluation();
 		}
@@ -180,7 +181,10 @@ public sealed class TerminalLobbyEvaluator
 		}
 		var thiefBranchPolicy = identity.Scenario.ThiefOfferBranchPolicy;
 		if (thiefBranchPolicy != null &&
-		    HasDegenerateThiefBranch(screening, thiefBranchPolicy))
+		    TrySelectDegenerateThiefBranch(
+			    screening.Records,
+			    thiefBranchPolicy,
+			    out _))
 		{
 			return new DegenerateTerminalEvaluation(screeningEvidence);
 		}
@@ -226,6 +230,18 @@ public sealed class TerminalLobbyEvaluator
 		{
 			return new CouldNotEvaluateLobbyEvaluation();
 		}
+	}
+
+	internal static int GetScreeningAttemptCount(
+		CanonicalSimulationScenario scenario)
+	{
+		ArgumentNullException.ThrowIfNull(scenario);
+		var branchCount = scenario.ActorSetupCards.Count > 0
+			? scenario.ThiefOfferBranchPolicy?.Branches.Count ?? 1
+			: 1;
+		return checked(
+			ScreeningAttemptCount *
+			branchCount);
 	}
 
 	private bool TryExecuteBatch(
@@ -282,17 +298,35 @@ public sealed class TerminalLobbyEvaluator
 		&& evidence.DecisionStrategy.Equals(decisionStrategyIdentity)
 		&& evidence.Records.Count == expectedCount;
 
-	private static bool HasDegenerateThiefBranch(
-		SimulationBatchSourceEvidence evidence,
-		ThiefOfferBranchPolicy policy) =>
-		policy.Branches.Any(branch =>
+	internal static bool TrySelectDegenerateThiefBranch(
+		IReadOnlyList<SimulationRun> records,
+		ThiefOfferBranchPolicy policy,
+		out CompletedSimulationRun[] witness,
+		int? exactRecordCount = null)
+	{
+		ArgumentNullException.ThrowIfNull(records);
+		ArgumentNullException.ThrowIfNull(policy);
+		foreach (var branch in policy.Branches)
 		{
-			var records = evidence.Records
+			var branchRecords = records
 				.Where(record =>
 					policy.GetBranch(record.RunSeedMaterial.RunNumber) == branch)
 				.ToArray();
-			return records.Length > 0 && records.All(record =>
-				record is CompletedSimulationRun { EndingTurn: 1 });
-		});
+			if (branchRecords.Length == 0
+				|| (exactRecordCount is { } expectedCount
+					&& branchRecords.Length != expectedCount)
+				|| branchRecords.Any(record =>
+					record is not CompletedSimulationRun { EndingTurn: 1 }))
+			{
+				continue;
+			}
+
+			witness = branchRecords.Cast<CompletedSimulationRun>().ToArray();
+			return true;
+		}
+
+		witness = [];
+		return false;
+	}
 
 }

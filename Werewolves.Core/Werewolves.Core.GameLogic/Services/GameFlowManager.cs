@@ -1094,6 +1094,19 @@ internal static class GameFlowManager
 		var actingPlayerId = commit.PowerIdentity.ActingPlayerId;
 		var hasExpectedStartingBoundary = startingInstruction switch
 		{
+			AssignRolesInstruction
+			{
+				Semantic:
+					ModeratorInstructionSemantic.AssignDayVoteTargetRole,
+				PlayersForAssignment: var playersForAssignment,
+				RolesForAssignment: var rolesForAssignment,
+				AffectedPlayerIds: [var affectedPlayerId]
+			} =>
+				affectedPlayerId == actingPlayerId &&
+				playersForAssignment.Count == 1 &&
+				playersForAssignment.Contains(actingPlayerId) &&
+				rolesForAssignment.Contains(MainRoleType.Actor) &&
+				IsExactActorRoleAssignmentResponse(input, actingPlayerId),
 			ConfirmationInstruction
 			{
 				Semantic:
@@ -1126,6 +1139,16 @@ internal static class GameFlowManager
 				nextInstruction,
 				session.GetPlayer(actingPlayerId));
 	}
+
+	private static bool IsExactActorRoleAssignmentResponse(
+		ModeratorResponse input,
+		Guid actorPlayerId) =>
+		input.Type == ExpectedInputType.AssignPlayerRoles &&
+		input.SelectedPlayerIds is null &&
+		input.SelectedOptionIds is null &&
+		input.AssignedPlayerRoles is { Count: 1 } assignments &&
+		assignments.TryGetValue(actorPlayerId, out var assignedRole) &&
+		assignedRole == MainRoleType.Actor;
 
 	private static bool IsCorrelatedActorBorrowedHunterFinalShot(
 		GameSession session,
@@ -1305,6 +1328,17 @@ internal static class GameFlowManager
 	{
 		var history = session.GameHistoryLog.ToArray();
 		var actorPlayerId = commit.PowerIdentity.ActingPlayerId;
+		var hasExpectedRevealResponse = startingInstruction switch
+		{
+			ConfirmationInstruction =>
+				input.Type == ExpectedInputType.Continue &&
+				input.SelectedPlayerIds is null &&
+				input.SelectedOptionIds is null &&
+				input.AssignedPlayerRoles is null,
+			AssignRolesInstruction =>
+				IsExactActorRoleAssignmentResponse(input, actorPlayerId),
+			_ => false
+		};
 		if (!IsCorrelatedActorBorrowedMarker(session, marker, commit) ||
 			session.GetCurrentPhase() != GamePhase.Day ||
 			commit.TriggeringVoteOutcomeLogIndex < 0 ||
@@ -1322,7 +1356,7 @@ internal static class GameFlowManager
 				startingInstruction,
 				actorPlayerId) ||
 			input.InstructionId != startingInstruction?.InstructionId ||
-			input.Type != ExpectedInputType.Continue)
+			!hasExpectedRevealResponse)
 		{
 			return false;
 		}
@@ -2666,7 +2700,20 @@ internal static class GameFlowManager
 			    return;
 		    }
 
-		    var continuation = ResolvePendingInstructionContinuation(
+		    var continuation = pendingInstruction is ConfirmationInstruction
+			    {
+				    Semantic: ModeratorInstructionSemantic.PutRoleToSleep
+			    } &&
+			    session.GetModeratorActiveActorBorrowedRolePowerActivation() is
+				    { } actorActivation
+				    ? ResolvePendingInstructionContinuation(
+					    Listener(actorActivation.SourceRole),
+					    NightMainActionLoop,
+					    session,
+					    pendingInstruction,
+					    admissions)
+				    : null;
+		    continuation ??= ResolvePendingInstructionContinuation(
 			    session,
 			    pendingInstruction,
 			    admissions);
@@ -2748,6 +2795,39 @@ internal static class GameFlowManager
 					"The Actor borrowed Stuttering Judge recovery cursor does not match the canonical Record Day Vote instruction.");
 			}
 
+			return;
+		}
+
+		if (cursor.Kind == DomainRecoveryCursorKind.ActorSetupCardSpendCommit)
+		{
+			if (session.GetCurrentPhase() != GamePhase.Night ||
+			    !IsNightStartSubPhase(session))
+			{
+				throw new InvalidOperationException(
+					"The Actor setup-card spend recovery cursor is outside the Night schedule.");
+			}
+
+			var actorPendingInstruction = session.PendingModeratorInstruction
+				?? throw new InvalidOperationException(
+					"The Actor setup-card spend recovery cursor requires one Pending Instruction.");
+			var actorContinuation = ResolvePendingInstructionContinuation(
+				Listener(MainRoleType.Actor),
+				NightMainActionLoop,
+				session,
+				actorPendingInstruction,
+				admissions);
+			if (actorContinuation == null ||
+			    actorContinuation.Value.Listener != Listener(MainRoleType.Actor))
+			{
+				throw new InvalidOperationException(
+					"The Actor setup-card spend recovery cursor does not match its pending continuation.");
+			}
+
+			session.RestoreTransientContinuation(
+				Key,
+				actorContinuation.Value.ActiveSubPhaseStage,
+				actorContinuation.Value.Listener,
+				actorContinuation.Value.ListenerState);
 			return;
 		}
 

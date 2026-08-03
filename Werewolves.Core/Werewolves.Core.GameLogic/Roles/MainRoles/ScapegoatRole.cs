@@ -354,10 +354,11 @@ internal sealed class ScapegoatRole
 				session,
 				out var borrowedExecution))
 		{
-			var borrowedReveal =
-				borrowedExecution.Actor.State.PubliclyRevealedRole == null
-					? CreateBorrowedTieReveal(borrowedExecution.Actor.Id)
-					: null;
+			var borrowedReveal = RoleKnowledgeHandlers.RequestPublicRoleReveal(
+				session,
+				[borrowedExecution.Actor],
+				ModeratorInstructionSemantic.RevealScapegoatForTie,
+				GameStrings.ActorRoleName);
 			if (borrowedReveal != null)
 			{
 				return HookListenerActionResult.NeedInput(
@@ -849,39 +850,32 @@ internal sealed class ScapegoatRole
 			instructionId: instructionId);
 	}
 
-	private static ConfirmationInstruction CreateBorrowedTieReveal(
-		Guid actorId,
-		Guid instructionId = default) =>
-		new(
-			ModeratorInstructionSemantic.RevealScapegoatForTie,
-			publicAnnouncement: GameStrings.ActorRoleName,
-			privateInstruction: GameStrings.PublicRoleRevealInstruction,
-			affectedPlayerIds: [actorId],
-			instructionId: instructionId);
-
 	internal static bool MatchesBorrowedTieReveal(
 		ModeratorInstruction? instruction,
 		Guid actorId)
 	{
-		if (instruction is not ConfirmationInstruction reveal)
+		if (instruction is not (ConfirmationInstruction or
+		    AssignRolesInstruction) ||
+		    instruction.Semantic !=
+		    ModeratorInstructionSemantic.RevealScapegoatForTie ||
+		    instruction.AffectedPlayerIds is not [var affectedPlayerId] ||
+		    affectedPlayerId != actorId ||
+		    !StringComparer.Ordinal.Equals(
+			    instruction.PublicAnnouncement,
+			    GameStrings.ActorRoleName) ||
+		    !StringComparer.Ordinal.Equals(
+			    instruction.PrivateInstruction,
+			    GameStrings.PublicRoleRevealInstruction) ||
+		    instruction.SoundEffects.Count != 0)
 		{
 			return false;
 		}
 
-		var expected = CreateBorrowedTieReveal(
-			actorId,
-			reveal.InstructionId);
-		return reveal.Semantic == expected.Semantic &&
-			reveal.InstructionId == expected.InstructionId &&
-			reveal.AffectedPlayerIds is { } affectedPlayerIds &&
-			affectedPlayerIds.SequenceEqual(expected.AffectedPlayerIds!) &&
-			StringComparer.Ordinal.Equals(
-				reveal.PublicAnnouncement,
-				expected.PublicAnnouncement) &&
-			StringComparer.Ordinal.Equals(
-				reveal.PrivateInstruction,
-				expected.PrivateInstruction) &&
-			reveal.SoundEffects.SequenceEqual(expected.SoundEffects);
+		return instruction is ConfirmationInstruction ||
+			instruction is AssignRolesInstruction assignment &&
+			assignment.PlayersForAssignment.Count == 1 &&
+			assignment.PlayersForAssignment.Contains(actorId) &&
+			assignment.RolesForAssignment.Contains(MainRoleType.Actor);
 	}
 
 	internal static bool MatchesPermittedVoterSelection(
