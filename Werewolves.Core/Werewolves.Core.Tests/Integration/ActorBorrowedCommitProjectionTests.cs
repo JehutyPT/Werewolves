@@ -486,12 +486,11 @@ public sealed class ActorBorrowedCommitProjectionTests
 				recoveredStart.CreateResponse())
 			.ModeratorInstruction.Should()
 			.BeOfType<ConfirmationInstruction>().Subject;
-		var werewolfObservation = AdvanceActorElderSetup(
-				service,
-				gameId,
-				nightStart,
-				actorId)
-			.Should()
+		var builder = GameTestBuilder.ForExistingGame(service, gameId);
+		builder.ConfirmNightStart().IsSuccess.Should().BeTrue();
+		var werewolfObservation = builder
+			.CompleteActorNightAction(actorId, ElderCard.Id)
+			.ModeratorInstruction.Should()
 			.BeOfType<SelectPlayersInstruction>().Subject;
 		var victimSelection = service.ProcessInstruction(
 				gameId,
@@ -533,45 +532,6 @@ public sealed class ActorBorrowedCommitProjectionTests
 		committed.GetActorBorrowedElderResistanceCommits()
 			.Should().ContainSingle();
 		return committed;
-	}
-
-	private static ModeratorInstruction AdvanceActorElderSetup(
-		GameService service,
-		Guid gameId,
-		ConfirmationInstruction nightStart,
-		Guid actorId)
-	{
-		var actorWake = service.ProcessInstruction(
-				gameId,
-				nightStart.CreateResponse())
-			.ModeratorInstruction.Should()
-			.BeOfType<ConfirmationInstruction>().Subject;
-		actorWake.Semantic.Should().Be(ModeratorInstructionSemantic.WakeRole);
-		actorWake.AffectedPlayerIds.Should().Equal(actorId);
-		var actorChoice = service.ProcessInstruction(
-				gameId,
-				actorWake.CreateResponse())
-			.ModeratorInstruction.Should()
-			.BeOfType<SelectOptionsInstruction>().Subject;
-		actorChoice.Semantic.Should().Be(
-			ModeratorInstructionSemantic.ChooseActorSetupCard);
-		actorChoice.AffectedPlayerIds.Should().Equal(actorId);
-		actorChoice.Options.Select(option => option.Id).Should().Contain(
-			ElderCard.Id.ToString("D"));
-		var actorSleep = service.ProcessInstruction(
-				gameId,
-				actorChoice.CreateResponse(ElderCard.Id.ToString("D")))
-			.ModeratorInstruction.Should()
-			.BeOfType<ConfirmationInstruction>().Subject;
-		actorSleep.Semantic.Should().Be(
-			ModeratorInstructionSemantic.PutRoleToSleep);
-		actorSleep.AffectedPlayerIds.Should().Equal(actorId);
-		var result = service.ProcessInstruction(
-			gameId,
-			actorSleep.CreateResponse());
-		result.IsSuccess.Should().BeTrue();
-		result.ModeratorInstruction.Should().NotBeNull();
-		return result.ModeratorInstruction!;
 	}
 
 	private static GameSession CreateCommittedElderSuppressionSession(

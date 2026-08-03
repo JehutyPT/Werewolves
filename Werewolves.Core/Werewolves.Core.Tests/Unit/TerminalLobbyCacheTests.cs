@@ -702,6 +702,41 @@ public class TerminalLobbyCacheTests
 	}
 
 	[Theory]
+	[InlineData(MainRoleType.SimpleWerewolf, MainRoleType.BigBadWolf, 2_000)]
+	[InlineData(MainRoleType.Seer, MainRoleType.Defender, 3_000)]
+	public void Capture_ActorReachableThiefDegenerateEvidence_RoundTripsSchemaOneExactCurrentRecord(
+		MainRoleType offer1,
+		MainRoleType offer2,
+		int expectedAttemptCount)
+	{
+		var identity = ActorThiefIdentity(offer1, offer2);
+		var evidence = Evidence(
+			identity,
+			expectedAttemptCount,
+			degenerate: true,
+			BaselineRandomDecisionStrategy.SafetyScreeningIdentity);
+
+		var record = TerminalLobbyCache.Capture(
+			identity,
+			new DegenerateTerminalEvaluation(evidence));
+		var encoded = TerminalLobbyCache.Write(TerminalLobbyCache.CreateDocument([record]));
+		var read = TerminalLobbyCache.ReadDocument(encoded);
+
+		identity.Scenario.ActorSetupCards.Should().NotBeEmpty();
+		identity.Scenario.ThiefOfferBranchPolicy!.Branches.Should().HaveCount(
+			expectedAttemptCount / TerminalLobbyEvaluator.ScreeningAttemptCount);
+		using var json = JsonDocument.Parse(encoded);
+		json.RootElement.GetProperty("version").GetInt32().Should().Be(1);
+		read.IsUsable.Should().BeTrue();
+		TerminalLobbyCache.TryGet(read.Document!, identity, out var roundTripped).Should().BeTrue();
+		var aggregate = roundTripped.Should().BeOfType<DegenerateTerminalCacheRecord>().Subject;
+		aggregate.AttemptedRunCount.Should().Be(expectedAttemptCount);
+		aggregate.CompletedRunCount.Should().Be(expectedAttemptCount);
+		aggregate.IncompleteRunCount.Should().Be(0);
+		aggregate.Should().BeEquivalentTo(record);
+	}
+
+	[Theory]
 	[InlineData(1_000, true)]
 	[InlineData(10_000, false)]
 	public void Capture_FullProbabilityProducerAcceptsBaselineStrategyForTerminalVariants(
@@ -927,6 +962,31 @@ public class TerminalLobbyCacheTests
 
 	private static SimulationCompatibilityIdentity AggregateIdentity() =>
 		ActorIdentity(villagers: 3, werewolves: 1);
+
+	private static SimulationCompatibilityIdentity ActorThiefIdentity(
+		MainRoleType offer1,
+		MainRoleType offer2)
+	{
+		MainRoleType[] dealPool =
+		[
+			MainRoleType.Actor,
+			MainRoleType.Thief,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager
+		];
+		var scenario = new SimulationScenario(
+			5,
+			dealPool.Concat([offer1, offer2]),
+			dealPool,
+			offer1,
+			offer2,
+			new ActorSetupCards(
+				[MainRoleType.Cupid, MainRoleType.Witch, MainRoleType.Elder]));
+		return new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+	}
 
 	private static SimulationCompatibilityIdentity ProbabilityIdentity() =>
 		Identity(6, 5, 1, SimulatorCapability.FullProbability.Identity);

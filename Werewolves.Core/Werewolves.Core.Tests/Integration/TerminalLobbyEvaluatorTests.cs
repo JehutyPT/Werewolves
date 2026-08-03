@@ -349,6 +349,34 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 	}
 
 	[Fact]
+	public void Evaluate_ThiefWithoutActorReachability_UsesOneThousandSafetyAttempts()
+	{
+		var scenario = ThiefScenario();
+		var calls = new List<int>();
+		var evaluator = new TerminalLobbyEvaluator((batchScenario, identity, count, _) =>
+		{
+			calls.Add(count);
+			return Batch(
+				batchScenario,
+				identity,
+				count,
+				_ => (2, VictoryCheckWindow.PreNight));
+		});
+
+		var result = evaluator.Evaluate(
+			scenario,
+			SimulatorCapability.SafetyScreening,
+			LobbyEvaluationDepth.DegenerateScreeningOnly);
+
+		scenario.ToCanonical().ActorSetupCards.Should().BeEmpty();
+		scenario.ThiefOfferBranchPolicy.Should().NotBeNull();
+		scenario.ThiefOfferBranchPolicy!.Branches.Count.Should().BeGreaterThan(1);
+		result.Should().BeOfType<ScreeningPassedLobbyEvaluation>();
+		calls.Should().Equal(TerminalLobbyEvaluator.ScreeningAttemptCount);
+		MarkTestCompleted();
+	}
+
+	[Fact]
 	public void Evaluate_ThiefBranchPolicy_NoDegenerateBranchAndOneIncomplete_ReturnsCouldNotEvaluate()
 	{
 		var evaluator = new TerminalLobbyEvaluator((scenario, identity, count, _) =>

@@ -58,6 +58,17 @@ public class NightActionInputs
     /// </summary>
     public Guid? BigBadWolfTargetId { get; init; }
 
+    /// <summary>
+    /// Actor action: ID of the Actor player to identify or wake.
+    /// </summary>
+    public Guid? ActorId { get; init; }
+
+    /// <summary>
+    /// Actor action: ID of the setup card to borrow, or null to decline.
+    /// ActorId distinguishes a declined choice from an omitted Actor action.
+    /// </summary>
+    public Guid? ActorSetupCardId { get; init; }
+
     // Future roles can add their inputs here, e.g.:
     // public Guid? WitchHealTargetId { get; init; }
     // public Guid? WitchPoisonTargetId { get; init; }
@@ -87,6 +98,17 @@ public class GameTestBuilder
 	/// Creates a new test builder instance.
 	/// </summary>
 	public static GameTestBuilder Create(ITestOutputHelper? output = null) => new(output);
+
+	internal static GameTestBuilder ForExistingGame(
+		GameService gameService,
+		Guid gameId) =>
+		new()
+		{
+			_gameService = gameService ??
+				throw new ArgumentNullException(nameof(gameService)),
+			_gameId = gameId,
+			_gameStarted = true
+		};
 
 	internal GameTestBuilder WithRolePowerAvailabilityPolicy(
 		IRolePowerAvailabilityPolicy policy)
@@ -797,6 +819,64 @@ public class GameTestBuilder
         return Process(sleep.CreateResponse());
     }
 
+	/// <summary>
+	/// Completes the Actor night action sequence:
+	/// identify or wake → choose or decline a setup card → confirm sleep.
+	/// </summary>
+	/// <param name="actorId">The ID of the Actor player.</param>
+	/// <param name="setupCardId">The setup card to borrow, or null to decline.</param>
+	/// <returns>The result of the final sleep confirmation.</returns>
+	public ProcessResult CompleteActorNightAction(
+		Guid actorId,
+		Guid? setupCardId)
+	{
+		EnsureGameStarted();
+
+		var afterWakeOrIdentification = GetCurrentInstruction() switch
+		{
+			SelectPlayersInstruction
+			{
+				Semantic: ModeratorInstructionSemantic.IdentifyRoleHolders,
+				RoleIdentification: MainRoleType.Actor
+			} identify => Process(identify.CreateResponse([actorId])),
+			ConfirmationInstruction
+			{
+				Semantic: ModeratorInstructionSemantic.WakeRole,
+				AffectedPlayerIds: [var affectedPlayerId]
+			} wake when affectedPlayerId == actorId => Process(wake.CreateResponse()),
+			null => throw new InvalidOperationException(
+				"No current instruction is available for the Actor wake."),
+			var instruction => throw new AssertionException(
+				$"Expected an Actor identification or wake instruction, but received " +
+				$"{instruction.GetType().Name} ({instruction.Semantic}).")
+		};
+
+		var choice = InstructionAssert.ExpectSuccessWithType<SelectOptionsInstruction>(
+			afterWakeOrIdentification,
+			"Actor setup-card choice");
+		if (choice.Semantic != ModeratorInstructionSemantic.ChooseActorSetupCard)
+		{
+			throw new AssertionException(
+				$"Expected {ModeratorInstructionSemantic.ChooseActorSetupCard}, " +
+				$"but received {choice.Semantic}.");
+		}
+
+		var afterChoice = Process(setupCardId is { } selectedSetupCardId
+			? choice.CreateResponse(selectedSetupCardId.ToString("D"))
+			: choice.CreateResponse());
+		var sleep = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+			afterChoice,
+			"Actor sleep confirmation");
+		if (sleep.Semantic != ModeratorInstructionSemantic.PutRoleToSleep)
+		{
+			throw new AssertionException(
+				$"Expected {ModeratorInstructionSemantic.PutRoleToSleep}, " +
+				$"but received {sleep.Semantic}.");
+		}
+
+		return Process(sleep.CreateResponse());
+	}
+
     /// <summary>
     /// Completes a full night phase by iterating through roles in the order defined by HookListeners[NightMainActionLoop].
     /// This includes confirming the night-end instruction that transitions to Dawn.
@@ -831,6 +911,7 @@ public class GameTestBuilder
             // Handle each role's night action based on the provided inputs
             result = roleType switch
             {
+				MainRoleType.Actor => HandleActorNightAction(inputs),
                 MainRoleType.SimpleWerewolf => HandleWerewolfNightAction(inputs),
                 MainRoleType.Seer => HandleSeerNightAction(inputs),
                 MainRoleType.AccursedWolfFather =>
@@ -960,6 +1041,20 @@ public class GameTestBuilder
             inputs.BigBadWolfId.Value,
             inputs.BigBadWolfTargetId.Value);
     }
+
+	/// <summary>
+	/// Handles the Actor night action if an Actor ID is provided.
+	/// A null setup-card ID records the Actor declining the optional choice.
+	/// </summary>
+	private ProcessResult HandleActorNightAction(NightActionInputs inputs)
+	{
+		if (inputs.ActorId == null)
+			return ProcessResult.Success(GetCurrentInstruction()!);
+
+		return CompleteActorNightAction(
+			inputs.ActorId.Value,
+			inputs.ActorSetupCardId);
+	}
 
     #endregion
 

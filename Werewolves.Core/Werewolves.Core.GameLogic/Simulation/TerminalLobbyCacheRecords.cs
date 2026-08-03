@@ -158,12 +158,13 @@ public sealed record DegenerateTerminalCacheRecord : AggregateTerminalCacheRecor
 		SimulationCompatibilityIdentity identity,
 		IEnumerable<TerminalCacheGameResultFrequency> frequencies,
 		IEnumerable<TerminalCacheTurnWindowFrequency> cells)
-		: base(
-			identity,
-			TerminalLobbyEvaluator.ScreeningAttemptCount,
-			frequencies,
-			cells,
-			turnOneOnly: true)
+			: base(
+				identity,
+				TerminalLobbyEvaluator.GetScreeningAttemptCount(
+					(identity ?? throw new ArgumentNullException(nameof(identity))).Scenario),
+				frequencies,
+				cells,
+				turnOneOnly: true)
 	{
 	}
 }

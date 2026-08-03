@@ -196,36 +196,21 @@ public class SimulationExecutionTests : DiagnosticTestBase
 		MarkTestCompleted();
 	}
 
-	[Fact]
-	public void ExecuteBatch_WithActorInOffer1_CompletesOneThousandFixedSeedAttemptsPerLegalBranch()
+	[Theory]
+	[InlineData(MainRoleType.Actor, MainRoleType.Seer)]
+	[InlineData(MainRoleType.Seer, MainRoleType.Actor)]
+	public void ExecuteBatch_WithActorInThiefOffer_CompletesOneThousandFixedSeedAttemptsPerLegalBranch(
+		MainRoleType offer1Role,
+		MainRoleType offer2Role)
 	{
 		var scenario = CreateOfferedActorScenario(
-			MainRoleType.Actor,
-			MainRoleType.Seer);
+			offer1Role,
+			offer2Role);
 
 		var batch = ExecuteAndAssertCompleteActorSafetyBatch(scenario);
 
-		scenario.ToCanonical().Offer1Role.Should().Be(MainRoleType.Actor);
-		scenario.ToCanonical().Offer2Role.Should().Be(MainRoleType.Seer);
-		scenario.ThiefOfferBranchPolicy!.Branches.Should().Equal(
-			ThiefOfferBranch.Offer1,
-			ThiefOfferBranch.Offer2,
-			ThiefOfferBranch.Decline);
-		batch.Records.Should().HaveCount(3_000);
-		MarkTestCompleted();
-	}
-
-	[Fact]
-	public void ExecuteBatch_WithActorInOffer2_CompletesOneThousandFixedSeedAttemptsPerLegalBranch()
-	{
-		var scenario = CreateOfferedActorScenario(
-			MainRoleType.Seer,
-			MainRoleType.Actor);
-
-		var batch = ExecuteAndAssertCompleteActorSafetyBatch(scenario);
-
-		scenario.ToCanonical().Offer1Role.Should().Be(MainRoleType.Seer);
-		scenario.ToCanonical().Offer2Role.Should().Be(MainRoleType.Actor);
+		scenario.ToCanonical().Offer1Role.Should().Be(offer1Role);
+		scenario.ToCanonical().Offer2Role.Should().Be(offer2Role);
 		scenario.ThiefOfferBranchPolicy!.Branches.Should().Equal(
 			ThiefOfferBranch.Offer1,
 			ThiefOfferBranch.Offer2,

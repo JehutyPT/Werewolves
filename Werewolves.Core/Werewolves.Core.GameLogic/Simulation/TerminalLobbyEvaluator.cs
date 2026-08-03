@@ -233,9 +233,12 @@ public sealed class TerminalLobbyEvaluator
 		CanonicalSimulationScenario scenario)
 	{
 		ArgumentNullException.ThrowIfNull(scenario);
+		var branchCount = scenario.ActorSetupCards.Count > 0
+			? scenario.ThiefOfferBranchPolicy?.Branches.Count ?? 1
+			: 1;
 		return checked(
 			ScreeningAttemptCount *
-			(scenario.ThiefOfferBranchPolicy?.Branches.Count ?? 1));
+			branchCount);
 	}
 
 	private bool TryExecuteBatch(

@@ -1102,18 +1102,11 @@ internal static class GameFlowManager
 				RolesForAssignment: var rolesForAssignment,
 				AffectedPlayerIds: [var affectedPlayerId]
 			} =>
-				input.Type == ExpectedInputType.AssignPlayerRoles &&
 				affectedPlayerId == actingPlayerId &&
 				playersForAssignment.Count == 1 &&
 				playersForAssignment.Contains(actingPlayerId) &&
 				rolesForAssignment.Contains(MainRoleType.Actor) &&
-				input.SelectedPlayerIds is null &&
-				input.SelectedOptionIds is null &&
-				input.AssignedPlayerRoles is { Count: 1 } assignments &&
-				assignments.TryGetValue(
-					actingPlayerId,
-					out var assignedRole) &&
-				assignedRole == MainRoleType.Actor,
+				IsExactActorRoleAssignmentResponse(input, actingPlayerId),
 			ConfirmationInstruction
 			{
 				Semantic:
@@ -1146,6 +1139,16 @@ internal static class GameFlowManager
 				nextInstruction,
 				session.GetPlayer(actingPlayerId));
 	}
+
+	private static bool IsExactActorRoleAssignmentResponse(
+		ModeratorResponse input,
+		Guid actorPlayerId) =>
+		input.Type == ExpectedInputType.AssignPlayerRoles &&
+		input.SelectedPlayerIds is null &&
+		input.SelectedOptionIds is null &&
+		input.AssignedPlayerRoles is { Count: 1 } assignments &&
+		assignments.TryGetValue(actorPlayerId, out var assignedRole) &&
+		assignedRole == MainRoleType.Actor;
 
 	private static bool IsCorrelatedActorBorrowedHunterFinalShot(
 		GameSession session,
@@ -1333,14 +1336,7 @@ internal static class GameFlowManager
 				input.SelectedOptionIds is null &&
 				input.AssignedPlayerRoles is null,
 			AssignRolesInstruction =>
-				input.Type == ExpectedInputType.AssignPlayerRoles &&
-				input.SelectedPlayerIds is null &&
-				input.SelectedOptionIds is null &&
-				input.AssignedPlayerRoles is { Count: 1 } assignments &&
-				assignments.TryGetValue(
-					actorPlayerId,
-					out var assignedRole) &&
-				assignedRole == MainRoleType.Actor,
+				IsExactActorRoleAssignmentResponse(input, actorPlayerId),
 			_ => false
 		};
 		if (!IsCorrelatedActorBorrowedMarker(session, marker, commit) ||
