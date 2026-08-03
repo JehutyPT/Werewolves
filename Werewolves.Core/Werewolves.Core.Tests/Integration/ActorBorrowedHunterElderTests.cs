@@ -1355,7 +1355,8 @@ public sealed class ActorBorrowedHunterElderTests
 			finalShot.PublicAnnouncement,
 			"\n",
 			finalShot.PrivateInstruction);
-		selectionCopy.Should().Contain(GameStrings.ActorRoleName)
+		selectionCopy.Should()
+			.Contain(GameStrings.ActorBorrowedHunterFinalShotSelectionInstruction)
 			.And.NotContain(GameStrings.HunterRoleName)
 			.And.NotContain(MainRoleType.Hunter.ToString())
 			.And.NotContain(EliminationCascadeReactionIds.HunterFinalShot)
