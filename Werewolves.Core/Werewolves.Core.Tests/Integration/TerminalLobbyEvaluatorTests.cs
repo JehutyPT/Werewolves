@@ -228,39 +228,45 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 	[Fact]
 	public void Evaluate_ThiefBranchPolicy_WhenOneWholeBranchIsTurnOne_ReturnsDegenerate()
 	{
+		var scenario = ActorScenario(ActorReachability.DealPoolWithThief);
+		var policy = scenario.ThiefOfferBranchPolicy!;
 		var evaluator = new TerminalLobbyEvaluator((scenario, identity, count, _) =>
 			Batch(
 				scenario,
 				identity,
 				count,
-				run => run % 3 == 1
+				run => policy.GetBranch(run) == policy.Branches[0]
 					? (1, VictoryCheckWindow.Dawn)
 					: (2, VictoryCheckWindow.PreNight)));
 
 		var result = evaluator.Evaluate(
-			ThiefScenario(),
+			scenario,
 			SimulatorCapability.SafetyScreening,
 			LobbyEvaluationDepth.DegenerateScreeningOnly);
 
-		result.Should().BeOfType<DegenerateTerminalEvaluation>();
+		var degenerate = result.Should().BeOfType<DegenerateTerminalEvaluation>().Subject;
+		degenerate.ScreeningEvidence.AttemptedRunCount.Should().Be(3_000);
+		degenerate.ScreeningEvidence.Records.Should().HaveCount(3_000);
 		MarkTestCompleted();
 	}
 
 	[Fact]
 	public void Evaluate_ThiefBranchPolicy_DegenerateBranchWinsOverIncompleteOtherBranch()
 	{
+		var scenario = ActorScenario(ActorReachability.DealPoolWithThief);
+		var policy = scenario.ThiefOfferBranchPolicy!;
 		var evaluator = new TerminalLobbyEvaluator((scenario, identity, count, _) =>
 		{
 			var complete = Batch(
 				scenario,
 				identity,
 				count,
-				run => run % 3 == 1
+				run => policy.GetBranch(run) == policy.Branches[0]
 					? (1, VictoryCheckWindow.Dawn)
 					: (2, VictoryCheckWindow.PreNight));
 			var records = complete.Records.ToArray();
 			var incompleteIndex = Enumerable.Range(0, count)
-				.Last(run => run % 3 == 2);
+				.Last(run => policy.GetBranch(run) == policy.Branches[1]);
 			records[incompleteIndex] = new IncompleteSimulationRun(
 				records[incompleteIndex].RunSeedMaterial);
 			return new SimulationBatchSourceEvidence(
@@ -271,11 +277,14 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 		});
 
 		var result = evaluator.Evaluate(
-			ThiefScenario(),
+			scenario,
 			SimulatorCapability.SafetyScreening,
 			LobbyEvaluationDepth.DegenerateScreeningOnly);
 
-		result.Should().BeOfType<DegenerateTerminalEvaluation>();
+		var degenerate = result.Should().BeOfType<DegenerateTerminalEvaluation>().Subject;
+		degenerate.ScreeningEvidence.AttemptedRunCount.Should().Be(3_000);
+		degenerate.ScreeningEvidence.IncompleteRunCount.Should().Be(1);
+		degenerate.ScreeningEvidence.Records.Should().HaveCount(3_000);
 		MarkTestCompleted();
 	}
 

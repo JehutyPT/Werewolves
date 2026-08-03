@@ -725,15 +725,80 @@ public class TerminalLobbyCacheTests
 		identity.Scenario.ActorSetupCards.Should().NotBeEmpty();
 		identity.Scenario.ThiefOfferBranchPolicy!.Branches.Should().HaveCount(
 			expectedAttemptCount / TerminalLobbyEvaluator.ScreeningAttemptCount);
+		evidence.AttemptedRunCount.Should().Be(expectedAttemptCount);
 		using var json = JsonDocument.Parse(encoded);
 		json.RootElement.GetProperty("version").GetInt32().Should().Be(1);
 		read.IsUsable.Should().BeTrue();
 		TerminalLobbyCache.TryGet(read.Document!, identity, out var roundTripped).Should().BeTrue();
 		var aggregate = roundTripped.Should().BeOfType<DegenerateTerminalCacheRecord>().Subject;
-		aggregate.AttemptedRunCount.Should().Be(expectedAttemptCount);
-		aggregate.CompletedRunCount.Should().Be(expectedAttemptCount);
+		aggregate.AttemptedRunCount.Should().Be(TerminalLobbyEvaluator.ScreeningAttemptCount);
+		aggregate.CompletedRunCount.Should().Be(TerminalLobbyEvaluator.ScreeningAttemptCount);
 		aggregate.IncompleteRunCount.Should().Be(0);
 		aggregate.Should().BeEquivalentTo(record);
+	}
+
+	[Theory]
+	[InlineData(MainRoleType.SimpleWerewolf, MainRoleType.BigBadWolf, 2_000, 1_000, false)]
+	[InlineData(MainRoleType.SimpleWerewolf, MainRoleType.BigBadWolf, 2_000, 1_000, true)]
+	[InlineData(MainRoleType.Seer, MainRoleType.Defender, 3_000, 500, false)]
+	[InlineData(MainRoleType.Seer, MainRoleType.Defender, 3_000, 500, true)]
+	public void Capture_ActorReachableThiefDegenerateBranchWithMixedSiblingEvidence_ProjectsProvingBranchAndRoundTripsExactCurrentRecord(
+		MainRoleType offer1,
+		MainRoleType offer2,
+		int expectedAttemptCount,
+		int expectedVillagerCount,
+		bool incompleteSibling)
+	{
+		var identity = ActorThiefIdentity(offer1, offer2);
+		var evidence = MixedActorThiefDegenerateEvidence(identity, incompleteSibling);
+
+		var record = TerminalLobbyCache.Capture(
+			identity,
+			new DegenerateTerminalEvaluation(evidence));
+		var encoded = TerminalLobbyCache.Write(TerminalLobbyCache.CreateDocument([record]));
+		var read = TerminalLobbyCache.ReadDocument(encoded);
+
+		evidence.AttemptedRunCount.Should().Be(expectedAttemptCount);
+		evidence.IncompleteRunCount.Should().Be(incompleteSibling ? 1 : 0);
+		read.IsUsable.Should().BeTrue();
+		TerminalLobbyCache.TryGet(read.Document!, identity, out var roundTripped).Should().BeTrue();
+		var aggregate = roundTripped.Should().BeOfType<DegenerateTerminalCacheRecord>().Subject;
+		aggregate.AttemptedRunCount.Should().Be(TerminalLobbyEvaluator.ScreeningAttemptCount);
+		aggregate.CompletedRunCount.Should().Be(TerminalLobbyEvaluator.ScreeningAttemptCount);
+		aggregate.IncompleteRunCount.Should().Be(0);
+		aggregate.GameResultFrequencies.Sum(row => row.Numerator)
+			.Should().Be(TerminalLobbyEvaluator.ScreeningAttemptCount);
+		aggregate.GameResultFrequencies.Select(row => row.Numerator)
+			.Should().Equal(
+				expectedVillagerCount,
+				TerminalLobbyEvaluator.ScreeningAttemptCount - expectedVillagerCount,
+				0);
+		aggregate.GameResultFrequencyByTurn.Should().OnlyContain(cell => cell.EndingTurn == 1);
+		aggregate.Should().BeEquivalentTo(record);
+	}
+
+	[Fact]
+	public void Capture_NonActorThiefDegenerateEvidence_PreservesExistingWholeBatchSchemaOneRecord()
+	{
+		var identity = NonActorThiefIdentity();
+		var evidence = Evidence(
+			identity,
+			TerminalLobbyEvaluator.ScreeningAttemptCount,
+			degenerate: true,
+			BaselineRandomDecisionStrategy.SafetyScreeningIdentity);
+
+		var record = TerminalLobbyCache.Capture(
+			identity,
+			new DegenerateTerminalEvaluation(evidence));
+		var read = TerminalLobbyCache.Read(TerminalLobbyCache.Write(record), identity);
+
+		identity.Scenario.ActorSetupCards.Should().BeEmpty();
+		identity.Scenario.ThiefOfferBranchPolicy.Should().NotBeNull();
+		read.IsUsable.Should().BeTrue();
+		var aggregate = read.Record.Should().BeOfType<DegenerateTerminalCacheRecord>().Subject;
+		aggregate.AttemptedRunCount.Should().Be(TerminalLobbyEvaluator.ScreeningAttemptCount);
+		aggregate.CompletedRunCount.Should().Be(TerminalLobbyEvaluator.ScreeningAttemptCount);
+		aggregate.IncompleteRunCount.Should().Be(0);
 	}
 
 	[Theory]
@@ -960,6 +1025,47 @@ public class TerminalLobbyCacheTests
 			]);
 	}
 
+	private static SimulationResultEvidence MixedActorThiefDegenerateEvidence(
+		SimulationCompatibilityIdentity identity,
+		bool incompleteSibling)
+	{
+		var strategy = BaselineRandomDecisionStrategy.SafetyScreeningIdentity;
+		var policy = identity.Scenario.ThiefOfferBranchPolicy!;
+		var attemptCount = TerminalLobbyEvaluator.GetScreeningAttemptCount(identity.Scenario);
+		var incompleteRunNumber = Enumerable.Range(0, attemptCount)
+			.Last(run => policy.GetBranch(run) == policy.Branches[1]);
+		var villager = new SingleFactionGameResult(Faction.Villager);
+		var werewolf = new SingleFactionGameResult(Faction.Werewolf);
+		var noWinner = new NoWinnerGameResult();
+		var records = Enumerable.Range(0, attemptCount).Select(run =>
+		{
+			var seed = new RunSeedMaterial(identity, strategy, run);
+			if (incompleteSibling && run == incompleteRunNumber)
+			{
+				return (SimulationRun)new IncompleteSimulationRun(seed);
+			}
+
+			var result = run % 2 == 0 ? (GameResult)villager : werewolf;
+			var provingBranch = policy.GetBranch(run) == policy.Branches[0];
+			return new CompletedSimulationRun(
+				seed,
+				result,
+				provingBranch ? 1 : 2,
+				result == villager
+					? VictoryCheckWindow.Dawn
+					: VictoryCheckWindow.PreNight);
+		});
+		var source = new SimulationBatchSourceEvidence(
+			identity.Scenario,
+			identity.Profile,
+			strategy,
+			records);
+		return new SimulationResultEvidence(
+			source,
+			[Faction.Villager, Faction.Werewolf],
+			[villager, werewolf, noWinner]);
+	}
+
 	private static SimulationCompatibilityIdentity AggregateIdentity() =>
 		ActorIdentity(villagers: 3, werewolves: 1);
 
@@ -983,6 +1089,27 @@ public class TerminalLobbyCacheTests
 			offer2,
 			new ActorSetupCards(
 				[MainRoleType.Cupid, MainRoleType.Witch, MainRoleType.Elder]));
+		return new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+	}
+
+	private static SimulationCompatibilityIdentity NonActorThiefIdentity()
+	{
+		MainRoleType[] dealPool =
+		[
+			MainRoleType.Thief,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager
+		];
+		var scenario = new SimulationScenario(
+			5,
+			dealPool.Concat([MainRoleType.Seer, MainRoleType.Defender]),
+			dealPool,
+			MainRoleType.Seer,
+			MainRoleType.Defender);
 		return new SimulationCompatibilityIdentity(
 			scenario.ToCanonical(),
 			SimulatorCapability.SafetyScreening.Identity);

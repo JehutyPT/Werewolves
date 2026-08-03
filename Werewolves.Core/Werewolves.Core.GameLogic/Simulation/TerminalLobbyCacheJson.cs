@@ -245,7 +245,7 @@ public static partial class TerminalLobbyCache
 					"results", "cells"
 				]);
 		var policy = degenerate
-			? TerminalLobbyEvaluator.GetScreeningAttemptCount(identity.Scenario)
+			? TerminalLobbyEvaluator.ScreeningAttemptCount
 			: TerminalLobbyEvaluator.ProbabilityAttemptCount;
 		if (RequiredInt(element, "attempted") != policy
 			|| RequiredInt(element, "completed") != policy

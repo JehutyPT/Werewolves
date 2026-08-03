@@ -92,8 +92,21 @@ public static partial class TerminalLobbyCache
 		if (!evidence.CanonicalScenario.Equals(identity.Scenario)
 			|| !evidence.SimulatorProfile.Equals(identity.Profile)
 			|| !evidence.DecisionStrategy.Equals(
-				producer.HeadlessResponsePolicy.StrategyIdentity)
-			|| evidence.IncompleteRunCount != 0)
+				producer.HeadlessResponsePolicy.StrategyIdentity))
+		{
+			throw new ArgumentException(
+				"Terminal evidence is incomplete or compatibility-mismatched.",
+				nameof(evidence));
+		}
+
+		if (degenerate
+			&& identity.Scenario.ActorSetupCards.Count > 0
+			&& identity.Scenario.ThiefOfferBranchPolicy is { } branchPolicy)
+		{
+			return CaptureDegenerateThiefBranchWitness(identity, evidence, branchPolicy);
+		}
+
+		if (evidence.IncompleteRunCount != 0)
 		{
 			throw new ArgumentException(
 				"Terminal evidence is incomplete or compatibility-mismatched.",
@@ -115,5 +128,52 @@ public static partial class TerminalLobbyCache
 		return degenerate
 			? new DegenerateTerminalCacheRecord(identity, rows, cells)
 			: new ProbabilityTerminalCacheRecord(identity, rows, cells);
+	}
+
+	private static DegenerateTerminalCacheRecord CaptureDegenerateThiefBranchWitness(
+		SimulationCompatibilityIdentity identity,
+		SimulationResultEvidence evidence,
+		ThiefOfferBranchPolicy branchPolicy)
+	{
+		foreach (var branch in branchPolicy.Branches)
+		{
+			var branchRecords = evidence.Records
+				.Where(record =>
+					branchPolicy.GetBranch(record.RunSeedMaterial.RunNumber) == branch)
+				.ToArray();
+			if (branchRecords.Length != TerminalLobbyEvaluator.ScreeningAttemptCount
+				|| branchRecords.Any(record =>
+					record is not CompletedSimulationRun { EndingTurn: 1 }))
+			{
+				continue;
+			}
+
+			var completedRuns = branchRecords
+				.Cast<CompletedSimulationRun>()
+				.ToArray();
+			var rows = evidence.PossibleGameResults.Select(result =>
+				new TerminalCacheGameResultFrequency(
+					result,
+					completedRuns.Count(run => run.GameResult.Equals(result)),
+					TerminalLobbyEvaluator.ScreeningAttemptCount));
+			var cells = completedRuns
+				.GroupBy(run => new
+				{
+					run.GameResult,
+					run.EndingTurn,
+					run.VictoryCheckWindow
+				})
+				.Select(group => new TerminalCacheTurnWindowFrequency(
+					group.Key.GameResult,
+					group.Key.EndingTurn,
+					group.Key.VictoryCheckWindow,
+					group.Count(),
+					TerminalLobbyEvaluator.ScreeningAttemptCount));
+			return new DegenerateTerminalCacheRecord(identity, rows, cells);
+		}
+
+		throw new ArgumentException(
+			"Terminal evidence does not contain a complete degenerate Thief branch.",
+			nameof(evidence));
 	}
 }

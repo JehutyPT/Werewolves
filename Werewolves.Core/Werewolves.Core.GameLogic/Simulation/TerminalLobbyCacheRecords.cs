@@ -160,8 +160,7 @@ public sealed record DegenerateTerminalCacheRecord : AggregateTerminalCacheRecor
 		IEnumerable<TerminalCacheTurnWindowFrequency> cells)
 			: base(
 				identity,
-				TerminalLobbyEvaluator.GetScreeningAttemptCount(
-					(identity ?? throw new ArgumentNullException(nameof(identity))).Scenario),
+				TerminalLobbyEvaluator.ScreeningAttemptCount,
 				frequencies,
 				cells,
 				turnOneOnly: true)
