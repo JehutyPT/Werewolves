@@ -1,6 +1,8 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using FluentAssertions;
+using Werewolves.Core.GameLogic.Models.EliminationCascades;
+using Werewolves.Core.GameLogic.Models.StateMachine;
 using Werewolves.Core.GameLogic.Queries;
 using Werewolves.Core.GameLogic.RolePowers;
 using Werewolves.Core.StateModels.Core;
@@ -379,6 +381,48 @@ public sealed class RolePowerAvailabilityTests
 			.WithMessage("*borrowed Role Power activation*");
 	}
 
+	[Theory]
+	[InlineData(InvalidPostEliminationLineageCase.HunterMissingActiveActivation)]
+	[InlineData(InvalidPostEliminationLineageCase.ElderExpiredActivation)]
+	[InlineData(InvalidPostEliminationLineageCase.KnightMismatchedSelectedCardSource)]
+	public void CreateBorrowedAfterElimination_ValidContextWithMissingStaleOrMismatchedLineage_Rejects(
+		InvalidPostEliminationLineageCase invalidCase)
+	{
+		var fixture = CreateInvalidPostEliminationLineageFixture(invalidCase);
+		var historyCountBefore = fixture.Session.GameHistoryLog.Count();
+		var act = () => RolePowerInstance.CreateBorrowedAfterElimination(
+			fixture.Session,
+			fixture.Actor,
+			fixture.SourceRole,
+			fixture.SourcePower,
+			fixture.Context);
+
+		act.Should().Throw<InvalidOperationException>()
+			.WithMessage("*borrowed Role Power activation*");
+		fixture.Session.GameHistoryLog.Should().HaveCount(historyCountBefore);
+	}
+
+	[Theory]
+	[InlineData(InvalidPostEliminationContextCase.HunterOutsideActiveInteractiveReactionBatch)]
+	[InlineData(InvalidPostEliminationContextCase.ElderBeforeCascadeCompletion)]
+	[InlineData(InvalidPostEliminationContextCase.KnightBeforeCascadeCompletion)]
+	public void CreateBorrowedAfterElimination_PrematureCommittedContext_Rejects(
+		InvalidPostEliminationContextCase invalidCase)
+	{
+		var fixture = CreatePrematurePostEliminationContextFixture(invalidCase);
+		var historyCountBefore = fixture.Session.GameHistoryLog.Count();
+		var act = () => RolePowerInstance.CreateBorrowedAfterElimination(
+			fixture.Session,
+			fixture.Actor,
+			fixture.SourceRole,
+			fixture.SourcePower,
+			fixture.Context);
+
+		act.Should().Throw<InvalidOperationException>()
+			.WithMessage("*borrowed post-elimination Role Power context*");
+		fixture.Session.GameHistoryLog.Should().HaveCount(historyCountBefore);
+	}
+
 	[Fact]
 	public void Evaluate_PolicyReturnsNull_RejectsIncompleteExecutionContext()
 	{
@@ -581,12 +625,215 @@ public sealed class RolePowerAvailabilityTests
 		public string Serialize() => throw new NotSupportedException();
 	}
 
+	private static BorrowedPostEliminationFactoryFixture
+		CreateInvalidPostEliminationLineageFixture(
+			InvalidPostEliminationLineageCase invalidCase) => invalidCase switch
+		{
+			InvalidPostEliminationLineageCase.HunterMissingActiveActivation =>
+				CreateHunterPostEliminationFixture(
+					spendHunterCard: false,
+					createActiveInteractiveReactionBatch: true),
+			InvalidPostEliminationLineageCase.ElderExpiredActivation =>
+				CreateElderPostEliminationFixture(
+					expireActivation: true,
+					completeCascade: true),
+			InvalidPostEliminationLineageCase.KnightMismatchedSelectedCardSource =>
+				CreateKnightPostEliminationFixture(
+					MainRoleType.Seer,
+					completeCascade: true),
+			_ => throw new ArgumentOutOfRangeException(nameof(invalidCase))
+		};
+
+	private static BorrowedPostEliminationFactoryFixture
+		CreatePrematurePostEliminationContextFixture(
+			InvalidPostEliminationContextCase invalidCase) => invalidCase switch
+		{
+			InvalidPostEliminationContextCase
+				.HunterOutsideActiveInteractiveReactionBatch =>
+				CreateHunterPostEliminationFixture(
+					spendHunterCard: true,
+					createActiveInteractiveReactionBatch: false),
+			InvalidPostEliminationContextCase.ElderBeforeCascadeCompletion =>
+				CreateElderPostEliminationFixture(
+					expireActivation: false,
+					completeCascade: false),
+			InvalidPostEliminationContextCase.KnightBeforeCascadeCompletion =>
+				CreateKnightPostEliminationFixture(
+					MainRoleType.KnightWithRustySword,
+					completeCascade: false),
+			_ => throw new ArgumentOutOfRangeException(nameof(invalidCase))
+		};
+
+	private static BorrowedPostEliminationFactoryFixture
+		CreateHunterPostEliminationFixture(
+			bool spendHunterCard,
+			bool createActiveInteractiveReactionBatch)
+	{
+		var (session, actor, hunterCard) = CreateBorrowedActorFixture(
+			MainRoleType.Hunter);
+		if (spendHunterCard)
+		{
+			session.TrySpendActorSetupCard(actor.Id, hunterCard.Id, out _)
+				.Should().BeTrue();
+		}
+
+		session.TransitionMainPhase(GamePhase.Day);
+		session.RevealRoles(new Dictionary<Guid, MainRoleType>
+		{
+			[actor.Id] = MainRoleType.Actor
+		});
+		var scopeId = $"RolePowerAvailability:Hunter:{session.TurnNumber}";
+		var elimination = new EliminationCascadeElimination(
+			actor.Id,
+			EliminationReason.EventElimination);
+		if (createActiveInteractiveReactionBatch)
+		{
+			EliminationCascadeRuntimeStore.Configure(
+				session,
+				[
+					new EliminationCascadeReactionBinding(
+						new BlockingInteractiveReaction(),
+						EliminationCascadeReactionBoundary.Interactive)
+				]);
+			var cascade = EliminationCascadeStage.CascadeStage(
+				PostEliminationFactoryCascadeStage.HunterLineageProbe,
+				_ => new EliminationCascadeSeed(
+					scopeId,
+					session.GameHistoryLog.Count() - 1,
+					[
+						new EliminationRequest(
+							actor.Id,
+							EliminationReason.EventElimination)
+					]),
+				ModeratorInstructionSemantic.AssignDayVoteTargetRole);
+			cascade.Execute(
+				session,
+				new StartGameConfirmationInstruction(session.Id).CreateResponse());
+		}
+		else
+		{
+			session.EliminatePlayer(actor.Id, elimination.Reason);
+			session.RecordEliminationCascadeBatchResolution(
+				scopeId,
+				[elimination],
+				[elimination]);
+		}
+
+		return new BorrowedPostEliminationFactoryFixture(
+			session,
+			actor,
+			MainRoleType.Hunter,
+			new RolePowerDefinition(
+				new RolePowerIdentifier("hunter-final-shot"),
+				RolePowerCategory.Reactive),
+			new BorrowedPostEliminationRolePowerContext.HunterFinalShot(
+				scopeId,
+				[actor.Id]));
+	}
+
+	private static BorrowedPostEliminationFactoryFixture
+		CreateElderPostEliminationFixture(
+			bool expireActivation,
+			bool completeCascade)
+	{
+		var (session, actor, elderCard) = CreateBorrowedActorFixture(
+			MainRoleType.Elder);
+		session.TrySpendActorSetupCard(actor.Id, elderCard.Id, out _)
+			.Should().BeTrue();
+		if (expireActivation)
+		{
+			session.TryExpireActorBorrowedRolePowerActivation().Should().BeTrue();
+		}
+
+		session.TransitionMainPhase(GamePhase.Day);
+		session.PerformDayVote(actor.Id);
+		var vote = GameSessionQueries.GetCurrentDayVoteOutcome(session)!.Value;
+		session.RevealRoles(new Dictionary<Guid, MainRoleType>
+		{
+			[actor.Id] = MainRoleType.Actor
+		});
+		var scopeId = $"Day:{session.TurnNumber}:Vote:{vote.VoteOrdinal}";
+		var elimination = new EliminationCascadeElimination(
+			actor.Id,
+			EliminationReason.DayVote);
+		session.EliminatePlayer(actor.Id, elimination.Reason);
+		session.RecordEliminationCascadeBatchResolution(
+			scopeId,
+			[elimination],
+			[elimination]);
+		if (completeCascade)
+		{
+			session.RecordEliminationCascadeCompletion(scopeId);
+		}
+
+		return new BorrowedPostEliminationFactoryFixture(
+			session,
+			actor,
+			MainRoleType.Elder,
+			new RolePowerDefinition(
+				new RolePowerIdentifier("elder-village-vote-suppression"),
+				RolePowerCategory.Reactive),
+			new BorrowedPostEliminationRolePowerContext
+				.ElderVillageVoteSuppression(vote.LogIndex, scopeId));
+	}
+
+	private static BorrowedPostEliminationFactoryFixture
+		CreateKnightPostEliminationFixture(
+			MainRoleType selectedCardRole,
+			bool completeCascade)
+	{
+		var (session, actor, selectedCard) = CreateBorrowedActorFixture(
+			selectedCardRole);
+		session.TrySpendActorSetupCard(actor.Id, selectedCard.Id, out _)
+			.Should().BeTrue();
+		session.TransitionMainPhase(GamePhase.Dawn);
+		session.DetermineDawnVictim(
+			actor.Id,
+			EliminationReason.WerewolfAttack);
+		session.EliminatePlayer(
+			actor.Id,
+			EliminationReason.WerewolfAttack);
+		var eliminationLogIndex = session.GameHistoryLog.Count() - 1;
+		var scopeId = $"Dawn:{session.TurnNumber}";
+		var elimination = new EliminationCascadeElimination(
+			actor.Id,
+			EliminationReason.WerewolfAttack);
+		session.RecordEliminationCascadeBatchResolution(
+			scopeId,
+			[elimination],
+			[elimination]);
+		if (completeCascade)
+		{
+			session.RecordEliminationCascadeCompletion(scopeId);
+		}
+
+		return new BorrowedPostEliminationFactoryFixture(
+			session,
+			actor,
+			MainRoleType.KnightWithRustySword,
+			new RolePowerDefinition(
+				new RolePowerIdentifier("knight-rusty-sword-disease"),
+				RolePowerCategory.Automatic),
+			new BorrowedPostEliminationRolePowerContext.KnightRustySwordSchedule(
+				eliminationLogIndex,
+				scopeId));
+	}
+
 	private static (GameSession Session, IPlayer Actor,
 		PhysicalCharacterCard SeerCard) CreateBorrowedSeerFixture()
 	{
-		var seerCard = new PhysicalCharacterCard(
-			Guid.Parse("30000000-0000-0000-0000-000000000001"),
+		var (session, actor, card) = CreateBorrowedActorFixture(
 			MainRoleType.Seer);
+		return (session, actor, card);
+	}
+
+	private static (GameSession Session, IPlayer Actor,
+		PhysicalCharacterCard SetupCard) CreateBorrowedActorFixture(
+			MainRoleType setupCardRole)
+	{
+		var setupCard = new PhysicalCharacterCard(
+			Guid.Parse("30000000-0000-0000-0000-000000000001"),
+			setupCardRole);
 		var sessionId = Guid.NewGuid();
 		var session = new GameSession(
 			sessionId,
@@ -603,7 +850,7 @@ public sealed class RolePowerAvailabilityTests
 				new ActorSetupCards(
 					version: 1,
 					[
-						seerCard,
+						setupCard,
 						new PhysicalCharacterCard(
 							Guid.Parse("30000000-0000-0000-0000-000000000002"),
 							MainRoleType.Cupid),
@@ -613,7 +860,31 @@ public sealed class RolePowerAvailabilityTests
 					])));
 		var actor = session.GetPlayers().First();
 		session.AssignRole(actor.Id, MainRoleType.Actor);
-		return (session, actor, seerCard);
+		return (session, actor, setupCard);
+	}
+
+	private sealed class BlockingInteractiveReaction : IEliminationCascadeReaction
+	{
+		public string ReactionId => "role-power-availability-blocking-probe";
+
+		public EliminationCascadeReactionResult Advance(
+			GameSession session,
+			IReadOnlyCollection<Guid> eliminatedPlayerIds,
+			ModeratorResponse input) =>
+			EliminationCascadeReactionResult.NeedInput(
+				new StartGameConfirmationInstruction(session.Id));
+	}
+
+	private sealed record BorrowedPostEliminationFactoryFixture(
+		GameSession Session,
+		IPlayer Actor,
+		MainRoleType SourceRole,
+		RolePowerDefinition SourcePower,
+		BorrowedPostEliminationRolePowerContext Context);
+
+	private enum PostEliminationFactoryCascadeStage
+	{
+		HunterLineageProbe
 	}
 
 	public enum InvalidBorrowedFactoryCase
@@ -624,5 +895,19 @@ public sealed class RolePowerAvailabilityTests
 		SelectedCardSourceMismatch,
 		ActorRoleChanged,
 		ActorDead
+	}
+
+	public enum InvalidPostEliminationLineageCase
+	{
+		HunterMissingActiveActivation,
+		ElderExpiredActivation,
+		KnightMismatchedSelectedCardSource
+	}
+
+	public enum InvalidPostEliminationContextCase
+	{
+		HunterOutsideActiveInteractiveReactionBatch,
+		ElderBeforeCascadeCompletion,
+		KnightBeforeCascadeCompletion
 	}
 }

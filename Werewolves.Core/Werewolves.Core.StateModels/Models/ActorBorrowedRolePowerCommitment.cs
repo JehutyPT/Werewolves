@@ -171,9 +171,81 @@ internal static class ActorBorrowedRolePowerCommitment
 					writer,
 					observation.SpentResourceIdentity);
 				break;
+			case ActorBorrowedVillageIdiotPardonCommit villageIdiot:
+				writer.Write((byte)9);
+				WriteResourceIdentity(
+					writer,
+					villageIdiot.SpentResourceIdentity);
+				break;
+			case ActorBorrowedHunterFinalShotCommit hunter:
+				writer.Write((byte)10);
+				writer.Write(hunter.CascadeScopeId);
+				writer.Write(hunter.TriggeringPlayerIds.Count);
+				foreach (var triggeringPlayerId in hunter.TriggeringPlayerIds)
+				{
+					WriteGuid(writer, triggeringPlayerId);
+				}
+				WriteGuid(writer, hunter.TargetPlayerId);
+				break;
+			case ActorBorrowedElderResistanceCommit elder:
+				writer.Write((byte)11);
+				WriteGuid(writer, elder.TargetPlayerId);
+				writer.Write(elder.TriggeringNightActionLogIndex);
+				writer.Write(elder.RestoringWitchSaveLogIndex.HasValue);
+				if (elder.RestoringWitchSaveLogIndex is { } restorationLogIndex)
+				{
+					writer.Write(restorationLogIndex);
+				}
+				break;
+			case ActorBorrowedElderSuppressionCommit elderSuppression:
+				writer.Write((byte)12);
+				writer.Write(
+					elderSuppression.TriggeringVoteOutcomeLogIndex);
+				writer.Write(elderSuppression.CascadeScopeId);
+				WriteGuid(
+					writer,
+					elderSuppression.AnnouncementInstructionId);
+				break;
+			case ActorBorrowedScapegoatTieReplacementCommit tieReplacement:
+				writer.Write((byte)13);
+				writer.Write(tieReplacement.TriggeringVoteOutcomeLogIndex);
+				writer.Write(tieReplacement.VoteOrdinal);
+				writer.Write(tieReplacement.CascadeScopeId);
+				break;
+			case ActorBorrowedScapegoatVoterRestrictionCommit restriction:
+				writer.Write((byte)14);
+				writer.Write(
+					restriction.TieReplacementPublicMarkerLogIndex);
+				writer.Write(restriction.CascadeScopeId);
+				WritePlayerIdSet(writer, restriction.CandidatePlayerIds);
+				WritePlayerIdSet(writer, restriction.PermittedVoterIds);
+				writer.Write(restriction.AppliesOnTurnNumber);
+				WriteGuid(writer, restriction.AnnouncementInstructionId);
+				break;
+			case ActorBorrowedBearTamerGrowlCommit:
+				writer.Write((byte)15);
+				break;
+			case ActorBorrowedKnightRustySwordScheduleCommit knight:
+				writer.Write((byte)16);
+				WriteGuid(writer, knight.TargetPlayerId);
+				writer.Write(knight.WerewolfAttackEliminationLogIndex);
+				writer.Write(knight.CascadeScopeId);
+				break;
 			default:
 				throw new InvalidOperationException(
 					"The Actor borrowed Role Power commit type has no integrity encoding.");
+		}
+	}
+
+	private static void WritePlayerIdSet(
+		BinaryWriter writer,
+		IEnumerable<Guid> playerIds)
+	{
+		var ordered = playerIds.OrderBy(playerId => playerId).ToArray();
+		writer.Write(ordered.Length);
+		foreach (var playerId in ordered)
+		{
+			WriteGuid(writer, playerId);
 		}
 	}
 

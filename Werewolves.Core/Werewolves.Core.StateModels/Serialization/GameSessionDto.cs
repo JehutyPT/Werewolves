@@ -28,6 +28,22 @@ internal class GameSessionDto
 		ActorBorrowedDefenderProtectionCommits { get; set; } = new();
 	public List<ActorBorrowedFoxCheckCommitDto> ActorBorrowedFoxCheckCommits
 		{ get; set; } = new();
+	public List<ActorBorrowedBearTamerGrowlCommitDto>
+		ActorBorrowedBearTamerGrowlCommits { get; set; } = new();
+	public List<ActorBorrowedKnightRustySwordScheduleCommitDto>
+		ActorBorrowedKnightRustySwordScheduleCommits { get; set; } = new();
+	public List<ActorBorrowedHunterFinalShotCommitDto>
+		ActorBorrowedHunterFinalShotCommits { get; set; } = new();
+	public List<ActorBorrowedElderResistanceCommitDto>
+		ActorBorrowedElderResistanceCommits { get; set; } = new();
+	public List<ActorBorrowedElderSuppressionCommitDto>
+		ActorBorrowedElderSuppressionCommits { get; set; } = new();
+	public List<ActorBorrowedScapegoatTieReplacementCommitDto>
+		ActorBorrowedScapegoatTieReplacementCommits { get; set; } = new();
+	public List<ActorBorrowedScapegoatVoterRestrictionCommitDto>
+		ActorBorrowedScapegoatVoterRestrictionCommits { get; set; } = new();
+	public List<ActorBorrowedVillageIdiotPardonCommitDto>
+		ActorBorrowedVillageIdiotPardonCommits { get; set; } = new();
 	public List<ActorBorrowedWitchPotionUseCommitDto>
 		ActorBorrowedWitchPotionUseCommits { get; set; } = new();
 	public List<ActorBorrowedWitchPotionDeclineCommitDto>
@@ -285,6 +301,309 @@ internal sealed class ActorBorrowedFoxCheckCommitDto
 		CenterPlayerId,
 		NeighborhoodAgentKnowledge,
 		SpentResourceIdentity,
+		Timestamp,
+		TurnNumber,
+		CurrentPhase,
+		PublicMarkerLogIndex);
+}
+
+internal sealed class ActorBorrowedVillageIdiotPardonCommitDto
+{
+	public RolePowerInstanceIdentity PowerIdentity { get; set; }
+	public Guid ActorSetupCardId { get; set; }
+	public OneUseRolePowerResourceIdentity SpentResourceIdentity { get; set; }
+	public DateTimeOffset Timestamp { get; set; }
+	public int TurnNumber { get; set; }
+	public GamePhase CurrentPhase { get; set; }
+	public int PublicMarkerLogIndex { get; set; }
+
+	internal static ActorBorrowedVillageIdiotPardonCommitDto FromValue(
+		ActorBorrowedVillageIdiotPardonCommit commit) => new()
+	{
+		PowerIdentity = commit.PowerIdentity,
+		ActorSetupCardId = commit.ActorSetupCardId,
+		SpentResourceIdentity = commit.SpentResourceIdentity,
+		Timestamp = commit.Timestamp,
+		TurnNumber = commit.TurnNumber,
+		CurrentPhase = commit.CurrentPhase,
+		PublicMarkerLogIndex = commit.PublicMarkerLogIndex
+	};
+
+	internal ActorBorrowedVillageIdiotPardonCommit ToValue() => new(
+		PowerIdentity,
+		ActorSetupCardId,
+		SpentResourceIdentity,
+		Timestamp,
+		TurnNumber,
+		CurrentPhase,
+		PublicMarkerLogIndex);
+}
+
+internal sealed class ActorBorrowedHunterFinalShotCommitDto
+{
+	public RolePowerInstanceIdentity PowerIdentity { get; set; }
+	public Guid ActorSetupCardId { get; set; }
+	public string CascadeScopeId { get; set; } = string.Empty;
+	public List<Guid> TriggeringPlayerIds { get; set; } = new();
+	public Guid TargetPlayerId { get; set; }
+	public DateTimeOffset Timestamp { get; set; }
+	public int TurnNumber { get; set; }
+	public GamePhase CurrentPhase { get; set; }
+	public int PublicMarkerLogIndex { get; set; }
+
+	internal static ActorBorrowedHunterFinalShotCommitDto FromValue(
+		ActorBorrowedHunterFinalShotCommit commit) => new()
+	{
+		PowerIdentity = commit.PowerIdentity,
+		ActorSetupCardId = commit.ActorSetupCardId,
+		CascadeScopeId = commit.CascadeScopeId,
+		TriggeringPlayerIds = commit.TriggeringPlayerIds.ToList(),
+		TargetPlayerId = commit.TargetPlayerId,
+		Timestamp = commit.Timestamp,
+		TurnNumber = commit.TurnNumber,
+		CurrentPhase = commit.CurrentPhase,
+		PublicMarkerLogIndex = commit.PublicMarkerLogIndex
+	};
+
+	internal ActorBorrowedHunterFinalShotCommit ToValue() => new(
+		PowerIdentity,
+		ActorSetupCardId,
+		CascadeScopeId,
+		TriggeringPlayerIds,
+		TargetPlayerId,
+		Timestamp,
+		TurnNumber,
+		CurrentPhase,
+		PublicMarkerLogIndex);
+}
+
+internal sealed class ActorBorrowedElderResistanceCommitDto
+{
+	public RolePowerInstanceIdentity PowerIdentity { get; set; }
+	public Guid ActorSetupCardId { get; set; }
+	public Guid TargetPlayerId { get; set; }
+	public int TriggeringNightActionLogIndex { get; set; }
+	public int? RestoringWitchSaveLogIndex { get; set; }
+	public DateTimeOffset Timestamp { get; set; }
+	public int TurnNumber { get; set; }
+	public GamePhase CurrentPhase { get; set; }
+	public int PublicMarkerLogIndex { get; set; }
+
+	internal static ActorBorrowedElderResistanceCommitDto FromValue(
+		ActorBorrowedElderResistanceCommit commit) => new()
+	{
+		PowerIdentity = commit.PowerIdentity,
+		ActorSetupCardId = commit.ActorSetupCardId,
+		TargetPlayerId = commit.TargetPlayerId,
+		TriggeringNightActionLogIndex =
+			commit.TriggeringNightActionLogIndex,
+		RestoringWitchSaveLogIndex = commit.RestoringWitchSaveLogIndex,
+		Timestamp = commit.Timestamp,
+		TurnNumber = commit.TurnNumber,
+		CurrentPhase = commit.CurrentPhase,
+		PublicMarkerLogIndex = commit.PublicMarkerLogIndex
+	};
+
+	internal ActorBorrowedElderResistanceCommit ToValue() => new(
+		PowerIdentity,
+		ActorSetupCardId,
+		TargetPlayerId,
+		TriggeringNightActionLogIndex,
+		RestoringWitchSaveLogIndex,
+		Timestamp,
+		TurnNumber,
+		CurrentPhase,
+		PublicMarkerLogIndex);
+}
+
+internal sealed class ActorBorrowedElderSuppressionCommitDto
+{
+	public RolePowerInstanceIdentity PowerIdentity { get; set; }
+	public Guid ActorSetupCardId { get; set; }
+	public int TriggeringVoteOutcomeLogIndex { get; set; }
+	public string CascadeScopeId { get; set; } = string.Empty;
+	public Guid AnnouncementInstructionId { get; set; }
+	public DateTimeOffset Timestamp { get; set; }
+	public int TurnNumber { get; set; }
+	public GamePhase CurrentPhase { get; set; }
+	public int PublicMarkerLogIndex { get; set; }
+
+	internal static ActorBorrowedElderSuppressionCommitDto FromValue(
+		ActorBorrowedElderSuppressionCommit commit) => new()
+	{
+		PowerIdentity = commit.PowerIdentity,
+		ActorSetupCardId = commit.ActorSetupCardId,
+		TriggeringVoteOutcomeLogIndex =
+			commit.TriggeringVoteOutcomeLogIndex,
+		CascadeScopeId = commit.CascadeScopeId,
+		AnnouncementInstructionId = commit.AnnouncementInstructionId,
+		Timestamp = commit.Timestamp,
+		TurnNumber = commit.TurnNumber,
+		CurrentPhase = commit.CurrentPhase,
+		PublicMarkerLogIndex = commit.PublicMarkerLogIndex
+	};
+
+	internal ActorBorrowedElderSuppressionCommit ToValue() => new(
+		PowerIdentity,
+		ActorSetupCardId,
+		TriggeringVoteOutcomeLogIndex,
+		CascadeScopeId,
+		AnnouncementInstructionId,
+		Timestamp,
+		TurnNumber,
+		CurrentPhase,
+		PublicMarkerLogIndex);
+}
+
+internal sealed class ActorBorrowedBearTamerGrowlCommitDto
+{
+	public RolePowerInstanceIdentity PowerIdentity { get; set; }
+	public Guid ActorSetupCardId { get; set; }
+	public DateTimeOffset Timestamp { get; set; }
+	public int TurnNumber { get; set; }
+	public GamePhase CurrentPhase { get; set; }
+	public int PublicMarkerLogIndex { get; set; }
+
+	internal static ActorBorrowedBearTamerGrowlCommitDto FromValue(
+		ActorBorrowedBearTamerGrowlCommit commit) => new()
+	{
+		PowerIdentity = commit.PowerIdentity,
+		ActorSetupCardId = commit.ActorSetupCardId,
+		Timestamp = commit.Timestamp,
+		TurnNumber = commit.TurnNumber,
+		CurrentPhase = commit.CurrentPhase,
+		PublicMarkerLogIndex = commit.PublicMarkerLogIndex
+	};
+
+	internal ActorBorrowedBearTamerGrowlCommit ToValue() => new(
+		PowerIdentity,
+		ActorSetupCardId,
+		Timestamp,
+		TurnNumber,
+		CurrentPhase,
+		PublicMarkerLogIndex);
+}
+
+internal sealed class ActorBorrowedKnightRustySwordScheduleCommitDto
+{
+	public RolePowerInstanceIdentity PowerIdentity { get; set; }
+	public Guid ActorSetupCardId { get; set; }
+	public Guid TargetPlayerId { get; set; }
+	public int WerewolfAttackEliminationLogIndex { get; set; }
+	public string CascadeScopeId { get; set; } = string.Empty;
+	public DateTimeOffset Timestamp { get; set; }
+	public int TurnNumber { get; set; }
+	public GamePhase CurrentPhase { get; set; }
+	public int PublicMarkerLogIndex { get; set; }
+
+	internal static ActorBorrowedKnightRustySwordScheduleCommitDto FromValue(
+		ActorBorrowedKnightRustySwordScheduleCommit commit) => new()
+	{
+		PowerIdentity = commit.PowerIdentity,
+		ActorSetupCardId = commit.ActorSetupCardId,
+		TargetPlayerId = commit.TargetPlayerId,
+		WerewolfAttackEliminationLogIndex =
+			commit.WerewolfAttackEliminationLogIndex,
+		CascadeScopeId = commit.CascadeScopeId,
+		Timestamp = commit.Timestamp,
+		TurnNumber = commit.TurnNumber,
+		CurrentPhase = commit.CurrentPhase,
+		PublicMarkerLogIndex = commit.PublicMarkerLogIndex
+	};
+
+	internal ActorBorrowedKnightRustySwordScheduleCommit ToValue() => new(
+		PowerIdentity,
+		ActorSetupCardId,
+		TargetPlayerId,
+		WerewolfAttackEliminationLogIndex,
+		CascadeScopeId,
+		Timestamp,
+		TurnNumber,
+		CurrentPhase,
+		PublicMarkerLogIndex);
+}
+
+internal sealed class ActorBorrowedScapegoatTieReplacementCommitDto
+{
+	public RolePowerInstanceIdentity PowerIdentity { get; set; }
+	public Guid ActorSetupCardId { get; set; }
+	public int TriggeringVoteOutcomeLogIndex { get; set; }
+	public int VoteOrdinal { get; set; }
+	public string CascadeScopeId { get; set; } = string.Empty;
+	public DateTimeOffset Timestamp { get; set; }
+	public int TurnNumber { get; set; }
+	public GamePhase CurrentPhase { get; set; }
+	public int PublicMarkerLogIndex { get; set; }
+
+	internal static ActorBorrowedScapegoatTieReplacementCommitDto FromValue(
+		ActorBorrowedScapegoatTieReplacementCommit commit) => new()
+	{
+		PowerIdentity = commit.PowerIdentity,
+		ActorSetupCardId = commit.ActorSetupCardId,
+		TriggeringVoteOutcomeLogIndex =
+			commit.TriggeringVoteOutcomeLogIndex,
+		VoteOrdinal = commit.VoteOrdinal,
+		CascadeScopeId = commit.CascadeScopeId,
+		Timestamp = commit.Timestamp,
+		TurnNumber = commit.TurnNumber,
+		CurrentPhase = commit.CurrentPhase,
+		PublicMarkerLogIndex = commit.PublicMarkerLogIndex
+	};
+
+	internal ActorBorrowedScapegoatTieReplacementCommit ToValue() => new(
+		PowerIdentity,
+		ActorSetupCardId,
+		TriggeringVoteOutcomeLogIndex,
+		VoteOrdinal,
+		CascadeScopeId,
+		Timestamp,
+		TurnNumber,
+		CurrentPhase,
+		PublicMarkerLogIndex);
+}
+
+internal sealed class ActorBorrowedScapegoatVoterRestrictionCommitDto
+{
+	public RolePowerInstanceIdentity PowerIdentity { get; set; }
+	public Guid ActorSetupCardId { get; set; }
+	public int TieReplacementPublicMarkerLogIndex { get; set; }
+	public string CascadeScopeId { get; set; } = string.Empty;
+	public List<Guid> CandidatePlayerIds { get; set; } = new();
+	public List<Guid> PermittedVoterIds { get; set; } = new();
+	public int AppliesOnTurnNumber { get; set; }
+	public Guid AnnouncementInstructionId { get; set; }
+	public DateTimeOffset Timestamp { get; set; }
+	public int TurnNumber { get; set; }
+	public GamePhase CurrentPhase { get; set; }
+	public int PublicMarkerLogIndex { get; set; }
+
+	internal static ActorBorrowedScapegoatVoterRestrictionCommitDto FromValue(
+		ActorBorrowedScapegoatVoterRestrictionCommit commit) => new()
+	{
+		PowerIdentity = commit.PowerIdentity,
+		ActorSetupCardId = commit.ActorSetupCardId,
+		TieReplacementPublicMarkerLogIndex =
+			commit.TieReplacementPublicMarkerLogIndex,
+		CascadeScopeId = commit.CascadeScopeId,
+		CandidatePlayerIds = commit.CandidatePlayerIds.ToList(),
+		PermittedVoterIds = commit.PermittedVoterIds.ToList(),
+		AppliesOnTurnNumber = commit.AppliesOnTurnNumber,
+		AnnouncementInstructionId = commit.AnnouncementInstructionId,
+		Timestamp = commit.Timestamp,
+		TurnNumber = commit.TurnNumber,
+		CurrentPhase = commit.CurrentPhase,
+		PublicMarkerLogIndex = commit.PublicMarkerLogIndex
+	};
+
+	internal ActorBorrowedScapegoatVoterRestrictionCommit ToValue() => new(
+		PowerIdentity,
+		ActorSetupCardId,
+		TieReplacementPublicMarkerLogIndex,
+		CascadeScopeId,
+		CandidatePlayerIds,
+		PermittedVoterIds,
+		AppliesOnTurnNumber,
+		AnnouncementInstructionId,
 		Timestamp,
 		TurnNumber,
 		CurrentPhase,

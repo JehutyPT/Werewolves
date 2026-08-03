@@ -65,7 +65,8 @@ public sealed record ActorBorrowedRolePowerCommittedLogEntry : GameLogEntryBase
 
 	internal override void EnforceValidity()
 	{
-		if (CurrentPhase is not (GamePhase.Night or GamePhase.Day) ||
+		if (CurrentPhase is not (
+				GamePhase.Night or GamePhase.Dawn or GamePhase.Day) ||
 			!ActorBorrowedRolePowerCommitment.IsWellFormed(IntegrityCommitment))
 		{
 			throw new InvalidOperationException(

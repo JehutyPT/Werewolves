@@ -1,11 +1,20 @@
 using System.Collections.Immutable;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Werewolves.Core.GameLogic.Interfaces;
+using Werewolves.Core.GameLogic.Models.EliminationCascades;
+using Werewolves.Core.GameLogic.Models.InternalMessages;
+using Werewolves.Core.GameLogic.RolePowers;
+using Werewolves.Core.GameLogic.Roles.MainRoles;
+using Werewolves.Core.GameLogic.Services;
+using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Models.Simulation;
+using Werewolves.Core.StateModels.Resources;
 using Werewolves.Core.StateModels.Serialization;
 
 namespace Werewolves.Core.Tests.Helpers;
@@ -42,6 +51,1208 @@ internal sealed class RecoveryPayloadTestDriver
 			?? throw new InvalidOperationException(
 				"The recovery test payload could not be deserialized.");
 		return new RecoveryPayloadTestDriver(payload);
+	}
+
+	internal static ActorBorrowedHunterPendingRecoverySnapshot
+		CreateActorBorrowedHunterPendingSelectorSnapshot(
+			IStateChangeObserver sourceObserver)
+	{
+		ArgumentNullException.ThrowIfNull(sourceObserver);
+		var hunterCard = new PhysicalCharacterCard(
+			Guid.Parse("00000000-0000-0000-0000-000000000261"),
+			MainRoleType.Hunter);
+		var setup = new ActorSetupCards(
+			version: 8,
+			[
+				hunterCard,
+				new PhysicalCharacterCard(
+					Guid.Parse("00000000-0000-0000-0000-000000000262"),
+					MainRoleType.Seer),
+				new PhysicalCharacterCard(
+					Guid.Parse("00000000-0000-0000-0000-000000000263"),
+					MainRoleType.Fox)
+			]);
+		var config = new GameSessionConfig(
+			[GameStrings.ActorRoleName, "Werewolf", "Target", "Villager A", "Villager B"],
+			[
+				MainRoleType.Actor,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			],
+			setup);
+		var sessionId = Guid.NewGuid();
+		var start = new StartGameConfirmationInstruction(sessionId);
+		var sourceSession = new GameSession(
+			sessionId,
+			start,
+			config,
+			sourceObserver);
+		var players = sourceSession.GetPlayers().ToArray();
+		var actorId = players[0].Id;
+		foreach (var player in players)
+		{
+			sourceSession.AssignRole(
+				player.Id,
+				player.Id == actorId
+					? MainRoleType.Actor
+					: player.Name == "Werewolf"
+						? MainRoleType.SimpleWerewolf
+						: MainRoleType.SimpleVillager);
+		}
+
+		var actorCard = sourceSession.GetModeratorPhysicalCharacterCards()
+			.Single(card => card.Card.PrintedRole == MainRoleType.Actor);
+		if (!sourceSession.TryRecordPhysicalCharacterCardOwnership(
+				sourceSession.RoleLockIn.Version,
+				actorId,
+				actorCard.Card.Id))
+		{
+			throw new InvalidOperationException(
+				"The Hunter recovery fixture could not bind Actor's physical card.");
+		}
+
+		sourceSession.IdentifyRole([actorId], MainRoleType.Actor);
+		if (!sourceSession.TrySpendActorSetupCard(
+				actorId,
+				hunterCard.Id,
+				out var activation))
+		{
+			throw new InvalidOperationException(
+				"The Hunter recovery fixture could not activate its setup card.");
+		}
+
+		SeedActorBorrowedHunterRecoveryFacts(sourceSession, players[1].Id);
+		sourceSession.TransitionMainPhase(GamePhase.Day);
+		sourceSession.SetPendingModeratorInstruction(
+			ActorBorrowedHunterRecoveryFlowKey.Instance,
+			start);
+		sourceSession.CaptureRecoveryBoundary(
+			ActorBorrowedHunterRecoveryFlowKey.Instance);
+
+		var service = new GameService();
+		var gameId = service.RehydrateSession(sourceSession.Serialize());
+		var recoveredStart = RequireActorBorrowedHunterInstruction<
+			StartGameConfirmationInstruction>(
+			service.GetCurrentInstruction(gameId));
+		var debate = RequireActorBorrowedHunterInstruction<
+			ConfirmationInstruction>(
+			service.ProcessInstruction(gameId, recoveredStart.CreateResponse())
+				.ModeratorInstruction);
+		var vote = RequireActorBorrowedHunterInstruction<
+			SelectPlayersInstruction>(
+			service.ProcessInstruction(gameId, debate.CreateResponse())
+				.ModeratorInstruction);
+		var actorReveal = RequireActorBorrowedHunterInstruction<
+			ConfirmationInstruction>(
+			service.ProcessInstruction(
+				gameId,
+				vote.CreateResponse([actorId])).ModeratorInstruction);
+		if (actorReveal.Semantic !=
+			ModeratorInstructionSemantic.AssignDayVoteTargetRole)
+		{
+			throw new InvalidOperationException(
+				"The Hunter recovery fixture did not reach Actor's public reveal.");
+		}
+
+		var elimination = RequireActorBorrowedHunterInstruction<
+			ConfirmationInstruction>(
+			service.ProcessInstruction(gameId, actorReveal.CreateResponse())
+				.ModeratorInstruction);
+		if (elimination.Semantic !=
+			ModeratorInstructionSemantic.AnnounceDayElimination)
+		{
+			throw new InvalidOperationException(
+				"The Hunter recovery fixture did not reach Actor's Elimination announcement.");
+		}
+
+		var selector = RequireActorBorrowedHunterInstruction<
+			SelectPlayersInstruction>(
+			service.ProcessInstruction(gameId, elimination.CreateResponse())
+				.ModeratorInstruction);
+		if (selector.Semantic !=
+				ModeratorInstructionSemantic.SelectHunterFinalShotTarget ||
+			selector.CountConstraint != NumberRangeConstraint.Single ||
+			selector.AffectedPlayerIds is not [var affectedPlayerId] ||
+			affectedPlayerId != actorId)
+		{
+			throw new InvalidOperationException(
+				"The Hunter recovery fixture did not reach the correlated final-shot selector.");
+		}
+
+		var pendingState = service.GetGameStateView(gameId)
+			?? throw new InvalidOperationException(
+				"The Hunter recovery fixture lost its pending Game Session.");
+		return new ActorBorrowedHunterPendingRecoverySnapshot(
+			pendingState.Serialize(),
+			gameId,
+			selector,
+			hunterCard.Id,
+			activation!.ActivationId);
+	}
+
+	internal static ActorBorrowedElderPendingRecoverySnapshot
+		CreateActorBorrowedElderPendingSuppressionAnnouncementSnapshot(
+			IStateChangeObserver sourceObserver)
+	{
+		ArgumentNullException.ThrowIfNull(sourceObserver);
+		var elderCard = new PhysicalCharacterCard(
+			Guid.Parse("00000000-0000-0000-0000-000000000271"),
+			MainRoleType.Elder);
+		var setup = new ActorSetupCards(
+			version: 8,
+			[
+				elderCard,
+				new PhysicalCharacterCard(
+					Guid.Parse("00000000-0000-0000-0000-000000000272"),
+					MainRoleType.Seer),
+				new PhysicalCharacterCard(
+					Guid.Parse("00000000-0000-0000-0000-000000000273"),
+					MainRoleType.Fox)
+			]);
+		var config = new GameSessionConfig(
+			[GameStrings.ActorRoleName, "Werewolf", "Villager A", "Villager B", "Villager C", "Villager D"],
+			[
+				MainRoleType.Actor,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			],
+			setup);
+		var sessionId = Guid.NewGuid();
+		var start = new StartGameConfirmationInstruction(sessionId);
+		var sourceSession = new GameSession(
+			sessionId,
+			start,
+			config,
+			sourceObserver);
+		var players = sourceSession.GetPlayers().ToArray();
+		var actorId = players[0].Id;
+		var werewolfId = players[1].Id;
+		foreach (var player in players)
+		{
+			sourceSession.AssignRole(
+				player.Id,
+				player.Id == actorId
+					? MainRoleType.Actor
+					: player.Id == werewolfId
+						? MainRoleType.SimpleWerewolf
+						: MainRoleType.SimpleVillager);
+		}
+
+		var actorCard = sourceSession.GetModeratorPhysicalCharacterCards()
+			.Single(card => card.Card.PrintedRole == MainRoleType.Actor);
+		if (!sourceSession.TryRecordPhysicalCharacterCardOwnership(
+				sourceSession.RoleLockIn.Version,
+				actorId,
+				actorCard.Card.Id))
+		{
+			throw new InvalidOperationException(
+				"The Elder recovery fixture could not bind Actor's physical card.");
+		}
+
+		sourceSession.IdentifyRole([actorId], MainRoleType.Actor);
+		if (!sourceSession.TrySpendActorSetupCard(
+				actorId,
+				elderCard.Id,
+				out var activation))
+		{
+			throw new InvalidOperationException(
+				"The Elder recovery fixture could not activate its setup card.");
+		}
+
+		SeedActorBorrowedHunterRecoveryFacts(sourceSession, werewolfId);
+		sourceSession.TransitionMainPhase(GamePhase.Day);
+		sourceSession.SetPendingModeratorInstruction(
+			ActorBorrowedElderRecoveryFlowKey.Instance,
+			start);
+		sourceSession.CaptureRecoveryBoundary(
+			ActorBorrowedElderRecoveryFlowKey.Instance);
+
+		var service = new GameService();
+		var gameId = service.RehydrateSession(sourceSession.Serialize());
+		var recoveredStart = RequireActorBorrowedElderInstruction<
+			StartGameConfirmationInstruction>(
+			service.GetCurrentInstruction(gameId));
+		var debate = RequireActorBorrowedElderInstruction<
+			ConfirmationInstruction>(
+			service.ProcessInstruction(gameId, recoveredStart.CreateResponse())
+				.ModeratorInstruction);
+		var vote = RequireActorBorrowedElderInstruction<
+			SelectPlayersInstruction>(
+			service.ProcessInstruction(gameId, debate.CreateResponse())
+				.ModeratorInstruction);
+		var actorReveal = RequireActorBorrowedElderInstruction<
+			ConfirmationInstruction>(
+			service.ProcessInstruction(
+				gameId,
+				vote.CreateResponse([actorId])).ModeratorInstruction);
+		if (actorReveal.Semantic !=
+			ModeratorInstructionSemantic.AssignDayVoteTargetRole)
+		{
+			throw new InvalidOperationException(
+				"The Elder recovery fixture did not reach Actor's public reveal.");
+		}
+
+		var elimination = RequireActorBorrowedElderInstruction<
+			ConfirmationInstruction>(
+			service.ProcessInstruction(gameId, actorReveal.CreateResponse())
+				.ModeratorInstruction);
+		if (elimination.Semantic !=
+			ModeratorInstructionSemantic.AnnounceDayElimination)
+		{
+			throw new InvalidOperationException(
+				"The Elder recovery fixture did not reach Actor's Elimination announcement.");
+		}
+
+		var progress = service.ProcessInstruction(
+			gameId,
+			elimination.CreateResponse());
+		ConfirmationInstruction? announcement = null;
+		for (var step = 0; step < 12 && announcement == null; step++)
+		{
+			if (progress.ModeratorInstruction is ConfirmationInstruction
+				{
+					Semantic: ModeratorInstructionSemantic
+						.AnnounceVillagerRolePowerSuppression
+				} pendingAnnouncement)
+			{
+				announcement = pendingAnnouncement;
+				break;
+			}
+
+			progress = progress.ModeratorInstruction switch
+			{
+				AssignRolesInstruction assignment => service.ProcessInstruction(
+					gameId,
+					assignment.CreateResponse(
+						assignment.PlayersForAssignment.ToDictionary(
+							playerId => playerId,
+							playerId => playerId == actorId
+								? MainRoleType.Actor
+								: playerId == werewolfId
+									? MainRoleType.SimpleWerewolf
+									: MainRoleType.SimpleVillager))),
+				ConfirmationInstruction confirmation =>
+					service.ProcessInstruction(
+						gameId,
+						confirmation.CreateResponse()),
+				_ => throw new InvalidOperationException(
+					"The Elder recovery fixture left the suppression continuation.")
+			};
+		}
+
+		if (announcement is not
+			{
+				PublicAnnouncement: var publicAnnouncement,
+				PrivateInstruction: null,
+				AffectedPlayerIds: null
+			} ||
+			!StringComparer.Ordinal.Equals(
+				publicAnnouncement,
+				GameStrings.VillagerRolePowerSuppressionAnnouncement) ||
+			announcement.SoundEffects.Count != 0)
+		{
+			throw new InvalidOperationException(
+				"The Elder recovery fixture did not reach the canonical suppression announcement.");
+		}
+
+		var pendingState = service.GetGameStateView(gameId)
+			?? throw new InvalidOperationException(
+				"The Elder recovery fixture lost its pending Game Session.");
+		return new ActorBorrowedElderPendingRecoverySnapshot(
+			pendingState.Serialize(),
+			gameId,
+			announcement,
+			elderCard.Id,
+			activation!.ActivationId);
+	}
+
+	internal static ActorBorrowedScapegoatPendingRecoverySnapshot
+		CreateActorBorrowedScapegoatPendingSnapshot(
+			ActorBorrowedScapegoatRecoveryStep step,
+			IStateChangeObserver sourceObserver)
+	{
+		ArgumentNullException.ThrowIfNull(sourceObserver);
+		var scapegoatCard = new PhysicalCharacterCard(
+			Guid.Parse("00000000-0000-0000-0000-000000000281"),
+			MainRoleType.Scapegoat);
+		var setup = new ActorSetupCards(
+			version: 7,
+			[
+				scapegoatCard,
+				new PhysicalCharacterCard(
+					Guid.Parse("00000000-0000-0000-0000-000000000282"),
+					MainRoleType.Seer),
+				new PhysicalCharacterCard(
+					Guid.Parse("00000000-0000-0000-0000-000000000283"),
+					MainRoleType.Fox)
+			]);
+		var config = new GameSessionConfig(
+			[
+				GameStrings.ActorRoleName,
+				"Werewolf",
+				"Permitted voter",
+				"Villager A",
+				"Villager B",
+				"Villager C"
+			],
+			[
+				MainRoleType.Actor,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			],
+			setup);
+		var sessionId = Guid.NewGuid();
+		var start = new StartGameConfirmationInstruction(sessionId);
+		var sourceSession = new GameSession(
+			sessionId,
+			start,
+			config,
+			sourceObserver);
+		var players = sourceSession.GetPlayers().ToArray();
+		var actorId = players[0].Id;
+		var werewolfId = players[1].Id;
+		foreach (var player in players)
+		{
+			sourceSession.AssignRole(
+				player.Id,
+				player.Id == actorId
+					? MainRoleType.Actor
+					: player.Id == werewolfId
+						? MainRoleType.SimpleWerewolf
+						: MainRoleType.SimpleVillager);
+		}
+
+		var actorCard = sourceSession.GetModeratorPhysicalCharacterCards()
+			.Single(card => card.Card.PrintedRole == MainRoleType.Actor);
+		if (!sourceSession.TryRecordPhysicalCharacterCardOwnership(
+				sourceSession.RoleLockIn.Version,
+				actorId,
+				actorCard.Card.Id))
+		{
+			throw new InvalidOperationException(
+				"The Scapegoat recovery fixture could not bind Actor's physical card.");
+		}
+
+		sourceSession.IdentifyRole([actorId], MainRoleType.Actor);
+		if (!sourceSession.TrySpendActorSetupCard(
+				actorId,
+				scapegoatCard.Id,
+				out var activation))
+		{
+			throw new InvalidOperationException(
+				"The Scapegoat recovery fixture could not activate its setup card.");
+		}
+
+		SeedActorBorrowedHunterRecoveryFacts(sourceSession, werewolfId);
+		sourceSession.TransitionMainPhase(GamePhase.Day);
+		sourceSession.SetPendingModeratorInstruction(
+			ActorBorrowedScapegoatRecoveryFlowKey.Instance,
+			start);
+		sourceSession.CaptureRecoveryBoundary(
+			ActorBorrowedScapegoatRecoveryFlowKey.Instance);
+
+		var service = new GameService();
+		var gameId = service.RehydrateSession(sourceSession.Serialize());
+		var recoveredStart = RequireActorBorrowedScapegoatInstruction<
+			StartGameConfirmationInstruction>(
+			service.GetCurrentInstruction(gameId));
+		var debate = RequireActorBorrowedScapegoatInstruction<
+			ConfirmationInstruction>(
+			service.ProcessInstruction(gameId, recoveredStart.CreateResponse())
+				.ModeratorInstruction);
+		var vote = RequireActorBorrowedScapegoatInstruction<
+			SelectPlayersInstruction>(
+			service.ProcessInstruction(gameId, debate.CreateResponse())
+				.ModeratorInstruction);
+		var reveal = RequireActorBorrowedScapegoatInstruction<
+			ConfirmationInstruction>(
+			service.ProcessInstruction(gameId, vote.CreateResponse([]))
+				.ModeratorInstruction);
+		if (reveal.Semantic !=
+				ModeratorInstructionSemantic.RevealScapegoatForTie ||
+			reveal.AffectedPlayerIds is not [var affectedActorId] ||
+			affectedActorId != actorId ||
+			!StringComparer.Ordinal.Equals(
+				reveal.PublicAnnouncement,
+				GameStrings.ActorRoleName) ||
+			!StringComparer.Ordinal.Equals(
+				reveal.PrivateInstruction,
+				GameStrings.PublicRoleRevealInstruction) ||
+			reveal.SoundEffects.Count != 0)
+		{
+			throw new InvalidOperationException(
+				"The Scapegoat recovery fixture did not reach the canonical borrowed reveal.");
+		}
+
+		ActorBorrowedScapegoatPendingRecoverySnapshot Capture(
+			ActorBorrowedScapegoatRecoveryStep capturedStep,
+			ModeratorInstruction instruction)
+		{
+			var pendingState = service.GetGameStateView(gameId) as GameSession
+				?? throw new InvalidOperationException(
+					"The Scapegoat recovery fixture lost its pending Game Session.");
+			var liveInstruction = pendingState.PendingModeratorInstruction;
+			if (liveInstruction == null ||
+				liveInstruction.InstructionId != instruction.InstructionId ||
+				liveInstruction.Semantic != instruction.Semantic)
+			{
+				throw new InvalidOperationException(
+					"The Scapegoat recovery fixture did not reach the requested live pending instruction.");
+			}
+
+			if (capturedStep == ActorBorrowedScapegoatRecoveryStep.Reveal)
+			{
+				// A tied Vote has no commit-based automatic recovery boundary.
+				// Capture the real pre-commit reveal explicitly before serializing.
+				pendingState.CaptureRecoveryBoundary(
+					ActorBorrowedScapegoatRecoveryFlowKey.Instance);
+			}
+
+			return new ActorBorrowedScapegoatPendingRecoverySnapshot(
+				capturedStep,
+				pendingState.Serialize(),
+				gameId,
+				instruction,
+				scapegoatCard.Id,
+				activation!.ActivationId);
+		}
+
+		if (step == ActorBorrowedScapegoatRecoveryStep.Reveal)
+		{
+			return Capture(step, reveal);
+		}
+
+		var selection = RequireActorBorrowedScapegoatInstruction<
+			SelectPlayersInstruction>(
+			service.ProcessInstruction(gameId, reveal.CreateResponse())
+				.ModeratorInstruction);
+		var expectedCandidates = players
+			.Where(player => player.Id != actorId)
+			.Select(player => player.Id)
+			.ToHashSet();
+		if (selection.Semantic !=
+				ModeratorInstructionSemantic.SelectScapegoatPermittedVoters ||
+			selection.CountConstraint != NumberRangeConstraint.AtLeast(1) ||
+			!selection.SelectablePlayerIds.SetEquals(expectedCandidates) ||
+			selection.AffectedPlayerIds is not { } selectionAffectedIds ||
+			!selectionAffectedIds.ToHashSet().SetEquals(expectedCandidates) ||
+			selection.PublicAnnouncement is not null ||
+			!StringComparer.Ordinal.Equals(
+				selection.PrivateInstruction,
+				GameStrings.ScapegoatPermittedVotersSelectionInstruction) ||
+			selection.RoleIdentification is not null ||
+			selection.EmptySelectionOptionLabel is not null)
+		{
+			throw new InvalidOperationException(
+				"The Scapegoat recovery fixture did not reach the canonical permitted-voter selector.");
+		}
+
+		if (step == ActorBorrowedScapegoatRecoveryStep.PermittedVoterSelection)
+		{
+			return Capture(step, selection);
+		}
+
+		if (step != ActorBorrowedScapegoatRecoveryStep.PermittedVoterAnnouncement)
+		{
+			throw new ArgumentOutOfRangeException(nameof(step), step, null);
+		}
+
+		var permittedVoterId = selection.SelectablePlayerIds.First();
+		var announcement = RequireActorBorrowedScapegoatInstruction<
+			ConfirmationInstruction>(
+			service.ProcessInstruction(
+				gameId,
+				selection.CreateResponse([permittedVoterId]))
+				.ModeratorInstruction);
+		var permittedVoterName = sourceSession.GetPlayer(permittedVoterId).Name;
+		if (announcement.Semantic !=
+				ModeratorInstructionSemantic.AnnounceScapegoatPermittedVoters ||
+			announcement.AffectedPlayerIds is not [var affectedVoterId] ||
+			affectedVoterId != permittedVoterId ||
+			!StringComparer.Ordinal.Equals(
+				announcement.PublicAnnouncement,
+				GameStrings.ScapegoatPermittedVotersAnnouncement.Format(
+					permittedVoterName)) ||
+			announcement.PrivateInstruction is not null ||
+			announcement.SoundEffects.Count != 0)
+		{
+			throw new InvalidOperationException(
+				"The Scapegoat recovery fixture did not reach the canonical permitted-voter announcement.");
+		}
+
+		return Capture(step, announcement);
+	}
+
+	internal static ActorBorrowedVillageIdiotPendingRecoverySnapshot
+		CreateActorBorrowedVillageIdiotPendingPardonSnapshot(
+			IStateChangeObserver sourceObserver)
+	{
+		ArgumentNullException.ThrowIfNull(sourceObserver);
+		var villageIdiotCard = new PhysicalCharacterCard(
+			Guid.Parse("00000000-0000-0000-0000-000000000291"),
+			MainRoleType.VillageIdiot);
+		var setup = new ActorSetupCards(
+			version: 7,
+			[
+				villageIdiotCard,
+				new PhysicalCharacterCard(
+					Guid.Parse("00000000-0000-0000-0000-000000000292"),
+					MainRoleType.Seer),
+				new PhysicalCharacterCard(
+					Guid.Parse("00000000-0000-0000-0000-000000000293"),
+					MainRoleType.Fox)
+			]);
+		var config = new GameSessionConfig(
+			[
+				GameStrings.ActorRoleName,
+				"Werewolf",
+				"Villager A",
+				"Villager B",
+				"Villager C",
+				"Villager D"
+			],
+			[
+				MainRoleType.Actor,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			],
+			setup);
+		var sessionId = Guid.NewGuid();
+		var start = new StartGameConfirmationInstruction(sessionId);
+		var sourceSession = new GameSession(
+			sessionId,
+			start,
+			config,
+			sourceObserver);
+		var players = sourceSession.GetPlayers().ToArray();
+		var actorId = players[0].Id;
+		var werewolfId = players[1].Id;
+		foreach (var player in players)
+		{
+			sourceSession.AssignRole(
+				player.Id,
+				player.Id == actorId
+					? MainRoleType.Actor
+					: player.Id == werewolfId
+						? MainRoleType.SimpleWerewolf
+						: MainRoleType.SimpleVillager);
+		}
+
+		var actorCard = sourceSession.GetModeratorPhysicalCharacterCards()
+			.Single(card => card.Card.PrintedRole == MainRoleType.Actor);
+		if (!sourceSession.TryRecordPhysicalCharacterCardOwnership(
+				sourceSession.RoleLockIn.Version,
+				actorId,
+				actorCard.Card.Id))
+		{
+			throw new InvalidOperationException(
+				"The Village Idiot recovery fixture could not bind Actor's physical card.");
+		}
+
+		sourceSession.IdentifyRole([actorId], MainRoleType.Actor);
+		if (!sourceSession.TrySpendActorSetupCard(
+				actorId,
+				villageIdiotCard.Id,
+				out var activation))
+		{
+			throw new InvalidOperationException(
+				"The Village Idiot recovery fixture could not activate its setup card.");
+		}
+
+		SeedActorBorrowedHunterRecoveryFacts(sourceSession, werewolfId);
+		sourceSession.TransitionMainPhase(GamePhase.Day);
+		sourceSession.SetPendingModeratorInstruction(
+			ActorBorrowedVillageIdiotRecoveryFlowKey.Instance,
+			start);
+		sourceSession.CaptureRecoveryBoundary(
+			ActorBorrowedVillageIdiotRecoveryFlowKey.Instance);
+
+		var service = new GameService();
+		var gameId = service.RehydrateSession(sourceSession.Serialize());
+		var recoveredStart = RequireActorBorrowedVillageIdiotInstruction<
+			StartGameConfirmationInstruction>(
+			service.GetCurrentInstruction(gameId));
+		var debate = RequireActorBorrowedVillageIdiotInstruction<
+			ConfirmationInstruction>(
+			service.ProcessInstruction(gameId, recoveredStart.CreateResponse())
+				.ModeratorInstruction);
+		var vote = RequireActorBorrowedVillageIdiotInstruction<
+			SelectPlayersInstruction>(
+			service.ProcessInstruction(gameId, debate.CreateResponse())
+				.ModeratorInstruction);
+		var actorReveal = RequireActorBorrowedVillageIdiotInstruction<
+			ConfirmationInstruction>(
+			service.ProcessInstruction(
+				gameId,
+				vote.CreateResponse([actorId])).ModeratorInstruction);
+		if (actorReveal.Semantic !=
+			ModeratorInstructionSemantic.AssignDayVoteTargetRole)
+		{
+			throw new InvalidOperationException(
+				"The Village Idiot recovery fixture did not reach Actor's public reveal.");
+		}
+
+		var pardon = RequireActorBorrowedVillageIdiotInstruction<
+			ConfirmationInstruction>(
+			service.ProcessInstruction(gameId, actorReveal.CreateResponse())
+				.ModeratorInstruction);
+		if (pardon.Semantic !=
+				ModeratorInstructionSemantic.AnnounceVillageIdiotPardon ||
+			pardon.AffectedPlayerIds is not [var affectedActorId] ||
+			affectedActorId != actorId ||
+			!StringComparer.Ordinal.Equals(
+				pardon.PublicAnnouncement,
+				GameStrings.ActorBorrowedVillageIdiotPardonAnnouncement.Format(
+					sourceSession.GetPlayer(actorId).Name)) ||
+			pardon.PrivateInstruction is not null ||
+			pardon.SoundEffects.Count != 0)
+		{
+			throw new InvalidOperationException(
+				"The Village Idiot recovery fixture did not reach the canonical borrowed pardon announcement.");
+		}
+
+		var pendingState = service.GetGameStateView(gameId) as GameSession
+			?? throw new InvalidOperationException(
+				"The Village Idiot recovery fixture lost its pending Game Session.");
+		var liveInstruction = pendingState.PendingModeratorInstruction;
+		if (liveInstruction == null ||
+			liveInstruction.InstructionId != pardon.InstructionId ||
+			liveInstruction.Semantic != pardon.Semantic)
+		{
+			throw new InvalidOperationException(
+				"The Village Idiot recovery fixture did not reach the live pending pardon announcement.");
+		}
+
+		var serializedSession = pendingState.Serialize();
+		var persisted = Parse(serializedSession)._payload;
+		if (persisted.DomainRecoveryCursor is not null ||
+			persisted.PendingInstructionSemantic !=
+				ModeratorInstructionSemantic.AnnounceVillageIdiotPardon ||
+			persisted.PendingInstruction?.InstructionId != pardon.InstructionId)
+		{
+			throw new InvalidOperationException(
+				"The Village Idiot recovery fixture did not persist a cursorless pending pardon boundary.");
+		}
+
+		return new ActorBorrowedVillageIdiotPendingRecoverySnapshot(
+			serializedSession,
+			gameId,
+			pardon,
+			villageIdiotCard.Id,
+			activation!.ActivationId,
+			ActorBorrowedVillageIdiotPardonCommit.ExpectedResourceId);
+	}
+
+	internal static ActorBorrowedBearTamerPendingRecoverySnapshot
+		CreateActorBorrowedBearTamerPendingGrowlSnapshot(
+			IStateChangeObserver sourceObserver)
+	{
+		ArgumentNullException.ThrowIfNull(sourceObserver);
+		var bearTamerCard = new PhysicalCharacterCard(
+			Guid.Parse("00000000-0000-0000-0000-000000000301"),
+			MainRoleType.BearTamer);
+		var setup = new ActorSetupCards(
+			version: 15,
+			[
+				bearTamerCard,
+				new PhysicalCharacterCard(
+					Guid.Parse("00000000-0000-0000-0000-000000000302"),
+					MainRoleType.Seer),
+				new PhysicalCharacterCard(
+					Guid.Parse("00000000-0000-0000-0000-000000000303"),
+					MainRoleType.Fox)
+			]);
+		var config = new GameSessionConfig(
+			[
+				GameStrings.ActorRoleName,
+				"Clockwise Werewolf",
+				"Dawn victim",
+				"Villager A",
+				"Villager B",
+				"Villager C"
+			],
+			[
+				MainRoleType.Actor,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			],
+			setup);
+		var sessionId = Guid.NewGuid();
+		var start = new StartGameConfirmationInstruction(sessionId);
+		var sourceSession = new GameSession(
+			sessionId,
+			start,
+			config,
+			sourceObserver);
+		var players = sourceSession.GetPlayers().ToArray();
+		var actorId = players[0].Id;
+		var werewolfId = players[1].Id;
+		var victimId = players[2].Id;
+		foreach (var player in players)
+		{
+			sourceSession.AssignRole(
+				player.Id,
+				player.Id == actorId
+					? MainRoleType.Actor
+					: player.Id == werewolfId
+						? MainRoleType.SimpleWerewolf
+						: MainRoleType.SimpleVillager);
+		}
+
+		var actorCard = sourceSession.GetModeratorPhysicalCharacterCards()
+			.Single(card => card.Card.PrintedRole == MainRoleType.Actor);
+		if (!sourceSession.TryRecordPhysicalCharacterCardOwnership(
+				sourceSession.RoleLockIn.Version,
+				actorId,
+				actorCard.Card.Id))
+		{
+			throw new InvalidOperationException(
+				"The Bear Tamer recovery fixture could not bind Actor's physical card.");
+		}
+
+		sourceSession.IdentifyRole([actorId], MainRoleType.Actor);
+		if (!sourceSession.TrySpendActorSetupCard(
+				actorId,
+				bearTamerCard.Id,
+				out var activation))
+		{
+			throw new InvalidOperationException(
+				"The Bear Tamer recovery fixture could not activate its setup card.");
+		}
+
+		SeedActorBorrowedHunterRecoveryFacts(sourceSession, werewolfId);
+		sourceSession.PerformNightAction(
+			NightActionType.WerewolfVictimSelection,
+			victimId);
+		sourceSession.TransitionMainPhase(GamePhase.Dawn);
+		sourceSession.SetPendingModeratorInstruction(
+			ActorBorrowedBearTamerRecoveryFlowKey.Instance,
+			start);
+		sourceSession.CaptureRecoveryBoundary(
+			ActorBorrowedBearTamerRecoveryFlowKey.Instance);
+
+		var service = new GameService();
+		var gameId = service.RehydrateSession(sourceSession.Serialize());
+		var recoveredStart = RequireActorBorrowedBearTamerInstruction<
+			StartGameConfirmationInstruction>(
+			service.GetCurrentInstruction(gameId));
+		var progress = service.ProcessInstruction(
+			gameId,
+			recoveredStart.CreateResponse());
+		ConfirmationInstruction? growl = null;
+		for (var step = 0; step < 20 && growl == null; step++)
+		{
+			if (progress.ModeratorInstruction is ConfirmationInstruction
+				{
+					Semantic:
+						ModeratorInstructionSemantic.AnnounceBearTamerGrowl
+				} pendingGrowl)
+			{
+				growl = pendingGrowl;
+				break;
+			}
+
+			progress = progress.ModeratorInstruction switch
+			{
+				ConfirmationInstruction confirmation => service.ProcessInstruction(
+					gameId,
+					confirmation.CreateResponse()),
+				AssignRolesInstruction assignment => service.ProcessInstruction(
+					gameId,
+					assignment.CreateResponse(
+						assignment.PlayersForAssignment.ToDictionary(
+							playerId => playerId,
+							playerId => sourceSession.GetPlayer(playerId).State
+								.CurrentRole ?? throw new InvalidOperationException(
+									"The Bear Tamer recovery fixture cannot assign an unknown Dawn role.")))),
+				_ => throw new InvalidOperationException(
+					"The Bear Tamer recovery fixture left the Dawn continuation before the growl.")
+			};
+		}
+
+		if (growl is not
+			{
+				PublicAnnouncement: null,
+				AffectedPlayerIds: null
+			} ||
+			!StringComparer.Ordinal.Equals(
+				growl.PrivateInstruction,
+				GameStrings.BearTamerGrowlInstruction) ||
+			!growl.SoundEffects.SequenceEqual([SoundEffectsEnum.BearGrowl]))
+		{
+			throw new InvalidOperationException(
+				"The Bear Tamer recovery fixture did not reach the canonical growl guidance.");
+		}
+
+		var pendingState = service.GetGameStateView(gameId) as GameSession
+			?? throw new InvalidOperationException(
+				"The Bear Tamer recovery fixture lost its pending Game Session.");
+		var liveInstruction = pendingState.PendingModeratorInstruction;
+		var currentActivation = pendingState
+			.GetModeratorActiveActorBorrowedRolePowerActivation();
+		if (liveInstruction == null ||
+			liveInstruction.InstructionId != growl.InstructionId ||
+			liveInstruction.Semantic != growl.Semantic ||
+			currentActivation is not
+			{
+				ActingRole: MainRoleType.Actor,
+				SourceRole: MainRoleType.BearTamer,
+				ActingPlayerId: var activeActorId
+			} ||
+			activeActorId != actorId ||
+			currentActivation.SelectedCardId != bearTamerCard.Id ||
+			currentActivation.ActivationId != activation!.ActivationId ||
+			pendingState.GetActorBorrowedBearTamerGrowlCommits().Count != 0)
+		{
+			throw new InvalidOperationException(
+				"The Bear Tamer recovery fixture did not reach the active borrowed pending growl.");
+		}
+
+		var serializedSession = pendingState.Serialize();
+		var persisted = Parse(serializedSession)._payload;
+		if (persisted.DomainRecoveryCursor is not null ||
+			persisted.PendingInstructionSemantic !=
+				ModeratorInstructionSemantic.AnnounceBearTamerGrowl ||
+			persisted.PendingInstruction?.InstructionId != growl.InstructionId)
+		{
+			throw new InvalidOperationException(
+				"The Bear Tamer recovery fixture did not persist a cursorless pending growl boundary.");
+		}
+
+		return new ActorBorrowedBearTamerPendingRecoverySnapshot(
+			serializedSession,
+			gameId,
+			growl,
+			actorId,
+			bearTamerCard.Id,
+			activation!.ActivationId);
+	}
+
+	internal static ActorBorrowedKnightPendingRecoverySnapshot
+		CreateActorBorrowedKnightPendingRustySwordAnnouncementSnapshot(
+			IStateChangeObserver sourceObserver)
+	{
+		ArgumentNullException.ThrowIfNull(sourceObserver);
+		var knightCard = new PhysicalCharacterCard(
+			Guid.Parse("00000000-0000-0000-0000-000000000311"),
+			MainRoleType.KnightWithRustySword);
+		var setup = new ActorSetupCards(
+			version: 16,
+			[
+				knightCard,
+				new PhysicalCharacterCard(
+					Guid.Parse("00000000-0000-0000-0000-000000000312"),
+					MainRoleType.BearTamer),
+				new PhysicalCharacterCard(
+					Guid.Parse("00000000-0000-0000-0000-000000000313"),
+					MainRoleType.Seer)
+			]);
+		var roles = new[]
+		{
+			MainRoleType.Actor,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager
+		};
+		var config = new GameSessionConfig(
+			[GameStrings.ActorRoleName, "Player B", "Player C", "Player D", "Player E", "Player F"],
+			roles.ToList(),
+			setup);
+		var sessionId = Guid.NewGuid();
+		var start = new StartGameConfirmationInstruction(sessionId);
+		var sourceSession = new GameSession(
+			sessionId,
+			start,
+			config,
+			sourceObserver);
+		var players = sourceSession.GetPlayers().ToArray();
+		for (var index = 0; index < players.Length; index++)
+		{
+			sourceSession.AssignRole(players[index].Id, roles[index]);
+		}
+
+		var actorId = players[0].Id;
+		var targetId = players[1].Id;
+		var otherWerewolfId = players[2].Id;
+		var actorCard = sourceSession.GetModeratorPhysicalCharacterCards()
+			.Single(card => card.Card.PrintedRole == MainRoleType.Actor);
+		if (!sourceSession.TryRecordPhysicalCharacterCardOwnership(
+				sourceSession.RoleLockIn.Version,
+				actorId,
+				actorCard.Card.Id))
+		{
+			throw new InvalidOperationException(
+				"The Knight recovery fixture could not bind Actor's physical card.");
+		}
+
+		sourceSession.IdentifyRole([actorId], MainRoleType.Actor);
+		if (!sourceSession.TrySpendActorSetupCard(
+				actorId,
+				knightCard.Id,
+				out var activation))
+		{
+			throw new InvalidOperationException(
+				"The Knight recovery fixture could not activate its setup card.");
+		}
+
+		SeedActorBorrowedKnightRecoveryFacts(
+			sourceSession,
+			new HashSet<Guid> { targetId, otherWerewolfId });
+		sourceSession.PerformNightAction(
+			NightActionType.WerewolfVictimSelection,
+			actorId);
+		sourceSession.TransitionMainPhase(GamePhase.Dawn);
+		sourceSession.SetPendingModeratorInstruction(
+			ActorBorrowedKnightRecoveryFlowKey.Instance,
+			start);
+		sourceSession.CaptureRecoveryBoundary(
+			ActorBorrowedKnightRecoveryFlowKey.Instance);
+
+		var service = new GameService();
+		var gameId = service.RehydrateSession(sourceSession.Serialize());
+		var recoveredStart = RequireActorBorrowedKnightInstruction<
+			StartGameConfirmationInstruction>(
+			service.GetCurrentInstruction(gameId));
+		var progress = service.ProcessInstruction(
+			gameId,
+			recoveredStart.CreateResponse());
+		for (var step = 0; step < 30; step++)
+		{
+			var current = service.GetGameStateView(gameId) as GameSession
+				?? throw new InvalidOperationException(
+					"The Knight recovery fixture lost its Game Session.");
+			if (current.GetCurrentPhase() == GamePhase.Day)
+			{
+				break;
+			}
+
+			progress = progress.ModeratorInstruction switch
+			{
+				ConfirmationInstruction confirmation => service.ProcessInstruction(
+					gameId,
+					confirmation.CreateResponse()),
+				AssignRolesInstruction assignment => service.ProcessInstruction(
+					gameId,
+					assignment.CreateResponse(
+						assignment.PlayersForAssignment.ToDictionary(
+							playerId => playerId,
+							playerId => sourceSession.GetPlayer(playerId).State
+								.CurrentRole ?? throw new InvalidOperationException(
+									"The Knight recovery fixture cannot assign an unknown Dawn role.")))),
+				_ => throw new InvalidOperationException(
+					"The Knight recovery fixture left the first Dawn continuation before Day.")
+			};
+		}
+
+		var pendingState = service.GetGameStateView(gameId) as GameSession
+			?? throw new InvalidOperationException(
+				"The Knight recovery fixture lost its pending Game Session.");
+		var schedules = pendingState
+			.GetActorBorrowedKnightRustySwordScheduleCommits()
+			.ToArray();
+		if (pendingState.GetCurrentPhase() != GamePhase.Day ||
+			schedules is not [var schedule] ||
+			schedule.TargetPlayerId != targetId ||
+			schedule.ActorSetupCardId != knightCard.Id ||
+			schedule.PowerIdentity.ActingPlayerId != actorId ||
+			schedule.PowerIdentity.SourceRole !=
+				MainRoleType.KnightWithRustySword ||
+			!StringComparer.Ordinal.Equals(
+				schedule.PowerIdentity.SourcePowerIdentifier,
+				ActorBorrowedKnightRustySwordScheduleCommit
+					.ExpectedSourcePowerIdentifier) ||
+			schedule.PowerIdentity.PowerInstanceOrigin !=
+				RolePowerInstanceOrigin.Borrowed)
+		{
+			throw new InvalidOperationException(
+				"The Knight recovery fixture did not create the correlated private schedule.");
+		}
+
+		var history = pendingState.GameHistoryLog.ToArray();
+		var markerIndex = schedule.PublicMarkerLogIndex;
+		var marker = history
+			.OfType<ActorBorrowedRolePowerCommittedLogEntry>()
+			.SingleOrDefault();
+		if (marker is null ||
+			markerIndex < 0 ||
+			markerIndex >= history.Length ||
+			!ReferenceEquals(history[markerIndex], marker) ||
+			!StringComparer.Ordinal.Equals(
+				marker.ToString(),
+				"ActorBorrowedRolePowerCommitted") ||
+			marker.ToString().Contains(
+				actorId.ToString(),
+				StringComparison.Ordinal) ||
+			marker.ToString().Contains(
+				targetId.ToString(),
+				StringComparison.Ordinal) ||
+			marker.ToString().Contains(
+				knightCard.Id.ToString(),
+				StringComparison.Ordinal) ||
+			marker.ToString().Contains(
+				activation!.ActivationId.ToString(),
+				StringComparison.Ordinal) ||
+			history.OfType<StatusEffectLogEntry>().Any(entry =>
+				entry.EffectType == StatusEffectTypes.RustySwordDisease) ||
+			pendingState.GetPlayerState(targetId).HasStatusEffect(
+				StatusEffectTypes.RustySwordDisease) ||
+			pendingState.GameHistoryLog.OfType<NightActionLogEntry>().Any(entry =>
+				entry.ActionType == NightActionType.RustySword) ||
+			pendingState.GameHistoryLog.OfType<RoleIdentificationLogEntry>().Any(entry =>
+				entry.Role == MainRoleType.KnightWithRustySword))
+		{
+			throw new InvalidOperationException(
+				"The Knight recovery fixture exposed its private schedule before the due consequence.");
+		}
+
+		pendingState.TransitionMainPhase(GamePhase.Night);
+		if (!pendingState.TryExpireActorBorrowedRolePowerActivation())
+		{
+			throw new InvalidOperationException(
+				"The Knight recovery fixture could not expire the completed borrowed activation.");
+		}
+
+		CommitActorBorrowedKnightCurrentWerewolfAgentFacts(
+			pendingState,
+			new HashSet<Guid> { otherWerewolfId });
+		if (!pendingState.TryEnterSubPhaseStage(
+				ActorBorrowedKnightRecoverySubPhaseKey.Instance,
+				GameHook.NightMainActionLoop.ToString()))
+		{
+			throw new InvalidOperationException(
+				"The Knight recovery fixture could not enter the following Night hook.");
+		}
+
+		IGameHookListener knight = new KnightWithTheRustySwordRole(
+			new RolePowerAvailabilityGateway(
+				AllowAllRolePowerAvailabilityPolicy.Instance));
+		var consequence = knight.Execute(
+			pendingState,
+			start.CreateResponse());
+		if (consequence.Outcome != HookListenerOutcome.Complete ||
+			consequence.Instruction is not null ||
+			consequence.NextListenerPhase is null)
+		{
+			throw new InvalidOperationException(
+				"The Knight recovery fixture did not convert its private schedule into the due consequence.");
+		}
+
+		pendingState.TransitionListenerStateCache(
+			ActorBorrowedKnightRecoveryHookKey.Instance,
+			knight.Id,
+			consequence.NextListenerPhase);
+		pendingState.ClearCurrentListenerCache(
+			ActorBorrowedKnightRecoveryHookKey.Instance);
+		EliminationCascadeRuntimeStore.Configure(
+			pendingState,
+			[
+				new EliminationCascadeReactionBinding(
+					(IEliminationCascadeReaction)knight,
+					EliminationCascadeReactionBoundary.PreReveal)
+			]);
+		pendingState.TransitionMainPhase(GamePhase.Dawn);
+		pendingState.SetPendingModeratorInstruction(
+			ActorBorrowedKnightRecoveryFlowKey.Instance,
+			start);
+		pendingState.CaptureRecoveryBoundary(
+			ActorBorrowedKnightRecoveryFlowKey.Instance);
+
+		var dueStart = RequireActorBorrowedKnightInstruction<
+			StartGameConfirmationInstruction>(
+			service.GetCurrentInstruction(gameId));
+		progress = service.ProcessInstruction(
+			gameId,
+			dueStart.CreateResponse());
+		ConfirmationInstruction? announcement = null;
+		for (var step = 0; step < 30 && announcement == null; step++)
+		{
+			if (progress.ModeratorInstruction is ConfirmationInstruction
+				{
+					Semantic: ModeratorInstructionSemantic.AnnounceDawnVictims
+				} pendingAnnouncement &&
+				pendingAnnouncement.AffectedPlayerIds?.Contains(targetId) == true)
+			{
+				announcement = pendingAnnouncement;
+				break;
+			}
+
+			progress = progress.ModeratorInstruction switch
+			{
+				ConfirmationInstruction confirmation => service.ProcessInstruction(
+					gameId,
+					confirmation.CreateResponse()),
+				AssignRolesInstruction assignment => service.ProcessInstruction(
+					gameId,
+					assignment.CreateResponse(
+						assignment.PlayersForAssignment.ToDictionary(
+							playerId => playerId,
+							playerId => pendingState.GetPlayer(playerId).State
+								.CurrentRole ?? throw new InvalidOperationException(
+									"The Knight recovery fixture cannot assign an unknown due Dawn role.")))),
+				_ => throw new InvalidOperationException(
+					"The Knight recovery fixture left the due Dawn continuation before its announcement.")
+			};
+		}
+
+		var expectedAnnouncement = GameStrings.MultipleVictimEliminatedAnnounce
+			.Format(
+				GameStrings.RustySwordDiseaseEliminationAnnouncement.Format(
+					pendingState.GetPlayer(targetId).Name));
+		if (announcement is null ||
+			!StringComparer.Ordinal.Equals(
+				announcement.PublicAnnouncement,
+				expectedAnnouncement) ||
+			announcement.PrivateInstruction is not null ||
+			announcement.AffectedPlayerIds is not [var affectedPlayerId] ||
+			affectedPlayerId != targetId ||
+			announcement.SoundEffects.Count != 0)
+		{
+			throw new InvalidOperationException(
+				"The Knight recovery fixture did not reach the canonical due Rusty Sword announcement.");
+		}
+
+		var liveInstruction = pendingState.PendingModeratorInstruction;
+		if (liveInstruction?.InstructionId != announcement.InstructionId ||
+			liveInstruction.Semantic != announcement.Semantic)
+		{
+			throw new InvalidOperationException(
+				"The Knight recovery fixture did not retain the live due announcement.");
+		}
+
+		var serializedSession = pendingState.Serialize();
+		var persisted = Parse(serializedSession)._payload;
+		if (persisted.DomainRecoveryCursor is not null ||
+			persisted.PendingInstructionSemantic !=
+				ModeratorInstructionSemantic.AnnounceDawnVictims ||
+			persisted.PendingInstruction?.InstructionId != announcement.InstructionId)
+		{
+			throw new InvalidOperationException(
+				"The Knight recovery fixture did not persist a cursorless due announcement boundary.");
+		}
+
+		return new ActorBorrowedKnightPendingRecoverySnapshot(
+			serializedSession,
+			gameId,
+			announcement,
+			actorId,
+			knightCard.Id,
+			activation.ActivationId);
 	}
 
 	internal RecoveryPayloadTestDriver RewriteRolesInPlay(
@@ -506,6 +1717,456 @@ internal sealed class RecoveryPayloadTestDriver
 		{
 			EmptySelectionOptionLabel = emptySelectionOptionLabel
 		};
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver
+		RewriteActorBorrowedHunterPendingSelectorPrivateInstruction(
+			string privateInstruction)
+	{
+		ArgumentException.ThrowIfNullOrWhiteSpace(privateInstruction);
+		if (_payload.PendingInstruction is not SelectPlayersInstruction pending ||
+			_payload.PendingInstructionSemantic !=
+				ModeratorInstructionSemantic.SelectHunterFinalShotTarget)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no borrowed Hunter final-shot selector.");
+		}
+
+		return RewritePendingPlayerSelectionPresentation(
+			pending.PublicAnnouncement,
+			privateInstruction,
+			pending.EmptySelectionOptionLabel);
+	}
+
+	internal RecoveryPayloadTestDriver
+		RewriteActorBorrowedElderPendingSuppressionPublicAnnouncement(
+			string publicAnnouncement)
+	{
+		ArgumentException.ThrowIfNullOrWhiteSpace(publicAnnouncement);
+		if (_payload.PendingInstruction is not ConfirmationInstruction pending ||
+			_payload.PendingInstructionSemantic !=
+				ModeratorInstructionSemantic
+					.AnnounceVillagerRolePowerSuppression)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no borrowed Elder suppression announcement.");
+		}
+
+		_payload.PendingInstruction = new ConfirmationInstruction(
+			pending.Semantic,
+			publicAnnouncement,
+			pending.PrivateInstruction,
+			pending.AffectedPlayerIds,
+			pending.InstructionId,
+			pending.SoundEffects);
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver
+		RewriteActorBorrowedScapegoatPendingPresentation(
+			ActorBorrowedScapegoatRecoveryStep step)
+	{
+		var expectedSemantic = step switch
+		{
+			ActorBorrowedScapegoatRecoveryStep.Reveal =>
+				ModeratorInstructionSemantic.RevealScapegoatForTie,
+			ActorBorrowedScapegoatRecoveryStep.PermittedVoterSelection =>
+				ModeratorInstructionSemantic.SelectScapegoatPermittedVoters,
+			ActorBorrowedScapegoatRecoveryStep.PermittedVoterAnnouncement =>
+				ModeratorInstructionSemantic.AnnounceScapegoatPermittedVoters,
+			_ => throw new ArgumentOutOfRangeException(nameof(step), step, null)
+		};
+		if (_payload.PendingInstructionSemantic != expectedSemantic)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload does not match the requested borrowed Scapegoat step.");
+		}
+
+		switch (step, _payload.PendingInstruction)
+		{
+			case (ActorBorrowedScapegoatRecoveryStep.Reveal,
+				ConfirmationInstruction reveal):
+				_payload.PendingInstruction = new ConfirmationInstruction(
+					expectedSemantic,
+					reveal.PublicAnnouncement,
+					"Tampered private borrowed reveal presentation.",
+					reveal.AffectedPlayerIds,
+					reveal.InstructionId,
+					reveal.SoundEffects);
+				return this;
+			case (ActorBorrowedScapegoatRecoveryStep.PermittedVoterSelection,
+				SelectPlayersInstruction selection):
+				_payload.PendingInstruction = new SelectPlayersInstruction(
+					expectedSemantic,
+					selection.SelectablePlayerIds.ToHashSet(),
+					selection.CountConstraint,
+					selection.PublicAnnouncement,
+					"Tampered private permitted-voter selector presentation.",
+					selection.AffectedPlayerIds,
+					selection.RoleIdentification,
+					selection.InstructionId)
+				{
+					EmptySelectionOptionLabel =
+						selection.EmptySelectionOptionLabel
+				};
+				return this;
+			case (ActorBorrowedScapegoatRecoveryStep.PermittedVoterAnnouncement,
+				ConfirmationInstruction announcement):
+				_payload.PendingInstruction = new ConfirmationInstruction(
+					expectedSemantic,
+					"Tampered public permitted-voter announcement.",
+					announcement.PrivateInstruction,
+					announcement.AffectedPlayerIds,
+					announcement.InstructionId,
+					announcement.SoundEffects);
+				return this;
+			default:
+				throw new InvalidOperationException(
+					"The recovery test payload does not match the requested borrowed Scapegoat step.");
+		}
+	}
+
+	internal RecoveryPayloadTestDriver
+		RewriteActorBorrowedVillageIdiotPendingPardonPublicAnnouncement(
+			string publicAnnouncement)
+	{
+		ArgumentException.ThrowIfNullOrWhiteSpace(publicAnnouncement);
+		var pendingSemantic = _payload.PendingInstructionSemantic;
+		if (_payload.PendingInstruction is not ConfirmationInstruction pending ||
+			pendingSemantic is null ||
+			pendingSemantic.Value !=
+				ModeratorInstructionSemantic.AnnounceVillageIdiotPardon)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no borrowed Village Idiot pardon announcement.");
+		}
+
+		_payload.PendingInstruction = new ConfirmationInstruction(
+			pendingSemantic.Value,
+			publicAnnouncement,
+			pending.PrivateInstruction,
+			pending.AffectedPlayerIds,
+			pending.InstructionId,
+			pending.SoundEffects);
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver
+		RewriteActorBorrowedBearTamerPendingGrowlPresentation(
+			ActorBorrowedBearTamerRecoveryTamper tamper)
+	{
+		var pendingSemantic = _payload.PendingInstructionSemantic;
+		if (_payload.PendingInstruction is not ConfirmationInstruction pending ||
+			pendingSemantic is null ||
+			pendingSemantic.Value !=
+				ModeratorInstructionSemantic.AnnounceBearTamerGrowl)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no borrowed Bear Tamer growl guidance.");
+		}
+
+		var publicAnnouncement = pending.PublicAnnouncement;
+		var privateInstruction = pending.PrivateInstruction;
+		IReadOnlyList<SoundEffectsEnum> soundEffects = pending.SoundEffects;
+		switch (tamper)
+		{
+			case ActorBorrowedBearTamerRecoveryTamper.PublicAnnouncement:
+				publicAnnouncement =
+					"Tampered public borrowed growl announcement.";
+				break;
+			case ActorBorrowedBearTamerRecoveryTamper.PrivateGuidance:
+				privateInstruction =
+					"Tampered private borrowed growl guidance.";
+				break;
+			case ActorBorrowedBearTamerRecoveryTamper.SoundEffect:
+				soundEffects = [];
+				break;
+			default:
+				throw new ArgumentOutOfRangeException(
+					nameof(tamper),
+					tamper,
+					null);
+		}
+
+		_payload.PendingInstruction = new ConfirmationInstruction(
+			pendingSemantic.Value,
+			publicAnnouncement,
+			privateInstruction,
+			pending.AffectedPlayerIds,
+			pending.InstructionId,
+			soundEffects);
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver
+		ExpireActorBorrowedBearTamerPendingGrowlActivation()
+	{
+		RequireCursorlessStableBoundary();
+		if (_payload.PendingInstructionSemantic !=
+				ModeratorInstructionSemantic.AnnounceBearTamerGrowl ||
+			_payload.ActiveActorBorrowedRolePowerActivation is not
+			{
+				SourceRole: MainRoleType.BearTamer
+			})
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no active borrowed Bear Tamer pending growl.");
+		}
+
+		var timestamp = _payload.GameHistoryLog.Last().Timestamp;
+		_payload.GameHistoryLog.Add(
+			new ActorBorrowedRolePowerActivationExpiredLogEntry
+			{
+				Timestamp = timestamp.AddTicks(1),
+				TurnNumber = _payload.TurnNumber,
+				CurrentPhase = GamePhase.Night
+			});
+		_payload.ActiveActorBorrowedRolePowerActivation = null;
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver
+		ReplaceActorBorrowedBearTamerPendingGrowlActivation()
+	{
+		RequireCursorlessStableBoundary();
+		if (_payload.PendingInstructionSemantic !=
+				ModeratorInstructionSemantic.AnnounceBearTamerGrowl ||
+			_payload.ActiveActorBorrowedRolePowerActivation is not
+			{
+				SourceRole: MainRoleType.BearTamer
+			} active)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no active borrowed Bear Tamer pending growl.");
+		}
+
+		var spends = _payload.ActorSetupCardSpends
+			?? throw new InvalidOperationException(
+				"The recovery test payload has no Actor Setup Card spends.");
+		var replacementCard = _payload.ActorSetupCards?.Cards?
+			.FirstOrDefault(card =>
+				card.PrintedRole != MainRoleType.BearTamer &&
+				spends.All(spend => spend.CardId != card.Id))
+			?? throw new InvalidOperationException(
+				"The recovery test payload has no unspent replacement Actor Setup Card.");
+		var replacementActivationId = Guid.NewGuid();
+		var timestamp = _payload.GameHistoryLog.Last().Timestamp;
+		_payload.GameHistoryLog.Add(
+			new ActorBorrowedRolePowerActivationExpiredLogEntry
+			{
+				Timestamp = timestamp.AddTicks(1),
+				TurnNumber = _payload.TurnNumber,
+				CurrentPhase = GamePhase.Night
+			});
+		spends.Add(new ActorSetupCardSpendDto
+		{
+			CardId = replacementCard.Id,
+			ActivationId = replacementActivationId
+		});
+		_payload.ActiveActorBorrowedRolePowerActivation =
+			new ActorBorrowedRolePowerActivationDto
+			{
+				ActivationId = replacementActivationId,
+				ActingPlayerId = active.ActingPlayerId,
+				ActingRole = MainRoleType.Actor,
+				SelectedCardId = replacementCard.Id,
+				SourceRole = replacementCard.PrintedRole
+			};
+		_payload.GameHistoryLog.Add(new ActorSetupCardSpendCommittedLogEntry
+		{
+			Timestamp = timestamp.AddTicks(2),
+			TurnNumber = _payload.TurnNumber,
+			CurrentPhase = GamePhase.Night
+		});
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver
+		ExpireActorBorrowedScapegoatPendingRevealActivation()
+	{
+		RequireCursorlessStableBoundary();
+		if (_payload.PendingInstructionSemantic !=
+				ModeratorInstructionSemantic.RevealScapegoatForTie ||
+			_payload.ActiveActorBorrowedRolePowerActivation is not
+			{
+				SourceRole: MainRoleType.Scapegoat
+			})
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no active borrowed Scapegoat pending reveal.");
+		}
+
+		var timestamp = _payload.GameHistoryLog.Last().Timestamp;
+		_payload.GameHistoryLog.Add(
+			new ActorBorrowedRolePowerActivationExpiredLogEntry
+			{
+				Timestamp = timestamp.AddTicks(1),
+				TurnNumber = _payload.TurnNumber,
+				CurrentPhase = GamePhase.Night
+			});
+		_payload.ActiveActorBorrowedRolePowerActivation = null;
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver
+		ReplaceActorBorrowedScapegoatPendingRevealActivation()
+	{
+		RequireCursorlessStableBoundary();
+		if (_payload.PendingInstructionSemantic !=
+				ModeratorInstructionSemantic.RevealScapegoatForTie ||
+			_payload.ActiveActorBorrowedRolePowerActivation is not
+			{
+				SourceRole: MainRoleType.Scapegoat
+			} active)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no active borrowed Scapegoat pending reveal.");
+		}
+
+		var spends = _payload.ActorSetupCardSpends
+			?? throw new InvalidOperationException(
+				"The recovery test payload has no Actor Setup Card spends.");
+		var replacementCard = _payload.ActorSetupCards?.Cards?
+			.FirstOrDefault(card =>
+				card.PrintedRole != MainRoleType.Scapegoat &&
+				spends.All(spend => spend.CardId != card.Id))
+			?? throw new InvalidOperationException(
+				"The recovery test payload has no unspent replacement Actor Setup Card.");
+		var replacementActivationId = Guid.NewGuid();
+		var timestamp = _payload.GameHistoryLog.Last().Timestamp;
+		_payload.GameHistoryLog.Add(
+			new ActorBorrowedRolePowerActivationExpiredLogEntry
+			{
+				Timestamp = timestamp.AddTicks(1),
+				TurnNumber = _payload.TurnNumber,
+				CurrentPhase = GamePhase.Night
+			});
+		spends.Add(new ActorSetupCardSpendDto
+		{
+			CardId = replacementCard.Id,
+			ActivationId = replacementActivationId
+		});
+		_payload.ActiveActorBorrowedRolePowerActivation =
+			new ActorBorrowedRolePowerActivationDto
+			{
+				ActivationId = replacementActivationId,
+				ActingPlayerId = active.ActingPlayerId,
+				ActingRole = MainRoleType.Actor,
+				SelectedCardId = replacementCard.Id,
+				SourceRole = replacementCard.PrintedRole
+			};
+		_payload.GameHistoryLog.Add(new ActorSetupCardSpendCommittedLogEntry
+		{
+			Timestamp = timestamp.AddTicks(2),
+			TurnNumber = _payload.TurnNumber,
+			CurrentPhase = GamePhase.Night
+		});
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver
+		ExpireActorBorrowedVillageIdiotPendingPardonActivation()
+	{
+		RequireCursorlessStableBoundary();
+		if (_payload.PendingInstructionSemantic !=
+				ModeratorInstructionSemantic.AnnounceVillageIdiotPardon ||
+			_payload.ActiveActorBorrowedRolePowerActivation is not
+			{
+				SourceRole: MainRoleType.VillageIdiot
+			})
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no active borrowed Village Idiot pending pardon.");
+		}
+
+		var timestamp = _payload.GameHistoryLog.Last().Timestamp;
+		_payload.GameHistoryLog.Add(
+			new ActorBorrowedRolePowerActivationExpiredLogEntry
+			{
+				Timestamp = timestamp.AddTicks(1),
+				TurnNumber = _payload.TurnNumber,
+				CurrentPhase = GamePhase.Night
+			});
+		_payload.ActiveActorBorrowedRolePowerActivation = null;
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver
+		RemoveActorBorrowedVillageIdiotPendingPardonLineage()
+	{
+		RequireCursorlessStableBoundary();
+		if (_payload.PendingInstructionSemantic !=
+				ModeratorInstructionSemantic.AnnounceVillageIdiotPardon ||
+			_payload.ActorBorrowedVillageIdiotPardonCommits is not
+				[var commit] ||
+			commit.PublicMarkerLogIndex < 0 ||
+			commit.PublicMarkerLogIndex >= _payload.GameHistoryLog.Count ||
+			_payload.GameHistoryLog[commit.PublicMarkerLogIndex] is not
+				ActorBorrowedRolePowerCommittedLogEntry)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no correlated borrowed Village Idiot pardon lineage.");
+		}
+
+		_payload.ActorBorrowedVillageIdiotPardonCommits.Clear();
+		_payload.GameHistoryLog.RemoveAt(commit.PublicMarkerLogIndex);
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver
+		RewriteActorBorrowedKnightPendingRustySwordAnnouncementPresentation(
+			ActorBorrowedKnightRecoveryTamper tamper)
+	{
+		var pendingSemantic = _payload.PendingInstructionSemantic;
+		if (_payload.PendingInstruction is not ConfirmationInstruction pending ||
+			pendingSemantic is null ||
+			pendingSemantic.Value !=
+				ModeratorInstructionSemantic.AnnounceDawnVictims)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no borrowed Knight due announcement.");
+		}
+
+		var publicAnnouncement = pending.PublicAnnouncement;
+		var privateInstruction = pending.PrivateInstruction;
+		IReadOnlyList<Guid>? affectedPlayerIds = pending.AffectedPlayerIds;
+		IReadOnlyList<SoundEffectsEnum> soundEffects = pending.SoundEffects;
+		switch (tamper)
+		{
+			case ActorBorrowedKnightRecoveryTamper.PublicAnnouncement:
+				publicAnnouncement =
+					"Tampered public borrowed Rusty Sword announcement.";
+				break;
+			case ActorBorrowedKnightRecoveryTamper.PrivateGuidance:
+				privateInstruction =
+					"Tampered private borrowed Rusty Sword guidance.";
+				break;
+			case ActorBorrowedKnightRecoveryTamper.AffectedPlayer:
+				var affected = pending.AffectedPlayerIds?.ToHashSet() ?? [];
+				affectedPlayerIds =
+				[
+					_payload.Players.Select(player => player.Id)
+						.First(playerId => !affected.Contains(playerId))
+				];
+				break;
+			case ActorBorrowedKnightRecoveryTamper.SoundEffect:
+				soundEffects = [SoundEffectsEnum.BearGrowl];
+				break;
+			default:
+				throw new ArgumentOutOfRangeException(
+					nameof(tamper),
+					tamper,
+					null);
+		}
+
+		_payload.PendingInstruction = new ConfirmationInstruction(
+			pendingSemantic.Value,
+			publicAnnouncement,
+			privateInstruction,
+			affectedPlayerIds,
+			pending.InstructionId,
+			soundEffects);
 		return this;
 	}
 
@@ -1038,7 +2699,23 @@ internal sealed class RecoveryPayloadTestDriver
 	internal RecoveryPayloadTestDriver MutateActorBorrowedPrivateCommit(
 		ActorBorrowedPrivateCommitMutation mutation)
 	{
-		RequireCursorlessStableBoundary();
+		if (mutation is
+			ActorBorrowedPrivateCommitMutation.HunterFinalShotTarget or
+			ActorBorrowedPrivateCommitMutation.ElderResistanceNightActionIndex or
+			ActorBorrowedPrivateCommitMutation.ElderSuppressionAnnouncement or
+			ActorBorrowedPrivateCommitMutation.ScapegoatTiePowerLineage or
+			ActorBorrowedPrivateCommitMutation.ScapegoatRestrictionAnnouncement or
+			ActorBorrowedPrivateCommitMutation.VillageIdiotPardonActingPlayerLineage or
+			ActorBorrowedPrivateCommitMutation.BearTamerGrowlActingPlayerLineage or
+			ActorBorrowedPrivateCommitMutation.KnightRustySwordTarget)
+		{
+			RequireStableRecoveryBoundary();
+		}
+		else
+		{
+			RequireCursorlessStableBoundary();
+		}
+
 		switch (mutation)
 		{
 			case ActorBorrowedPrivateCommitMutation.SeerTarget:
@@ -1186,6 +2863,106 @@ internal sealed class RecoveryPayloadTestDriver
 						ActorBorrowedStutteringJudgeSignalObservationCommit
 							.ExpectedOneUseResourceId)
 					: null;
+				break;
+			}
+			case ActorBorrowedPrivateCommitMutation.HunterFinalShotTarget:
+			{
+				var commit = _payload
+					.ActorBorrowedHunterFinalShotCommits.Single();
+				commit.TargetPlayerId = RequireAlternatePlayerId(
+					commit.TargetPlayerId,
+					[
+						commit.PowerIdentity.ActingPlayerId,
+						.. commit.TriggeringPlayerIds
+					]);
+				break;
+			}
+			case ActorBorrowedPrivateCommitMutation.ElderResistanceNightActionIndex:
+			{
+				var commit = _payload
+					.ActorBorrowedElderResistanceCommits.Single();
+				commit.TriggeringNightActionLogIndex++;
+				break;
+			}
+			case ActorBorrowedPrivateCommitMutation.ElderSuppressionAnnouncement:
+			{
+				var commit = _payload
+					.ActorBorrowedElderSuppressionCommits.Single();
+				commit.AnnouncementInstructionId = Guid.NewGuid();
+				break;
+			}
+			case ActorBorrowedPrivateCommitMutation.ScapegoatTiePowerLineage:
+			{
+				var commit = _payload
+					.ActorBorrowedScapegoatTieReplacementCommits.Single();
+				var previousActivationId = commit.PowerIdentity.PowerInstanceId;
+				var replacementActivationId = Guid.NewGuid();
+				commit.PowerIdentity = commit.PowerIdentity with
+				{
+					PowerInstanceId = replacementActivationId
+				};
+				_payload.ActorSetupCardSpends!.Single(spend =>
+					spend.CardId == commit.ActorSetupCardId).ActivationId =
+					replacementActivationId;
+				if (_payload.ActiveActorBorrowedRolePowerActivation is { } active &&
+					active.ActivationId == previousActivationId)
+				{
+					active.ActivationId = replacementActivationId;
+				}
+				if (_payload.DomainRecoveryCursor is { } cursor)
+				{
+					if (cursor.PowerInstanceId == previousActivationId)
+					{
+						cursor.PowerInstanceId = replacementActivationId;
+					}
+					if (cursor.ActorBorrowedActivationId == previousActivationId)
+					{
+						cursor.ActorBorrowedActivationId = replacementActivationId;
+					}
+				}
+				break;
+			}
+			case ActorBorrowedPrivateCommitMutation.ScapegoatRestrictionAnnouncement:
+			{
+				var commit = _payload
+					.ActorBorrowedScapegoatVoterRestrictionCommits.Single();
+				commit.AnnouncementInstructionId = Guid.NewGuid();
+				break;
+			}
+			case ActorBorrowedPrivateCommitMutation.VillageIdiotPardonActingPlayerLineage:
+			{
+				var commit = _payload
+					.ActorBorrowedVillageIdiotPardonCommits.Single();
+				var actingPlayerId = RequireAlternatePlayerId(
+					commit.PowerIdentity.ActingPlayerId);
+				commit.PowerIdentity = commit.PowerIdentity with
+				{
+					ActingPlayerId = actingPlayerId
+				};
+				commit.SpentResourceIdentity = commit.SpentResourceIdentity with
+				{
+					ActingPlayerId = actingPlayerId
+				};
+				break;
+			}
+			case ActorBorrowedPrivateCommitMutation.BearTamerGrowlActingPlayerLineage:
+			{
+				var commit = _payload
+					.ActorBorrowedBearTamerGrowlCommits.Single();
+				commit.PowerIdentity = commit.PowerIdentity with
+				{
+					ActingPlayerId = RequireAlternatePlayerId(
+						commit.PowerIdentity.ActingPlayerId)
+				};
+				break;
+			}
+			case ActorBorrowedPrivateCommitMutation.KnightRustySwordTarget:
+			{
+				var commit = _payload
+					.ActorBorrowedKnightRustySwordScheduleCommits.Single();
+				commit.TargetPlayerId = RequireAlternatePlayerId(
+					commit.TargetPlayerId,
+					commit.PowerIdentity.ActingPlayerId);
 				break;
 			}
 			default:
@@ -1364,6 +3141,15 @@ internal sealed class RecoveryPayloadTestDriver
 		}
 	}
 
+	private void RequireStableRecoveryBoundary()
+	{
+		if (!_payload.IsStableRecoveryBoundary)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload is not a stable recovery boundary.");
+		}
+	}
+
 	private Guid RequireAlternatePlayerId(
 		Guid currentPlayerId,
 		params Guid[] excludedPlayerIds)
@@ -1393,6 +3179,292 @@ internal sealed class RecoveryPayloadTestDriver
 			powerIdentity.PowerInstanceId,
 			powerIdentity.PowerInstanceOrigin,
 			resourceId);
+
+	private static void SeedActorBorrowedHunterRecoveryFacts(
+		GameSession session,
+		Guid werewolfId)
+	{
+		FactionFactEffectiveBoundary? agentGroupBoundary = null;
+		session.CommitFactionFactBatch(context =>
+		{
+			var boundary = new FactionFactEffectiveBoundary(
+				context.TurnNumber,
+				context.CurrentPhase,
+				session.GameHistoryLog.Count());
+			agentGroupBoundary = boundary;
+			return new FactionFactsCommittedLogEntry
+			{
+				Timestamp = context.Timestamp,
+				TurnNumber = context.TurnNumber,
+				CurrentPhase = context.CurrentPhase,
+				Source = new FactionFactSource(
+					FactionFactSourceKind.ScheduledObservation,
+					FactionFactSource
+						.WerewolfFactionAgentGroupObservationIdentifier),
+				Facts = session.GetPlayers()
+					.Select(player => FactionFact.Agent(
+						player.Id,
+						Faction.Werewolf,
+						player.Id == werewolfId
+							? FactionAgentKnowledge.KnownAgent
+							: FactionAgentKnowledge.KnownNonAgent,
+						boundary))
+					.ToImmutableArray()
+			};
+		});
+
+		if (InitialBeneficiaryClosureRules.TryCommitCurrentSession(
+				session,
+				agentGroupBoundary) != InitialBeneficiaryClosureResult.Committed)
+		{
+			throw new InvalidOperationException(
+				"The Hunter recovery fixture could not close Faction Beneficiary facts.");
+		}
+	}
+
+	private static void SeedActorBorrowedKnightRecoveryFacts(
+		GameSession session,
+		IReadOnlySet<Guid> werewolfIds)
+	{
+		FactionFactEffectiveBoundary? closureBoundary = null;
+		session.CommitFactionFactBatch(context =>
+		{
+			var boundary = new FactionFactEffectiveBoundary(
+				context.TurnNumber,
+				context.CurrentPhase,
+				session.GameHistoryLog.Count());
+			closureBoundary = boundary;
+			return new FactionFactsCommittedLogEntry
+			{
+				Timestamp = context.Timestamp,
+				TurnNumber = context.TurnNumber,
+				CurrentPhase = context.CurrentPhase,
+				Source = new FactionFactSource(
+					FactionFactSourceKind.ExplicitTransition,
+					"test-actor-borrowed-knight-recovery-faction-state"),
+				Facts = session.GetPlayers()
+					.Select(player => FactionFact.Beneficiary(
+						player.Id,
+						werewolfIds.Contains(player.Id)
+							? Faction.Werewolf
+							: Faction.Villager,
+						boundary))
+					.Concat(session.GetPlayers().Select(player => FactionFact.Agent(
+						player.Id,
+						Faction.Werewolf,
+						werewolfIds.Contains(player.Id)
+							? FactionAgentKnowledge.KnownAgent
+							: FactionAgentKnowledge.KnownNonAgent,
+						boundary)))
+					.ToImmutableArray()
+			};
+		});
+
+		if (InitialBeneficiaryClosureRules.TryCommitCurrentSession(
+				session,
+				closureBoundary) != InitialBeneficiaryClosureResult.Committed)
+		{
+			throw new InvalidOperationException(
+				"The Knight recovery fixture could not close Faction Beneficiary facts.");
+		}
+	}
+
+	private static void CommitActorBorrowedKnightCurrentWerewolfAgentFacts(
+		GameSession session,
+		IReadOnlySet<Guid> currentAgentIds)
+	{
+		var players = session.GetPlayers().ToArray();
+		session.CommitFactionFactBatch(context =>
+		{
+			var boundary = new FactionFactEffectiveBoundary(
+				context.TurnNumber,
+				context.CurrentPhase,
+				session.GameHistoryLog.Count());
+			return new FactionFactsCommittedLogEntry
+			{
+				Timestamp = context.Timestamp,
+				TurnNumber = context.TurnNumber,
+				CurrentPhase = context.CurrentPhase,
+				Source = new FactionFactSource(
+					FactionFactSourceKind.ExplicitTransition,
+					"test-actor-borrowed-knight-current-agent-transition"),
+				Facts = players.Select(player => FactionFact.Agent(
+						player.Id,
+						Faction.Werewolf,
+						currentAgentIds.Contains(player.Id)
+							? FactionAgentKnowledge.KnownAgent
+							: FactionAgentKnowledge.KnownNonAgent,
+						boundary))
+					.ToImmutableArray()
+			};
+		});
+	}
+
+	private static TInstruction RequireActorBorrowedHunterInstruction<TInstruction>(
+		ModeratorInstruction? instruction)
+		where TInstruction : ModeratorInstruction =>
+		instruction as TInstruction
+		?? throw new InvalidOperationException(
+			$"The Hunter recovery fixture expected {typeof(TInstruction).Name}.");
+
+	private static TInstruction RequireActorBorrowedElderInstruction<TInstruction>(
+		ModeratorInstruction? instruction)
+		where TInstruction : ModeratorInstruction =>
+		instruction as TInstruction
+		?? throw new InvalidOperationException(
+			$"The Elder recovery fixture expected {typeof(TInstruction).Name}.");
+
+	private static TInstruction
+		RequireActorBorrowedScapegoatInstruction<TInstruction>(
+			ModeratorInstruction? instruction)
+		where TInstruction : ModeratorInstruction =>
+		instruction as TInstruction
+		?? throw new InvalidOperationException(
+			$"The Scapegoat recovery fixture expected {typeof(TInstruction).Name}.");
+
+	private static TInstruction
+		RequireActorBorrowedVillageIdiotInstruction<TInstruction>(
+			ModeratorInstruction? instruction)
+		where TInstruction : ModeratorInstruction =>
+		instruction as TInstruction
+		?? throw new InvalidOperationException(
+			$"The Village Idiot recovery fixture expected {typeof(TInstruction).Name}.");
+
+	private static TInstruction
+		RequireActorBorrowedBearTamerInstruction<TInstruction>(
+			ModeratorInstruction? instruction)
+		where TInstruction : ModeratorInstruction =>
+		instruction as TInstruction
+		?? throw new InvalidOperationException(
+			$"The Bear Tamer recovery fixture expected {typeof(TInstruction).Name}.");
+
+	private static TInstruction
+		RequireActorBorrowedKnightInstruction<TInstruction>(
+			ModeratorInstruction? instruction)
+		where TInstruction : ModeratorInstruction =>
+		instruction as TInstruction
+		?? throw new InvalidOperationException(
+			$"The Knight recovery fixture expected {typeof(TInstruction).Name}.");
+
+	private sealed class ActorBorrowedHunterRecoveryFlowKey : IGameFlowManagerKey
+	{
+		internal static ActorBorrowedHunterRecoveryFlowKey Instance { get; } = new();
+	}
+
+	private sealed class ActorBorrowedElderRecoveryFlowKey : IGameFlowManagerKey
+	{
+		internal static ActorBorrowedElderRecoveryFlowKey Instance { get; } = new();
+	}
+
+	private sealed class ActorBorrowedScapegoatRecoveryFlowKey
+		: IGameFlowManagerKey
+	{
+		internal static ActorBorrowedScapegoatRecoveryFlowKey Instance { get; } =
+			new();
+	}
+
+	private sealed class ActorBorrowedVillageIdiotRecoveryFlowKey
+		: IGameFlowManagerKey
+	{
+		internal static ActorBorrowedVillageIdiotRecoveryFlowKey Instance { get; } =
+			new();
+	}
+
+	private sealed class ActorBorrowedBearTamerRecoveryFlowKey
+		: IGameFlowManagerKey
+	{
+		internal static ActorBorrowedBearTamerRecoveryFlowKey Instance { get; } =
+			new();
+	}
+
+	private sealed class ActorBorrowedKnightRecoveryFlowKey
+		: IGameFlowManagerKey
+	{
+		internal static ActorBorrowedKnightRecoveryFlowKey Instance { get; } =
+			new();
+	}
+
+	private sealed class ActorBorrowedKnightRecoverySubPhaseKey
+		: ISubPhaseManagerKey
+	{
+		internal static ActorBorrowedKnightRecoverySubPhaseKey Instance { get; } =
+			new();
+	}
+
+	private sealed class ActorBorrowedKnightRecoveryHookKey
+		: IHookSubPhaseKey
+	{
+		internal static ActorBorrowedKnightRecoveryHookKey Instance { get; } =
+			new();
+	}
+}
+
+internal sealed record ActorBorrowedHunterPendingRecoverySnapshot(
+	string SerializedSession,
+	Guid SessionId,
+	SelectPlayersInstruction Selector,
+	Guid ActorSetupCardId,
+	Guid ActivationId);
+
+internal sealed record ActorBorrowedElderPendingRecoverySnapshot(
+	string SerializedSession,
+	Guid SessionId,
+	ConfirmationInstruction Announcement,
+	Guid ActorSetupCardId,
+	Guid ActivationId);
+
+internal sealed record ActorBorrowedScapegoatPendingRecoverySnapshot(
+	ActorBorrowedScapegoatRecoveryStep Step,
+	string SerializedSession,
+	Guid SessionId,
+	ModeratorInstruction PendingInstruction,
+	Guid ActorSetupCardId,
+	Guid ActivationId);
+
+internal sealed record ActorBorrowedVillageIdiotPendingRecoverySnapshot(
+	string SerializedSession,
+	Guid SessionId,
+	ConfirmationInstruction Pardon,
+	Guid ActorSetupCardId,
+	Guid ActivationId,
+	Guid PardonResourceId);
+
+internal sealed record ActorBorrowedBearTamerPendingRecoverySnapshot(
+	string SerializedSession,
+	Guid SessionId,
+	ConfirmationInstruction Growl,
+	Guid ActorId,
+	Guid ActorSetupCardId,
+	Guid ActivationId);
+
+internal sealed record ActorBorrowedKnightPendingRecoverySnapshot(
+	string SerializedSession,
+	Guid SessionId,
+	ConfirmationInstruction Announcement,
+	Guid ActorId,
+	Guid ActorSetupCardId,
+	Guid ActivationId);
+
+public enum ActorBorrowedScapegoatRecoveryStep
+{
+	Reveal,
+	PermittedVoterSelection,
+	PermittedVoterAnnouncement
+}
+
+public enum ActorBorrowedBearTamerRecoveryTamper
+{
+	PublicAnnouncement,
+	PrivateGuidance,
+	SoundEffect
+}
+
+public enum ActorBorrowedKnightRecoveryTamper
+{
+	PublicAnnouncement,
+	PrivateGuidance,
+	AffectedPlayer,
+	SoundEffect
 }
 
 public enum ActorBorrowedPrivateCommitMutation
@@ -1408,5 +3480,13 @@ public enum ActorBorrowedPrivateCommitMutation
 	CupidPair,
 	CupidDisposition,
 	JudgeSetupPowerLineage,
-	JudgeObservationSignalAndResource
+	JudgeObservationSignalAndResource,
+	HunterFinalShotTarget,
+	ElderResistanceNightActionIndex,
+	ElderSuppressionAnnouncement,
+	ScapegoatTiePowerLineage,
+	ScapegoatRestrictionAnnouncement,
+	VillageIdiotPardonActingPlayerLineage,
+	BearTamerGrowlActingPlayerLineage,
+	KnightRustySwordTarget
 }

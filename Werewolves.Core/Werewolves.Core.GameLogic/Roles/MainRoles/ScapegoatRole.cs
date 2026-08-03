@@ -46,6 +46,8 @@ internal sealed class ScapegoatRole
 			ScapegoatCascadeStageId.Sacrifice,
 			CreateCascadeSeed,
 			ModeratorInstructionSemantic.RevealScapegoatForTie,
+			createPostCommitInstruction:
+				CreateReactionEliminationAnnouncement,
 			advancePostCommitInteraction:
 				AdvancePostCommitVoterRestriction,
 			matchesPostCommitInteractionInstruction:
@@ -71,6 +73,63 @@ internal sealed class ScapegoatRole
 		if (hook != GameHook.OnVoteConcluded)
 		{
 			return false;
+		}
+
+		if (pendingInstruction.Semantic ==
+				ModeratorInstructionSemantic.RevealScapegoatForTie &&
+			TryGetActiveBorrowedActorId(session, out var borrowedActorId))
+		{
+			if (!MatchesBorrowedTieReveal(
+					pendingInstruction,
+					borrowedActorId))
+			{
+				return false;
+			}
+
+			listenerState =
+				ScapegoatRoleState.AwaitingPublicReveal.ToString();
+			return true;
+		}
+
+		var replacement = GetCurrentTieReplacement(session);
+		if (replacement is { IsBorrowed: true })
+		{
+			if (pendingInstruction.Semantic == ModeratorInstructionSemantic
+					.SelectScapegoatPermittedVoters)
+			{
+				if (!MatchesPermittedVoterSelection(
+						pendingInstruction,
+						GetPermittedVoterCandidates(session)))
+				{
+					return false;
+				}
+
+				listenerState = ScapegoatRoleState
+					.AwaitingSacrificeCascade.ToString();
+				return true;
+			}
+
+			if (pendingInstruction.Semantic == ModeratorInstructionSemantic
+					.AnnounceScapegoatPermittedVoters)
+			{
+				var restriction =
+					DayVoteRules.GetVoterEligibilityRestriction(
+						session,
+						replacement.ScopeId);
+				if (restriction == null ||
+					!MatchesPermittedVoterAnnouncement(
+						session,
+						pendingInstruction,
+						restriction.PermittedVoterIds,
+						restriction.AnnouncementInstructionId))
+				{
+					return false;
+				}
+
+				listenerState = ScapegoatRoleState
+					.AwaitingSacrificeCascade.ToString();
+				return true;
+			}
 		}
 
 		switch (pendingInstruction.Semantic)
@@ -100,8 +159,6 @@ internal sealed class ScapegoatRole
 				return true;
 		}
 
-		var replacement =
-			GameSessionQueries.GetCurrentScapegoatTieReplacement(session);
 		if (replacement != null &&
 		    !GameSessionQueries.IsEliminationCascadeComplete(
 			    session,
@@ -113,6 +170,111 @@ internal sealed class ScapegoatRole
 		}
 
 		return false;
+	}
+
+	internal static void ValidateBorrowedPendingRecoveryInstruction(
+		GameSession session)
+	{
+		var pendingInstruction = session.PendingModeratorInstruction;
+		if (pendingInstruction == null)
+		{
+			return;
+		}
+
+		var isValid = true;
+		switch (pendingInstruction.Semantic)
+		{
+			case ModeratorInstructionSemantic.RevealScapegoatForTie:
+				if (!session.GetModeratorActorSetupCards().Cards.Any(card =>
+						card.PrintedRole == MainRoleType.Scapegoat))
+				{
+					return;
+				}
+
+				if (!TryGetActiveBorrowedActorId(
+						session,
+						out var borrowedActorId))
+				{
+					isValid = false;
+					break;
+				}
+
+				var vote = GameSessionQueries.GetCurrentDayVoteOutcome(session);
+				isValid = vote is { PlayerId: var votedPlayerId } &&
+					votedPlayerId == Guid.Empty &&
+					GetCurrentTieReplacement(session) == null &&
+					MatchesBorrowedTieReveal(
+						pendingInstruction,
+						borrowedActorId);
+				break;
+			case ModeratorInstructionSemantic
+				.SelectScapegoatPermittedVoters:
+				var selectionReplacement =
+					GetCurrentTieReplacement(session);
+				if (selectionReplacement == null)
+				{
+					isValid = false;
+					break;
+				}
+
+				if (!selectionReplacement.IsBorrowed)
+				{
+					return;
+				}
+
+				isValid = DayVoteRules.GetVoterEligibilityRestriction(
+						session,
+						selectionReplacement.ScopeId) == null &&
+					MatchesPermittedVoterSelection(
+						pendingInstruction,
+						GetPermittedVoterCandidates(session));
+				break;
+			case ModeratorInstructionSemantic
+				.AnnounceScapegoatPermittedVoters:
+				var announcementReplacement =
+					GetCurrentTieReplacement(session);
+				if (announcementReplacement is not { IsBorrowed: true })
+				{
+					return;
+				}
+
+				var restriction =
+					DayVoteRules.GetVoterEligibilityRestriction(
+						session,
+						announcementReplacement.ScopeId);
+				var borrowedRestrictions = session
+					.GetActorBorrowedScapegoatVoterRestrictionCommits()
+					.Where(commit =>
+						commit.TieReplacementPublicMarkerLogIndex ==
+						announcementReplacement.PublicMarkerLogIndex &&
+						StringComparer.Ordinal.Equals(
+							commit.CascadeScopeId,
+							announcementReplacement.ScopeId))
+					.ToArray();
+				isValid = restriction != null &&
+					borrowedRestrictions is [var borrowedRestriction] &&
+					borrowedRestriction.AnnouncementInstructionId ==
+						restriction.AnnouncementInstructionId &&
+					!DayVoteRules
+						.IsVoterEligibilityRestrictionAnnouncementAcknowledged(
+							session,
+							restriction.ScopeId,
+							restriction.AnnouncementInstructionId) &&
+					MatchesPermittedVoterAnnouncement(
+						session,
+						pendingInstruction,
+						restriction.PermittedVoterIds,
+						restriction.AnnouncementInstructionId);
+				break;
+			default:
+				return;
+		}
+
+		if (!isValid)
+		{
+			throw new InvalidOperationException(
+				"The pending Actor borrowed Role Power instruction does not match its recovery context.");
+		}
 	}
 
 	public override HookListenerActionResult Execute(
@@ -133,14 +295,14 @@ internal sealed class ScapegoatRole
 		}
 
 		var currentState = GetCurrentListenerState(session);
-		if (currentState == null &&
-		    GameSessionQueries.GetCurrentScapegoatTieReplacement(session) !=
-		    null)
+		if (currentState == null && GetCurrentTieReplacement(session) != null)
 		{
 			return HookListenerActionResult.Skip();
 		}
 
-		return currentState == null
+		var hasBorrowedScapegoat =
+			TryGetBorrowedActorTieReplacement(session, out _);
+		return currentState == null && !hasBorrowedScapegoat
 			? base.Execute(session, input)
 			: ExecuteCore(session, input);
 	}
@@ -188,6 +350,27 @@ internal sealed class ScapegoatRole
 		GameSession session,
 		ModeratorResponse input)
 	{
+		if (TryGetBorrowedActorTieReplacement(
+				session,
+				out var borrowedExecution))
+		{
+			var borrowedReveal =
+				borrowedExecution.Actor.State.PubliclyRevealedRole == null
+					? CreateBorrowedTieReveal(borrowedExecution.Actor.Id)
+					: null;
+			if (borrowedReveal != null)
+			{
+				return HookListenerActionResult.NeedInput(
+					borrowedReveal,
+					ScapegoatRoleState.AwaitingPublicReveal);
+			}
+
+			RecordBorrowedTieReplacement(
+				session,
+				borrowedExecution.PowerIdentity);
+			return AdvanceSacrificeCascade(session, input);
+		}
+
 		var aliveScapegoats = GetAliveRolePlayers(session)?.ToArray();
 		if (aliveScapegoats?.Any(player =>
 				GameSessionQueries
@@ -295,6 +478,20 @@ internal sealed class ScapegoatRole
 		GameSession session,
 		ModeratorResponse input)
 	{
+		if (TryGetBorrowedActorTieReplacement(
+				session,
+				out var borrowedExecution))
+		{
+			RoleKnowledgeHandlers.RecordPublicRoleReveal(
+				session,
+				[borrowedExecution.Actor],
+				input);
+			RecordBorrowedTieReplacement(
+				session,
+				borrowedExecution.PowerIdentity);
+			return AdvanceSacrificeCascade(session, input);
+		}
+
 		var scapegoat = GetAliveRolePlayers(session)?.SingleOrDefault()
 			?? throw new InvalidOperationException(
 				"No living Scapegoat is available to replace the tied Vote.");
@@ -349,6 +546,57 @@ internal sealed class ScapegoatRole
 			.AvailabilityResult.IsAvailable;
 	}
 
+	private bool TryGetBorrowedActorTieReplacement(
+		GameSession session,
+		out BorrowedScapegoatTieReplacementExecution execution)
+	{
+		execution = default;
+		var activation =
+			session.GetModeratorActiveActorBorrowedRolePowerActivation();
+		if (activation is not
+			{
+				ActingPlayerId: var actorId,
+				SourceRole: MainRoleType.Scapegoat
+			})
+		{
+			return false;
+		}
+
+		var actor = session.GetPlayer(actorId);
+		if (actor.State.Health != PlayerHealth.Alive ||
+			actor.State.CurrentRole != MainRoleType.Actor)
+		{
+			return false;
+		}
+
+		var instance = RolePowerInstance.CreateBorrowed(
+			session,
+			actor,
+			MainRoleType.Scapegoat,
+			TieReplacementPower);
+		if (!_availabilityGateway.Evaluate(
+				new RolePowerAttempt(
+					session,
+					actor,
+					MainRoleType.Scapegoat,
+					TieReplacementPower,
+					instance))
+			.AvailabilityResult.IsAvailable)
+		{
+			return false;
+		}
+
+		execution = new BorrowedScapegoatTieReplacementExecution(
+			actor,
+			new RolePowerInstanceIdentity(
+				actor.Id,
+				MainRoleType.Scapegoat,
+				TieReplacementPower.Identifier.Value,
+				instance.Id,
+				instance.Origin));
+		return true;
+	}
+
 	private static bool IsNonContradictoryScapegoatCandidate(
 		IPlayer player) =>
 		(player.State.CurrentRole is null or MainRoleType.Scapegoat) &&
@@ -382,10 +630,29 @@ internal sealed class ScapegoatRole
 			});
 	}
 
+	private static void RecordBorrowedTieReplacement(
+		GameSession session,
+		RolePowerInstanceIdentity powerIdentity)
+	{
+		var vote = GameSessionQueries.GetCurrentDayVoteOutcome(session)
+			?? throw new InvalidOperationException(
+				"No current tied Day Vote is available for Actor Scapegoat replacement.");
+		if (vote.PlayerId != Guid.Empty)
+		{
+			throw new InvalidOperationException(
+				"The Actor's borrowed Scapegoat can replace only a tied Day Vote.");
+		}
+
+		session.CommitActorBorrowedScapegoatTieReplacement(
+			powerIdentity,
+			vote.LogIndex,
+			vote.VoteOrdinal,
+			CreateScopeId(session, vote.VoteOrdinal));
+	}
+
 	private static EliminationCascadeSeed CreateCascadeSeed(GameSession session)
 	{
-		var replacement =
-			GameSessionQueries.GetCurrentScapegoatTieReplacement(session)
+		var replacement = GetCurrentTieReplacement(session)
 			?? throw new InvalidOperationException(
 				"The Scapegoat sacrifice cascade requires a tie replacement fact.");
 		return new EliminationCascadeSeed(
@@ -393,9 +660,39 @@ internal sealed class ScapegoatRole
 			replacement.VoteLogIndex,
 			[
 				new EliminationRequest(
-					replacement.ScapegoatPlayerId,
-					EliminationReason.ScapegoatSacrifice)
+					replacement.PlayerId,
+					replacement.IsBorrowed
+						? EliminationReason.EventElimination
+						: EliminationReason.ScapegoatSacrifice)
 			]);
+	}
+
+	private static ModeratorInstruction?
+		CreateReactionEliminationAnnouncement(
+			GameSession session,
+			IReadOnlyCollection<EliminationRequest> eliminations)
+	{
+		var replacement = GetCurrentTieReplacement(session)
+			?? throw new InvalidOperationException(
+				"The Scapegoat sacrifice cascade requires a tie replacement fact.");
+		if (eliminations.Any(elimination =>
+				elimination.PlayerId == replacement.PlayerId))
+		{
+			return null;
+		}
+
+		var victimNames = string.Join(
+			Environment.NewLine,
+			eliminations.Select(elimination =>
+				session.GetPlayer(elimination.PlayerId).Name));
+		return new ConfirmationInstruction(
+			ModeratorInstructionSemantic.AnnounceEliminationCascadeVictims,
+			publicAnnouncement:
+				GameStrings.MultipleVictimEliminatedAnnounce.Format(
+					victimNames),
+			affectedPlayerIds: eliminations
+				.Select(elimination => elimination.PlayerId)
+				.ToArray());
 	}
 
 	private static EliminationCascadePostCommitInteractionResult
@@ -404,17 +701,19 @@ internal sealed class ScapegoatRole
 		IReadOnlyCollection<EliminationRequest> eliminations,
 		ModeratorResponse? input)
 	{
+		var replacement = GetCurrentTieReplacement(session)
+			?? throw new InvalidOperationException(
+				"The Scapegoat voter restriction requires a tie replacement fact.");
+		var eliminationReason = replacement.IsBorrowed
+			? EliminationReason.EventElimination
+			: EliminationReason.ScapegoatSacrifice;
 		if (!eliminations.Any(elimination =>
-			    elimination.Reason ==
-			    EliminationReason.ScapegoatSacrifice))
+				elimination.PlayerId == replacement.PlayerId &&
+				elimination.Reason == eliminationReason))
 		{
 			return EliminationCascadePostCommitInteractionResult.Complete();
 		}
 
-		var replacement =
-			GameSessionQueries.GetCurrentScapegoatTieReplacement(session)
-			?? throw new InvalidOperationException(
-				"The Scapegoat voter restriction requires a tie replacement fact.");
 		var restriction = DayVoteRules.GetVoterEligibilityRestriction(
 			session,
 			replacement.ScopeId);
@@ -430,24 +729,40 @@ internal sealed class ScapegoatRole
 			    SelectPlayersInstruction
 			    {
 				    Semantic:
-				    ModeratorInstructionSemantic
-					    .SelectScapegoatPermittedVoters
-			    } selection ||
-			    input.SelectedPlayerIds is not { Count: > 0 } selected)
+					ModeratorInstructionSemantic
+						.SelectScapegoatPermittedVoters
+				} selection ||
+			    input.SelectedPlayerIds is not { Count: > 0 } selected ||
+			    selected.Any(playerId =>
+				    !selection.SelectablePlayerIds.Contains(playerId)))
 			{
 				throw new InvalidOperationException(
 					"The Scapegoat permitted-voter response is not correlated to the pending fixed candidate snapshot.");
 			}
 
 			var announcementInstructionId = Guid.NewGuid();
-			DayVoteRules.CommitVoterEligibilityRestriction(
-				session,
-				replacement.ScopeId,
-				MainRoleType.Scapegoat,
-				selection.SelectablePlayerIds,
-				selected,
-				session.TurnNumber + 1,
-				announcementInstructionId);
+			if (replacement.BorrowedPowerIdentity is { } powerIdentity)
+			{
+				session.CommitActorBorrowedScapegoatVoterRestriction(
+					powerIdentity,
+					replacement.PublicMarkerLogIndex,
+					replacement.ScopeId,
+					selection.SelectablePlayerIds,
+					selected,
+					session.TurnNumber + 1,
+					announcementInstructionId);
+			}
+			else
+			{
+				DayVoteRules.CommitVoterEligibilityRestriction(
+					session,
+					replacement.ScopeId,
+					MainRoleType.Scapegoat,
+					selection.SelectablePlayerIds,
+					selected,
+					session.TurnNumber + 1,
+					announcementInstructionId);
+			}
 			restriction =
 				DayVoteRules.GetVoterEligibilityRestriction(
 					session,
@@ -486,41 +801,233 @@ internal sealed class ScapegoatRole
 		return EliminationCascadePostCommitInteractionResult.Complete();
 	}
 
-	private static ModeratorInstruction CreatePermittedVoterSelection(
-		GameSession session)
+	private static SelectPlayersInstruction CreatePermittedVoterSelection(
+		GameSession session) =>
+		CreatePermittedVoterSelection(
+			GetPermittedVoterCandidates(session));
+
+	private static SelectPlayersInstruction CreatePermittedVoterSelection(
+		IReadOnlySet<Guid> candidates,
+		Guid instructionId = default)
 	{
-		var candidates = session.GetPlayers()
-			.WithHealth(PlayerHealth.Alive)
-			.Select(player => player.Id)
-			.ToHashSet();
 		return new SelectPlayersInstruction(
 			ModeratorInstructionSemantic.SelectScapegoatPermittedVoters,
-			candidates,
+			new HashSet<Guid>(candidates),
 			NumberRangeConstraint.AtLeast(1),
 			privateInstruction:
 				GameStrings.ScapegoatPermittedVotersSelectionInstruction,
-			affectedPlayerIds: candidates.ToArray());
+			affectedPlayerIds: candidates.ToArray(),
+			instructionId: instructionId);
 	}
 
-	private static ModeratorInstruction CreatePermittedVoterAnnouncement(
+	private static ConfirmationInstruction CreatePermittedVoterAnnouncement(
 		GameSession session,
-		VoterEligibilityRestrictionCommittedLogEntry restriction)
+		DayVoteRules.VoterEligibilityRestriction restriction) =>
+		CreatePermittedVoterAnnouncement(
+			session,
+			restriction.PermittedVoterIds,
+			restriction.AnnouncementInstructionId);
+
+	private static ConfirmationInstruction CreatePermittedVoterAnnouncement(
+		GameSession session,
+		IReadOnlyCollection<Guid> permittedVoterIds,
+		Guid instructionId)
 	{
+		var orderedPermittedVoterIds = permittedVoterIds
+			.OrderBy(playerId => playerId)
+			.ToArray();
 		var selectedNames = string.Join(
 			Environment.NewLine,
-			restriction.PermittedVoterIds.Select(
+			orderedPermittedVoterIds.Select(
 				playerId => session.GetPlayer(playerId).Name));
 		return new ConfirmationInstruction(
 			ModeratorInstructionSemantic.AnnounceScapegoatPermittedVoters,
 			publicAnnouncement:
 				GameStrings.ScapegoatPermittedVotersAnnouncement.Format(
 					selectedNames),
-			affectedPlayerIds: restriction.PermittedVoterIds,
-			instructionId: restriction.AnnouncementInstructionId);
+			affectedPlayerIds: orderedPermittedVoterIds,
+			instructionId: instructionId);
+	}
+
+	private static ConfirmationInstruction CreateBorrowedTieReveal(
+		Guid actorId,
+		Guid instructionId = default) =>
+		new(
+			ModeratorInstructionSemantic.RevealScapegoatForTie,
+			publicAnnouncement: GameStrings.ActorRoleName,
+			privateInstruction: GameStrings.PublicRoleRevealInstruction,
+			affectedPlayerIds: [actorId],
+			instructionId: instructionId);
+
+	internal static bool MatchesBorrowedTieReveal(
+		ModeratorInstruction? instruction,
+		Guid actorId)
+	{
+		if (instruction is not ConfirmationInstruction reveal)
+		{
+			return false;
+		}
+
+		var expected = CreateBorrowedTieReveal(
+			actorId,
+			reveal.InstructionId);
+		return reveal.Semantic == expected.Semantic &&
+			reveal.InstructionId == expected.InstructionId &&
+			reveal.AffectedPlayerIds is { } affectedPlayerIds &&
+			affectedPlayerIds.SequenceEqual(expected.AffectedPlayerIds!) &&
+			StringComparer.Ordinal.Equals(
+				reveal.PublicAnnouncement,
+				expected.PublicAnnouncement) &&
+			StringComparer.Ordinal.Equals(
+				reveal.PrivateInstruction,
+				expected.PrivateInstruction) &&
+			reveal.SoundEffects.SequenceEqual(expected.SoundEffects);
+	}
+
+	internal static bool MatchesPermittedVoterSelection(
+		ModeratorInstruction? instruction,
+		IReadOnlySet<Guid> candidates)
+	{
+		if (instruction is not SelectPlayersInstruction selection)
+		{
+			return false;
+		}
+
+		var expected = CreatePermittedVoterSelection(
+			candidates,
+			selection.InstructionId);
+		return selection.Semantic == expected.Semantic &&
+			selection.InstructionId == expected.InstructionId &&
+			selection.CountConstraint == expected.CountConstraint &&
+			selection.SelectablePlayerIds.SetEquals(
+				expected.SelectablePlayerIds) &&
+			selection.AffectedPlayerIds is { } affectedPlayerIds &&
+			affectedPlayerIds.Count == candidates.Count &&
+			affectedPlayerIds.ToHashSet().SetEquals(candidates) &&
+			selection.RoleIdentification == expected.RoleIdentification &&
+			StringComparer.Ordinal.Equals(
+				selection.PublicAnnouncement,
+				expected.PublicAnnouncement) &&
+			StringComparer.Ordinal.Equals(
+				selection.PrivateInstruction,
+				expected.PrivateInstruction) &&
+			StringComparer.Ordinal.Equals(
+				selection.EmptySelectionOptionLabel,
+				expected.EmptySelectionOptionLabel) &&
+			selection.SoundEffects.SequenceEqual(expected.SoundEffects);
+	}
+
+	internal static bool MatchesPermittedVoterAnnouncement(
+		GameSession session,
+		ModeratorInstruction? instruction,
+		IReadOnlyCollection<Guid> permittedVoterIds,
+		Guid instructionId)
+	{
+		if (instruction is not ConfirmationInstruction announcement)
+		{
+			return false;
+		}
+
+		var expected = CreatePermittedVoterAnnouncement(
+			session,
+			permittedVoterIds,
+			instructionId);
+		return announcement.Semantic == expected.Semantic &&
+			announcement.InstructionId == expected.InstructionId &&
+			announcement.AffectedPlayerIds is { } affectedPlayerIds &&
+			affectedPlayerIds.SequenceEqual(expected.AffectedPlayerIds!) &&
+			StringComparer.Ordinal.Equals(
+				announcement.PublicAnnouncement,
+				expected.PublicAnnouncement) &&
+			StringComparer.Ordinal.Equals(
+				announcement.PrivateInstruction,
+				expected.PrivateInstruction) &&
+			announcement.SoundEffects.SequenceEqual(expected.SoundEffects);
+	}
+
+	private static HashSet<Guid> GetPermittedVoterCandidates(
+		GameSession session) =>
+		session.GetPlayers()
+			.WithHealth(PlayerHealth.Alive)
+			.Select(player => player.Id)
+			.ToHashSet();
+
+	private static bool TryGetActiveBorrowedActorId(
+		GameSession session,
+		out Guid actorId)
+	{
+		if (session.GetModeratorActiveActorBorrowedRolePowerActivation() is
+			{
+				ActingPlayerId: var activeActorId,
+				SourceRole: MainRoleType.Scapegoat
+			} &&
+			session.GetPlayer(activeActorId).State is
+			{
+				CurrentRole: MainRoleType.Actor,
+				Health: PlayerHealth.Alive
+			})
+		{
+			actorId = activeActorId;
+			return true;
+		}
+
+		actorId = Guid.Empty;
+		return false;
 	}
 
 	private static string CreateScopeId(
 		GameSession session,
 		int voteOrdinal) =>
 		$"Day:{session.TurnNumber}:Vote:{voteOrdinal}";
+
+	private static ScapegoatTieReplacementState? GetCurrentTieReplacement(
+		GameSession session)
+	{
+		var native = GameSessionQueries.GetCurrentScapegoatTieReplacement(session);
+		if (native != null)
+		{
+			return new ScapegoatTieReplacementState(
+				native.ScapegoatPlayerId,
+				native.VoteLogIndex,
+				native.ScopeId,
+				false,
+				null,
+				-1);
+		}
+
+		var vote = GameSessionQueries.GetCurrentDayVoteOutcome(session);
+		if (vote is not
+			{
+				PlayerId: var playerId,
+				VoteOrdinal: var voteOrdinal
+			} || playerId != Guid.Empty)
+		{
+			return null;
+		}
+
+		var scopeId = CreateScopeId(session, voteOrdinal);
+		var borrowed = session.GetActorBorrowedScapegoatTieReplacementCommits()
+			.SingleOrDefault(commit => commit.CascadeScopeId == scopeId);
+		return borrowed == null
+			? null
+			: new ScapegoatTieReplacementState(
+				borrowed.PowerIdentity.ActingPlayerId,
+				borrowed.TriggeringVoteOutcomeLogIndex,
+				borrowed.CascadeScopeId,
+				true,
+				borrowed.PowerIdentity,
+				borrowed.PublicMarkerLogIndex);
+	}
+
+	private readonly record struct BorrowedScapegoatTieReplacementExecution(
+		IPlayer Actor,
+		RolePowerInstanceIdentity PowerIdentity);
+
+	private sealed record ScapegoatTieReplacementState(
+		Guid PlayerId,
+		int VoteLogIndex,
+		string ScopeId,
+		bool IsBorrowed,
+		RolePowerInstanceIdentity? BorrowedPowerIdentity,
+		int PublicMarkerLogIndex);
 }

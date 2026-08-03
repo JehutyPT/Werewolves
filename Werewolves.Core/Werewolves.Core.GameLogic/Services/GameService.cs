@@ -12,6 +12,7 @@ using Werewolves.Core.GameLogic.Models;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
 using Werewolves.Core.GameLogic.RolePowers;
 using Werewolves.Core.GameLogic.Roles;
+using Werewolves.Core.GameLogic.Roles.MainRoles;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
@@ -100,6 +101,7 @@ public class GameService
         ThiefOfferRules.EnforceValidHistory(session);
         DayVoteRules.EnforceValidHistory(session);
 		AngelLifecycleRules.EnforceValidHistory(session);
+		ElderRole.ValidateBorrowedResistanceRecovery(session);
         SeedActiveRoleListeners(session);
         ConfigureEliminationCascadeReactions(session);
         GameFlowManager.RestoreDurableContinuation(session, _roleAdmissions);
@@ -310,10 +312,19 @@ public class GameService
 	{
 		var roleReactions = GameFlowManager
 			.EliminationCascadeReactionRegistrations
-			.Where(registration =>
-				session.RoleLockIn.RoleComposition.Any(card =>
-					card.PrintedRole ==
-					(MainRoleType)registration.Listener))
+				.Where(registration =>
+					session.RoleLockIn.RoleComposition.Any(card =>
+						card.PrintedRole ==
+						(MainRoleType)registration.Listener) ||
+					((MainRoleType)registration.Listener ==
+						 MainRoleType.Hunter &&
+					 session.GetModeratorActorSetupCards().Cards.Any(card =>
+						 card.PrintedRole == MainRoleType.Hunter)) ||
+					((MainRoleType)registration.Listener ==
+						 MainRoleType.KnightWithRustySword &&
+					 session.GetModeratorActorSetupCards().Cards.Any(card =>
+						 card.PrintedRole ==
+							 MainRoleType.KnightWithRustySword)))
 			.Select(registration =>
 				CreateEliminationCascadeReactionBinding(
 					session,

@@ -79,6 +79,9 @@
   <data name="HunterRoleName" xml:space="preserve">
     <value>Hunter</value>
   </data>
+  <data name="ActorBorrowedHunterFinalShotSelectionInstruction" xml:space="preserve">
+    <value>Actor, choose exactly one living player to eliminate.</value>
+  </data>
   <data name="LittleGirlRoleName" xml:space="preserve">
     <value>Little Girl</value>
   </data>
@@ -168,5 +171,8 @@
   </data>
   <data name="ActorBorrowedRolePowerInvalidResponse" xml:space="preserve">
     <value>The borrowed Role Power response is invalid or no longer available.</value>
+  </data>
+  <data name="ActorBorrowedVillageIdiotPardonAnnouncement" xml:space="preserve">
+    <value>{0} is pardoned. They remain alive but permanently lose the right and power to vote.</value>
   </data>
 </root>

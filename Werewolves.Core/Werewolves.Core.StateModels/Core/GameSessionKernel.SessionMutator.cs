@@ -62,6 +62,22 @@ internal interface IActorSessionMutator
 		ActorBorrowedDefenderProtectionCommandLogEntry entry);
 	string ApplyActorBorrowedFoxCheck(
 		ActorBorrowedFoxCheckCommandLogEntry entry);
+	string ApplyActorBorrowedBearTamerGrowl(
+		ActorBorrowedBearTamerGrowlCommandLogEntry entry);
+	string ApplyActorBorrowedKnightRustySwordSchedule(
+		ActorBorrowedKnightRustySwordScheduleCommandLogEntry entry);
+	string ApplyActorBorrowedHunterFinalShot(
+		ActorBorrowedHunterFinalShotCommandLogEntry entry);
+	string ApplyActorBorrowedElderResistance(
+		ActorBorrowedElderResistanceCommandLogEntry entry);
+	string ApplyActorBorrowedElderSuppression(
+		ActorBorrowedElderSuppressionCommandLogEntry entry);
+	string ApplyActorBorrowedScapegoatTieReplacement(
+		ActorBorrowedScapegoatTieReplacementCommandLogEntry entry);
+	string ApplyActorBorrowedScapegoatVoterRestriction(
+		ActorBorrowedScapegoatVoterRestrictionCommandLogEntry entry);
+	string ApplyActorBorrowedVillageIdiotPardon(
+		ActorBorrowedVillageIdiotPardonCommandLogEntry entry);
 	string ApplyActorBorrowedWitchPotionUse(
 		ActorBorrowedWitchPotionUseCommandLogEntry entry);
 	string ApplyActorBorrowedWitchPotionDecline(
@@ -723,6 +739,640 @@ internal partial class GameSessionKernel
 				markerLogIndex);
 			commit.EnforceValidity();
 			kernel._actorBorrowedFoxCheckCommits.Add(commit);
+			return ActorBorrowedRolePowerCommitment.Create(
+				kernel._actorBorrowedRolePowerCommitmentKey,
+				commit);
+		}
+
+		public string ApplyActorBorrowedBearTamerGrowl(
+			ActorBorrowedBearTamerGrowlCommandLogEntry entry)
+		{
+			ArgumentNullException.ThrowIfNull(entry);
+			var identity = entry.PowerIdentity;
+			var active = kernel._activeActorBorrowedRolePowerActivation;
+			var selectedCard = active is null
+				? null
+				: kernel._actorSetupCards.Cards.SingleOrDefault(card =>
+					card.Id == active.SelectedCardId);
+			var markerLogIndex = kernel._gameHistoryLog.GetAllLogEntries().Count;
+			if (active is null ||
+				entry.CurrentPhase != kernel.CurrentPhase ||
+				entry.TurnNumber != kernel.TurnNumber ||
+				kernel.CurrentPhase != GamePhase.Dawn ||
+				identity.ActingPlayerId != active.ActingPlayerId ||
+				identity.SourceRole != MainRoleType.BearTamer ||
+				identity.SourceRole != active.SourceRole ||
+				!StringComparer.Ordinal.Equals(
+					identity.SourcePowerIdentifier,
+					ActorBorrowedBearTamerGrowlCommit
+						.ExpectedSourcePowerIdentifier) ||
+				identity.PowerInstanceId != active.ActivationId ||
+				identity.PowerInstanceOrigin != RolePowerInstanceOrigin.Borrowed ||
+				entry.ActorSetupCardId != active.SelectedCardId ||
+				selectedCard?.PrintedRole != MainRoleType.BearTamer ||
+				!kernel._actorSetupCardSpendActivationIds.TryGetValue(
+					entry.ActorSetupCardId,
+					out var spentActivationId) ||
+				spentActivationId != active.ActivationId ||
+				!kernel._players.TryGetValue(identity.ActingPlayerId, out var actor) ||
+				((IPlayer)actor).State is not
+				{
+					Health: PlayerHealth.Alive,
+					CurrentRole: MainRoleType.Actor
+				} ||
+				kernel._actorBorrowedBearTamerGrowlCommits.Any(commit =>
+					commit.PowerIdentity == identity))
+			{
+				throw new InvalidOperationException(
+					"The Actor borrowed Role Power commit is stale or invalid.");
+			}
+
+			var commit = new ActorBorrowedBearTamerGrowlCommit(
+				identity,
+				entry.ActorSetupCardId,
+				entry.Timestamp,
+				entry.TurnNumber,
+				entry.CurrentPhase,
+				markerLogIndex);
+			commit.EnforceValidity();
+			kernel._actorBorrowedBearTamerGrowlCommits.Add(commit);
+			return ActorBorrowedRolePowerCommitment.Create(
+				kernel._actorBorrowedRolePowerCommitmentKey,
+				commit);
+		}
+
+		public string ApplyActorBorrowedKnightRustySwordSchedule(
+			ActorBorrowedKnightRustySwordScheduleCommandLogEntry entry)
+		{
+			ArgumentNullException.ThrowIfNull(entry);
+			var identity = entry.PowerIdentity;
+			var active = kernel._activeActorBorrowedRolePowerActivation;
+			var selectedCard = active is null
+				? null
+				: kernel._actorSetupCards.Cards.SingleOrDefault(card =>
+					card.Id == active.SelectedCardId);
+			var history = kernel._gameHistoryLog.GetAllLogEntries();
+			var markerLogIndex = history.Count;
+			if (active is null ||
+				entry.CurrentPhase != kernel.CurrentPhase ||
+				entry.TurnNumber != kernel.TurnNumber ||
+				kernel.CurrentPhase != GamePhase.Dawn ||
+				identity.ActingPlayerId != active.ActingPlayerId ||
+				identity.SourceRole != MainRoleType.KnightWithRustySword ||
+				identity.SourceRole != active.SourceRole ||
+				!StringComparer.Ordinal.Equals(
+					identity.SourcePowerIdentifier,
+					ActorBorrowedKnightRustySwordScheduleCommit
+						.ExpectedSourcePowerIdentifier) ||
+				identity.PowerInstanceId != active.ActivationId ||
+				identity.PowerInstanceOrigin != RolePowerInstanceOrigin.Borrowed ||
+				entry.ActorSetupCardId != active.SelectedCardId ||
+				selectedCard?.PrintedRole !=
+					MainRoleType.KnightWithRustySword ||
+				!kernel._actorSetupCardSpendActivationIds.TryGetValue(
+					entry.ActorSetupCardId,
+					out var spentActivationId) ||
+				spentActivationId != active.ActivationId ||
+				!kernel._players.TryGetValue(
+					identity.ActingPlayerId,
+					out var actor) ||
+				((IPlayer)actor).State is not
+				{
+					Health: PlayerHealth.Dead,
+					CurrentRole: MainRoleType.Actor
+				} ||
+				!kernel._players.TryGetValue(
+					entry.TargetPlayerId,
+					out var target) ||
+				((IPlayer)target).State.Health != PlayerHealth.Alive ||
+				!HasQualifyingActorBorrowedKnightScheduleHistory(
+					history,
+					identity.ActingPlayerId,
+					entry.TurnNumber,
+					entry.WerewolfAttackEliminationLogIndex,
+					entry.CascadeScopeId,
+					markerLogIndex) ||
+				kernel._actorBorrowedKnightRustySwordScheduleCommits.Any())
+			{
+				throw new InvalidOperationException(
+					"The Actor borrowed Role Power commit is stale or invalid.");
+			}
+
+			var commit = new ActorBorrowedKnightRustySwordScheduleCommit(
+				identity,
+				entry.ActorSetupCardId,
+				entry.TargetPlayerId,
+				entry.WerewolfAttackEliminationLogIndex,
+				entry.CascadeScopeId,
+				entry.Timestamp,
+				entry.TurnNumber,
+				entry.CurrentPhase,
+				markerLogIndex);
+			commit.EnforceValidity();
+			kernel._actorBorrowedKnightRustySwordScheduleCommits.Add(commit);
+			return ActorBorrowedRolePowerCommitment.Create(
+				kernel._actorBorrowedRolePowerCommitmentKey,
+				commit);
+		}
+
+		public string ApplyActorBorrowedHunterFinalShot(
+			ActorBorrowedHunterFinalShotCommandLogEntry entry)
+		{
+			ArgumentNullException.ThrowIfNull(entry);
+			var identity = entry.PowerIdentity;
+			var active = kernel._activeActorBorrowedRolePowerActivation;
+			var selectedCard = active is null
+				? null
+				: kernel._actorSetupCards.Cards.SingleOrDefault(card =>
+					card.Id == active.SelectedCardId);
+			var markerLogIndex = kernel._gameHistoryLog.GetAllLogEntries().Count;
+			if (active is null ||
+				entry.CurrentPhase != kernel.CurrentPhase ||
+				entry.TurnNumber != kernel.TurnNumber ||
+				kernel.CurrentPhase is not (GamePhase.Night or GamePhase.Day) ||
+				identity.ActingPlayerId != active.ActingPlayerId ||
+				identity.SourceRole != MainRoleType.Hunter ||
+				identity.SourceRole != active.SourceRole ||
+				!StringComparer.Ordinal.Equals(
+					identity.SourcePowerIdentifier,
+					ActorBorrowedHunterFinalShotCommit
+						.ExpectedSourcePowerIdentifier) ||
+				identity.PowerInstanceId != active.ActivationId ||
+				identity.PowerInstanceOrigin != RolePowerInstanceOrigin.Borrowed ||
+				entry.ActorSetupCardId != active.SelectedCardId ||
+				selectedCard?.PrintedRole != MainRoleType.Hunter ||
+				!kernel._actorSetupCardSpendActivationIds.TryGetValue(
+					entry.ActorSetupCardId,
+					out var spentActivationId) ||
+				spentActivationId != active.ActivationId ||
+				!kernel._players.TryGetValue(identity.ActingPlayerId, out var actor) ||
+				((IPlayer)actor).State is not
+				{
+					Health: PlayerHealth.Dead,
+					CurrentRole: MainRoleType.Actor
+				} ||
+				entry.TriggeringPlayerIds.Any(playerId =>
+					!kernel._players.TryGetValue(playerId, out var triggeringPlayer) ||
+					((IPlayer)triggeringPlayer).State.Health != PlayerHealth.Dead) ||
+				!kernel._players.TryGetValue(entry.TargetPlayerId, out var target) ||
+				((IPlayer)target).State.Health != PlayerHealth.Alive ||
+				kernel._actorBorrowedHunterFinalShotCommits.Any(commit =>
+					commit.PowerIdentity == identity))
+			{
+				throw new InvalidOperationException(
+					"The Actor borrowed Role Power commit is stale or invalid.");
+			}
+
+			var commit = new ActorBorrowedHunterFinalShotCommit(
+				identity,
+				entry.ActorSetupCardId,
+				entry.CascadeScopeId,
+				entry.TriggeringPlayerIds.ToArray(),
+				entry.TargetPlayerId,
+				entry.Timestamp,
+				entry.TurnNumber,
+				entry.CurrentPhase,
+				markerLogIndex);
+			commit.EnforceValidity();
+			kernel._actorBorrowedHunterFinalShotCommits.Add(commit);
+			return ActorBorrowedRolePowerCommitment.Create(
+				kernel._actorBorrowedRolePowerCommitmentKey,
+				commit);
+		}
+
+		public string ApplyActorBorrowedElderResistance(
+			ActorBorrowedElderResistanceCommandLogEntry entry)
+		{
+			ArgumentNullException.ThrowIfNull(entry);
+			var identity = entry.PowerIdentity;
+			var active = kernel._activeActorBorrowedRolePowerActivation;
+			var selectedCard = active is null
+				? null
+				: kernel._actorSetupCards.Cards.SingleOrDefault(card =>
+					card.Id == active.SelectedCardId);
+			var history = kernel._gameHistoryLog.GetAllLogEntries();
+			var markerLogIndex = history.Count;
+			var previousCommit = kernel._actorBorrowedElderResistanceCommits
+				.LastOrDefault(commit => commit.PowerIdentity == identity);
+			if (active is null ||
+				entry.CurrentPhase != kernel.CurrentPhase ||
+				entry.TurnNumber != kernel.TurnNumber ||
+				kernel.CurrentPhase != GamePhase.Dawn ||
+				identity.ActingPlayerId != active.ActingPlayerId ||
+				identity.SourceRole != MainRoleType.Elder ||
+				identity.SourceRole != active.SourceRole ||
+				!StringComparer.Ordinal.Equals(
+					identity.SourcePowerIdentifier,
+					ActorBorrowedElderResistanceCommit
+						.ExpectedSourcePowerIdentifier) ||
+				identity.PowerInstanceId != active.ActivationId ||
+				identity.PowerInstanceOrigin != RolePowerInstanceOrigin.Borrowed ||
+				entry.ActorSetupCardId != active.SelectedCardId ||
+				selectedCard?.PrintedRole != MainRoleType.Elder ||
+				!kernel._actorSetupCardSpendActivationIds.TryGetValue(
+					entry.ActorSetupCardId,
+					out var spentActivationId) ||
+				spentActivationId != active.ActivationId ||
+				!kernel._players.TryGetValue(
+					identity.ActingPlayerId,
+					out var actor) ||
+				((IPlayer)actor).State is not
+				{
+					Health: PlayerHealth.Alive,
+					CurrentRole: MainRoleType.Actor
+				} ||
+				entry.TargetPlayerId != identity.ActingPlayerId ||
+				entry.TriggeringNightActionLogIndex < 0 ||
+				entry.TriggeringNightActionLogIndex >= markerLogIndex ||
+				entry.RestoringWitchSaveLogIndex is { } restorationLogIndex &&
+					(restorationLogIndex <=
+						entry.TriggeringNightActionLogIndex ||
+					 restorationLogIndex >= markerLogIndex) ||
+				kernel._actorBorrowedElderResistanceCommits.Any(commit =>
+					commit.PowerIdentity == identity &&
+					commit.TriggeringNightActionLogIndex ==
+						entry.TriggeringNightActionLogIndex) ||
+				previousCommit is not null &&
+					(previousCommit.RestoringWitchSaveLogIndex is null ||
+					 previousCommit.PublicMarkerLogIndex >=
+						entry.TriggeringNightActionLogIndex))
+			{
+				throw new InvalidOperationException(
+					"The Actor borrowed Role Power commit is stale or invalid.");
+			}
+
+			var commit = new ActorBorrowedElderResistanceCommit(
+				identity,
+				entry.ActorSetupCardId,
+				entry.TargetPlayerId,
+				entry.TriggeringNightActionLogIndex,
+				entry.RestoringWitchSaveLogIndex,
+				entry.Timestamp,
+				entry.TurnNumber,
+				entry.CurrentPhase,
+				markerLogIndex);
+			commit.EnforceValidity();
+			kernel._actorBorrowedElderResistanceCommits.Add(commit);
+			return ActorBorrowedRolePowerCommitment.Create(
+				kernel._actorBorrowedRolePowerCommitmentKey,
+				commit);
+		}
+
+		public string ApplyActorBorrowedElderSuppression(
+			ActorBorrowedElderSuppressionCommandLogEntry entry)
+		{
+			ArgumentNullException.ThrowIfNull(entry);
+			var identity = entry.PowerIdentity;
+			var active = kernel._activeActorBorrowedRolePowerActivation;
+			var selectedCard = active is null
+				? null
+				: kernel._actorSetupCards.Cards.SingleOrDefault(card =>
+					card.Id == active.SelectedCardId);
+			var history = kernel._gameHistoryLog.GetAllLogEntries();
+			var markerLogIndex = history.Count;
+			if (active is null ||
+				entry.CurrentPhase != kernel.CurrentPhase ||
+				entry.TurnNumber != kernel.TurnNumber ||
+				kernel.CurrentPhase != GamePhase.Day ||
+				identity.ActingPlayerId != active.ActingPlayerId ||
+				identity.SourceRole != MainRoleType.Elder ||
+				identity.SourceRole != active.SourceRole ||
+				!StringComparer.Ordinal.Equals(
+					identity.SourcePowerIdentifier,
+					ActorBorrowedElderSuppressionCommit
+						.ExpectedSourcePowerIdentifier) ||
+				identity.PowerInstanceId != active.ActivationId ||
+				identity.PowerInstanceOrigin != RolePowerInstanceOrigin.Borrowed ||
+				entry.ActorSetupCardId != active.SelectedCardId ||
+				selectedCard?.PrintedRole != MainRoleType.Elder ||
+				!kernel._actorSetupCardSpendActivationIds.TryGetValue(
+					entry.ActorSetupCardId,
+					out var spentActivationId) ||
+				spentActivationId != active.ActivationId ||
+				!kernel._players.TryGetValue(
+					identity.ActingPlayerId,
+					out var actor) ||
+				((IPlayer)actor).State is not
+				{
+					Health: PlayerHealth.Dead,
+					CurrentRole: MainRoleType.Actor,
+					PhysicalCharacterCardRole: MainRoleType.Actor,
+					PubliclyRevealedRole: MainRoleType.Actor
+				} ||
+				!HasQualifyingActorBorrowedElderSuppressionHistory(
+					history,
+					identity.ActingPlayerId,
+					entry.TurnNumber,
+					entry.TriggeringVoteOutcomeLogIndex,
+					entry.CascadeScopeId,
+					markerLogIndex) ||
+				kernel._actorBorrowedElderSuppressionCommits.Any() ||
+				history.OfType<VillagerRolePowerSuppressionCommittedLogEntry>()
+					.Any())
+			{
+				throw new InvalidOperationException(
+					"The Actor borrowed Role Power commit is stale or invalid.");
+			}
+
+			var commit = new ActorBorrowedElderSuppressionCommit(
+				identity,
+				entry.ActorSetupCardId,
+				entry.TriggeringVoteOutcomeLogIndex,
+				entry.CascadeScopeId,
+				entry.AnnouncementInstructionId,
+				entry.Timestamp,
+				entry.TurnNumber,
+				entry.CurrentPhase,
+				markerLogIndex);
+			commit.EnforceValidity();
+			kernel._actorBorrowedElderSuppressionCommits.Add(commit);
+			return ActorBorrowedRolePowerCommitment.Create(
+				kernel._actorBorrowedRolePowerCommitmentKey,
+				commit);
+		}
+
+		public string ApplyActorBorrowedScapegoatTieReplacement(
+			ActorBorrowedScapegoatTieReplacementCommandLogEntry entry)
+		{
+			ArgumentNullException.ThrowIfNull(entry);
+			var identity = entry.PowerIdentity;
+			var active = kernel._activeActorBorrowedRolePowerActivation;
+			var selectedCard = active is null
+				? null
+				: kernel._actorSetupCards.Cards.SingleOrDefault(card =>
+					card.Id == active.SelectedCardId);
+			var history = kernel._gameHistoryLog.GetAllLogEntries();
+			var markerLogIndex = history.Count;
+			var expectedScopeId =
+				$"Day:{entry.TurnNumber}:Vote:{entry.VoteOrdinal}";
+			var voteOrdinal = entry.TriggeringVoteOutcomeLogIndex < 0 ||
+				entry.TriggeringVoteOutcomeLogIndex >= markerLogIndex
+					? 0
+					: history
+						.Take(entry.TriggeringVoteOutcomeLogIndex + 1)
+						.OfType<VoteOutcomeReportedLogEntry>()
+						.Count(vote =>
+							vote.TurnNumber == entry.TurnNumber &&
+							vote.CurrentPhase == GamePhase.Day);
+			if (active is null ||
+				entry.CurrentPhase != kernel.CurrentPhase ||
+				entry.TurnNumber != kernel.TurnNumber ||
+				kernel.CurrentPhase != GamePhase.Day ||
+				identity.ActingPlayerId != active.ActingPlayerId ||
+				identity.SourceRole != MainRoleType.Scapegoat ||
+				identity.SourceRole != active.SourceRole ||
+				!StringComparer.Ordinal.Equals(
+					identity.SourcePowerIdentifier,
+					ActorBorrowedScapegoatTieReplacementCommit
+						.ExpectedSourcePowerIdentifier) ||
+				identity.PowerInstanceId != active.ActivationId ||
+				identity.PowerInstanceOrigin != RolePowerInstanceOrigin.Borrowed ||
+				entry.ActorSetupCardId != active.SelectedCardId ||
+				selectedCard?.PrintedRole != MainRoleType.Scapegoat ||
+				!kernel._actorSetupCardSpendActivationIds.TryGetValue(
+					entry.ActorSetupCardId,
+					out var spentActivationId) ||
+				spentActivationId != active.ActivationId ||
+				!kernel._players.TryGetValue(
+					identity.ActingPlayerId,
+					out var actor) ||
+				((IPlayer)actor).State is not
+				{
+					Health: PlayerHealth.Alive,
+					CurrentRole: MainRoleType.Actor,
+					PhysicalCharacterCardRole: MainRoleType.Actor,
+					PubliclyRevealedRole: MainRoleType.Actor
+				} ||
+				entry.TriggeringVoteOutcomeLogIndex < 0 ||
+				entry.TriggeringVoteOutcomeLogIndex >= markerLogIndex ||
+				history[entry.TriggeringVoteOutcomeLogIndex] is not
+					VoteOutcomeReportedLogEntry
+					{
+						ReportedOutcomePlayerId: var reportedOutcome,
+						CurrentPhase: GamePhase.Day
+					} triggeringVote ||
+				reportedOutcome != Guid.Empty ||
+				triggeringVote.TurnNumber != entry.TurnNumber ||
+				voteOrdinal != entry.VoteOrdinal ||
+				!StringComparer.Ordinal.Equals(
+					entry.CascadeScopeId,
+					expectedScopeId) ||
+				kernel._actorBorrowedScapegoatTieReplacementCommits.Any() ||
+				kernel._actorBorrowedScapegoatVoterRestrictionCommits.Any() ||
+				history.OfType<ScapegoatTieReplacementLogEntry>()
+					.Any(replacement =>
+						StringComparer.Ordinal.Equals(
+							replacement.ScopeId,
+							entry.CascadeScopeId)))
+			{
+				throw new InvalidOperationException(
+					"The Actor borrowed Scapegoat tie replacement is stale or invalid.");
+			}
+
+			var commit = new ActorBorrowedScapegoatTieReplacementCommit(
+				identity,
+				entry.ActorSetupCardId,
+				entry.TriggeringVoteOutcomeLogIndex,
+				entry.VoteOrdinal,
+				entry.CascadeScopeId,
+				entry.Timestamp,
+				entry.TurnNumber,
+				entry.CurrentPhase,
+				markerLogIndex);
+			commit.EnforceValidity();
+			kernel._actorBorrowedScapegoatTieReplacementCommits.Add(commit);
+			return ActorBorrowedRolePowerCommitment.Create(
+				kernel._actorBorrowedRolePowerCommitmentKey,
+				commit);
+		}
+
+		public string ApplyActorBorrowedScapegoatVoterRestriction(
+			ActorBorrowedScapegoatVoterRestrictionCommandLogEntry entry)
+		{
+			ArgumentNullException.ThrowIfNull(entry);
+			var identity = entry.PowerIdentity;
+			var active = kernel._activeActorBorrowedRolePowerActivation;
+			var selectedCard = active is null
+				? null
+				: kernel._actorSetupCards.Cards.SingleOrDefault(card =>
+					card.Id == active.SelectedCardId);
+			var history = kernel._gameHistoryLog.GetAllLogEntries();
+			var markerLogIndex = history.Count;
+			var tieReplacement =
+				kernel._actorBorrowedScapegoatTieReplacementCommits
+					.SingleOrDefault(commit =>
+						commit.PowerIdentity == identity &&
+						commit.PublicMarkerLogIndex ==
+							entry.TieReplacementPublicMarkerLogIndex &&
+						StringComparer.Ordinal.Equals(
+							commit.CascadeScopeId,
+							entry.CascadeScopeId));
+			var livingPlayerIds = kernel._players.Values
+				.Where(player =>
+					((IPlayer)player).State.Health == PlayerHealth.Alive)
+				.Select(player => player.Id)
+				.ToHashSet();
+			var candidatePlayerIds = entry.CandidatePlayerIds.ToHashSet();
+			var permittedVoterIds = entry.PermittedVoterIds.ToHashSet();
+			var hasSacrificeElimination = tieReplacement is not null &&
+				history
+					.Skip(tieReplacement.PublicMarkerLogIndex + 1)
+					.OfType<PlayerEliminatedLogEntry>()
+					.Any(elimination =>
+						elimination.PlayerId == identity.ActingPlayerId &&
+						elimination.Reason ==
+							EliminationReason.EventElimination);
+			var hasSacrificeBatch = history
+				.OfType<EliminationCascadeBatchResolvedLogEntry>()
+				.Any(batch =>
+					StringComparer.Ordinal.Equals(
+						batch.ScopeId,
+						entry.CascadeScopeId) &&
+					batch.CommittedEliminations.Any(elimination =>
+						elimination.PlayerId == identity.ActingPlayerId &&
+						elimination.Reason ==
+							EliminationReason.EventElimination));
+			if (active is null ||
+				entry.CurrentPhase != kernel.CurrentPhase ||
+				entry.TurnNumber != kernel.TurnNumber ||
+				kernel.CurrentPhase != GamePhase.Day ||
+				identity.ActingPlayerId != active.ActingPlayerId ||
+				identity.SourceRole != MainRoleType.Scapegoat ||
+				identity.SourceRole != active.SourceRole ||
+				!StringComparer.Ordinal.Equals(
+					identity.SourcePowerIdentifier,
+					ActorBorrowedScapegoatVoterRestrictionCommit
+						.ExpectedSourcePowerIdentifier) ||
+				identity.PowerInstanceId != active.ActivationId ||
+				identity.PowerInstanceOrigin != RolePowerInstanceOrigin.Borrowed ||
+				entry.ActorSetupCardId != active.SelectedCardId ||
+				selectedCard?.PrintedRole != MainRoleType.Scapegoat ||
+				!kernel._actorSetupCardSpendActivationIds.TryGetValue(
+					entry.ActorSetupCardId,
+					out var spentActivationId) ||
+				spentActivationId != active.ActivationId ||
+				!kernel._players.TryGetValue(
+					identity.ActingPlayerId,
+					out var actor) ||
+				((IPlayer)actor).State is not
+				{
+					Health: PlayerHealth.Dead,
+					CurrentRole: MainRoleType.Actor,
+					PhysicalCharacterCardRole: MainRoleType.Actor,
+					PubliclyRevealedRole: MainRoleType.Actor
+				} ||
+				tieReplacement is null ||
+				tieReplacement.ActorSetupCardId != entry.ActorSetupCardId ||
+				tieReplacement.TurnNumber != entry.TurnNumber ||
+				tieReplacement.CurrentPhase != entry.CurrentPhase ||
+				entry.TieReplacementPublicMarkerLogIndex >= markerLogIndex ||
+				history[entry.TieReplacementPublicMarkerLogIndex] is not
+					ActorBorrowedRolePowerCommittedLogEntry ||
+				!hasSacrificeElimination ||
+				!hasSacrificeBatch ||
+				entry.CandidatePlayerIds.Count != candidatePlayerIds.Count ||
+				!candidatePlayerIds.SetEquals(livingPlayerIds) ||
+				entry.PermittedVoterIds.Count != permittedVoterIds.Count ||
+				permittedVoterIds.Count == 0 ||
+				!permittedVoterIds.IsSubsetOf(candidatePlayerIds) ||
+				entry.AppliesOnTurnNumber != entry.TurnNumber + 1 ||
+				kernel._actorBorrowedScapegoatVoterRestrictionCommits.Any() ||
+				history.OfType<VoterEligibilityRestrictionCommittedLogEntry>()
+					.Any(restriction =>
+						StringComparer.Ordinal.Equals(
+							restriction.ScopeId,
+							entry.CascadeScopeId)))
+			{
+				throw new InvalidOperationException(
+					"The Actor borrowed Scapegoat voter restriction is stale or invalid.");
+			}
+
+			var commit = new ActorBorrowedScapegoatVoterRestrictionCommit(
+				identity,
+				entry.ActorSetupCardId,
+				entry.TieReplacementPublicMarkerLogIndex,
+				entry.CascadeScopeId,
+				entry.CandidatePlayerIds.ToArray(),
+				entry.PermittedVoterIds.ToArray(),
+				entry.AppliesOnTurnNumber,
+				entry.AnnouncementInstructionId,
+				entry.Timestamp,
+				entry.TurnNumber,
+				entry.CurrentPhase,
+				markerLogIndex);
+			commit.EnforceValidity();
+			kernel._actorBorrowedScapegoatVoterRestrictionCommits.Add(commit);
+			return ActorBorrowedRolePowerCommitment.Create(
+				kernel._actorBorrowedRolePowerCommitmentKey,
+				commit);
+		}
+
+		public string ApplyActorBorrowedVillageIdiotPardon(
+			ActorBorrowedVillageIdiotPardonCommandLogEntry entry)
+		{
+			ArgumentNullException.ThrowIfNull(entry);
+			var identity = entry.PowerIdentity;
+			var active = kernel._activeActorBorrowedRolePowerActivation;
+			var selectedCard = active is null
+				? null
+				: kernel._actorSetupCards.Cards.SingleOrDefault(card =>
+					card.Id == active.SelectedCardId);
+			var markerLogIndex = kernel._gameHistoryLog.GetAllLogEntries().Count;
+			if (active is null ||
+				entry.CurrentPhase != kernel.CurrentPhase ||
+				entry.TurnNumber != kernel.TurnNumber ||
+				kernel.CurrentPhase != GamePhase.Day ||
+				identity.ActingPlayerId != active.ActingPlayerId ||
+				identity.SourceRole != MainRoleType.VillageIdiot ||
+				identity.SourceRole != active.SourceRole ||
+				!StringComparer.Ordinal.Equals(
+					identity.SourcePowerIdentifier,
+					ActorBorrowedVillageIdiotPardonCommit
+						.ExpectedSourcePowerIdentifier) ||
+				identity.PowerInstanceId != active.ActivationId ||
+				identity.PowerInstanceOrigin != RolePowerInstanceOrigin.Borrowed ||
+				entry.ActorSetupCardId != active.SelectedCardId ||
+				selectedCard?.PrintedRole != MainRoleType.VillageIdiot ||
+				!kernel._actorSetupCardSpendActivationIds.TryGetValue(
+					entry.ActorSetupCardId,
+					out var spentActivationId) ||
+				spentActivationId != active.ActivationId ||
+				!kernel._players.TryGetValue(identity.ActingPlayerId, out var actor) ||
+				((IPlayer)actor).State is not
+				{
+					Health: PlayerHealth.Alive,
+					CurrentRole: MainRoleType.Actor,
+					DurableVotingPower: 1
+				} ||
+				entry.SpentResourceIdentity.ActingPlayerId !=
+					identity.ActingPlayerId ||
+				entry.SpentResourceIdentity.SourceRole != identity.SourceRole ||
+				!StringComparer.Ordinal.Equals(
+					entry.SpentResourceIdentity.SourcePowerIdentifier,
+					identity.SourcePowerIdentifier) ||
+				entry.SpentResourceIdentity.PowerInstanceId !=
+					identity.PowerInstanceId ||
+				entry.SpentResourceIdentity.PowerInstanceOrigin !=
+					identity.PowerInstanceOrigin ||
+				entry.SpentResourceIdentity.OneUseResourceId !=
+					ActorBorrowedVillageIdiotPardonCommit.ExpectedResourceId ||
+				kernel._actorBorrowedVillageIdiotPardonCommits.Any(commit =>
+					commit.SpentResourceIdentity == entry.SpentResourceIdentity))
+			{
+				throw new InvalidOperationException(
+					"The Actor borrowed Role Power commit is stale or invalid.");
+			}
+
+			var commit = new ActorBorrowedVillageIdiotPardonCommit(
+				identity,
+				entry.ActorSetupCardId,
+				entry.SpentResourceIdentity,
+				entry.Timestamp,
+				entry.TurnNumber,
+				entry.CurrentPhase,
+				markerLogIndex);
+			commit.EnforceValidity();
+			kernel._actorBorrowedVillageIdiotPardonCommits.Add(commit);
 			return ActorBorrowedRolePowerCommitment.Create(
 				kernel._actorBorrowedRolePowerCommitmentKey,
 				commit);

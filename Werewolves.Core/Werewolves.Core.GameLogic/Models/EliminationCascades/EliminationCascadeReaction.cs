@@ -48,22 +48,47 @@ internal sealed record EliminationCascadeReactionBinding(
 	IEliminationCascadeReaction Reaction,
 	EliminationCascadeReactionBoundary Boundary);
 
+internal enum EliminationCascadeReactionResultDisposition
+{
+	NeedInput,
+	PublicCompletion,
+	NotApplicable,
+	PrivatelyDurableCompletion
+}
+
 internal sealed record EliminationCascadeReactionResult(
-	bool IsComplete,
+	EliminationCascadeReactionResultDisposition Disposition,
 	ModeratorInstruction? Instruction,
 	IReadOnlyCollection<EliminationRequest> Eliminations)
 {
+	internal bool IsComplete =>
+		Disposition != EliminationCascadeReactionResultDisposition.NeedInput;
+
 	internal static EliminationCascadeReactionResult Complete(
 		IReadOnlyCollection<EliminationRequest>? eliminations = null) =>
 		new(
-			IsComplete: true,
+			EliminationCascadeReactionResultDisposition.PublicCompletion,
 			Instruction: null,
 			eliminations ?? []);
+
+	internal static EliminationCascadeReactionResult NotApplicable() =>
+		new(
+			EliminationCascadeReactionResultDisposition.NotApplicable,
+			Instruction: null,
+			Eliminations: []);
+
+	internal static EliminationCascadeReactionResult CompletePrivately(
+		IReadOnlyCollection<EliminationRequest> eliminations) =>
+		new(
+			EliminationCascadeReactionResultDisposition
+				.PrivatelyDurableCompletion,
+			Instruction: null,
+			eliminations);
 
 	internal static EliminationCascadeReactionResult NeedInput(
 		ModeratorInstruction instruction) =>
 		new(
-			IsComplete: false,
+			EliminationCascadeReactionResultDisposition.NeedInput,
 			instruction,
 			Eliminations: []);
 }
