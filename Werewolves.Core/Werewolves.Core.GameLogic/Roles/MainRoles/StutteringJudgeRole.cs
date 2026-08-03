@@ -75,11 +75,17 @@ internal sealed class StutteringJudgeRole
 		{
 			if (TryResolveBorrowedExecution(session, out var borrowedExecution))
 			{
-				return GameSessionQueries.HasStutteringJudgeSignalBeenEstablished(
-						session,
-						CreatePowerIdentity(borrowedExecution))
-					? HookListenerActionResult.Skip()
-					: ExecuteCore(session, input);
+				var currentState = GetCurrentListenerState(session);
+				if (GameSessionQueries.HasStutteringJudgeSignalBeenEstablished(
+					    session,
+					    CreatePowerIdentity(borrowedExecution)))
+				{
+					return currentState == StutteringJudgeRoleState.NightComplete
+						? ExecuteCore(session, input)
+						: HookListenerActionResult.Skip();
+				}
+
+				return ExecuteCore(session, input);
 			}
 
 			if (session.TurnNumber != 1 ||

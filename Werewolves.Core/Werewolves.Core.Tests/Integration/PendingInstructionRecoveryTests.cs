@@ -6,6 +6,7 @@ using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
+using Werewolves.Core.StateModels.Resources;
 using Werewolves.Core.Tests.Helpers;
 using Xunit;
 
@@ -407,6 +408,181 @@ public sealed class PendingInstructionRecoveryTests
     }
 
     [Fact]
+    public void AcceptedActorSetupCardSpend_RehydratesAtSleep_RejectsReplayWithoutMutation_AndContinuesToWerewolfObservation()
+    {
+        var fixture = StartActorGameAtPendingSleep();
+
+        var recoveredService = new GameService();
+        var recoveredGameId = recoveredService.RehydrateSession(
+            fixture.Service.GetGameStateView(fixture.GameId)!.Serialize());
+        var recovered = recoveredService.GetGameStateView(recoveredGameId)!;
+        var recoveredSleep = recoveredService.GetCurrentInstruction(recoveredGameId)
+            .Should().BeOfType<ConfirmationInstruction>().Subject;
+        var recoveredActivation = recovered
+            .GetModeratorActiveActorBorrowedRolePowerActivation();
+
+        using (new AssertionScope())
+        {
+            recoveredSleep.InstructionId.Should().Be(
+                fixture.PendingActorSleep.InstructionId);
+            recoveredSleep.Semantic.Should().Be(
+                ModeratorInstructionSemantic.PutRoleToSleep);
+            recovered.GetModeratorSpentActorSetupCards().Should()
+                .ContainSingle(card =>
+                    card.Id == fixture.HunterCard.Id &&
+                    card.PrintedRole == MainRoleType.Hunter);
+            recovered.GetModeratorRemainingActorSetupCards().Should().HaveCount(2);
+            recoveredActivation.Should().NotBeNull();
+            recoveredActivation!.ActingPlayerId.Should().Be(fixture.ActorId);
+            recoveredActivation.SelectedCardId.Should().Be(fixture.HunterCard.Id);
+            recoveredActivation.SourceRole.Should().Be(MainRoleType.Hunter);
+            recoveredActivation.Origin.Should().Be(RolePowerInstanceOrigin.Borrowed);
+            recovered.GameHistoryLog.OfType<ActorSetupCardSpendCommittedLogEntry>()
+                .Should().ContainSingle();
+        }
+
+        AssertResponseReplayIsRejectedWithoutPublicMutation(
+            recoveredService, recoveredGameId, fixture.AcceptedActorChoice);
+
+        var werewolfObservation = ProcessAndExpect<SelectPlayersInstruction>(
+            recoveredService, recoveredGameId, recoveredSleep.CreateResponse());
+
+        werewolfObservation.Semantic.Should().Be(
+            ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
+        recovered.GetModeratorSpentActorSetupCards().Should()
+            .ContainSingle(card => card.Id == fixture.HunterCard.Id);
+        recovered.GetModeratorActiveActorBorrowedRolePowerActivation().Should()
+            .Be(recoveredActivation);
+        recovered.GameHistoryLog.OfType<ActorSetupCardSpendCommittedLogEntry>()
+            .Should().ContainSingle();
+    }
+
+    [Fact]
+    public void SuppressedActorOpening_AfterRecovery_ExpiresOnceRejectsStaleChoiceAndContinuesToWerewolves()
+    {
+        var fixture = StartActorGameAtPendingSleep();
+        var service = fixture.Service;
+        var gameId = fixture.GameId;
+        var werewolfObservation = ProcessAndExpect<SelectPlayersInstruction>(
+            service, gameId, fixture.PendingActorSleep.CreateResponse());
+        werewolfObservation.Semantic.Should().Be(
+            ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
+        var victimSelection = ProcessAndExpect<SelectPlayersInstruction>(
+            service, gameId,
+            werewolfObservation.CreateResponse([fixture.WerewolfId]));
+        victimSelection.Semantic.Should().Be(
+            ModeratorInstructionSemantic.SelectWerewolfVictim);
+        var werewolfSleep = ProcessAndExpect<ConfirmationInstruction>(
+            service, gameId,
+            victimSelection.CreateResponse([fixture.NightVictimId]));
+        var nightEnd = ProcessAndExpect<ConfirmationInstruction>(
+            service, gameId, werewolfSleep.CreateResponse());
+        var elderIdentification = ProcessAndExpect<SelectPlayersInstruction>(
+            service, gameId, nightEnd.CreateResponse());
+        elderIdentification.RoleIdentification.Should().Be(MainRoleType.Elder);
+        var dawnRoleAssignment = ProcessAndExpect<AssignRolesInstruction>(
+            service, gameId,
+            elderIdentification.CreateResponse([fixture.ElderId]));
+        service.ProcessInstruction(
+            gameId,
+            dawnRoleAssignment.CreateResponse(new()
+            {
+                [fixture.NightVictimId] = MainRoleType.SimpleVillager
+            })).IsSuccess.Should().BeTrue();
+
+        for (var step = 0;
+             step < 10 &&
+             service.GetGameStateView(gameId)!.GetCurrentPhase() != GamePhase.Day;
+             step++)
+        {
+            var dawnConfirmation = service.GetCurrentInstruction(gameId)
+                .Should().BeOfType<ConfirmationInstruction>().Subject;
+            service.ProcessInstruction(gameId, dawnConfirmation.CreateResponse())
+                .IsSuccess.Should().BeTrue();
+        }
+
+        service.GetGameStateView(gameId)!.GetCurrentPhase().Should()
+            .Be(GamePhase.Day);
+        var debate = service.GetCurrentInstruction(gameId)
+            .Should().BeOfType<ConfirmationInstruction>().Subject;
+        debate.Semantic.Should().Be(ModeratorInstructionSemantic.StartDayDebate);
+        var vote = ProcessAndExpect<SelectPlayersInstruction>(
+            service, gameId, debate.CreateResponse());
+        var dayRoleAssignment = ProcessAndExpect<AssignRolesInstruction>(
+            service, gameId, vote.CreateResponse([fixture.ElderId]));
+        dayRoleAssignment.Semantic.Should().Be(
+            ModeratorInstructionSemantic.AssignDayVoteTargetRole);
+        dayRoleAssignment.PlayersForAssignment.Should().Equal(fixture.ElderId);
+        dayRoleAssignment.RolesForAssignment.Should().Contain(MainRoleType.Elder);
+        var reveal = ProcessAndExpect<ConfirmationInstruction>(
+            service, gameId,
+            dayRoleAssignment.CreateResponse(new()
+            {
+                [fixture.ElderId] = MainRoleType.Elder
+            }));
+        var dayTail = ProcessAndExpect<ConfirmationInstruction>(
+            service, gameId, reveal.CreateResponse());
+        var secondNightStart = ProcessAndExpect<ConfirmationInstruction>(
+            service, gameId, dayTail.CreateResponse());
+        secondNightStart.Semantic.Should().Be(
+            ModeratorInstructionSemantic.StartNight);
+        service.GetGameStateView(gameId)!.GetCurrentPhase().Should()
+            .Be(GamePhase.Night);
+        service.GetGameStateView(gameId)!.GameHistoryLog
+            .OfType<VillagerRolePowerSuppressionCommittedLogEntry>()
+            .Should().ContainSingle();
+
+        var recoveredService = new GameService();
+        var recoveredGameId = recoveredService.RehydrateSession(
+            service.GetGameStateView(gameId)!.Serialize());
+        var recovered = recoveredService.GetGameStateView(recoveredGameId)!;
+        var recoveredNightStart = recoveredService
+            .GetCurrentInstruction(recoveredGameId)
+            .Should().BeOfType<ConfirmationInstruction>().Subject;
+        recoveredNightStart.InstructionId.Should().Be(secondNightStart.InstructionId);
+        recoveredNightStart.Semantic.Should().Be(
+            ModeratorInstructionSemantic.StartNight);
+        recovered.GetModeratorActiveActorBorrowedRolePowerActivation().Should()
+            .NotBeNull();
+        recovered.GameHistoryLog
+            .OfType<ActorBorrowedRolePowerActivationExpiredLogEntry>()
+            .Should().BeEmpty();
+
+        var werewolfWake = ProcessAndExpect<ConfirmationInstruction>(
+            recoveredService, recoveredGameId,
+            recoveredNightStart.CreateResponse());
+
+        using (new AssertionScope())
+        {
+            werewolfWake.Semantic.Should().Be(
+                ModeratorInstructionSemantic.WakeRole);
+            werewolfWake.AffectedPlayerIds.Should().Equal(fixture.WerewolfId);
+            recovered.GetModeratorActiveActorBorrowedRolePowerActivation().Should()
+                .BeNull();
+            recovered.GetModeratorSpentActorSetupCards().Should()
+                .ContainSingle(card => card.Id == fixture.HunterCard.Id);
+            recovered.GameHistoryLog
+                .OfType<ActorSetupCardSpendCommittedLogEntry>()
+                .Should().ContainSingle();
+            recovered.GameHistoryLog
+                .OfType<ActorBorrowedRolePowerActivationExpiredLogEntry>()
+                .Should().ContainSingle();
+        }
+
+        AssertResponseReplayIsRejectedWithoutPublicMutation(
+            recoveredService, recoveredGameId, fixture.AcceptedActorChoice);
+
+        var secondVictimSelection = ProcessAndExpect<SelectPlayersInstruction>(
+            recoveredService, recoveredGameId, werewolfWake.CreateResponse());
+
+        secondVictimSelection.Semantic.Should().Be(
+            ModeratorInstructionSemantic.SelectWerewolfVictim);
+        recovered.GameHistoryLog
+            .OfType<ActorBorrowedRolePowerActivationExpiredLogEntry>()
+            .Should().ContainSingle();
+    }
+
+    [Fact]
     public void AcceptedWerewolfAgentGroupObservation_UnknownSemanticCursorVersion_IsRejected()
     {
         var builder = GameTestBuilder.Create()
@@ -613,6 +789,67 @@ public sealed class PendingInstructionRecoveryTests
         replaySession.GameHistoryLog.OfType<VoteOutcomeReportedLogEntry>()
             .Should().ContainSingle(entry =>
                 entry.ReportedOutcomePlayerId == scenario.LivingTargetId);
+    }
+
+    private static (GameService Service, Guid GameId, Guid ActorId,
+        Guid WerewolfId, Guid ElderId, Guid NightVictimId,
+        PhysicalCharacterCard HunterCard, ModeratorResponse AcceptedActorChoice,
+        ConfirmationInstruction PendingActorSleep) StartActorGameAtPendingSleep()
+    {
+        var actorSetup = new ActorSetupCards([
+            MainRoleType.Hunter,
+            MainRoleType.VillageIdiot,
+            MainRoleType.Scapegoat
+        ]);
+        var service = new GameService();
+        var start = service.StartNewGame(new GameSessionConfig(
+            [GameStrings.ActorRoleName, "Werewolf", "Elder", "Villager A", "Villager B"],
+            [
+                MainRoleType.Actor,
+                MainRoleType.SimpleWerewolf,
+                MainRoleType.Elder,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager
+            ],
+            actorSetup));
+        var gameId = start.GameGuid;
+        var players = service.GetGameStateView(gameId)!.GetPlayers()
+            .ToDictionary(player => player.Name);
+        var actorId = players[GameStrings.ActorRoleName].Id;
+        var nightStart = ProcessAndExpect<ConfirmationInstruction>(
+            service, gameId, start.CreateResponse());
+        var actorIdentification = ProcessAndExpect<SelectPlayersInstruction>(
+            service, gameId, nightStart.CreateResponse());
+        actorIdentification.RoleIdentification.Should().Be(MainRoleType.Actor);
+        var actorChoice = ProcessAndExpect<SelectOptionsInstruction>(
+            service, gameId, actorIdentification.CreateResponse([actorId]));
+        actorChoice.Semantic.Should().Be(
+            ModeratorInstructionSemantic.ChooseActorSetupCard);
+        var hunterCard = actorSetup.Cards.Single(card =>
+            card.PrintedRole == MainRoleType.Hunter);
+        var acceptedActorChoice = actorChoice.CreateResponse(hunterCard.Id.ToString("D"));
+        var actorSleep = ProcessAndExpect<ConfirmationInstruction>(
+            service, gameId, acceptedActorChoice);
+        actorSleep.Semantic.Should().Be(
+            ModeratorInstructionSemantic.PutRoleToSleep);
+
+        return (service, gameId, actorId, players["Werewolf"].Id,
+            players["Elder"].Id, players["Villager A"].Id, hunterCard,
+            acceptedActorChoice, actorSleep);
+    }
+
+    private static void AssertResponseReplayIsRejectedWithoutPublicMutation(
+        GameService service,
+        Guid gameId,
+        ModeratorResponse response)
+    {
+        var beforeReplay = PublicGameSessionSnapshot.Capture(service, gameId);
+        Action replay = () => service.ProcessInstruction(gameId, response);
+
+        replay.Should().Throw<InvalidOperationException>();
+        PublicGameSessionSnapshot.Capture(service, gameId).Should().BeEquivalentTo(
+            beforeReplay,
+            options => options.WithStrictOrdering());
     }
 
     private static void AdvanceToNextNight(GameTestBuilder builder)

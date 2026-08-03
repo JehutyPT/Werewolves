@@ -109,7 +109,7 @@ public class SimulationRoleLockInTests
 	}
 
 	[Fact]
-	public void CreateGameSessionConfig_WithActorSetupArtifact_BindsExactlyTheCanonicalSourceRoles()
+	public void Derive_WithSafetyActorScenario_ProducesVillagerNonAgentFactsAndRematerializesCanonicalSetup()
 	{
 		MainRoleType[] roles =
 		[
@@ -127,18 +127,47 @@ public class SimulationRoleLockInTests
 				new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.Elder)
 			]);
 		var scenario = new SimulationScenario(5, roles, setupArtifact);
-		var startState = CreateStartState(scenario, roles);
+		var capability = SimulatorCapabilityRegistry.Production.SafetyScreening;
+		var material = new RunSeedMaterial(
+			new SimulationCompatibilityIdentity(
+				scenario.ToCanonical(),
+				capability.Identity),
+			capability.HeadlessResponsePolicy.StrategyIdentity,
+			runNumber: 144);
+
+		var startState = SimulationStartStateDeriver.Derive(material, capability);
+		var actorAssignment = startState.RoleAssignments.Single(assignment =>
+			assignment.Role == MainRoleType.Actor);
+		var actorFacts = startState.FactionFacts.Single(facts =>
+			facts.SeatNumber == actorAssignment.SeatNumber);
 
 		var config = startState.CreateGameSessionConfig();
 
+		actorFacts.Beneficiary.Should().Be(
+			FactionBeneficiaryKnowledge.Known(Faction.Villager));
+		foreach (var faction in Enum.GetValues<Faction>())
+		{
+			actorFacts.GetAgentKnowledge(faction).Should().Be(
+				FactionAgentKnowledge.KnownNonAgent);
+		}
+		MainRoleType[] canonicalSetup =
+		[
+			MainRoleType.Cupid,
+			MainRoleType.Elder,
+			MainRoleType.Seer
+		];
+		startState.CanonicalScenario.ActorSetupCards.Should().Equal(canonicalSetup);
+		setupArtifact.Version.Should().Be(8);
 		config.ActorSetupCards.Version.Should().Be(1);
-		config.ActorSetupCards.PrintedRoles.Should().Equal(
-			scenario.ToCanonical().ActorSetupCards);
+		config.ActorSetupCards.PrintedRoles.Should().Equal(canonicalSetup);
 		config.ActorSetupCards.Cards.Select(card => card.PrintedRole).Should().Equal(
-			scenario.ToCanonical().ActorSetupCards);
+			canonicalSetup);
 		config.ActorSetupCards.Cards.Select(card => card.Id)
 			.Should().NotContain(Guid.Empty)
 			.And.OnlyHaveUniqueItems();
+		config.ActorSetupCards.Cards.Select(card => card.Id)
+			.Should().NotIntersectWith(
+				setupArtifact.Cards.Select(card => card.Id));
 	}
 
 	[Fact]

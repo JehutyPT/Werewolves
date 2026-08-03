@@ -397,7 +397,7 @@ internal static class ActorBorrowedInstructionFixture
 			setup.CreateResponse(),
 			"Stuttering Judge sleep");
 		var terminal = Advance(listener, fixture.Session, sleep.CreateResponse());
-		if (terminal.Outcome != HookListenerOutcome.Skip)
+		if (terminal.Outcome != HookListenerOutcome.Complete)
 		{
 			throw new InvalidOperationException(
 				"The Actor UI fixture did not finish Stuttering Judge setup.");

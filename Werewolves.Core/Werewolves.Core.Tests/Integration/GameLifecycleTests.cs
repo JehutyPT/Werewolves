@@ -60,6 +60,39 @@ public class GameLifecycleTests : DiagnosticTestBase
         MarkTestCompleted();
     }
 
+	[Fact]
+	public void Actor_IsSelectableAndStartableThroughProductionGameServiceCatalog()
+	{
+		var gameService = new GameLogic.Services.GameService();
+		var metadata = gameService.GetLobbySetupMetadata();
+		var config = new GameSessionConfig(
+			["Alice", "Bob", "Charlie", "Diana", "Eve"],
+			[
+				MainRoleType.Actor,
+				MainRoleType.BigBadWolf,
+				MainRoleType.Seer,
+				MainRoleType.Witch,
+				MainRoleType.Hunter
+			],
+			new ActorSetupCards(
+				[
+					MainRoleType.Cupid,
+					MainRoleType.Defender,
+					MainRoleType.Elder
+				]));
+
+		var actor = metadata.AvailableRoles.Single(role =>
+			role.Role == MainRoleType.Actor);
+		var start = gameService.StartNewGame(config);
+
+		actor.DisplayName.Should().Be(GameStrings.ActorRoleName);
+		actor.Group.Should().Be(RoleGroup.Villagers);
+		actor.CountConstraint.Should().Be(NumberRangeConstraint.SingleOptional);
+		start.GameGuid.Should().NotBeEmpty();
+
+		MarkTestCompleted();
+	}
+
     /// <summary>
     /// GL-001: StartNewGame with valid roles and players returns StartGameConfirmationInstruction.
     /// </summary>

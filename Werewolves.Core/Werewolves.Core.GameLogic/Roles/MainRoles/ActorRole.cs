@@ -51,17 +51,14 @@ internal sealed class ActorRole : NightRoleHookListener<ActorRoleState>
 		if (GetCurrentListenerState(session) == null)
 		{
 			session.TryExpireActorBorrowedRolePowerActivation();
-			if (session.GetModeratorRemainingActorSetupCards().Count == 0)
-			{
-				return HookListenerActionResult.Skip();
-			}
 			if (GameSessionQueries.IsVillagerRolePowerSuppressionActive(session))
 			{
 				return HookListenerActionResult.Skip();
 			}
 
 			var committedHolder = GetAliveRolePlayers(session)?.SingleOrDefault();
-			if (committedHolder != null &&
+			if (session.GetModeratorRemainingActorSetupCards().Count > 0 &&
+			    committedHolder != null &&
 			    !IsSetupCardSelectionAvailable(session, committedHolder))
 			{
 				return HookListenerActionResult.Skip();
@@ -216,7 +213,10 @@ internal sealed class ActorRole : NightRoleHookListener<ActorRoleState>
 		CreateStage(
 			GameHook.NightMainActionLoop,
 			ActorRoleState.Awake,
-			ActorRoleState.AwaitingSetupCardChoice,
+			[
+				ActorRoleState.AwaitingSetupCardChoice,
+				ActorRoleState.ReadyToSleep
+			],
 			HandleNightPowerUse_AndId),
 		CreateStage(
 			GameHook.NightMainActionLoop,
@@ -261,7 +261,8 @@ internal sealed class ActorRole : NightRoleHookListener<ActorRoleState>
 		ModeratorResponse input)
 	{
 		var holder = GetActor(session);
-		if (!IsSetupCardSelectionAvailable(session, holder))
+		if (session.GetModeratorRemainingActorSetupCards().Count == 0 ||
+		    !IsSetupCardSelectionAvailable(session, holder))
 		{
 			return PrepareSleepInstruction(session);
 		}

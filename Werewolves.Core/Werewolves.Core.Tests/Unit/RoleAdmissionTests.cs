@@ -138,7 +138,7 @@ public class RoleAdmissionTests
 	}
 
 	[Fact]
-	public void SupportedRoleCatalog_AdmitsTwentyFiveActiveRolesAndThreePassiveRoles()
+	public void SupportedRoleCatalog_AdmitsTwentySixActiveRolesAndThreePassiveRoles()
 	{
 		var catalog = SupportedRoleCatalog.Admissions;
 
@@ -169,6 +169,7 @@ public class RoleAdmissionTests
 			MainRoleType.KnightWithRustySword,
 			MainRoleType.Fox,
 			MainRoleType.Elder,
+			MainRoleType.Actor,
 			MainRoleType.SimpleVillager,
 			MainRoleType.VillagerVillager,
 			MainRoleType.Angel
@@ -200,7 +201,8 @@ public class RoleAdmissionTests
 			         MainRoleType.BearTamer,
 			         MainRoleType.KnightWithRustySword,
 			         MainRoleType.Fox,
-			         MainRoleType.Elder
+			         MainRoleType.Elder,
+			         MainRoleType.Actor
 		         })
 		{
 			var listenerId = ListenerIdentifier.Listener(activeRole);

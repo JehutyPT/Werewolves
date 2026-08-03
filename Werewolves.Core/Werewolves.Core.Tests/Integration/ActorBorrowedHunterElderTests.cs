@@ -35,7 +35,7 @@ public sealed class ActorBorrowedHunterElderTests
 	[Fact]
 	public void BorrowedElder_FirstCollectiveAttackResistsSilentlyAndContinuesWithoutSourceLeak()
 	{
-		var fixture = CreateElderActorSession();
+		var fixture = CreateElderActorSession(preActivate: false);
 		var service = new GameService();
 		var gameId = service.RehydrateSession(fixture.Session.Serialize());
 		var gameStart = service.GetCurrentInstruction(gameId)
@@ -47,10 +47,12 @@ public sealed class ActorBorrowedHunterElderTests
 			.BeOfType<ConfirmationInstruction>().Subject;
 		nightStart.Semantic.Should().Be(
 			ModeratorInstructionSemantic.StartNight);
-		var werewolfObservation = service.ProcessInstruction(
+		var werewolfObservation = AdvanceActorElderSetup(
+				service,
 				gameId,
-				nightStart.CreateResponse())
-			.ModeratorInstruction.Should()
+				nightStart,
+				fixture.ActorId)
+			.Should()
 			.BeOfType<SelectPlayersInstruction>().Subject;
 		werewolfObservation.Semantic.Should().Be(
 			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
@@ -148,10 +150,12 @@ public sealed class ActorBorrowedHunterElderTests
 			.BeOfType<ConfirmationInstruction>().Subject;
 		nightStart.Semantic.Should().Be(
 			ModeratorInstructionSemantic.StartNight);
-		var werewolfObservation = service.ProcessInstruction(
+		var werewolfObservation = AdvanceActorElderSetup(
+				service,
 				gameId,
-				nightStart.CreateResponse())
-			.ModeratorInstruction.Should()
+				nightStart,
+				fixture.ActorId)
+			.Should()
 			.BeOfType<SelectPlayersInstruction>().Subject;
 		werewolfObservation.Semantic.Should().Be(
 			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
@@ -294,10 +298,12 @@ public sealed class ActorBorrowedHunterElderTests
 			.BeOfType<ConfirmationInstruction>().Subject;
 		nightStart.Semantic.Should().Be(
 			ModeratorInstructionSemantic.StartNight);
-		var werewolfObservation = service.ProcessInstruction(
+		var werewolfObservation = AdvanceActorElderSetup(
+				service,
 				gameId,
-				nightStart.CreateResponse())
-			.ModeratorInstruction.Should()
+				nightStart,
+				fixture.ActorId)
+			.Should()
 			.BeOfType<SelectPlayersInstruction>().Subject;
 		werewolfObservation.Semantic.Should().Be(
 			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
@@ -661,10 +667,12 @@ public sealed class ActorBorrowedHunterElderTests
 			.BeOfType<ConfirmationInstruction>().Subject;
 		nightStart.Semantic.Should().Be(
 			ModeratorInstructionSemantic.StartNight);
-		var werewolfWake = service.ProcessInstruction(
+		var werewolfWake = AdvanceActorElderSetup(
+				service,
 				gameId,
-				nightStart.CreateResponse())
-			.ModeratorInstruction.Should()
+				nightStart,
+				fixture.ActorId)
+			.Should()
 			.BeOfType<ConfirmationInstruction>().Subject;
 		werewolfWake.Semantic.Should().Be(
 			ModeratorInstructionSemantic.WakeRole);
@@ -1099,10 +1107,12 @@ public sealed class ActorBorrowedHunterElderTests
 				gameStart.CreateResponse())
 			.ModeratorInstruction.Should()
 			.BeOfType<ConfirmationInstruction>().Subject;
-		var defenderWake = service.ProcessInstruction(
+		var defenderWake = AdvanceActorElderSetup(
+				service,
 				gameId,
-				nightStart.CreateResponse())
-			.ModeratorInstruction.Should()
+				nightStart,
+				fixture.ActorId)
+			.Should()
 			.BeOfType<ConfirmationInstruction>().Subject;
 		defenderWake.Semantic.Should().Be(
 			ModeratorInstructionSemantic.WakeRole);
@@ -1976,6 +1986,45 @@ public sealed class ActorBorrowedHunterElderTests
 			.And.NotContain(StatusEffectTypes.ElderProtectionLost.ToString());
 	}
 
+	private static ModeratorInstruction AdvanceActorElderSetup(
+		GameService service,
+		Guid gameId,
+		ConfirmationInstruction nightStart,
+		Guid actorId)
+	{
+		var actorWake = service.ProcessInstruction(
+				gameId,
+				nightStart.CreateResponse())
+			.ModeratorInstruction.Should()
+			.BeOfType<ConfirmationInstruction>().Subject;
+		actorWake.Semantic.Should().Be(ModeratorInstructionSemantic.WakeRole);
+		actorWake.AffectedPlayerIds.Should().Equal(actorId);
+		var actorChoice = service.ProcessInstruction(
+				gameId,
+				actorWake.CreateResponse())
+			.ModeratorInstruction.Should()
+			.BeOfType<SelectOptionsInstruction>().Subject;
+		actorChoice.Semantic.Should().Be(
+			ModeratorInstructionSemantic.ChooseActorSetupCard);
+		actorChoice.AffectedPlayerIds.Should().Equal(actorId);
+		actorChoice.Options.Select(option => option.Id).Should().Contain(
+			ElderCard.Id.ToString("D"));
+		var actorSleep = service.ProcessInstruction(
+				gameId,
+				actorChoice.CreateResponse(ElderCard.Id.ToString("D")))
+			.ModeratorInstruction.Should()
+			.BeOfType<ConfirmationInstruction>().Subject;
+		actorSleep.Semantic.Should().Be(
+			ModeratorInstructionSemantic.PutRoleToSleep);
+		actorSleep.AffectedPlayerIds.Should().Equal(actorId);
+		var result = service.ProcessInstruction(
+			gameId,
+			actorSleep.CreateResponse());
+		result.IsSuccess.Should().BeTrue();
+		result.ModeratorInstruction.Should().NotBeNull();
+		return result.ModeratorInstruction!;
+	}
+
 	private static ElderSuppressionFixture
 		CreateActiveElderActorVoteSuppressionSession()
 	{
@@ -2067,7 +2116,7 @@ public sealed class ActorBorrowedHunterElderTests
 			activation!.ActivationId);
 	}
 
-	private static ElderFixture CreateElderActorSession()
+	private static ElderFixture CreateElderActorSession(bool preActivate = true)
 	{
 		var setup = new ActorSetupCards(
 			version: 8,
@@ -2114,10 +2163,13 @@ public sealed class ActorBorrowedHunterElderTests
 			actorId,
 			actorCard.Card.Id).Should().BeTrue();
 		session.IdentifyRole([actorId], MainRoleType.Actor);
-		session.TrySpendActorSetupCard(
-			actorId,
-			ElderCard.Id,
-			out _).Should().BeTrue();
+		if (preActivate)
+		{
+			session.TrySpendActorSetupCard(
+				actorId,
+				ElderCard.Id,
+				out _).Should().BeTrue();
+		}
 		session.SetPendingModeratorInstruction(FlowKey, start);
 		session.CaptureRecoveryBoundary(FlowKey);
 		return new ElderFixture(session, actorId, werewolfId);
@@ -2176,10 +2228,6 @@ public sealed class ActorBorrowedHunterElderTests
 		session.IdentifyRole(
 			[wolfFatherId],
 			MainRoleType.AccursedWolfFather);
-		session.TrySpendActorSetupCard(
-			actorId,
-			ElderCard.Id,
-			out _).Should().BeTrue();
 		session.PerformNightAction(NightActionType.DefenderProtect, actorId);
 		session.SetPendingModeratorInstruction(FlowKey, start);
 		session.CaptureRecoveryBoundary(FlowKey);
@@ -2250,10 +2298,6 @@ public sealed class ActorBorrowedHunterElderTests
 			[wolfFatherId],
 			MainRoleType.AccursedWolfFather);
 		session.IdentifyRole([witchId], MainRoleType.Witch);
-		session.TrySpendActorSetupCard(
-			actorId,
-			ElderCard.Id,
-			out _).Should().BeTrue();
 		session.SetPendingModeratorInstruction(FlowKey, start);
 		session.CaptureRecoveryBoundary(FlowKey);
 		return new ElderWitchRestorationFixture(
@@ -2340,10 +2384,6 @@ public sealed class ActorBorrowedHunterElderTests
 		session.TransitionMainPhase(GamePhase.Dawn);
 		session.TransitionMainPhase(GamePhase.Day);
 		session.TransitionMainPhase(GamePhase.Night);
-		session.TrySpendActorSetupCard(
-			actorId,
-			ElderCard.Id,
-			out _).Should().BeTrue();
 		session.PerformNightAction(
 			NightActionType.DefenderProtect,
 			collectiveTargetId);
@@ -2410,10 +2450,6 @@ public sealed class ActorBorrowedHunterElderTests
 			actorCard.Card.Id).Should().BeTrue();
 		session.IdentifyRole([actorId], MainRoleType.Actor);
 		session.IdentifyRole([defenderId], MainRoleType.Defender);
-		session.TrySpendActorSetupCard(
-			actorId,
-			ElderCard.Id,
-			out _).Should().BeTrue();
 		session.SetPendingModeratorInstruction(FlowKey, start);
 		session.CaptureRecoveryBoundary(FlowKey);
 		return new ElderDefenderFixture(

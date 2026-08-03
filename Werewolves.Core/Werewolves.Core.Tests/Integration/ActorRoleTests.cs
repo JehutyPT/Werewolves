@@ -643,6 +643,40 @@ public sealed class ActorRoleTests
 	}
 
 	[Fact]
+	public void KnownEmptyHolder_OmitsEntireCallWithoutAvailabilityEvaluation()
+	{
+		var (session, start, actorId) = CreateActorSession(holderKnown: true);
+		session.EliminatePlayer(actorId, EliminationReason.EventElimination);
+		session.GetPlayerState(actorId).Health.Should().Be(PlayerHealth.Dead);
+		session.GetPlayerState(actorId).ModeratorKnownRole.Should()
+			.Be(MainRoleType.Actor);
+		session.GetPlayers().Where(player =>
+			player.State.Health == PlayerHealth.Alive &&
+			player.State.CurrentRole == MainRoleType.Actor).Should().BeEmpty();
+		var policy = new RecordingPolicy(RolePowerAvailabilityResult.Allowed);
+		IGameHookListener listener = new ActorRole(
+			new RolePowerAvailabilityGateway(policy));
+		var historyCountBeforeOpening = session.GameHistoryLog.Count();
+		var identificationCountBeforeOpening = session.GameHistoryLog
+			.OfType<RoleIdentificationLogEntry>().Count();
+
+		var result = Advance(listener, session, start.CreateResponse());
+
+		result.Outcome.Should().Be(HookListenerOutcome.Skip);
+		result.Instruction.Should().BeNull();
+		policy.ObservedAttempts.Should().BeEmpty();
+		session.GetModeratorRemainingActorSetupCards().Should().HaveCount(3);
+		session.GetModeratorSpentActorSetupCards().Should().BeEmpty();
+		session.GetModeratorActiveActorBorrowedRolePowerActivation().Should()
+			.BeNull();
+		session.GameHistoryLog.OfType<ActorSetupCardSpendCommittedLogEntry>()
+			.Should().BeEmpty();
+		session.GameHistoryLog.OfType<RoleIdentificationLogEntry>().Should()
+			.HaveCount(identificationCountBeforeOpening);
+		session.GameHistoryLog.Should().HaveCount(historyCountBeforeOpening);
+	}
+
+	[Fact]
 	public void NextOpening_ExpiresPreviousActivationBeforeWakeAndASecondSpendUsesFreshLineage()
 	{
 		var (session, start, actorId) = CreateActorSession(holderKnown: true);
@@ -700,9 +734,9 @@ public sealed class ActorRoleTests
 	}
 
 	[Fact]
-	public void OpeningWithKnownEmptyInventory_ExpiresActivationAndSkipsAllPublicInteraction()
+	public void OpeningWithKnownEmptyInventory_ExpiresActivationWakesAndSleepsWithoutOfferingAChoice()
 	{
-		var (session, start, _) = CreateActorSession(holderKnown: true);
+		var (session, start, actorId) = CreateActorSession(holderKnown: true);
 		IGameHookListener listener = CreateActorRole();
 		PerformSpendOpening(listener, session, start, SeerCard.Id);
 		PerformSpendOpening(listener, session, start, CupidCard.Id);
@@ -710,10 +744,19 @@ public sealed class ActorRoleTests
 		session.GetModeratorActiveActorBorrowedRolePowerActivation().Should()
 			.NotBeNull();
 
-		var result = Advance(listener, session, start.CreateResponse());
+		var wake = Advance(listener, session, start.CreateResponse()).Instruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var sleep = Advance(listener, session, wake.CreateResponse()).Instruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
 
-		result.Outcome.Should().Be(HookListenerOutcome.Skip);
-		result.Instruction.Should().BeNull();
+		wake.Semantic.Should().Be(ModeratorInstructionSemantic.WakeRole);
+		wake.PublicAnnouncement.Should().Be(
+			GameStrings.RoleWakesUp.Format(GameStrings.ActorRoleName));
+		wake.AffectedPlayerIds.Should().Equal(actorId);
+		sleep.Semantic.Should().Be(ModeratorInstructionSemantic.PutRoleToSleep);
+		sleep.PublicAnnouncement.Should().Be(
+			GameStrings.RoleGoesToSleepSingle.Format(GameStrings.ActorRoleName));
+		sleep.AffectedPlayerIds.Should().Equal(actorId);
 		session.GetModeratorRemainingActorSetupCards().Should().BeEmpty();
 		session.GetModeratorSpentActorSetupCards().Should().HaveCount(3);
 		session.GetModeratorActiveActorBorrowedRolePowerActivation().Should()
@@ -766,12 +809,9 @@ public sealed class ActorRoleTests
 	}
 
 	[Fact]
-	public void SemanticAdmission_UsesActorFactoryWithoutPublishingActorInSupportedCatalog()
+	public void ProductionAdmission_UsesActorFactoryAndPublishesActorInSupportedCatalog()
 	{
-		var catalog = new RoleAdmissionCatalog(
-		[
-			RoleAdmission.Active(MainRoleType.Actor, CreateActorRole)
-		]);
+		var catalog = SupportedRoleCatalog.Admissions;
 		var actorListenerId = ListenerIdentifier.Listener(MainRoleType.Actor);
 
 		catalog.GetAdmission(actorListenerId).Should()
@@ -779,7 +819,7 @@ public sealed class ActorRoleTests
 		catalog.TryGetListenerFactory(actorListenerId, out var factory).Should()
 			.BeTrue();
 		factory!().Should().BeOfType<ActorRole>();
-		SupportedRoleCatalog.IsSupported(MainRoleType.Actor).Should().BeFalse();
+		SupportedRoleCatalog.IsSupported(MainRoleType.Actor).Should().BeTrue();
 		var nightOrder = GameFlowManager.HookListeners[GameHook.NightMainActionLoop];
 		nightOrder.IndexOf(ListenerIdentifier.Listener(MainRoleType.Thief)).Should()
 			.BeLessThan(nightOrder.IndexOf(actorListenerId));

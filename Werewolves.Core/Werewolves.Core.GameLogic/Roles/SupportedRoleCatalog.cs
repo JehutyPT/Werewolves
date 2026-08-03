@@ -115,6 +115,10 @@ public static class SupportedRoleCatalog
 							MainRoleType.Elder,
 							() => new ElderRole(
 								rolePowerAvailabilityGateway)),
+						RoleAdmission.Active(
+							MainRoleType.Actor,
+							() => new ActorRole(
+								rolePowerAvailabilityGateway)),
 					RoleAdmission.Passive(MainRoleType.SimpleVillager),
 				RoleAdmission.Passive(MainRoleType.VillagerVillager),
 				RoleAdmission.Passive(MainRoleType.Angel)

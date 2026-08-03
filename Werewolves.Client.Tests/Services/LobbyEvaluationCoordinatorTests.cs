@@ -674,14 +674,9 @@ public class LobbyEvaluationCoordinatorTests
 	}
 
 	[Fact]
-	public async Task DegenerateScreeningOnly_ScreeningPassedFallbackIsNonblockingAndNotPersisted()
+	public async Task ActorDegenerateScreeningOnly_ScreeningPassedFallbackIsSessionLocalAndNotPersisted()
 	{
-		var lobby = CreateLobby(
-			MainRoleType.SimpleWerewolf,
-			MainRoleType.SimpleVillager,
-			MainRoleType.SimpleVillager,
-			MainRoleType.SimpleVillager,
-			MainRoleType.SimpleVillager);
+		var lobby = CreateAcceptedActorLobby();
 		var local = new RecordingLocalStore(bytes: null);
 		var screeningPassed = new ScreeningPassedLobbyEvaluation();
 		var evaluator = new RecordingEvaluator(screeningPassed);
@@ -696,6 +691,12 @@ public class LobbyEvaluationCoordinatorTests
 		await WaitForStateAsync(coordinator, LobbyEvaluationStateKind.ScreeningPassed);
 
 		coordinator.State.Probability.Should().BeNull();
+		coordinator.State.Identity!.Profile.Should().Be(
+			new SimulatorProfileIdentity("safety-screening", "29"));
+		coordinator.State.Identity.Scenario.ActorSetupCards.Should().Equal(
+			MainRoleType.Cupid,
+			MainRoleType.Defender,
+			MainRoleType.Elder);
 		coordinator.TryRequestLobbyExit().Should().BeTrue();
 		local.Writes.Should().BeEmpty();
 		evaluator.Capabilities.Should().Equal(SimulatorCapability.SafetyScreening);
@@ -1116,6 +1117,55 @@ public class LobbyEvaluationCoordinatorTests
 	}
 
 	[Fact]
+	public async Task EquivalentActorSetupReplacement_ReusesExactCurrentLocalDegenerateRecord()
+	{
+		var lobby = CreateAcceptedActorLobby();
+		var originalSetup = lobby.AcceptedActorSetupCards;
+		var originalScenario = lobby.CreateSimulationScenario();
+		var identity = new SimulationCompatibilityIdentity(
+			originalScenario.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+		var exactLocal = new DegenerateTerminalCacheRecord(
+			identity,
+			AggregateRows(1_000, 750, 250),
+			AggregateCells(1_000, 750, 250, turnOneOnly: true));
+		var manager = new GameClientManager();
+
+		manager.TryReplaceStagedActorSetupCards(
+			lobby,
+			originalSetup.Version,
+			[
+				MainRoleType.Elder,
+				MainRoleType.Defender,
+				MainRoleType.Cupid
+			]).Should().BeTrue();
+		var replacementSetup = lobby.AcceptedActorSetupCards;
+		var replacementScenario = lobby.CreateSimulationScenario();
+		var evaluator = new RecordingEvaluator(new CouldNotEvaluateLobbyEvaluation());
+		var local = new RecordingLocalStore(DocumentBytes(exactLocal));
+
+		using var coordinator = new LobbyEvaluationCoordinator(
+			lobby,
+			local,
+			evaluator,
+			SafetyScreeningSettings,
+			TimeProvider.System);
+		await WaitForStateAsync(coordinator, LobbyEvaluationStateKind.Degenerate);
+
+		replacementSetup.Version.Should().BeGreaterThan(originalSetup.Version);
+		replacementSetup.PrintedRoles.Should().Equal(
+			MainRoleType.Elder,
+			MainRoleType.Defender,
+			MainRoleType.Cupid);
+		replacementSetup.Cards.Select(card => card.Id).Should().NotIntersectWith(
+			originalSetup.Cards.Select(card => card.Id));
+		replacementScenario.ToCanonical().Should().Be(originalScenario.ToCanonical());
+		coordinator.State.Identity.Should().Be(identity);
+		evaluator.CallCount.Should().Be(0);
+		local.Writes.Should().BeEmpty();
+	}
+
+	[Fact]
 	public async Task MismatchedLocalRecord_IsAMissAndFallsBackUnderCurrentSafetyIdentity()
 	{
 		var lobby = CreateLobby(
@@ -1154,6 +1204,7 @@ public class LobbyEvaluationCoordinatorTests
 	}
 
 	[Theory]
+	[InlineData("safety-screening@28")]
 	[InlineData("safety-screening@27")]
 	[InlineData("safety-screening@21")]
 	[InlineData("core-simulator@1")]
@@ -1310,6 +1361,28 @@ public class LobbyEvaluationCoordinatorTests
 		{
 			lobby.IncrementRole(role);
 		}
+
+		return lobby;
+	}
+
+	private static LobbySetupState CreateAcceptedActorLobby()
+	{
+		var lobby = CreateLobby(
+			MainRoleType.Actor,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager);
+		var manager = new GameClientManager();
+		manager.TryEnsureStagedRoleLockIn(lobby).Should().BeTrue();
+		manager.TryReplaceStagedActorSetupCards(
+			lobby,
+			expectedCurrentVersion: 0,
+			[
+				MainRoleType.Cupid,
+				MainRoleType.Defender,
+				MainRoleType.Elder
+			]).Should().BeTrue();
 
 		return lobby;
 	}

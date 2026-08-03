@@ -3,6 +3,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Werewolves.Core.GameLogic.Simulation;
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Simulation;
 using Xunit;
 
@@ -11,10 +12,10 @@ namespace Werewolves.Core.Tests.Unit;
 public class TerminalLobbyCacheTests
 {
 	private const string AlreadyGolden =
-		"{\"schema\":\"terminal-lobby-cache\",\"version\":1,\"record\":{\"identity\":\"profile=safety-screening@28|players=5|roles=[SimpleVillager=2,SimpleWerewolf=3]|actor=[]|rules=[]\",\"kind\":\"alreadyDecided\",\"result\":{\"kind\":0,\"factions\":[1]},\"reason\":2}}";
+		"{\"schema\":\"terminal-lobby-cache\",\"version\":1,\"record\":{\"identity\":\"profile=safety-screening@29|players=5|roles=[Actor=1,SimpleVillager=1,SimpleWerewolf=3]|actor=[Cupid,Defender,Elder]|rules=[]\",\"kind\":\"alreadyDecided\",\"result\":{\"kind\":0,\"factions\":[1]},\"reason\":2}}";
 
 	private const string DegenerateGolden =
-		"{\"schema\":\"terminal-lobby-cache\",\"version\":1,\"record\":{\"identity\":\"profile=safety-screening@28|players=5|roles=[SimpleVillager=4,SimpleWerewolf=1]|actor=[]|rules=[]\",\"kind\":\"degenerate\",\"attempted\":1000,\"completed\":1000,\"incomplete\":0,\"results\":[{\"result\":{\"kind\":0,\"factions\":[0]},\"numerator\":750,\"denominator\":1000},{\"result\":{\"kind\":0,\"factions\":[1]},\"numerator\":250,\"denominator\":1000},{\"result\":{\"kind\":2,\"factions\":[]},\"numerator\":0,\"denominator\":1000}],\"cells\":[{\"result\":{\"kind\":0,\"factions\":[0]},\"turn\":1,\"window\":0,\"numerator\":750,\"denominator\":1000},{\"result\":{\"kind\":0,\"factions\":[1]},\"turn\":1,\"window\":1,\"numerator\":250,\"denominator\":1000}],\"inclusiveEndingTurnCutoff\":1}}";
+		"{\"schema\":\"terminal-lobby-cache\",\"version\":1,\"record\":{\"identity\":\"profile=safety-screening@29|players=5|roles=[Actor=1,SimpleVillager=3,SimpleWerewolf=1]|actor=[Cupid,Defender,Elder]|rules=[]\",\"kind\":\"degenerate\",\"attempted\":1000,\"completed\":1000,\"incomplete\":0,\"results\":[{\"result\":{\"kind\":0,\"factions\":[0]},\"numerator\":750,\"denominator\":1000},{\"result\":{\"kind\":0,\"factions\":[1]},\"numerator\":250,\"denominator\":1000},{\"result\":{\"kind\":2,\"factions\":[]},\"numerator\":0,\"denominator\":1000}],\"cells\":[{\"result\":{\"kind\":0,\"factions\":[0]},\"turn\":1,\"window\":0,\"numerator\":750,\"denominator\":1000},{\"result\":{\"kind\":0,\"factions\":[1]},\"turn\":1,\"window\":1,\"numerator\":250,\"denominator\":1000}],\"inclusiveEndingTurnCutoff\":1}}";
 
 	private const string ProbabilityGolden =
 		"{\"schema\":\"terminal-lobby-cache\",\"version\":1,\"record\":{\"identity\":\"profile=full-probability@4|players=6|roles=[SimpleVillager=5,SimpleWerewolf=1]|actor=[]|rules=[]\",\"kind\":\"probability\",\"attempted\":10000,\"completed\":10000,\"incomplete\":0,\"results\":[{\"result\":{\"kind\":0,\"factions\":[0]},\"numerator\":7000,\"denominator\":10000},{\"result\":{\"kind\":0,\"factions\":[1]},\"numerator\":3000,\"denominator\":10000},{\"result\":{\"kind\":2,\"factions\":[]},\"numerator\":0,\"denominator\":10000}],\"cells\":[{\"result\":{\"kind\":0,\"factions\":[0]},\"turn\":1,\"window\":0,\"numerator\":7000,\"denominator\":10000},{\"result\":{\"kind\":0,\"factions\":[1]},\"turn\":2,\"window\":1,\"numerator\":3000,\"denominator\":10000}]}}";
@@ -25,15 +26,18 @@ public class TerminalLobbyCacheTests
 		var scenario = new SimulationScenario(
 			5,
 			[
-				MainRoleType.SimpleVillager,
+				MainRoleType.Actor,
 				MainRoleType.SimpleVillager,
 				MainRoleType.SimpleWerewolf,
 				MainRoleType.SimpleWerewolf,
 				MainRoleType.SimpleWerewolf
-			]);
+			],
+			new ActorSetupCards(
+				[MainRoleType.Cupid, MainRoleType.Defender, MainRoleType.Elder]));
 		var identity = new SimulationCompatibilityIdentity(
 			scenario.ToCanonical(),
 			SimulatorCapability.SafetyScreening.Identity);
+		identity.Should().Be(AlreadyDecidedIdentity());
 		var classification = SimulationScenarioClassifier.Classify(
 			scenario,
 			SimulatorCapability.SafetyScreening);
@@ -340,8 +344,8 @@ public class TerminalLobbyCacheTests
 		yield return [AlreadyGolden.Replace("\"reason\":2", "\"reason\":99", StringComparison.Ordinal)];
 		yield return [AlreadyGolden.Replace("alreadyDecided", "unknownKind", StringComparison.Ordinal)];
 		yield return [AlreadyGolden.Replace("players=5", "players=05", StringComparison.Ordinal)];
-		yield return [AlreadyGolden.Replace("safety-screening@28", "safety screening@28", StringComparison.Ordinal)];
-		yield return [AlreadyGolden.Replace("safety-screening@28", "safety-screening@27", StringComparison.Ordinal)];
+		yield return [AlreadyGolden.Replace("safety-screening@29", "safety screening@29", StringComparison.Ordinal)];
+		yield return [AlreadyGolden.Replace("safety-screening@29", "safety-screening@28", StringComparison.Ordinal)];
 		yield return [AlreadyGolden.Replace("\"schema\":\"terminal-lobby-cache\",\"version\":1", "\"version\":1,\"schema\":\"terminal-lobby-cache\"", StringComparison.Ordinal)];
 	}
 
@@ -463,8 +467,8 @@ public class TerminalLobbyCacheTests
 		var reversed = "{\"schema\":\"terminal-lobby-cache\",\"version\":1,\"records\":["
 			+ RecordJson(DegenerateGolden) + "," + RecordJson(ProbabilityGolden) + "]}";
 		var stale = canonical.Replace(
+			"safety-screening@29",
 			"safety-screening@28",
-			"safety-screening@27",
 			StringComparison.Ordinal);
 		Action duplicateConstructor = () => TerminalLobbyCache.CreateDocument(
 			[DegenerateRecord(), DegenerateRecord()]);
@@ -490,7 +494,7 @@ public class TerminalLobbyCacheTests
 
 		read.Rejection.Should().BeNull();
 		read.Document!.Records.Select(record => record.CompatibilityIdentity.Profile.ToString())
-			.Should().Equal("full-probability@4", "safety-screening@28", "safety-screening@28");
+			.Should().Equal("full-probability@4", "safety-screening@29", "safety-screening@29");
 	}
 
 	[Fact]
@@ -498,7 +502,7 @@ public class TerminalLobbyCacheTests
 	{
 		var record = RecordJson(ProbabilityGolden.Replace(
 			"full-probability@4",
-			"safety-screening@28",
+			"safety-screening@29",
 			StringComparison.Ordinal));
 		var payload = "{\"schema\":\"terminal-lobby-cache\",\"version\":1,\"records\":["
 			+ record + "]}";
@@ -507,10 +511,10 @@ public class TerminalLobbyCacheTests
 	}
 
 	[Theory]
-	[InlineData(false, "safety-screening@28", "safety-screening@27")]
+	[InlineData(false, "safety-screening@29", "safety-screening@28")]
 	[InlineData(true, "full-probability@4", "full-probability@3")]
-	[InlineData(false, "safety-screening@28", "foreign-simulator@1")]
-	[InlineData(false, "safety-screening@28", "core-simulator@1")]
+	[InlineData(false, "safety-screening@29", "foreign-simulator@1")]
+	[InlineData(false, "safety-screening@29", "core-simulator@1")]
 	public void ReadDocument_RejectsSchemaOneRecordsFromNonCurrentProducersAtomically(
 		bool probabilityRecord,
 		string currentProducer,
@@ -534,7 +538,7 @@ public class TerminalLobbyCacheTests
 	public void Read_RejectsObsoleteCoreSimulatorProducer()
 	{
 		var obsolete = AlreadyGolden.Replace(
-			"safety-screening@28",
+			"safety-screening@29",
 			"core-simulator@1",
 			StringComparison.Ordinal);
 		var document = "{\"schema\":\"terminal-lobby-cache\",\"version\":1,\"records\":["
@@ -547,16 +551,85 @@ public class TerminalLobbyCacheTests
 	}
 
 	[Fact]
-	public void CompatibilitySelection_RequiresTheCompleteActiveIdentity()
+	public void CompatibilitySelection_ReusesOnlyEquivalentActorReplacementUnderCompleteActiveIdentity()
 	{
 		var document = TerminalLobbyCache.CreateDocument([DegenerateRecord()]);
-		var stale = new SimulationCompatibilityIdentity(
-			AggregateIdentity().Scenario,
-			new SimulatorProfileIdentity("safety-screening", "21"));
+		var originalSetup = new ActorSetupCards(
+			version: 7,
+			[
+				new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.Cupid),
+				new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.Defender),
+				new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.Elder)
+			]);
+		var replacementSetup = new ActorSetupCards(
+			version: 8,
+			[
+				new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.Elder),
+				new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.Defender),
+				new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.Cupid)
+			]);
+		MainRoleType[] roles =
+		[
+			MainRoleType.Actor,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleWerewolf
+		];
+		var original = new SimulationCompatibilityIdentity(
+			new SimulationScenario(5, roles, originalSetup).ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+		var equivalentReplacement = new SimulationCompatibilityIdentity(
+			new SimulationScenario(5, roles, replacementSetup).ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+		var differentMembership = new SimulationCompatibilityIdentity(
+			new SimulationScenario(
+				5,
+				roles,
+				new ActorSetupCards(
+					[MainRoleType.Cupid, MainRoleType.Defender, MainRoleType.Fox]))
+				.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+		var differentScenario = new SimulationCompatibilityIdentity(
+			new SimulationScenario(
+				5,
+				[
+					MainRoleType.Actor,
+					MainRoleType.WildChild,
+					MainRoleType.SimpleVillager,
+					MainRoleType.SimpleVillager,
+					MainRoleType.SimpleWerewolf
+				],
+				replacementSetup).ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+		var priorSafety = new SimulationCompatibilityIdentity(
+			original.Scenario,
+			new SimulatorProfileIdentity("safety-screening", "28"));
+		var foreign = new SimulationCompatibilityIdentity(
+			original.Scenario,
+			new SimulatorProfileIdentity("foreign-simulator", "1"));
+		var obsoleteCore = new SimulationCompatibilityIdentity(
+			original.Scenario,
+			new SimulatorProfileIdentity("core-simulator", "1"));
 
-		TerminalLobbyCache.TryGet(document, AggregateIdentity(), out _).Should().BeTrue();
-		TerminalLobbyCache.TryGet(document, stale, out _).Should().BeFalse();
-		TerminalLobbyCache.Read(TerminalLobbyCache.Write(DegenerateRecord()), stale).IsUsable.Should().BeFalse();
+		original.Should().Be(AggregateIdentity());
+		equivalentReplacement.Should().Be(original);
+		originalSetup.Version.Should().Be(7);
+		replacementSetup.Version.Should().Be(8);
+		replacementSetup.Cards.Select(card => card.Id).Should().NotIntersectWith(
+			originalSetup.Cards.Select(card => card.Id));
+		TerminalLobbyCache.TryGet(document, equivalentReplacement, out _)
+			.Should().BeTrue();
+		TerminalLobbyCache.TryGet(document, differentMembership, out _)
+			.Should().BeFalse();
+		TerminalLobbyCache.TryGet(document, differentScenario, out _)
+			.Should().BeFalse();
+		TerminalLobbyCache.TryGet(document, priorSafety, out _).Should().BeFalse();
+		TerminalLobbyCache.TryGet(document, foreign, out _).Should().BeFalse();
+		TerminalLobbyCache.TryGet(document, obsoleteCore, out _).Should().BeFalse();
+		TerminalLobbyCache.Read(
+			TerminalLobbyCache.Write(DegenerateRecord()),
+			priorSafety).IsUsable.Should().BeFalse();
 	}
 
 	[Fact]
@@ -635,8 +708,9 @@ public class TerminalLobbyCacheTests
 		int count,
 		bool degenerate)
 	{
-		var sourceIdentity = degenerate ? AggregateIdentity() : ProbabilityIdentity();
-		var identity = CurrentIdentity(sourceIdentity, "full-probability");
+		var identity = degenerate
+			? FullProbabilityDegenerateIdentity()
+			: ProbabilityIdentity();
 		var evidence = Evidence(identity, count, degenerate);
 
 		var record = TerminalLobbyCache.Capture(
@@ -657,8 +731,12 @@ public class TerminalLobbyCacheTests
 		SimulatorProfileIdentity producerProfile,
 		DecisionStrategyIdentity wrongStrategy)
 	{
+		var scenario = producerProfile.Equals(
+			SimulatorCapability.SafetyScreening.Identity)
+			? AggregateIdentity().Scenario
+			: FullProbabilityDegenerateIdentity().Scenario;
 		var identity = new SimulationCompatibilityIdentity(
-			AggregateIdentity().Scenario,
+			scenario,
 			producerProfile);
 		var evidence = Evidence(
 			identity,
@@ -689,7 +767,7 @@ public class TerminalLobbyCacheTests
 		yield return
 		[
 			SimulatorCapability.SafetyScreening.Identity,
-			new DecisionStrategyIdentity("baseline-random", "12-splitmix64")
+			new DecisionStrategyIdentity("baseline-random", "13-splitmix64")
 		];
 	}
 
@@ -848,13 +926,23 @@ public class TerminalLobbyCacheTests
 	}
 
 	private static SimulationCompatibilityIdentity AggregateIdentity() =>
-		Identity(5, 4, 1, SimulatorCapability.SafetyScreening.Identity);
+		ActorIdentity(villagers: 3, werewolves: 1);
 
 	private static SimulationCompatibilityIdentity ProbabilityIdentity() =>
 		Identity(6, 5, 1, SimulatorCapability.FullProbability.Identity);
 
+	private static SimulationCompatibilityIdentity FullProbabilityDegenerateIdentity() =>
+		Identity(5, 4, 1, SimulatorCapability.FullProbability.Identity);
+
 	private static SimulationCompatibilityIdentity AlreadyDecidedIdentity() =>
-		Identity(5, 2, 3, SimulatorCapability.SafetyScreening.Identity);
+		ActorIdentity(villagers: 1, werewolves: 3);
+
+	private static SimulationCompatibilityIdentity ActorIdentity(
+		int villagers,
+		int werewolves) => new(
+		CanonicalSimulationScenario.Parse(
+			$"players=5|roles=[Actor=1,SimpleVillager={villagers},SimpleWerewolf={werewolves}]|actor=[Cupid,Defender,Elder]|rules=[]"),
+		SimulatorCapability.SafetyScreening.Identity);
 
 	private static SimulationCompatibilityIdentity CurrentIdentity(
 		SimulationCompatibilityIdentity sourceIdentity,

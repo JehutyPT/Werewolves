@@ -150,9 +150,10 @@ public sealed class TerminalLobbyEvaluator
 		{
 			return new CouldNotEvaluateLobbyEvaluation();
 		}
+		var screeningAttemptCount = GetScreeningAttemptCount(identity.Scenario);
 
 		if (!TryExecuteBatch(
-			scenario, capability, identity, ScreeningAttemptCount, cancellationToken, out var screening))
+			scenario, capability, identity, screeningAttemptCount, cancellationToken, out var screening))
 		{
 			return new CouldNotEvaluateLobbyEvaluation();
 		}
@@ -162,7 +163,7 @@ public sealed class TerminalLobbyEvaluator
 			screening,
 			identity,
 			simulatorSupport.Profile.HeadlessResponsePolicy.StrategyIdentity,
-			ScreeningAttemptCount))
+			screeningAttemptCount))
 		{
 			return new CouldNotEvaluateLobbyEvaluation();
 		}
@@ -226,6 +227,15 @@ public sealed class TerminalLobbyEvaluator
 		{
 			return new CouldNotEvaluateLobbyEvaluation();
 		}
+	}
+
+	internal static int GetScreeningAttemptCount(
+		CanonicalSimulationScenario scenario)
+	{
+		ArgumentNullException.ThrowIfNull(scenario);
+		return checked(
+			ScreeningAttemptCount *
+			(scenario.ThiefOfferBranchPolicy?.Branches.Count ?? 1));
 	}
 
 	private bool TryExecuteBatch(
