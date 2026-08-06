@@ -1,5 +1,6 @@
 using FluentAssertions;
 using FluentAssertions.Execution;
+using Werewolves.Core.GameLogic.Roles;
 using Werewolves.Core.GameLogic.Simulation;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Models.Simulation;
@@ -14,6 +15,54 @@ public class SimulatorProfileTests
 	{
 		SimulatorCapability.SafetyScreening.Identity.Should().Be(
 			new SimulatorProfileIdentity("safety-screening", "29"));
+	}
+
+	[Fact]
+	public void SupportedRoleCatalogAndSafetyScreeningCapability_ExposeTheSameExact29Roles()
+	{
+		MainRoleType[] expectedRoles =
+		[
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.BigBadWolf,
+			MainRoleType.Seer,
+			MainRoleType.WildChild,
+			MainRoleType.SimpleVillager,
+			MainRoleType.VillagerVillager,
+			MainRoleType.TwoSisters,
+			MainRoleType.ThreeBrothers,
+			MainRoleType.Witch,
+			MainRoleType.Hunter,
+			MainRoleType.LittleGirl,
+			MainRoleType.Defender,
+			MainRoleType.Elder,
+			MainRoleType.StutteringJudge,
+			MainRoleType.Scapegoat,
+			MainRoleType.VillageIdiot,
+			MainRoleType.WolfHound,
+			MainRoleType.AccursedWolfFather,
+			MainRoleType.WhiteWerewolf,
+			MainRoleType.Piper,
+			MainRoleType.BearTamer,
+			MainRoleType.Fox,
+			MainRoleType.KnightWithRustySword,
+			MainRoleType.Cupid,
+			MainRoleType.Thief,
+			MainRoleType.DevotedServant,
+			MainRoleType.Angel,
+			MainRoleType.PrejudicedManipulator,
+			MainRoleType.Actor
+		];
+		var catalogRoles = SupportedRoleCatalog.Roles;
+		var safetyScreeningRoles = SimulatorCapability.SafetyScreening.SupportedRoles;
+
+		using (new AssertionScope())
+		{
+			catalogRoles.Should().HaveCount(29);
+			safetyScreeningRoles.Should().HaveCount(29);
+			catalogRoles.Should().BeEquivalentTo(expectedRoles);
+			safetyScreeningRoles.Should().BeEquivalentTo(expectedRoles);
+			safetyScreeningRoles.Should().BeEquivalentTo(catalogRoles);
+		}
 	}
 
 	[Fact]
@@ -123,36 +172,6 @@ public class SimulatorProfileTests
 			.Be(new DecisionStrategyIdentity("baseline-random", "3-splitmix64"));
 		BaselineRandomDecisionStrategy.SafetyScreeningIdentity.Should()
 			.Be(new DecisionStrategyIdentity("baseline-random", "14-splitmix64"));
-		safety.SupportedRoles.Should().Equal(
-			MainRoleType.SimpleWerewolf,
-			MainRoleType.BigBadWolf,
-			MainRoleType.Seer,
-			MainRoleType.WildChild,
-			MainRoleType.SimpleVillager,
-			MainRoleType.VillagerVillager,
-			MainRoleType.TwoSisters,
-			MainRoleType.ThreeBrothers,
-			MainRoleType.Witch,
-			MainRoleType.Hunter,
-			MainRoleType.LittleGirl,
-			MainRoleType.Defender,
-			MainRoleType.Elder,
-			MainRoleType.StutteringJudge,
-			MainRoleType.Scapegoat,
-			MainRoleType.VillageIdiot,
-			MainRoleType.WolfHound,
-			MainRoleType.AccursedWolfFather,
-			MainRoleType.WhiteWerewolf,
-			MainRoleType.Piper,
-			MainRoleType.BearTamer,
-			MainRoleType.Fox,
-			MainRoleType.KnightWithRustySword,
-			MainRoleType.Cupid,
-			MainRoleType.Thief,
-			MainRoleType.DevotedServant,
-			MainRoleType.Angel,
-			MainRoleType.PrejudicedManipulator,
-			MainRoleType.Actor);
 		probability.SupportedRoles.Should().Equal(
 			MainRoleType.SimpleWerewolf,
 			MainRoleType.Seer,
