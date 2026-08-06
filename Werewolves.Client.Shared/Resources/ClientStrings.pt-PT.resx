@@ -187,6 +187,12 @@
   <data name="LobbyEvaluation_FactionCrossFactionLovers" xml:space="preserve">
     <value>Amantes de facções diferentes</value>
   </data>
+  <data name="LobbyEvaluation_FactionAngel" xml:space="preserve">
+    <value>Anjo</value>
+  </data>
+  <data name="LobbyEvaluation_FactionPrejudicedManipulator" xml:space="preserve">
+    <value>Manipulador</value>
+  </data>
   <data name="LobbyEvaluation_FactionSeparator" xml:space="preserve">
     <value> e </value>
   </data>

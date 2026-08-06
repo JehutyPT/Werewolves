@@ -13,18 +13,28 @@ namespace Werewolves.Client.Tests.Components;
 public class LobbyEvaluationPresentationTests
 {
 	[Fact]
-	public void GameResultName_SharedVictoryComposesEveryLocalizedFactionAsOneOutcome()
+	public void GameResultName_SharedVictoriesComposeNewFactionNamesExactlyOnce()
 	{
 		using var context = new ModeratorComponentTestContext();
-		var result = new SharedVictoryGameResult(
-			[Faction.Villager, Faction.Werewolf, Faction.WhiteWerewolf]);
+		SharedVictoryGameResult[] results =
+		[
+			new([Faction.Villager, Faction.Angel]),
+			new([Faction.Werewolf, Faction.PrejudicedManipulator]),
+			new([Faction.Piper, Faction.Angel, Faction.PrejudicedManipulator])
+		];
 
-		var name = LobbyEvaluationPresentation.GameResultName(result);
+		foreach (var result in results)
+		{
+			var expected = string.Format(
+				CultureInfo.CurrentCulture,
+				ClientStrings.LobbyEvaluation_GameResultSharedFormat,
+				ClientStrings.LobbyEvaluation_GameResultShared,
+				string.Join(
+					ClientStrings.LobbyEvaluation_FactionSeparator,
+					result.Factions.Select(FactionPresentationTestData.Name)));
 
-		name.Should().Contain(ClientStrings.LobbyEvaluation_GameResultShared);
-		name.Should().Contain(ClientStrings.LobbyEvaluation_FactionVillager);
-		name.Should().Contain(ClientStrings.LobbyEvaluation_FactionWerewolf);
-		name.Should().Contain(ClientStrings.LobbyEvaluation_FactionWhiteWerewolf);
+			LobbyEvaluationPresentation.GameResultName(result).Should().Be(expected);
+		}
 	}
 
 	[Fact]
@@ -40,29 +50,30 @@ public class LobbyEvaluationPresentationTests
 		name.Should().NotContain(ClientStrings.LobbyEvaluation_FactionWhiteWerewolf);
 	}
 
-	[Theory]
-	[InlineData(Faction.Villager)]
-	[InlineData(Faction.Werewolf)]
-	[InlineData(Faction.WhiteWerewolf)]
-	[InlineData(Faction.Piper)]
-	[InlineData(Faction.CrossFactionLovers)]
-	public void GameResultName_SingleFactionUsesItsLocalizedFactionName(Faction faction)
+	[Fact]
+	public void GameResultName_SingleFactionUsesLocalizedNameForEveryDeclaredFaction()
 	{
 		using var context = new ModeratorComponentTestContext();
-		var expected = faction switch
-		{
-			Faction.Villager => ClientStrings.LobbyEvaluation_FactionVillager,
-			Faction.Werewolf => ClientStrings.LobbyEvaluation_FactionWerewolf,
-			Faction.WhiteWerewolf =>
-				ClientStrings.LobbyEvaluation_FactionWhiteWerewolf,
-			Faction.Piper => ClientStrings.LobbyEvaluation_FactionPiper,
-			Faction.CrossFactionLovers =>
-				ClientStrings.LobbyEvaluation_FactionCrossFactionLovers,
-			_ => throw new ArgumentOutOfRangeException(nameof(faction))
-		};
+		var declaredFactions = Enum.GetValues<Faction>();
 
-		LobbyEvaluationPresentation.GameResultName(new SingleFactionGameResult(faction))
-			.Should().Be(expected);
+		FactionPresentationTestData.Factions.Should().Equal(declaredFactions);
+		foreach (var faction in declaredFactions)
+		{
+			LobbyEvaluationPresentation.GameResultName(new SingleFactionGameResult(faction))
+				.Should().Be(FactionPresentationTestData.Name(faction));
+		}
+	}
+
+	[Fact]
+	public void GameResultName_UndefinedFactionContinuesToThrow()
+	{
+		using var context = new ModeratorComponentTestContext();
+		var undefinedFaction = (Faction)int.MaxValue;
+
+		var act = () => LobbyEvaluationPresentation.GameResultName(
+			new SingleFactionGameResult(undefinedFaction));
+
+		act.Should().Throw<ArgumentOutOfRangeException>();
 	}
 
 	[Fact]
