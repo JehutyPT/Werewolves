@@ -20,45 +20,22 @@ public class SimulatorProfileTests
 	[Fact]
 	public void SupportedRoleCatalogAndSafetyScreeningCapability_ExposeTheSameExact29Roles()
 	{
-		MainRoleType[] expectedRoles =
-		[
-			MainRoleType.SimpleWerewolf,
-			MainRoleType.BigBadWolf,
-			MainRoleType.Seer,
-			MainRoleType.WildChild,
-			MainRoleType.SimpleVillager,
-			MainRoleType.VillagerVillager,
-			MainRoleType.TwoSisters,
-			MainRoleType.ThreeBrothers,
-			MainRoleType.Witch,
-			MainRoleType.Hunter,
-			MainRoleType.LittleGirl,
-			MainRoleType.Defender,
-			MainRoleType.Elder,
-			MainRoleType.StutteringJudge,
-			MainRoleType.Scapegoat,
-			MainRoleType.VillageIdiot,
-			MainRoleType.WolfHound,
-			MainRoleType.AccursedWolfFather,
-			MainRoleType.WhiteWerewolf,
-			MainRoleType.Piper,
-			MainRoleType.BearTamer,
-			MainRoleType.Fox,
-			MainRoleType.KnightWithRustySword,
-			MainRoleType.Cupid,
-			MainRoleType.Thief,
-			MainRoleType.DevotedServant,
-			MainRoleType.Angel,
-			MainRoleType.PrejudicedManipulator,
-			MainRoleType.Actor
-		];
+		MainRoleType[] mainRoleTypes = Enum.GetValues<MainRoleType>();
+		var expectedRoles = new List<MainRoleType>();
+		foreach (var mainRoleType in mainRoleTypes)
+		{
+			if (mainRoleType != MainRoleType.Gypsy)
+			{
+				expectedRoles.Add(mainRoleType);
+			}
+		}
 		var catalogRoles = SupportedRoleCatalog.Roles;
 		var safetyScreeningRoles = SimulatorCapability.SafetyScreening.SupportedRoles;
 
 		using (new AssertionScope())
 		{
-			catalogRoles.Should().HaveCount(29);
-			safetyScreeningRoles.Should().HaveCount(29);
+			catalogRoles.Should().HaveCount(expectedRoles.Count);
+			safetyScreeningRoles.Should().HaveCount(expectedRoles.Count);
 			catalogRoles.Should().BeEquivalentTo(expectedRoles);
 			safetyScreeningRoles.Should().BeEquivalentTo(expectedRoles);
 			safetyScreeningRoles.Should().BeEquivalentTo(catalogRoles);
