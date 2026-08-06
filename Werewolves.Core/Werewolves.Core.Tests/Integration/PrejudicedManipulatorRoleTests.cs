@@ -172,6 +172,118 @@ public sealed class PrejudicedManipulatorRoleTests
 	}
 
 	[Fact]
+	public void NightOne_UnknownDealPoolHolder_RunsAfterThiefBeforeActor()
+	{
+		var roster = Enumerable.Range(1, 5)
+			.Select(index => new GameSessionPlayerConfig(
+				Guid.NewGuid(),
+				$"Player{index}"))
+			.ToArray();
+		var cards = new[]
+		{
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.Thief),
+			new PhysicalCharacterCard(
+				Guid.NewGuid(),
+				MainRoleType.PrejudicedManipulator),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.Actor),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.SimpleWerewolf),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.SimpleVillager),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.Seer),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.Cupid)
+		};
+		var lockIn = new RoleLockIn(
+			version: 1,
+			playerCount: roster.Length,
+			cards,
+			cards.Take(roster.Length).Select(card => card.Id),
+			cards[5].Id,
+			cards[6].Id);
+		var actorSetupCards = new ActorSetupCards(
+			[
+				MainRoleType.Defender,
+				MainRoleType.Fox,
+				MainRoleType.Witch
+			]);
+		var partition = PublicGroupPartition.Create(
+			roster.Select(player => player.Id),
+			roster.Take(2).Select(player => player.Id),
+			roster.Skip(2).Select(player => player.Id));
+		var service = new GameService();
+		var start = service.StartNewGame(new GameSessionConfig(
+			roster,
+			lockIn,
+			actorSetupCards,
+			partition));
+		var session = service.GetGameStateView(start.GameGuid)
+			.Should().BeOfType<GameSession>().Subject;
+		session.TryRecordPhysicalCharacterCardOwnership(
+			lockIn.Version,
+			roster[0].Id,
+			cards[0].Id).Should().BeTrue();
+		session.AssignRole(roster[0].Id, MainRoleType.Thief);
+		session.IdentifyRole([roster[0].Id], MainRoleType.Thief);
+		var nightStart =
+			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+				service.ProcessInstruction(
+					start.GameGuid,
+					start.CreateResponse()));
+		var thiefWake =
+			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+				service.ProcessInstruction(
+					start.GameGuid,
+					nightStart.CreateResponse()));
+		var thiefChoice =
+			InstructionAssert.ExpectSuccessWithType<SelectOptionsInstruction>(
+				service.ProcessInstruction(
+					start.GameGuid,
+					thiefWake.CreateResponse()));
+		thiefChoice.Semantic.Should().Be(
+			ModeratorInstructionSemantic.ChooseThiefOffer);
+		var thiefSleep =
+			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+				service.ProcessInstruction(
+					start.GameGuid,
+					thiefChoice.CreateResponse(ThiefOfferOptionIds.Decline)));
+		thiefSleep.Semantic.Should().Be(
+			ModeratorInstructionSemantic.PutRoleToSleep);
+
+		var prejudicedManipulatorIdentification =
+			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+				service.ProcessInstruction(
+					start.GameGuid,
+					thiefSleep.CreateResponse()));
+
+		prejudicedManipulatorIdentification.Semantic.Should().Be(
+			ModeratorInstructionSemantic.IdentifyRoleHolders);
+		prejudicedManipulatorIdentification.RoleIdentification.Should().Be(
+			MainRoleType.PrejudicedManipulator);
+		prejudicedManipulatorIdentification.CountConstraint.Should().Be(
+			NumberRangeConstraint.Single);
+
+		var actorIdentification =
+			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+				service.ProcessInstruction(
+					start.GameGuid,
+					prejudicedManipulatorIdentification.CreateResponse(
+						[roster[1].Id])));
+
+		actorIdentification.Semantic.Should().Be(
+			ModeratorInstructionSemantic.IdentifyRoleHolders);
+		actorIdentification.RoleIdentification.Should().Be(MainRoleType.Actor);
+		actorIdentification.CountConstraint.Should().Be(
+			NumberRangeConstraint.Single);
+
+		var actorChoice =
+			InstructionAssert.ExpectSuccessWithType<SelectOptionsInstruction>(
+				service.ProcessInstruction(
+					start.GameGuid,
+					actorIdentification.CreateResponse([roster[2].Id])));
+
+		actorChoice.Semantic.Should().Be(
+			ModeratorInstructionSemantic.ChooseActorSetupCard);
+	}
+
+	[Fact]
 	public void NightOne_KnownHolder_SkipsTheWholeIdentificationSlot()
 	{
 		var roster = Enumerable.Range(1, 5)
