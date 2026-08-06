@@ -357,20 +357,31 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 		MarkTestCompleted();
 	}
 
-	[Fact]
-	public void Evaluate_ThiefWithoutActorReachability_UsesOneThousandSafetyAttempts()
+	[Theory]
+	[InlineData(MainRoleType.Seer, MainRoleType.Defender, 3)]
+	[InlineData(MainRoleType.Seer, MainRoleType.Seer, 2)]
+	[InlineData(MainRoleType.SimpleWerewolf, MainRoleType.BigBadWolf, 2)]
+	[InlineData(MainRoleType.SimpleWerewolf, MainRoleType.SimpleWerewolf, 1)]
+	public void Evaluate_ThiefWithoutActorReachability_UsesOneThousandSafetyAttemptsPerSemanticBranch(
+		MainRoleType offer1,
+		MainRoleType offer2,
+		int expectedBranchCount)
 	{
-		var scenario = ThiefScenario();
+		var scenario = ThiefScenario(offer1, offer2);
 		var calls = new List<int>();
+		SimulationBatchSourceEvidence? screening = null;
 		var evaluator = new TerminalLobbyEvaluator((batchScenario, identity, count, _) =>
 		{
 			calls.Add(count);
-			return Batch(
+			screening = Batch(
 				batchScenario,
 				identity,
 				count,
 				_ => (2, VictoryCheckWindow.PreNight));
+			return screening;
 		});
+		var expectedAttemptCount = checked(
+			TerminalLobbyEvaluator.ScreeningAttemptCount * expectedBranchCount);
 
 		var result = evaluator.Evaluate(
 			scenario,
@@ -379,9 +390,15 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 
 		scenario.ToCanonical().ActorSetupCards.Should().BeEmpty();
 		scenario.ThiefOfferBranchPolicy.Should().NotBeNull();
-		scenario.ThiefOfferBranchPolicy!.Branches.Count.Should().BeGreaterThan(1);
+		scenario.ThiefOfferBranchPolicy!.Branches.Should().HaveCount(expectedBranchCount);
 		result.Should().BeOfType<ScreeningPassedLobbyEvaluation>();
-		calls.Should().Equal(TerminalLobbyEvaluator.ScreeningAttemptCount);
+		calls.Should().Equal(expectedAttemptCount);
+		screening!.Records
+			.GroupBy(record => scenario.ThiefOfferBranchPolicy.GetBranch(
+				record.RunSeedMaterial.RunNumber))
+			.Should().HaveCount(expectedBranchCount)
+			.And.OnlyContain(group =>
+				group.Count() == TerminalLobbyEvaluator.ScreeningAttemptCount);
 		MarkTestCompleted();
 	}
 
@@ -658,7 +675,7 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 	[Fact]
 	public void Evaluate_DevotedServantPolicyMissingVoteWindow_UsesFixedIncompleteRunAndReturnsCouldNotEvaluate()
 	{
-		const long runNumber = 0;
+		const long runNumber = 1;
 		var scenario = new SimulationScenario(
 			7,
 			[
@@ -817,7 +834,9 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 		MainRoleType.SimpleWerewolf, MainRoleType.Seer, MainRoleType.SimpleVillager,
 		MainRoleType.SimpleVillager, MainRoleType.SimpleVillager);
 
-	private static SimulationScenario ThiefScenario()
+	private static SimulationScenario ThiefScenario(
+		MainRoleType offer1 = MainRoleType.Seer,
+		MainRoleType offer2 = MainRoleType.Defender)
 	{
 		MainRoleType[] dealPool =
 		[
@@ -829,10 +848,10 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 		];
 		return new SimulationScenario(
 			5,
-			dealPool.Concat([MainRoleType.Seer, MainRoleType.Defender]),
+			dealPool.Concat([offer1, offer2]),
 			dealPool,
-			MainRoleType.Seer,
-			MainRoleType.Defender);
+			offer1,
+			offer2);
 	}
 
 	private static SimulationScenario ActorScenario(

@@ -119,6 +119,9 @@ public static class LobbyEvaluationPresentation
 		Faction.Piper => ClientStrings.LobbyEvaluation_FactionPiper,
 		Faction.CrossFactionLovers =>
 			ClientStrings.LobbyEvaluation_FactionCrossFactionLovers,
+		Faction.Angel => ClientStrings.LobbyEvaluation_FactionAngel,
+		Faction.PrejudicedManipulator =>
+			ClientStrings.LobbyEvaluation_FactionPrejudicedManipulator,
 		_ => throw new ArgumentOutOfRangeException(nameof(faction))
 	};
 }

@@ -100,7 +100,6 @@ public static partial class TerminalLobbyCache
 		}
 
 		if (degenerate
-			&& identity.Scenario.ActorSetupCards.Count > 0
 			&& identity.Scenario.ThiefOfferBranchPolicy is { } branchPolicy)
 		{
 			return CaptureDegenerateThiefBranchWitness(identity, evidence, branchPolicy);
@@ -138,8 +137,8 @@ public static partial class TerminalLobbyCache
 		if (!TerminalLobbyEvaluator.TrySelectDegenerateThiefBranch(
 			evidence.Records,
 			branchPolicy,
-			out var completedRuns,
-			exactRecordCount: TerminalLobbyEvaluator.ScreeningAttemptCount))
+			TerminalLobbyEvaluator.ScreeningAttemptCount,
+			out var completedRuns))
 		{
 			throw new ArgumentException(
 				"Terminal evidence does not contain a complete degenerate Thief branch.",
