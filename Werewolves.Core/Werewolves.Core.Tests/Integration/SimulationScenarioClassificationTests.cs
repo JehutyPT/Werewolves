@@ -227,7 +227,7 @@ public class SimulationScenarioClassificationTests : DiagnosticTestBase
 		classification.Cacheability.CompatibilityIdentity.Should().Be(
 			new SimulationCompatibilityIdentity(
 				scenario.ToCanonical(),
-				new SimulatorProfileIdentity("safety-screening", "29")));
+				new SimulatorProfileIdentity("safety-screening", "30")));
 		MarkTestCompleted();
 	}
 
