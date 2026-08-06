@@ -99,19 +99,19 @@ public sealed class ActorBorrowedSemanticTraceTests
 	}
 
 	[Theory]
-	[InlineData(MainRoleType.Seer, 4L)]
+	[InlineData(MainRoleType.Seer, 7L)]
 	[InlineData(MainRoleType.Cupid, 1L)]
 	[InlineData(MainRoleType.Witch, 0L)]
-	[InlineData(MainRoleType.LittleGirl, 6L)]
+	[InlineData(MainRoleType.LittleGirl, 1L)]
 	[InlineData(MainRoleType.Defender, 0L)]
-	[InlineData(MainRoleType.Fox, 0L)]
-	[InlineData(MainRoleType.StutteringJudge, 1L)]
-	[InlineData(MainRoleType.Hunter, 45L)]
-	[InlineData(MainRoleType.Elder, 171L)]
-	[InlineData(MainRoleType.Scapegoat, 54L)]
-	[InlineData(MainRoleType.VillageIdiot, 63L)]
-	[InlineData(MainRoleType.BearTamer, 81L)]
-	[InlineData(MainRoleType.KnightWithRustySword, 108L)]
+	[InlineData(MainRoleType.Fox, 4L)]
+	[InlineData(MainRoleType.StutteringJudge, 0L)]
+	[InlineData(MainRoleType.Hunter, 171L)]
+	[InlineData(MainRoleType.Elder, 6L)]
+	[InlineData(MainRoleType.Scapegoat, 14L)]
+	[InlineData(MainRoleType.VillageIdiot, 46L)]
+	[InlineData(MainRoleType.BearTamer, 90L)]
+	[InlineData(MainRoleType.KnightWithRustySword, 24L)]
 	public void ProductionSafetyDriver_ExactThreeSetup_GenuinelySelectsAndExecutesEveryActorSource(
 		MainRoleType sourceRole,
 		long runNumber)

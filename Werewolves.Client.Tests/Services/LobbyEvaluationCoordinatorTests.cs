@@ -525,6 +525,59 @@ public class LobbyEvaluationCoordinatorTests
 	}
 
 	[Fact]
+	public async Task NonActorThiefDegenerateBranchWithIncompleteSibling_ActualEvaluatorPersistsAndBlocksExit()
+	{
+		var lobby = CreateAcceptedThiefLobby(
+			MainRoleType.Seer,
+			MainRoleType.Defender);
+		var scenario = lobby.CreateSimulationScenario();
+		var requestedAttemptCounts = new List<int>();
+		var terminalEvaluator = new TerminalLobbyEvaluator(
+			(batchScenario, identity, count, _) =>
+			{
+				requestedAttemptCounts.Add(count);
+				return SafetyMixedBranchSourceEvidence(
+					batchScenario,
+					identity,
+					count,
+					incompleteSibling: true);
+			});
+		var local = new RecordingLocalStore(bytes: null);
+		using var coordinator = new LobbyEvaluationCoordinator(
+			lobby,
+			local,
+			new AsyncTerminalLobbyEvaluator(
+				terminalEvaluator.Evaluate,
+				TimeProvider.System),
+			SafetyScreeningSettings,
+			TimeProvider.System,
+			(_, _) => new LobbyScenarioSupport(
+				RulesValid: true,
+				AppSupported: true,
+				SimulatorSupported: true));
+
+		coordinator.TryRequestLobbyExit().Should().BeFalse();
+		await WaitForStateAsync(coordinator, LobbyEvaluationStateKind.Degenerate);
+
+		requestedAttemptCounts.Should().Equal(3_000);
+		coordinator.State.Identity!.Scenario.ActorSetupCards.Should().BeEmpty();
+		coordinator.State.Identity.Scenario.ThiefOfferBranchPolicy!.Branches.Should().HaveCount(3);
+		coordinator.EvaluationBlocksLobbyExit.Should().BeTrue();
+		coordinator.TryRequestLobbyExit().Should().BeFalse();
+		var persisted = TerminalLobbyCache.ReadDocument(local.Writes.Single());
+		persisted.IsUsable.Should().BeTrue();
+		TerminalLobbyCache.TryGet(
+			persisted.Document!,
+			coordinator.State.Identity,
+			out var record).Should().BeTrue();
+		var aggregate = record.Should().BeOfType<DegenerateTerminalCacheRecord>().Subject;
+		aggregate.AttemptedRunCount.Should().Be(TerminalLobbyEvaluator.ScreeningAttemptCount);
+		aggregate.CompletedRunCount.Should().Be(TerminalLobbyEvaluator.ScreeningAttemptCount);
+		aggregate.IncompleteRunCount.Should().Be(0);
+		aggregate.GameResultFrequencyByTurn.Should().OnlyContain(cell => cell.EndingTurn == 1);
+	}
+
+	[Fact]
 	public void ScenarioChange_DuringLocalReadStopsStalePipelineBeforeFallback()
 	{
 		var pump = new ControlledContinuationPump();
@@ -779,7 +832,7 @@ public class LobbyEvaluationCoordinatorTests
 
 		coordinator.State.Probability.Should().BeNull();
 		coordinator.State.Identity!.Profile.Should().Be(
-			new SimulatorProfileIdentity("safety-screening", "29"));
+			new SimulatorProfileIdentity("safety-screening", "30"));
 		coordinator.State.Identity.Scenario.ActorSetupCards.Should().Equal(
 			MainRoleType.Cupid,
 			MainRoleType.Defender,
@@ -1291,6 +1344,7 @@ public class LobbyEvaluationCoordinatorTests
 	}
 
 	[Theory]
+	[InlineData("safety-screening@29")]
 	[InlineData("safety-screening@28")]
 	[InlineData("safety-screening@27")]
 	[InlineData("safety-screening@21")]
@@ -1503,6 +1557,27 @@ public class LobbyEvaluationCoordinatorTests
 		return lobby;
 	}
 
+	private static LobbySetupState CreateAcceptedThiefLobby(
+		MainRoleType offer1,
+		MainRoleType offer2)
+	{
+		var lobby = CreateLobby(
+			MainRoleType.Thief,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			offer1,
+			offer2);
+		var manager = new GameClientManager();
+		manager.TryReplaceStagedRoleLockIn(
+			lobby,
+			expectedCurrentVersion: 0,
+			offer1,
+			offer2).Should().BeTrue();
+		return lobby;
+	}
+
 	private static void ChangeToVillagerMajority(LobbySetupState lobby)
 	{
 		lobby.DecrementRole(MainRoleType.SimpleWerewolf);
@@ -1593,14 +1668,33 @@ public class LobbyEvaluationCoordinatorTests
 		var identity = new SimulationCompatibilityIdentity(
 			scenario.ToCanonical(),
 			SimulatorCapability.SafetyScreening.Identity);
+		var attemptCount = TerminalLobbyEvaluator.GetScreeningAttemptCount(identity.Scenario);
+		var villager = new SingleFactionGameResult(Faction.Villager);
+		var werewolf = new SingleFactionGameResult(Faction.Werewolf);
+		var noWinner = new NoWinnerGameResult();
+		var source = SafetyMixedBranchSourceEvidence(
+			scenario,
+			identity,
+			attemptCount,
+			incompleteSibling);
+		return new DegenerateTerminalEvaluation(new SimulationResultEvidence(
+			source,
+			[Faction.Villager, Faction.Werewolf],
+			[villager, werewolf, noWinner]));
+	}
+
+	private static SimulationBatchSourceEvidence SafetyMixedBranchSourceEvidence(
+		SimulationScenario scenario,
+		SimulationCompatibilityIdentity identity,
+		int attemptCount,
+		bool incompleteSibling)
+	{
 		var strategy = BaselineRandomDecisionStrategy.SafetyScreeningIdentity;
 		var policy = identity.Scenario.ThiefOfferBranchPolicy!;
-		var attemptCount = TerminalLobbyEvaluator.GetScreeningAttemptCount(identity.Scenario);
 		var incompleteRunNumber = Enumerable.Range(0, attemptCount)
 			.Last(run => policy.GetBranch(run) == policy.Branches[1]);
 		var villager = new SingleFactionGameResult(Faction.Villager);
 		var werewolf = new SingleFactionGameResult(Faction.Werewolf);
-		var noWinner = new NoWinnerGameResult();
 		var runs = Enumerable.Range(0, attemptCount).Select(run =>
 		{
 			var seed = new RunSeedMaterial(identity, strategy, run);
@@ -1619,15 +1713,11 @@ public class LobbyEvaluationCoordinatorTests
 					? VictoryCheckWindow.Dawn
 					: VictoryCheckWindow.PreNight);
 		});
-		var source = new SimulationBatchSourceEvidence(
-			identity.Scenario,
+		return new SimulationBatchSourceEvidence(
+			scenario.ToCanonical(),
 			identity.Profile,
 			strategy,
 			runs);
-		return new DegenerateTerminalEvaluation(new SimulationResultEvidence(
-			source,
-			[Faction.Villager, Faction.Werewolf],
-			[villager, werewolf, noWinner]));
 	}
 
 	private static Task WaitForStateAsync(

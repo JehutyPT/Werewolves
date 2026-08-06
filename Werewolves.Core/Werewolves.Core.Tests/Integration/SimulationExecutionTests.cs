@@ -184,11 +184,11 @@ public class SimulationExecutionTests : DiagnosticTestBase
 	}
 
 	[Fact]
-	public void ExecuteBatch_WithActorInDealPool_CompletesAllOneThousandFixedSeedSafetyAttempts()
+	public void ExecuteBatch_WithActorInDealPool_ProducesCompleteOneThousandAttemptSafetyEvidence()
 	{
 		var scenario = CreateDirectActorScenario();
 
-		var batch = ExecuteAndAssertCompleteActorSafetyBatch(scenario);
+		var batch = ExecuteAndAssertActorSafetyBatch(scenario);
 
 		scenario.ThiefOfferBranchPolicy.Should().BeNull();
 		batch.Records.Should().HaveCount(
@@ -199,7 +199,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 	[Theory]
 	[InlineData(MainRoleType.Actor, MainRoleType.Seer)]
 	[InlineData(MainRoleType.Seer, MainRoleType.Actor)]
-	public void ExecuteBatch_WithActorInThiefOffer_CompletesOneThousandFixedSeedAttemptsPerLegalBranch(
+	public void ExecuteBatch_WithActorInThiefOffer_ProducesOneThousandAttemptEvidencePerLegalBranch(
 		MainRoleType offer1Role,
 		MainRoleType offer2Role)
 	{
@@ -207,7 +207,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 			offer1Role,
 			offer2Role);
 
-		var batch = ExecuteAndAssertCompleteActorSafetyBatch(scenario);
+		var batch = ExecuteAndAssertActorSafetyBatch(scenario);
 
 		scenario.ToCanonical().Offer1Role.Should().Be(offer1Role);
 		scenario.ToCanonical().Offer2Role.Should().Be(offer2Role);
@@ -220,11 +220,13 @@ public class SimulationExecutionTests : DiagnosticTestBase
 	}
 
 	[Fact]
-	public void ExecuteBatch_WithActorAndThiefInDealPool_CompletesOneThousandFixedSeedAttemptsPerLegalBranch()
+	public void ExecuteBatch_WithActorAndThiefInDealPool_ProducesOneThousandAttemptEvidencePerLegalBranch()
 	{
 		var scenario = CreateDealPoolActorThiefScenario();
 
-		var batch = ExecuteAndAssertCompleteActorSafetyBatch(scenario);
+		var batch = ExecuteAndAssertActorSafetyBatch(
+			scenario,
+			expectedIncompleteRunNumbers: [1_110, 1_266, 2_823]);
 
 		scenario.DealPoolCards.Should().Contain(MainRoleType.Actor)
 			.And.Contain(MainRoleType.Thief);
@@ -2368,9 +2370,11 @@ public class SimulationExecutionTests : DiagnosticTestBase
 	private static ActorSetupCards CreateActorSetupCards() =>
 		new([MainRoleType.Cupid, MainRoleType.Defender, MainRoleType.Elder]);
 
-	private static SimulationBatchSourceEvidence ExecuteAndAssertCompleteActorSafetyBatch(
-		SimulationScenario scenario)
+	private static SimulationBatchSourceEvidence ExecuteAndAssertActorSafetyBatch(
+		SimulationScenario scenario,
+		IReadOnlyList<long>? expectedIncompleteRunNumbers = null)
 	{
+		expectedIncompleteRunNumbers ??= [];
 		SimulationScenarioClassifier.Classify(
 				scenario,
 				SimulatorCapability.SafetyScreening)
@@ -2393,7 +2397,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 			MainRoleType.Elder);
 		batch.CanonicalScenario.Should().Be(identity.Scenario);
 		batch.SimulatorProfile.Should().Be(
-			new SimulatorProfileIdentity("safety-screening", "29"));
+			new SimulatorProfileIdentity("safety-screening", "30"));
 		batch.DecisionStrategy.Should().Be(
 			new DecisionStrategyIdentity("baseline-random", "14-splitmix64"));
 		batch.Records.Should().HaveCount(runCount);
@@ -2403,10 +2407,13 @@ public class SimulationExecutionTests : DiagnosticTestBase
 					identity,
 					BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
 					attempt)));
-		batch.CompletedRunCount.Should().Be(runCount);
-		batch.IncompleteRunCount.Should().Be(0);
-		batch.Records.Should().OnlyContain(record =>
-			record is CompletedSimulationRun);
+		batch.Records
+			.OfType<IncompleteSimulationRun>()
+			.Select(run => run.RunSeedMaterial.RunNumber)
+			.Should().Equal(expectedIncompleteRunNumbers);
+		batch.CompletedRunCount.Should().Be(
+			runCount - expectedIncompleteRunNumbers.Count);
+		batch.IncompleteRunCount.Should().Be(expectedIncompleteRunNumbers.Count);
 		if (scenario.ThiefOfferBranchPolicy is { } branchPolicy)
 		{
 			batch.Records

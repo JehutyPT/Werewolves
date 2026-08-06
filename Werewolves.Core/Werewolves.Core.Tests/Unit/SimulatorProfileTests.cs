@@ -10,10 +10,10 @@ namespace Werewolves.Core.Tests.Unit;
 public class SimulatorProfileTests
 {
 	[Fact]
-	public void SafetyScreeningCapability_UsesIssue144Identity()
+	public void SafetyScreeningCapability_UsesThiefBranchEvidenceIdentity()
 	{
 		SimulatorCapability.SafetyScreening.Identity.Should().Be(
-			new SimulatorProfileIdentity("safety-screening", "29"));
+			new SimulatorProfileIdentity("safety-screening", "30"));
 	}
 
 	[Fact]
@@ -117,7 +117,7 @@ public class SimulatorProfileTests
 		var safety = SimulatorCapability.SafetyScreening;
 		var probability = SimulatorCapability.FullProbability;
 
-		safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "29"));
+			safety.Identity.Should().Be(new SimulatorProfileIdentity("safety-screening", "30"));
 		probability.Identity.Should().Be(new SimulatorProfileIdentity("full-probability", "4"));
 		BaselineRandomDecisionStrategy.Identity.Should()
 			.Be(new DecisionStrategyIdentity("baseline-random", "3-splitmix64"));
