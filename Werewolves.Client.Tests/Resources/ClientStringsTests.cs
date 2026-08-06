@@ -10,6 +10,17 @@ namespace Werewolves.Client.Tests.Resources;
 
 public class ClientStringsTests
 {
+	private static readonly string[] FactionUiResourceKeys =
+	[
+		nameof(ClientStrings.LobbyEvaluation_FactionVillager),
+		nameof(ClientStrings.LobbyEvaluation_FactionWerewolf),
+		nameof(ClientStrings.LobbyEvaluation_FactionWhiteWerewolf),
+		nameof(ClientStrings.LobbyEvaluation_FactionPiper),
+		nameof(ClientStrings.LobbyEvaluation_FactionCrossFactionLovers),
+		nameof(ClientStrings.LobbyEvaluation_FactionAngel),
+		nameof(ClientStrings.LobbyEvaluation_FactionPrejudicedManipulator)
+	];
+
 	private static readonly string[] ActorSetupUiResourceKeys =
 	[
 		nameof(ClientStrings.ActorSetup_StepLabel),
@@ -41,7 +52,7 @@ public class ClientStringsTests
 		nameof(ClientStrings.RoleSelection_ReviewPublicGroupPartitionButton)
 	];
 
-	private static readonly string[] PortugueseUiResourceKeys =
+	private static readonly string[] LocalizedUiResourceKeys =
 	[
 		nameof(ClientStrings.LobbyRoster_Title),
 		nameof(ClientStrings.Validation_EmptyPlayerName),
@@ -57,10 +68,7 @@ public class ClientStringsTests
 		nameof(ClientStrings.LobbyEvaluation_GameResultShared),
 		nameof(ClientStrings.LobbyEvaluation_GameResultNoWinner),
 		nameof(ClientStrings.LobbyEvaluation_GameResultSharedFormat),
-		nameof(ClientStrings.LobbyEvaluation_FactionVillager),
-		nameof(ClientStrings.LobbyEvaluation_FactionWerewolf),
-		nameof(ClientStrings.LobbyEvaluation_FactionWhiteWerewolf),
-		nameof(ClientStrings.LobbyEvaluation_FactionPiper),
+		.. FactionUiResourceKeys,
 		nameof(ClientStrings.LobbyEvaluation_FactionSeparator),
 		nameof(ClientStrings.LobbyEvaluation_ReasonNoWerewolfBeneficiaries),
 		nameof(ClientStrings.LobbyEvaluation_ReasonWerewolfControl),
@@ -110,16 +118,20 @@ public class ClientStringsTests
 		.. PublicGroupPartitionUiResourceKeys
 	];
 
-	[Fact]
-	public void ClientStrings_ExposesPortugueseUiCopyThroughGeneratedAccessor()
+	[Theory]
+	[InlineData("en-US", "ClientStrings.resx")]
+	[InlineData("pt-PT", "ClientStrings.pt-PT.resx")]
+	public void ClientStrings_ExposesNeutralAndPortugueseUiCopyThroughGeneratedAccessor(
+		string cultureName,
+		string resourceFileName)
 	{
-		var expectedValues = LoadResourceValues("ClientStrings.pt-PT.resx", PortugueseUiResourceKeys);
+		var expectedValues = LoadResourceValues(resourceFileName, LocalizedUiResourceKeys);
 		var previousCulture = ClientStrings.Culture;
 		try
 		{
-			ClientStrings.Culture = CultureInfo.GetCultureInfo("pt-PT");
+			ClientStrings.Culture = CultureInfo.GetCultureInfo(cultureName);
 
-			foreach (var key in PortugueseUiResourceKeys)
+			foreach (var key in LocalizedUiResourceKeys)
 			{
 				GetClientStringAccessorValue(key).Should().Be(expectedValues[key]);
 			}

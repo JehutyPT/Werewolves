@@ -21,7 +21,7 @@ public sealed class PrejudicedManipulatorVictoryIntegrationTests
 			new(Guid.NewGuid(), "Player B"),
 			new(Guid.NewGuid(), "Werewolf"),
 			new(Guid.NewGuid(), "Hunter"),
-			new(Guid.NewGuid(), "Angel")
+			new(Guid.NewGuid(), "Player E")
 		];
 		var partition = PublicGroupPartition.Create(
 			roster.Select(player => player.Id),
@@ -319,7 +319,7 @@ public sealed class PrejudicedManipulatorVictoryIntegrationTests
 		[
 			new(Guid.NewGuid(), "Manipulator"),
 			new(Guid.NewGuid(), "Werewolf"),
-			new(Guid.NewGuid(), "Angel"),
+			new(Guid.NewGuid(), "Player C"),
 			new(Guid.NewGuid(), "Villager A"),
 			new(Guid.NewGuid(), "Villager B")
 		];
