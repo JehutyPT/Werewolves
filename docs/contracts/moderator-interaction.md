@@ -264,8 +264,8 @@ These sections state only the observable differences from the shared interaction
 
 - When the Role appears in the Deal Pool or as a Thief Offer Card, the Moderator creates and publicly announces two non-empty groups, then records every Player in exactly one group.
 - The app stores the Player-to-group mapping and never creates or balances the groups.
-- Immediately after the Thief slot on Night 1, if the deal-pool holder is still unknown, publicly call Prejudiced Manipulator, perform Role Identification for exactly one Player, and return that Player to sleep. A committed Thief choice or other transition that already established the current holder omits this entire identification-only slot.
-- The call adds no Role Power, gameplay choice, feedback, or public Role Reveal. Once the holder is known, later Eliminations, Faction changes, and Permanent Role Swaps update the relevant state without another identification response or a pause at a Victory Check Window.
+- At the canonical Night 1 Prejudiced Manipulator slot, publicly call the Role for an otherwise-unknown Deal Pool holder, perform Role Identification for exactly one Player, and return that Player to sleep. If a committed Thief choice or another transition already established the current holder, or if the card is Set-Aside, present no instruction or response and continue at the next canonical slot.
+- The call adds no Role Power, gameplay choice, feedback, or public Role Reveal. Once the identification commits, it is never repeated. Later Eliminations, Faction changes, and Permanent Role Swaps create neither another Prejudiced Manipulator identification response nor a pause at a Victory Check Window. The [game-rule clarification](../domain/game-rules-clarifications.md#prejudiced-manipulator-public-groups-and-outcome) owns why the exact early identity remains required.
 - If the recorded mapping differs from the announced groups, the Moderator may replace it before Lobby Exit only with the complete announced partition. This corrects the app's record without regrouping Players. After Lobby Exit, correction requires a new Game Session.
 
 ### Actor

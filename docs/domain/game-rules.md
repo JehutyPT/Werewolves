@@ -105,7 +105,7 @@ Win conditions are evaluated during Victory Check Windows: after Night Eliminati
 *   **White Werewolf:** Wakes and eliminates with other Werewolf Faction Agents while remaining a White Werewolf Faction Beneficiary. Has no solo action on Night 1. On Nights 2, 4, 6, and every later even-numbered Game Session Night, wakes again alone and may eliminate one other living Werewolf Faction Agent. The White Werewolf Faction wins when the White Werewolf is the sole surviving Player.
 *   **Angel:** The physical Angel card's holder uses ordinary Villager Faction Beneficiary mechanics. Every actual Elimination of that holder during Night 1, any part of Day 1, or Night 2—including standard or Consecutive Votes and reaction or cascade Eliminations—qualifies the card's Role-Card Victory Eligibility for the next shared Victory Check Window. If Angel has not won by the Dawn Victory Check Window that resolves Night 2, the eligibility expires immediately after that window and the card thereafter supplies Simple Villager current-Role mechanics without changing the physical card, its ownership, or its visibility. Angel adds no holder-identification flow.
 *   **Piper:** Each Night, must charm distinct eligible Players: exactly two when at least two are available, the sole Player when only one is available, and no Player when none are available. An eligible target is living, is not the Piper, and is not already Charmed; the Piper cannot decline or select the same Player twice. Afterward, all living Charmed Players wake and recognize one another. Charmed Players keep their Roles, Faction Beneficiaries, and powers. At the next Victory Check Window, the Piper Faction predicate is true only if a living Piper Faction Beneficiary exists and every other living Player is Charmed. Charm is not blocked by Defender or Witch and is not passed between Lovers.
-*   **Prejudiced Manipulator:** Before the Game Session, the Moderator creates a Public Group Partition based on an arbitrary announced criterion. Both groups must be non-empty, may differ in size, and keep the same Player membership for the full Game Session. At a Victory Check Window, the Prejudiced Manipulator Faction predicate is true only if a living Prejudiced Manipulator Faction Beneficiary exists and no living Player remains in that beneficiary's Opposing Public Group, regardless of those Players' Faction Beneficiaries. A later holder of the Role uses the existing partition and the group opposite that holder. Has no special night power.
+*   **Prejudiced Manipulator:** Before the Game Session, the Moderator creates a Public Group Partition based on an arbitrary announced criterion. Both groups must be non-empty, may differ in size, and keep the same Player membership for the full Game Session. At a Victory Check Window, the Prejudiced Manipulator Faction predicate is true only if a living Prejudiced Manipulator Faction Beneficiary exists and either partition group has no living Player, regardless of those Players' Faction Beneficiaries. A later holder of the Role uses the existing partition. The Role has no Role Power.
 
 ### Roles Specific to New Moon (Require New Moon Events)
 
@@ -158,26 +158,27 @@ Win conditions are evaluated during Victory Check Windows: after Night Eliminati
 ### Call Order: 1st Night ONLY
 
 1.  Thief
-2.  Actor
-3.  Little Girl
-4.  Cupid
-5.  Lovers (recognize each other)
-6.  Stuttering Judge (shows sign to Moderator)
-7.  Two Sisters (recognize each other)
-8.  Three Brothers (recognize each other)
-9.  Wild Child (chooses model)
-10. Wolf Hound
-11. Bear Tamer
-12. Defender
-13. All Werewolf Faction Agents (including Wolf Hound if chosen Werewolf, White Werewolf, Accursed Wolf-Father, and Big Bad Wolf) wake and choose a victim. The Little Girl may spy during this collective wake interval; the White Werewolf has no solo action on Night 1
-14. Fox
-15. Accursed Wolf-Father (infection option)
-16. Big Bad Wolf (mandatory second victim when the power is available and a legal target exists)
-17. Seer
-18. Witch (shown victim, uses potions)
-19. Gypsy (can choose medium)
-20. Piper (charms Players)
-21. Charmed Players (tapped by Moderator)
+2.  Prejudiced Manipulator (identification-only for an otherwise-unknown Deal Pool holder; omitted when the current holder is already known or the card is Set-Aside)
+3.  Actor
+4.  Little Girl
+5.  Cupid
+6.  Lovers (recognize each other)
+7.  Stuttering Judge (shows sign to Moderator)
+8.  Two Sisters (recognize each other)
+9.  Three Brothers (recognize each other)
+10. Wild Child (chooses model)
+11. Wolf Hound
+12. Bear Tamer
+13. Defender
+14. All Werewolf Faction Agents (including Wolf Hound if chosen Werewolf, White Werewolf, Accursed Wolf-Father, and Big Bad Wolf) wake and choose a victim. The Little Girl may spy during this collective wake interval; the White Werewolf has no solo action on Night 1
+15. Fox
+16. Accursed Wolf-Father (infection option)
+17. Big Bad Wolf (mandatory second victim when the power is available and a legal target exists)
+18. Seer
+19. Witch (shown victim, uses potions)
+20. Gypsy (can choose medium)
+21. Piper (charms Players)
+22. Charmed Players (tapped by Moderator)
 
 ### Call Order: Each Subsequent Night (Subject to New Moon Event modifications, e.g., Full Moon Rising)
 
