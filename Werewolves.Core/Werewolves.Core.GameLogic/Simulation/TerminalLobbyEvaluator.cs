@@ -181,10 +181,11 @@ public sealed class TerminalLobbyEvaluator
 		}
 		var thiefBranchPolicy = identity.Scenario.ThiefOfferBranchPolicy;
 		if (thiefBranchPolicy != null &&
-		    TrySelectDegenerateThiefBranch(
-			    screening.Records,
-			    thiefBranchPolicy,
-			    out _))
+			    TrySelectDegenerateThiefBranch(
+				    screening.Records,
+				    thiefBranchPolicy,
+				    ScreeningAttemptCount,
+				    out _))
 		{
 			return new DegenerateTerminalEvaluation(screeningEvidence);
 		}
@@ -236,9 +237,7 @@ public sealed class TerminalLobbyEvaluator
 		CanonicalSimulationScenario scenario)
 	{
 		ArgumentNullException.ThrowIfNull(scenario);
-		var branchCount = scenario.ActorSetupCards.Count > 0
-			? scenario.ThiefOfferBranchPolicy?.Branches.Count ?? 1
-			: 1;
+		var branchCount = scenario.ThiefOfferBranchPolicy?.Branches.Count ?? 1;
 		return checked(
 			ScreeningAttemptCount *
 			branchCount);
@@ -301,8 +300,8 @@ public sealed class TerminalLobbyEvaluator
 	internal static bool TrySelectDegenerateThiefBranch(
 		IReadOnlyList<SimulationRun> records,
 		ThiefOfferBranchPolicy policy,
-		out CompletedSimulationRun[] witness,
-		int? exactRecordCount = null)
+		int expectedBranchRecordCount,
+		out CompletedSimulationRun[] witness)
 	{
 		ArgumentNullException.ThrowIfNull(records);
 		ArgumentNullException.ThrowIfNull(policy);
@@ -313,8 +312,7 @@ public sealed class TerminalLobbyEvaluator
 					policy.GetBranch(record.RunSeedMaterial.RunNumber) == branch)
 				.ToArray();
 			if (branchRecords.Length == 0
-				|| (exactRecordCount is { } expectedCount
-					&& branchRecords.Length != expectedCount)
+				|| branchRecords.Length != expectedBranchRecordCount
 				|| branchRecords.Any(record =>
 					record is not CompletedSimulationRun { EndingTurn: 1 }))
 			{

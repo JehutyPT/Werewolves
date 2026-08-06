@@ -103,7 +103,7 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 
 	[Theory]
 	[InlineData(0, ExpectedInputType.PlayerSelection)]
-	[InlineData(3, ExpectedInputType.Continue)]
+	[InlineData(1, ExpectedInputType.Continue)]
 	public void BaselineRandomDecisionStrategy_WithDevotedServantVoteWindow_DeterministicallyCoversContinueAndPublicUse(
 		long runNumber,
 		ExpectedInputType expectedResponseType)
@@ -826,8 +826,8 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 	}
 
 	[Theory]
-	[InlineData(0L, "wolf-hound-villagers")]
-	[InlineData(1L, "wolf-hound-werewolves")]
+	[InlineData(0L, "wolf-hound-werewolves")]
+	[InlineData(1L, "wolf-hound-villagers")]
 	public void BaselineRandomDecisionStrategy_WithWolfHoundAlignment_UsesGlobalDeterministicStreamWithoutHiddenTruth(
 		long runNumber,
 		string expectedOptionId)
@@ -905,10 +905,10 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 		[Theory]
 		[InlineData(
 			3L,
-			AccursedWolfFatherInfectionOptionIds.Decline)]
+			AccursedWolfFatherInfectionOptionIds.Infect)]
 		[InlineData(
 			1L,
-			AccursedWolfFatherInfectionOptionIds.Infect)]
+			AccursedWolfFatherInfectionOptionIds.Decline)]
 		public void BaselineRandomDecisionStrategy_WithAccursedWolfFatherInfection_CoversBothBranchesDeterministically(
 			long runNumber,
 			string expectedOptionId)
