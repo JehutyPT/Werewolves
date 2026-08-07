@@ -163,6 +163,11 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 					var identity = new SimulationCompatibilityIdentity(
 						scenario.ToCanonical(),
 						_capability.Identity);
+					if (_currentRequest is { } currentRequest &&
+						currentRequest.Identity.Equals(identity))
+					{
+						return;
+					}
 					replacement = new EvaluationRequest(scenario, identity);
 					nextState = LobbyEvaluationState.Pending(identity);
 				}

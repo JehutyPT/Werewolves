@@ -32,6 +32,7 @@ This document records short, stable domain facts that can be asserted without ca
 - Simulator-generated Player assignments never populate a live Game Session.
 - Safety-screening and full-probability capabilities have explicit, separately versioned Role sets.
 - The Full-Probability Role Set is a subset of the Safety-Screening Role Set.
+- Replacing a staged Role Lock-In or Actor Setup Cards invalidates Safety-Screening evidence only when the resulting Canonical Simulation Scenario changes.
 
 ## Faction state
 

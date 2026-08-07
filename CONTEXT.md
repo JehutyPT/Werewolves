@@ -135,7 +135,7 @@ The stable string representation of a Role Composition.
 _Avoid_: Display role list, localized composition
 
 **Canonical Simulation Scenario**:
-The stable string representation of a Simulation Scenario.
+The stable identity of a Simulation Scenario, derived only from its simulation-relevant pre-game facts. Two staged physical setups with the same Canonical Simulation Scenario are the same Simulation Scenario for simulation evidence.
 _Avoid_: Canonical Role Composition (when Player count or setup artifacts are included)
 
 **Capability-Supported Simulation Scenario**:

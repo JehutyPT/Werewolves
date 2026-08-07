@@ -618,6 +618,70 @@ public class LobbyEvaluationCoordinatorTests
 	}
 
 	[Fact]
+	public void EquivalentRoleLockInReplacement_DuringLocalReadPreservesExactCurrentPipeline()
+	{
+		var pump = new ControlledContinuationPump();
+		pump.Run(() =>
+		{
+			var lobby = CreateLobby(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+			var manager = new GameClientManager();
+			manager.TryEnsureStagedRoleLockIn(lobby).Should().BeTrue();
+			var originalLockIn = lobby.AcceptedRoleLockIn!;
+			var local = new ControlledReadLocalStore();
+			var evaluator = new RecordingEvaluator(new CouldNotEvaluateLobbyEvaluation());
+			using var coordinator = new LobbyEvaluationCoordinator(
+				lobby,
+				local,
+				evaluator,
+				SafetyScreeningSettings,
+				new ManualTimeProvider());
+			pump.Drain();
+			var read = local.NextReadAsync().GetAwaiter().GetResult();
+			coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.Pending);
+			var pendingIdentity = coordinator.State.Identity!;
+			var replacement = RoleLockIn.CreateFromPrintedRoles(
+				originalLockIn.Version + 1,
+				originalLockIn.PlayerCount,
+				originalLockIn.RoleComposition.Select(card => card.PrintedRole));
+
+			manager.TryReplaceStagedRoleLockIn(
+				lobby,
+				originalLockIn.Version,
+				replacement).Should().BeTrue();
+			pump.Drain();
+
+			var replacementLockIn = lobby.AcceptedRoleLockIn!;
+			replacementLockIn.Version.Should().BeGreaterThan(originalLockIn.Version);
+			replacementLockIn.RoleComposition.Select(card => card.Id).Should().NotIntersectWith(
+				originalLockIn.RoleComposition.Select(card => card.Id));
+			lobby.CreateSimulationScenario().ToCanonical().Should().Be(pendingIdentity.Scenario);
+			coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.Pending);
+			coordinator.State.Identity.Should().Be(pendingIdentity);
+			coordinator.EvaluationBlocksLobbyExit.Should().BeTrue();
+			read.CancellationToken.IsCancellationRequested.Should().BeFalse();
+			local.ReadCount.Should().Be(1);
+			evaluator.CallCount.Should().Be(0);
+
+			var exactLocal = new DegenerateTerminalCacheRecord(
+				pendingIdentity,
+				AggregateRows(1_000, 750, 250),
+				AggregateCells(1_000, 750, 250, turnOneOnly: true));
+			read.Complete(DocumentBytes(exactLocal));
+			pump.Drain();
+
+			coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.Degenerate);
+			coordinator.State.Identity.Should().Be(pendingIdentity);
+			local.ReadCount.Should().Be(1);
+			evaluator.CallCount.Should().Be(0);
+		});
+	}
+
+	[Fact]
 	public async Task ScenarioChange_AtCommitBoundaryRejectsStaleWriteAndCurrentWriteSurvives()
 	{
 		var lobby = CreateLobby(
@@ -841,6 +905,48 @@ public class LobbyEvaluationCoordinatorTests
 		local.Writes.Should().BeEmpty();
 		evaluator.Capabilities.Should().Equal(SimulatorCapability.SafetyScreening);
 		evaluator.Depths.Should().Equal(LobbyEvaluationDepth.DegenerateScreeningOnly);
+	}
+
+	[Fact]
+	public async Task EquivalentActorSetupReplacement_PreservesSessionLocalScreeningPassed()
+	{
+		var lobby = CreateAcceptedActorLobby();
+		var originalSetup = lobby.AcceptedActorSetupCards;
+		var originalScenario = lobby.CreateSimulationScenario();
+		var local = new RecordingLocalStore(bytes: null);
+		var evaluator = new RecordingEvaluator(new ScreeningPassedLobbyEvaluation());
+		using var coordinator = new LobbyEvaluationCoordinator(
+			lobby,
+			local,
+			evaluator,
+			SafetyScreeningSettings,
+			TimeProvider.System);
+		coordinator.TryRequestLobbyExit().Should().BeFalse();
+		await WaitForStateAsync(coordinator, LobbyEvaluationStateKind.ScreeningPassed);
+		var screenedIdentity = coordinator.State.Identity;
+		var localReadCount = local.ReadCount;
+		var manager = new GameClientManager();
+
+		manager.TryReplaceStagedActorSetupCards(
+			lobby,
+			originalSetup.Version,
+			[
+				MainRoleType.Elder,
+				MainRoleType.Defender,
+				MainRoleType.Cupid
+			]).Should().BeTrue();
+
+		lobby.AcceptedActorSetupCards.Version.Should().BeGreaterThan(originalSetup.Version);
+		lobby.AcceptedActorSetupCards.Cards.Select(card => card.Id).Should().NotIntersectWith(
+			originalSetup.Cards.Select(card => card.Id));
+		lobby.CreateSimulationScenario().ToCanonical().Should().Be(originalScenario.ToCanonical());
+		coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.ScreeningPassed);
+		coordinator.State.Identity.Should().Be(screenedIdentity);
+		coordinator.EvaluationBlocksLobbyExit.Should().BeFalse();
+		coordinator.TryRequestLobbyExit().Should().BeTrue();
+		evaluator.CallCount.Should().Be(1);
+		local.ReadCount.Should().Be(localReadCount);
+		local.Writes.Should().BeEmpty();
 	}
 
 	[Fact]
@@ -1302,6 +1408,59 @@ public class LobbyEvaluationCoordinatorTests
 		replacementScenario.ToCanonical().Should().Be(originalScenario.ToCanonical());
 		coordinator.State.Identity.Should().Be(identity);
 		evaluator.CallCount.Should().Be(0);
+		local.Writes.Should().BeEmpty();
+	}
+
+	[Fact]
+	public async Task EquivalentRoleLockInReplacement_PreservesExactCurrentLocalDegenerateResult()
+	{
+		var lobby = CreateLobby(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager);
+		var manager = new GameClientManager();
+		manager.TryEnsureStagedRoleLockIn(lobby).Should().BeTrue();
+		var originalLockIn = lobby.AcceptedRoleLockIn!;
+		var originalScenario = lobby.CreateSimulationScenario();
+		var identity = new SimulationCompatibilityIdentity(
+			originalScenario.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+		var exactLocal = new DegenerateTerminalCacheRecord(
+			identity,
+			AggregateRows(1_000, 750, 250),
+			AggregateCells(1_000, 750, 250, turnOneOnly: true));
+		var evaluator = new RecordingEvaluator(new CouldNotEvaluateLobbyEvaluation());
+		var local = new RecordingLocalStore(DocumentBytes(exactLocal));
+		using var coordinator = new LobbyEvaluationCoordinator(
+			lobby,
+			local,
+			evaluator,
+			SafetyScreeningSettings,
+			TimeProvider.System);
+		await WaitForStateAsync(coordinator, LobbyEvaluationStateKind.Degenerate);
+		var localReadCount = local.ReadCount;
+		var replacement = RoleLockIn.CreateFromPrintedRoles(
+			originalLockIn.Version + 1,
+			originalLockIn.PlayerCount,
+			originalLockIn.RoleComposition.Select(card => card.PrintedRole));
+
+		manager.TryReplaceStagedRoleLockIn(
+			lobby,
+			originalLockIn.Version,
+			replacement).Should().BeTrue();
+
+		var replacementLockIn = lobby.AcceptedRoleLockIn!;
+		replacementLockIn.Version.Should().BeGreaterThan(originalLockIn.Version);
+		replacementLockIn.RoleComposition.Select(card => card.Id).Should().NotIntersectWith(
+			originalLockIn.RoleComposition.Select(card => card.Id));
+		lobby.CreateSimulationScenario().ToCanonical().Should().Be(originalScenario.ToCanonical());
+		coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.Degenerate);
+		coordinator.State.Identity.Should().Be(identity);
+		coordinator.EvaluationBlocksLobbyExit.Should().BeTrue();
+		evaluator.CallCount.Should().Be(0);
+		local.ReadCount.Should().Be(localReadCount);
 		local.Writes.Should().BeEmpty();
 	}
 
@@ -1807,8 +1966,10 @@ public class LobbyEvaluationCoordinatorTests
 		});
 	}
 
-	private sealed class ControlledRead
+	private sealed class ControlledRead(CancellationToken cancellationToken)
 	{
+		public CancellationToken CancellationToken { get; } = cancellationToken;
+
 		public TaskCompletionSource<ReadOnlyMemory<byte>?> Result { get; } =
 			new();
 
@@ -1827,7 +1988,7 @@ public class LobbyEvaluationCoordinatorTests
 			CancellationToken cancellationToken = default)
 		{
 			Interlocked.Increment(ref _readCount);
-			var read = new ControlledRead();
+			var read = new ControlledRead(cancellationToken);
 			lock (_reads)
 			{
 				_reads.Enqueue(read);
