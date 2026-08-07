@@ -115,12 +115,6 @@ public static class CoreTestReferences
 		public static string Phase => nameof(Phase);
 	}
 
-	public static class SkipReasons
-	{
-		public const string RequiresRolesOutsideSimpleGameScope =
-			"Requires roles not in simple game scope (Knight's rusty sword, Witch's poison)";
-	}
-
 	public static class ExceptionMessages
 	{
 		public static string MinimumPlayersRequired(int minimum) =>

@@ -24,17 +24,80 @@ public class VictoryConditionTests : DiagnosticTestBase
     #region VC-001 to VC-002: Villager Victory
 
     /// <summary>
-    /// VC-001: Last werewolf killed by special ability at dawn triggers villager victory.
-    /// Skipped: Simple game has no roles that kill werewolves at dawn (Knight, Witch not implemented).
+    /// VC-001: Last werewolf eliminated by the Witch at Dawn triggers Villager victory.
     /// </summary>
-    [Fact(Skip = CoreTestReferences.SkipReasons.RequiresRolesOutsideSimpleGameScope)]
+    [Fact]
     public void WerewolfEliminated_AtDawn_VillagerVictory()
     {
-        // This test would require:
-        // - Knight role that inflicts rusty sword on attacking werewolf
-        // - Witch role with poison potion
-        // - Other dawn-kill mechanics
-        // Currently not implemented in simple game.
+        var builder = CreateBuilder()
+            .WithPlayers(
+                "Werewolf",
+                "Witch",
+                "Attack victim",
+                "Villager A",
+                "Villager B")
+            .WithRoles(
+                MainRoleType.SimpleWerewolf,
+                MainRoleType.Witch,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager);
+        builder.StartGame();
+        builder.ConfirmGameStart();
+        builder.ConfirmNightStart();
+        var players = builder.GetGameState()!.GetPlayers().ToArray();
+        var werewolf = players[0];
+        var witch = players[1];
+        var attackVictim = players[2];
+
+        builder.CompleteWerewolfNightAction(
+            [werewolf.Id],
+            attackVictim.Id);
+        var witchIdentification = builder.GetCurrentInstruction()
+            .Should().BeOfType<SelectPlayersInstruction>().Subject;
+        var healing = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+            builder.Process(witchIdentification.CreateResponse([witch.Id])));
+        var poison = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+            builder.Process(healing.CreateResponse([])));
+        var sleep = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+            builder.Process(poison.CreateResponse([werewolf.Id])));
+        var finishNight = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+            builder.Process(sleep.CreateResponse()));
+        var dawnReveal = InstructionAssert.ExpectSuccessWithType<AssignRolesInstruction>(
+            builder.Process(finishNight.CreateResponse()));
+
+        dawnReveal.PlayersForAssignment.Should().BeEquivalentTo(
+            [werewolf.Id, attackVictim.Id]);
+        var finished =
+            InstructionAssert.ExpectSuccessWithType<FinishedGameConfirmationInstruction>(
+                builder.Process(dawnReveal.CreateResponse(new()
+                {
+                    [werewolf.Id] = MainRoleType.SimpleWerewolf,
+                    [attackVictim.Id] = MainRoleType.SimpleVillager
+                })));
+        finished.GameResult.Should().Be(
+            new SingleFactionGameResult(Faction.Villager));
+        finished.VictoryCheckWindow.Should().Be(VictoryCheckWindow.Dawn);
+        var completed = builder.GetGameState()!;
+        completed.GetPlayerState(werewolf.Id).Health.Should()
+            .Be(PlayerHealth.Dead);
+        completed.GameHistoryLog
+            .OfType<PlayerEliminatedLogEntry>()
+            .Should().ContainSingle(entry =>
+                entry.PlayerId == werewolf.Id &&
+                entry.Reason == EliminationReason.WitchKill &&
+                entry.TurnNumber == 1 &&
+                entry.CurrentPhase == GamePhase.Dawn);
+        var victory = completed.GameHistoryLog
+            .OfType<VictoryConditionMetLogEntry>()
+            .Should().ContainSingle(entry =>
+                entry.TurnNumber == 1 &&
+                entry.CurrentPhase == GamePhase.Day).Which;
+        victory.GameResult.Should().Be(
+            new SingleFactionGameResult(Faction.Villager));
+        victory.VictoryCheckWindow.Should().Be(VictoryCheckWindow.Dawn);
+
+        MarkTestCompleted();
     }
 
     /// <summary>

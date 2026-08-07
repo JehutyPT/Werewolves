@@ -297,9 +297,9 @@ Tests for both victory paths.
 ### 6.1 Villager Victory
 
 - **VC-001**: `WerewolfEliminated_AtDawn_VillagerVictory`
-  - Given: Last werewolf killed by special ability at dawn (future: Knight's sword, witch's poison, etc.)
-  - When: Dawn resolution completes
-  - Then: Victory detected, `WinningTeam` is `Villagers`
+  - Given: The sole Werewolf is eliminated by Witch poison during Dawn
+  - When: The complete Dawn Elimination Cascade resolves
+  - Then: Exactly one `SingleFactionGameResult(Faction.Villager)` is emitted at `VictoryCheckWindow.Dawn` before Day
 
 - **VC-002**: `WerewolfEliminated_AtDay_VillagerVictory`
   - Given: Last werewolf voted out during day
