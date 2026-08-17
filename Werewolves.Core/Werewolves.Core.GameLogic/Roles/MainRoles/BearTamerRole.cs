@@ -34,13 +34,14 @@ internal sealed class BearTamerRole : NightRoleIdOnlyHookListener
 		GameSession session,
 		ModeratorResponse input)
 	{
-		if (session.GetCurrentPhase() == GamePhase.Dawn &&
+		var execution = session.Execution;
+		if (execution.CurrentPhase == GamePhase.Dawn &&
 		    TryResolveBorrowedExecution(session, out _))
 		{
 			return ExecuteCore(session, input);
 		}
 
-		return session.GetCurrentPhase() switch
+		return execution.CurrentPhase switch
 		{
 			GamePhase.Night when session.TurnNumber == 1 =>
 				base.Execute(session, input),
@@ -153,7 +154,8 @@ internal sealed class BearTamerRole : NightRoleIdOnlyHookListener
 	internal static void ValidateBorrowedPendingGrowlRecoveryInstruction(
 		GameSession session)
 	{
-		var pendingInstruction = session.PendingModeratorInstruction;
+		var execution = session.Execution;
+		var pendingInstruction = execution.PendingInstruction;
 		if (pendingInstruction?.Semantic !=
 				ModeratorInstructionSemantic.AnnounceBearTamerGrowl ||
 			!session.GetModeratorActorSetupCards().Cards.Any(card =>
@@ -185,7 +187,7 @@ internal sealed class BearTamerRole : NightRoleIdOnlyHookListener
 				commit.PowerIdentity.PowerInstanceId ==
 					activation.ActivationId &&
 				commit.ActorSetupCardId == activation.SelectedCardId);
-		if (session.GetCurrentPhase() != GamePhase.Dawn ||
+		if (execution.CurrentPhase != GamePhase.Dawn ||
 			selectedCard?.PrintedRole != MainRoleType.BearTamer ||
 			actor.State.Health != PlayerHealth.Alive ||
 			actor.State.CurrentRole != MainRoleType.Actor ||

@@ -58,7 +58,8 @@ internal sealed class VillageIdiotRole
 		    target.State.DurableVotingPower != 1 ||
 			GameSessionQueries.IsDevotedServantAcquiredRoleDormantForCurrentDay(
 				session,
-				target.Id) ||
+				target.Id,
+				session.Execution.CurrentPhase) ||
 			!TryResolveExecution(session, target, out var resolved))
 		{
 			return false;
@@ -145,7 +146,8 @@ internal sealed class VillageIdiotRole
 	internal static void ValidateBorrowedPendingPardonRecoveryInstruction(
 		GameSession session)
 	{
-		var pendingInstruction = session.PendingModeratorInstruction;
+		var execution = session.Execution;
+		var pendingInstruction = execution.PendingInstruction;
 		if (pendingInstruction?.Semantic !=
 				ModeratorInstructionSemantic.AnnounceVillageIdiotPardon ||
 			!session.GetModeratorActorSetupCards().Cards.Any(card =>
@@ -164,7 +166,7 @@ internal sealed class VillageIdiotRole
 		}
 
 		var actor = session.GetPlayer(commit.PowerIdentity.ActingPlayerId);
-		if (session.GetCurrentPhase() != GamePhase.Day ||
+		if (execution.CurrentPhase != GamePhase.Day ||
 			commit.TurnNumber != session.TurnNumber ||
 			commit.CurrentPhase != GamePhase.Day ||
 			actor.State is not

@@ -118,6 +118,7 @@ internal class GameSession : IGameSession
 	#endregion
 
 	#region Internal Game Cache read-access
+	internal ExecutionView Execution => _gameSessionKernel.Execution;
     internal ModeratorInstruction? PendingModeratorInstruction => _gameSessionKernel.PendingModeratorInstruction;
     internal AcceptedObservationRecoveryCursor? GetAcceptedObservationRecoveryCursor(
         IGameFlowManagerKey key) =>

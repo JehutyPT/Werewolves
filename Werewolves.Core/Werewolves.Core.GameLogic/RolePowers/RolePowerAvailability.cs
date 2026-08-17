@@ -208,7 +208,7 @@ internal sealed record RolePowerInstance(
 			!StringComparer.Ordinal.Equals(
 				sourcePower.Identifier.Value,
 				"elder-village-vote-suppression") ||
-			session.GetCurrentPhase() != GamePhase.Day ||
+			session.Execution.CurrentPhase != GamePhase.Day ||
 			actingPlayer.State.PubliclyRevealedRole != MainRoleType.Actor ||
 			vote is not { } currentVote ||
 			currentVote.LogIndex != context.VoteOutcomeLogIndex ||
@@ -307,7 +307,7 @@ internal sealed record RolePowerInstance(
 			!StringComparer.Ordinal.Equals(
 				sourcePower.Identifier.Value,
 				"knight-rusty-sword-disease") ||
-			session.GetCurrentPhase() != GamePhase.Dawn ||
+			session.Execution.CurrentPhase != GamePhase.Dawn ||
 			!StringComparer.Ordinal.Equals(
 				context.CascadeScopeId,
 				$"Dawn:{session.TurnNumber}") ||

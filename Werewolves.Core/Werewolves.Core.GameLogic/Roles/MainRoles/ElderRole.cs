@@ -69,7 +69,8 @@ internal sealed class ElderRole : RoleHookListener<ElderRoleState>
 		if (GameSessionQueries
 		    .IsDevotedServantAcquiredRoleDormantForCurrentDay(
 			    session,
-			    attackedPlayer.Id))
+			    attackedPlayer.Id,
+			    session.Execution.CurrentPhase))
 		{
 			execution = default;
 			return false;
@@ -320,7 +321,7 @@ internal sealed class ElderRole : RoleHookListener<ElderRoleState>
 
 		if (borrowedCommits.Length != 1 ||
 			!MatchesSuppressionAnnouncement(
-				session.PendingModeratorInstruction,
+				session.Execution.PendingInstruction,
 				suppression.AnnouncementInstructionId))
 		{
 			throw new InvalidOperationException(
@@ -332,7 +333,7 @@ internal sealed class ElderRole : RoleHookListener<ElderRoleState>
 		GameSession session,
 		ModeratorResponse input)
 	{
-		if (!session.TryGetActiveGameHook(out var hook) ||
+		if (!session.Execution.TryGetActiveGameHook(out var hook) ||
 		    hook != GameHook.OnVoteConcluded)
 		{
 			return HookListenerActionResult.Skip();
@@ -469,7 +470,8 @@ internal sealed class ElderRole : RoleHookListener<ElderRoleState>
 		if (GameSessionQueries
 			.IsDevotedServantAcquiredRoleDormantForCurrentDay(
 				session,
-				actingPlayer.Id))
+				actingPlayer.Id,
+				session.Execution.CurrentPhase))
 		{
 			return false;
 		}

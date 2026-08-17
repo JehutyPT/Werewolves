@@ -33,7 +33,7 @@ internal static class ThiefOfferRules
 	{
 		ArgumentNullException.ThrowIfNull(session);
 		if (session.TurnNumber != 1 ||
-		    session.GetCurrentPhase() != GamePhase.Night ||
+		    session.Execution.CurrentPhase != GamePhase.Night ||
 		    playerId == Guid.Empty)
 		{
 			return false;

@@ -115,9 +115,10 @@ internal sealed class WolfHoundRole : NightRoleHookListener<WolfHoundRoleState>
 			return false;
 		}
 
-		var subPhase = session.GetSubPhase<NightSubPhases>();
+		var execution = session.Execution;
+		var subPhase = execution.GetSubPhase<NightSubPhases>();
 		if (session.TurnNumber != 1 ||
-		    session.GetCurrentPhase() != GamePhase.Night ||
+		    execution.CurrentPhase != GamePhase.Night ||
 		    (subPhase ?? NightSubPhases.Start) != NightSubPhases.Start ||
 		    !HasValidCommittedAlignment(session, wolfHound.Id))
 		{

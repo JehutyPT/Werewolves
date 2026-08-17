@@ -175,7 +175,7 @@ internal sealed class ScapegoatRole
 	internal static void ValidateBorrowedPendingRecoveryInstruction(
 		GameSession session)
 	{
-		var pendingInstruction = session.PendingModeratorInstruction;
+		var pendingInstruction = session.Execution.PendingInstruction;
 		if (pendingInstruction == null)
 		{
 			return;
@@ -281,7 +281,7 @@ internal sealed class ScapegoatRole
 		GameSession session,
 		ModeratorResponse input)
 	{
-		if (!session.TryGetActiveGameHook(out var hook) ||
+		if (!session.Execution.TryGetActiveGameHook(out var hook) ||
 		    hook != GameHook.OnVoteConcluded)
 		{
 			return HookListenerActionResult.Skip();
@@ -372,12 +372,14 @@ internal sealed class ScapegoatRole
 			return AdvanceSacrificeCascade(session, input);
 		}
 
+		var currentPhase = session.Execution.CurrentPhase;
 		var aliveScapegoats = GetAliveRolePlayers(session)?.ToArray();
 		if (aliveScapegoats?.Any(player =>
 				GameSessionQueries
 					.IsDevotedServantAcquiredRoleDormantForCurrentDay(
 						session,
-						player.Id)) == true)
+						player.Id,
+						currentPhase)) == true)
 		{
 			return HookListenerActionResult.Complete(
 				ScapegoatRoleState.Complete);
@@ -726,7 +728,7 @@ internal sealed class ScapegoatRole
 					CreatePermittedVoterSelection(session));
 			}
 
-			if (session.PendingModeratorInstruction is not
+			if (session.Execution.PendingInstruction is not
 			    SelectPlayersInstruction
 			    {
 				    Semantic:

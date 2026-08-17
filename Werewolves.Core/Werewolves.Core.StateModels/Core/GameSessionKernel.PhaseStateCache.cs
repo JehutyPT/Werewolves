@@ -136,6 +136,21 @@ internal partial class GameSessionKernel
 
 		#endregion
 
+		internal ExecutionView CreateExecutionView(
+			ModeratorInstruction? pendingInstruction,
+			AcceptedObservationRecoveryCursor? acceptedObservationRecoveryCursor,
+			DomainRecoveryCursor? domainRecoveryCursor) =>
+			new(
+				_currentPhase,
+				_currentSubPhase,
+				_currentSubPhaseStage,
+				_previousSubPhaseStages,
+				_currentListener,
+				_currentListenerState,
+				pendingInstruction,
+				acceptedObservationRecoveryCursor,
+				domainRecoveryCursor);
+
 		#region Public Interface Accessors
 
 		/// <summary>
