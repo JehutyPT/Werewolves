@@ -547,17 +547,18 @@ internal static class GameFlowManager
         ModeratorResponse input,
         IRoleAdmissionSource admissions)
     {
-        var startingPhase = session.GetCurrentPhase();
-        var startingInstruction = session.PendingModeratorInstruction;
-        var startingListener = session.GetCurrentListener();
+        var startingExecution = session.Execution;
+        var startingPhase = startingExecution.CurrentPhase;
+        var startingInstruction = startingExecution.PendingInstruction;
+        var startingListener = startingExecution.CurrentListener;
         var startingLogCount = session.GameHistoryLog.Count();
         ModeratorInstruction? nextInstructionToSend = null;
 
         while (nextInstructionToSend == null)
         {
-            var oldPhase = session.GetCurrentPhase();
+            var oldPhase = session.Execution.CurrentPhase;
             var handlerResult = RouteInputToPhaseHandler(session, input);
-            var newPhase = session.GetCurrentPhase();
+            var newPhase = session.Execution.CurrentPhase;
 
             // A silent main-phase transition is a resolution boundary. Check victory
             // before routing any work owned by the phase that was just entered.
@@ -577,7 +578,7 @@ internal static class GameFlowManager
 
         // --- Update Pending Instruction ---
 		session.SetPendingModeratorInstruction(Key, nextInstructionToSend);
-        var endingPhase = session.GetCurrentPhase();
+        var endingPhase = session.Execution.CurrentPhase;
 		if (ShouldAdvanceRecoveryBoundary(
                 session,
                 startingPhase,
@@ -967,7 +968,7 @@ internal static class GameFlowManager
 			_ => false
 		};
 		return IsCorrelatedActorBorrowedMarker(session, marker, commit) &&
-			session.GetCurrentPhase() == GamePhase.Night &&
+			session.Execution.CurrentPhase == GamePhase.Night &&
 			startingInstruction is SelectPlayersInstruction
 			{
 				CountConstraint: var countConstraint,
@@ -1015,7 +1016,7 @@ internal static class GameFlowManager
 			_ => false
 		};
 		return IsCorrelatedActorBorrowedMarker(session, marker, commit) &&
-			session.GetCurrentPhase() == GamePhase.Night &&
+			session.Execution.CurrentPhase == GamePhase.Night &&
 			startingInstruction is SelectPlayersInstruction
 			{
 				CountConstraint: var countConstraint,
@@ -1041,12 +1042,13 @@ internal static class GameFlowManager
 		ModeratorResponse input,
 		ModeratorInstruction nextInstruction)
 	{
+		var execution = session.Execution;
 		var expectedOptionId = commit.SignalOccurred
 			? StutteringJudgeSignalOptionIds.Occurred
 			: StutteringJudgeSignalOptionIds.DidNotOccur;
 		return IsCorrelatedActorBorrowedMarker(session, marker, commit) &&
-			session.GetCurrentPhase() == GamePhase.Day &&
-			session.GetSubPhase<DaySubPhases>() == DaySubPhases.NormalVoting &&
+			execution.CurrentPhase == GamePhase.Day &&
+			execution.GetSubPhase<DaySubPhases>() == DaySubPhases.NormalVoting &&
 			GameSessionQueries.GetCurrentDayVoteOutcome(session) is null &&
 			startingInstruction is SelectOptionsInstruction
 			{
@@ -1131,7 +1133,7 @@ internal static class GameFlowManager
 		};
 
 		return IsCorrelatedActorBorrowedMarker(session, marker, commit) &&
-			session.GetCurrentPhase() == GamePhase.Day &&
+			session.Execution.CurrentPhase == GamePhase.Day &&
 			startingInstruction is not null &&
 			input.InstructionId == startingInstruction.InstructionId &&
 			hasExpectedStartingBoundary &&
@@ -1205,7 +1207,7 @@ internal static class GameFlowManager
 		var voteOutcomeLogIndex = commit.TriggeringVoteOutcomeLogIndex;
 		var suppressionFactIndex = commit.PublicMarkerLogIndex + 1;
 		if (!IsCorrelatedActorBorrowedMarker(session, marker, commit) ||
-			session.GetCurrentPhase() != GamePhase.Day ||
+			session.Execution.CurrentPhase != GamePhase.Day ||
 			voteOutcomeLogIndex < 0 ||
 			voteOutcomeLogIndex >= commit.PublicMarkerLogIndex ||
 			commit.PublicMarkerLogIndex >= history.Length ||
@@ -1340,7 +1342,7 @@ internal static class GameFlowManager
 			_ => false
 		};
 		if (!IsCorrelatedActorBorrowedMarker(session, marker, commit) ||
-			session.GetCurrentPhase() != GamePhase.Day ||
+			session.Execution.CurrentPhase != GamePhase.Day ||
 			commit.TriggeringVoteOutcomeLogIndex < 0 ||
 			commit.TriggeringVoteOutcomeLogIndex >=
 				commit.PublicMarkerLogIndex ||
@@ -1459,7 +1461,7 @@ internal static class GameFlowManager
 			tieReplacement.CurrentPhase != commit.CurrentPhase ||
 			commit.PublicMarkerLogIndex <=
 				commit.TieReplacementPublicMarkerLogIndex ||
-			session.GetCurrentPhase() != GamePhase.Day ||
+			session.Execution.CurrentPhase != GamePhase.Day ||
 			!ScapegoatRole.MatchesPermittedVoterSelection(
 				startingInstruction,
 				commit.CandidatePlayerIds.ToHashSet()) ||
@@ -2326,8 +2328,9 @@ internal static class GameFlowManager
             ModeratorInstruction nextInstruction,
             IRoleAdmissionSource admissions)
     {
-        if (session.GetCurrentPhase() != GamePhase.Night ||
-            !IsNightStartSubPhase(session) ||
+        var execution = session.Execution;
+        if (execution.CurrentPhase != GamePhase.Night ||
+            !IsNightStartSubPhase(execution) ||
             !TryGetAcceptedObservationRole(
                 startingInstruction,
                 startingListener,
@@ -2337,7 +2340,7 @@ internal static class GameFlowManager
             return null;
         }
 
-        var currentListener = session.GetCurrentListener();
+        var currentListener = execution.CurrentListener;
         if (currentListener == null)
         {
             return null;
@@ -2370,6 +2373,7 @@ internal static class GameFlowManager
 
         ValidateAcceptedObservationRecoverySemantics(
             session,
+            execution,
             cursor,
             nextInstruction);
 		var continuation = ResolvePendingInstructionContinuation(
@@ -2432,12 +2436,13 @@ internal static class GameFlowManager
 
     private static void ValidateAcceptedObservationRecoverySemantics(
         GameSession session,
+        ExecutionView execution,
         AcceptedObservationRecoveryCursor cursor,
         ModeratorInstruction pendingInstruction)
     {
         var continuationRole = cursor.ContinuationRole ?? cursor.ObservedRole;
-        if (session.GetCurrentPhase() != GamePhase.Night ||
-            !IsNightStartSubPhase(session))
+        if (execution.CurrentPhase != GamePhase.Night ||
+            !IsNightStartSubPhase(execution))
         {
             throw new InvalidOperationException(
                 $"Unsupported accepted observation continuation '{cursor.AcceptedObservationSemantic}:{cursor.ObservedRole}:{continuationRole}:{cursor.NextInstructionSemantic}'.");
@@ -2618,7 +2623,8 @@ internal static class GameFlowManager
 		KnightWithTheRustySwordRole
 			.ValidateBorrowedPendingRustySwordRecoveryInstruction(session);
 
-        var domainCursor = session.GetDomainRecoveryCursor(Key);
+        var execution = session.Execution;
+        var domainCursor = execution.DomainRecoveryCursor;
         if (domainCursor != null)
         {
             RestoreDomainContinuation(session, domainCursor, admissions);
@@ -2631,7 +2637,7 @@ internal static class GameFlowManager
                 "A committed White Werewolf attack requires its domain recovery cursor.");
         }
 
-	        var cursor = session.GetAcceptedObservationRecoveryCursor(Key);
+	        var cursor = execution.AcceptedObservationRecoveryCursor;
 	        if (cursor == null)
 	        {
 		        HunterRole.ValidateBorrowedPendingFinalShotRecoveryInstruction(
@@ -2650,11 +2656,12 @@ internal static class GameFlowManager
 	        }
 
         var continuationRole = cursor.ContinuationRole ?? cursor.ObservedRole;
-        var pendingInstruction = session.PendingModeratorInstruction
+        var pendingInstruction = execution.PendingInstruction
             ?? throw new InvalidOperationException(
                 "The accepted observation continuation requires one Pending Instruction.");
         ValidateAcceptedObservationRecoverySemantics(
             session,
+            execution,
             cursor,
             pendingInstruction);
 		var continuation = ResolvePendingInstructionContinuation(
@@ -2694,7 +2701,7 @@ internal static class GameFlowManager
 		    GameSession session,
 		    IRoleAdmissionSource admissions)
 	    {
-		    var pendingInstruction = session.PendingModeratorInstruction;
+		    var pendingInstruction = session.Execution.PendingInstruction;
 		    if (pendingInstruction == null)
 		    {
 			    return;
@@ -2731,7 +2738,7 @@ internal static class GameFlowManager
 
 	    private static bool HasCursorlessWhiteWerewolfAttackBoundary(
 		    GameSession session) =>
-		    session.GetCurrentPhase() == GamePhase.Night &&
+		    session.Execution.CurrentPhase == GamePhase.Night &&
 		    GameSessionQueries.FindLogEntries<NightActionLogEntry>(
 			    session,
 			    NumberRangeConstraint.Exact(session.TurnNumber),
@@ -2750,6 +2757,7 @@ internal static class GameFlowManager
         DomainRecoveryCursor cursor,
         IRoleAdmissionSource admissions)
     {
+        var execution = session.Execution;
         var sourceRole = cursor.SourceRole
             ?? throw new InvalidOperationException(
                 "The domain recovery cursor is structurally invalid.");
@@ -2761,10 +2769,10 @@ internal static class GameFlowManager
 			if (sourceRole != MainRoleType.StutteringJudge ||
 				cursor.CommittedActionType != NightActionType.Unknown ||
 				cursor.CommittedDayActionType != DayPowerType.JudgeExtraVote ||
-				session.GetCurrentPhase() != GamePhase.Day ||
-				session.GetSubPhase<DaySubPhases>() !=
+				execution.CurrentPhase != GamePhase.Day ||
+				execution.GetSubPhase<DaySubPhases>() !=
 					DaySubPhases.NormalVoting ||
-				session.PendingModeratorInstruction is not
+				execution.PendingInstruction is not
 					SelectPlayersInstruction pendingVoteInstruction ||
 				pendingVoteInstruction.Semantic !=
 					expectedVoteInstruction.Semantic ||
@@ -2800,14 +2808,14 @@ internal static class GameFlowManager
 
 		if (cursor.Kind == DomainRecoveryCursorKind.ActorSetupCardSpendCommit)
 		{
-			if (session.GetCurrentPhase() != GamePhase.Night ||
-			    !IsNightStartSubPhase(session))
+			if (execution.CurrentPhase != GamePhase.Night ||
+			    !IsNightStartSubPhase(execution))
 			{
 				throw new InvalidOperationException(
 					"The Actor setup-card spend recovery cursor is outside the Night schedule.");
 			}
 
-			var actorPendingInstruction = session.PendingModeratorInstruction
+			var actorPendingInstruction = execution.PendingInstruction
 				?? throw new InvalidOperationException(
 					"The Actor setup-card spend recovery cursor requires one Pending Instruction.");
 			var actorContinuation = ResolvePendingInstructionContinuation(
@@ -2837,8 +2845,8 @@ internal static class GameFlowManager
                  DomainRecoveryCursorKind.TargetPrivateRolePowerCommit or
 				 DomainRecoveryCursorKind.ActorBorrowedWitchPotionUseCommit or
 				 DomainRecoveryCursorKind.ActorBorrowedWitchPotionDeclineCommit) ||
-            session.GetCurrentPhase() != GamePhase.Night ||
-            !IsNightStartSubPhase(session))
+            execution.CurrentPhase != GamePhase.Night ||
+            !IsNightStartSubPhase(execution))
         {
             throw new InvalidOperationException(
                 $"Unsupported domain continuation '{sourceRole}:{cursor.CommittedActionType}:{cursor.NextInstructionSemantic}'.");
@@ -2852,7 +2860,7 @@ internal static class GameFlowManager
                 "The domain recovery cursor is structurally invalid.");
         }
 
-        var pendingInstruction = session.PendingModeratorInstruction
+        var pendingInstruction = execution.PendingInstruction
             ?? throw new InvalidOperationException(
                 "The committed domain continuation requires one Pending Instruction.");
         if (cursor.Kind ==
@@ -3011,7 +3019,7 @@ internal static class GameFlowManager
                 $"Unsupported domain continuation '{sourceRole}:{cursor.CommittedActionType}:{cursor.NextInstructionSemantic}'.");
         }
 
-        if (!continuation.Value.Matches(session.PendingModeratorInstruction))
+        if (!continuation.Value.Matches(execution.PendingInstruction))
         {
             throw new InvalidOperationException(
                 "The Pending Instruction does not match the committed domain continuation.");
@@ -3024,10 +3032,10 @@ internal static class GameFlowManager
             continuation.Value.ListenerState);
     }
 
-    private static bool IsNightStartSubPhase(GameSession session)
+    private static bool IsNightStartSubPhase(ExecutionView execution)
     {
-        var subPhaseId = session.GetSubPhaseId();
-        var nightSubPhase = session.GetSubPhase<NightSubPhases>();
+        var subPhaseId = execution.SubPhaseId;
+        var nightSubPhase = execution.GetSubPhase<NightSubPhases>();
 
         return (subPhaseId == null || nightSubPhase != null) &&
             (nightSubPhase ?? NightSubPhases.Start) == NightSubPhases.Start;
@@ -3102,7 +3110,7 @@ internal static class GameFlowManager
 
     private static PhaseHandlerResult RouteInputToPhaseHandler(GameSession session, ModeratorResponse input)
     {
-        var currentPhase = session.GetCurrentPhase();
+        var currentPhase = session.Execution.CurrentPhase;
 
         if (!PhaseDefinitions.TryGetValue(currentPhase, out var phaseDef))
         {
@@ -3118,7 +3126,7 @@ internal static class GameFlowManager
         {
             throw new InvalidOperationException(
                 $"Internal State Machine Error: Received null ModeratorInstruction from non-MainPhaseHandlerResult. " +
-                $"Result type: {result.GetType().Name}, Current phase: {session.GetCurrentPhase()}");
+                $"Result type: {result.GetType().Name}, Current phase: {session.Execution.CurrentPhase}");
         }
 
         return result;

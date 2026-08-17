@@ -159,6 +159,10 @@ namespace Werewolves.Core.StateModels.Core
 		internal DomainRecoveryCursor? DomainRecoveryCursor =>
 			_domainRecoveryCursor;
 		internal GamePhase CurrentPhase => _phaseStateCache.GetCurrentPhase();
+		internal ExecutionView Execution => _phaseStateCache.CreateExecutionView(
+			_pendingModeratorInstruction,
+			_acceptedObservationRecoveryCursor,
+			_domainRecoveryCursor);
 
 		internal GameSessionKernel(Guid id, ModeratorInstruction initialInstruction, GameSessionConfig config, IStateChangeObserver? stateChangeObserver = null)
 		{

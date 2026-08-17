@@ -66,7 +66,7 @@ internal sealed class StutteringJudgeRole
 		GameSession session,
 		ModeratorResponse input)
 	{
-		if (!session.TryGetActiveGameHook(out var hook))
+		if (!session.Execution.TryGetActiveGameHook(out var hook))
 		{
 			return HookListenerActionResult.Skip();
 		}
@@ -179,8 +179,9 @@ internal sealed class StutteringJudgeRole
 			return false;
 		}
 
-		if (session.GetCurrentPhase() != GamePhase.Day ||
-		    session.GetSubPhase<DaySubPhases>() !=
+		var execution = session.Execution;
+		if (execution.CurrentPhase != GamePhase.Day ||
+		    execution.GetSubPhase<DaySubPhases>() !=
 			    DaySubPhases.NormalVoting ||
 		    GameSessionQueries.GetCurrentDayVoteOutcome(session) != null ||
 		    pendingInstruction is not
@@ -628,7 +629,7 @@ internal sealed class StutteringJudgeRole
 		out BorrowedExecutionContext execution)
 	{
 		execution = null!;
-		return session.GetCurrentPhase() == GamePhase.Day &&
+		return session.Execution.CurrentPhase == GamePhase.Day &&
 			TryResolveBorrowedExecution(session, out execution) &&
 			GameSessionQueries.HasStutteringJudgeSignalBeenEstablished(
 				session,
@@ -699,7 +700,7 @@ internal sealed class StutteringJudgeRole
 		{
 			return HasValidBorrowedSignalSetupSleep(
 				session,
-				session.PendingModeratorInstruction);
+				session.Execution.PendingInstruction);
 		}
 
 		var judges = session.GetPlayers()
@@ -761,7 +762,7 @@ internal sealed class StutteringJudgeRole
 		GameSession session,
 		ModeratorInstruction pendingInstruction)
 	{
-		if (session.GetCurrentPhase() != GamePhase.Night ||
+		if (session.Execution.CurrentPhase != GamePhase.Night ||
 		    !TryResolveBorrowedExecution(session, out var borrowedExecution) ||
 		    GameSessionQueries.HasStutteringJudgeSignalBeenEstablished(
 			    session,

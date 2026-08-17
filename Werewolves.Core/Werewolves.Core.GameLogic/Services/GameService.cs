@@ -375,7 +375,7 @@ public class GameService
     {
         if (_sessions.TryGetValue(gameId, out var session))
         {
-            return session.PendingModeratorInstruction;
+            return session.Execution.PendingInstruction;
         }
         return null; // Or throw GameNotFoundException
     }
@@ -409,7 +409,7 @@ public class GameService
 				privateInstruction: GameStrings.GameSessionNotFoundError));
 		}
 
-        var pendingInstruction = session.PendingModeratorInstruction
+        var pendingInstruction = session.Execution.PendingInstruction
             ?? throw new InvalidOperationException("Internal error: No pending instruction available.");
 
         if (pendingInstruction is FinishedGameConfirmationInstruction)

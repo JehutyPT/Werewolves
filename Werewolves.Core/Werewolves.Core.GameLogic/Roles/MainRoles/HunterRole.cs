@@ -51,7 +51,7 @@ internal sealed class HunterRole :
 		IReadOnlyCollection<Guid> eliminatedPlayerIds,
 		ModeratorResponse input)
 	{
-		var pendingInstruction = session.PendingModeratorInstruction;
+		var pendingInstruction = session.Execution.PendingInstruction;
 		var cascadeScopeId = EliminationCascadeStage.GetActiveScopeId(session);
 		var triggeringPlayerIds = eliminatedPlayerIds.ToArray();
 		var triggeringPlayers = triggeringPlayerIds
@@ -194,7 +194,7 @@ internal sealed class HunterRole :
 	internal static void ValidateBorrowedPendingFinalShotRecoveryInstruction(
 		GameSession session)
 	{
-		var pendingInstruction = session.PendingModeratorInstruction;
+		var pendingInstruction = session.Execution.PendingInstruction;
 		if (pendingInstruction?.Semantic !=
 				ModeratorInstructionSemantic.SelectHunterFinalShotTarget ||
 			!session.GetModeratorActorSetupCards().Cards.Any(card =>
@@ -293,7 +293,8 @@ internal sealed class HunterRole :
 			GameSessionQueries
 				.IsDevotedServantAcquiredRoleDormantForCurrentDay(
 					session,
-					eliminatedPlayer.Id))
+					eliminatedPlayer.Id,
+					session.Execution.CurrentPhase))
 		{
 			execution = null!;
 			return false;

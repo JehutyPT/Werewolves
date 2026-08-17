@@ -302,8 +302,9 @@ internal static class GameSessionQueries
 
 	internal static bool IsDevotedServantAcquiredRoleDormantForCurrentDay(
 		IGameSession session,
-		Guid playerId) =>
-		session.GetCurrentPhase() == GamePhase.Day &&
+		Guid playerId,
+		GamePhase currentPhase) =>
+		currentPhase == GamePhase.Day &&
 		FindLogEntries<DevotedServantRoleTakenCommittedLogEntry>(session)
 			.Any(entry =>
 				entry.ActingPlayerId == playerId &&
@@ -477,11 +478,12 @@ internal static class GameSessionQueries
 
     internal static bool HasActiveStatusEffectAppliedThisPhase(
         IGameSession session,
-        StatusEffectTypes effectType) =>
+        StatusEffectTypes effectType,
+        GamePhase currentPhase) =>
         FindLogEntries<StatusEffectLogEntry>(
                 session,
                 NumberRangeConstraint.Exact(session.TurnNumber),
-                session.GetCurrentPhase(),
+                currentPhase,
                 entry =>
                     entry.EffectType == effectType &&
                     entry.IsActive)

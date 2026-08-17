@@ -302,8 +302,9 @@ internal sealed class CupidRole
 				borrowedExecution);
 		}
 
+		var execution = session.Execution;
 		if (session.TurnNumber != 1 ||
-		    session.GetCurrentPhase() != GamePhase.Night ||
+		    execution.CurrentPhase != GamePhase.Night ||
 		    GameSessionQueries.GetCommittedLoversPair(session) is not null)
 		{
 			throw new InvalidOperationException(
@@ -311,7 +312,7 @@ internal sealed class CupidRole
 		}
 
 		var holder = GetHolder(session);
-		if (session.PendingModeratorInstruction is not SelectPlayersInstruction
+		if (execution.PendingInstruction is not SelectPlayersInstruction
 		    {
 			    Semantic: ModeratorInstructionSemantic.SelectCupidLovers,
 			    CountConstraint: var countConstraint,
@@ -351,13 +352,14 @@ internal sealed class CupidRole
 		ModeratorResponse input,
 		ExecutionContext execution)
 	{
-		if (session.GetCurrentPhase() != GamePhase.Night)
+		var executionView = session.Execution;
+		if (executionView.CurrentPhase != GamePhase.Night)
 		{
 			throw new InvalidOperationException(
 				GameStrings.ActorBorrowedRolePowerInvalidResponse);
 		}
 
-		if (session.PendingModeratorInstruction is not
+		if (executionView.PendingInstruction is not
 		    SelectPlayersInstruction
 		    {
 			    Semantic: ModeratorInstructionSemantic.SelectCupidLovers

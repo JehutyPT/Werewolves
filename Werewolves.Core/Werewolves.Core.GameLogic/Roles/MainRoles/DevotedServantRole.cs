@@ -79,7 +79,7 @@ internal sealed class DevotedServantRole
 				input);
 		}
 
-		if (session.PendingModeratorInstruction is
+		if (session.Execution.PendingInstruction is
 			DevotedServantVoteWindowInstruction pending)
 		{
 			ValidatePendingWindow(pending, target.Id, selectablePlayerIds);
@@ -149,7 +149,7 @@ internal sealed class DevotedServantRole
 			return EliminationCascadeReactionResult.Complete();
 		}
 
-		if (session.PendingModeratorInstruction is not AssignRolesInstruction
+		if (session.Execution.PendingInstruction is not AssignRolesInstruction
 			{
 				Semantic:
 					ModeratorInstructionSemantic.RecordDevotedServantAcquiredCard
@@ -274,7 +274,7 @@ internal sealed class DevotedServantRole
 		out IPlayer target)
 	{
 		target = null!;
-		if (session.GetCurrentPhase() != GamePhase.Day ||
+		if (session.Execution.CurrentPhase != GamePhase.Day ||
 			eliminatedPlayerIds is not { Count: 1 })
 		{
 			return false;

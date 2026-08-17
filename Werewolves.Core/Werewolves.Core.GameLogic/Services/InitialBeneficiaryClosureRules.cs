@@ -284,7 +284,7 @@ internal static class InitialBeneficiaryClosureRules
 	{
 		ArgumentNullException.ThrowIfNull(session);
 		if (session.TurnNumber != 1 ||
-		    session.GetCurrentPhase() != GamePhase.Night)
+		    session.Execution.CurrentPhase != GamePhase.Night)
 		{
 			return false;
 		}
@@ -404,7 +404,7 @@ internal static class InitialBeneficiaryClosureRules
 		closureFacts = [];
 		var currentBoundary = new FactionFactEffectiveBoundary(
 			session.TurnNumber,
-			session.GetCurrentPhase(),
+			session.Execution.CurrentPhase,
 			int.MaxValue);
 		if (FactionFactProjection.CompareBoundaries(
 			request.InitialAgentGroupBoundary,

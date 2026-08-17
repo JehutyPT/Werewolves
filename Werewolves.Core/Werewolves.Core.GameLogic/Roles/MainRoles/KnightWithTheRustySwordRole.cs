@@ -59,7 +59,7 @@ internal sealed class KnightWithTheRustySwordRole
 			return EliminationCascadeReactionResult.Complete();
 		}
 
-		var pendingInstruction = session.PendingModeratorInstruction;
+		var pendingInstruction = session.Execution.PendingInstruction;
 		if (pendingInstruction?.Semantic ==
 		    ModeratorInstructionSemantic.AnnounceDawnVictims)
 		{
@@ -89,8 +89,9 @@ internal sealed class KnightWithTheRustySwordRole
 	{
 		ValidateBorrowedRustySwordScheduleRecovery(session);
 
-		var pendingInstruction = session.PendingModeratorInstruction;
-		if (session.GetCurrentPhase() != GamePhase.Dawn ||
+		var execution = session.Execution;
+		var pendingInstruction = execution.PendingInstruction;
+		if (execution.CurrentPhase != GamePhase.Dawn ||
 			pendingInstruction?.Semantic !=
 				ModeratorInstructionSemantic.AnnounceDawnVictims)
 		{
@@ -258,10 +259,11 @@ internal sealed class KnightWithTheRustySwordRole
 		GameSession session,
 		ModeratorResponse input)
 	{
-		if (!session.TryGetActiveGameHook(out var hook) ||
+		var execution = session.Execution;
+		if (!execution.TryGetActiveGameHook(out var hook) ||
 		    hook is not (GameHook.NightMainActionLoop or
 			    GameHook.DawnMainActionLoop) ||
-		    session.GetCurrentPhase() is not (GamePhase.Night or GamePhase.Dawn))
+		    execution.CurrentPhase is not (GamePhase.Night or GamePhase.Dawn))
 		{
 			return HookListenerActionResult.Skip();
 		}
@@ -289,8 +291,9 @@ internal sealed class KnightWithTheRustySwordRole
 		GameSession session,
 		ModeratorResponse _)
 	{
-		if (session.GetCurrentPhase() != GamePhase.Night ||
-		    !session.TryGetActiveGameHook(out var hook) ||
+		var execution = session.Execution;
+		if (execution.CurrentPhase != GamePhase.Night ||
+		    !execution.TryGetActiveGameHook(out var hook) ||
 		    hook != GameHook.NightMainActionLoop)
 		{
 			return HookListenerActionResult.Skip();
@@ -371,8 +374,9 @@ internal sealed class KnightWithTheRustySwordRole
 		GameSession session,
 		ModeratorResponse _)
 	{
-		if (session.GetCurrentPhase() != GamePhase.Dawn ||
-		    !session.TryGetActiveGameHook(out var hook) ||
+		var executionView = session.Execution;
+		if (executionView.CurrentPhase != GamePhase.Dawn ||
+		    !executionView.TryGetActiveGameHook(out var hook) ||
 		    hook != GameHook.DawnMainActionLoop)
 		{
 			return HookListenerActionResult.Skip();
@@ -381,7 +385,8 @@ internal sealed class KnightWithTheRustySwordRole
 		var alreadyScheduled =
 			GameSessionQueries.HasActiveStatusEffectAppliedThisPhase(
 				session,
-				StatusEffectTypes.RustySwordDisease) ||
+				StatusEffectTypes.RustySwordDisease,
+				executionView.CurrentPhase) ||
 			session.GetActorBorrowedKnightRustySwordScheduleCommits()
 				.Any(commit =>
 					commit.TurnNumber == session.TurnNumber &&

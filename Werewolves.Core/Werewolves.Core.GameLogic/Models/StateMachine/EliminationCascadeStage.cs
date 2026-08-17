@@ -243,7 +243,7 @@ internal sealed class EliminationCascadeStage : SubPhaseStage
 				return new BatchFrame(
 					eliminations,
 					isInitial,
-					session.PendingModeratorInstruction is { } pending &&
+					session.Execution.PendingInstruction is { } pending &&
 					matchesPostCommitInteractionInstruction(pending)
 						? BatchProgress.AwaitingPostCommitInteraction
 						: BatchProgress.AwaitingCommitConsequence)
@@ -1026,7 +1026,7 @@ internal sealed class EliminationCascadeStage : SubPhaseStage
 		ModeratorInstructionSemantic revealSemantic,
 		bool isInitial)
 	{
-		var pending = session.PendingModeratorInstruction;
+		var pending = session.Execution.PendingInstruction;
 		if (pending is not AssignRolesInstruction &&
 			pending is not ConfirmationInstruction)
 		{

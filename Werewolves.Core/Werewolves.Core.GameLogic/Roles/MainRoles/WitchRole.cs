@@ -453,7 +453,7 @@ internal sealed class WitchRole : NightRoleHookListener<WitchRoleState>
 		var attackTargets = GameSessionQueries.GetPhysicalAttackTargetsThisNight(session);
 		var attackRosterWasDisclosed =
 			_attackRosterDisclosed ||
-			session.PendingModeratorInstruction?.Semantic ==
+			session.Execution.PendingInstruction?.Semantic ==
 				ModeratorInstructionSemantic.SelectWitchHealingTarget;
 		var privateInstruction = attackRosterWasDisclosed || attackTargets.Count == 0
 			? GameStrings.WitchPoisonSelectionInstruction
@@ -489,7 +489,7 @@ internal sealed class WitchRole : NightRoleHookListener<WitchRoleState>
 			PoisonResourceId);
 		var wasAttackRosterDisclosed =
 			_attackRosterDisclosed ||
-			session.PendingModeratorInstruction?.Semantic is
+			session.Execution.PendingInstruction?.Semantic is
 				ModeratorInstructionSemantic.SelectWitchHealingTarget or
 				ModeratorInstructionSemantic.SelectWitchPoisonTarget ||
 			(execution.IsBorrowed

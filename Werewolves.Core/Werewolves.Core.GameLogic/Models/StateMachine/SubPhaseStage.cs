@@ -264,7 +264,7 @@ internal sealed class HookSubPhaseStage : SubPhaseStage
         foreach (var listenerId in listeners)
         {
             // Check if we have a currently paused listener
-            var currentListener = session.GetCurrentListener();
+            var currentListener = session.Execution.CurrentListener;
 
 			if (currentListener != null && currentListener != listenerId)
             {

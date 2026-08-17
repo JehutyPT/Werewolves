@@ -69,13 +69,14 @@ internal class PhaseManager<TSubPhaseEnum> : IPhaseDefinition where TSubPhaseEnu
         do
         {
             // 1. Determine the current sub-phase state, defaulting to the defined entry point
-            var subPhaseState = session.GetSubPhase<TSubPhaseEnum>() ?? _entrySubPhase;
+            var execution = session.Execution;
+            var subPhaseState = execution.GetSubPhase<TSubPhaseEnum>() ?? _entrySubPhase;
 
             // 2. Find the corresponding stage definition
             if (!_subPhaseDictionary.TryGetValue(subPhaseState, out var subPhase))
             {
                 throw new InvalidOperationException(
-                    $"Internal State Machine Error: No sub-phase stage definition found for phase '{session.GetCurrentPhase()}' and sub-phase '{subPhaseState}'.");
+                    $"Internal State Machine Error: No sub-phase stage definition found for phase '{execution.CurrentPhase}' and sub-phase '{subPhaseState}'.");
             }
 
             // 3. Execute the specific handler for this stage
@@ -85,7 +86,7 @@ internal class PhaseManager<TSubPhaseEnum> : IPhaseDefinition where TSubPhaseEnu
             AttemptTransition(session, subPhaseState, result, subPhase);
             
             // Exit if we're no longer the active phase (silent main phase transition occurred)
-        } while (result.ModeratorInstruction == null && session.GetCurrentPhase() == ownedPhase);
+        } while (result.ModeratorInstruction == null && session.Execution.CurrentPhase == ownedPhase);
         
 
         return result;

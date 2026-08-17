@@ -282,7 +282,7 @@ internal sealed class PiperRole
 		}
 
 		var holder = GetHolder(session);
-		if (session.PendingModeratorInstruction is not SelectPlayersInstruction
+		if (session.Execution.PendingInstruction is not SelectPlayersInstruction
 		    {
 			    Semantic: ModeratorInstructionSemantic.SelectPiperTargets,
 			    AffectedPlayerIds: { Count: 1 } affectedPlayerIds

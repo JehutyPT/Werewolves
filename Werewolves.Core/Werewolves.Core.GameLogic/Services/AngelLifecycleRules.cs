@@ -180,7 +180,7 @@ internal static class AngelLifecycleRules
     private static bool HasPassedNightTwoDawnWindow(GameSession session) =>
         session.TurnNumber > 2 ||
         session.TurnNumber == 2 &&
-        session.GetCurrentPhase() == GamePhase.Day;
+        session.Execution.CurrentPhase == GamePhase.Day;
 
     private static bool IsAngelVictoryBoundary(
         VictoryConditionMetLogEntry victory) =>
