@@ -46,6 +46,27 @@ public static partial class TerminalLobbyCache
 		ReadOnlySpan<byte> utf8Json,
 		SimulationCompatibilityIdentity expectedIdentity)
 	{
+		return Read(utf8Json, expectedIdentity, resolveCapability: null);
+	}
+
+	public static TerminalLobbyCacheReadResult Read(
+		ReadOnlySpan<byte> utf8Json,
+		SimulationScenario scenario,
+		SimulatorCapability capability)
+	{
+		ArgumentNullException.ThrowIfNull(scenario);
+		ArgumentNullException.ThrowIfNull(capability);
+		return Read(
+			utf8Json,
+			capability.CreateCompatibilityIdentity(scenario),
+			identity => identity.Equals(capability.Identity) ? capability : null);
+	}
+
+	private static TerminalLobbyCacheReadResult Read(
+		ReadOnlySpan<byte> utf8Json,
+		SimulationCompatibilityIdentity expectedIdentity,
+		Func<SimulatorProfileIdentity, SimulatorCapability?>? resolveCapability)
+	{
 		ArgumentNullException.ThrowIfNull(expectedIdentity);
 		try
 		{
@@ -53,7 +74,7 @@ public static partial class TerminalLobbyCache
 			var root = json.RootElement;
 			RequireProperties(root, "schema", "version", "record");
 			RequireSchema(root);
-			var record = ParseRecord(root.GetProperty("record"));
+			var record = ParseRecord(root.GetProperty("record"), resolveCapability);
 			if (!record.CompatibilityIdentity.Equals(expectedIdentity))
 			{
 				throw new FormatException("Incompatible identity.");
@@ -77,6 +98,25 @@ public static partial class TerminalLobbyCache
 	public static TerminalLobbyCacheDocumentReadResult ReadDocument(
 		ReadOnlySpan<byte> utf8Json)
 	{
+		return ReadDocument(utf8Json, resolveCapability: null);
+	}
+
+	public static TerminalLobbyCacheDocumentReadResult ReadDocument(
+		ReadOnlySpan<byte> utf8Json,
+		SimulatorCapabilityRegistry capabilityRegistry)
+	{
+		ArgumentNullException.ThrowIfNull(capabilityRegistry);
+		return ReadDocument(
+			utf8Json,
+			identity => capabilityRegistry.TryGet(identity, out var capability)
+				? capability
+				: null);
+	}
+
+	private static TerminalLobbyCacheDocumentReadResult ReadDocument(
+		ReadOnlySpan<byte> utf8Json,
+		Func<SimulatorProfileIdentity, SimulatorCapability?>? resolveCapability)
+	{
 		try
 		{
 			using var json = JsonDocument.Parse(utf8Json.ToArray());
@@ -86,7 +126,7 @@ public static partial class TerminalLobbyCache
 			var records = root
 				.GetProperty("records")
 				.EnumerateArray()
-				.Select(ParseRecord)
+				.Select(element => ParseRecord(element, resolveCapability))
 				.ToArray();
 			var document = CreateDocument(records);
 			if (!Write(document).AsSpan().SequenceEqual(utf8Json))
@@ -213,18 +253,31 @@ public static partial class TerminalLobbyCache
 		writer.WriteEndObject();
 	}
 
-	private static TerminalLobbyCacheRecord ParseRecord(JsonElement element)
+	private static TerminalLobbyCacheRecord ParseRecord(
+		JsonElement element,
+		Func<SimulatorProfileIdentity, SimulatorCapability?>? resolveCapability)
 	{
 		var identity = SimulationCompatibilityIdentity.Parse(
 			RequiredString(element, "identity"));
+		var capability = resolveCapability?.Invoke(identity.Profile);
+		if (resolveCapability is not null && capability is null)
+		{
+			throw new FormatException(
+				"The cache identity does not name a current Simulator Capability.");
+		}
 		var kind = RequiredString(element, "kind");
 		if (kind == "alreadyDecided")
 		{
 			RequireProperties(element, "identity", "kind", "result", "reason");
-			return new AlreadyDecidedTerminalCacheRecord(
-				identity,
-				ParseResult(element.GetProperty("result")),
-				RequiredEnum<AlreadyDecidedReason>(element, "reason"));
+			var result = ParseResult(element.GetProperty("result"));
+			var reason = RequiredEnum<AlreadyDecidedReason>(element, "reason");
+			return capability is null
+				? new AlreadyDecidedTerminalCacheRecord(identity, result, reason)
+				: new AlreadyDecidedTerminalCacheRecord(
+					identity,
+					result,
+					reason,
+					capability);
 		}
 
 		var degenerate = kind == "degenerate";
@@ -266,9 +319,21 @@ public static partial class TerminalLobbyCache
 			.EnumerateArray()
 			.Select(ParseCell)
 			.ToArray();
-		return degenerate
-			? new DegenerateTerminalCacheRecord(identity, rows, cells)
-			: new ProbabilityTerminalCacheRecord(identity, rows, cells);
+		return (degenerate, capability) switch
+		{
+			(true, null) => new DegenerateTerminalCacheRecord(identity, rows, cells),
+			(true, not null) => new DegenerateTerminalCacheRecord(
+				identity,
+				rows,
+				cells,
+				capability),
+			(false, null) => new ProbabilityTerminalCacheRecord(identity, rows, cells),
+			(false, not null) => new ProbabilityTerminalCacheRecord(
+				identity,
+				rows,
+				cells,
+				capability)
+		};
 	}
 
 	private static TerminalCacheGameResultFrequency ParseFrequency(JsonElement element)
