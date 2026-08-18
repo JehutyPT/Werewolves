@@ -85,6 +85,27 @@ public class SimulatorProfile
 	public bool SupportsRuleState(SimulationRuleState ruleState) =>
 		_supportedRuleStates.Contains(ruleState);
 
+	internal SimulatorSupportResult ClassifySupport(
+		SimulationScenario scenario,
+		AppSupportResult appSupport)
+	{
+		ArgumentNullException.ThrowIfNull(scenario);
+		ArgumentNullException.ThrowIfNull(appSupport);
+		var unsupportedRoles = scenario.RoleCompositionCards
+			.Distinct()
+			.Where(role => !SupportsRole(role))
+			.OrderBy(role => role.ToString(), StringComparer.Ordinal);
+		return new SimulatorSupportResult(
+			scenario,
+			appSupport,
+			this,
+			unsupportedRoles,
+			hasUnsupportedActorSetupCards:
+				scenario.ActorSetupCards.Cards.Count > 0
+				&& !SupportsActorSetupCards,
+			hasUnsupportedRuleState: !SupportsRuleState(scenario.RuleState));
+	}
+
 	internal static HeadlessResponsePolicy CreateBaselinePolicy() => new(
 		BaselineRandomDecisionStrategy.Identity,
 		BaselineRandomDecisionStrategy.Policy.AdmittedSemantics);
@@ -125,6 +146,8 @@ internal sealed class SimulatorProfileRoleDescriptor
 
 public sealed class SimulatorCapability : SimulatorProfile
 {
+	private readonly LobbyEvaluationDepth[] _supportedEvaluationDepths;
+
 	private static readonly SimulatorProfileRoleDescriptor[] SafetyScreeningRoleDescriptors =
 	[
 		new(MainRoleType.SimpleWerewolf, Faction.Werewolf, Faction.Werewolf),
@@ -197,6 +220,30 @@ public sealed class SimulatorCapability : SimulatorProfile
 	public static SimulatorCapability FullProbability =>
 		SimulatorCapabilityRegistry.Production.FullProbability;
 
+	public IReadOnlyList<LobbyEvaluationDepth> SupportedEvaluationDepths { get; }
+
+	public bool SupportsEvaluationDepth(LobbyEvaluationDepth depth) =>
+		_supportedEvaluationDepths.Contains(depth);
+
+	public SimulationCompatibilityIdentity CreateCompatibilityIdentity(
+		SimulationScenario scenario)
+	{
+		ArgumentNullException.ThrowIfNull(scenario);
+		return new SimulationCompatibilityIdentity(scenario.ToCanonical(), Identity);
+	}
+
+	public new bool TryGetBeneficiaryFaction(
+		MainRoleType role,
+		out Faction faction) =>
+		base.TryGetBeneficiaryFaction(role, out faction);
+
+	public new bool IsFactionAgent(MainRoleType role, Faction faction) =>
+		base.IsFactionAgent(role, faction);
+
+	internal new GameResult[] CreatePossibleGameResults(
+		IEnumerable<Faction> possibleFactions) =>
+		base.CreatePossibleGameResults(possibleFactions);
+
 	internal static SimulatorCapability CreateSafetyScreening() => new(
 			new SimulatorProfileIdentity("safety-screening", "30"),
 		SafetyScreeningRoleDescriptors,
@@ -259,7 +306,11 @@ public sealed class SimulatorCapability : SimulatorProfile
 					ModeratorInstructionSemantic.ChooseActorSetupCard
 				]),
 		supportsActorSetupCards: true,
-		supportedRuleStates: [SimulationRuleState.Default]);
+			supportedRuleStates: [SimulationRuleState.Default],
+			supportedEvaluationDepths:
+			[
+				LobbyEvaluationDepth.DegenerateScreeningOnly
+			]);
 
 	internal static SimulatorCapability CreateFullProbability() => new(
 			new SimulatorProfileIdentity("full-probability", "4"),
@@ -288,7 +339,12 @@ public sealed class SimulatorCapability : SimulatorProfile
 				ModeratorInstructionSemantic.AnnounceDayElimination
 			]),
 		supportsActorSetupCards: false,
-		supportedRuleStates: [SimulationRuleState.Default]);
+			supportedRuleStates: [SimulationRuleState.Default],
+			supportedEvaluationDepths:
+			[
+				LobbyEvaluationDepth.DegenerateScreeningOnly,
+				LobbyEvaluationDepth.FullProbability
+			]);
 
 	internal SimulatorCapability(
 		SimulatorProfileIdentity identity,
@@ -296,7 +352,8 @@ public sealed class SimulatorCapability : SimulatorProfile
 		IEnumerable<SharedVictoryGameResult>? sharedVictoryCapabilities = null,
 		HeadlessResponsePolicy? headlessResponsePolicy = null,
 		bool supportsActorSetupCards = false,
-		IEnumerable<SimulationRuleState>? supportedRuleStates = null)
+		IEnumerable<SimulationRuleState>? supportedRuleStates = null,
+		IEnumerable<LobbyEvaluationDepth>? supportedEvaluationDepths = null)
 		: base(
 			identity,
 			roleDescriptors,
@@ -305,6 +362,16 @@ public sealed class SimulatorCapability : SimulatorProfile
 			supportsActorSetupCards,
 			supportedRuleStates)
 	{
+		_supportedEvaluationDepths = (supportedEvaluationDepths ??
+			[ LobbyEvaluationDepth.DegenerateScreeningOnly ])
+			.Distinct()
+			.ToArray();
+		if (_supportedEvaluationDepths.Any(depth => !Enum.IsDefined(depth)))
+		{
+			throw new ArgumentOutOfRangeException(nameof(supportedEvaluationDepths));
+		}
+
+		SupportedEvaluationDepths = Array.AsReadOnly(_supportedEvaluationDepths);
 	}
 }
 
