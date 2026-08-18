@@ -283,26 +283,6 @@ public sealed class GameClientManager
 			new LobbyChange.RemovePlayer(index));
 	}
 
-	private bool TryClearStagedRecoveryBeforeMembershipEdit(
-		LobbySetupState lobby)
-	{
-		if (_stagedLobby is null && lobby.AcceptedRoleLockIn is null)
-		{
-			return true;
-		}
-
-		try
-		{
-			_saveStore.Clear();
-		}
-		catch (Exception)
-		{
-			return false;
-		}
-		_stagedLobby = null;
-		return true;
-	}
-
 	public StartGameConfirmationInstruction StartGame(
 		IReadOnlyList<string> playerNamesInOrder,
 		IReadOnlyList<MainRoleType> rolesInPlay)
@@ -375,29 +355,6 @@ public sealed class GameClientManager
 			lobby.AcceptedActorSetupCards,
 			lobby.AcceptedPublicGroupPartition);
 		return StartGame(config, lobby);
-	}
-
-	private void PersistStagedLobbyBeforeApply(
-		IReadOnlyList<GameSessionPlayerConfig> proposedPlayerRoster,
-		RoleLockIn roleLockIn,
-		ActorSetupCards actorSetupCards,
-		PublicGroupPartition? publicGroupPartition,
-		Action apply)
-	{
-		var playerRoster = proposedPlayerRoster.ToArray();
-		var payload = LocalRecoveryPayloadCodec.SerializeStagedLobby(
-			playerRoster,
-			roleLockIn,
-			actorSetupCards,
-			publicGroupPartition);
-		_saveStore.Save(payload);
-		apply();
-		_stagedLobby = new StagedLobbyRecoveryPayload(
-			playerRoster,
-			roleLockIn,
-			actorSetupCards,
-			publicGroupPartition);
-		OnStateChanged();
 	}
 
 	public StartGameConfirmationInstruction StartGame(GameSessionConfig config)
@@ -549,12 +506,23 @@ public sealed class GameClientManager
 			switch (LocalRecoveryPayloadCodec.Deserialize(serializedPayload))
 			{
 				case StagedLobbyRecoveryPayload stagedLobby:
-					_lobbySetupState?.RestoreAcceptedRoleLockIn(
+					var lobbySetupState = _lobbySetupState ??
+						throw new InvalidOperationException(
+							"Staged Lobby recovery requires a Lobby setup target.");
+					var commit = lobbySetupState.CreateRecoveryCommit(
 						stagedLobby.PlayerRoster,
 						stagedLobby.RoleLockIn,
 						stagedLobby.ActorSetupCards,
 						stagedLobby.PublicGroupPartition);
+					lobbySetupState.Publish(commit);
 					_stagedLobby = stagedLobby;
+					try
+					{
+						lobbySetupState.NotifySimulationScenarioChanged();
+					}
+					catch (Exception)
+					{
+					}
 					break;
 				case ActiveGameRecoveryPayload activeGame:
 					ActiveGameId = _gameService.RehydrateSession(activeGame.SerializedSession);

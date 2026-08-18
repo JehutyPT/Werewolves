@@ -758,7 +758,7 @@ public class LobbySetupState
 	internal void NotifySimulationScenarioChanged() =>
 		OnSimulationScenarioChanged();
 
-	internal bool CanReplaceRoleLockIn(
+	private bool CanReplaceRoleLockIn(
 		long expectedCurrentVersion,
 		RoleLockIn replacement)
 	{
@@ -782,29 +782,7 @@ public class LobbySetupState
 			allowMissingActorSetup: true);
 	}
 
-	internal void ApplyAcceptedRoleLockIn(RoleLockIn replacement)
-	{
-		var retainedActorSetupCards =
-			GetRetainedActorSetupCardsForRoleLockIn(replacement);
-		var retainedPartition = AcceptedPublicGroupPartition;
-		if (!IsPrejudicedManipulatorReachable(replacement) ||
-			IsActorReachable(replacement) && retainedActorSetupCards.Cards.Count == 0)
-		{
-			retainedPartition = null;
-		}
-		_current = new LobbySetupAggregate(
-			_current.PlayerRoster,
-			_current.IssuedPlayerIds,
-			GetRoleCounts(replacement),
-			replacement,
-			retainedActorSetupCards,
-			retainedPartition,
-			roleLockInFinalized: false,
-			acceptedRoleLockInRequiresReplacement: false);
-		OnSimulationScenarioChanged();
-	}
-
-	internal ActorSetupCards GetRetainedActorSetupCardsForRoleLockIn(
+	private ActorSetupCards GetRetainedActorSetupCardsForRoleLockIn(
 		RoleLockIn replacement)
 	{
 		ArgumentNullException.ThrowIfNull(replacement);
@@ -821,7 +799,7 @@ public class LobbySetupState
 		return AcceptedActorSetupCards;
 	}
 
-	internal bool CanReplaceActorSetupCards(
+	private bool CanReplaceActorSetupCards(
 		long expectedCurrentVersion,
 		ActorSetupCards replacement)
 	{
@@ -839,22 +817,7 @@ public class LobbySetupState
 				allowMissingActorSetup: false);
 	}
 
-	internal void ApplyAcceptedActorSetupCards(ActorSetupCards replacement)
-	{
-		ArgumentNullException.ThrowIfNull(replacement);
-		_current = new LobbySetupAggregate(
-			_current.PlayerRoster,
-			_current.IssuedPlayerIds,
-			_current.RoleCounts,
-			AcceptedRoleLockIn,
-			replacement,
-			AcceptedPublicGroupPartition,
-			_current.RoleLockInFinalized,
-			_current.AcceptedRoleLockInRequiresReplacement);
-		OnSimulationScenarioChanged();
-	}
-
-	internal bool CanReplacePublicGroupPartition(PublicGroupPartition replacement)
+	private bool CanReplacePublicGroupPartition(PublicGroupPartition replacement)
 	{
 		ArgumentNullException.ThrowIfNull(replacement);
 		return !_current.RoleLockInFinalized &&
@@ -864,27 +827,7 @@ public class LobbySetupState
 			HasExactCurrentRoster(replacement);
 	}
 
-	internal void ApplyAcceptedPublicGroupPartition(PublicGroupPartition replacement)
-	{
-		ArgumentNullException.ThrowIfNull(replacement);
-		if (AcceptedPublicGroupPartition?.Equals(replacement) == true)
-		{
-			return;
-		}
-
-		_current = new LobbySetupAggregate(
-			_current.PlayerRoster,
-			_current.IssuedPlayerIds,
-			_current.RoleCounts,
-			AcceptedRoleLockIn,
-			AcceptedActorSetupCards,
-			replacement,
-			_current.RoleLockInFinalized,
-			_current.AcceptedRoleLockInRequiresReplacement);
-		OnSimulationScenarioChanged();
-	}
-
-	internal void RestoreAcceptedRoleLockIn(
+	internal Commit CreateRecoveryCommit(
 		IReadOnlyList<GameSessionPlayerConfig> playerRoster,
 		RoleLockIn roleLockIn,
 		ActorSetupCards actorSetupCards,
@@ -951,7 +894,7 @@ public class LobbySetupState
 				exception);
 		}
 
-		_current = new LobbySetupAggregate(
+		var recoveredAggregate = new LobbySetupAggregate(
 			roster,
 			_current.IssuedPlayerIds.Concat(
 				roster.Select(player => player.Id)).Distinct(),
@@ -961,7 +904,7 @@ public class LobbySetupState
 			publicGroupPartition,
 			roleLockInFinalized: false,
 			acceptedRoleLockInRequiresReplacement: false);
-		OnSimulationScenarioChanged();
+		return new Commit(CommitAuthority, recoveredAggregate);
 	}
 
 	internal void FinalizeRoleLockIn(RoleLockIn roleLockIn)
