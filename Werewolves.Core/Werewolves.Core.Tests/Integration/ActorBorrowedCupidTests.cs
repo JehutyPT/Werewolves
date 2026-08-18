@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Werewolves.Core.GameLogic.Interfaces;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
+using Werewolves.Core.GameLogic.Models.StateMachine;
 using Werewolves.Core.GameLogic.RolePowers;
 using Werewolves.Core.GameLogic.Roles;
 using Werewolves.Core.GameLogic.Roles.MainRoles;
@@ -12,6 +13,7 @@ using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Resources;
+using Werewolves.Core.Tests.Helpers;
 using Xunit;
 
 namespace Werewolves.Core.Tests.Integration;
@@ -28,16 +30,23 @@ public sealed class ActorBorrowedCupidTests
 		Guid.Parse("00000000-0000-0000-0000-000000000147"),
 		MainRoleType.Defender);
 
-	private static readonly TestSubPhaseManagerKey SubPhaseKey = new();
-	private static readonly TestHookSubPhaseKey HookKey = new();
-	private static readonly TestGameFlowManagerKey RecoveryKey = new();
+	private static readonly SubPhaseManager<NightSubPhases> NightActionLoop = new(
+		NightSubPhases.Start,
+		[
+			HookSubPhaseStage.HookStage(GameHook.NightMainActionLoop),
+			NavigationSubPhaseStage.NavigationEndStageSilent(NightSubPhases.Start)
+		]);
 
 	[Fact]
 	public void BorrowedCupid_NightOneRecoversDeferredRecognitionBeforeInitialBeneficiaryClosureWithoutDuplicate()
 	{
 		var (session, start, actorId) = CreateFirstNightActorSession();
-		var activation = PerformSpendOpening(
+		IGameHookListener listener = new CupidRole(
+			new RolePowerAvailabilityGateway(
+				AllowAllRolePowerAvailabilityPolicy.Instance));
+		var (activation, wake) = PerformSpendOpening(
 			CreateActorRole(),
+			listener,
 			session,
 			start,
 			CupidCard.Id);
@@ -47,15 +56,11 @@ public sealed class ActorBorrowedCupidTests
 		var villagerTargetId = players.Single(player =>
 			player.Name == "Villager 1").Id;
 		var lovers = new[] { villagerTargetId, werewolfTargetId };
-		IGameHookListener listener = new CupidRole(
-			new RolePowerAvailabilityGateway(
-				AllowAllRolePowerAvailabilityPolicy.Instance));
-		var wake = Advance(listener, session, start.CreateResponse()).Instruction
-			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		var selection = Advance(listener, session, wake.CreateResponse())
-			.Instruction.Should().BeOfType<SelectPlayersInstruction>().Subject;
+			.ModeratorInstruction.Should()
+			.BeOfType<SelectPlayersInstruction>().Subject;
 		var logCountBeforeCommit = session.GameHistoryLog.Count();
-		session.SetPendingModeratorInstruction(RecoveryKey, selection);
+		session = RehydrateAtPendingInstruction(session, selection);
 
 		var recognition = GameFlowManager.HandleInput(
 				session,
@@ -85,11 +90,10 @@ public sealed class ActorBorrowedCupidTests
 		session.GameHistoryLog.OfType<LoversPairCommittedLogEntry>().Should()
 			.BeEmpty();
 
-		var recovered = new GameSession(session.Serialize());
-		GameFlowManager.RestoreDurableContinuation(
-			recovered,
-			SupportedRoleCatalog.Admissions);
-		var recoveredRecognition = recovered.PendingModeratorInstruction
+		var recovered = RecoveryPayloadTestDriver.Parse(session.Serialize())
+			.RehydrateGameSession();
+		var recoveredRecognition = RecoveryPayloadTestDriver.Capture(recovered)
+			.PendingInstruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 
 		recoveredRecognition.InstructionId.Should().Be(recognition.InstructionId);
@@ -194,25 +198,26 @@ public sealed class ActorBorrowedCupidTests
 			.Should().Be(InitialBeneficiaryClosureResult.Committed);
 
 		var (borrowedSession, start, _) = CreateFirstNightActorSession();
-		PerformSpendOpening(
+		IGameHookListener listener = new CupidRole(
+			new RolePowerAvailabilityGateway(
+				AllowAllRolePowerAvailabilityPolicy.Instance));
+		var (_, wake) = PerformSpendOpening(
 			CreateActorRole(),
+			listener,
 			borrowedSession,
 			start,
 			CupidCard.Id);
 		var borrowedLovers = SelectClassificationPair(
 			borrowedSession,
 			crossFaction);
-		IGameHookListener listener = new CupidRole(
-			new RolePowerAvailabilityGateway(
-				AllowAllRolePowerAvailabilityPolicy.Instance));
-		var wake = Advance(listener, borrowedSession, start.CreateResponse())
-			.Instruction.Should().BeOfType<ConfirmationInstruction>().Subject;
 		var selection = Advance(
 			listener,
 			borrowedSession,
-			wake.CreateResponse()).Instruction
+			wake.CreateResponse()).ModeratorInstruction
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
-		borrowedSession.SetPendingModeratorInstruction(RecoveryKey, selection);
+		borrowedSession = RehydrateAtPendingInstruction(
+			borrowedSession,
+			selection);
 		GameFlowManager.HandleInput(
 			borrowedSession,
 			selection.CreateResponse(borrowedLovers.ToHashSet()),
@@ -270,8 +275,12 @@ public sealed class ActorBorrowedCupidTests
 	public void BorrowedCupid_LaterNightSourceSlotKeepsActorIdentityAndSelectsExactlyTwoLivingPlayers()
 	{
 		var (session, start, actorId) = CreateLaterNightActorSession();
-		var activation = PerformSpendOpening(
+		var policy = new RecordingPolicy();
+		IGameHookListener listener = new CupidRole(
+			new RolePowerAvailabilityGateway(policy));
+		var (activation, wake) = PerformSpendOpening(
 			CreateActorRole(),
+			listener,
 			session,
 			start,
 			CupidCard.Id);
@@ -286,12 +295,6 @@ public sealed class ActorBorrowedCupidTests
 		session.GetPlayers().Should().OnlyContain(player =>
 			!player.State.HasStatusEffect(StatusEffectTypes.Lovers));
 
-		var policy = new RecordingPolicy();
-		IGameHookListener listener = new CupidRole(
-			new RolePowerAvailabilityGateway(policy));
-		var wake = Advance(listener, session, start.CreateResponse()).Instruction
-			.Should().BeOfType<ConfirmationInstruction>().Subject;
-
 		wake.Semantic.Should().Be(ModeratorInstructionSemantic.WakeRole);
 		wake.PublicAnnouncement.Should().Be(
 			GameStrings.RoleWakesUp.Format(GameStrings.ActorRoleName));
@@ -300,7 +303,8 @@ public sealed class ActorBorrowedCupidTests
 		wake.AffectedPlayerIds.Should().Equal(actorId);
 
 		var selection = Advance(listener, session, wake.CreateResponse())
-			.Instruction.Should().BeOfType<SelectPlayersInstruction>().Subject;
+			.ModeratorInstruction.Should()
+			.BeOfType<SelectPlayersInstruction>().Subject;
 		var livingPlayerIds = session.GetPlayers()
 			.WithHealth(PlayerHealth.Alive)
 			.Select(player => player.Id)
@@ -334,8 +338,12 @@ public sealed class ActorBorrowedCupidTests
 	public void BorrowedCupid_FewerThanTwoLivingCandidates_OmitsSelectorAndCompletesThroughActorSleepWithoutCommit()
 	{
 		var (session, start, actorId) = CreateLaterNightActorSession();
-		var activation = PerformSpendOpening(
+		var policy = new RecordingPolicy();
+		IGameHookListener listener = new CupidRole(
+			new RolePowerAvailabilityGateway(policy));
+		var (activation, wake) = PerformSpendOpening(
 			CreateActorRole(),
+			listener,
 			session,
 			start,
 			CupidCard.Id);
@@ -348,18 +356,13 @@ public sealed class ActorBorrowedCupidTests
 				EliminationReason.EventElimination);
 		}
 
-		var policy = new RecordingPolicy();
-		IGameHookListener listener = new CupidRole(
-			new RolePowerAvailabilityGateway(policy));
 		var logCountBeforeSourceSlot = session.GameHistoryLog.Count();
-		var wake = Advance(listener, session, start.CreateResponse()).Instruction
-			.Should().BeOfType<ConfirmationInstruction>().Subject;
-
 		wake.Semantic.Should().Be(ModeratorInstructionSemantic.WakeRole);
 		wake.PublicAnnouncement.Should().Be(
 			GameStrings.RoleWakesUp.Format(GameStrings.ActorRoleName));
 		wake.AffectedPlayerIds.Should().Equal(actorId);
-		var sleep = Advance(listener, session, wake.CreateResponse()).Instruction
+		var sleep = Advance(listener, session, wake.CreateResponse())
+			.ModeratorInstruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 
 		sleep.Semantic.Should().Be(ModeratorInstructionSemantic.PutRoleToSleep);
@@ -378,18 +381,19 @@ public sealed class ActorBorrowedCupidTests
 		session.GetPlayers().Should().OnlyContain(player =>
 			!player.State.HasStatusEffect(StatusEffectTypes.Lovers));
 
-		var completion = Advance(listener, session, sleep.CreateResponse());
-
-		completion.Outcome.Should().Be(HookListenerOutcome.Complete);
-		completion.Instruction.Should().BeNull();
+		CompleteCadence(listener, session, sleep.CreateResponse());
 	}
 
 	[Fact]
 	public void BorrowedCupid_LaterNightSameFactionPairPreservesKnownBeneficiaries()
 	{
 		var (session, start, _) = CreateLaterNightActorSession();
-		PerformSpendOpening(
+		IGameHookListener listener = new CupidRole(
+			new RolePowerAvailabilityGateway(
+				AllowAllRolePowerAvailabilityPolicy.Instance));
+		var (_, wake) = PerformSpendOpening(
 			CreateActorRole(),
+			listener,
 			session,
 			start,
 			CupidCard.Id);
@@ -403,15 +407,11 @@ public sealed class ActorBorrowedCupidTests
 		ArrangeKnownBeneficiaries(
 			session,
 			lovers.Select(playerId => (playerId, Faction.Villager)).ToArray());
-		IGameHookListener listener = new CupidRole(
-			new RolePowerAvailabilityGateway(
-				AllowAllRolePowerAvailabilityPolicy.Instance));
-		var wake = Advance(listener, session, start.CreateResponse()).Instruction
-			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		var selection = Advance(listener, session, wake.CreateResponse())
-			.Instruction.Should().BeOfType<SelectPlayersInstruction>().Subject;
+			.ModeratorInstruction.Should()
+			.BeOfType<SelectPlayersInstruction>().Subject;
 		var historyCountBeforeCommit = session.GameHistoryLog.Count();
-		session.SetPendingModeratorInstruction(RecoveryKey, selection);
+		session = RehydrateAtPendingInstruction(session, selection);
 
 		var recognition = GameFlowManager.HandleInput(
 				session,
@@ -441,8 +441,12 @@ public sealed class ActorBorrowedCupidTests
 	public void BorrowedCupid_LaterNightUnknownBeneficiaryRejectsSelectionAndStaleRetryWithoutMutation()
 	{
 		var (session, start, actorId) = CreateLaterNightActorSession();
-		var activation = PerformSpendOpening(
+		IGameHookListener listener = new CupidRole(
+			new RolePowerAvailabilityGateway(
+				AllowAllRolePowerAvailabilityPolicy.Instance));
+		var (activation, wake) = PerformSpendOpening(
 			CreateActorRole(),
+			listener,
 			session,
 			start,
 			CupidCard.Id);
@@ -458,14 +462,10 @@ public sealed class ActorBorrowedCupidTests
 		session.GetFactionBeneficiaryKnowledge(unknownTargetId).Should().Be(
 			FactionBeneficiaryKnowledge.Unknown);
 
-		IGameHookListener listener = new CupidRole(
-			new RolePowerAvailabilityGateway(
-				AllowAllRolePowerAvailabilityPolicy.Instance));
-		var wake = Advance(listener, session, start.CreateResponse()).Instruction
-			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		var selection = Advance(listener, session, wake.CreateResponse())
-			.Instruction.Should().BeOfType<SelectPlayersInstruction>().Subject;
-		session.SetPendingModeratorInstruction(RecoveryKey, selection);
+			.ModeratorInstruction.Should()
+			.BeOfType<SelectPlayersInstruction>().Subject;
+		session = RehydrateAtPendingInstruction(session, selection);
 		var response = selection.CreateResponse(lovers.ToHashSet());
 		var historyCountBefore = session.GameHistoryLog.Count();
 		var markerCountBefore = session.GameHistoryLog
@@ -498,7 +498,8 @@ public sealed class ActorBorrowedCupidTests
 				FactionBeneficiaryKnowledge.Unknown);
 			session.GetModeratorActiveActorBorrowedRolePowerActivation().Should()
 				.Be(activation);
-			var pendingSelection = session.PendingModeratorInstruction.Should()
+			var pendingSelection = RecoveryPayloadTestDriver.Capture(session)
+				.PendingInstruction.Should()
 				.BeOfType<SelectPlayersInstruction>().Subject;
 			pendingSelection.InstructionId.Should().Be(selection.InstructionId);
 			pendingSelection.Semantic.Should().Be(
@@ -511,8 +512,12 @@ public sealed class ActorBorrowedCupidTests
 	public void BorrowedCupid_RelationshipSurvivesNextOpeningExpiryAndCannotReactivate()
 	{
 		var (session, start, actorId) = CreateLaterNightActorSession();
-		var activation = PerformSpendOpening(
+		IGameHookListener listener = new CupidRole(
+			new RolePowerAvailabilityGateway(
+				AllowAllRolePowerAvailabilityPolicy.Instance));
+		var (activation, wake) = PerformSpendOpening(
 			CreateActorRole(),
+			listener,
 			session,
 			start,
 			CupidCard.Id);
@@ -531,15 +536,11 @@ public sealed class ActorBorrowedCupidTests
 		session.RequireKnownFactionBeneficiary(villagerTargetId).Should().Be(
 			Faction.Villager);
 
-		IGameHookListener listener = new CupidRole(
-			new RolePowerAvailabilityGateway(
-				AllowAllRolePowerAvailabilityPolicy.Instance));
-		var wake = Advance(listener, session, start.CreateResponse()).Instruction
-			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		var selection = Advance(listener, session, wake.CreateResponse())
-			.Instruction.Should().BeOfType<SelectPlayersInstruction>().Subject;
+			.ModeratorInstruction.Should()
+			.BeOfType<SelectPlayersInstruction>().Subject;
 		var logCountBeforeCommit = session.GameHistoryLog.Count();
-		session.SetPendingModeratorInstruction(RecoveryKey, selection);
+		session = RehydrateAtPendingInstruction(session, selection);
 
 		var recognition = GameFlowManager.HandleInput(
 				session,
@@ -602,11 +603,10 @@ public sealed class ActorBorrowedCupidTests
 		session.GameHistoryLog.OfType<RoleIdentificationLogEntry>().Should()
 			.NotContain(entry => entry.Role == MainRoleType.Cupid);
 
-		var recovered = new GameSession(session.Serialize());
-		GameFlowManager.RestoreDurableContinuation(
-			recovered,
-			SupportedRoleCatalog.Admissions);
-		var recoveredRecognition = recovered.PendingModeratorInstruction
+		var recovered = RecoveryPayloadTestDriver.Parse(session.Serialize())
+			.RehydrateGameSession();
+		var recoveredRecognition = RecoveryPayloadTestDriver.Capture(recovered)
+			.PendingInstruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 
 		recoveredRecognition.InstructionId.Should().Be(recognition.InstructionId);
@@ -650,48 +650,34 @@ public sealed class ActorBorrowedCupidTests
 			MainRoleType.Actor);
 		recovered.GameHistoryLog.OfType<RoleIdentificationLogEntry>().Should()
 			.NotContain(entry => entry.Role == MainRoleType.Cupid);
-		Advance(listener, recovered, sleep.CreateResponse()).Outcome.Should()
-			.Be(HookListenerOutcome.Complete);
-		recovered.ClearCurrentListenerCache(HookKey);
+		CompleteCadence(listener, recovered, sleep.CreateResponse());
 		recovered.TransitionMainPhase(GamePhase.Dawn);
 		recovered.TransitionMainPhase(GamePhase.Day);
 		recovered.TransitionMainPhase(GamePhase.Night);
-		recovered.TryEnterSubPhaseStage(
-			SubPhaseKey,
-			GameHook.NightMainActionLoop.ToString()).Should().BeTrue();
 
 		IGameHookListener nextActor = CreateActorRole();
 		var nextActorWake = Advance(
 			nextActor,
 			recovered,
-			start.CreateResponse()).Instruction
+			start.CreateResponse()).ModeratorInstruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		recovered.GetModeratorActiveActorBorrowedRolePowerActivation().Should()
 			.BeNull();
 		var nextActorChoice = Advance(
 			nextActor,
 			recovered,
-			nextActorWake.CreateResponse()).Instruction
+			nextActorWake.CreateResponse()).ModeratorInstruction
 			.Should().BeOfType<SelectOptionsInstruction>().Subject;
 		var nextActorSleep = Advance(
 			nextActor,
 			recovered,
-			nextActorChoice.CreateResponse()).Instruction
+			nextActorChoice.CreateResponse()).ModeratorInstruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
-		Advance(nextActor, recovered, nextActorSleep.CreateResponse()).Outcome
-			.Should().Be(HookListenerOutcome.Complete);
-		recovered.ClearCurrentListenerCache(HookKey);
-		var historyCountBeforeExpiredSource = recovered.GameHistoryLog.Count();
-
-		var expiredSource = Advance(
-			listener,
+		CompleteCadence(
+			nextActor,
 			recovered,
-			start.CreateResponse());
+			nextActorSleep.CreateResponse());
 
-		expiredSource.Outcome.Should().Be(HookListenerOutcome.Skip);
-		expiredSource.Instruction.Should().BeNull();
-		recovered.GameHistoryLog.Should().HaveCount(
-			historyCountBeforeExpiredSource);
 		recovered.GetActorBorrowedCupidLoversCommits().Should()
 			.Equal(privateCommit);
 		lovers.Should().OnlyContain(playerId =>
@@ -712,27 +698,133 @@ public sealed class ActorBorrowedCupidTests
 			new VillagerRolePowerSuppressionPolicy(
 				AllowAllRolePowerAvailabilityPolicy.Instance)));
 
-	private static ActorBorrowedRolePowerActivation PerformSpendOpening(
-		IGameHookListener listener,
+	private static (
+		ActorBorrowedRolePowerActivation Activation,
+		ConfirmationInstruction SourceWake) PerformSpendOpening(
+		IGameHookListener actorListener,
+		IGameHookListener sourceListener,
 		GameSession session,
 		StartGameConfirmationInstruction start,
 		Guid selectedCardId)
 	{
-		var wake = Advance(listener, session, start.CreateResponse()).Instruction
+		var wake = Advance(actorListener, session, start.CreateResponse())
+			.ModeratorInstruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
-		var choice = Advance(listener, session, wake.CreateResponse()).Instruction
+		var choice = Advance(actorListener, session, wake.CreateResponse())
+			.ModeratorInstruction
 			.Should().BeOfType<SelectOptionsInstruction>().Subject;
 		var sleep = Advance(
-			listener,
+			actorListener,
 			session,
-			choice.CreateResponse(selectedCardId.ToString("D"))).Instruction
+			choice.CreateResponse(selectedCardId.ToString("D")))
+			.ModeratorInstruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		var activation = session
 			.GetModeratorActiveActorBorrowedRolePowerActivation()!;
-		Advance(listener, session, sleep.CreateResponse()).Outcome.Should()
-			.Be(HookListenerOutcome.Complete);
-		session.ClearCurrentListenerCache(HookKey);
-		return activation;
+		session.GetOrCreateListener(sourceListener.Id, () => sourceListener);
+		var sourceWake = AdvanceToBorrowedRoleWake(
+			actorListener,
+			session,
+			sleep.CreateResponse(),
+			activation.ActingPlayerId);
+		return (activation, sourceWake);
+	}
+
+	private static ConfirmationInstruction AdvanceToBorrowedRoleWake(
+		IGameHookListener listener,
+		GameSession session,
+		ModeratorResponse response,
+		Guid actorId)
+	{
+		var instruction = Advance(listener, session, response)
+			.ModeratorInstruction;
+		for (var step = 0; step < 20; step++)
+		{
+			if (instruction is ConfirmationInstruction
+			    {
+				    Semantic: ModeratorInstructionSemantic.WakeRole
+			    } wake &&
+			    wake.AffectedPlayerIds?.SequenceEqual([actorId]) == true)
+			{
+				return wake;
+			}
+
+			instruction = Advance(
+				listener,
+				session,
+				CreateCadenceResponse(session, instruction))
+					.ModeratorInstruction;
+		}
+
+		throw new InvalidOperationException(
+			"The test cadence did not reach the borrowed Role wake within 20 steps.");
+	}
+
+	private static ModeratorResponse CreateCadenceResponse(
+		GameSession session,
+		ModeratorInstruction? instruction) => instruction switch
+		{
+			SelectPlayersInstruction
+			{
+				Semantic:
+					ModeratorInstructionSemantic
+						.ObserveWerewolfFactionAgentGroup
+			} selection => CreateSingleSelectionResponse(
+				session,
+				selection,
+				"Werewolf"),
+			SelectPlayersInstruction
+			{
+				Semantic: ModeratorInstructionSemantic.SelectWerewolfVictim
+			} selection => CreateSingleSelectionResponse(
+				session,
+				selection,
+				"Villager 3"),
+			ConfirmationInstruction confirmation =>
+				confirmation.CreateResponse(),
+			_ => throw new InvalidOperationException(
+				$"The test cadence cannot answer '{instruction?.Semantic}'.")
+		};
+
+	private static ModeratorResponse CreateSingleSelectionResponse(
+		GameSession session,
+		SelectPlayersInstruction instruction,
+		string preferredPlayerName)
+	{
+		var preferredPlayerId = session.GetPlayers()
+			.Where(player => player.Name == preferredPlayerName)
+			.Select(player => player.Id)
+			.SingleOrDefault();
+		var selectedPlayerId = instruction.SelectablePlayerIds.Contains(
+			preferredPlayerId)
+			? preferredPlayerId
+			: instruction.SelectablePlayerIds.First();
+		return instruction.CreateResponse([selectedPlayerId]);
+	}
+
+	private static void CompleteCadence(
+		IGameHookListener listener,
+		GameSession session,
+		ModeratorResponse response)
+	{
+		var instruction = Advance(listener, session, response)
+			.ModeratorInstruction;
+		for (var step = 0; step < 20; step++)
+		{
+			if (instruction == null)
+			{
+				return;
+			}
+
+			instruction = Advance(
+				listener,
+				session,
+				CreateCadenceResponse(session, instruction))
+				.ModeratorInstruction;
+		}
+
+		throw new InvalidOperationException(
+			"The test cadence did not complete the Night hook within 20 steps.");
 	}
 
 	private static (
@@ -759,9 +851,6 @@ public sealed class ActorBorrowedCupidTests
 		var actorId = session.GetPlayers().First().Id;
 		session.AssignRole(actorId, MainRoleType.Actor);
 		session.IdentifyRole([actorId], MainRoleType.Actor);
-		session.TryEnterSubPhaseStage(
-			SubPhaseKey,
-			GameHook.NightMainActionLoop.ToString()).Should().BeTrue();
 		return (session, start, actorId);
 	}
 
@@ -840,9 +929,6 @@ public sealed class ActorBorrowedCupidTests
 		session.IdentifyRole([actorId], MainRoleType.Actor);
 		session.TransitionMainPhase(GamePhase.Day);
 		session.TransitionMainPhase(GamePhase.Night);
-		session.TryEnterSubPhaseStage(
-			SubPhaseKey,
-			GameHook.NightMainActionLoop.ToString()).Should().BeTrue();
 		return (session, start, actorId);
 	}
 
@@ -913,22 +999,21 @@ public sealed class ActorBorrowedCupidTests
 			});
 	}
 
-	private static HookListenerActionResult Advance(
+	private static PhaseHandlerResult Advance(
 		IGameHookListener listener,
 		GameSession session,
 		ModeratorResponse response)
 	{
-		var result = listener.Execute(session, response);
-		if (result.Outcome != HookListenerOutcome.Skip)
-		{
-			session.TransitionListenerStateCache(
-				HookKey,
-				listener.Id,
-				result.NextListenerPhase!);
-		}
-
-		return result;
+		session.GetOrCreateListener(listener.Id, () => listener);
+		return NightActionLoop.Execute(session, response);
 	}
+
+	private static GameSession RehydrateAtPendingInstruction(
+		GameSession session,
+		ModeratorInstruction instruction) =>
+		RecoveryPayloadTestDriver.Capture(session)
+			.WithPendingInstruction(instruction)
+			.RehydrateGameSession();
 
 	private sealed class RecordingPolicy : IRolePowerAvailabilityPolicy
 	{
@@ -941,7 +1026,4 @@ public sealed class ActorBorrowedCupidTests
 		}
 	}
 
-	private sealed class TestSubPhaseManagerKey : ISubPhaseManagerKey;
-	private sealed class TestHookSubPhaseKey : IHookSubPhaseKey;
-	private sealed class TestGameFlowManagerKey : IGameFlowManagerKey;
 }

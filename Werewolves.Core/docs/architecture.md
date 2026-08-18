@@ -30,32 +30,33 @@ The system distinguishes between two types of state:
     *   **Initial State:** Games begin in the Night phase. There is no Setup phase; the `StartGameConfirmationInstruction` directly triggers Night phase execution when confirmed.
 
 2.  **Transient Execution State (In-Memory):**
-    *   **Scope:** `_phaseStateCache` (SubPhase, ActiveStage, ListenerState), `_pendingInstruction`.
-    *   **Mechanism:** Direct mutations via `GameSession` methods, bypassing the event log.
+    *   **Scope:** The current Main Phase/Sub-Phase cursor, completed and active stage, active listener and listener state, Pending Instruction, and semantic recovery cursors owned by `GameSessionKernel`.
+    *   **Mechanism:** GameLogic reads one immutable `GameSession.Execution` (`ExecutionView`) snapshot and requests changes through the keyed, reducer-backed `GameSession` facade. The Kernel validates the expected snapshot and complete candidate before applying the change.
     *   **Purpose:** Represents the fleeting "program counter" of the logic engine. Logging every state machine tick (e.g., transitioning between stages within `Night.Start`) would bloat the history log with technical noise.
 
 ## Key Pattern (Controlled Mutation Access)
 
-Transient state updates don't go through GameLogEntryBase as it would pollute the log history with a lot of noise. Therefore, GameSession exposes methods that allow for direct mutation of different parts of the cached transient state values.
-To enforce strict encapsulation and prevent arbitrary code from accessing those methods, the system uses a **Key Pattern**. Mutation methods require a specific interface implementation (a "Key") that is only implemented by authorized components.
+Most transient execution updates do not go through `GameLogEntryBase`, because recording every state-machine tick would pollute domain history. `GameSession` therefore exposes a narrow reducer facade rather than direct cache setters. Each request requires the key for the component that owns it; the key authorizes the caller, while the Kernel reducer remains the mutation authority and validates the requested transition.
 
 
-*   **`IStateMutatorKey`:** Required to access the `SessionMutator` for persistent state changes. This is a nested interface inside `GameSession`, implemented by the private `SessionMutator` class.
-*   **`IGameFlowManagerKey`:** Required to set the `PendingModeratorInstruction`. Implemented by `GameFlowManager`.
-*   **`IPhaseManagerKey`:** Required to transition main phases and sub-phases in the cache. Implemented by `PhaseManager<T>`.
-*   **`ISubPhaseManagerKey`:** Required to manage sub-phase stages. Implemented by `SubPhaseManager<T>`.
-*   **`IHookSubPhaseKey`:** Required to update listener state. Implemented by `HookSubPhase`.
+*   **`IStateMutatorKey`:** Remains the separate capability used by the private `SessionMutator` to reach persistent mutable state while applying log entries.
+*   **`IGameFlowManagerKey`:** Authorizes correlated Pending Instruction publication, optional stable-recovery-boundary advancement, and authenticated transient-continuation restoration. Its only production owner is `GameFlowManager`.
+*   **`IPhaseManagerKey`:** Authorizes Sub-Phase movement and stage completion. Its only production owner is `PhaseManager<TSubPhaseEnum>`.
+*   **`ISubPhaseManagerKey`:** Authorizes atomic stage entry. Its only production owner is `SubPhaseManager<TSubPhase>`.
+*   **`IHookSubPhaseKey`:** Authorizes listener-state movement and clearing. Its only production owner is `HookSubPhaseStage`.
+*   **`IRoleStageExecutionKey`:** Remains a separate capability for the existing Role-stage workflow; it is not an alternative execution-state mutation path.
 
 ## Core Principles
 
 *   **Canonical State Source:** The `GameSessionKernel.GameHistoryLog` is the **single, canonical source of truth** for all **state-altering** game events. This includes both **non-deterministic inputs** (moderator choices) and **deterministic consequences** (rule resolutions like infection). This append-only event store drives all persistent state mutations.
-*   **The Kernel (Core):** The `GameSessionKernel` is the **sole owner of mutable memory**. It encapsulates the `GameHistoryLog`, `GamePhaseStateCache`, `Players`, `SeatingOrder` and `RolesInPlay`. It is an internal, hermetically sealed component.
-*   **The Facade (Read-Only Projection & Mutation Gatekeeper):** The `GameSession` class acts as a **read-only projection** of the Kernel for the public API (via `IGameSession`). For the `Werewolves.Core.GameLogic` assembly, it acts as the **Mutation Gatekeeper**, exposing methods to dispatch commands to the Kernel, protected by Keys.
+*   **The Kernel (Core):** The `GameSessionKernel` is the **sole owner of mutable memory**. It encapsulates the `GameHistoryLog`, its private execution-cursor storage, `Players`, `SeatingOrder` and `RolesInPlay`. It is an internal, hermetically sealed component.
+*   **The Facade (Read-Only Projection & Mutation Gatekeeper):** The `GameSession` class acts as a **read-only projection** of the Kernel for the public API (via `IGameSession`). GameLogic receives a coherent immutable `ExecutionView` for internal execution reads and uses keyed facade methods to submit reducer requests; it never receives the mutable phase cache.
 *   **Transactional Mutation:** Persistent state mutation follows a strict transactional flow:
     1.  **Command Dispatch:** The Facade constructs a `GameLogEntryBase` (the command) and passes it to the Kernel.
     2.  **Proxy Mutator:** The Kernel creates a temporary `SessionMutator` (a private nested class implementing `ISessionMutator`) that has privileged access to the internal mutable state.
     3.  **Apply:** The `GameLogEntryBase.Apply(ISessionMutator)` method is called, allowing the entry to modify the state via the proxy.
     4.  **Commit:** If successful, the entry is appended to the `GameHistoryLog`. 
+*   **Validated Execution Mutation:** The Kernel constructs or receives one complete candidate execution view, rejects stale or structurally invalid movement, and—when requested—builds and validates the candidate stable recovery snapshot before changing live state. Only after validation succeeds does it replace the execution cursor and any Pending Instruction/recovery boundary, then emit the notification owned by that transition.
 
 # Hook System Architecture
 
@@ -65,7 +66,7 @@ The architecture uses a declarative hook-based system where the `GameFlowManager
 *   **Hook Listeners:** Components (roles and events) that register to respond to specific hooks.
 *   **Self-Contained State Machines:** Each listener manages its own state and logic, encapsulating all behavior.
 *   **Capability-Based Logic:** The dispatcher does not check *who* a player is (e.g., "Is this the Village Idiot?"), but *what* they can do (e.g., "Is this player immune to lynching?"). Logic relies on `IPlayerState` computed properties.
-*   **Unified State Cache:** Centralized state management for resuming paused operations and tracking execution progress. 
+*   **Unified Execution Boundary:** `ExecutionView` provides one coherent read, and the Kernel reducer owns all cursor updates needed to pause and resume operations.
 
 # Two-Assembly Architecture
 
@@ -86,7 +87,8 @@ The hermetically sealed kernel that owns the game's mutable memory. It is not vi
 *   **Sole Owner of Mutable State:** The Kernel holds the master references to:
     *   `Id` (Guid): The unique game session identifier, injected at construction
     *   `GameHistoryLog` (The event source)
-    *   `GamePhaseStateCache` (Transient execution state)
+    *   A private `GamePhaseStateCache` value used only for transient execution-cursor storage and stable DTO conversion
+    *   The Pending Instruction, semantic recovery cursors, and latest validated stable recovery boundary
     *   `Players` (Dictionary of concrete `Player` objects)
     *   `SeatingOrder` (List of Guids)
     *   `RolesInPlay` (List of roles)
@@ -95,6 +97,7 @@ The hermetically sealed kernel that owns the game's mutable memory. It is not vi
     *   **`Player` & `PlayerState`:** Concrete implementations of `IPlayer` and `IPlayerState` are defined as **private nested classes** within the Kernel. This ensures their setters are physically inaccessible to any code outside the Kernel file.
     *   **`SessionMutator`:** A **private nested class** implementing `ISessionMutator`. This is the "Proxy Mutator" that bridges the gap between the log entry and the private state.
 *   **Transactional Apply Flow:** The Kernel exposes a single entry point for persistent mutation: `AddEntryAndUpdateState(GameLogEntryBase entry)`.
+*   **Execution Reducer:** All structural execution changes pass through the Kernel's closed `ExecutionTransition` reducer. It compares the request's expected `ExecutionView` with current state, validates the candidate and cleanup hierarchy, prepares any requested stable boundary, applies the complete transition, and only then notifies observers.
 *   **Deserialization:** `Deserialize(string json)` (static): Restores a `GameSessionKernel` from a stable recovery snapshot JSON payload. Rehydration restores derived player state, the boundary `GameHistoryLog`, the committed boundary `PendingInstruction`, and the minimal phase cursor directly; it does not replay log entries or restore the live in-memory execution tail.
 
 ### `GameSession` (Facade):
@@ -113,7 +116,7 @@ A lightweight, stateless wrapper that implements `IGameSession` and delegates al
     *   `GetPlayerState(Guid id)` (IPlayerState): Retrieves a player's state by ID.
     *   `GameHistoryLog` (IEnumerable<GameLogEntryBase>): The event log.
     *   `RoleInPlayCount(MainRoleType type)` (int): Returns count of a specific role in play.
-    *   `Serialize()` (string): Serializes the latest stable Main Phase recovery snapshot to JSON for persistence. The payload advances only when the Kernel captures a new recovery boundary.
+    *   `Serialize()` (string): Serializes the latest stable recovery snapshot to JSON for persistence. The payload advances only when a validated execution commit advances the recovery boundary.
 *   **Internal API (GameLogic):** Mutation gatekeeper for the rules engine.
     *   **State Mutation Methods** (create and dispatch log entries):
         *   `EliminatePlayer(Guid playerId, EliminationReason reason)`: Eliminates a player by creating a `PlayerEliminatedLogEntry`.
@@ -127,19 +130,15 @@ A lightweight, stateless wrapper that implements `IGameSession` and delegates al
         *   `PerformNightAction(NightActionType type, List<Guid> targetIds)`: Records a night action targeting multiple players.
         *   `PerformDayVote(Guid? reportedOutcomePlayerId)`: Records a vote outcome by creating a `VoteOutcomeReportedLogEntry`. Pass `null` for a tie.
         *   `VictoryConditionMet(Team winningTeam, string description)`: Records victory by creating a `VictoryConditionMetLogEntry`.
-    *   **Cache Read Methods** (query transient execution state):
-        *   `PendingModeratorInstruction` (ModeratorInstruction?): Returns the current pending instruction.
-        *   `GetSubPhase<T>()` (T?): Returns the current sub-phase as a typed enum.
-        *   `GetCurrentListener()` (ListenerIdentifier?): Returns the currently active/paused listener.
-        *   `GetCurrentListenerState<T>(ListenerIdentifier listener)` (T?): Returns the listener's internal state machine value as a typed enum.
-        *   `TryGetActiveGameHook(out GameHook hook)` (bool): Attempts to parse the active sub-phase stage as a `GameHook`.
-    *   **Cache Write Methods** (require specific Keys for access):
-        *   `SetPendingModeratorInstruction(IGameFlowManagerKey key, ModeratorInstruction instruction)`: Updates transient instruction state.
-        *   `TransitionSubPhaseCache(IPhaseManagerKey key, Enum subPhase)`: Updates transient sub-phase state.
+    *   **Execution Read:** `Execution` returns one immutable `ExecutionView` containing the coherent Main Phase/Sub-Phase, stage, listener, Pending Instruction, and recovery-cursor projection used by GameLogic. There are no separate execution-field getters or exposed phase-cache interface.
+    *   **Keyed Execution Requests** (all delegate to the Kernel reducer):
+        *   `CommitExecution(IGameFlowManagerKey key, ExecutionCommit commit)`: Publishes one correlated next Pending Instruction and either retains or advances the validated stable recovery boundary.
+        *   `RestoreTransientContinuation(IGameFlowManagerKey key, ExecutionView expected, ...)`: Restores only an authenticated continuation against an explicit expected view.
+        *   `TransitionSubPhase(IPhaseManagerKey key, Enum subPhase)`: Requests Sub-Phase movement.
         *   `TryEnterSubPhaseStage(ISubPhaseManagerKey key, string subPhaseStageId)` (bool): Attempts to enter a sub-phase stage atomically. Returns `false` if already in a different stage or if the stage has already been completed.
-        *   `CompleteSubPhaseStageCache(IPhaseManagerKey key)`: Marks the current sub-phase stage as completed.
-        *   `TransitionListenerStateCache(IHookSubPhaseKey key, ListenerIdentifier listener, string state)`: Updates listener and its state.
-        *   `ClearCurrentListenerCache(IHookSubPhaseKey key)`: Clears the current listener and its state.
+        *   `CompleteSubPhaseStage(IPhaseManagerKey key)`: Marks the current sub-phase stage as completed.
+        *   `TransitionListenerState(IHookSubPhaseKey key, ListenerIdentifier listener, string state)`: Requests listener-state movement.
+        *   `ClearCurrentListener(IHookSubPhaseKey key)`: Clears the current listener and its state.
     *   **Listener Instance Management** (session-scoped listener caching):
         *   `GetOrCreateListener<T>(ListenerIdentifier id, Func<T> factory)` (T): Gets or creates a listener instance for this session. Listeners are cached per-session to ensure state machine isolation between games while maintaining consistency within a game.
 
@@ -214,7 +213,7 @@ Defines the contract for components that respond to game hooks (represents the *
 *   **Interaction Contract:**  
     *   The `GameFlowManager` dispatches to all listeners registered for a fired hook by calling `Execute`.
     *   Each listener is responsible for determining if it should act based on game state and cached execution state 
-    *   Listeners manage their own state machines and can pause/resume operations using the `GamePhaseStateCache`
+    *   Listeners manage their own state machines by reading the current `ExecutionView`; `HookSubPhaseStage` owns the keyed listener-state requests that pause, resume, and clear dispatch state.
     *   **Return Value Semantics:** The `HookListenerActionResult` communicates the outcome to the dispatcher: 
         *   `HookListenerActionResult.NeedInput(instruction, nextPhase)`: Listener requires input, processing pauses.
         *   `HookListenerActionResult.Complete(nextPhase)`: Listener has finished processing a given game hook, after performing some work.
@@ -281,27 +280,16 @@ Stores runtime state for an active event in `GameSession.ActiveEvents`.
 *   `TurnsRemaining` (int?): Countdown for temporary events. 
 *   `StateData` (Dictionary<string, object>): Event-specific runtime data.
 
-## `IGamePhaseStateCache` Interface & `GamePhaseStateCache` Struct
+## Transient Execution Read and Mutation Boundary
 
-Unified state cache that serves as the single source of truth for the game's current execution point. Implemented as a `private record struct` within `GameSessionKernel`.
-Its primary role is to track the "program counter" of the state machine and enforce atomic execution of sub-phase stages.
+`GameSessionKernel` is the sole owner of the mutable execution point. Its private `GamePhaseStateCache` value is an implementation detail for cursor storage and stable DTO conversion; there is no exposed phase-cache interface or Kernel cache accessor.
 
-*   **Read-Only Interface (`IGamePhaseStateCache`):** Exposed to external consumers (UI) for reading the current state.
-    *   `GetCurrentPhase()`: Returns current main phase.
-    *   `GetSubPhase<T>()`: Returns current sub-phase.
-    *   `GetActiveSubPhaseStage()`: Returns current stage.
-    *   `GetCurrentListener()`: Returns currently paused listener.
-    *   `CurrentListenerState` (int?): Returns the current listener's internal state machine value.
-    *   `SubPhase` (object?): Returns the current sub-phase as an untyped object (for generic access).
-*   **Mutation API (Internal):** Mutation methods are located on `GameSession` and require specific Keys to prevent unauthorized access.
-    *   `TransitionMainPhase(...)`: Transitions main phase via `PhaseTransitionLogEntry` (event sourcing) - no key required.
-    *   `TransitionSubPhase(IPhaseManagerKey, ...)`: Transitions sub-phase within current main phase.
-    *   `TryEnterSubPhaseStage(ISubPhaseManagerKey, ...)`: Attempts to enter a sub-phase stage atomically.
-    *   `TransitionListenerAndState(IHookSubPhaseKey, ...)`: Updates listener and its state.
-*   **Automatic State Cleanup:**
-    *   Transitioning to a new main phase clears all sub-phase and stage history, and listener data.
-    *   Transitioning to a new sub-phase clears all stage history and listener data.
-    *   Transitioning to a new sub-phase stage clears current listener data.
+*   **Coherent Read:** `GameSession.Execution` returns one immutable `ExecutionView` containing the current Main Phase, Sub-Phase, active and completed stages, active listener and listener state, Pending Instruction, and semantic recovery cursors. GameLogic takes one view for a decision instead of assembling state from field-at-a-time getters.
+*   **Authorized Requests:** The keyed facade preserves one production owner per request family: `GameFlowManager` publishes Pending Instructions/recovery boundaries and restores authenticated continuations; `PhaseManager<TSubPhaseEnum>` moves Sub-Phases and completes stages; `SubPhaseManager<TSubPhase>` enters stages; and `HookSubPhaseStage` moves or clears listener state.
+*   **Reducer Validation:** The closed `ExecutionTransition` family carries an expected view and one complete candidate. The Kernel rejects stale expectations, invalid cursor structure, illegal cleanup, mismatched instruction correlation, and invalid recovery publication before mutating any execution field.
+*   **Automatic Cleanup:** A Main Phase change clears Sub-Phase, stage, and listener state; a Sub-Phase change clears stage and listener state; stage completion clears the active stage and listener; and listener transitions cannot escape the active stage.
+*   **Persistent Main Phase Path:** `GameFlowManager` chooses every Main Phase and Sub-Phase destination under ADR-0004. A Main Phase destination is persisted only through `PhaseTransitionLogEntry`; applying that entry asks the reducer to install the corresponding transient cursor. There is no direct transient Main Phase setter.
+*   **Notifications:** The Kernel emits execution notifications only after the complete transition has passed validation and live state has been updated. Applying `PhaseTransitionLogEntry` emits the Main Phase callback after its cursor consequence; `PhaseManager<TSubPhaseEnum>` requests emit the corresponding Sub-Phase or stage callback; `SubPhaseManager<TSubPhase>` stage entry emits the stage callback; `HookSubPhaseStage` requests emit the listener callback; and a `GameFlowManager` commit emits the Pending Instruction callback after any requested stable-boundary validation and publication. Authenticated continuation restoration installs the stage and listener atomically before emitting those two callbacks in that order.
 
 ## `GameFlowManager` Class
 
@@ -327,15 +315,15 @@ Acts as a high-level phase controller and reactive hook dispatcher. It contains 
 *   **Declarative State Machine Architecture:** The game flow is defined by a hierarchy of declarative components:
     *   **`PhaseManager<TSubPhaseEnum>`**: Manages the flow between sub-phases for a single main `GamePhase`. It contains a dictionary of `SubPhaseManager`s. Each `PhaseManager` is **phase-aware**: it determines which `GamePhase` it manages by finding itself in the `PhaseDefinitions` dictionary (cached after first lookup). This enables clean exit when a silent main phase transition occurs—if the session's current phase no longer matches the owned phase, the manager returns immediately with a `MainPhaseHandlerResult(null, currentPhase)`, allowing `HandleInput` to check the transition boundary before processing the new phase.
     *   **`SubPhaseManager<TSubPhase>`**: Defines a single sub-phase. It contains a linear sequence of `SubPhaseStage`s that are executed in order. It also declares all valid transitions to other sub-phases or main phases.
-    *   **`SubPhaseStage`**: An abstract class representing a single, **atomic, non-re-entrant** unit of work. The `GamePhaseStateCache` ensures each stage is executed at most once per sub-phase entry.
+    *   **`SubPhaseStage`**: An abstract class representing a single, **atomic, non-re-entrant** unit of work. `SubPhaseManager<TSubPhase>` requests stage entry through its keyed facade operation, and the Kernel reducer ensures each stage is executed at most once per Sub-Phase entry.
         *   `LogicSubPhaseStage`: Executes a custom logic handler.
         *   `HookSubPhaseStage`: Fires a `GameHook` and dispatches to all registered listeners.
         *   `EliminationCascadeStage`: Drains one scoped Dawn or Day elimination cascade. Registered pre-reveal reactions run in deterministic order before generic Role Reveal or another target-dependent consequence; the stage then commits every Player in the current distinct batch before forced and interactive reactions run, admits chained batches until empty, and may pause for Moderator input. A newly Eliminated Hunter is evaluated through the shared Role Power availability boundary after forced reactions drain; a non-empty legal roster produces one mandatory exact-one target instruction, while an empty roster completes silently. The shot creates a child batch in the same cascade. The stage never navigates.
         *   `NavigationSubPhaseStage`: A stage that results in a transition to a new sub-phase or main phase. Created via factory methods (`NavigationEndStage`, `NavigationEndStageSilent`) as the required final stage for any sub-phase.
 *   **State Machine Validation:** The architecture provides strong runtime guarantees:
     *   **Transition Validation:** All transitions are validated against the `PossibleNextSubPhases` and `PossibleNextMainPhaseTransitions` sets defined in the `SubPhaseManager`. An illegal transition throws an `InvalidOperationException`.
-    *   **Stage Atomicity:** The `Session.TryEnterSubPhaseStage` method prevents any stage from being executed more than once within a single sub-phase activation, eliminating the need for idempotent handlers.
-*   **Key Pattern Usage:** Implements `IGameFlowManagerKey` to authorize updates to `GameSession.PendingModeratorInstruction`.
+    *   **Stage Atomicity:** The `GameSession.TryEnterSubPhaseStage` method prevents any stage from being executed more than once within a single Sub-Phase activation, eliminating the need for idempotent handlers.
+*   **Navigation and Key Ownership:** `GameFlowManager` remains the single visible owner of every Main Phase and Sub-Phase destination under ADR-0004. Its `IGameFlowManagerKey` authorizes correlated Pending Instruction/stable-boundary commits and authenticated continuation restoration; it does not provide a second Main Phase path.
 
 ## `GameService` Class
 
@@ -349,7 +337,7 @@ Orchestrates the game flow based on moderator input and tracked state. **Delegat
         *   Returns the `ProcessResult` from the state machine, containing either the next instruction or a failure.
         *   An emitted elimination-reaction input is a stable recovery boundary. Rehydration restores the exact committed Hunter selector and resumes it without re-evaluating Role Power availability, while stale or structurally mismatched selector context fails closed. Devoted Servant uses the same stable-response rule at two semantic boundaries: after the accepted public self-reveal it resumes only the correlated private printed-Role record, and after the accepted swap it resumes target resolution without reopening Continue or duplicating the exchange.
         *   **Session Cleanup:** A `FinishedGameConfirmationInstruction` remains pending until its correlated Continue acknowledgment is accepted; that successful acknowledgment removes the session from the active sessions list.
-    *   `GetCurrentInstruction(Guid gameId)` (ModeratorInstruction?): Retrieves the `PendingModeratorInstruction`. 
+    *   `GetCurrentInstruction(Guid gameId)` (ModeratorInstruction?): Retrieves the current Pending Instruction through the service boundary.
     *   `GetGameStateView(Guid gameId)` (IGameSession?): Returns the game state via the read-only `IGameSession` interface. This hides the internal mutation methods present on the concrete object, ensuring the UI cannot modify state.
     *   `RehydrateSession(string serializedSession)` (Guid): Restores a game session from its stable recovery snapshot and adds it to the active session collection. Returns the session's GUID.
 *   **Internal Logic:** 
@@ -482,11 +470,11 @@ A hierarchy of records represents the outcome of a `SubPhaseStage`'s execution, 
     *   `Skip()`: Listener has no work to do.
  
 ## State Machine Validation
-*   **Purpose:** The `GameFlowManager` implements comprehensive validation to ensure all phase transitions and state changes conform to the defined state machine rules. 
+*   **Purpose:** Validation is split at the existing ownership boundary: `GameFlowManager` and the phase managers validate declarative navigation, while the Kernel reducer validates each execution-state candidate.
 *   **Validation Features:** 
     *   **Phase Transition Validation:** Every phase transition is validated against the `PhaseTransitionInfo` defined in the source phase's `PossibleTransitions` list. 
     *   **Hook Dispatch Validation:** Ensures hooks are fired in correct sequence and listeners respond appropriately. 
-    *   **State Cache Validation:** Validates that `IntraPhaseStateCache` operations are consistent with state machine rules. 
+    *   **Execution Transition Validation:** Compares the request's expected `ExecutionView` with current state and validates the complete candidate, cleanup hierarchy, Pending Instruction correlation, and optional stable recovery boundary before mutation or notification.
     *   **Internal Error Detection:** Catches internal state machine inconsistencies and provides detailed error messages for debugging. 
 *   **Error Handling:** Validation failures result in exceptions, as they indicate unrecoverable logic errors.
 
@@ -631,6 +619,8 @@ The chosen approach is an abstract base class (`GameLogEntryBase`) providing uni
 *   **`Apply(ISessionMutator)`:** Internal method called by the Kernel when a log entry is being committed. It invokes `InnerApply` and then appends the entry to the log via the mutator.
 *   **`InnerApply(ISessionMutator)`:** Abstract protected method that each derived log entry must implement. This is where the actual state mutation logic resides. The method receives an `ISessionMutator` to perform changes and returns the log entry (potentially modified, e.g., if `TurnNumber` changed during application).
 
+`PhaseTransitionLogEntry` is the only persistent Main Phase mutation path. `GameFlowManager` chooses the destination, `GameSession` constructs the entry, and the Kernel preflights and applies it through `SessionMutator`. The mutator sends the entry's transient cursor consequence through the same execution reducer, so stale-source and cursor validation happen before the Main Phase changes. The Main Phase observer callback follows that cursor mutation; the log-entry callback follows append of the applied entry.
+
 **Core Principle:** The `GameHistoryLog` serves as the single, canonical source of truth, containing an append-only record of events that determine the game state.
 
 ## Implemented Log Entries
@@ -733,6 +723,8 @@ Static helpers for finding Players in test scenarios.
 
 For integration testing, an optional `IStateChangeObserver` can be injected into `GameSessionKernel` at construction time. This observer receives callbacks for all state mutations, enabling tests to capture a complete timeline of changes.
 
+The observer is diagnostic only, not a second mutation or execution-read surface. Reducer-backed callbacks are emitted after their complete transition validates and live state changes. Main Phase notification occurs while applying the durable `PhaseTransitionLogEntry`; Sub-Phase, stage, and listener notifications follow their respective keyed owner requests; and Pending Instruction notification follows successful publication of the instruction and any advanced stable recovery boundary. Continuation restoration emits stage and listener callbacks only after both have been installed as one validated transition.
+
 **Tracked State Changes:**
 - Main phase transitions (`OnMainPhaseChanged`)
 - Sub-phase transitions (`OnSubPhaseChanged`)
@@ -790,13 +782,13 @@ public class MyTests : DiagnosticTestBase
 
 *Status: **Implemented** — Stable recovery snapshot serialization via `System.Text.Json`.*
 
-The Core persistence boundary is `IGameSession.Serialize()` plus `GameService.RehydrateSession(string)`. Serialization returns the latest stable recovery snapshot captured by `GameSessionKernel.CaptureRecoveryBoundary()`. It does not serialize the live in-memory execution tail, and Rehydration does not replay the event log.
+The Core persistence boundary is `IGameSession.Serialize()` plus `GameService.RehydrateSession(string)`. Serialization returns the latest validated stable recovery snapshot retained by `GameSessionKernel`. It does not serialize the live in-memory execution tail, and Rehydration does not replay the event log.
 
 ## Design
 
-*   **Serialization:** `GameSession.Serialize()` delegates to `GameSessionKernel.Serialize()`, which returns the last captured stable boundary snapshot.
-*   **Boundary advancement:** `GameFlowManager.HandleInput(...)` captures a new boundary only after routing, victory override handling, and `PendingInstruction` settlement are complete. Accepted observations, committed one-use resources, settled elimination batches, completed elimination reactions, and fully drained elimination cascades are additional semantic boundaries.
-*   **Rehydration:** `GameService.RehydrateSession(string serializedSession)` restores the stable snapshot into a new active session and returns the session's GUID.
+*   **Serialization:** `GameSession.Serialize()` delegates to `GameSessionKernel.Serialize()`, which returns the latest installed stable boundary snapshot.
+*   **Boundary advancement:** After routing, victory override handling, and next-instruction settlement are complete, `GameFlowManager.HandleInput(...)` submits one keyed `ExecutionCommit`. When that commit advances recovery, the Kernel creates and validates the candidate snapshot before publishing the Pending Instruction or replacing the previous boundary. Accepted observations, committed one-use resources, settled elimination batches, completed elimination reactions, and fully drained elimination cascades are additional semantic boundaries.
+*   **Rehydration:** `GameService.RehydrateSession(string serializedSession)` restores the stable snapshot into a new active session and returns the session's GUID. When a governed semantic boundary requires a live continuation, `GameFlowManager` authenticates the durable instruction/cursor and uses its keyed restoration request against an explicit `ExecutionView`; this reconstruction does not make the live listener state durable.
 
 **Committed response checkpoints:** the landed Thief flow creates one narrow mid-Night stable checkpoint atomically with a successful `Offer1`, `Offer2`, or `Decline` response. That checkpoint contains the committed outcome, resulting card zones, current Role and fresh power state, and the pending public sleep instruction before Core returns success. Devoted Servant applies the same semantic-boundary pattern after the accepted public self-reveal and again after the accepted private swap record. Neither flow serializes arbitrary listener progress.
 
@@ -811,11 +803,12 @@ The Core persistence boundary is `IGameSession.Serialize()` plus `GameService.Re
 *   `Players`: Current derived player cache, including current Role, Moderator-known Role, publicly revealed Role, Status Effects, health, voting facts, and known-or-unknown Faction facts. These facts rehydrate independently without reconstructing unknown values.
 *   `TurnNumber`: Derived turn cursor as of the stable boundary. It is durable to avoid double-incrementing after Day-to-Night recovery.
 *   `GameHistoryLog`: Event source entries as of the same stable boundary as the derived caches.
-*   `PendingInstruction`: The committed boundary instruction the moderator must consume next after Rehydration. This is stable boundary state, not arbitrary listener progress.
+*   `PendingInstruction`, `PendingInstructionSemantic`: The exact committed boundary instruction and its machine-stable semantic that the moderator must consume next after Rehydration. This is stable boundary state, not arbitrary listener progress.
 *   `IsStableRecoveryBoundary`: Marks payloads that follow the ADR-0002 stable boundary contract.
+*   `AcceptedObservationRecoveryCursor` or `DomainRecoveryCursor`: An optional, versioned semantic recovery identity correlated with the exact committed next instruction. A boundary carries at most one cursor family.
 *   `PhaseStateCache`: Serialized for DTO compatibility, but stable Rehydration restores only `CurrentPhase`, `SubPhase`, and `CompletedSubPhaseStages`. `ActiveSubPhaseStage`, `CurrentListenerId`, `CurrentListenerType`, and `CurrentListenerState` are ignored because they are transient execution state.
 
-For legacy or non-stable payloads, `GamePhaseStateCache.FromDto(...)` restores only the current Main Phase and discards all sub-phase, stage, listener, and listener-state details. For stable payloads, `GamePhaseStateCache.FromStableRecoveryBoundaryDto(...)` restores the minimal cursor needed to consume the committed boundary `PendingInstruction`.
+For non-stable payloads, Rehydration restores only the current Main Phase and discards all Sub-Phase, stage, listener, and listener-state details. For stable payloads, it restores the minimal Main Phase/Sub-Phase cursor and completed stages needed to consume the committed boundary `PendingInstruction`. The private phase-cache value performs this DTO conversion inside the Kernel; it is not an external read or mutation seam.
 
 An interrupted elimination cascade is reconstructed from its scoped semantic facts. A batch-resolution fact prevents a settled zero-elimination interception from being reevaluated, completed reaction facts re-admit their recorded child eliminations without executing the reaction again, and a cascade-completed fact prevents a finished vote scope from being reused. Pre-reveal completion facts are replayed in registration order after Moderator input so every admission from that boundary reconstructs the same concurrent next wave. Reconstruction occurs only when each frame reaches the queue head, so nested descendants cannot overtake sibling waves admitted by an earlier frame. The live wave queue, reaction instances, and listener state are never serialized.
 

@@ -295,9 +295,9 @@ public sealed class ActorBorrowedCommitProjectionTests
 			session.GetActorBorrowedElderResistanceCommits().Should().ContainSingle();
 			session.GameHistoryLog.OfType<ActorBorrowedRolePowerCommittedLogEntry>()
 				.Should().ContainSingle();
-			session.CaptureRecoveryBoundary(RecoveryBoundaryKey.Instance);
+			var serialized = RecoveryPayloadTestDriver.Capture(session).Serialize();
 			var service = new GameService();
-			Action rehydrate = () => service.RehydrateSession(session.Serialize());
+			Action rehydrate = () => service.RehydrateSession(serialized);
 
 		rehydrate.Should().Throw<InvalidOperationException>()
 			.WithMessage(
@@ -474,11 +474,12 @@ public sealed class ActorBorrowedCommitProjectionTests
 		source.IdentifyRole([actorId], MainRoleType.Actor);
 		source.IdentifyRole([wolfFatherId], MainRoleType.AccursedWolfFather);
 		source.PerformNightAction(NightActionType.DefenderProtect, actorId);
-		source.SetPendingModeratorInstruction(RecoveryBoundaryKey.Instance, start);
-		source.CaptureRecoveryBoundary(RecoveryBoundaryKey.Instance);
+		var serializedSource = RecoveryPayloadTestDriver.Capture(source)
+			.WithPendingInstruction(start)
+			.Serialize();
 
 		var service = new GameService();
-		var gameId = service.RehydrateSession(source.Serialize());
+		var gameId = service.RehydrateSession(serializedSource);
 		var recoveredStart = service.GetCurrentInstruction(gameId)
 			.Should().BeOfType<StartGameConfirmationInstruction>().Subject;
 		var nightStart = service.ProcessInstruction(
@@ -833,7 +834,11 @@ public sealed class ActorBorrowedCommitProjectionTests
 			powerIdentity,
 			targetId,
 			FactionAgentKnowledge.KnownNonAgent);
-		session.CaptureRecoveryBoundary(RecoveryBoundaryKey.Instance);
+		if (observer == null)
+		{
+			session = RecoveryPayloadTestDriver.Capture(session)
+				.RehydrateGameSession();
+		}
 		return new CommittedSeerFixture(session, powerIdentity, targetId);
 	}
 
@@ -871,7 +876,7 @@ public sealed class ActorBorrowedCommitProjectionTests
 		session.CommitActorBorrowedDefenderProtection(
 			powerIdentity,
 			players[1].Id);
-		session.CaptureRecoveryBoundary(RecoveryBoundaryKey.Instance);
+		session = RecoveryPayloadTestDriver.Capture(session).RehydrateGameSession();
 		return new CommittedDefenderFixture(session, players[2].Id);
 	}
 
@@ -1013,8 +1018,7 @@ public sealed class ActorBorrowedCommitProjectionTests
 				.Should().Be(ActorBorrowedCupidLoversDisposition.SameFaction);
 		}
 
-		session.CaptureRecoveryBoundary(RecoveryBoundaryKey.Instance);
-		return session;
+		return RecoveryPayloadTestDriver.Capture(session).RehydrateGameSession();
 	}
 
 	private static string SourcePowerIdentifier(MainRoleType sourceRole) =>
@@ -1146,11 +1150,6 @@ public sealed class ActorBorrowedCommitProjectionTests
 	private sealed record CommittedDefenderFixture(
 		GameSession Session,
 		Guid AlternateTargetPlayerId);
-
-	private sealed class RecoveryBoundaryKey : IGameFlowManagerKey
-	{
-		internal static RecoveryBoundaryKey Instance { get; } = new();
-	}
 
 	private sealed class RecordingStateChangeObserver : IStateChangeObserver
 	{

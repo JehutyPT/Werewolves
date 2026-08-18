@@ -2978,20 +2978,8 @@ internal static class GameFlowManager
                                 cursor.CommittedTargetIds));
             if (!hasMatchingRecurringCommit)
             {
-                if (sourceRole != MainRoleType.BigBadWolf)
-                {
-                    throw new InvalidOperationException(
-                        "The domain recovery cursor does not match the latest recurring native Role Power action.");
-                }
-
-				BigBadWolfRole.ValidateLegacyRecurringRecoveryBoundary(
-					cursor,
-					pendingInstruction);
-				session.NormalizeLegacyRecurringRolePowerCommit(
-					Key,
-					cursor.CommittedActionType,
-					cursor.CommittedTargetIds.Single(),
-					cursor.PowerIdentity!.Value);
+				throw new InvalidOperationException(
+					"The domain recovery cursor does not match the latest recurring native Role Power action.");
             }
         }
 

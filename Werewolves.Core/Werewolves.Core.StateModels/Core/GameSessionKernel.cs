@@ -74,7 +74,6 @@ namespace Werewolves.Core.StateModels.Core
 
 		internal Guid Id { get; }
 
-		internal IGamePhaseStateCache PhaseStateCache => _phaseStateCache;
 
 		internal IEnumerable<TLogEntry> FindLogEntries<TLogEntry>
 			(NumberRangeConstraint? turnIntervalConstraint = null, GamePhase? phase = null, Func<TLogEntry, bool>? filter = null) where TLogEntry : GameLogEntryBase 
@@ -153,11 +152,6 @@ namespace Werewolves.Core.StateModels.Core
 
 		private ModeratorInstruction? _pendingModeratorInstruction = null;
 		
-		internal ModeratorInstruction? PendingModeratorInstruction => _pendingModeratorInstruction;
-		internal AcceptedObservationRecoveryCursor? AcceptedObservationRecoveryCursor =>
-			_acceptedObservationRecoveryCursor;
-		internal DomainRecoveryCursor? DomainRecoveryCursor =>
-			_domainRecoveryCursor;
 		internal GamePhase CurrentPhase => _phaseStateCache.GetCurrentPhase();
 		internal ExecutionView Execution => _phaseStateCache.CreateExecutionView(
 			_pendingModeratorInstruction,
@@ -219,7 +213,10 @@ namespace Werewolves.Core.StateModels.Core
 			_stateChangeObserver?.OnPendingInstructionChanged(initialInstruction);
 			_stateChangeObserver?.OnMainPhaseChanged(GamePhase.Night);
 			_stateChangeObserver?.OnTurnNumberChanged(1);
-			CaptureRecoveryBoundary();
+			_recoveryBoundary = CreateValidatedRecoveryBoundary(
+				initialInstruction,
+				acceptedObservationRecoveryCursor: null,
+				domainRecoveryCursor: null);
 		}
 
 		private static IReadOnlyList<PhysicalCharacterCard> OrderActorSetupCards(
@@ -773,16 +770,6 @@ namespace Werewolves.Core.StateModels.Core
 			}
 
 			internal void RestoreTransientContinuation(
-				string activeSubPhaseStage,
-				ListenerIdentifier listener,
-				string listenerState) =>
-				RestoreTransientContinuation(
-					Execution,
-					activeSubPhaseStage,
-					listener,
-					listenerState);
-
-			internal void RestoreTransientContinuation(
 				ExecutionView expected,
 				string activeSubPhaseStage,
 				ListenerIdentifier listener,
@@ -857,12 +844,6 @@ namespace Werewolves.Core.StateModels.Core
 
 		private PlayerState GetMutablePlayerState(SessionMutator.IStateMutatorKey key, Guid playerId) => GetPlayer(playerId).GetMutableState(key);
 		private void IncrementTurnNumber(SessionMutator.IStateMutatorKey key) => _turnNumber++;
-		internal void SetPendingModeratorInstruction(ModeratorInstruction instruction)
-		{
-			_pendingModeratorInstruction = instruction;
-			_stateChangeObserver?.OnPendingInstructionChanged(instruction);
-		}
-
 		#region Serialization
 
 		private static readonly JsonSerializerOptions SerializationOptions = new()
@@ -880,23 +861,6 @@ namespace Werewolves.Core.StateModels.Core
 		internal string Serialize()
 		{
 			return JsonSerializer.Serialize(_recoveryBoundary ?? CreateDto(), SerializationOptions);
-		}
-
-		internal void CaptureRecoveryBoundary(
-			AcceptedObservationRecoveryCursor? acceptedObservationRecoveryCursor = null,
-			DomainRecoveryCursor? domainRecoveryCursor = null)
-		{
-			var pendingInstruction = _pendingModeratorInstruction
-				?? throw new InvalidOperationException(
-					"A stable recovery boundary requires one Pending Instruction.");
-			var candidateBoundary = CreateValidatedRecoveryBoundary(
-				pendingInstruction,
-				acceptedObservationRecoveryCursor,
-				domainRecoveryCursor);
-
-			_acceptedObservationRecoveryCursor = acceptedObservationRecoveryCursor;
-			_domainRecoveryCursor = domainRecoveryCursor;
-			_recoveryBoundary = candidateBoundary;
 		}
 
 		private GameSessionDto CreateValidatedRecoveryBoundary(
@@ -922,29 +886,6 @@ namespace Werewolves.Core.StateModels.Core
 
 			return candidateBoundary;
 		}
-
-			internal void NormalizeLegacyRecurringRolePowerCommit(
-				NightActionType actionType,
-				Guid targetId,
-				RolePowerInstanceIdentity powerIdentity)
-			{
-				if (!Enum.IsDefined(actionType) ||
-				    actionType == NightActionType.Unknown ||
-				    targetId == Guid.Empty ||
-				    !powerIdentity.IsValid)
-				{
-					throw new InvalidOperationException(
-						"The legacy recurring Role Power normalization request is structurally invalid.");
-				}
-
-				_gameHistoryLog.NormalizeLegacyRecurringRolePowerCommit(
-					actionType,
-					targetId,
-					powerIdentity,
-					CurrentPhase,
-					TurnNumber);
-				_recoveryBoundary = CreateDto();
-			}
 
 			private GameSessionDto CreateDto()
 		{

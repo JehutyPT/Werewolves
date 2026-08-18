@@ -3,6 +3,7 @@ using FluentAssertions;
 using Werewolves.Core.GameLogic.Interfaces;
 using Werewolves.Core.GameLogic.Models.EliminationCascades;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
+using Werewolves.Core.GameLogic.Models.StateMachine;
 using Werewolves.Core.GameLogic.RolePowers;
 using Werewolves.Core.GameLogic.Roles;
 using Werewolves.Core.GameLogic.Roles.MainRoles;
@@ -14,6 +15,7 @@ using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Simulation;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Resources;
+using Werewolves.Core.Tests.Helpers;
 using Xunit;
 
 namespace Werewolves.Core.Tests.Integration;
@@ -32,10 +34,6 @@ public sealed class ActorBorrowedBearTamerKnightTests
 	private static readonly PhysicalCharacterCard KnightCard = new(
 		Guid.Parse("00000000-0000-0000-0000-000000000153"),
 		MainRoleType.KnightWithRustySword);
-	private static readonly TestGameFlowManagerKey FlowKey = new();
-	private static readonly TestSubPhaseManagerKey SubPhaseKey = new();
-	private static readonly TestHookSubPhaseKey HookKey = new();
-
 	[Fact]
 	public void BorrowedBearTamer_LivingAgentNeighborGrowlsAfterDawnCascadeBeforeTerminalVictory()
 	{
@@ -629,19 +627,25 @@ public sealed class ActorBorrowedBearTamerKnightTests
 				Faction.Werewolf)
 			.Should().Be(FactionAgentKnowledge.KnownAgent);
 
-		recovered.TryEnterSubPhaseStage(
-			SubPhaseKey,
-			GameHook.NightMainActionLoop.ToString()).Should().BeTrue();
 		IGameHookListener knight = new KnightWithTheRustySwordRole(
 			new RolePowerAvailabilityGateway(
 				AllowAllRolePowerAvailabilityPolicy.Instance));
-		var consequence = Advance(
+		var followingNightVictimId = FindFollowingNightVictim(
+			recovered,
+			fixture.TargetId);
+		var hookInstructions = AdvanceNightHookToCompletion(
 			knight,
 			recovered,
-			fixture.Start.CreateResponse());
+			fixture.Start.CreateResponse(),
+			followingNightVictimId);
+		var prematureRustySwordAnnouncement = string.Format(
+			GameStrings.RustySwordDiseaseEliminationAnnouncement,
+			recovered.GetPlayer(fixture.TargetId).Name);
 
-		consequence.Outcome.Should().Be(HookListenerOutcome.Complete);
-		consequence.Instruction.Should().BeNull();
+		hookInstructions.Any(instruction =>
+			instruction.PublicAnnouncement?.Contains(
+				prematureRustySwordAnnouncement,
+				StringComparison.Ordinal) == true).Should().BeFalse();
 		var publicFollowingNight = recoveryService
 			.GetGameStateView(recoveredGameId)!;
 		publicFollowingNight.GameHistoryLog.OfType<NightActionLogEntry>()
@@ -655,17 +659,20 @@ public sealed class ActorBorrowedBearTamerKnightTests
 				entry.PlayerId == fixture.TargetId &&
 				entry.EffectType == StatusEffectTypes.RustySwordDisease);
 
-		recovered.ClearCurrentListenerCache(HookKey);
 		recovered.TransitionMainPhase(GamePhase.Dawn);
-		recovered.SetPendingModeratorInstruction(FlowKey, fixture.Start);
-		recovered.CaptureRecoveryBoundary(FlowKey);
+		recovered = RecoveryPayloadTestDriver.Capture(recovered)
+			.WithPendingInstruction(fixture.Start)
+			.RehydrateGameSession();
 		var followingDawnInstructions = AdvanceDawnToDay(
 			recovered,
 			fixture.Start.CreateResponse(),
 			fixture.Admissions,
 			new Dictionary<Guid, MainRoleType>
 			{
-				[fixture.TargetId] = MainRoleType.SimpleWerewolf
+				[fixture.TargetId] = MainRoleType.SimpleWerewolf,
+				[followingNightVictimId] = recovered
+					.GetPlayerState(followingNightVictimId)
+					.CurrentRole!.Value
 			});
 		recovered.GameHistoryLog.OfType<DawnVictimDeterminedLogEntry>()
 			.Should().ContainSingle(entry =>
@@ -750,17 +757,20 @@ public sealed class ActorBorrowedBearTamerKnightTests
 		scheduled.TargetPlayerId.Should().Be(fixture.TargetId);
 		fixture.Session.GetPlayerState(fixture.TargetId).HasStatusEffect(
 			StatusEffectTypes.RustySwordDisease).Should().BeFalse();
+		var session = RecoveryPayloadTestDriver.Capture(fixture.Session)
+			.WithPendingInstruction(fixture.Start)
+			.RehydrateGameSession();
 		var targetRoleAtFollowingDawn = MainRoleType.SimpleWerewolf;
 		if (mutation == BorrowedKnightCommittedTargetMutation.TargetRoleChanged)
 		{
-			fixture.Session.AssignRole(
+			session.AssignRole(
 				fixture.TargetId,
 				MainRoleType.SimpleVillager);
 			targetRoleAtFollowingDawn = MainRoleType.SimpleVillager;
 		}
 		else
 		{
-			fixture.Session.CommitGameFact(context =>
+			session.CommitGameFact(context =>
 				new VillagerRolePowerSuppressionCommittedLogEntry
 				{
 					Timestamp = context.Timestamp,
@@ -770,76 +780,78 @@ public sealed class ActorBorrowedBearTamerKnightTests
 				});
 		}
 
-		fixture.Session.TransitionMainPhase(GamePhase.Night);
-		fixture.Session.TryExpireActorBorrowedRolePowerActivation()
+		session.TransitionMainPhase(GamePhase.Night);
+		session.TryExpireActorBorrowedRolePowerActivation()
 			.Should().BeTrue();
 		CommitCurrentWerewolfAgentFacts(
-			fixture.Session,
+			session,
 			new HashSet<Guid> { fixture.OtherWerewolfId });
-		fixture.Session.GetFactionAgentKnowledge(
+		session.GetFactionAgentKnowledge(
 				fixture.TargetId,
 				Faction.Werewolf)
 			.Should().Be(FactionAgentKnowledge.KnownNonAgent);
-		fixture.Session.GetFactionAgentKnowledge(
+		session.GetFactionAgentKnowledge(
 				fixture.OtherWerewolfId,
 				Faction.Werewolf)
 			.Should().Be(FactionAgentKnowledge.KnownAgent);
-		fixture.Session.TryEnterSubPhaseStage(
-			SubPhaseKey,
-			GameHook.NightMainActionLoop.ToString()).Should().BeTrue();
 		IGameHookListener knight = new KnightWithTheRustySwordRole(
 			new RolePowerAvailabilityGateway(
 				new VillagerRolePowerSuppressionPolicy(
 					AllowAllRolePowerAvailabilityPolicy.Instance)));
-		var consequence = Advance(
+		var followingNightVictimId = FindFollowingNightVictim(
+			session,
+			fixture.TargetId);
+		AdvanceNightHookToCompletion(
 			knight,
-			fixture.Session,
-			fixture.Start.CreateResponse());
+			session,
+			fixture.Start.CreateResponse(),
+			followingNightVictimId);
 
-		consequence.Outcome.Should().Be(HookListenerOutcome.Complete);
-		consequence.Instruction.Should().BeNull();
-		fixture.Session.GameHistoryLog.OfType<NightActionLogEntry>()
+		session.GameHistoryLog.OfType<NightActionLogEntry>()
 			.Should().NotContain(entry =>
 				entry.ActionType == NightActionType.RustySword);
-		fixture.Session.GetPlayerState(fixture.TargetId).HasStatusEffect(
+		session.GetPlayerState(fixture.TargetId).HasStatusEffect(
 			StatusEffectTypes.RustySwordDisease).Should().BeFalse();
-		fixture.Session.GameHistoryLog.OfType<StatusEffectLogEntry>()
+		session.GameHistoryLog.OfType<StatusEffectLogEntry>()
 			.Should().NotContain(entry =>
 				entry.PlayerId == fixture.TargetId &&
 				entry.EffectType == StatusEffectTypes.RustySwordDisease);
-		fixture.Session.ClearCurrentListenerCache(HookKey);
-		fixture.Session.TransitionMainPhase(GamePhase.Dawn);
-		fixture.Session.SetPendingModeratorInstruction(FlowKey, fixture.Start);
-		fixture.Session.CaptureRecoveryBoundary(FlowKey);
+		session.TransitionMainPhase(GamePhase.Dawn);
+		session = RecoveryPayloadTestDriver.Capture(session)
+			.WithPendingInstruction(fixture.Start)
+			.RehydrateGameSession();
 		AdvanceDawnToDay(
-			fixture.Session,
+			session,
 			fixture.Start.CreateResponse(),
 			fixture.Admissions,
 			new Dictionary<Guid, MainRoleType>
 			{
-				[fixture.TargetId] = targetRoleAtFollowingDawn
+				[fixture.TargetId] = targetRoleAtFollowingDawn,
+				[followingNightVictimId] = session
+					.GetPlayerState(followingNightVictimId)
+					.CurrentRole!.Value
 			});
 
-		fixture.Session.GameHistoryLog.OfType<DawnVictimDeterminedLogEntry>()
+		session.GameHistoryLog.OfType<DawnVictimDeterminedLogEntry>()
 			.Should().ContainSingle(entry =>
 				entry.TurnNumber == 2 &&
 				entry.PlayerId == fixture.TargetId &&
 				entry.Reason == EliminationReason.RustySword);
-		fixture.Session.GameHistoryLog.OfType<DawnVictimDeterminedLogEntry>()
+		session.GameHistoryLog.OfType<DawnVictimDeterminedLogEntry>()
 			.Should().NotContain(entry =>
 				entry.TurnNumber == 2 &&
 				entry.PlayerId == fixture.OtherWerewolfId &&
 				entry.Reason == EliminationReason.RustySword);
-		fixture.Session.GetPlayerState(fixture.TargetId).Health.Should().Be(
+		session.GetPlayerState(fixture.TargetId).Health.Should().Be(
 			PlayerHealth.Dead);
-		fixture.Session.GetPlayerState(fixture.OtherWerewolfId).Health.Should().Be(
+		session.GetPlayerState(fixture.OtherWerewolfId).Health.Should().Be(
 			PlayerHealth.Alive);
-		fixture.Session.GetActorBorrowedKnightRustySwordScheduleCommits()
+		session.GetActorBorrowedKnightRustySwordScheduleCommits()
 			.Should().ContainSingle().Which.Should().Be(scheduled);
 		if (mutation ==
 			BorrowedKnightCommittedTargetMutation.GlobalSuppressionActivated)
 		{
-			fixture.Session.GameHistoryLog
+			session.GameHistoryLog
 				.OfType<VillagerRolePowerSuppressionCommittedLogEntry>()
 				.Should().ContainSingle();
 		}
@@ -885,19 +897,18 @@ public sealed class ActorBorrowedBearTamerKnightTests
 				Faction.Werewolf)
 			.Should().Be(FactionAgentKnowledge.KnownAgent);
 
-		recovered.TryEnterSubPhaseStage(
-			SubPhaseKey,
-			GameHook.NightMainActionLoop.ToString()).Should().BeTrue();
 		IGameHookListener knight = new KnightWithTheRustySwordRole(
 			new RolePowerAvailabilityGateway(
 				AllowAllRolePowerAvailabilityPolicy.Instance));
-		var consequence = Advance(
+		var followingNightVictimId = FindFollowingNightVictim(
+			recovered,
+			fixture.TargetId);
+		AdvanceNightHookToCompletion(
 			knight,
 			recovered,
-			fixture.Start.CreateResponse());
+			fixture.Start.CreateResponse(),
+			followingNightVictimId);
 
-		consequence.Outcome.Should().Be(HookListenerOutcome.Complete);
-		consequence.Instruction.Should().BeNull();
 		var publicFollowingNight = recoveryService
 			.GetGameStateView(recoveredGameId)!;
 		publicFollowingNight.GameHistoryLog.OfType<NightActionLogEntry>()
@@ -907,19 +918,20 @@ public sealed class ActorBorrowedBearTamerKnightTests
 			.HasStatusEffect(StatusEffectTypes.RustySwordDisease)
 			.Should().BeFalse();
 
-		recovered.ClearCurrentListenerCache(HookKey);
 		recovered.TransitionMainPhase(GamePhase.Dawn);
-		recovered.SetPendingModeratorInstruction(FlowKey, fixture.Start);
-		recovered.CaptureRecoveryBoundary(FlowKey);
+		recovered = RecoveryPayloadTestDriver.Capture(recovered)
+			.WithPendingInstruction(fixture.Start)
+			.RehydrateGameSession();
 		var followingDawnInstructions = AdvanceDawnToDay(
 			recovered,
 			fixture.Start.CreateResponse(),
 			fixture.Admissions,
-			new Dictionary<Guid, MainRoleType>());
-		followingDawnInstructions.OfType<ConfirmationInstruction>()
-			.Should().NotContain(instruction =>
-				instruction.Semantic ==
-					ModeratorInstructionSemantic.AnnounceDawnVictims);
+			new Dictionary<Guid, MainRoleType>
+			{
+				[followingNightVictimId] = recovered
+					.GetPlayerState(followingNightVictimId)
+					.CurrentRole!.Value
+			});
 		var forbiddenAnnouncement = string.Format(
 			GameStrings.RustySwordDiseaseEliminationAnnouncement,
 			recovered.GetPlayer(fixture.TargetId).Name);
@@ -1009,22 +1021,84 @@ public sealed class ActorBorrowedBearTamerKnightTests
 			admissions ?? SupportedRoleCatalog.Admissions)
 			.ModeratorInstruction;
 
-	private static HookListenerActionResult Advance(
+	private static IReadOnlyList<ModeratorInstruction>
+		AdvanceNightHookToCompletion(
 		IGameHookListener listener,
 		GameSession session,
-		ModeratorResponse response)
+		ModeratorResponse response,
+		Guid werewolfVictimId)
 	{
-		var result = listener.Execute(session, response);
-		if (result.Outcome != HookListenerOutcome.Skip)
+		session.GetOrCreateListener(listener.Id, () => listener);
+		var hook = new SubPhaseManager<HookDriverSubPhase>(
+			HookDriverSubPhase.Active,
+			[
+				HookSubPhaseStage.HookStage(GameHook.NightMainActionLoop),
+				NavigationSubPhaseStage.NavigationEndStageSilent(
+					HookDriverSubPhase.Complete)
+			],
+			possibleNextSubPhases: [HookDriverSubPhase.Complete]);
+		var observed = new List<ModeratorInstruction>();
+		var currentResponse = response;
+		for (var step = 0; step < 20; step++)
 		{
-			session.TransitionListenerStateCache(
-				HookKey,
-				listener.Id,
-				result.NextListenerPhase!);
+			var instruction = hook.Execute(session, currentResponse)
+				.ModeratorInstruction;
+			if (instruction == null)
+			{
+				return observed;
+			}
+
+			observed.Add(instruction);
+			currentResponse = CreateNightHookResponse(
+				session,
+				instruction,
+				werewolfVictimId);
 		}
 
-		return result;
+		throw new InvalidOperationException(
+			"The following Night hook did not complete.");
 	}
+
+	private static ModeratorResponse CreateNightHookResponse(
+		GameSession session,
+		ModeratorInstruction instruction,
+		Guid werewolfVictimId) => instruction switch
+	{
+		ConfirmationInstruction confirmation => confirmation.CreateResponse(),
+		SelectPlayersInstruction
+		{
+			Semantic:
+				ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup
+		} observation => observation.CreateResponse(
+			observation.SelectablePlayerIds
+				.Where(playerId =>
+					session.GetFactionAgentKnowledge(
+						playerId,
+						Faction.Werewolf) ==
+					FactionAgentKnowledge.KnownAgent)
+				.ToHashSet()),
+		SelectPlayersInstruction
+		{
+			Semantic: ModeratorInstructionSemantic.SelectWerewolfVictim
+		} victimSelection
+			when victimSelection.SelectablePlayerIds.Contains(werewolfVictimId) =>
+			victimSelection.CreateResponse([werewolfVictimId]),
+		_ => throw new InvalidOperationException(
+			$"Unexpected following Night instruction {instruction.Semantic}.")
+	};
+
+	private static Guid FindFollowingNightVictim(
+		GameSession session,
+		Guid excludedPlayerId) => session.GetPlayers()
+		.Where(player =>
+			player.Id != excludedPlayerId &&
+			player.State.Health == PlayerHealth.Alive &&
+			session.GetFactionAgentKnowledge(
+				player.Id,
+				Faction.Werewolf) ==
+			FactionAgentKnowledge.KnownNonAgent)
+		.Select(player => player.Id)
+		.First();
 
 	private static IReadOnlyList<ModeratorInstruction> AdvanceDawnToDay(
 		GameSession session,
@@ -1166,17 +1240,16 @@ public sealed class ActorBorrowedBearTamerKnightTests
 		var sessionId = Guid.NewGuid();
 		var start = new StartGameConfirmationInstruction(sessionId);
 		var session = new GameSession(sessionId, start, config);
+		IRolePowerAvailabilityPolicy availabilityPolicy =
+			scenario == BorrowedBearTamerScenario.Unavailable
+				? new DenyBearTamerAvailabilityPolicy()
+				: AllowAllRolePowerAvailabilityPolicy.Instance;
 		var admissions = scenario == BorrowedBearTamerScenario.Unavailable
 			? SupportedRoleCatalog.CreateAdmissions(
 				new RolePowerAvailabilityGateway(
 					new VillagerRolePowerSuppressionPolicy(
-						new DenyBearTamerAvailabilityPolicy())))
+						availabilityPolicy)))
 			: SupportedRoleCatalog.Admissions;
-		foreach (var (listenerId, listenerFactory) in
-			admissions.ListenerFactories)
-		{
-			session.GetOrCreateListener(listenerId, listenerFactory);
-		}
 		var players = session.GetPlayers().ToArray();
 		var actorId = players[0].Id;
 		var werewolfIds = players.Skip(1).Take(3)
@@ -1232,8 +1305,10 @@ public sealed class ActorBorrowedBearTamerKnightTests
 			NightActionType.WerewolfVictimSelection,
 			victimId);
 		session.TransitionMainPhase(GamePhase.Dawn);
-		session.SetPendingModeratorInstruction(FlowKey, start);
-		session.CaptureRecoveryBoundary(FlowKey);
+		session = RehydrateAtPendingInstruction(
+			session,
+			start,
+			availabilityPolicy);
 		return new BorrowedBearTamerDawnFixture(
 			session,
 			start,
@@ -1351,18 +1426,16 @@ public sealed class ActorBorrowedBearTamerKnightTests
 		var sessionId = Guid.NewGuid();
 		var start = new StartGameConfirmationInstruction(sessionId);
 		var session = new GameSession(sessionId, start, config);
+		IRolePowerAvailabilityPolicy availabilityPolicy =
+			scenario == BorrowedKnightScenario.AvailabilityDenied
+				? new DenyKnightAvailabilityPolicy()
+				: AllowAllRolePowerAvailabilityPolicy.Instance;
 		var admissions = scenario == BorrowedKnightScenario.AvailabilityDenied
 			? SupportedRoleCatalog.CreateAdmissions(
 				new RolePowerAvailabilityGateway(
 					new VillagerRolePowerSuppressionPolicy(
-						new DenyKnightAvailabilityPolicy())))
+						availabilityPolicy)))
 			: SupportedRoleCatalog.Admissions;
-		foreach (var (listenerId, listenerFactory) in
-			admissions.ListenerFactories)
-		{
-			session.GetOrCreateListener(listenerId, listenerFactory);
-		}
-
 		var players = session.GetPlayers().ToArray();
 		var actorId = players[0].Id;
 		var werewolfIds = players
@@ -1468,8 +1541,10 @@ public sealed class ActorBorrowedBearTamerKnightTests
 		{
 			CommitCurrentWerewolfAgentFacts(session, werewolfIds);
 		}
-		session.SetPendingModeratorInstruction(FlowKey, start);
-		session.CaptureRecoveryBoundary(FlowKey);
+		session = RehydrateAtPendingInstruction(
+			session,
+			start,
+			availabilityPolicy);
 		return new BorrowedKnightDawnFixture(
 			session,
 			start,
@@ -1479,6 +1554,21 @@ public sealed class ActorBorrowedBearTamerKnightTests
 			players[2].Id,
 			omittedAgentPlayerId ?? Guid.Empty,
 			activation!.ActivationId);
+	}
+
+	private static GameSession RehydrateAtPendingInstruction(
+		GameSession session,
+		ModeratorInstruction pendingInstruction,
+		IRolePowerAvailabilityPolicy availabilityPolicy)
+	{
+		var serializedSession = RecoveryPayloadTestDriver.Capture(session)
+			.WithPendingInstruction(pendingInstruction)
+			.Serialize();
+		var service = new GameService(availabilityPolicy);
+		var gameId = service.RehydrateSession(serializedSession);
+		return (GameSession)(service.GetGameStateView(gameId)
+			?? throw new InvalidOperationException(
+				"Rehydrated game session was not available."));
 	}
 
 	private static void SeedCompleteFactionFacts(
@@ -1637,6 +1727,12 @@ public sealed class ActorBorrowedBearTamerKnightTests
 		GlobalSuppressionActivated
 	}
 
+	private enum HookDriverSubPhase
+	{
+		Active,
+		Complete
+	}
+
 	private sealed class DenyBearTamerAvailabilityPolicy
 		: IRolePowerAvailabilityPolicy
 	{
@@ -1655,8 +1751,4 @@ public sealed class ActorBorrowedBearTamerKnightTests
 				: RolePowerAvailabilityResult.Allowed;
 	}
 
-	private sealed class TestSubPhaseManagerKey : ISubPhaseManagerKey;
-	private sealed class TestHookSubPhaseKey : IHookSubPhaseKey;
-
-	private sealed class TestGameFlowManagerKey : IGameFlowManagerKey;
 }

@@ -34,8 +34,6 @@ public sealed class ActorBorrowedScapegoatVillageIdiotTests
 	private static readonly PhysicalCharacterCard FoxCard = new(
 		Guid.Parse("00000000-0000-0000-0000-000000000145"),
 		MainRoleType.Fox);
-	private static readonly TestGameFlowManagerKey FlowKey = new();
-
 	[Fact]
 	public void BorrowedScapegoat_TiedVote_RevealsActorAndFixesCandidatesBeforeForcedReaction()
 	{
@@ -512,14 +510,16 @@ public sealed class ActorBorrowedScapegoatVillageIdiotTests
 		// Test-owned historical-lineage arrangement: the dead Actor has no
 		// natural next opening at which this activation could expire.
 		arranged.TryExpireActorBorrowedRolePowerActivation().Should().BeTrue();
-		arranged.CaptureRecoveryBoundary(FlowKey);
+		var arrangedPayload = RecoveryPayloadTestDriver.Capture(arranged)
+			.WithPendingInstruction(nightStart)
+			.Serialize();
 
 		var recoveryService = CreateScapegoatService(
 			new BorrowedScapegoatForcedReaction(
 				pending.ActorId,
 				pending.ReactionVictimId));
 		var recoveredGameId = recoveryService.RehydrateSession(
-			arranged.Serialize());
+			arrangedPayload);
 		var recoveredNightStart = recoveryService
 			.GetCurrentInstruction(recoveredGameId)
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
@@ -544,7 +544,6 @@ public sealed class ActorBorrowedScapegoatVillageIdiotTests
 	{
 		var (session, start, actorId) = CreateActiveVillageIdiotActorSession();
 		session.TransitionMainPhase(GamePhase.Day);
-		session.SetPendingModeratorInstruction(FlowKey, start);
 
 		var debate = Advance(session, start.CreateResponse())
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
@@ -656,7 +655,6 @@ public sealed class ActorBorrowedScapegoatVillageIdiotTests
 		SeedRequiredFactionBeneficiaryFacts(session);
 		session.TransitionMainPhase(GamePhase.Day);
 		session.PerformDayActionNoTarget(DayPowerType.JudgeExtraVote);
-		session.SetPendingModeratorInstruction(FlowKey, start);
 		var debate = Advance(session, start.CreateResponse())
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		var firstVote = Advance(session, debate.CreateResponse())
@@ -733,7 +731,6 @@ public sealed class ActorBorrowedScapegoatVillageIdiotTests
 					AnnouncementInstructionId = Guid.NewGuid()
 				});
 		}
-		session.SetPendingModeratorInstruction(FlowKey, start);
 		var debate = Advance(session, start.CreateResponse())
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		var vote = Advance(session, debate.CreateResponse())
@@ -1042,7 +1039,6 @@ public sealed class ActorBorrowedScapegoatVillageIdiotTests
 				});
 		}
 
-		session.SetPendingModeratorInstruction(FlowKey, start);
 		var debate = Advance(session, start.CreateResponse())
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		var vote = Advance(session, debate.CreateResponse())
@@ -1121,7 +1117,6 @@ public sealed class ActorBorrowedScapegoatVillageIdiotTests
 		var (session, start, actorId) = CreateActiveVillageIdiotActorSession();
 		SeedRequiredFactionBeneficiaryFacts(session);
 		session.TransitionMainPhase(GamePhase.Day);
-		session.SetPendingModeratorInstruction(FlowKey, start);
 		var debate = Advance(session, start.CreateResponse())
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		var vote = Advance(session, debate.CreateResponse())
@@ -1311,5 +1306,4 @@ public sealed class ActorBorrowedScapegoatVillageIdiotTests
 		}
 	}
 
-	private sealed class TestGameFlowManagerKey : IGameFlowManagerKey;
 }

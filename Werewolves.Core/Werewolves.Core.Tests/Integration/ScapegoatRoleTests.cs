@@ -21,7 +21,6 @@ namespace Werewolves.Core.Tests.Integration;
 
 public sealed class ScapegoatRoleTests : DiagnosticTestBase
 {
-	private static readonly TestGameFlowManagerKey RecoveryFlowKey = new();
 	private static readonly JsonSerializerOptions RecoverySerializationOptions =
 		new()
 		{
@@ -736,9 +735,8 @@ public sealed class ScapegoatRoleTests : DiagnosticTestBase
 			DayVoteRules.ExpireActiveVoterEligibilityRestriction(session);
 		}
 
-		session.CaptureRecoveryBoundary(RecoveryFlowKey);
 		var malformed = MoveNativeRestrictionAfterEvent(
-			session.Serialize(),
+			RecoveryPayloadTestDriver.Capture(session).Serialize(),
 			moveAfterExpiry);
 
 		var act = () => new GameService().RehydrateSession(malformed);
@@ -790,9 +788,9 @@ public sealed class ScapegoatRoleTests : DiagnosticTestBase
 			.BeGreaterThan(acknowledgmentLogIndex);
 		session.GameHistoryLog.ElementAt(restriction.PublicMarkerLogIndex)
 			.Should().BeOfType<ActorBorrowedRolePowerCommittedLogEntry>();
-		session.CaptureRecoveryBoundary(RecoveryFlowKey);
+		var serialized = RecoveryPayloadTestDriver.Capture(session).Serialize();
 
-		var act = () => new GameService().RehydrateSession(session.Serialize());
+		var act = () => new GameService().RehydrateSession(serialized);
 
 		act.Should().Throw<InvalidOperationException>()
 			.WithMessage(
@@ -1103,8 +1101,6 @@ public sealed class ScapegoatRoleTests : DiagnosticTestBase
 			return result;
 		}
 	}
-
-	private sealed class TestGameFlowManagerKey : IGameFlowManagerKey;
 
 	private sealed class ScapegoatTriggeredReaction
 		: IEliminationCascadeReaction

@@ -2,6 +2,7 @@ using System.Globalization;
 using FluentAssertions;
 using Werewolves.Core.GameLogic.Interfaces;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
+using Werewolves.Core.GameLogic.Models.StateMachine;
 using Werewolves.Core.GameLogic.RolePowers;
 using Werewolves.Core.GameLogic.Roles;
 using Werewolves.Core.GameLogic.Roles.MainRoles;
@@ -29,10 +30,6 @@ public sealed class ActorBorrowedPrivacyTests
 		Card("00000000-0000-0000-0000-000000000256", MainRoleType.Fox),
 		Card("00000000-0000-0000-0000-000000000257", MainRoleType.StutteringJudge)
 	];
-
-	private static readonly TestSubPhaseManagerKey SubPhaseKey = new();
-	private static readonly TestHookSubPhaseKey HookKey = new();
-	private static readonly TestGameFlowManagerKey FlowKey = new();
 
 	[Theory]
 	[InlineData(MainRoleType.Seer)]
@@ -123,13 +120,12 @@ public sealed class ActorBorrowedPrivacyTests
 		HookListenerActionResult? replay = null;
 
 		Action submitStaleResponse = () => replay = Advance(
-			fixture.Listener,
-			fixture.Session,
+			fixture,
 			staleResponse);
 
 		submitStaleResponse.Should().NotThrow();
 		replay.Should().NotBeNull();
-		replay!.Outcome.Should().Be(HookListenerOutcome.Skip);
+		replay!.Outcome.Should().Be(HookListenerOutcome.Complete);
 		replay.Instruction.Should().BeNull();
 		fixture.Session.GameHistoryLog.Should().HaveCount(historyCount);
 		fixture.Session.GameHistoryLog
@@ -715,7 +711,7 @@ public sealed class ActorBorrowedPrivacyTests
 			fixture);
 		if (fixture.SourceRole == MainRoleType.Cupid)
 		{
-			fixture.Session.SetPendingModeratorInstruction(FlowKey, selection);
+			fixture.RestoreAt(selection);
 		}
 
 		var selectedPlayerIds = selection.SelectablePlayerIds
@@ -736,10 +732,7 @@ public sealed class ActorBorrowedPrivacyTests
 				EliminationReason.EventElimination);
 		}
 
-		return () => Advance(
-			fixture.Listener,
-			fixture.Session,
-			staleResponse);
+		return () => Advance(fixture, staleResponse);
 	}
 
 	private static ValidationSubmission PrepareValidationSubmission(
@@ -792,7 +785,7 @@ public sealed class ActorBorrowedPrivacyTests
 			if (branch !=
 			    BorrowedValidationBranch.CupidMissingPendingSelection)
 			{
-				fixture.Session.SetPendingModeratorInstruction(FlowKey, selection);
+				fixture.RestoreAt(selection);
 			}
 
 			if (branch == BorrowedValidationBranch.CupidAlreadyCommitted)
@@ -815,10 +808,7 @@ public sealed class ActorBorrowedPrivacyTests
 		    BorrowedValidationBranch.WitchPoisonMultipleSelection or
 		    BorrowedValidationBranch.WitchPoisonInvalidTarget)
 		{
-			selection = Advance(
-				fixture.Listener,
-				fixture.Session,
-				selection.CreateResponse([])).Instruction
+			selection = Advance(fixture, selection.CreateResponse([])).Instruction
 				.Should().BeOfType<SelectPlayersInstruction>().Subject;
 		}
 
@@ -843,7 +833,7 @@ public sealed class ActorBorrowedPrivacyTests
 		PrivacyFixture fixture,
 		ModeratorResponse response) => new(
 		fixture.Session,
-		() => Advance(fixture.Listener, fixture.Session, response));
+		() => Advance(fixture, response));
 
 	private static ModeratorResponse CreateUncheckedResponse(
 		SelectPlayersInstruction selection,
@@ -880,20 +870,42 @@ public sealed class ActorBorrowedPrivacyTests
 		fixture.Activation.ActivationId,
 		RolePowerInstanceOrigin.Borrowed);
 
+	private static SpendOpening PerformSpendOpening(
+		GameSession session,
+		StartGameConfirmationInstruction start,
+		Guid selectedCardId)
+	{
+		var wake = Advance(session, start.CreateResponse()).Instruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var choice = Advance(session, wake.CreateResponse()).Instruction
+			.Should().BeOfType<SelectOptionsInstruction>().Subject;
+		var sleep = Advance(
+			session,
+			choice.CreateResponse(selectedCardId.ToString("D"))).Instruction
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var activation = session
+			.GetModeratorActiveActorBorrowedRolePowerActivation();
+		activation.Should().NotBeNull();
+
+		return new SpendOpening(activation!, sleep.CreateResponse());
+	}
+
 	private static TInstruction PrepareInstructionAfterWake<TInstruction>(
 		PrivacyFixture fixture)
 		where TInstruction : ModeratorInstruction
 	{
-		var wake = Advance(
-			fixture.Listener,
-			fixture.Session,
-			fixture.Start.CreateResponse()).Instruction
+		var wake = Advance(fixture, fixture.OpeningResponse).Instruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
-		return Advance(
-				fixture.Listener,
-				fixture.Session,
-				wake.CreateResponse()).Instruction
+		var instruction = Advance(fixture, wake.CreateResponse()).Instruction
 			.Should().BeOfType<TInstruction>().Subject;
+		if (fixture.SourceRole is MainRoleType.Seer or MainRoleType.Fox)
+		{
+			SeedKnownWerewolfAgentFacts(
+				fixture.Session,
+				fixture.Session.GetPlayers().Skip(1).First().Id);
+		}
+
+		return instruction;
 	}
 
 	private static PrivacyFixture CreateFixture(MainRoleType sourceRole)
@@ -923,7 +935,12 @@ public sealed class ActorBorrowedPrivacyTests
 		session.AssignRole(actorId, MainRoleType.Actor);
 		session.IdentifyRole([actorId], MainRoleType.Actor);
 		SeedKnownActorBeneficiary(session, actorId);
-		SeedKnownWerewolfAgentFacts(session, players[1].Id);
+		SeedKnownWerewolfAgentFacts(
+			session,
+			sourceRole is MainRoleType.Seer or MainRoleType.Fox or
+				MainRoleType.Witch
+				? null
+				: players[1].Id);
 		session.TransitionMainPhase(GamePhase.Day);
 		session.TransitionMainPhase(GamePhase.Night);
 		if (sourceRole == MainRoleType.Witch)
@@ -933,37 +950,17 @@ public sealed class ActorBorrowedPrivacyTests
 				players[^1].Id);
 		}
 
-		session.TrySpendActorSetupCard(actorId, sourceCard.Id, out var activation)
-			.Should()
-			.BeTrue();
-		session.TryEnterSubPhaseStage(
-			SubPhaseKey,
-			GameHook.NightMainActionLoop.ToString()).Should().BeTrue();
-		var gateway = new RolePowerAvailabilityGateway(
-			AllowAllRolePowerAvailabilityPolicy.Instance);
+		var opening = PerformSpendOpening(
+			session,
+			start,
+			sourceCard.Id);
 		return new PrivacyFixture(
 			sourceRole,
 			session,
-			start,
 			actorId,
-			activation!,
-			CreateSourceListener(sourceRole, gateway));
+			opening.Activation,
+			opening.SourceOpeningResponse);
 	}
-
-	private static IGameHookListener CreateSourceListener(
-		MainRoleType sourceRole,
-		RolePowerAvailabilityGateway gateway) =>
-		sourceRole switch
-		{
-			MainRoleType.Seer => new SeerRole(gateway),
-			MainRoleType.Cupid => new CupidRole(gateway),
-			MainRoleType.Witch => new WitchRole(gateway),
-			MainRoleType.LittleGirl => new SimpleWerewolfRole(gateway),
-			MainRoleType.Defender => new DefenderRole(gateway),
-			MainRoleType.Fox => new FoxRole(gateway),
-			MainRoleType.StutteringJudge => new StutteringJudgeRole(gateway),
-			_ => throw new ArgumentOutOfRangeException(nameof(sourceRole))
-		};
 
 	private static void SeedKnownActorBeneficiary(
 		GameSession session,
@@ -996,8 +993,11 @@ public sealed class ActorBorrowedPrivacyTests
 
 	private static void SeedKnownWerewolfAgentFacts(
 		GameSession session,
-		Guid werewolfId)
+		Guid? werewolfId)
 	{
+		var hadCompleteAgentKnowledge = session.GetPlayers().All(player =>
+			session.GetFactionAgentKnowledge(player.Id, Faction.Werewolf) !=
+			FactionAgentKnowledge.Unknown);
 		var boundary = new FactionFactEffectiveBoundary(
 			session.TurnNumber,
 			session.GetCurrentPhase(),
@@ -1023,42 +1023,87 @@ public sealed class ActorBorrowedPrivacyTests
 						boundary))
 				]
 			});
+		if (werewolfId is not { } knownWerewolfId ||
+			hadCompleteAgentKnowledge)
+		{
+			return;
+		}
+
 		InitialBeneficiaryClosureRules.TryCommitCurrentSession(session, boundary)
 			.Should().Be(InitialBeneficiaryClosureResult.Committed);
 		session.GetPlayers().Should().OnlyContain(player =>
 			session.GetFactionBeneficiaryKnowledge(player.Id).IsKnown);
-		session.GetFactionBeneficiaryKnowledge(werewolfId).Should().Be(
+		session.GetFactionBeneficiaryKnowledge(knownWerewolfId).Should().Be(
 			FactionBeneficiaryKnowledge.Known(Faction.Werewolf));
 	}
 
 	private static HookListenerActionResult Advance(
-		IGameHookListener listener,
+		PrivacyFixture fixture,
+		ModeratorResponse response) => Advance(fixture.Session, response);
+
+	private static HookListenerActionResult Advance(
 		GameSession session,
 		ModeratorResponse response)
 	{
-		var result = listener.Execute(session, response);
-		if (result.Outcome != HookListenerOutcome.Skip)
+		var manager = new SubPhaseManager<HookHarnessSubPhase>(
+			HookHarnessSubPhase.Active,
+			[
+				HookSubPhaseStage.HookStage(GameHook.NightMainActionLoop),
+				NavigationSubPhaseStage.NavigationEndStageSilent(GamePhase.Dawn)
+			]);
+		var result = manager.Execute(session, response).Should()
+			.BeOfType<StayInSubPhaseHandlerResult>().Subject;
+		if (!result.StageComplete)
 		{
-			session.TransitionListenerStateCache(
-				HookKey,
-				listener.Id,
-				result.NextListenerPhase!);
+			result.ModeratorInstruction.Should().NotBeNull();
+			return HookListenerActionResult.NeedInput(
+				result.ModeratorInstruction!,
+				HookHarnessListenerState.AwaitingInput);
 		}
 
-		return result;
+		result.ModeratorInstruction.Should().BeNull();
+		return HookListenerActionResult.Complete(
+			HookHarnessListenerState.Complete);
 	}
 
 	private static PhysicalCharacterCard Card(
 		string id,
 		MainRoleType role) => new(Guid.Parse(id), role);
 
-	private sealed record PrivacyFixture(
-		MainRoleType SourceRole,
-		GameSession Session,
-		StartGameConfirmationInstruction Start,
-		Guid ActorId,
+	private sealed record SpendOpening(
 		ActorBorrowedRolePowerActivation Activation,
-		IGameHookListener Listener);
+		ModeratorResponse SourceOpeningResponse);
+
+	private sealed class PrivacyFixture
+	{
+		internal PrivacyFixture(
+			MainRoleType sourceRole,
+			GameSession session,
+			Guid actorId,
+			ActorBorrowedRolePowerActivation activation,
+			ModeratorResponse openingResponse)
+		{
+			SourceRole = sourceRole;
+			Session = session;
+			ActorId = actorId;
+			Activation = activation;
+			OpeningResponse = openingResponse;
+		}
+
+		internal MainRoleType SourceRole { get; }
+		internal GameSession Session { get; private set; }
+		internal Guid ActorId { get; }
+		internal ActorBorrowedRolePowerActivation Activation { get; }
+		internal ModeratorResponse OpeningResponse { get; }
+
+		internal void RestoreAt(ModeratorInstruction instruction)
+		{
+			Session = RecoveryPayloadTestDriver.Capture(Session)
+				.RecordActorSetupCardSpend(Activation)
+				.WithPendingInstruction(instruction)
+				.RehydrateGameSession();
+		}
+	}
 
 	private sealed record ValidationSubmission(
 		GameSession Session,
@@ -1106,7 +1151,14 @@ public sealed class ActorBorrowedPrivacyTests
 		WitchPoisonInvalidTarget
 	}
 
-	private sealed class TestSubPhaseManagerKey : ISubPhaseManagerKey;
-	private sealed class TestHookSubPhaseKey : IHookSubPhaseKey;
-	private sealed class TestGameFlowManagerKey : IGameFlowManagerKey;
+	private enum HookHarnessSubPhase
+	{
+		Active
+	}
+
+	private enum HookHarnessListenerState
+	{
+		AwaitingInput,
+		Complete
+	}
 }

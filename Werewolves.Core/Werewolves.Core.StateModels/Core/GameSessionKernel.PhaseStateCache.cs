@@ -4,18 +4,6 @@ using Werewolves.Core.StateModels.Serialization;
 
 namespace Werewolves.Core.StateModels.Core;
 
-//todo: move this to its own file once this is finalized.
-internal interface IGamePhaseStateCache
-{
-	GamePhase GetCurrentPhase();
-	T? GetSubPhase<T>() where T : struct, Enum;
-	string? GetSubPhaseId();
-	string? GetActiveSubPhaseStage();
-	bool HasSubPhaseStageCompleted(string subPhaseStageId);
-	T? GetCurrentListenerState<T>(ListenerIdentifier listener) where T : struct, Enum;
-	ListenerIdentifier? GetCurrentListener();
-}
-
 internal partial class GameSessionKernel
 {
 	/// <summary>
@@ -23,7 +11,7 @@ internal partial class GameSessionKernel
 	/// for resumable, multi-step actions that must pause for moderator input.
 	/// This becomes the single source of truth for the game's current execution point.
 	/// </summary>
-	private record struct GamePhaseStateCache : IGamePhaseStateCache
+	private record struct GamePhaseStateCache
 	{
 		#region Private State Fields
 
@@ -122,20 +110,20 @@ internal partial class GameSessionKernel
 				acceptedObservationRecoveryCursor,
 				domainRecoveryCursor);
 
-		#region Public Interface Accessors
+		#region Internal Accessors
 
 		/// <summary>
 		/// Gets the current game phase.
 		/// </summary>
 		/// <returns>The current game phase.</returns>
-		public GamePhase GetCurrentPhase() => _currentPhase;
+		internal GamePhase GetCurrentPhase() => _currentPhase;
 
 		/// <summary>
 		/// Gets the current GFM sub-phase as the specified enum type.
 		/// </summary>
 		/// <typeparam name="T">The enum type for the sub-phase.</typeparam>
 		/// <returns>The sub-phase value, or null if not set or parsing fails.</returns>
-		public T? GetSubPhase<T>() where T : struct, Enum
+		internal T? GetSubPhase<T>() where T : struct, Enum
 		{
 			if (_currentSubPhase != null)
 			{
@@ -152,9 +140,9 @@ internal partial class GameSessionKernel
 		/// Gets the currently active sub phase stage.
 		/// </summary>
 		/// <returns>The active sub phase stage, or null if none is active.</returns>
-		public string? GetActiveSubPhaseStage() => _currentSubPhaseStage;
+		internal string? GetActiveSubPhaseStage() => _currentSubPhaseStage;
 
-		public bool HasSubPhaseStageCompleted(string subPhaseStageId) =>
+		internal bool HasSubPhaseStageCompleted(string subPhaseStageId) =>
 			_previousSubPhaseStages.Contains(subPhaseStageId);
 
 		/// <summary>
@@ -163,7 +151,7 @@ internal partial class GameSessionKernel
 		/// <typeparam name="T">The enum type for the listener state.</typeparam>
 		/// <param name="listener">The identifier of the listener to check.</param>
 		/// <returns>The listener's state, or null if the listener is not current or parsing fails.</returns>
-		public T? GetCurrentListenerState<T>(ListenerIdentifier listener) where T : struct, Enum
+		internal T? GetCurrentListenerState<T>(ListenerIdentifier listener) where T : struct, Enum
 		{
 			if (_currentListener?.Equals(listener) == true && _currentListenerState != null)
 			{
@@ -176,13 +164,13 @@ internal partial class GameSessionKernel
 			return null;
 		}
 
-		public string? GetSubPhaseId() => _currentSubPhase;
+		internal string? GetSubPhaseId() => _currentSubPhase;
 
 		/// <summary>
 		/// Gets the identifier of the currently active listener.
 		/// </summary>
 		/// <returns>The current listener identifier, or null if no listener is active.</returns>
-		public ListenerIdentifier? GetCurrentListener() => _currentListener;
+		internal ListenerIdentifier? GetCurrentListener() => _currentListener;
 
 		#endregion
 
