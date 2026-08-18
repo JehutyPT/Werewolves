@@ -712,35 +712,65 @@ namespace Werewolves.Core.StateModels.Core
 			});
 		}
 
-				internal void AddEntryAndUpdateState(GameLogEntryBase entry)
+			internal void AddEntryAndUpdateState(GameLogEntryBase entry)
 			{
+				if (entry is PhaseTransitionLogEntry phaseTransition &&
+					phaseTransition.PreviousPhase != Execution.CurrentPhase)
+				{
+					throw new InvalidOperationException(
+						"The Main Phase transition is stale.");
+				}
+
 				_gameHistoryLog.PreflightLogEntry(entry, _players.Keys);
 				entry.Apply(new SessionMutator(this));
 			}
 
-		internal void TransitionSubPhase(Enum subPhase)
-		{
-			_phaseStateCache.TransitionSubPhase(subPhase);
-			_stateChangeObserver?.OnSubPhaseChanged(subPhase.ToString());
-		}
+			internal void TransitionSubPhase(Enum subPhase)
+			{
+				var expected = Execution;
+				ApplyExecutionTransition(
+					ExecutionTransition.ChangeSubPhase(expected, subPhase));
+			}
 
-		internal void StartSubPhaseStage(string subPhaseStage)
-		{
-			_phaseStateCache.StartSubPhaseStage(subPhaseStage);
-			_stateChangeObserver?.OnSubPhaseStageChanged(subPhaseStage);
-		}
+			internal bool TryEnterSubPhaseStage(string subPhaseStage)
+			{
+				ArgumentException.ThrowIfNullOrWhiteSpace(subPhaseStage);
+				var expected = Execution;
+				if (expected.ActiveSubPhaseStage != null)
+				{
+					return StringComparer.Ordinal.Equals(
+						expected.ActiveSubPhaseStage,
+						subPhaseStage);
+				}
+				if (expected.HasSubPhaseStageCompleted(subPhaseStage))
+				{
+					return false;
+				}
 
-		internal void CompleteSubPhaseStage()
-		{
-			_phaseStateCache.CompleteSubPhaseStage();
-			_stateChangeObserver?.OnSubPhaseStageChanged(null);
-		}
+				ApplyExecutionTransition(
+					ExecutionTransition.EnterStage(expected, subPhaseStage));
+				return true;
+			}
 
-		internal void TransitionListenerAndState(ListenerIdentifier listener, string state)
-		{
-			_phaseStateCache.TransitionListenerAndState(listener, state);
-			_stateChangeObserver?.OnListenerChanged(listener, state);
-		}
+			internal void CompleteSubPhaseStage()
+			{
+				var expected = Execution;
+				ApplyExecutionTransition(
+					ExecutionTransition.CompleteStage(expected));
+			}
+
+			internal void TransitionListenerAndState(
+				ListenerIdentifier listener,
+				string state)
+			{
+				ArgumentNullException.ThrowIfNull(listener);
+				var expected = Execution;
+				ApplyExecutionTransition(
+					ExecutionTransition.PauseOrResumeListener(
+						expected,
+						listener,
+						state));
+			}
 
 		internal void RestoreTransientContinuation(
 			string activeSubPhaseStage,
@@ -751,11 +781,22 @@ namespace Werewolves.Core.StateModels.Core
 				listener,
 				listenerState);
 
-		internal void ClearCurrentListener()
-		{
-			_phaseStateCache.ClearCurrentListener();
-			_stateChangeObserver?.OnListenerChanged(null, null);
-		}
+			internal void ClearCurrentListener()
+			{
+				var expected = Execution;
+				ApplyExecutionTransition(
+					ExecutionTransition.ClearListener(expected));
+			}
+
+			private void ApplyExecutionTransition(ExecutionTransition transition)
+			{
+				ArgumentNullException.ThrowIfNull(transition);
+				var current = Execution;
+				transition.EnforceValidAgainst(current);
+				_phaseStateCache = _phaseStateCache.WithExecutionCursor(
+					transition.Candidate);
+				transition.NotifyObserver(_stateChangeObserver);
+			}
 
 		internal IPlayer GetIPlayer(Guid playerId) => GetPlayer(playerId);
 

@@ -229,34 +229,8 @@ internal class GameSession : IGameSession
     /// <param name="key"></param>
     /// <param name="subPhaseStageId"></param>
     /// <returns></returns>
-    internal bool TryEnterSubPhaseStage(ISubPhaseManagerKey key, string subPhaseStageId)
-    {
-        var currentSubPhaseStage = _gameSessionKernel.PhaseStateCache.GetActiveSubPhaseStage();
-
-		// If already in a different sub-phase stage, cannot enter
-		if (currentSubPhaseStage != null && currentSubPhaseStage != subPhaseStageId)
-        {
-            return false;
-        }
-        else
-        // If no sub-phase stage is active:
-        if (currentSubPhaseStage == null)
-        {
-			// If this sub-phase stage has already been completed, cannot enter
-			if (_gameSessionKernel.PhaseStateCache.HasSubPhaseStageCompleted(subPhaseStageId))
-            {
-                return false;
-            }
-			// Otherwise, enter the sub-phase stage
-			else
-			{
-				_gameSessionKernel.StartSubPhaseStage(subPhaseStageId);
-			}
-        }
-
-		// Either already in this sub-phase stage, or just entered it successfully
-		return true;
-    }
+	internal bool TryEnterSubPhaseStage(ISubPhaseManagerKey key, string subPhaseStageId)
+		=> _gameSessionKernel.TryEnterSubPhaseStage(subPhaseStageId);
 
     internal void CompleteSubPhaseStageCache(IPhaseManagerKey key) =>
         _gameSessionKernel.CompleteSubPhaseStage();

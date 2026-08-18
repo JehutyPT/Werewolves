@@ -171,12 +171,13 @@ internal partial class GameSessionKernel
 		public void SetPubliclyRevealedRole(Guid playerId, MainRoleType role)
 			=> GetMutablePlayerState(playerId).PubliclyRevealedRole = role;
 
-		public void SetCurrentPhase(GamePhase newPhase)
-		{
-			kernel._phaseStateCache.TransitionMainPhase(Key, newPhase);
-			kernel._stateChangeObserver?.OnMainPhaseChanged(newPhase);
+			public void SetCurrentPhase(GamePhase newPhase)
+			{
+				var expected = kernel.Execution;
+				kernel.ApplyExecutionTransition(
+					ExecutionTransition.ChangeMainPhase(expected, newPhase));
 
-			if (newPhase == GamePhase.Night)
+				if (newPhase == GamePhase.Night)
 			{
 				kernel.IncrementTurnNumber(Key);
 				kernel._stateChangeObserver?.OnTurnNumberChanged(kernel.TurnNumber);

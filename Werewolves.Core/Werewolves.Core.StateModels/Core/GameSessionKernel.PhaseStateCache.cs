@@ -66,54 +66,25 @@ internal partial class GameSessionKernel
 
 		#region Internal State Mutators
 
-		internal void TransitionMainPhase(SessionMutator.IStateMutatorKey key, GamePhase phase)
+		internal GamePhaseStateCache WithExecutionCursor(ExecutionView candidate)
 		{
-			if (_currentPhase != phase)
+			ArgumentNullException.ThrowIfNull(candidate);
+
+			var previousStages = _previousSubPhaseStages;
+			var completedStages = previousStages
+				.Where(candidate.CompletedSubPhaseStages.Contains)
+				.Concat(candidate.CompletedSubPhaseStages.Where(stage =>
+					!previousStages.Contains(stage)))
+				.ToList();
+
+			return new GamePhaseStateCache(candidate.CurrentPhase)
 			{
-				ClearCurrentSubPhase();
-			}
-
-			_currentPhase = phase;
-		}
-
-		/// <summary>
-		/// Sets the GFM's current state with the specified sub-phase.
-		/// </summary>
-		/// <typeparam name="T">The enum type for the sub-phase.</typeparam>
-		/// <param name="subPhase">The optional sub-phase enum value.</param>
-		internal void TransitionSubPhase(Enum subPhase)
-		{
-			ClearCurrentSubPhase();
-			_currentSubPhase = subPhase.ToString();
-		}
-
-		/// <summary>
-		/// Sets the currently active sub phase stage.
-		/// </summary>
-		/// <param name="subPhaseStage">The sub phase stage that is currently being processed.</param>
-		internal void StartSubPhaseStage(string subPhaseStage)
-		{
-			_currentSubPhaseStage = subPhaseStage;
-		}
-
-		internal void CompleteSubPhaseStage()
-		{
-			//ok to throw if _currentSubPhaseStage is null here - indicates a logic error.
-			//we shouldn't be able to attempt to complete subphase stages when none are active.
-			_previousSubPhaseStages.Add(_currentSubPhaseStage!);
-			ClearSubPhaseStage();
-		}
-
-
-		/// <summary>
-		/// Sets the state for a current listener.
-		/// </summary>
-		/// <param name="listener">The identifier of the current listener.</param>
-		/// <param name="state">The state value for the listener.</param>
-		internal void TransitionListenerAndState(ListenerIdentifier listener, string state)
-		{
-			_currentListener = listener;
-			_currentListenerState = state;
+				_currentSubPhase = candidate.SubPhaseId,
+				_currentSubPhaseStage = candidate.ActiveSubPhaseStage,
+				_previousSubPhaseStages = completedStages,
+				_currentListener = candidate.CurrentListener,
+				_currentListenerState = candidate.CurrentListenerState
+			};
 		}
 
 		internal void RestoreTransientContinuation(
@@ -212,44 +183,6 @@ internal partial class GameSessionKernel
 		/// </summary>
 		/// <returns>The current listener identifier, or null if no listener is active.</returns>
 		public ListenerIdentifier? GetCurrentListener() => _currentListener;
-
-		#endregion
-
-		#region Internal State Cleanup
-
-		/// <summary>
-		/// Clears the current listener and its state.
-		/// </summary>
-		internal void ClearCurrentListener()
-		{
-			_currentListener = null;
-			_currentListenerState = null;
-		}
-
-		#endregion
-
-		#region Private Helpers
-
-		/// <summary>
-		/// Marks the current hook as completed and clears it.
-		/// </summary>
-
-		private void ClearSubPhaseStage()
-		{
-			_currentSubPhaseStage = null;
-			ClearCurrentListener();
-		}
-
-		/// <summary>
-		/// Central cleanup method that must be called when transitioning between main GamePhases.
-		/// Guarantees transient state is never leaked across phases.
-		/// </summary>
-		private void ClearCurrentSubPhase()
-		{
-			_currentSubPhase = null;
-			_previousSubPhaseStages = [];
-			ClearSubPhaseStage();
-		}
 
 		#endregion
 
