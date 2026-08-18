@@ -82,6 +82,36 @@ public class GameClientManagerTests
 	}
 
 	[Fact]
+	public void RoleLockInReplacement_WhenNotificationThrows_RemainsAcceptedAndReconcilesRecovery()
+	{
+		var store = new RecordingSaveStore();
+		var lobby = CreateThiefLobby();
+		var replacement = CreateThiefRoleLockIn(
+			version: 1,
+			rotateOffer1IntoDealPool: false);
+		var manager = new GameClientManager(new GameService(), saveStore: store);
+		lobby.SimulationScenarioChanged += (_, _) =>
+			throw new InvalidOperationException("notification failure");
+		manager.StateChanged += (_, _) =>
+			throw new InvalidOperationException("notification failure");
+
+		var accepted = manager.TryReplaceStagedRoleLockIn(
+			lobby,
+			expectedCurrentVersion: 0,
+			replacement);
+
+		accepted.Should().BeTrue();
+		lobby.AcceptedRoleLockIn.Should().BeSameAs(replacement);
+		manager.StagedRoleLockIn.Should().BeSameAs(replacement);
+		var persisted = LocalRecoveryPayloadCodec.Deserialize(store.Load()!)
+			.Should().BeOfType<StagedLobbyRecoveryPayload>()
+			.Which.RoleLockIn;
+		persisted.Version.Should().Be(replacement.Version);
+		persisted.RoleComposition.Select(card => card.Id)
+			.Should().Equal(replacement.RoleComposition.Select(card => card.Id));
+	}
+
+	[Fact]
 	public void ActorSetupCards_ReplacementRecoveryAndStaleAttempt_KeepLatestExactArtifact()
 	{
 		using var saveDirectory = TemporaryDirectory.Create();
@@ -1223,6 +1253,48 @@ public class GameClientManagerTests
 		Directory.GetFiles(saveDirectory.Path).Should().ContainSingle(path => path == saveFilePath);
 		Directory.GetFiles(saveDirectory.Path, $"{FileGameSessionSaveStore.SaveFileName}.*.tmp")
 			.Should().BeEmpty();
+	}
+
+	[Fact]
+	public void Save_WhenWriteFails_PreservesExistingSaveFile()
+	{
+		using var saveDirectory = TemporaryDirectory.Create();
+		var saveStore = new FileGameSessionSaveStore(saveDirectory.Path);
+		saveStore.Save("committed save data");
+		var saveFilePath = Path.Combine(
+			saveDirectory.Path,
+			FileGameSessionSaveStore.SaveFileName);
+
+		if (OperatingSystem.IsWindows())
+		{
+			using var lockedSave = new FileStream(
+				saveFilePath,
+				FileMode.Open,
+				FileAccess.Read,
+				FileShare.Read);
+			var save = () => saveStore.Save("uncommitted save data");
+
+			save.Should().Throw<IOException>();
+		}
+		else
+		{
+			var originalMode = File.GetUnixFileMode(saveDirectory.Path);
+			try
+			{
+				File.SetUnixFileMode(
+					saveDirectory.Path,
+					UnixFileMode.UserRead | UnixFileMode.UserExecute);
+				var save = () => saveStore.Save("uncommitted save data");
+
+				save.Should().Throw<UnauthorizedAccessException>();
+			}
+			finally
+			{
+				File.SetUnixFileMode(saveDirectory.Path, originalMode);
+			}
+		}
+
+		File.ReadAllText(saveFilePath).Should().Be("committed save data");
 	}
 
 	[Fact]

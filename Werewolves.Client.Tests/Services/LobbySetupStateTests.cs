@@ -14,6 +14,373 @@ namespace Werewolves.Client.Tests.Services;
 public class LobbySetupStateTests
 {
 	[Fact]
+	public void DecideRoleLockIn_ReturnsCompleteReplaceDecisionWithoutPublishing()
+	{
+		var state = LobbySetupMetadataFixture.StateWithRoles(
+			MainRoleType.Thief,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager);
+		foreach (var playerName in PlayerNames.DefaultFive)
+		{
+			state.AddPlayer(playerName).Should().Be(AddPlayerResult.Success);
+		}
+		state.IncrementRole(MainRoleType.Thief);
+		state.IncrementRole(MainRoleType.SimpleWerewolf);
+		for (var index = 0; index < 5; index++)
+		{
+			state.IncrementRole(MainRoleType.SimpleVillager);
+		}
+		var replacement = RoleLockIn.CreateFromPrintedRoles(
+			version: 1,
+			state.PlayerRoster.Count,
+			state.GetSelectedRoles(),
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager);
+		var scenarioChanges = 0;
+		state.SimulationScenarioChanged += (_, _) => scenarioChanges++;
+
+		var decision = state.Decide(
+			new LobbyChange.ReplaceRoleLockIn(
+				expectedCurrentVersion: 0,
+				replacement));
+
+		decision.Should().NotBeNull();
+		decision!.NextAggregate.PlayerRoster.Should().Equal(state.PlayerRoster);
+		decision.NextAggregate.AcceptedRoleLockIn.Should().BeSameAs(replacement);
+		decision.NextAggregate.AcceptedActorSetupCards.Should().Be(ActorSetupCards.None);
+		decision.NextAggregate.AcceptedPublicGroupPartition.Should().BeNull();
+		decision.Persistence.Should()
+			.BeOfType<LobbyPersistenceInstruction.Replace>()
+			.Which.Aggregate.Should().BeSameAs(decision.NextAggregate);
+		decision.CanonicalScenarioDelta.Before.Should().BeNull();
+		decision.CanonicalScenarioDelta.After.Should().NotBeNull();
+		decision.CanonicalScenarioDelta.HasIdentityChanged.Should().BeTrue();
+		decision.Commit.Should().NotBeNull();
+		state.AcceptedRoleLockIn.Should().BeNull();
+		state.RequiresRoleLockIn.Should().BeTrue();
+		scenarioChanges.Should().Be(0);
+	}
+
+	[Fact]
+	public void DecideActorSetupCards_ReturnsCompleteReplaceDecisionWithoutPublishing()
+	{
+		var state = CreateStateWithAcceptedRoleLockIn(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.Actor);
+		var replacement = ActorSetupCards.CreateFromPrintedRoles(
+			version: 1,
+			[
+				MainRoleType.Cupid,
+				MainRoleType.Witch,
+				MainRoleType.Hunter
+			]);
+
+		var decision = state.Decide(
+			new LobbyChange.ReplaceActorSetupCards(
+				expectedCurrentVersion: 0,
+				replacement));
+
+		decision.Should().NotBeNull();
+		decision!.NextAggregate.AcceptedRoleLockIn
+			.Should().BeSameAs(state.AcceptedRoleLockIn);
+		decision.NextAggregate.AcceptedActorSetupCards.Should().BeSameAs(replacement);
+		decision.Persistence.Should()
+			.BeOfType<LobbyPersistenceInstruction.Replace>();
+		decision.CanonicalScenarioDelta.Before.Should().BeNull();
+		decision.CanonicalScenarioDelta.After.Should().NotBeNull();
+		decision.CanonicalScenarioDelta.HasIdentityChanged.Should().BeTrue();
+		state.AcceptedActorSetupCards.Should().Be(ActorSetupCards.None);
+	}
+
+	[Fact]
+	public void DecidePublicGroupPartition_ReturnsCompleteReplaceDecisionWithoutPublishing()
+	{
+		var state = CreateStateWithAcceptedRoleLockIn(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.Seer,
+			MainRoleType.Witch,
+			MainRoleType.PrejudicedManipulator);
+		var rosterIds = state.PlayerRoster.Select(player => player.Id).ToArray();
+		var replacement = PublicGroupPartition.Create(
+			rosterIds,
+			[rosterIds[0], rosterIds[2]],
+			[rosterIds[1], rosterIds[3], rosterIds[4]]);
+
+		var decision = state.Decide(
+			new LobbyChange.ReplacePublicGroupPartition(replacement));
+
+		decision.Should().NotBeNull();
+		decision!.NextAggregate.AcceptedPublicGroupPartition
+			.Should().BeSameAs(replacement);
+		decision.Persistence.Should()
+			.BeOfType<LobbyPersistenceInstruction.Replace>();
+		decision.CanonicalScenarioDelta.Before.Should().BeNull();
+		decision.CanonicalScenarioDelta.After.Should().NotBeNull();
+		state.AcceptedPublicGroupPartition.Should().BeNull();
+	}
+
+	[Fact]
+	public void DecideSeatingOrderMove_ReturnsCompleteReplaceDecisionWithoutPublishing()
+	{
+		var state = CreateStateWithAcceptedRoleLockIn(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.Seer,
+			MainRoleType.Witch,
+			MainRoleType.PrejudicedManipulator);
+		AcceptCurrentRosterPartition(state);
+		var originalRoster = state.PlayerRoster.ToArray();
+
+		var decision = state.Decide(
+			new LobbyChange.MovePlayer(fromIndex: 0, toIndex: 1));
+
+		decision.Should().NotBeNull();
+		decision!.NextAggregate.PlayerRoster.Should().Equal(
+			originalRoster[1],
+			originalRoster[0],
+			originalRoster[2],
+			originalRoster[3],
+			originalRoster[4]);
+		decision.Persistence.Should()
+			.BeOfType<LobbyPersistenceInstruction.Replace>();
+		decision.CanonicalScenarioDelta.Before.Should().NotBeNull();
+		decision.CanonicalScenarioDelta.After.Should().NotBeNull();
+		decision.CanonicalScenarioDelta.HasIdentityChanged.Should().BeTrue();
+		state.PlayerRoster.Should().Equal(originalRoster);
+	}
+
+	[Theory]
+	[InlineData(true)]
+	[InlineData(false)]
+	public void DecidePlayerMembershipChange_ClearsRecoveryWithoutPublishing(
+		bool addPlayer)
+	{
+		var state = CreateStateWithAcceptedRoleLockIn(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.Seer,
+			MainRoleType.Witch,
+			MainRoleType.PrejudicedManipulator);
+		AcceptCurrentRosterPartition(state);
+		var originalRoster = state.PlayerRoster.ToArray();
+		var addedPlayer = new GameSessionPlayerConfig(
+			Guid.Parse("30000000-0000-0000-0000-000000000001"),
+			"Fátima");
+		LobbyChange change = addPlayer
+			? new LobbyChange.AddPlayer(addedPlayer)
+			: new LobbyChange.RemovePlayer(index: 2);
+
+		var decision = state.Decide(change);
+
+		decision.Should().NotBeNull();
+		decision!.Persistence.Should()
+			.BeOfType<LobbyPersistenceInstruction.Clear>();
+		decision.NextAggregate.AcceptedRoleLockIn
+			.Should().BeSameAs(state.AcceptedRoleLockIn);
+		decision.NextAggregate.AcceptedRoleLockInRequiresReplacement
+			.Should().BeTrue();
+		decision.NextAggregate.AcceptedPublicGroupPartition.Should().BeNull();
+		decision.NextAggregate.PlayerRoster.Count.Should().Be(
+			originalRoster.Length + (addPlayer ? 1 : -1));
+		decision.CanonicalScenarioDelta.Before.Should().NotBeNull();
+		decision.CanonicalScenarioDelta.After.Should().BeNull();
+		decision.CanonicalScenarioDelta.HasIdentityChanged.Should().BeTrue();
+		state.PlayerRoster.Should().Equal(originalRoster);
+		state.AcceptedRoleLockInRequiresReplacement.Should().BeFalse();
+	}
+
+	[Fact]
+	public void DecideImplicitRoleLockIn_PersistsCanonicalEquivalentAggregateWithoutPublishing()
+	{
+		var state = LobbySetupMetadataFixture.StateWithRoles(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.Seer);
+		foreach (var playerName in PlayerNames.DefaultFive)
+		{
+			state.AddPlayer(playerName).Should().Be(AddPlayerResult.Success);
+		}
+		state.IncrementRole(MainRoleType.SimpleWerewolf);
+		state.IncrementRole(MainRoleType.Seer);
+		for (var index = 0; index < 3; index++)
+		{
+			state.IncrementRole(MainRoleType.SimpleVillager);
+		}
+		var replacement = RoleLockIn.CreateFromPrintedRoles(
+			version: 1,
+			state.PlayerRoster.Count,
+			state.GetSelectedRoles());
+
+		var decision = state.Decide(
+			new LobbyChange.AcceptImplicitRoleLockIn(
+				expectedCurrentVersion: 0,
+				replacement));
+
+		decision.Should().NotBeNull();
+		decision!.NextAggregate.AcceptedRoleLockIn.Should().BeSameAs(replacement);
+		decision.Persistence.Should()
+			.BeOfType<LobbyPersistenceInstruction.Replace>();
+		decision.CanonicalScenarioDelta.Before.Should().NotBeNull();
+		decision.CanonicalScenarioDelta.After.Should().Be(
+			decision.CanonicalScenarioDelta.Before);
+		decision.CanonicalScenarioDelta.HasIdentityChanged.Should().BeFalse();
+		state.AcceptedRoleLockIn.Should().BeNull();
+	}
+
+	[Fact]
+	public void DecideDraftSeatingOrderMove_KeepsPersistenceAndCanonicalIdentity()
+	{
+		var state = LobbySetupMetadataFixture.StateWithRoles(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager);
+		foreach (var playerName in PlayerNames.DefaultFive)
+		{
+			state.AddPlayer(playerName);
+		}
+		state.IncrementRole(MainRoleType.SimpleWerewolf);
+		for (var index = 0; index < 4; index++)
+		{
+			state.IncrementRole(MainRoleType.SimpleVillager);
+		}
+
+		var decision = state.Decide(
+			new LobbyChange.MovePlayer(fromIndex: 0, toIndex: 1));
+
+		decision.Should().NotBeNull();
+		decision!.Persistence.Should()
+			.BeOfType<LobbyPersistenceInstruction.Keep>();
+		decision.CanonicalScenarioDelta.Before.Should().NotBeNull();
+		decision.CanonicalScenarioDelta.After.Should().Be(
+			decision.CanonicalScenarioDelta.Before);
+		decision.CanonicalScenarioDelta.HasIdentityChanged.Should().BeFalse();
+		state.PlayerNames.Should().Equal(PlayerNames.DefaultFive);
+	}
+
+	[Fact]
+	public void DecideStaleRoleLockIn_ReturnsNoPublishableDecision()
+	{
+		var state = CreateStateWithAcceptedRoleLockIn(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager);
+		var accepted = state.AcceptedRoleLockIn;
+		var staleReplacement = RoleLockIn.CreateFromPrintedRoles(
+			version: 2,
+			state.PlayerRoster.Count,
+			state.GetSelectedRoles());
+		var scenarioChanges = 0;
+		state.SimulationScenarioChanged += (_, _) => scenarioChanges++;
+
+		var decision = state.Decide(
+			new LobbyChange.ReplaceRoleLockIn(
+				expectedCurrentVersion: 0,
+				staleReplacement));
+
+		decision.Should().BeNull();
+		state.AcceptedRoleLockIn.Should().BeSameAs(accepted);
+		scenarioChanges.Should().Be(0);
+	}
+
+	[Fact]
+	public void DecideCanceledChange_ReturnsNoPublishableDecision()
+	{
+		var state = LobbySetupMetadataFixture.DefaultState();
+		var scenarioChanges = 0;
+		state.SimulationScenarioChanged += (_, _) => scenarioChanges++;
+
+		var decision = state.Decide(null!);
+
+		decision.Should().BeNull();
+		state.PlayerRoster.Should().BeEmpty();
+		state.AcceptedRoleLockIn.Should().BeNull();
+		scenarioChanges.Should().Be(0);
+	}
+
+	[Fact]
+	public void DecideInvalidSeatingMove_ReturnsNoPublishableDecision()
+	{
+		var state = LobbySetupMetadataFixture.DefaultState();
+		state.AddPlayer(PlayerNames.Ana);
+		state.AddPlayer(PlayerNames.Bruno);
+		var originalRoster = state.PlayerRoster.ToArray();
+		var scenarioChanges = 0;
+		state.SimulationScenarioChanged += (_, _) => scenarioChanges++;
+
+		var decision = state.Decide(
+			new LobbyChange.MovePlayer(fromIndex: 0, toIndex: 2));
+
+		decision.Should().BeNull();
+		state.PlayerRoster.Should().Equal(originalRoster);
+		scenarioChanges.Should().Be(0);
+	}
+
+	[Fact]
+	public void DecideIncompleteActorSetup_ReturnsNoPublishableDecision()
+	{
+		var state = CreateStateWithAcceptedRoleLockIn(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.Actor);
+		var acceptedRoleLockIn = state.AcceptedRoleLockIn;
+		var scenarioChanges = 0;
+		state.SimulationScenarioChanged += (_, _) => scenarioChanges++;
+
+		var decision = state.Decide(
+			new LobbyChange.ReplaceActorSetupCards(
+				expectedCurrentVersion: 0,
+				ActorSetupCards.None));
+
+		decision.Should().BeNull();
+		state.AcceptedRoleLockIn.Should().BeSameAs(acceptedRoleLockIn);
+		state.AcceptedActorSetupCards.Should().Be(ActorSetupCards.None);
+		scenarioChanges.Should().Be(0);
+	}
+
+	[Fact]
+	public void Publish_AppliesTheCompleteDecisionWithoutRaisingCallbacks()
+	{
+		var state = LobbySetupMetadataFixture.StateWithRoles(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager);
+		foreach (var playerName in PlayerNames.DefaultFive)
+		{
+			state.AddPlayer(playerName);
+		}
+		state.IncrementRole(MainRoleType.SimpleWerewolf);
+		for (var index = 0; index < 4; index++)
+		{
+			state.IncrementRole(MainRoleType.SimpleVillager);
+		}
+		var roleLockIn = RoleLockIn.CreateFromPrintedRoles(
+			version: 1,
+			state.PlayerRoster.Count,
+			state.GetSelectedRoles());
+		var decision = state.Decide(
+			new LobbyChange.AcceptImplicitRoleLockIn(
+				expectedCurrentVersion: 0,
+				roleLockIn))!;
+		var scenarioChanges = 0;
+		state.SimulationScenarioChanged += (_, _) => scenarioChanges++;
+
+		state.Publish(decision.Commit);
+
+		state.AcceptedRoleLockIn.Should().BeSameAs(roleLockIn);
+		state.PlayerRoster.Should().Equal(decision.NextAggregate.PlayerRoster);
+		state.GetSelectedRoles().Should().BeEquivalentTo(
+			decision.NextAggregate.RoleCounts.SelectMany(entry =>
+				Enumerable.Repeat(entry.Key, entry.Value)));
+		scenarioChanges.Should().Be(0);
+	}
+
+	[Fact]
 	public void SimulationScenarioChanged_RaisesOnlyWhenScenarioIdentityMaterialChanges()
 	{
 		var state = LobbySetupMetadataFixture.DefaultState();
