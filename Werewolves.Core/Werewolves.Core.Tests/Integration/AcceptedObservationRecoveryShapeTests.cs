@@ -1,5 +1,4 @@
 using FluentAssertions;
-using System.Text.Json.Nodes;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Models.Instructions;
@@ -25,11 +24,13 @@ public sealed class AcceptedObservationRecoveryShapeTests : DiagnosticTestBase
 		var identification = builder.GetCurrentInstruction()
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
 		builder.Process(identification.CreateResponse([werewolf.Id]));
-		var payload = JsonNode.Parse(builder.GetGameState()!.Serialize())!.AsObject();
-		payload["PendingInstruction"]!["$type"] = nameof(ConfirmationInstruction);
+		var payload = RecoveryPayloadTestDriver
+			.Parse(builder.GetGameState()!.Serialize())
+			.ReplacePendingInstructionWithConfirmation()
+			.Serialize();
 		var service = new GameService();
 
-		Action rehydrate = () => service.RehydrateSession(payload.ToJsonString());
+		Action rehydrate = () => service.RehydrateSession(payload);
 
 		rehydrate.Should().Throw<InvalidOperationException>()
 			.WithMessage("*Pending Instruction*");
@@ -49,14 +50,16 @@ public sealed class AcceptedObservationRecoveryShapeTests : DiagnosticTestBase
 		var seerIdentification = builder.GetCurrentInstruction()
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
 		builder.Process(seerIdentification.CreateResponse([players[1].Id]));
-		var payload = JsonNode.Parse(builder.GetGameState()!.Serialize())!.AsObject();
-		payload["PendingInstructionSemantic"] =
-			ModeratorInstructionSemantic.PutRoleToSleep.ToString();
-		payload["AcceptedObservationRecoveryCursor"]!["NextInstructionSemantic"] =
-			ModeratorInstructionSemantic.PutRoleToSleep.ToString();
+		var payload = RecoveryPayloadTestDriver
+			.Parse(builder.GetGameState()!.Serialize())
+			.RewritePendingInstructionSemanticCheckpoint(
+				ModeratorInstructionSemantic.PutRoleToSleep)
+			.RewriteAcceptedObservationCursorNextSemantic(
+				ModeratorInstructionSemantic.PutRoleToSleep)
+			.Serialize();
 		var service = new GameService();
 
-		Action rehydrate = () => service.RehydrateSession(payload.ToJsonString());
+		Action rehydrate = () => service.RehydrateSession(payload);
 
 		rehydrate.Should().Throw<InvalidOperationException>()
 			.WithMessage("*Pending Instruction*");

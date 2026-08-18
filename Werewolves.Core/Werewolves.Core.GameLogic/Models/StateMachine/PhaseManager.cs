@@ -114,7 +114,7 @@ internal class PhaseManager<TSubPhaseEnum> : IPhaseDefinition where TSubPhaseEnu
                         $"Valid next sub-phases are: {(allowed == null ? "None" : string.Join(", ", allowed))}.");
                 }
 
-                session.TransitionSubPhaseCache(Key, subPhaseResult.SubGamePhase);
+				session.TransitionSubPhase(Key, subPhaseResult.SubGamePhase);
 				break;
             }
             case MainPhaseHandlerResult mainPhaseResult:
@@ -138,7 +138,7 @@ internal class PhaseManager<TSubPhaseEnum> : IPhaseDefinition where TSubPhaseEnu
 				// to allow re-entry on the next input.
                 if (stayInSubPhase.StageComplete)
                 {
-                    session.CompleteSubPhaseStageCache(Key);
+					session.CompleteSubPhaseStage(Key);
                 }
 				break;
         }

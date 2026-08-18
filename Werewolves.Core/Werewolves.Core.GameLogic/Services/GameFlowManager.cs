@@ -33,11 +33,12 @@ namespace Werewolves.Core.GameLogic.Services;
 /// </summary>
 internal static class GameFlowManager
 {
-    private class GameFlowManagerKey : IGameFlowManagerKey;
+	// Owner capability for reducer-backed execution mutations.
+	private class GameFlowManagerKey : IGameFlowManagerKey;
 
-    private static readonly GameFlowManagerKey Key = new();
+	private static readonly GameFlowManagerKey Key = new();
 
-    private enum AcceptedObservationInstructionShape
+	private enum AcceptedObservationInstructionShape
     {
         PlayerSelection,
         Confirmation
@@ -549,7 +550,9 @@ internal static class GameFlowManager
     {
         var startingExecution = session.Execution;
         var startingPhase = startingExecution.CurrentPhase;
-        var startingInstruction = startingExecution.PendingInstruction;
+		var startingInstruction = startingExecution.PendingInstruction
+			?? throw new InvalidOperationException(
+				"HandleInput requires one Pending Instruction.");
         var startingListener = startingExecution.CurrentListener;
         var startingLogCount = session.GameHistoryLog.Count();
         ModeratorInstruction? nextInstructionToSend = null;
@@ -576,36 +579,50 @@ internal static class GameFlowManager
             throw new InvalidOperationException("HandleInput: null nextInstructionToSend");
         }
 
-        // --- Update Pending Instruction ---
-		session.SetPendingModeratorInstruction(Key, nextInstructionToSend);
-        var endingPhase = session.Execution.CurrentPhase;
-		if (ShouldAdvanceRecoveryBoundary(
-                session,
-                startingPhase,
-                endingPhase,
-                startingInstruction,
-                nextInstructionToSend,
-                startingLogCount))
+		var postRoutingExecution = session.Execution;
+		var endingPhase = postRoutingExecution.CurrentPhase;
+		var advanceRecoveryBoundary = ShouldAdvanceRecoveryBoundary(
+			session,
+			startingPhase,
+			endingPhase,
+			startingInstruction,
+			nextInstructionToSend,
+			startingLogCount);
+		AcceptedObservationRecoveryCursor? acceptedObservationRecoveryCursor = null;
+		DomainRecoveryCursor? domainRecoveryCursor = null;
+		if (advanceRecoveryBoundary)
 		{
-            var domainRecoveryCursor = CreateDomainRecoveryCursor(
-                session,
-                startingInstruction,
-                input,
-                nextInstructionToSend,
-                startingLogCount,
-                admissions);
-			session.CaptureRecoveryBoundary(
-                Key,
-                domainRecoveryCursor == null
-                    ? CreateAcceptedObservationRecoveryCursor(
-	                    session,
-                        startingInstruction,
-                        startingListener,
-                        nextInstructionToSend,
-                        admissions)
-                    : null,
-                domainRecoveryCursor);
+			domainRecoveryCursor = CreateDomainRecoveryCursor(
+				session,
+				startingInstruction,
+				input,
+				nextInstructionToSend,
+				startingLogCount,
+				admissions);
+			acceptedObservationRecoveryCursor = domainRecoveryCursor == null
+				? CreateAcceptedObservationRecoveryCursor(
+					session,
+					startingInstruction,
+					startingListener,
+					nextInstructionToSend,
+					admissions)
+				: null;
 		}
+
+		var executionCommit = advanceRecoveryBoundary
+			? ExecutionCommit.AdvanceRecoveryBoundary(
+				postRoutingExecution,
+				startingInstruction,
+				input,
+				nextInstructionToSend,
+				acceptedObservationRecoveryCursor,
+				domainRecoveryCursor)
+			: ExecutionCommit.RetainRecoveryBoundary(
+				postRoutingExecution,
+				startingInstruction,
+				input,
+				nextInstructionToSend);
+		session.CommitExecution(Key, executionCommit);
 
 		return ProcessResult.Success(nextInstructionToSend);
     }
@@ -2476,10 +2493,12 @@ internal static class GameFlowManager
                         pendingInstruction) &&
                     InitialBeneficiaryClosureRules
                         .HasConsistentInitialBeneficiaryClosure(session),
-                ModeratorInstructionSemantic
-                    .EstablishStutteringJudgeSignal
-                    when cursor.ObservedRole == StutteringJudge =>
-                    StutteringJudgeRole.HasValidEstablishedSignal(session),
+				ModeratorInstructionSemantic
+					.EstablishStutteringJudgeSignal
+					when cursor.ObservedRole == StutteringJudge =>
+					StutteringJudgeRole.HasValidEstablishedSignal(
+						session,
+						pendingInstruction),
                 ModeratorInstructionSemantic.ChooseWolfHoundAlignment
                     when cursor.ObservedRole == WolfHound =>
                     HasCommittedWolfHoundAlignment(session),
@@ -2690,18 +2709,20 @@ internal static class GameFlowManager
                 cursor.RetainedLittleGirlGuidanceDecision);
         }
 
-	        session.RestoreTransientContinuation(
-	            Key,
-	            continuation.Value.ActiveSubPhaseStage,
-	            continuation.Value.Listener,
-	            continuation.Value.ListenerState);
+		session.RestoreTransientContinuation(
+			Key,
+			execution,
+			continuation.Value.ActiveSubPhaseStage,
+			continuation.Value.Listener,
+			continuation.Value.ListenerState);
 	    }
 
 	    private static void RestorePendingHookListenerContinuation(
 		    GameSession session,
 		    IRoleAdmissionSource admissions)
 	    {
-		    var pendingInstruction = session.Execution.PendingInstruction;
+		    var execution = session.Execution;
+		    var pendingInstruction = execution.PendingInstruction;
 		    if (pendingInstruction == null)
 		    {
 			    return;
@@ -2731,6 +2752,7 @@ internal static class GameFlowManager
 
 		    session.RestoreTransientContinuation(
 			    Key,
+			    execution,
 			    continuation.Value.ActiveSubPhaseStage,
 			    continuation.Value.Listener,
 			    continuation.Value.ListenerState);
@@ -2833,6 +2855,7 @@ internal static class GameFlowManager
 
 			session.RestoreTransientContinuation(
 				Key,
+				execution,
 				actorContinuation.Value.ActiveSubPhaseStage,
 				actorContinuation.Value.Listener,
 				actorContinuation.Value.ListenerState);
@@ -2961,14 +2984,14 @@ internal static class GameFlowManager
                         "The domain recovery cursor does not match the latest recurring native Role Power action.");
                 }
 
-                BigBadWolfRole.ValidateLegacyRecurringRecoveryBoundary(
-                    cursor,
-                    pendingInstruction);
-                session.NormalizeLegacyRecurringRolePowerCommit(
-                    Key,
-                    cursor.CommittedActionType,
-                    cursor.CommittedTargetIds.Single(),
-                    cursor.PowerIdentity!.Value);
+				BigBadWolfRole.ValidateLegacyRecurringRecoveryBoundary(
+					cursor,
+					pendingInstruction);
+				session.NormalizeLegacyRecurringRolePowerCommit(
+					Key,
+					cursor.CommittedActionType,
+					cursor.CommittedTargetIds.Single(),
+					cursor.PowerIdentity!.Value);
             }
         }
 
@@ -2997,11 +3020,12 @@ internal static class GameFlowManager
                     "The committed domain continuation resolved to a different listener.");
             }
 
-            session.RestoreTransientContinuation(
-                Key,
-                listenerContinuation.Value.ActiveSubPhaseStage,
-                listenerContinuation.Value.Listener,
-                listenerContinuation.Value.ListenerState);
+			session.RestoreTransientContinuation(
+				Key,
+				execution,
+				listenerContinuation.Value.ActiveSubPhaseStage,
+				listenerContinuation.Value.Listener,
+				listenerContinuation.Value.ListenerState);
             return;
         }
 
@@ -3025,11 +3049,12 @@ internal static class GameFlowManager
                 "The Pending Instruction does not match the committed domain continuation.");
         }
 
-        session.RestoreTransientContinuation(
-            Key,
-            continuation.Value.ActiveSubPhaseStage,
-            continuation.Value.Listener,
-            continuation.Value.ListenerState);
+		session.RestoreTransientContinuation(
+			Key,
+			execution,
+			continuation.Value.ActiveSubPhaseStage,
+			continuation.Value.Listener,
+			continuation.Value.ListenerState);
     }
 
     private static bool IsNightStartSubPhase(ExecutionView execution)

@@ -693,14 +693,16 @@ internal sealed class StutteringJudgeRole
 			       judge.Id);
 	}
 
-	internal static bool HasValidEstablishedSignal(GameSession session)
+	internal static bool HasValidEstablishedSignal(
+		GameSession session,
+		ModeratorInstruction pendingInstruction)
 	{
 		if (session.GetModeratorActiveActorBorrowedRolePowerActivation()
 			?.SourceRole == MainRoleType.StutteringJudge)
 		{
 			return HasValidBorrowedSignalSetupSleep(
 				session,
-				session.Execution.PendingInstruction);
+				pendingInstruction);
 		}
 
 		var judges = session.GetPlayers()

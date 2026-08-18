@@ -772,14 +772,27 @@ namespace Werewolves.Core.StateModels.Core
 						state));
 			}
 
-		internal void RestoreTransientContinuation(
-			string activeSubPhaseStage,
-			ListenerIdentifier listener,
-			string listenerState) =>
-			_phaseStateCache.RestoreTransientContinuation(
-				activeSubPhaseStage,
-				listener,
-				listenerState);
+			internal void RestoreTransientContinuation(
+				string activeSubPhaseStage,
+				ListenerIdentifier listener,
+				string listenerState) =>
+				RestoreTransientContinuation(
+					Execution,
+					activeSubPhaseStage,
+					listener,
+					listenerState);
+
+			internal void RestoreTransientContinuation(
+				ExecutionView expected,
+				string activeSubPhaseStage,
+				ListenerIdentifier listener,
+				string listenerState) =>
+				ApplyExecutionTransition(
+					ExecutionTransition.RestoreContinuation(
+						expected,
+						activeSubPhaseStage,
+						listener,
+						listenerState));
 
 			internal void ClearCurrentListener()
 			{
@@ -788,13 +801,42 @@ namespace Werewolves.Core.StateModels.Core
 					ExecutionTransition.ClearListener(expected));
 			}
 
+			internal void CommitExecution(ExecutionCommit commit) =>
+				ApplyExecutionTransition(
+					ExecutionTransition.CommitExecution(commit));
+
 			private void ApplyExecutionTransition(ExecutionTransition transition)
 			{
 				ArgumentNullException.ThrowIfNull(transition);
 				var current = Execution;
 				transition.EnforceValidAgainst(current);
+
+				GameSessionDto? candidateRecoveryBoundary = null;
+				if (transition.PublishesInstruction &&
+					transition.AdvancesRecoveryBoundary)
+				{
+					candidateRecoveryBoundary = CreateValidatedRecoveryBoundary(
+						transition.Candidate.PendingInstruction!,
+						transition.Candidate.AcceptedObservationRecoveryCursor,
+						transition.Candidate.DomainRecoveryCursor);
+				}
+
 				_phaseStateCache = _phaseStateCache.WithExecutionCursor(
 					transition.Candidate);
+				if (transition.PublishesInstruction)
+				{
+					_pendingModeratorInstruction =
+						transition.Candidate.PendingInstruction!;
+					if (transition.AdvancesRecoveryBoundary)
+					{
+						_acceptedObservationRecoveryCursor =
+							transition.Candidate.AcceptedObservationRecoveryCursor;
+						_domainRecoveryCursor =
+							transition.Candidate.DomainRecoveryCursor;
+						_recoveryBoundary = candidateRecoveryBoundary;
+					}
+				}
+
 				transition.NotifyObserver(_stateChangeObserver);
 			}
 
@@ -840,25 +882,46 @@ namespace Werewolves.Core.StateModels.Core
 			return JsonSerializer.Serialize(_recoveryBoundary ?? CreateDto(), SerializationOptions);
 		}
 
-			internal void CaptureRecoveryBoundary(
-				AcceptedObservationRecoveryCursor? acceptedObservationRecoveryCursor = null,
-				DomainRecoveryCursor? domainRecoveryCursor = null)
+		internal void CaptureRecoveryBoundary(
+			AcceptedObservationRecoveryCursor? acceptedObservationRecoveryCursor = null,
+			DomainRecoveryCursor? domainRecoveryCursor = null)
 		{
+			var pendingInstruction = _pendingModeratorInstruction
+				?? throw new InvalidOperationException(
+					"A stable recovery boundary requires one Pending Instruction.");
+			var candidateBoundary = CreateValidatedRecoveryBoundary(
+				pendingInstruction,
+				acceptedObservationRecoveryCursor,
+				domainRecoveryCursor);
+
+			_acceptedObservationRecoveryCursor = acceptedObservationRecoveryCursor;
+			_domainRecoveryCursor = domainRecoveryCursor;
+			_recoveryBoundary = candidateBoundary;
+		}
+
+		private GameSessionDto CreateValidatedRecoveryBoundary(
+			ModeratorInstruction pendingInstruction,
+			AcceptedObservationRecoveryCursor? acceptedObservationRecoveryCursor,
+			DomainRecoveryCursor? domainRecoveryCursor)
+		{
+			ArgumentNullException.ThrowIfNull(pendingInstruction);
 			var candidateBoundary = CreateDto();
+			candidateBoundary.PendingInstruction = pendingInstruction;
+			candidateBoundary.PendingInstructionSemantic =
+				pendingInstruction.Semantic;
 			candidateBoundary.AcceptedObservationRecoveryCursor =
 				acceptedObservationRecoveryCursor;
 			candidateBoundary.DomainRecoveryCursor = domainRecoveryCursor;
 			ValidateAcceptedObservationRecoveryCursor(
 				candidateBoundary,
-				_pendingModeratorInstruction);
+				pendingInstruction);
 			ValidateDomainRecoveryCursor(
 				candidateBoundary,
-				_pendingModeratorInstruction);
+				pendingInstruction);
+			_ = JsonSerializer.Serialize(candidateBoundary, SerializationOptions);
 
-			_acceptedObservationRecoveryCursor = acceptedObservationRecoveryCursor;
-			_domainRecoveryCursor = domainRecoveryCursor;
-				_recoveryBoundary = candidateBoundary;
-			}
+			return candidateBoundary;
+		}
 
 			internal void NormalizeLegacyRecurringRolePowerCommit(
 				NightActionType actionType,

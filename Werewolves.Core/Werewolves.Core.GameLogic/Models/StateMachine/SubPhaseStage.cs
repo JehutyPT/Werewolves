@@ -286,7 +286,10 @@ internal sealed class HookSubPhaseStage : SubPhaseStage
 
             if (hookResult.Outcome != HookListenerOutcome.Skip)
             {
-                session.TransitionListenerStateCache(Key, listenerId, hookResult.NextListenerPhase!);
+				session.TransitionListenerState(
+					Key,
+                    listenerId,
+                    hookResult.NextListenerPhase!);
 			}
             
 			switch (hookResult.Outcome)
@@ -297,7 +300,7 @@ internal sealed class HookSubPhaseStage : SubPhaseStage
 
                 case HookListenerOutcome.Complete:
 					// Listener completed successfully, continue to next
-                    session.ClearCurrentListenerCache(Key);
+			session.ClearCurrentListener(Key);
 					continue;
 
                 case HookListenerOutcome.Skip:

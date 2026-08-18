@@ -11,14 +11,20 @@ internal abstract class ExecutionTransition
 {
 	private ExecutionTransition(
 		ExecutionView expected,
-		ExecutionView candidate)
+		ExecutionView candidate,
+		bool publishesInstruction = false,
+		bool advancesRecoveryBoundary = false)
 	{
 		Expected = expected;
 		Candidate = candidate;
+		PublishesInstruction = publishesInstruction;
+		AdvancesRecoveryBoundary = advancesRecoveryBoundary;
 	}
 
 	internal ExecutionView Expected { get; }
 	internal ExecutionView Candidate { get; }
+	internal bool PublishesInstruction { get; }
+	internal bool AdvancesRecoveryBoundary { get; }
 
 	internal static ExecutionTransition ChangeMainPhase(
 		ExecutionView expected,
@@ -113,10 +119,58 @@ internal abstract class ExecutionTransition
 				currentListener: null,
 				currentListenerState: null));
 
+	internal static ExecutionTransition RestoreContinuation(
+		ExecutionView expected,
+		string activeSubPhaseStage,
+		ListenerIdentifier listener,
+		string listenerState)
+	{
+		ArgumentException.ThrowIfNullOrWhiteSpace(activeSubPhaseStage);
+		ArgumentNullException.ThrowIfNull(listener);
+		ArgumentException.ThrowIfNullOrWhiteSpace(listenerState);
+
+		return new ContinuationRestorationTransition(
+			expected,
+			CreateCandidate(
+				expected,
+				expected.CurrentPhase,
+				expected.SubPhaseId,
+				activeSubPhaseStage,
+				expected.CompletedSubPhaseStages,
+				listener,
+				listenerState));
+	}
+
+	internal static ExecutionTransition CommitExecution(ExecutionCommit commit)
+	{
+		ArgumentNullException.ThrowIfNull(commit);
+		var expected = commit.Expected;
+		var recoveryBoundaryAdvance = commit.RecoveryBoundaryAdvance;
+		var candidateAcceptedObservationCursor = recoveryBoundaryAdvance == null
+			? expected.AcceptedObservationRecoveryCursor
+			: recoveryBoundaryAdvance.AcceptedObservationRecoveryCursor;
+		var candidateDomainCursor = recoveryBoundaryAdvance == null
+			? expected.DomainRecoveryCursor
+			: recoveryBoundaryAdvance.DomainRecoveryCursor;
+
+		return new InstructionPublicationTransition(
+			commit,
+			new ExecutionView(
+				expected.CurrentPhase,
+				expected.SubPhaseId,
+				expected.ActiveSubPhaseStage,
+				expected.CompletedSubPhaseStages,
+				expected.CurrentListener,
+				expected.CurrentListenerState,
+				commit.NextInstruction,
+				candidateAcceptedObservationCursor,
+				candidateDomainCursor));
+	}
+
 	internal void EnforceValidAgainst(ExecutionView current)
 	{
 		ArgumentNullException.ThrowIfNull(current);
-		if (!HasSameCursor(current, Expected))
+		if (!MatchesExpectedState(current))
 		{
 			throw new InvalidOperationException(
 				"The execution transition is stale.");
@@ -132,6 +186,8 @@ internal abstract class ExecutionTransition
 	}
 
 	protected abstract bool IsValidMovement();
+	protected virtual bool MatchesExpectedState(ExecutionView current) =>
+		HasSameCursor(current, Expected);
 	internal abstract void NotifyObserver(IStateChangeObserver? observer);
 
 	private static void EnforceStructurallyValid(
@@ -182,6 +238,13 @@ internal abstract class ExecutionTransition
 		ExecutionView right) =>
 		left.CurrentPhase == right.CurrentPhase &&
 		StringComparer.Ordinal.Equals(left.SubPhaseId, right.SubPhaseId);
+
+	private static bool HasSameExecutionState(
+		ExecutionView left,
+		ExecutionView right) =>
+		HasSameCursor(left, right) &&
+		ReferenceEquals(left.PendingInstruction, right.PendingInstruction) &&
+		left.HasSameRecoveryCursors(right);
 
 	private static ExecutionView CreateCandidate(
 		ExecutionView expected,
@@ -325,5 +388,70 @@ internal abstract class ExecutionTransition
 			observer?.OnListenerChanged(
 				Candidate.CurrentListener,
 				Candidate.CurrentListenerState);
+	}
+
+	private sealed class ContinuationRestorationTransition(
+		ExecutionView expected,
+		ExecutionView candidate)
+		: ExecutionTransition(expected, candidate)
+	{
+		protected override bool IsValidMovement() =>
+			HasSamePhaseAndSubPhase(Candidate, Expected) &&
+			Expected.ActiveSubPhaseStage == null &&
+			Expected.CurrentListener == null &&
+			Expected.CurrentListenerState == null &&
+			Candidate.ActiveSubPhaseStage != null &&
+			!Expected.CompletedSubPhaseStages.Contains(
+				Candidate.ActiveSubPhaseStage) &&
+			Candidate.CompletedSubPhaseStages.SetEquals(
+				Expected.CompletedSubPhaseStages) &&
+			Candidate.CurrentListener != null &&
+			Candidate.CurrentListenerState != null;
+
+		internal override void NotifyObserver(IStateChangeObserver? observer)
+		{
+			observer?.OnSubPhaseStageChanged(Candidate.ActiveSubPhaseStage);
+			observer?.OnListenerChanged(
+				Candidate.CurrentListener,
+				Candidate.CurrentListenerState);
+		}
+	}
+
+	private sealed class InstructionPublicationTransition : ExecutionTransition
+	{
+		private readonly ExecutionCommit _commit;
+
+		internal InstructionPublicationTransition(
+			ExecutionCommit commit,
+			ExecutionView candidate)
+			: base(
+				commit.Expected,
+				candidate,
+				publishesInstruction: true,
+				advancesRecoveryBoundary: commit.AdvancesRecoveryBoundary)
+		{
+			_commit = commit;
+		}
+
+		protected override bool MatchesExpectedState(ExecutionView current) =>
+			HasSameExecutionState(current, Expected);
+
+		protected override bool IsValidMovement() =>
+			HasSameCursor(Candidate, Expected) &&
+			ReferenceEquals(
+				Expected.PendingInstruction,
+				_commit.ConsumedInstruction) &&
+			_commit.Response.InstructionId ==
+				_commit.ConsumedInstruction.InstructionId &&
+			ReferenceEquals(
+				Candidate.PendingInstruction,
+				_commit.NextInstruction) &&
+			(AdvancesRecoveryBoundary
+				? Candidate.AcceptedObservationRecoveryCursor == null ||
+				  Candidate.DomainRecoveryCursor == null
+				: Candidate.HasSameRecoveryCursors(Expected));
+
+		internal override void NotifyObserver(IStateChangeObserver? observer) =>
+			observer?.OnPendingInstructionChanged(Candidate.PendingInstruction);
 	}
 }
