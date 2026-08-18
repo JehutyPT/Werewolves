@@ -168,21 +168,21 @@ public sealed class SimulationExecutor
 		SimulatorCapability capability,
 		SimulationCompatibilityIdentity compatibilityIdentity)
 	{
-		var classification = SimulationScenarioClassifier.Classify(scenario, capability);
-		if (classification.SimulatorSupport is not { IsSupported: true } simulatorSupport)
+		var admission = SimulationScenarioClassifier.ClassifyAdmission(
+			scenario,
+			capability,
+			compatibilityIdentity);
+		if (admission == SimulationScenarioAdmission.Unsupported)
 		{
 			throw new ArgumentException(
-				"The Simulation Scenario is not supported by the selected simulator descriptor.",
+				"The Simulation Scenario is not supported by the selected Simulator Capability.",
 				nameof(scenario));
 		}
 
-		var expectedIdentity = new SimulationCompatibilityIdentity(
-			scenario.ToCanonical(),
-			simulatorSupport.Profile.Identity);
-		if (!compatibilityIdentity.Equals(expectedIdentity))
+		if (admission == SimulationScenarioAdmission.CompatibilityIdentityMismatch)
 		{
 			throw new ArgumentException(
-				"The Simulation Compatibility Identity does not match the supplied Simulation Scenario and selected simulator descriptor.",
+				"The Simulation Compatibility Identity does not match the supplied Simulation Scenario and selected Simulator Capability.",
 				nameof(compatibilityIdentity));
 		}
 	}

@@ -5,6 +5,13 @@ using Werewolves.Core.StateModels.Models.Simulation;
 
 namespace Werewolves.Core.GameLogic.Simulation;
 
+internal enum SimulationScenarioAdmission
+{
+	Admitted,
+	Unsupported,
+	CompatibilityIdentityMismatch
+}
+
 public static class SimulationScenarioClassifier
 {
 	public static SimulationScenarioClassification Classify(
@@ -19,6 +26,26 @@ public static class SimulationScenarioClassifier
 				composition,
 				capability),
 			capability.CreateCompatibilityIdentity);
+	}
+
+	internal static SimulationScenarioAdmission ClassifyAdmission(
+		SimulationScenario scenario,
+		SimulatorCapability capability,
+		SimulationCompatibilityIdentity compatibilityIdentity)
+	{
+		ArgumentNullException.ThrowIfNull(scenario);
+		ArgumentNullException.ThrowIfNull(capability);
+		ArgumentNullException.ThrowIfNull(compatibilityIdentity);
+		var classification = Classify(scenario, capability);
+		if (classification.SimulatorSupport is not { IsSupported: true })
+		{
+			return SimulationScenarioAdmission.Unsupported;
+		}
+
+		return compatibilityIdentity.Equals(
+			capability.CreateCompatibilityIdentity(scenario))
+				? SimulationScenarioAdmission.Admitted
+				: SimulationScenarioAdmission.CompatibilityIdentityMismatch;
 	}
 
 	internal static SimulationScenarioClassification Classify(

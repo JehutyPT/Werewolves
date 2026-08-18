@@ -167,6 +167,29 @@ public sealed class SimulationScenario : IEquatable<SimulationScenario>
 
 	public CanonicalSimulationScenario ToCanonical() => _canonical;
 
+	internal static SimulationScenario FromCanonical(
+		CanonicalSimulationScenario canonicalScenario)
+	{
+		ArgumentNullException.ThrowIfNull(canonicalScenario);
+		var dealPoolCards = canonicalScenario.RoleComposition.Entries
+			.SelectMany(entry => Enumerable.Repeat(entry.Role, entry.Count))
+			.ToArray();
+		var roleCompositionCards = dealPoolCards
+			.Concat(canonicalScenario.Offer1Role is { } offer1Role ? [offer1Role] : [])
+			.Concat(canonicalScenario.Offer2Role is { } offer2Role ? [offer2Role] : [])
+			.ToArray();
+
+		return new SimulationScenario(
+			canonicalScenario.PlayerCount,
+			roleCompositionCards,
+			dealPoolCards,
+			canonicalScenario.Offer1Role,
+			canonicalScenario.Offer2Role,
+			new ActorSetupCards(canonicalScenario.ActorSetupCards),
+			canonicalScenario.RuleState,
+			canonicalScenario.PublicGroupPartition);
+	}
+
 	public bool Equals(SimulationScenario? other) =>
 		other is not null
 		&& _canonical.Equals(other._canonical);
