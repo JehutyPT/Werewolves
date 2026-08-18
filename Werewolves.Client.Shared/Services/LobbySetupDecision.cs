@@ -144,6 +144,7 @@ internal sealed record LobbyDecision(
 	LobbySetupAggregate NextAggregate,
 	LobbyPersistenceInstruction Persistence,
 	CanonicalSimulationScenarioDelta CanonicalScenarioDelta,
+	bool PublishesStateChange,
 	LobbySetupState.Commit Commit);
 
 internal static class LobbyPersistenceExecutor
