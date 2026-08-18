@@ -11,19 +11,34 @@ public static class SimulatorFactionBeneficiaryBridge
 		SimulatorCapability capability)
 	{
 		ArgumentNullException.ThrowIfNull(capability);
-		return Map(composition, (SimulatorProfile)capability);
+		return Map(
+			composition,
+			role => capability.TryGetBeneficiaryFaction(role, out var faction)
+				? faction
+				: null);
 	}
 
 	internal static FactionBeneficiaryComposition Map(
 		CanonicalRoleComposition composition,
 		SimulatorProfile profile)
 	{
-		ArgumentNullException.ThrowIfNull(composition);
 		ArgumentNullException.ThrowIfNull(profile);
+		return Map(
+			composition,
+			role => profile.TryGetBeneficiaryFaction(role, out var faction)
+				? faction
+				: null);
+	}
+
+	private static FactionBeneficiaryComposition Map(
+		CanonicalRoleComposition composition,
+		Func<MainRoleType, Faction?> getBeneficiaryFaction)
+	{
+		ArgumentNullException.ThrowIfNull(composition);
 		var counts = new Dictionary<Faction, int>();
 		foreach (var entry in composition.Entries)
 		{
-			if (!profile.TryGetBeneficiaryFaction(entry.Role, out var faction))
+			if (getBeneficiaryFaction(entry.Role) is not { } faction)
 			{
 				throw new ArgumentException(
 					$"Role {entry.Role} is not supported by the selected simulator producer.",
@@ -44,16 +59,20 @@ public static class AlreadyDecidedRoleCompositionClassifier
 		SimulatorCapability capability)
 	{
 		ArgumentNullException.ThrowIfNull(capability);
-		return Classify(composition, (SimulatorProfile)capability);
+		return Classify(SimulatorFactionBeneficiaryBridge.Map(composition, capability));
 	}
 
 	internal static AlreadyDecidedRoleCompositionResult Classify(
 		CanonicalRoleComposition composition,
 		SimulatorProfile profile)
 	{
-		ArgumentNullException.ThrowIfNull(composition);
 		ArgumentNullException.ThrowIfNull(profile);
-		var evidence = SimulatorFactionBeneficiaryBridge.Map(composition, profile);
+		return Classify(SimulatorFactionBeneficiaryBridge.Map(composition, profile));
+	}
+
+	private static AlreadyDecidedRoleCompositionResult Classify(
+		FactionBeneficiaryComposition evidence)
+	{
 		var satisfiedFactions = FactionVictoryPredicates
 			.Evaluate(evidence)
 			.ToHashSet();

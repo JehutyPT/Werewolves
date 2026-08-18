@@ -12,15 +12,41 @@ public static class SimulationScenarioClassifier
 		SimulatorCapability capability)
 	{
 		ArgumentNullException.ThrowIfNull(capability);
-		return Classify(scenario, (SimulatorProfile)capability);
+		return Classify(
+			scenario,
+			capability.ClassifySupport,
+			composition => AlreadyDecidedRoleCompositionClassifier.Classify(
+				composition,
+				capability),
+			capability.CreateCompatibilityIdentity);
 	}
 
 	internal static SimulationScenarioClassification Classify(
 		SimulationScenario scenario,
 		SimulatorProfile profile)
 	{
-		ArgumentNullException.ThrowIfNull(scenario);
 		ArgumentNullException.ThrowIfNull(profile);
+		return Classify(
+			scenario,
+			profile.ClassifySupport,
+			composition => AlreadyDecidedRoleCompositionClassifier.Classify(
+				composition,
+				profile),
+			candidate => new SimulationCompatibilityIdentity(
+				candidate.ToCanonical(),
+				profile.Identity));
+	}
+
+	private static SimulationScenarioClassification Classify(
+		SimulationScenario scenario,
+		Func<SimulationScenario, AppSupportResult, SimulatorSupportResult>
+			classifySimulatorSupport,
+		Func<CanonicalRoleComposition, AlreadyDecidedRoleCompositionResult>
+			classifyAlreadyDecided,
+		Func<SimulationScenario, SimulationCompatibilityIdentity>
+			createCompatibilityIdentity)
+	{
+		ArgumentNullException.ThrowIfNull(scenario);
 
 		List<GameConfigValidationError> errors;
 		if (scenario.ThiefOfferBranchPolicy is not null &&
@@ -85,20 +111,7 @@ public static class SimulationScenarioClassifier
 				cacheability: null);
 		}
 
-		var simulatorUnsupportedRoles = scenario.RoleCompositionCards
-			.Distinct()
-			.Where(role => !profile.SupportsRole(role))
-			.OrderBy(role => role.ToString(), StringComparer.Ordinal)
-			.ToArray();
-		var simulatorSupport = new SimulatorSupportResult(
-			scenario,
-			appSupport,
-			profile,
-			simulatorUnsupportedRoles,
-			hasUnsupportedActorSetupCards:
-				scenario.ActorSetupCards.Cards.Count > 0
-				&& !profile.SupportsActorSetupCards,
-			hasUnsupportedRuleState: !profile.SupportsRuleState(scenario.RuleState));
+		var simulatorSupport = classifySimulatorSupport(scenario, appSupport);
 		if (!simulatorSupport.IsSupported)
 		{
 			return new SimulationScenarioClassification(
@@ -110,9 +123,8 @@ public static class SimulationScenarioClassifier
 				cacheability: null);
 		}
 
-		var alreadyDecided = AlreadyDecidedRoleCompositionClassifier.Classify(
-			scenario.ToCanonical().RoleComposition,
-			profile);
+		var alreadyDecided = classifyAlreadyDecided(
+			scenario.ToCanonical().RoleComposition);
 		if (alreadyDecided.IsAlreadyDecided)
 		{
 			return new SimulationScenarioClassification(
@@ -127,9 +139,7 @@ public static class SimulationScenarioClassifier
 		var cacheability = new CacheabilityResult(
 			scenario,
 			simulatorSupport,
-			new SimulationCompatibilityIdentity(
-				scenario.ToCanonical(),
-				profile.Identity));
+			createCompatibilityIdentity(scenario));
 
 		return new SimulationScenarioClassification(
 			scenario,

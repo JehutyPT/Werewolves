@@ -81,6 +81,35 @@ public class SimulatorProfileTests
 	}
 
 	[Fact]
+	public void ProductionCapabilities_DeclareOnlyTheirSupportedEvaluationDepths()
+	{
+		var safety = SimulatorCapabilityRegistry.Production.SafetyScreening;
+		var probability = SimulatorCapabilityRegistry.Production.FullProbability;
+
+		safety.SupportedEvaluationDepths.Should().Equal(
+			LobbyEvaluationDepth.DegenerateScreeningOnly);
+		probability.SupportedEvaluationDepths.Should().Equal(
+			LobbyEvaluationDepth.DegenerateScreeningOnly,
+			LobbyEvaluationDepth.FullProbability);
+	}
+
+	[Fact]
+	public void ProductionCapabilities_QueryEvaluationDepthSupportFromTheirOwnDeclaration()
+	{
+		var safety = SimulatorCapabilityRegistry.Production.SafetyScreening;
+		var probability = SimulatorCapabilityRegistry.Production.FullProbability;
+
+		safety.SupportsEvaluationDepth(LobbyEvaluationDepth.DegenerateScreeningOnly)
+			.Should().BeTrue();
+		safety.SupportsEvaluationDepth(LobbyEvaluationDepth.FullProbability)
+			.Should().BeFalse();
+		probability.SupportsEvaluationDepth(LobbyEvaluationDepth.DegenerateScreeningOnly)
+			.Should().BeTrue();
+		probability.SupportsEvaluationDepth(LobbyEvaluationDepth.FullProbability)
+			.Should().BeTrue();
+	}
+
+	[Fact]
 	public void ProductionCapabilities_ExposeIndependentFrozenDeclarations()
 	{
 		ModeratorInstructionSemantic[] expectedProbabilitySemantics =
@@ -384,6 +413,43 @@ public class SimulatorProfileTests
 		parsed.Should().Be(current);
 		differentProfile.Should().NotBe(current);
 		differentVersion.Should().NotBe(current);
+	}
+
+	[Fact]
+	public void CapabilityCompatibilityIdentity_PreservesTheCompleteCanonicalScenarioAndSelectedCapability()
+	{
+		MainRoleType[] dealPool =
+		[
+			MainRoleType.Thief,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.PrejudicedManipulator,
+			MainRoleType.Actor,
+			MainRoleType.SimpleVillager
+		];
+		var scenario = new SimulationScenario(
+			5,
+			dealPool.Concat([MainRoleType.Angel, MainRoleType.Cupid]),
+			dealPool,
+			MainRoleType.Angel,
+			MainRoleType.Cupid,
+			new Werewolves.Core.StateModels.Models.ActorSetupCards(
+				[MainRoleType.Defender, MainRoleType.Seer, MainRoleType.Witch]),
+			new SimulationRuleState(NewMoonEnabled: true),
+			CanonicalPublicGroupPartition.Create(5, [1, 3], [2, 4, 5]));
+		var safety = SimulatorCapabilityRegistry.Production.SafetyScreening;
+		var probability = SimulatorCapabilityRegistry.Production.FullProbability;
+
+		var safetyIdentity = safety.CreateCompatibilityIdentity(scenario);
+		var probabilityIdentity = probability.CreateCompatibilityIdentity(scenario);
+
+		safetyIdentity.Scenario.Should().Be(scenario.ToCanonical());
+		safetyIdentity.Profile.Should().Be(safety.Identity);
+		probabilityIdentity.Scenario.Should().Be(scenario.ToCanonical());
+		probabilityIdentity.Profile.Should().Be(probability.Identity);
+		SimulationCompatibilityIdentity.Parse(safetyIdentity.ToString()).Should()
+			.Be(safetyIdentity);
+		SimulationCompatibilityIdentity.Parse(probabilityIdentity.ToString()).Should()
+			.Be(probabilityIdentity);
 	}
 
 	[Fact]
