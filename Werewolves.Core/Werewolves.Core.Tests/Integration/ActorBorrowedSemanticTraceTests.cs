@@ -887,7 +887,17 @@ public sealed class ActorBorrowedSemanticTraceTests
 		var input = fixture.SourceOpeningResponse;
 		for (var step = 0; step < 8; step++)
 		{
-			var result = Advance(fixture.Listener, fixture.Session, input);
+			var result = fixture.SourceRole == MainRoleType.Fox && trace.Count > 0
+				? HookListenerActionResult.NeedInput(
+					GameFlowManager.HandleInput(
+							fixture.Session,
+							input,
+							SupportedRoleCatalog.Admissions)
+						.ModeratorInstruction ??
+						throw new InvalidOperationException(
+							"The Actor borrowed Fox production path emitted no instruction."),
+					HookHarnessListenerState.AwaitingInput)
+				: Advance(fixture.Listener, fixture.Session, input);
 			if (trace.LastOrDefault() ==
 				ModeratorInstructionSemantic.PutRoleToSleep)
 			{
@@ -918,6 +928,11 @@ public sealed class ActorBorrowedSemanticTraceTests
 			result.Instruction.Should().NotBeNull();
 			var instruction = result.Instruction!;
 			trace.Add(instruction.Semantic);
+			if (fixture.SourceRole == MainRoleType.Fox && trace.Count == 1)
+			{
+				fixture.RestoreAt(instruction);
+			}
+
 			if (fixture.SourceRole is MainRoleType.Seer or MainRoleType.Fox &&
 				instruction.Semantic is
 					ModeratorInstructionSemantic.SelectSeerTarget or

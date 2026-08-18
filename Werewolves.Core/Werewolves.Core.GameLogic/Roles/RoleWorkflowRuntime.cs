@@ -1,3 +1,4 @@
+using Werewolves.Core.GameLogic.Interfaces;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
@@ -40,6 +41,9 @@ internal readonly record struct RoleWorkflowRecoveryCandidate(
 			null,
 			failure);
 }
+
+internal sealed class RoleWorkflowInputRejectionException(string message)
+	: InvalidOperationException(message);
 
 internal sealed class RoleWorkflowRuntime
 {
@@ -105,15 +109,23 @@ internal sealed class RoleWorkflowRuntime
 	internal RoleWorkflowRecoveryCandidate ClassifyRecoveryCandidate(
 		GameSession session,
 		ModeratorInstruction pendingInstruction,
-		AcceptedObservationRecoveryCursor? cursor)
+		AcceptedObservationRecoveryCursor? acceptedObservationCursor = null,
+		DomainRecoveryCursor? domainCursor = null)
 	{
 		ArgumentNullException.ThrowIfNull(session);
 		ArgumentNullException.ThrowIfNull(pendingInstruction);
+		if (acceptedObservationCursor != null && domainCursor != null)
+		{
+			throw new InvalidOperationException(
+				$"Declared Role workflow '{_listener}' cannot recover from multiple cursors.");
+		}
+
 		var claims = _waits
 			.Select(wait => wait.ClassifyRecoveryCandidate(
 				session,
 				pendingInstruction,
-				cursor))
+				acceptedObservationCursor,
+				domainCursor))
 			.Where(candidate =>
 				candidate.Kind != RoleWorkflowRecoveryCandidateKind.Unrelated)
 			.ToArray();
@@ -137,6 +149,34 @@ internal sealed class RoleWorkflowRuntime
 			[var candidate] => candidate,
 			_ => RoleWorkflowRecoveryCandidate.ClaimedButInvalid(
 				$"Pending instruction '{pendingInstruction.Semantic}' authenticates multiple waits for '{_listener}'.")
+		};
+	}
+
+	internal bool TryValidateCommittedRecoveryBoundary(
+		GameSession session,
+		ModeratorInstruction? startingInstruction,
+		ModeratorResponse input,
+		TargetPrivateRolePowerRecoveryBoundary committedBoundary,
+		ModeratorInstruction nextInstruction)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		ArgumentNullException.ThrowIfNull(input);
+		ArgumentNullException.ThrowIfNull(committedBoundary);
+		ArgumentNullException.ThrowIfNull(nextInstruction);
+		var claims = _waits
+			.Where(wait => wait.TryValidateCommittedRecoveryBoundary(
+				session,
+				startingInstruction,
+				input,
+				committedBoundary,
+				nextInstruction))
+			.ToArray();
+		return claims switch
+		{
+			[] => false,
+			[_] => true,
+			_ => throw new InvalidOperationException(
+				$"Committed target-private boundary authenticates multiple waits for '{_listener}'.")
 		};
 	}
 
@@ -197,7 +237,22 @@ internal interface IRecoverableWait : IRoleWorkflowStep
 	RoleWorkflowRecoveryCandidate ClassifyRecoveryCandidate(
 		GameSession session,
 		ModeratorInstruction pendingInstruction,
-		AcceptedObservationRecoveryCursor? cursor);
+		AcceptedObservationRecoveryCursor? acceptedObservationCursor,
+		DomainRecoveryCursor? domainCursor);
+
+	bool TryValidateCommittedRecoveryBoundary(
+		GameSession session,
+		ModeratorInstruction? startingInstruction,
+		ModeratorResponse input,
+		TargetPrivateRolePowerRecoveryBoundary committedBoundary,
+		ModeratorInstruction nextInstruction);
+}
+
+internal enum RecoverableWaitDurability
+{
+	Replayable,
+	AcceptedObservation,
+	Domain
 }
 
 internal sealed class RecoverableWait<TState, TInstruction> : IRecoverableWait
@@ -212,13 +267,24 @@ internal sealed class RecoverableWait<TState, TInstruction> : IRecoverableWait
 	private readonly Func<GameSession, TInstruction> _instructionFactory;
 	private readonly Func<GameSession, ModeratorInstruction, bool> _claimsCandidate;
 	private readonly Action<GameSession, TInstruction> _validateInstructionContext;
-	private readonly bool _replayable;
+	private readonly RecoverableWaitDurability _durability;
 	private readonly Action<
 		GameSession,
 		TInstruction,
 		AcceptedObservationRecoveryCursor>? _validateDurableContext;
 	private readonly Func<AcceptedObservationRecoveryCursor, TState>?
 		_existingCursorContinuationFactory;
+	private readonly Action<GameSession, TInstruction, DomainRecoveryCursor>?
+		_validateDomainContext;
+	private readonly Func<DomainRecoveryCursor, TState>?
+		_existingDomainCursorContinuationFactory;
+	private readonly Func<
+		GameSession,
+		ModeratorInstruction?,
+		ModeratorResponse,
+		TargetPrivateRolePowerRecoveryBoundary,
+		TInstruction,
+		bool>? _validateCommittedRecoveryBoundary;
 
 	private RecoverableWait(
 		ListenerIdentifier listener,
@@ -232,11 +298,22 @@ internal sealed class RecoverableWait<TState, TInstruction> : IRecoverableWait
 		Func<GameSession, TInstruction> instructionFactory,
 		Func<GameSession, ModeratorInstruction, bool> claimsCandidate,
 		Action<GameSession, TInstruction> validateInstructionContext,
-		bool replayable,
+		RecoverableWaitDurability durability,
 		Action<GameSession, TInstruction, AcceptedObservationRecoveryCursor>?
 			validateDurableContext,
 		Func<AcceptedObservationRecoveryCursor, TState>?
-			existingCursorContinuationFactory)
+			existingCursorContinuationFactory,
+		Action<GameSession, TInstruction, DomainRecoveryCursor>?
+			validateDomainContext,
+		Func<DomainRecoveryCursor, TState>?
+			existingDomainCursorContinuationFactory,
+		Func<
+			GameSession,
+			ModeratorInstruction?,
+			ModeratorResponse,
+			TargetPrivateRolePowerRecoveryBoundary,
+			TInstruction,
+			bool>? validateCommittedRecoveryBoundary)
 	{
 		if (!Enum.IsDefined(semantic) || !Enum.IsDefined(expectedResponseType))
 		{
@@ -257,16 +334,35 @@ internal sealed class RecoverableWait<TState, TInstruction> : IRecoverableWait
 			throw new ArgumentNullException(nameof(claimsCandidate));
 		_validateInstructionContext = validateInstructionContext ??
 			throw new ArgumentNullException(nameof(validateInstructionContext));
-		_replayable = replayable;
+		_durability = durability;
 		_validateDurableContext = validateDurableContext;
 		_existingCursorContinuationFactory =
 			existingCursorContinuationFactory;
-		if (replayable !=
-		    (validateDurableContext == null &&
-		     existingCursorContinuationFactory == null))
+		_validateDomainContext = validateDomainContext;
+		_existingDomainCursorContinuationFactory =
+			existingDomainCursorContinuationFactory;
+		_validateCommittedRecoveryBoundary =
+			validateCommittedRecoveryBoundary;
+		var hasAcceptedObservationPolicy =
+			validateDurableContext != null &&
+			existingCursorContinuationFactory != null;
+		var hasDomainPolicy =
+			validateDomainContext != null &&
+			existingDomainCursorContinuationFactory != null &&
+			validateCommittedRecoveryBoundary != null;
+		if (durability switch
+		    {
+			    RecoverableWaitDurability.Replayable =>
+				    !hasAcceptedObservationPolicy && !hasDomainPolicy,
+			    RecoverableWaitDurability.AcceptedObservation =>
+				    hasAcceptedObservationPolicy && !hasDomainPolicy,
+			    RecoverableWaitDurability.Domain =>
+				    !hasAcceptedObservationPolicy && hasDomainPolicy,
+			    _ => false
+		    } is false)
 		{
 			throw new ArgumentException(
-				"A wait must declare either replayable recovery or a durable validator and existing-cursor continuation.");
+				"A wait must declare exactly one replayable, accepted-observation, or domain recovery policy.");
 		}
 	}
 
@@ -294,9 +390,12 @@ internal sealed class RecoverableWait<TState, TInstruction> : IRecoverableWait
 			instructionFactory,
 			claimsCandidate,
 			validateInstructionContext,
-			replayable: true,
+			RecoverableWaitDurability.Replayable,
 			validateDurableContext: null,
-			existingCursorContinuationFactory: null);
+			existingCursorContinuationFactory: null,
+			validateDomainContext: null,
+			existingDomainCursorContinuationFactory: null,
+			validateCommittedRecoveryBoundary: null);
 
 	internal static RecoverableWait<TState, TInstruction> Durable(
 		ListenerIdentifier listener,
@@ -326,9 +425,54 @@ internal sealed class RecoverableWait<TState, TInstruction> : IRecoverableWait
 			instructionFactory,
 			claimsCandidate,
 			validateInstructionContext,
-			replayable: false,
+			RecoverableWaitDurability.AcceptedObservation,
 			validateDurableContext,
-			existingCursorContinuationFactory);
+			existingCursorContinuationFactory,
+			validateDomainContext: null,
+			existingDomainCursorContinuationFactory: null,
+			validateCommittedRecoveryBoundary: null);
+
+	internal static RecoverableWait<TState, TInstruction> DomainDurable(
+		ListenerIdentifier listener,
+		GameHook hook,
+		TState? startState,
+		TState continuationState,
+		ModeratorInstructionSemantic semantic,
+		ExpectedInputType expectedResponseType,
+		Func<GameSession, bool> canIssue,
+		Action<GameSession, ModeratorResponse> beforeIssue,
+		Func<GameSession, TInstruction> instructionFactory,
+		Func<GameSession, ModeratorInstruction, bool> claimsCandidate,
+		Action<GameSession, TInstruction> validateInstructionContext,
+		Action<GameSession, TInstruction, DomainRecoveryCursor>
+			validateDomainContext,
+		Func<DomainRecoveryCursor, TState>
+			existingDomainCursorContinuationFactory,
+		Func<
+			GameSession,
+			ModeratorInstruction?,
+			ModeratorResponse,
+			TargetPrivateRolePowerRecoveryBoundary,
+			TInstruction,
+			bool> validateCommittedRecoveryBoundary) =>
+		new(
+			listener,
+			hook,
+			startState,
+			continuationState,
+			semantic,
+			expectedResponseType,
+			canIssue,
+			beforeIssue,
+			instructionFactory,
+			claimsCandidate,
+			validateInstructionContext,
+			RecoverableWaitDurability.Domain,
+			validateDurableContext: null,
+			existingCursorContinuationFactory: null,
+			validateDomainContext,
+			existingDomainCursorContinuationFactory,
+			validateCommittedRecoveryBoundary);
 
 	public ListenerIdentifier Listener { get; }
 	public GameHook Hook { get; }
@@ -356,17 +500,12 @@ internal sealed class RecoverableWait<TState, TInstruction> : IRecoverableWait
 		ModeratorResponse input,
 		string currentState)
 	{
-		if (!Claims(session, pendingInstruction))
-		{
-			return RoleWorkflowRecoveryCandidate.Unrelated();
-		}
-
-		if (!StringComparer.Ordinal.Equals(
+		if (!Claims(session, pendingInstruction) ||
+		    !StringComparer.Ordinal.Equals(
 			    _continuationState.ToString(),
 			    currentState))
 		{
-			return Invalid(
-				$"Pending instruction '{pendingInstruction.Semantic}' claims '{Listener}' but not continuation '{currentState}'.");
+			return RoleWorkflowRecoveryCandidate.Unrelated();
 		}
 
 		var invalidInstruction = TryValidateInstruction(
@@ -391,25 +530,38 @@ internal sealed class RecoverableWait<TState, TInstruction> : IRecoverableWait
 	public RoleWorkflowRecoveryCandidate ClassifyRecoveryCandidate(
 		GameSession session,
 		ModeratorInstruction pendingInstruction,
-		AcceptedObservationRecoveryCursor? cursor)
+		AcceptedObservationRecoveryCursor? acceptedObservationCursor,
+		DomainRecoveryCursor? domainCursor)
 	{
-		var claims = cursor == null
-			? _claimsCandidate(session, pendingInstruction)
-			: cursor.NextInstructionSemantic == _semantic ||
-			  _claimsCandidate(session, pendingInstruction);
+		var suppliedDurability = acceptedObservationCursor != null
+			? RecoverableWaitDurability.AcceptedObservation
+			: domainCursor != null
+				? RecoverableWaitDurability.Domain
+				: RecoverableWaitDurability.Replayable;
+		if (suppliedDurability != _durability)
+		{
+			if (_durability == RecoverableWaitDurability.Domain &&
+			    domainCursor == null &&
+			    Claims(session, pendingInstruction))
+			{
+				return Invalid(
+					$"Pending instruction '{pendingInstruction.Semantic}' claims durable '{Listener}' context without its domain cursor.");
+			}
+
+			return RoleWorkflowRecoveryCandidate.Unrelated();
+		}
+
+		var cursorSemantic = acceptedObservationCursor?.NextInstructionSemantic ??
+		                     domainCursor?.NextInstructionSemantic;
+		var claims = cursorSemantic == _semantic ||
+		             _claimsCandidate(session, pendingInstruction);
 		if (!claims)
 		{
 			return RoleWorkflowRecoveryCandidate.Unrelated();
 		}
 
-		if (cursor == null)
+		if (_durability == RecoverableWaitDurability.Replayable)
 		{
-			if (!_replayable)
-			{
-				return Invalid(
-					$"Pending instruction '{pendingInstruction.Semantic}' claims durable '{Listener}' context without its semantic cursor.");
-			}
-
 			var invalidReplayableInstruction = TryValidateInstruction(
 				session,
 				pendingInstruction,
@@ -418,12 +570,6 @@ internal sealed class RecoverableWait<TState, TInstruction> : IRecoverableWait
 				? RoleWorkflowRecoveryCandidate.Authenticated(
 					_continuationState.ToString())
 				: Invalid(invalidReplayableInstruction);
-		}
-
-		if (_replayable)
-		{
-			return Invalid(
-				$"Replayable wait '{Listener}:{_semantic}' cannot claim a durable continuation.");
 		}
 
 		var invalidInstruction = TryValidateInstruction(
@@ -435,8 +581,13 @@ internal sealed class RecoverableWait<TState, TInstruction> : IRecoverableWait
 			return Invalid(invalidInstruction);
 		}
 
-		if (pendingInstruction.InstructionId != cursor.NextInstructionId ||
-		    pendingInstruction.Semantic != cursor.NextInstructionSemantic)
+		var nextInstructionId = acceptedObservationCursor?.NextInstructionId ??
+		                        domainCursor!.NextInstructionId;
+		var nextInstructionSemantic =
+			acceptedObservationCursor?.NextInstructionSemantic ??
+			domainCursor!.NextInstructionSemantic;
+		if (pendingInstruction.InstructionId != nextInstructionId ||
+		    pendingInstruction.Semantic != nextInstructionSemantic)
 		{
 			return Invalid(
 				$"Pending instruction '{pendingInstruction.Semantic}' does not correlate to the declared '{Listener}' cursor.");
@@ -444,9 +595,25 @@ internal sealed class RecoverableWait<TState, TInstruction> : IRecoverableWait
 
 		try
 		{
-			_validateDurableContext!(session, typedInstruction!, cursor);
-			var continuation =
-				_existingCursorContinuationFactory!(cursor).ToString();
+			string continuation;
+			if (acceptedObservationCursor != null)
+			{
+				_validateDurableContext!(
+					session,
+					typedInstruction!,
+					acceptedObservationCursor);
+				continuation = _existingCursorContinuationFactory!(
+					acceptedObservationCursor).ToString();
+			}
+			else
+			{
+				_validateDomainContext!(
+					session,
+					typedInstruction!,
+					domainCursor!);
+				continuation = _existingDomainCursorContinuationFactory!(
+					domainCursor!).ToString();
+			}
 			if (!StringComparer.Ordinal.Equals(
 				    continuation,
 				    _continuationState.ToString()))
@@ -463,6 +630,34 @@ internal sealed class RecoverableWait<TState, TInstruction> : IRecoverableWait
 			return Invalid(
 				$"Pending instruction '{pendingInstruction.Semantic}' claims invalid durable '{Listener}' context: {exception.Message}");
 		}
+	}
+
+	public bool TryValidateCommittedRecoveryBoundary(
+		GameSession session,
+		ModeratorInstruction? startingInstruction,
+		ModeratorResponse input,
+		TargetPrivateRolePowerRecoveryBoundary committedBoundary,
+		ModeratorInstruction nextInstruction)
+	{
+		if (_durability != RecoverableWaitDurability.Domain ||
+		    nextInstruction.Semantic != _semantic)
+		{
+			return false;
+		}
+
+		if (nextInstruction is not TInstruction typedInstruction)
+		{
+			throw new InvalidOperationException(
+				$"Committed boundary claims '{Listener}:{_semantic}' with invalid instruction type '{nextInstruction.GetType().Name}'.");
+		}
+
+		ValidateInstruction(session, typedInstruction);
+		return _validateCommittedRecoveryBoundary!(
+			session,
+			startingInstruction,
+			input,
+			committedBoundary,
+			typedInstruction);
 	}
 
 	private bool Claims(
@@ -487,6 +682,10 @@ internal sealed class RecoverableWait<TState, TInstruction> : IRecoverableWait
 			ValidateInstruction(session, typedInstruction);
 			return null;
 		}
+		catch (RoleWorkflowInputRejectionException exception)
+		{
+			return exception.Message;
+		}
 		catch (Exception exception) when (
 			exception is ArgumentException or InvalidOperationException)
 		{
@@ -509,6 +708,41 @@ internal sealed class RecoverableWait<TState, TInstruction> : IRecoverableWait
 
 	private static RoleWorkflowRecoveryCandidate Invalid(string failure) =>
 		RoleWorkflowRecoveryCandidate.ClaimedButInvalid(failure);
+}
+
+internal sealed class RoleWorkflowDecisionStep<TState> : IRoleWorkflowStep
+	where TState : struct, Enum
+{
+	private readonly Func<GameSession, bool> _canExecute;
+	private readonly Func<
+		GameSession,
+		ModeratorResponse,
+		HookListenerActionResult> _execute;
+
+	internal RoleWorkflowDecisionStep(
+		ListenerIdentifier listener,
+		GameHook hook,
+		TState? startState,
+		Func<GameSession, bool> canExecute,
+		Func<GameSession, ModeratorResponse, HookListenerActionResult> execute)
+	{
+		Listener = listener;
+		Hook = hook;
+		StartState = startState?.ToString();
+		_canExecute = canExecute ?? throw new ArgumentNullException(nameof(canExecute));
+		_execute = execute ?? throw new ArgumentNullException(nameof(execute));
+	}
+
+	public ListenerIdentifier Listener { get; }
+	public GameHook Hook { get; }
+	public string? StartState { get; }
+
+	public bool CanExecute(GameSession session) => _canExecute(session);
+
+	public HookListenerActionResult Execute(
+		GameSession session,
+		ModeratorResponse input) =>
+		_execute(session, input);
 }
 
 internal sealed class RoleWorkflowCompletionStep<TState> : IRoleWorkflowStep
