@@ -55,7 +55,8 @@ public sealed class BrowserQaScenarioTerminalLobbyCacheStore : ILocalTerminalLob
 			[
 				new(villager, 1, VictoryCheckWindow.Dawn, 750, 1_000),
 				new(werewolf, 1, VictoryCheckWindow.PreNight, 250, 1_000)
-			]);
+			],
+			SimulatorCapability.SafetyScreening);
 		return TerminalLobbyCache.Write(TerminalLobbyCache.CreateDocument([record]));
 	}
 }

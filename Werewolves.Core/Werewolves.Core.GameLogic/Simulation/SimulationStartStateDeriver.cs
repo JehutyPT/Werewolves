@@ -6,17 +6,6 @@ namespace Werewolves.Core.GameLogic.Simulation;
 
 public static class SimulationStartStateDeriver
 {
-	internal static SimulationStartState Derive(RunSeedMaterial material)
-	{
-		ArgumentNullException.ThrowIfNull(material);
-		var capability = ResolveCurrentCapability(material);
-		EnsureMaterialMatchesCapability(material, capability);
-		return Derive(
-			material,
-			capability,
-			new DeterministicRandomSource(material));
-	}
-
 	public static SimulationStartState Derive(
 		RunSeedMaterial material,
 		SimulatorCapability capability)
@@ -29,16 +18,6 @@ public static class SimulationStartStateDeriver
 			material,
 			capability,
 			new DeterministicRandomSource(material));
-	}
-
-	internal static SimulationStartState Derive(
-		RunSeedMaterial material,
-		DeterministicRandomSource random)
-	{
-		ArgumentNullException.ThrowIfNull(material);
-		var capability = ResolveCurrentCapability(material);
-		EnsureMaterialMatchesCapability(material, capability);
-		return Derive(material, capability, random);
 	}
 
 	internal static SimulationStartState Derive(
@@ -100,25 +79,6 @@ public static class SimulationStartStateDeriver
 				faction => capability.IsFactionAgent(assignment.Role, faction)
 					? FactionAgentKnowledge.KnownAgent
 					: FactionAgentKnowledge.KnownNonAgent));
-	}
-
-	private static SimulatorCapability ResolveCurrentCapability(
-		RunSeedMaterial material)
-	{
-		var profile = material.CompatibilityIdentity.Profile;
-		var registry = SimulatorCapabilityRegistry.Production;
-		if (profile.Equals(registry.SafetyScreening.Identity))
-		{
-			return registry.SafetyScreening;
-		}
-		if (profile.Equals(registry.FullProbability.Identity))
-		{
-			return registry.FullProbability;
-		}
-
-		throw new ArgumentException(
-			"Run Seed Material does not identify a current Simulator Capability.",
-			nameof(material));
 	}
 
 	private static void EnsureMaterialMatchesCapability(

@@ -78,7 +78,7 @@ _Avoid_: Supported roles, implemented roles
 The Roles for which the product has working game behavior.
 _Avoid_: Rules Role Set, selectable roles
 
-**Simulator Profile Role Set**:
+**Simulator Capability Role Set**:
 The Roles a named simulation capability can execute.
 _Avoid_: Implemented Role Set, selectable roles
 
@@ -88,7 +88,7 @@ _Avoid_: Active profile (when the capability is not named), simulator support (u
 
 **Safety-Screening Role Set**:
 The Roles supported by pre-game safety screening.
-_Avoid_: Simulator Profile Role Set (when capability matters), full simulator support
+_Avoid_: Simulator Capability Role Set (when capability matters), full simulator support
 
 **Full-Probability Role Set**:
 The Roles supported by full probability evaluation.

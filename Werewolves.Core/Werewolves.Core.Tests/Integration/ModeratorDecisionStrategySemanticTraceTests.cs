@@ -243,7 +243,10 @@ public class ModeratorDecisionStrategySemanticTraceTests
 			BaselineRandomDecisionStrategy.Identity,
 			runNumber);
 		var random = new DeterministicRandomSource(material);
-		var startState = SimulationStartStateDeriver.Derive(material, random);
+		var startState = SimulationStartStateDeriver.Derive(
+			material,
+			SimulatorCapability.FullProbability,
+			random);
 		var config = startState.CreateGameSessionConfig();
 		var builder = GameTestBuilder.Create()
 			.WithPlayers(config.Players.ToArray())

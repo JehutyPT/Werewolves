@@ -3,12 +3,13 @@ using Werewolves.Core.StateModels.Models.Simulation;
 
 namespace Werewolves.Core.GameLogic.Simulation;
 
-public class SimulatorProfile
+public sealed class SimulatorCapability
 {
 	private readonly IReadOnlyDictionary<MainRoleType, Faction> _beneficiaryFactions;
 	private readonly IReadOnlyDictionary<MainRoleType, IReadOnlySet<Faction>> _agentFactions;
 	private readonly SharedVictoryGameResult[] _sharedVictoryCapabilities;
 	private readonly SimulationRuleState[] _supportedRuleStates;
+	private readonly LobbyEvaluationDepth[] _supportedEvaluationDepths;
 
 	public SimulatorProfileIdentity Identity { get; }
 
@@ -16,47 +17,99 @@ public class SimulatorProfile
 	public IReadOnlyList<SharedVictoryGameResult> SharedVictoryCapabilities { get; }
 	public HeadlessResponsePolicy HeadlessResponsePolicy { get; }
 	public IReadOnlyList<SimulationRuleState> SupportedRuleStates { get; }
+	public IReadOnlyList<LobbyEvaluationDepth> SupportedEvaluationDepths { get; }
 
 	public bool SupportsActorSetupCards { get; }
 
-	internal SimulatorProfile(
-		SimulatorProfileIdentity identity,
-		IEnumerable<SimulatorProfileRoleDescriptor> roleDescriptors,
-		IEnumerable<SharedVictoryGameResult>? sharedVictoryCapabilities = null,
-		HeadlessResponsePolicy? headlessResponsePolicy = null,
-		bool supportsActorSetupCards = false,
-		IEnumerable<SimulationRuleState>? supportedRuleStates = null)
+	private static readonly (
+		MainRoleType Role,
+		Faction BeneficiaryFaction,
+		Faction[] AgentFactions)[] SafetyScreeningRoleFacts =
+	[
+		(MainRoleType.SimpleWerewolf, Faction.Werewolf, [Faction.Werewolf]),
+		(MainRoleType.BigBadWolf, Faction.Werewolf, [Faction.Werewolf]),
+		(MainRoleType.Seer, Faction.Villager, []),
+		(MainRoleType.WildChild, Faction.Villager, []),
+		(MainRoleType.SimpleVillager, Faction.Villager, []),
+		(MainRoleType.VillagerVillager, Faction.Villager, []),
+		(MainRoleType.TwoSisters, Faction.Villager, []),
+		(MainRoleType.ThreeBrothers, Faction.Villager, []),
+		(MainRoleType.Witch, Faction.Villager, []),
+		(MainRoleType.Hunter, Faction.Villager, []),
+		(MainRoleType.LittleGirl, Faction.Villager, []),
+		(MainRoleType.Defender, Faction.Villager, []),
+		(MainRoleType.Elder, Faction.Villager, []),
+		(MainRoleType.StutteringJudge, Faction.Villager, []),
+		(MainRoleType.Scapegoat, Faction.Villager, []),
+		(MainRoleType.VillageIdiot, Faction.Villager, []),
+		(MainRoleType.WolfHound, Faction.Villager, []),
+		(MainRoleType.AccursedWolfFather, Faction.Werewolf, [Faction.Werewolf]),
+		(MainRoleType.WhiteWerewolf, Faction.WhiteWerewolf, [Faction.Werewolf]),
+		(MainRoleType.Piper, Faction.Piper, []),
+		(MainRoleType.BearTamer, Faction.Villager, []),
+		(MainRoleType.Fox, Faction.Villager, []),
+		(MainRoleType.KnightWithRustySword, Faction.Villager, []),
+		(MainRoleType.Cupid, Faction.Villager, []),
+		(MainRoleType.Thief, Faction.Villager, []),
+		(MainRoleType.DevotedServant, Faction.Villager, []),
+		(MainRoleType.Angel, Faction.Villager, []),
+		(MainRoleType.PrejudicedManipulator, Faction.PrejudicedManipulator, []),
+		(MainRoleType.Actor, Faction.Villager, [])
+	];
+
+	private static readonly SharedVictoryGameResult[] SafetyScreeningSharedVictoryCapabilities =
+	[
+		new([Faction.Angel, Faction.Villager]),
+		new([Faction.Angel, Faction.Werewolf]),
+		new([Faction.Angel, Faction.WhiteWerewolf]),
+		new([Faction.Angel, Faction.Piper]),
+		new([Faction.Angel, Faction.CrossFactionLovers]),
+		new([Faction.Angel, Faction.PrejudicedManipulator]),
+		new([Faction.Piper, Faction.PrejudicedManipulator]),
+		new(
+			[
+				Faction.Angel,
+				Faction.Piper,
+				Faction.PrejudicedManipulator
+			])
+	];
+
+	private static readonly (
+		MainRoleType Role,
+		Faction BeneficiaryFaction,
+		Faction[] AgentFactions)[] FullProbabilityRoleFacts =
+	[
+		(MainRoleType.SimpleWerewolf, Faction.Werewolf, [Faction.Werewolf]),
+		(MainRoleType.Seer, Faction.Villager, []),
+		(MainRoleType.WildChild, Faction.Villager, []),
+		(MainRoleType.SimpleVillager, Faction.Villager, [])
+	];
+
+	public static SimulatorCapability SafetyScreening =>
+		SimulatorCapabilityRegistry.Production.SafetyScreening;
+
+	public static SimulatorCapability FullProbability =>
+		SimulatorCapabilityRegistry.Production.FullProbability;
+
+	public bool SupportsEvaluationDepth(LobbyEvaluationDepth depth) =>
+		_supportedEvaluationDepths.Contains(depth);
+
+	public SimulationCompatibilityIdentity CreateCompatibilityIdentity(
+		SimulationScenario scenario)
 	{
-		ArgumentNullException.ThrowIfNull(identity);
-		ArgumentNullException.ThrowIfNull(roleDescriptors);
-		Identity = identity;
-		var snapshot = roleDescriptors.ToArray();
-		_beneficiaryFactions = snapshot.ToDictionary(
-			descriptor => descriptor.Role,
-			descriptor => descriptor.BeneficiaryFaction);
-		_agentFactions = snapshot.ToDictionary(
-			descriptor => descriptor.Role,
-			descriptor => descriptor.AgentFactions);
-		SupportedRoles = Array.AsReadOnly(snapshot.Select(descriptor => descriptor.Role).ToArray());
-		_sharedVictoryCapabilities = (sharedVictoryCapabilities ?? [])
-			.Distinct()
-			.OrderBy(result => string.Join(',', result.Factions))
-			.ToArray();
-		SharedVictoryCapabilities = Array.AsReadOnly(_sharedVictoryCapabilities);
-		HeadlessResponsePolicy = headlessResponsePolicy ?? CreateBaselinePolicy();
-		SupportsActorSetupCards = supportsActorSetupCards;
-		_supportedRuleStates = (supportedRuleStates ?? [SimulationRuleState.Default])
-			.Distinct()
-			.ToArray();
-		SupportedRuleStates = Array.AsReadOnly(_supportedRuleStates);
+		ArgumentNullException.ThrowIfNull(scenario);
+		return new SimulationCompatibilityIdentity(scenario.ToCanonical(), Identity);
 	}
 
-	public bool SupportsRole(MainRoleType role) => _beneficiaryFactions.ContainsKey(role);
+	public bool SupportsRole(MainRoleType role) =>
+		_beneficiaryFactions.ContainsKey(role);
 
-	internal bool TryGetBeneficiaryFaction(MainRoleType role, out Faction faction) =>
+	public bool TryGetBeneficiaryFaction(
+		MainRoleType role,
+		out Faction faction) =>
 		_beneficiaryFactions.TryGetValue(role, out faction);
 
-	internal bool IsFactionAgent(MainRoleType role, Faction faction)
+	public bool IsFactionAgent(MainRoleType role, Faction faction)
 	{
 		if (!Enum.IsDefined(faction))
 		{
@@ -70,7 +123,8 @@ public class SimulatorProfile
 		return factions.Contains(faction);
 	}
 
-	internal GameResult[] CreatePossibleGameResults(IEnumerable<Faction> possibleFactions)
+	internal GameResult[] CreatePossibleGameResults(
+		IEnumerable<Faction> possibleFactions)
 	{
 		ArgumentNullException.ThrowIfNull(possibleFactions);
 		var factions = possibleFactions.ToArray();
@@ -109,144 +163,10 @@ public class SimulatorProfile
 	internal static HeadlessResponsePolicy CreateBaselinePolicy() => new(
 		BaselineRandomDecisionStrategy.Identity,
 		BaselineRandomDecisionStrategy.Policy.AdmittedSemantics);
-}
-
-internal sealed class SimulatorProfileRoleDescriptor
-{
-	internal MainRoleType Role { get; }
-
-	internal Faction BeneficiaryFaction { get; }
-
-	internal IReadOnlySet<Faction> AgentFactions { get; }
-
-	internal SimulatorProfileRoleDescriptor(
-		MainRoleType role,
-		Faction beneficiaryFaction,
-		params Faction[] agentFactions)
-	{
-		if (!Enum.IsDefined(role))
-		{
-			throw new ArgumentOutOfRangeException(nameof(role));
-		}
-		if (!Enum.IsDefined(beneficiaryFaction))
-		{
-			throw new ArgumentOutOfRangeException(nameof(beneficiaryFaction));
-		}
-		ArgumentNullException.ThrowIfNull(agentFactions);
-		if (agentFactions.Any(faction => !Enum.IsDefined(faction)))
-		{
-			throw new ArgumentOutOfRangeException(nameof(agentFactions));
-		}
-
-		Role = role;
-		BeneficiaryFaction = beneficiaryFaction;
-		AgentFactions = agentFactions.ToHashSet();
-	}
-}
-
-public sealed class SimulatorCapability : SimulatorProfile
-{
-	private readonly LobbyEvaluationDepth[] _supportedEvaluationDepths;
-
-	private static readonly SimulatorProfileRoleDescriptor[] SafetyScreeningRoleDescriptors =
-	[
-		new(MainRoleType.SimpleWerewolf, Faction.Werewolf, Faction.Werewolf),
-		new(MainRoleType.BigBadWolf, Faction.Werewolf, Faction.Werewolf),
-		new(MainRoleType.Seer, Faction.Villager),
-		new(MainRoleType.WildChild, Faction.Villager),
-		new(MainRoleType.SimpleVillager, Faction.Villager),
-		new(MainRoleType.VillagerVillager, Faction.Villager),
-		new(MainRoleType.TwoSisters, Faction.Villager),
-		new(MainRoleType.ThreeBrothers, Faction.Villager),
-		new(MainRoleType.Witch, Faction.Villager),
-			new(MainRoleType.Hunter, Faction.Villager),
-			new(MainRoleType.LittleGirl, Faction.Villager),
-			new(MainRoleType.Defender, Faction.Villager),
-			new(MainRoleType.Elder, Faction.Villager),
-				new(MainRoleType.StutteringJudge, Faction.Villager),
-				new(MainRoleType.Scapegoat, Faction.Villager),
-				new(MainRoleType.VillageIdiot, Faction.Villager),
-				new(MainRoleType.WolfHound, Faction.Villager),
-			new(
-				MainRoleType.AccursedWolfFather,
-				Faction.Werewolf,
-				Faction.Werewolf),
-			new(
-				MainRoleType.WhiteWerewolf,
-				Faction.WhiteWerewolf,
-				Faction.Werewolf),
-			new(MainRoleType.Piper, Faction.Piper),
-			new(MainRoleType.BearTamer, Faction.Villager),
-			new(MainRoleType.Fox, Faction.Villager),
-			new(MainRoleType.KnightWithRustySword, Faction.Villager),
-			new(MainRoleType.Cupid, Faction.Villager),
-			new(MainRoleType.Thief, Faction.Villager),
-			new(MainRoleType.DevotedServant, Faction.Villager),
-			new(MainRoleType.Angel, Faction.Villager),
-			new(
-				MainRoleType.PrejudicedManipulator,
-				Faction.PrejudicedManipulator),
-			new(MainRoleType.Actor, Faction.Villager)
-	];
-
-	private static readonly SharedVictoryGameResult[] SafetyScreeningSharedVictoryCapabilities =
-	[
-		new([Faction.Angel, Faction.Villager]),
-		new([Faction.Angel, Faction.Werewolf]),
-		new([Faction.Angel, Faction.WhiteWerewolf]),
-		new([Faction.Angel, Faction.Piper]),
-		new([Faction.Angel, Faction.CrossFactionLovers]),
-		new([Faction.Angel, Faction.PrejudicedManipulator]),
-		new([Faction.Piper, Faction.PrejudicedManipulator]),
-		new(
-			[
-				Faction.Angel,
-				Faction.Piper,
-				Faction.PrejudicedManipulator
-			])
-	];
-
-	private static readonly SimulatorProfileRoleDescriptor[] FullProbabilityRoleDescriptors =
-	[
-		new(MainRoleType.SimpleWerewolf, Faction.Werewolf, Faction.Werewolf),
-		new(MainRoleType.Seer, Faction.Villager),
-		new(MainRoleType.WildChild, Faction.Villager),
-		new(MainRoleType.SimpleVillager, Faction.Villager)
-	];
-
-	public static SimulatorCapability SafetyScreening =>
-		SimulatorCapabilityRegistry.Production.SafetyScreening;
-
-	public static SimulatorCapability FullProbability =>
-		SimulatorCapabilityRegistry.Production.FullProbability;
-
-	public IReadOnlyList<LobbyEvaluationDepth> SupportedEvaluationDepths { get; }
-
-	public bool SupportsEvaluationDepth(LobbyEvaluationDepth depth) =>
-		_supportedEvaluationDepths.Contains(depth);
-
-	public SimulationCompatibilityIdentity CreateCompatibilityIdentity(
-		SimulationScenario scenario)
-	{
-		ArgumentNullException.ThrowIfNull(scenario);
-		return new SimulationCompatibilityIdentity(scenario.ToCanonical(), Identity);
-	}
-
-	public new bool TryGetBeneficiaryFaction(
-		MainRoleType role,
-		out Faction faction) =>
-		base.TryGetBeneficiaryFaction(role, out faction);
-
-	public new bool IsFactionAgent(MainRoleType role, Faction faction) =>
-		base.IsFactionAgent(role, faction);
-
-	internal new GameResult[] CreatePossibleGameResults(
-		IEnumerable<Faction> possibleFactions) =>
-		base.CreatePossibleGameResults(possibleFactions);
 
 	internal static SimulatorCapability CreateSafetyScreening() => new(
 			new SimulatorProfileIdentity("safety-screening", "30"),
-		SafetyScreeningRoleDescriptors,
+		SafetyScreeningRoleFacts,
 		sharedVictoryCapabilities: SafetyScreeningSharedVictoryCapabilities,
 		headlessResponsePolicy: new HeadlessResponsePolicy(
 			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
@@ -314,7 +234,7 @@ public sealed class SimulatorCapability : SimulatorProfile
 
 	internal static SimulatorCapability CreateFullProbability() => new(
 			new SimulatorProfileIdentity("full-probability", "4"),
-		FullProbabilityRoleDescriptors,
+		FullProbabilityRoleFacts,
 		headlessResponsePolicy: new HeadlessResponsePolicy(
 			BaselineRandomDecisionStrategy.Identity,
 			[
@@ -348,20 +268,58 @@ public sealed class SimulatorCapability : SimulatorProfile
 
 	internal SimulatorCapability(
 		SimulatorProfileIdentity identity,
-		IEnumerable<SimulatorProfileRoleDescriptor> roleDescriptors,
+		IEnumerable<(
+			MainRoleType Role,
+			Faction BeneficiaryFaction,
+			Faction[] AgentFactions)> roleFacts,
 		IEnumerable<SharedVictoryGameResult>? sharedVictoryCapabilities = null,
 		HeadlessResponsePolicy? headlessResponsePolicy = null,
 		bool supportsActorSetupCards = false,
 		IEnumerable<SimulationRuleState>? supportedRuleStates = null,
 		IEnumerable<LobbyEvaluationDepth>? supportedEvaluationDepths = null)
-		: base(
-			identity,
-			roleDescriptors,
-			sharedVictoryCapabilities,
-			headlessResponsePolicy,
-			supportsActorSetupCards,
-			supportedRuleStates)
 	{
+		ArgumentNullException.ThrowIfNull(identity);
+		ArgumentNullException.ThrowIfNull(roleFacts);
+		Identity = identity;
+		var snapshot = roleFacts.ToArray();
+		if (snapshot.Any(fact => !Enum.IsDefined(fact.Role)))
+		{
+			throw new ArgumentOutOfRangeException(nameof(roleFacts));
+		}
+		if (snapshot.Any(fact => !Enum.IsDefined(fact.BeneficiaryFaction)))
+		{
+			throw new ArgumentOutOfRangeException(nameof(roleFacts));
+		}
+		if (snapshot.Any(fact => fact.AgentFactions is null
+			|| fact.AgentFactions.Any(faction => !Enum.IsDefined(faction))))
+		{
+			throw new ArgumentOutOfRangeException(nameof(roleFacts));
+		}
+		if (snapshot.GroupBy(fact => fact.Role).Any(group => group.Count() > 1))
+		{
+			throw new ArgumentException(
+				"Each Role can have only one Simulator Capability declaration.",
+				nameof(roleFacts));
+		}
+
+		_beneficiaryFactions = snapshot.ToDictionary(
+			fact => fact.Role,
+			fact => fact.BeneficiaryFaction);
+		_agentFactions = snapshot.ToDictionary(
+			fact => fact.Role,
+			fact => (IReadOnlySet<Faction>)fact.AgentFactions.ToHashSet());
+		SupportedRoles = Array.AsReadOnly(snapshot.Select(fact => fact.Role).ToArray());
+		_sharedVictoryCapabilities = (sharedVictoryCapabilities ?? [])
+			.Distinct()
+			.OrderBy(result => string.Join(',', result.Factions))
+			.ToArray();
+		SharedVictoryCapabilities = Array.AsReadOnly(_sharedVictoryCapabilities);
+		HeadlessResponsePolicy = headlessResponsePolicy ?? CreateBaselinePolicy();
+		SupportsActorSetupCards = supportsActorSetupCards;
+		_supportedRuleStates = (supportedRuleStates ?? [SimulationRuleState.Default])
+			.Distinct()
+			.ToArray();
+		SupportedRuleStates = Array.AsReadOnly(_supportedRuleStates);
 		_supportedEvaluationDepths = (supportedEvaluationDepths ??
 			[ LobbyEvaluationDepth.DegenerateScreeningOnly ])
 			.Distinct()

@@ -27,9 +27,7 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 		var capability = new SimulatorCapability(
 			SimulatorCapability.FullProbability.Identity,
 			[
-				new SimulatorProfileRoleDescriptor(
-					MainRoleType.SimpleVillager,
-					Faction.Villager)
+				(MainRoleType.SimpleVillager, Faction.Villager, [])
 			],
 			supportedEvaluationDepths:
 			[
@@ -930,10 +928,10 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 	private static SimulatorCapability FullProbabilityWithoutStartGame() => new(
 		SimulatorCapability.FullProbability.Identity,
 		[
-			new(MainRoleType.SimpleWerewolf, Faction.Werewolf),
-			new(MainRoleType.Seer, Faction.Villager),
-			new(MainRoleType.WildChild, Faction.Villager),
-			new(MainRoleType.SimpleVillager, Faction.Villager)
+			(MainRoleType.SimpleWerewolf, Faction.Werewolf, []),
+			(MainRoleType.Seer, Faction.Villager, []),
+			(MainRoleType.WildChild, Faction.Villager, []),
+			(MainRoleType.SimpleVillager, Faction.Villager, [])
 		],
 		headlessResponsePolicy: new HeadlessResponsePolicy(
 			BaselineRandomDecisionStrategy.Identity,
@@ -967,9 +965,9 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 	private static SimulatorCapability SafetyScreeningWithoutStutteringJudgeSignalObservation() => new(
 		SimulatorCapability.SafetyScreening.Identity,
 		[
-			new(MainRoleType.SimpleWerewolf, Faction.Werewolf),
-			new(MainRoleType.StutteringJudge, Faction.Villager),
-			new(MainRoleType.SimpleVillager, Faction.Villager)
+			(MainRoleType.SimpleWerewolf, Faction.Werewolf, []),
+			(MainRoleType.StutteringJudge, Faction.Villager, []),
+			(MainRoleType.SimpleVillager, Faction.Villager, [])
 		],
 		headlessResponsePolicy: new HeadlessResponsePolicy(
 			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
@@ -982,9 +980,9 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 	private static SimulatorCapability SafetyScreeningWithoutScapegoatHolderObservation() => new(
 		SimulatorCapability.SafetyScreening.Identity,
 		[
-			new(MainRoleType.SimpleWerewolf, Faction.Werewolf),
-			new(MainRoleType.Scapegoat, Faction.Villager),
-			new(MainRoleType.SimpleVillager, Faction.Villager)
+			(MainRoleType.SimpleWerewolf, Faction.Werewolf, []),
+			(MainRoleType.Scapegoat, Faction.Villager, []),
+			(MainRoleType.SimpleVillager, Faction.Villager, [])
 		],
 		headlessResponsePolicy: new HeadlessResponsePolicy(
 			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
@@ -997,9 +995,9 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 	private static SimulatorCapability SafetyScreeningWithoutDevotedServantVoteWindow() => new(
 		SimulatorCapability.SafetyScreening.Identity,
 		[
-			new(MainRoleType.SimpleWerewolf, Faction.Werewolf, Faction.Werewolf),
-			new(MainRoleType.DevotedServant, Faction.Villager),
-			new(MainRoleType.SimpleVillager, Faction.Villager)
+			(MainRoleType.SimpleWerewolf, Faction.Werewolf, [Faction.Werewolf]),
+			(MainRoleType.DevotedServant, Faction.Villager, []),
+			(MainRoleType.SimpleVillager, Faction.Villager, [])
 		],
 		headlessResponsePolicy: new HeadlessResponsePolicy(
 			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,

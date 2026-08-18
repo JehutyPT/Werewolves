@@ -144,7 +144,8 @@ public class TerminalLobbyCacheAdapterTests
 						VictoryCheckWindow.Dawn,
 						1_000,
 						1_000)
-				]);
+				],
+				SimulatorCapability.SafetyScreening);
 			var bytes = TerminalLobbyCache.Write(
 				TerminalLobbyCache.CreateDocument([record]));
 			var writer = new FileTerminalLobbyCacheStore(directory);
@@ -153,13 +154,19 @@ public class TerminalLobbyCacheAdapterTests
 
 			var reopened = new FileTerminalLobbyCacheStore(directory);
 			var persisted = await reopened.ReadAsync();
-			var read = TerminalLobbyCache.ReadDocument(persisted!.Value.Span);
+			var read = TerminalLobbyCache.ReadDocument(
+				persisted!.Value.Span,
+				SimulatorCapabilityRegistry.Production);
 
 			SimulatorCapability.SafetyScreening.Identity.ToString()
 				.Should().Be("safety-screening@30");
 			persisted.Value.ToArray().Should().Equal(bytes);
 			read.IsUsable.Should().BeTrue();
-			TerminalLobbyCache.TryGet(read.Document!, identity, out var restored)
+			TerminalLobbyCache.TryGet(
+				read.Document!,
+				scenario,
+				SimulatorCapability.SafetyScreening,
+				out var restored)
 				.Should().BeTrue();
 			restored.Should().BeOfType<DegenerateTerminalCacheRecord>();
 		}
