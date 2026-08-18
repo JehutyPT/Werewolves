@@ -16,7 +16,7 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 	}
 
 	[Fact]
-	public void Evaluate_FullProbabilityDepthWithSafetyCapabilityRejectsBeforeExecution()
+	public void Evaluate_DepthNotDeclaredByCapabilityRejectsBeforeExecution()
 	{
 		var calls = 0;
 		var evaluator = new TerminalLobbyEvaluator((_, _, _, _, _) =>
@@ -24,10 +24,21 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 			calls++;
 			throw new InvalidOperationException();
 		});
+		var capability = new SimulatorCapability(
+			SimulatorCapability.FullProbability.Identity,
+			[
+				new SimulatorProfileRoleDescriptor(
+					MainRoleType.SimpleVillager,
+					Faction.Villager)
+			],
+			supportedEvaluationDepths:
+			[
+				LobbyEvaluationDepth.DegenerateScreeningOnly
+			]);
 
 		var act = () => evaluator.Evaluate(
 			SupportedScenario(),
-			SimulatorCapability.SafetyScreening,
+			capability,
 			LobbyEvaluationDepth.FullProbability);
 
 		act.Should().Throw<ArgumentException>().WithParameterName("depth");
@@ -946,7 +957,12 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 				ModeratorInstructionSemantic.AnnounceDayElimination
 			]),
 		supportsActorSetupCards: false,
-		supportedRuleStates: [SimulationRuleState.Default]);
+		supportedRuleStates: [SimulationRuleState.Default],
+		supportedEvaluationDepths:
+		[
+			LobbyEvaluationDepth.DegenerateScreeningOnly,
+			LobbyEvaluationDepth.FullProbability
+		]);
 
 	private static SimulatorCapability SafetyScreeningWithoutStutteringJudgeSignalObservation() => new(
 		SimulatorCapability.SafetyScreening.Identity,

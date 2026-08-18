@@ -25,8 +25,24 @@ public sealed record AlreadyDecidedTerminalCacheRecord : TerminalLobbyCacheRecor
 		SimulationCompatibilityIdentity identity,
 		GameResult gameResult,
 		AlreadyDecidedReason reason)
+		: this(
+			identity,
+			gameResult,
+			reason,
+			TerminalLobbyCache.ResolveProducerProfile(
+				identity,
+				probabilityRecord: false))
+	{
+	}
+
+	internal AlreadyDecidedTerminalCacheRecord(
+		SimulationCompatibilityIdentity identity,
+		GameResult gameResult,
+		AlreadyDecidedReason reason,
+		SimulatorCapability capability)
 		: base(identity)
 	{
+		ArgumentNullException.ThrowIfNull(capability);
 		GameResult = TerminalLobbyCache.ValidateGameResult(gameResult);
 		if (!Enum.IsDefined(reason)
 			|| reason == AlreadyDecidedReason.NoLobbyExitVictoryPredicateSatisfied)
@@ -35,7 +51,7 @@ public sealed record AlreadyDecidedTerminalCacheRecord : TerminalLobbyCacheRecor
 		}
 
 		Reason = reason;
-		TerminalLobbyCache.ValidateAlreadyDecided(this);
+		TerminalLobbyCache.ValidateAlreadyDecided(this, capability);
 	}
 }
 
@@ -120,9 +136,11 @@ public abstract record AggregateTerminalCacheRecord : TerminalLobbyCacheRecord
 		int policyCount,
 		IEnumerable<TerminalCacheGameResultFrequency> frequencies,
 		IEnumerable<TerminalCacheTurnWindowFrequency> cells,
-		bool turnOneOnly)
+		bool turnOneOnly,
+		SimulatorCapability capability)
 		: base(identity)
 	{
+		ArgumentNullException.ThrowIfNull(capability);
 		ArgumentNullException.ThrowIfNull(frequencies);
 		ArgumentNullException.ThrowIfNull(cells);
 		var rows = frequencies
@@ -137,6 +155,7 @@ public abstract record AggregateTerminalCacheRecord : TerminalLobbyCacheRecord
 			.ToArray();
 		TerminalLobbyCache.ValidateAggregate(
 			identity,
+			capability,
 			policyCount,
 			rows,
 			timing,
@@ -163,7 +182,25 @@ public sealed record DegenerateTerminalCacheRecord : AggregateTerminalCacheRecor
 				TerminalLobbyEvaluator.ScreeningAttemptCount,
 				frequencies,
 				cells,
-				turnOneOnly: true)
+				turnOneOnly: true,
+				capability: TerminalLobbyCache.ResolveProducerProfile(
+					identity,
+					probabilityRecord: false))
+	{
+	}
+
+	internal DegenerateTerminalCacheRecord(
+		SimulationCompatibilityIdentity identity,
+		IEnumerable<TerminalCacheGameResultFrequency> frequencies,
+		IEnumerable<TerminalCacheTurnWindowFrequency> cells,
+		SimulatorCapability capability)
+			: base(
+				identity,
+				TerminalLobbyEvaluator.ScreeningAttemptCount,
+				frequencies,
+				cells,
+				turnOneOnly: true,
+				capability: capability)
 	{
 	}
 }
@@ -179,7 +216,25 @@ public sealed record ProbabilityTerminalCacheRecord : AggregateTerminalCacheReco
 			TerminalLobbyEvaluator.ProbabilityAttemptCount,
 			frequencies,
 			cells,
-			turnOneOnly: false)
+			turnOneOnly: false,
+			capability: TerminalLobbyCache.ResolveProducerProfile(
+				identity,
+				probabilityRecord: true))
+	{
+	}
+
+	internal ProbabilityTerminalCacheRecord(
+		SimulationCompatibilityIdentity identity,
+		IEnumerable<TerminalCacheGameResultFrequency> frequencies,
+		IEnumerable<TerminalCacheTurnWindowFrequency> cells,
+		SimulatorCapability capability)
+		: base(
+			identity,
+			TerminalLobbyEvaluator.ProbabilityAttemptCount,
+			frequencies,
+			cells,
+			turnOneOnly: false,
+			capability: capability)
 	{
 	}
 }

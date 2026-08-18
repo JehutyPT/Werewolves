@@ -110,6 +110,24 @@ public class SimulatorProfileTests
 	}
 
 	[Fact]
+	public void ProductionRegistry_ResolvesOnlyExactCurrentCapabilityIdentities()
+	{
+		var registry = SimulatorCapabilityRegistry.Production;
+
+		registry.TryGet(
+			SimulatorCapability.SafetyScreening.Identity,
+			out var safety).Should().BeTrue();
+		safety.Should().BeSameAs(SimulatorCapability.SafetyScreening);
+		registry.TryGet(
+			SimulatorCapability.FullProbability.Identity,
+			out var probability).Should().BeTrue();
+		probability.Should().BeSameAs(SimulatorCapability.FullProbability);
+		registry.TryGet(
+			new SimulatorProfileIdentity("safety-screening", "29"),
+			out _).Should().BeFalse();
+	}
+
+	[Fact]
 	public void ProductionCapabilities_ExposeIndependentFrozenDeclarations()
 	{
 		ModeratorInstructionSemantic[] expectedProbabilitySemantics =

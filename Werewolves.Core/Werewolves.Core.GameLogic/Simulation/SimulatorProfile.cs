@@ -377,6 +377,9 @@ public sealed class SimulatorCapability : SimulatorProfile
 
 public sealed class SimulatorCapabilityRegistry
 {
+	private readonly IReadOnlyDictionary<SimulatorProfileIdentity, SimulatorCapability>
+		_capabilitiesByIdentity;
+
 	public static SimulatorCapabilityRegistry Production { get; } = new(
 		SimulatorCapability.CreateSafetyScreening(),
 		SimulatorCapability.CreateFullProbability());
@@ -397,8 +400,27 @@ public sealed class SimulatorCapabilityRegistry
 				"The Full-Probability Role Set must be a subset of the Safety-Screening Role Set.",
 				nameof(fullProbability));
 		}
+		if (safetyScreening.Identity.Equals(fullProbability.Identity))
+		{
+			throw new ArgumentException(
+				"Simulator Capabilities must have distinct identities.",
+				nameof(fullProbability));
+		}
 
 		SafetyScreening = safetyScreening;
 		FullProbability = fullProbability;
+		_capabilitiesByIdentity = new Dictionary<SimulatorProfileIdentity, SimulatorCapability>
+		{
+			[safetyScreening.Identity] = safetyScreening,
+			[fullProbability.Identity] = fullProbability
+		};
+	}
+
+	public bool TryGet(
+		SimulatorProfileIdentity identity,
+		out SimulatorCapability capability)
+	{
+		ArgumentNullException.ThrowIfNull(identity);
+		return _capabilitiesByIdentity.TryGetValue(identity, out capability!);
 	}
 }

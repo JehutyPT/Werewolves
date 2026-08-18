@@ -160,9 +160,7 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 				}
 				else
 				{
-					var identity = new SimulationCompatibilityIdentity(
-						scenario.ToCanonical(),
-						_capability.Identity);
+					var identity = _capability.CreateCompatibilityIdentity(scenario);
 					if (_currentRequest is { } currentRequest &&
 						currentRequest.Identity.Equals(identity))
 					{
@@ -244,7 +242,11 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 			}
 			var localDocument = ReadUsableDocument(localBytes);
 			if (localDocument is not null
-				&& TerminalLobbyCache.TryGet(localDocument, request.Identity, out var localRecord))
+				&& TerminalLobbyCache.TryGet(
+					localDocument,
+					request.Scenario,
+					_capability,
+					out var localRecord))
 			{
 				PublishIfCurrent(request, ProjectTerminalRecord(localRecord, request.Identity));
 				return;
@@ -281,7 +283,10 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 			TerminalLobbyCacheRecord record;
 			try
 			{
-				record = TerminalLobbyCache.Capture(request.Identity, terminal);
+				record = TerminalLobbyCache.Capture(
+					request.Scenario,
+					_capability,
+					terminal);
 			}
 			catch (ArgumentException)
 			{
@@ -378,7 +383,9 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 			return null;
 		}
 
-		var read = TerminalLobbyCache.ReadDocument(value.Span);
+		var read = TerminalLobbyCache.ReadDocument(
+			value.Span,
+			SimulatorCapabilityRegistry.Production);
 		return read.IsUsable ? read.Document : null;
 	}
 

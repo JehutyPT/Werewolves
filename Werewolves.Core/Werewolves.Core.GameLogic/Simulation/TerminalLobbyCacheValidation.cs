@@ -43,11 +43,14 @@ public static partial class TerminalLobbyCache
 	}
 
 	internal static void ValidateAlreadyDecided(
-		AlreadyDecidedTerminalCacheRecord record)
+		AlreadyDecidedTerminalCacheRecord record,
+		SimulatorCapability capability)
 	{
+		ArgumentNullException.ThrowIfNull(capability);
 		var classification = ClassifyProducer(
 			record.CompatibilityIdentity,
-			probabilityRecord: false);
+			capability,
+			LobbyEvaluationDepth.DegenerateScreeningOnly);
 		var expected = classification.AlreadyDecided;
 		if (expected is not { IsAlreadyDecided: true, GameResult: not null }
 			|| !expected.GameResult.Equals(record.GameResult)
@@ -60,11 +63,13 @@ public static partial class TerminalLobbyCache
 
 	internal static void ValidateAggregate(
 		SimulationCompatibilityIdentity identity,
+		SimulatorCapability capability,
 		int policy,
 		TerminalCacheGameResultFrequency[] rows,
 		TerminalCacheTurnWindowFrequency[] cells,
 		bool turnOneOnly)
 	{
+		ArgumentNullException.ThrowIfNull(capability);
 		if (rows.Length == 0
 			|| rows.Any(row => row.Denominator != policy)
 			|| cells.Any(cell => cell.Denominator != policy)
@@ -74,9 +79,10 @@ public static partial class TerminalLobbyCache
 			throw new ArgumentException("Invalid complete Game Result distribution.");
 		}
 
-		var probabilityRecord = !turnOneOnly;
-		var profile = ResolveProducerProfile(identity.Profile, probabilityRecord);
-		var classification = ClassifyProducer(identity, probabilityRecord);
+		var depth = turnOneOnly
+			? LobbyEvaluationDepth.DegenerateScreeningOnly
+			: LobbyEvaluationDepth.FullProbability;
+		var classification = ClassifyProducer(identity, capability, depth);
 		if (classification.AlreadyDecided is not { IsAlreadyDecided: false }
 			|| classification.Cacheability?.CompatibilityIdentity != identity)
 		{
@@ -86,7 +92,7 @@ public static partial class TerminalLobbyCache
 
 		if (!PossibleGameResultInventory.TryCreate(
 			classification.Scenario,
-			profile,
+			capability,
 			out var derivedInventory))
 		{
 			throw new ArgumentException(
@@ -143,24 +149,31 @@ public static partial class TerminalLobbyCache
 	{
 		ArgumentNullException.ThrowIfNull(identity);
 		var producer = ResolveProducerProfile(identity.Profile, probabilityRecord);
+		return ClassifyProducer(
+			identity,
+			producer,
+			probabilityRecord
+				? LobbyEvaluationDepth.FullProbability
+				: LobbyEvaluationDepth.DegenerateScreeningOnly);
+	}
+
+	private static SimulationScenarioClassification ClassifyProducer(
+		SimulationCompatibilityIdentity identity,
+		SimulatorCapability capability,
+		LobbyEvaluationDepth depth)
+	{
+		ArgumentNullException.ThrowIfNull(identity);
+		ArgumentNullException.ThrowIfNull(capability);
+		if (!capability.SupportsEvaluationDepth(depth))
+		{
+			throw new ArgumentException(
+				"The cache record kind is not supported by its Simulator Capability.",
+				nameof(identity));
+		}
 
 		var canonical = identity.Scenario;
 		ValidateMaterializationBounds(canonical);
-		var dealPool = canonical.RoleComposition.Entries.SelectMany(entry =>
-			Enumerable.Repeat(entry.Role, entry.Count)).ToArray();
-		var fullComposition = dealPool
-			.Concat(canonical.Offer1Role is { } offer1 ? [offer1] : [])
-			.Concat(canonical.Offer2Role is { } offer2 ? [offer2] : [])
-			.ToArray();
-		var scenario = new SimulationScenario(
-			canonical.PlayerCount,
-			fullComposition,
-			dealPool,
-			canonical.Offer1Role,
-			canonical.Offer2Role,
-			new ActorSetupCards(canonical.ActorSetupCards),
-			canonical.RuleState,
-			canonical.PublicGroupPartition);
+		var scenario = SimulationScenario.FromCanonical(canonical);
 		if (!scenario.ToCanonical().Equals(canonical))
 		{
 			throw new ArgumentException(
@@ -168,13 +181,10 @@ public static partial class TerminalLobbyCache
 				nameof(identity));
 		}
 
-		var classification = SimulationScenarioClassifier.Classify(scenario, producer);
+		var classification = SimulationScenarioClassifier.Classify(scenario, capability);
 		if (classification.SimulatorSupport is not
-			{
-				IsSupported: true,
-				Profile: var profile
-			}
-			|| !profile.Identity.Equals(identity.Profile))
+			{ IsSupported: true }
+			|| !capability.CreateCompatibilityIdentity(scenario).Equals(identity))
 		{
 			throw new ArgumentException(
 				"The canonical Simulation Scenario is not supported by its cache producer.",
@@ -184,31 +194,32 @@ public static partial class TerminalLobbyCache
 		return classification;
 	}
 
-	private static SimulatorProfile ResolveProducerProfile(
+	internal static SimulatorCapability ResolveProducerProfile(
+		SimulationCompatibilityIdentity identity,
+		bool probabilityRecord)
+	{
+		ArgumentNullException.ThrowIfNull(identity);
+		return ResolveProducerProfile(identity.Profile, probabilityRecord);
+	}
+
+	private static SimulatorCapability ResolveProducerProfile(
 		SimulatorProfileIdentity identity,
 		bool probabilityRecord)
 	{
 		ArgumentNullException.ThrowIfNull(identity);
-		SimulatorProfile producer;
-		if (identity.Equals(SimulatorCapability.SafetyScreening.Identity))
-		{
-			if (probabilityRecord)
-			{
-				throw new ArgumentException(
-					"Safety screening cannot produce probability cache records.",
-					nameof(identity));
-			}
-
-			producer = SimulatorCapability.SafetyScreening;
-		}
-		else if (identity.Equals(SimulatorCapability.FullProbability.Identity))
-		{
-			producer = SimulatorCapability.FullProbability;
-		}
-		else
+		if (!SimulatorCapabilityRegistry.Production.TryGet(identity, out var producer))
 		{
 			throw new ArgumentException(
 				"The cache identity does not name a known producer.",
+				nameof(identity));
+		}
+		var depth = probabilityRecord
+			? LobbyEvaluationDepth.FullProbability
+			: LobbyEvaluationDepth.DegenerateScreeningOnly;
+		if (!producer.SupportsEvaluationDepth(depth))
+		{
+			throw new ArgumentException(
+				"The cache record kind is not supported by its Simulator Capability.",
 				nameof(identity));
 		}
 
