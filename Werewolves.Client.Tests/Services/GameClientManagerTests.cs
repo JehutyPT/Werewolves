@@ -1693,40 +1693,6 @@ public class GameClientManagerTests
 	}
 
 	[Fact]
-	public void DisplayFlow_ForInstructionWithPublicAndPrivateText_ShowsAnnouncementBeforeInput()
-	{
-		var manager = new GameClientManager();
-		var startInstruction = StartSimpleGame(manager);
-		manager.ProcessInput(startInstruction.CreateResponse());
-		var instruction = manager.CurrentInstruction!;
-
-		instruction.PublicAnnouncement.Should().NotBeNullOrWhiteSpace();
-		instruction.PrivateInstruction.Should().NotBeNullOrWhiteSpace();
-
-		var flow = new InstructionDisplayFlow(instruction);
-
-		flow.CurrentText.Should().Be(instruction.PublicAnnouncement);
-		flow.IsShowingInput.Should().BeFalse();
-
-		flow.Advance();
-
-		flow.CurrentText.Should().Be(instruction.PrivateInstruction);
-		flow.IsShowingInput.Should().BeTrue();
-	}
-
-	[Fact]
-	public void DisplayFlow_ForSinglePartInstruction_ShowsTextAndInputImmediately()
-	{
-		var manager = new GameClientManager();
-		var instruction = StartSimpleGame(manager);
-
-		var flow = new InstructionDisplayFlow(instruction);
-
-		flow.CurrentText.Should().Be(instruction.PublicAnnouncement);
-		flow.IsShowingInput.Should().BeTrue();
-	}
-
-	[Fact]
 	public void ProcessInput_AcrossNightBoundary_UsesResourceBackedConfirmationText()
 	{
 		var manager = new GameClientManager();

@@ -14,6 +14,7 @@ using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
+using Werewolves.Core.StateModels.Models.Simulation;
 using Werewolves.Core.StateModels.Resources;
 using Xunit;
 using Html = Werewolves.Client.Tests.Helpers.ClientTestReferences.Html;
@@ -28,6 +29,73 @@ public class InstructionRendererBunitTests
 	private static string DashboardActionZoneSelector => $".{ClientTestReferences.Css.Classes.DashboardActionZone}";
 	private static string HoldButtonSelector => Html.Selectors.ButtonWithClass(ClientTestReferences.Css.Classes.HoldButton);
 	private static string PlayerOptionSelector => Html.Selectors.ElementWithRole(Html.Elements.ListItem, Html.Roles.Option);
+
+	[Fact]
+	public void CurrentInstructionFamilies_RenderTheirEstablishedSingleResponseSurface()
+	{
+		var selectablePlayerId = Guid.NewGuid();
+		var roster = new[]
+		{
+			CreateRosterEntry(selectablePlayerId, 1, PlayerNames.Ana)
+		};
+		var cases = new[]
+		{
+			new InstructionFamilyCase(
+				CreateConfirmationInstruction(publicAnnouncement: GameStrings.NightStartsPrompt),
+				ClientStrings.Dashboard_ContinueButton,
+				IsResponseEnabled: true),
+			new InstructionFamilyCase(
+				CreateSelectPlayersInstruction(selectablePlayerId),
+				ClientStrings.SelectPlayers_SubmitButton,
+				IsResponseEnabled: false),
+			new InstructionFamilyCase(
+				CreateSelectOptionsInstruction(
+					NumberRangeConstraint.Single,
+					GameStrings.ConfirmNightStarted),
+				ClientStrings.Dashboard_ContinueButton,
+				IsResponseEnabled: false),
+			new InstructionFamilyCase(
+				CreateAssignRolesInstruction(
+					[selectablePlayerId],
+					[MainRoleType.SimpleVillager]),
+				ClientStrings.Dashboard_ContinueButton,
+				IsResponseEnabled: false),
+			new InstructionFamilyCase(
+				CreateDevotedServantVoteWindowInstruction(selectablePlayerId),
+				ClientStrings.Dashboard_ContinueButton,
+				IsResponseEnabled: true),
+			new InstructionFamilyCase(
+				new FinishedGameConfirmationInstruction(
+					new SingleFactionGameResult(Faction.Villager),
+					VictoryCheckWindow.Dawn),
+				ExpectedActionLabel: null,
+				IsResponseEnabled: false)
+		};
+
+		foreach (var testCase in cases)
+		{
+			using var context = new ModeratorComponentTestContext();
+			var cut = context.RenderModeratorComponent<InstructionRenderer>(parameters => parameters
+				.Add(component => component.Instruction, testCase.Instruction)
+				.Add(component => component.Roster, roster));
+
+			cut.FindAll(DashboardActionZoneSelector).Should().ContainSingle();
+			var responseControls = cut.FindAll(HoldButtonSelector);
+			if (testCase.ExpectedActionLabel is null)
+			{
+				responseControls.Should().BeEmpty();
+				cut.FindAll(Html.Selectors.Button).Should().ContainSingle(button =>
+					button.HasAttribute(Html.Attributes.Disabled) &&
+					button.TextContent.Trim() == ClientStrings.Dashboard_RespondButton);
+				continue;
+			}
+
+			responseControls.Should().ContainSingle();
+			responseControls.Single().TextContent.Should().Contain(testCase.ExpectedActionLabel);
+			responseControls.Single().HasAttribute(Html.Attributes.Disabled).Should()
+				.Be(!testCase.IsResponseEnabled);
+		}
+	}
 
 	[Theory]
 	[InlineData(MainRoleType.TwoSisters)]
@@ -119,6 +187,8 @@ public class InstructionRendererBunitTests
 	public void ConfirmationInstruction_WithPublicAndPrivateGuidance_CanToggleEachExpandedBlockIndependently()
 	{
 		using var context = new ModeratorComponentTestContext();
+		var haptic = new RecordingHapticFeedbackService();
+		context.Services.AddSingleton<IHapticFeedbackService>(haptic);
 		var instruction = CreateConfirmationInstruction(
 			publicAnnouncement: $"{GameStrings.NightStartsPrompt}\n{GameStrings.DebateStartsPrompt}",
 			privateInstruction: $"{GameStrings.ConfirmNightStarted}\n{GameStrings.RevealRolePromptSpecify}");
@@ -147,6 +217,7 @@ public class InstructionRendererBunitTests
 		privateToggle.GetAttribute(Html.Attributes.AriaExpanded).Should().Be(Html.AriaValues.False);
 		publicToggle.TextContent.Should().Contain(GameStrings.DebateStartsPrompt);
 		privateToggle.TextContent.Should().NotContain(GameStrings.RevealRolePromptSpecify);
+		haptic.ClickCount.Should().Be(3);
 	}
 
 	[Fact]
@@ -551,6 +622,8 @@ public class InstructionRendererBunitTests
 	public void SelectOptionsInstruction_WithPublicAndPrivateGuidance_KeepsPrivateGuidanceCollapsedInitially()
 	{
 		using var context = new ModeratorComponentTestContext();
+		var haptic = new RecordingHapticFeedbackService();
+		context.Services.AddSingleton<IHapticFeedbackService>(haptic);
 		var options = new[]
 		{
 			GameStrings.NightStartsPrompt,
@@ -579,6 +652,52 @@ public class InstructionRendererBunitTests
 		actionZones.Should().ContainSingle();
 		actionZones.Single().TextContent.Should().Contain(ClientStrings.Dashboard_ContinueButton);
 		actionZones.Single().QuerySelectorAll(HoldButtonSelector).Should().ContainSingle();
+
+		privateToggle.Click();
+		publicToggle = cut.FindButtonByAccessibleName(ClientStrings.Dashboard_AnnounceLabel);
+		privateToggle = cut.FindButtonByAccessibleName(ClientStrings.Dashboard_ModeratorLabel);
+
+		publicToggle.GetAttribute(Html.Attributes.AriaExpanded).Should().Be(Html.AriaValues.False);
+		privateToggle.GetAttribute(Html.Attributes.AriaExpanded).Should().Be(Html.AriaValues.True);
+		publicToggle.TextContent.Should().NotContain(GameStrings.DebateStartsPrompt);
+		privateToggle.TextContent.Should().Contain(GameStrings.RevealRolePromptSpecify);
+		cut.FindAll(DashboardActionZoneSelector).Should().ContainSingle();
+		cut.FindAll(HoldButtonSelector).Should().ContainSingle();
+		haptic.ClickCount.Should().Be(1);
+	}
+
+	[Fact]
+	public void ReplacingInputInstruction_ResetsGuidanceAndDraftSelection()
+	{
+		using var context = new ModeratorComponentTestContext();
+		var first = CreateSelectOptionsInstruction(
+			NumberRangeConstraint.Single,
+			[new ModeratorOption("first", GameStrings.ConfirmNightStarted)],
+			publicAnnouncement: $"{GameStrings.NightStartsPrompt}\n{GameStrings.DebateStartsPrompt}",
+			privateInstruction: $"{GameStrings.ConfirmNightStarted}\n{GameStrings.RevealRolePromptSpecify}");
+		var second = CreateSelectOptionsInstruction(
+			NumberRangeConstraint.Single,
+			[new ModeratorOption("second", GameStrings.DebateStartsPrompt)],
+			publicAnnouncement: $"{GameStrings.NightActionsCompletePrompt}\n{GameStrings.DebateStartsPrompt}",
+			privateInstruction: $"{GameStrings.ConfirmNightStarted}\n{GameStrings.RevealRolePromptSpecify}");
+
+		var cut = context.RenderModeratorComponent<InstructionRenderer>(parameters => parameters
+			.Add(component => component.Instruction, first));
+		cut.FindButtonByAccessibleName(ClientStrings.Dashboard_ModeratorLabel).Click();
+		cut.FindAll(Html.Selectors.Button)
+			.Single(button => button.TextContent.Trim() == first.Options.Single().Label)
+			.Click();
+
+		cut.Render(parameters => parameters
+			.Add(component => component.Instruction, second));
+
+		cut.FindButtonByAccessibleName(ClientStrings.Dashboard_AnnounceLabel)
+			.GetAttribute(Html.Attributes.AriaExpanded).Should().Be(Html.AriaValues.True);
+		cut.FindButtonByAccessibleName(ClientStrings.Dashboard_ModeratorLabel)
+			.GetAttribute(Html.Attributes.AriaExpanded).Should().Be(Html.AriaValues.False);
+		cut.FindAll(Html.Selectors.Button)
+			.Single(button => button.TextContent.Trim() == second.Options.Single().Label)
+			.GetAttribute(Html.Attributes.AriaPressed).Should().Be(Html.AriaValues.False);
 	}
 
 	[Fact]
@@ -798,6 +917,15 @@ public class InstructionRendererBunitTests
 				Guid.Empty
 			]);
 
+	private static DevotedServantVoteWindowInstruction CreateDevotedServantVoteWindowInstruction(
+		Guid selectablePlayerId) =>
+		(DevotedServantVoteWindowInstruction)DevotedServantVoteWindowConstructor.Invoke(
+			[
+				Guid.NewGuid(),
+				new HashSet<Guid> { selectablePlayerId },
+				GameStrings.DevotedServantVoteWindowAnnouncement
+			]);
+
 	private static DashboardRosterEntry CreateRosterEntry(Guid playerId, int seatNumber, string name) =>
 		new(
 			playerId,
@@ -908,6 +1036,27 @@ public class InstructionRendererBunitTests
 		typeof(SelectOptionsInstruction)
 			.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic)
 			.Single(ctor => ctor.GetParameters().Length == 6);
+
+	private static readonly ConstructorInfo DevotedServantVoteWindowConstructor =
+		typeof(DevotedServantVoteWindowInstruction)
+			.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic)
+			.Single(ctor => ctor.GetParameters().Length == 3);
+
+	private sealed record InstructionFamilyCase(
+		ModeratorInstruction Instruction,
+		string? ExpectedActionLabel,
+		bool IsResponseEnabled);
+
+	private sealed class RecordingHapticFeedbackService : IHapticFeedbackService
+	{
+		public int ClickCount { get; private set; }
+
+		public void Click() => ClickCount++;
+
+		public void LongPress()
+		{
+		}
+	}
 }
 
 internal static class InstructionRendererBunitTestExtensions
