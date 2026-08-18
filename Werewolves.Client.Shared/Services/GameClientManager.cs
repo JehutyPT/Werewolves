@@ -94,15 +94,23 @@ public sealed class GameClientManager
 	{
 		ArgumentNullException.ThrowIfNull(lobby);
 		ArgumentNullException.ThrowIfNull(replacement);
+		return TryAcceptLobbyChange(
+			lobby,
+			new LobbyChange.ReplaceRoleLockIn(
+				expectedCurrentVersion,
+				replacement));
+	}
+
+	private bool TryAcceptLobbyChange(
+		LobbySetupState lobby,
+		LobbyChange change)
+	{
 		if (HasActiveSession)
 		{
 			return false;
 		}
 
-		var decision = lobby.Decide(
-			new LobbyChange.ReplaceRoleLockIn(
-				expectedCurrentVersion,
-				replacement));
+		var decision = lobby.Decide(change);
 		if (decision is null)
 		{
 			return false;
@@ -128,6 +136,8 @@ public sealed class GameClientManager
 	{
 		switch (decision.Persistence)
 		{
+			case LobbyPersistenceInstruction.Keep:
+				return;
 			case LobbyPersistenceInstruction.Clear:
 				_stagedLobby = null;
 				break;
@@ -195,30 +205,11 @@ public sealed class GameClientManager
 	{
 		ArgumentNullException.ThrowIfNull(lobby);
 		ArgumentNullException.ThrowIfNull(replacement);
-		if (HasActiveSession ||
-			!lobby.CanReplaceActorSetupCards(
+		return TryAcceptLobbyChange(
+			lobby,
+			new LobbyChange.ReplaceActorSetupCards(
 				expectedCurrentVersion,
-				replacement))
-		{
-			return false;
-		}
-
-		var roleLockIn = lobby.AcceptedRoleLockIn!;
-		try
-		{
-			PersistStagedLobbyBeforeApply(
-				lobby.PlayerRoster,
-				roleLockIn,
-				replacement,
-				lobby.AcceptedPublicGroupPartition,
-				() => lobby.ApplyAcceptedActorSetupCards(replacement));
-		}
-		catch (Exception)
-		{
-			return false;
-		}
-
-		return true;
+				replacement));
 	}
 
 	public bool TryReplaceStagedPublicGroupPartition(
@@ -227,31 +218,9 @@ public sealed class GameClientManager
 	{
 		ArgumentNullException.ThrowIfNull(lobby);
 		ArgumentNullException.ThrowIfNull(replacement);
-		if (HasActiveSession ||
-			!lobby.CanReplacePublicGroupPartition(replacement))
-		{
-			return false;
-		}
-		if (lobby.AcceptedPublicGroupPartition?.Equals(replacement) == true)
-		{
-			return true;
-		}
-
-		var roleLockIn = lobby.AcceptedRoleLockIn!;
-		try
-		{
-			PersistStagedLobbyBeforeApply(
-				lobby.PlayerRoster,
-				roleLockIn,
-				lobby.AcceptedActorSetupCards,
-				replacement,
-				() => lobby.ApplyAcceptedPublicGroupPartition(replacement));
-		}
-		catch (Exception)
-		{
-			return false;
-		}
-		return true;
+		return TryAcceptLobbyChange(
+			lobby,
+			new LobbyChange.ReplacePublicGroupPartition(replacement));
 	}
 
 	public bool TryMoveStagedPlayerDown(LobbySetupState lobby, int index)

@@ -112,6 +112,51 @@ public class GameClientManagerTests
 	}
 
 	[Fact]
+	public void ActorSetupCardsReplacement_WhenNotificationThrows_RemainsAcceptedAndRecoverable()
+	{
+		var store = new RecordingSaveStore();
+		var lobby = CreateActorLobby();
+		var manager = new GameClientManager(new GameService(), saveStore: store);
+		manager.TryEnsureStagedRoleLockIn(lobby).Should().BeTrue();
+		ActorSetupCards? observedPublishedCards = null;
+		ActorSetupCards? observedDurableCards = null;
+		lobby.SimulationScenarioChanged += (_, _) =>
+		{
+			observedPublishedCards = lobby.AcceptedActorSetupCards;
+			observedDurableCards = LocalRecoveryPayloadCodec.Deserialize(store.Load()!)
+				.Should().BeOfType<StagedLobbyRecoveryPayload>()
+				.Which.ActorSetupCards;
+			throw new InvalidOperationException("notification failure");
+		};
+		manager.StateChanged += (_, _) =>
+			throw new InvalidOperationException("notification failure");
+
+		var accepted = manager.TryReplaceStagedActorSetupCards(
+			lobby,
+			expectedCurrentVersion: 0,
+			[MainRoleType.Cupid, MainRoleType.Witch, MainRoleType.Hunter]);
+
+		accepted.Should().BeTrue();
+		lobby.AcceptedActorSetupCards.Version.Should().Be(1);
+		lobby.AcceptedActorSetupCards.PrintedRoles.Should().Equal(
+			MainRoleType.Cupid,
+			MainRoleType.Witch,
+			MainRoleType.Hunter);
+		observedPublishedCards.Should().BeSameAs(lobby.AcceptedActorSetupCards);
+		observedDurableCards.Should().Be(lobby.AcceptedActorSetupCards);
+		var resumedLobby = CreateActorLobby();
+		_ = new GameClientManager(
+			new GameService(),
+			saveStore: store,
+			lobbySetupState: resumedLobby);
+		resumedLobby.AcceptedActorSetupCards.Version.Should().Be(1);
+		resumedLobby.AcceptedActorSetupCards.PrintedRoles.Should().Equal(
+			MainRoleType.Cupid,
+			MainRoleType.Witch,
+			MainRoleType.Hunter);
+	}
+
+	[Fact]
 	public void ActorSetupCards_ReplacementRecoveryAndStaleAttempt_KeepLatestExactArtifact()
 	{
 		using var saveDirectory = TemporaryDirectory.Create();
@@ -192,6 +237,56 @@ public class GameClientManagerTests
 	}
 
 	[Fact]
+	public void ActorSetupCards_InvalidReplacementAttempts_DoNotPersistOrPublish()
+	{
+		var store = new RecordingSaveStore();
+		var lobby = CreateActorLobby();
+		var manager = new GameClientManager(new GameService(), saveStore: store);
+		manager.TryEnsureStagedRoleLockIn(lobby).Should().BeTrue();
+		manager.TryReplaceStagedActorSetupCards(
+			lobby,
+			expectedCurrentVersion: 0,
+			[MainRoleType.Cupid, MainRoleType.Witch, MainRoleType.Hunter])
+			.Should().BeTrue();
+		var accepted = lobby.AcceptedActorSetupCards;
+		var durablePayload = store.Load();
+		var saveCount = store.SavedPayloads.Count;
+		var notifications = 0;
+		lobby.SimulationScenarioChanged += (_, _) => notifications++;
+
+		manager.TryReplaceStagedActorSetupCards(
+			lobby,
+			expectedCurrentVersion: 0,
+			[MainRoleType.Seer, MainRoleType.Defender, MainRoleType.Elder])
+			.Should().BeFalse("the expected version is stale");
+		manager.TryReplaceStagedActorSetupCards(
+			lobby,
+			expectedCurrentVersion: 2,
+			[MainRoleType.Seer, MainRoleType.Defender, MainRoleType.Elder])
+			.Should().BeFalse("the expected version skips the current artifact");
+		manager.TryReplaceStagedActorSetupCards(
+			lobby,
+			expectedCurrentVersion: long.MaxValue,
+			[MainRoleType.Seer, MainRoleType.Defender, MainRoleType.Elder])
+			.Should().BeFalse("the next version would overflow");
+		manager.TryReplaceStagedActorSetupCards(
+			lobby,
+			expectedCurrentVersion: 1,
+			[MainRoleType.Seer, MainRoleType.Defender])
+			.Should().BeFalse("the replacement is incomplete");
+		manager.TryReplaceStagedActorSetupCards(
+			lobby,
+			expectedCurrentVersion: 1,
+			[MainRoleType.Cupid, MainRoleType.Cupid, MainRoleType.Hunter])
+			.Should().BeFalse("the replacement contains duplicate source Roles");
+
+		lobby.AcceptedActorSetupCards.Should().BeSameAs(accepted);
+		store.SavedPayloads.Should().HaveCount(saveCount);
+		store.Load().Should().Be(durablePayload);
+		notifications.Should().Be(0);
+	}
+
+	[Fact]
 	public void Restart_ResumesActorThenManipulatorAtEachIncompleteAggregateGate()
 	{
 		using var saveDirectory = TemporaryDirectory.Create();
@@ -244,6 +339,54 @@ public class GameClientManagerTests
 		manipulatorGateLobby.RequiresActorSetupCards.Should().BeFalse();
 		manipulatorGateLobby.RequiresPublicGroupPartition.Should().BeTrue();
 		manipulatorGateLobby.TryCreateSimulationScenario(out _).Should().BeFalse();
+	}
+
+	[Fact]
+	public void ActorSetupCardsReplacement_RetainsCompatiblePartitionInOneRecoverableAggregate()
+	{
+		var store = new RecordingSaveStore();
+		var lobby = CreateActorAndPrejudicedManipulatorLobby();
+		var manager = new GameClientManager(new GameService(), saveStore: store);
+		manager.TryEnsureStagedRoleLockIn(lobby).Should().BeTrue();
+		manager.TryReplaceStagedActorSetupCards(
+			lobby,
+			expectedCurrentVersion: 0,
+			[MainRoleType.Cupid, MainRoleType.Witch, MainRoleType.Hunter])
+			.Should().BeTrue();
+		var rosterIds = lobby.PlayerRoster.Select(player => player.Id).ToArray();
+		var partition = PublicGroupPartition.Create(
+			rosterIds,
+			rosterIds.Take(2),
+			rosterIds.Skip(2));
+		manager.TryReplaceStagedPublicGroupPartition(lobby, partition)
+			.Should().BeTrue();
+		var firstActorSetupCards = lobby.AcceptedActorSetupCards;
+
+		manager.TryReplaceStagedActorSetupCards(
+			lobby,
+			expectedCurrentVersion: firstActorSetupCards.Version,
+			[MainRoleType.Hunter, MainRoleType.Cupid, MainRoleType.Witch])
+			.Should().BeTrue();
+
+		var replacement = lobby.AcceptedActorSetupCards;
+		replacement.Version.Should().Be(2);
+		replacement.Cards.Select(card => card.Id).Should().NotIntersectWith(
+			firstActorSetupCards.Cards.Select(card => card.Id));
+		lobby.AcceptedPublicGroupPartition.Should().BeSameAs(partition);
+		var persisted = LocalRecoveryPayloadCodec.Deserialize(store.Load()!)
+			.Should().BeOfType<StagedLobbyRecoveryPayload>()
+			.Which;
+		persisted.ActorSetupCards.Should().Be(replacement);
+		persisted.PublicGroupPartition.Should().Be(partition);
+		var resumedLobby = CreateActorAndPrejudicedManipulatorLobby(
+			withPlayers: false);
+		_ = new GameClientManager(
+			new GameService(),
+			saveStore: store,
+			lobbySetupState: resumedLobby);
+		resumedLobby.AcceptedActorSetupCards.Should().Be(replacement);
+		resumedLobby.AcceptedPublicGroupPartition.Should().Be(partition);
+		resumedLobby.TryCreateSimulationScenario(out _).Should().BeTrue();
 	}
 
 	[Fact]
@@ -629,6 +772,114 @@ public class GameClientManagerTests
 		lobby.AcceptedRoleLockIn.Should().BeNull();
 		manager.StagedRoleLockIn.Should().BeNull();
 		manager.HasActiveSession.Should().BeFalse();
+	}
+
+	[Fact]
+	public void PublicGroupPartitionReplacement_WhenNotificationThrows_RemainsAcceptedAndRecoverable()
+	{
+		var store = new RecordingSaveStore();
+		var lobby = CreatePrejudicedManipulatorLobby();
+		var manager = new GameClientManager(new GameService(), saveStore: store);
+		manager.TryEnsureStagedRoleLockIn(lobby).Should().BeTrue();
+		var partition = PublicGroupPartition.Create(
+			lobby.PlayerRoster.Select(player => player.Id),
+			lobby.PlayerRoster.Take(2).Select(player => player.Id),
+			lobby.PlayerRoster.Skip(2).Select(player => player.Id));
+		PublicGroupPartition? observedPublishedPartition = null;
+		PublicGroupPartition? observedDurablePartition = null;
+		lobby.SimulationScenarioChanged += (_, _) =>
+		{
+			observedPublishedPartition = lobby.AcceptedPublicGroupPartition;
+			observedDurablePartition = LocalRecoveryPayloadCodec.Deserialize(store.Load()!)
+				.Should().BeOfType<StagedLobbyRecoveryPayload>()
+				.Which.PublicGroupPartition;
+			throw new InvalidOperationException("notification failure");
+		};
+		manager.StateChanged += (_, _) =>
+			throw new InvalidOperationException("notification failure");
+
+		var accepted = manager.TryReplaceStagedPublicGroupPartition(
+			lobby,
+			partition);
+
+		accepted.Should().BeTrue();
+		lobby.AcceptedPublicGroupPartition.Should().Be(partition);
+		observedPublishedPartition.Should().BeSameAs(partition);
+		observedDurablePartition.Should().Be(partition);
+		var resumedLobby = CreatePrejudicedManipulatorLobby();
+		_ = new GameClientManager(
+			new GameService(),
+			saveStore: store,
+			lobbySetupState: resumedLobby);
+		resumedLobby.AcceptedPublicGroupPartition.Should().Be(partition);
+	}
+
+	[Fact]
+	public void PublicGroupPartitionEquivalentReplacement_KeepsRecoveryAndEmitsNoNotifications()
+	{
+		var store = new RecordingSaveStore();
+		var lobby = CreatePrejudicedManipulatorLobby();
+		var manager = new GameClientManager(new GameService(), saveStore: store);
+		manager.TryEnsureStagedRoleLockIn(lobby).Should().BeTrue();
+		var rosterIds = lobby.PlayerRoster.Select(player => player.Id).ToArray();
+		var acceptedPartition = PublicGroupPartition.Create(
+			rosterIds,
+			rosterIds.Take(2),
+			rosterIds.Skip(2));
+		manager.TryReplaceStagedPublicGroupPartition(lobby, acceptedPartition)
+			.Should().BeTrue();
+		var durablePayload = store.Load();
+		var saveCount = store.SavedPayloads.Count;
+		var lobbyNotifications = 0;
+		var managerNotifications = 0;
+		lobby.SimulationScenarioChanged += (_, _) => lobbyNotifications++;
+		manager.StateChanged += (_, _) => managerNotifications++;
+		var equivalentPartition = PublicGroupPartition.Create(
+			rosterIds,
+			rosterIds.Skip(2).Reverse(),
+			rosterIds.Take(2).Reverse());
+
+		var accepted = manager.TryReplaceStagedPublicGroupPartition(
+			lobby,
+			equivalentPartition);
+
+		accepted.Should().BeTrue();
+		lobby.AcceptedPublicGroupPartition.Should().BeSameAs(acceptedPartition);
+		store.SavedPayloads.Should().HaveCount(saveCount);
+		store.Load().Should().Be(durablePayload);
+		lobbyNotifications.Should().Be(0);
+		managerNotifications.Should().Be(0);
+	}
+
+	[Fact]
+	public void PublicGroupPartition_ForForeignRoster_DoesNotPersistOrPublish()
+	{
+		var store = new RecordingSaveStore();
+		var lobby = CreatePrejudicedManipulatorLobby();
+		var manager = new GameClientManager(new GameService(), saveStore: store);
+		manager.TryEnsureStagedRoleLockIn(lobby).Should().BeTrue();
+		var durablePayload = store.Load();
+		var saveCount = store.SavedPayloads.Count;
+		var foreignRoster = lobby.PlayerRoster
+			.Select(player => player.Id)
+			.ToArray();
+		foreignRoster[^1] = Guid.NewGuid();
+		var partition = PublicGroupPartition.Create(
+			foreignRoster,
+			foreignRoster.Take(2),
+			foreignRoster.Skip(2));
+		var notifications = 0;
+		lobby.SimulationScenarioChanged += (_, _) => notifications++;
+
+		var accepted = manager.TryReplaceStagedPublicGroupPartition(
+			lobby,
+			partition);
+
+		accepted.Should().BeFalse();
+		lobby.AcceptedPublicGroupPartition.Should().BeNull();
+		store.SavedPayloads.Should().HaveCount(saveCount);
+		store.Load().Should().Be(durablePayload);
+		notifications.Should().Be(0);
 	}
 
 	[Fact]
