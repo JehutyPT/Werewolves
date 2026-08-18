@@ -118,7 +118,7 @@ internal sealed class FoxRole
 				static _ => false,
 				CommitCenterSelection,
 				CreateFeedbackInstruction,
-				static (_, _) => false,
+				ClaimsCommittedFeedback,
 				ValidateFeedbackInstruction,
 				ValidateFeedbackRecoveryContext,
 				static _ => FoxRoleState.AwaitingResultAcknowledgement,
@@ -825,6 +825,27 @@ internal sealed class FoxRole
 			throw new InvalidOperationException(
 				"The Fox feedback has invalid private workflow context.");
 		}
+	}
+
+	private static bool ClaimsCommittedFeedback(
+		GameSession session,
+		ModeratorInstruction instruction)
+	{
+		if (instruction is not ConfirmationInstruction
+		    {
+			    Semantic: ModeratorInstructionSemantic.RevealFoxResult,
+			    AffectedPlayerIds: [var affectedPlayerId]
+		    })
+		{
+			return false;
+		}
+
+		return GetFoxCheckCommitsThisNight(session).Any(commit =>
+			       commit.ActingPlayerId == affectedPlayerId) ||
+		       session.GetActorBorrowedFoxCheckCommits().Any(commit =>
+			       commit.TurnNumber == session.TurnNumber &&
+			       commit.CurrentPhase == GamePhase.Night &&
+			       commit.PowerIdentity.ActingPlayerId == affectedPlayerId);
 	}
 
 	private void ValidateSleepInstruction(

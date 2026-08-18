@@ -640,6 +640,14 @@ internal static class GameFlowManager
             return true;
         }
 
+		var execution = session.Execution;
+		if (startingInstruction != null &&
+		    execution.DomainRecoveryCursor?.NextInstructionId ==
+		    startingInstruction.InstructionId)
+		{
+			return true;
+		}
+
 	        if (IsAcceptedObservation(startingInstruction))
 	        {
 	            return true;
@@ -2231,7 +2239,12 @@ internal static class GameFlowManager
                             recurringEntry,
                             nextInstruction),
                     MainRoleType.Piper =>
-                        PiperRole.TryValidateCommittedRecoveryBoundary(
+                        RoleListenerDispatch
+							.TryValidateRecurringCommittedRecoveryBoundary(
+								Listener(MainRoleType.Piper),
+								admissions,
+								(id, factory) =>
+									session.GetOrCreateListener(id, factory),
                             session,
                             startingInstruction,
                             input,
@@ -2476,19 +2489,16 @@ internal static class GameFlowManager
                 "The Pending Instruction does not match the accepted observation continuation.");
         }
 
-        if (RoleListenerDispatch.ValidateDeclaredWorkflowRecovery(
-                Listener(continuationRole),
-                NightMainActionLoop,
-                admissions,
-                (id, factory) => session.GetOrCreateListener(id, factory),
-                session,
-                pendingInstruction,
-                cursor))
-        {
-            return;
-        }
-
-        var matchesCommittedObservation =
+		var hasCentralObservationContract =
+			cursor.AcceptedObservationSemantic is
+				ModeratorInstructionSemantic.IdentifyRoleHolders or
+				ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup or
+				ModeratorInstructionSemantic.EstablishStutteringJudgeSignal or
+				ModeratorInstructionSemantic.ChooseWolfHoundAlignment or
+				ModeratorInstructionSemantic.ChooseThiefOffer or
+				ModeratorInstructionSemantic.ChooseActorSetupCard or
+				ModeratorInstructionSemantic.RecognizeLovers;
+		var matchesCommittedObservation =
             cursor.AcceptedObservationSemantic switch
             {
                 ModeratorInstructionSemantic.IdentifyRoleHolders =>
@@ -2544,10 +2554,24 @@ internal static class GameFlowManager
                         pendingInstruction),
                 _ => false
             };
-        if (!matchesCommittedObservation)
-        {
-            throw new InvalidOperationException(
-                "The accepted observation recovery cursor does not match its committed observation.");
+		if (!matchesCommittedObservation)
+		{
+			if (!hasCentralObservationContract &&
+			    RoleListenerDispatch.ValidateDeclaredWorkflowRecovery(
+				    Listener(continuationRole),
+				    NightMainActionLoop,
+				    admissions,
+				    (id, factory) =>
+					    session.GetOrCreateListener(id, factory),
+				    session,
+				    pendingInstruction,
+				    cursor))
+			{
+				return;
+			}
+
+			throw new InvalidOperationException(
+				"The accepted observation recovery cursor does not match its committed observation.");
         }
 
 		if (!LittleGirlRole.HasValidRetainedGuidanceDecision(
@@ -2558,6 +2582,15 @@ internal static class GameFlowManager
 			throw new InvalidOperationException(
 				"The accepted observation recovery cursor has an invalid retained Little Girl guidance decision.");
 		}
+
+		_ = RoleListenerDispatch.ValidateDeclaredWorkflowRecovery(
+			Listener(continuationRole),
+			NightMainActionLoop,
+			admissions,
+			(id, factory) => session.GetOrCreateListener(id, factory),
+			session,
+			pendingInstruction,
+			cursor);
 	}
 
 	private static bool HasCommittedRoleIdentification(
@@ -2684,8 +2717,6 @@ internal static class GameFlowManager
 			        session);
 		        VillageIdiotRole
 			        .ValidateBorrowedPendingPardonRecoveryInstruction(session);
-		        BearTamerRole.ValidateBorrowedPendingGrowlRecoveryInstruction(
-			        session);
 		        RestorePendingHookListenerContinuation(session, admissions);
 	            return;
 	        }
@@ -2941,10 +2972,21 @@ internal static class GameFlowManager
                         cursor);
                     break;
                 case MainRoleType.Piper:
-					PiperRole.ValidateRecurringRecoveryCursorIdentity(
-						session,
-						cursor);
-                    break;
+					if (!RoleListenerDispatch
+					    .TryValidateDeclaredDomainRecoveryCursorIdentity(
+						    session,
+						    Listener(MainRoleType.Piper),
+						    NightMainActionLoop,
+						    admissions,
+						    (id, factory) =>
+							    session.GetOrCreateListener(id, factory),
+						    pendingInstruction,
+						    cursor))
+					{
+						throw new InvalidOperationException(
+							"Unsupported Piper recurring Role Power continuation.");
+					}
+					break;
                 case MainRoleType.Cupid:
 					CupidRole.ValidateRecurringRecoveryCursorIdentity(
 						session,

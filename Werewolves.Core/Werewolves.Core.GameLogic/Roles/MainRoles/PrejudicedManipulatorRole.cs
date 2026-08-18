@@ -8,7 +8,8 @@ using Werewolves.Core.StateModels.Resources;
 
 namespace Werewolves.Core.GameLogic.Roles.MainRoles;
 
-internal sealed class PrejudicedManipulatorRole : NightRoleIdOnlyHookListener
+internal sealed class PrejudicedManipulatorRole
+	: DeclaredRoleIdentificationOnlyHookListener
 {
 	internal override string PublicName =>
 		GameStrings.PrejudicedManipulatorRoleName;
@@ -16,14 +17,7 @@ internal sealed class PrejudicedManipulatorRole : NightRoleIdOnlyHookListener
 	public override ListenerIdentifier Id =>
 		ListenerIdentifier.Listener(MainRoleType.PrejudicedManipulator);
 
-	public override HookListenerActionResult Execute(
-		GameSession session,
-		ModeratorResponse input) =>
-		session.TurnNumber == 1
-			? base.Execute(session, input)
-			: HookListenerActionResult.Skip();
-
-	protected override void ProcessRoleIdentification(
+	protected override void OnIdentificationAccepted(
 		GameSession session,
 		ModeratorResponse input)
 	{
@@ -56,7 +50,7 @@ internal sealed class PrejudicedManipulatorRole : NightRoleIdOnlyHookListener
 			}
 		}
 
-		base.ProcessRoleIdentification(session, input);
+		base.OnIdentificationAccepted(session, input);
 		InitialBeneficiaryClosureRules.TryCommitCurrentSession(session);
 	}
 }

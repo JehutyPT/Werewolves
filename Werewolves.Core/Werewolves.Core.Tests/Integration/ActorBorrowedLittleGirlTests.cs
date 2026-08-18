@@ -19,6 +19,9 @@ namespace Werewolves.Core.Tests.Integration;
 
 public sealed class ActorBorrowedLittleGirlTests
 {
+	private sealed class TestExecutionCommitKey : IGameFlowManagerKey;
+	private static readonly TestExecutionCommitKey ExecutionCommitKey = new();
+
 	private static readonly PhysicalCharacterCard LittleGirlCard = new(
 		Guid.Parse("00000000-0000-0000-0000-000000000142"),
 		MainRoleType.LittleGirl);
@@ -548,8 +551,26 @@ public sealed class ActorBorrowedLittleGirlTests
 		GameSession session,
 		ModeratorResponse response)
 	{
+		var startingExecution = session.Execution;
+		var consumedInstruction = startingExecution.PendingInstruction
+			?? throw new InvalidOperationException(
+				"The Actor borrowed test workflow requires one Pending Instruction.");
 		session.GetOrCreateListener(listener.Id, () => listener);
-		return NightActionLoop.Execute(session, response).ModeratorInstruction;
+		var nextInstruction = NightActionLoop.Execute(
+			session,
+			response).ModeratorInstruction;
+		if (nextInstruction != null)
+		{
+			session.CommitExecution(
+				ExecutionCommitKey,
+				ExecutionCommit.RetainRecoveryBoundary(
+					session.Execution,
+					consumedInstruction,
+					response,
+					nextInstruction));
+		}
+
+		return nextInstruction;
 	}
 
 	private static GameSession RestorePendingInstruction(

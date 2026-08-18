@@ -24,6 +24,9 @@ namespace Werewolves.Core.Tests.Integration;
 
 public sealed class ActorBorrowedSemanticTraceTests
 {
+	private sealed class TestExecutionCommitKey : IGameFlowManagerKey;
+	private static readonly TestExecutionCommitKey ExecutionCommitKey = new();
+
 	private static readonly MainRoleType[] SourceRoles =
 	[
 		MainRoleType.Seer,
@@ -1633,6 +1636,9 @@ public sealed class ActorBorrowedSemanticTraceTests
 		GameSession session,
 		ModeratorResponse response)
 	{
+		var consumedInstruction = session.Execution.PendingInstruction
+			?? throw new InvalidOperationException(
+				"The Actor borrowed semantic harness requires one Pending Instruction.");
 		session.GetOrCreateListener(listener.Id, () => listener);
 		var currentPhase = session.GetCurrentPhase();
 		var hook = currentPhase switch
@@ -1662,8 +1668,27 @@ public sealed class ActorBorrowedSemanticTraceTests
 		if (!result.StageComplete)
 		{
 			result.ModeratorInstruction.Should().NotBeNull();
+			var nextInstruction = result.ModeratorInstruction!;
+			var publicationResponse =
+				response.InstructionId == consumedInstruction.InstructionId
+					? response
+					: new ModeratorResponse
+					{
+						InstructionId = consumedInstruction.InstructionId,
+						Type = response.Type,
+						SelectedPlayerIds = response.SelectedPlayerIds,
+						AssignedPlayerRoles = response.AssignedPlayerRoles,
+						SelectedOptionIds = response.SelectedOptionIds
+					};
+			session.CommitExecution(
+				ExecutionCommitKey,
+				ExecutionCommit.RetainRecoveryBoundary(
+					session.Execution,
+					consumedInstruction,
+					publicationResponse,
+					nextInstruction));
 			return HookListenerActionResult.NeedInput(
-				result.ModeratorInstruction!,
+				nextInstruction,
 				HookHarnessListenerState.AwaitingInput);
 		}
 

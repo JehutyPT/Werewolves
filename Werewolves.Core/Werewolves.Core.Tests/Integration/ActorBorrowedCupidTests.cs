@@ -20,6 +20,9 @@ namespace Werewolves.Core.Tests.Integration;
 
 public sealed class ActorBorrowedCupidTests
 {
+	private sealed class TestExecutionCommitKey : IGameFlowManagerKey;
+	private static readonly TestExecutionCommitKey ExecutionCommitKey = new();
+
 	private static readonly PhysicalCharacterCard CupidCard = new(
 		Guid.Parse("00000000-0000-0000-0000-000000000145"),
 		MainRoleType.Cupid);
@@ -1004,8 +1007,34 @@ public sealed class ActorBorrowedCupidTests
 		GameSession session,
 		ModeratorResponse response)
 	{
+		var consumedInstruction = session.Execution.PendingInstruction
+			?? throw new InvalidOperationException(
+				"The Actor borrowed Cupid test workflow requires one Pending Instruction.");
 		session.GetOrCreateListener(listener.Id, () => listener);
-		return NightActionLoop.Execute(session, response);
+		var result = NightActionLoop.Execute(session, response);
+		if (result.ModeratorInstruction is { } nextInstruction)
+		{
+			var publicationResponse =
+				response.InstructionId == consumedInstruction.InstructionId
+					? response
+					: new ModeratorResponse
+					{
+						InstructionId = consumedInstruction.InstructionId,
+						Type = response.Type,
+						SelectedPlayerIds = response.SelectedPlayerIds,
+						AssignedPlayerRoles = response.AssignedPlayerRoles,
+						SelectedOptionIds = response.SelectedOptionIds
+					};
+			session.CommitExecution(
+				ExecutionCommitKey,
+				ExecutionCommit.RetainRecoveryBoundary(
+					session.Execution,
+					consumedInstruction,
+					publicationResponse,
+					nextInstruction));
+		}
+
+		return result;
 	}
 
 	private static GameSession RehydrateAtPendingInstruction(

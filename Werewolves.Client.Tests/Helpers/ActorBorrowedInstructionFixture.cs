@@ -232,7 +232,8 @@ internal static class ActorBorrowedInstructionFixture
 			listener,
 			fixture,
 			fixture.ActorSleep.CreateResponse(),
-			"Seer wake");
+			"Seer wake",
+			retainExecution: true);
 		var selection = AdvanceToInstruction<SelectPlayersInstruction>(
 			listener,
 			fixture.Session,
@@ -286,7 +287,8 @@ internal static class ActorBorrowedInstructionFixture
 			listener,
 			fixture,
 			fixture.ActorSleep.CreateResponse(),
-			"Witch wake");
+			"Witch wake",
+			retainExecution: true);
 		var selection = AdvanceToInstruction<SelectPlayersInstruction>(
 			listener,
 			fixture.Session,
@@ -1160,12 +1162,23 @@ internal static class ActorBorrowedInstructionFixture
 		var result = NightActionLoop.Execute(session, response);
 		if (retainExecution && result.ModeratorInstruction is { } nextInstruction)
 		{
+			var publicationResponse =
+				response.InstructionId == consumedInstruction!.InstructionId
+					? response
+					: new ModeratorResponse
+					{
+						InstructionId = consumedInstruction.InstructionId,
+						Type = response.Type,
+						SelectedPlayerIds = response.SelectedPlayerIds,
+						AssignedPlayerRoles = response.AssignedPlayerRoles,
+						SelectedOptionIds = response.SelectedOptionIds
+					};
 			session.CommitExecution(
 				ExecutionCommitKey,
 				ExecutionCommit.RetainRecoveryBoundary(
 					session.Execution,
 					consumedInstruction!,
-					response,
+					publicationResponse,
 					nextInstruction));
 		}
 
