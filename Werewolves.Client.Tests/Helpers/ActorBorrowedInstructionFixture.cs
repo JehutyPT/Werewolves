@@ -57,6 +57,9 @@ internal sealed record ActorBorrowedInstructionScenario(
 
 internal static class ActorBorrowedInstructionFixture
 {
+	private sealed class TestExecutionCommitKey : IGameFlowManagerKey;
+	private static readonly TestExecutionCommitKey ExecutionCommitKey = new();
+
 	private static readonly PhysicalCharacterCard[] SourceCards =
 	[
 		Card("72000000-0000-0000-0000-000000000101", MainRoleType.Seer),
@@ -185,7 +188,8 @@ internal static class ActorBorrowedInstructionFixture
 			new ActorRole(CreateActorAvailabilityGateway()),
 			session,
 			start,
-			sourceCard.Id);
+			sourceCard.Id,
+			retainExecution: sourceRole == MainRoleType.Fox);
 		return new CoreFixture(
 			session,
 			start,
@@ -332,12 +336,14 @@ internal static class ActorBorrowedInstructionFixture
 			listener,
 			fixture,
 			fixture.ActorSleep.CreateResponse(),
-			"Fox wake");
+			"Fox wake",
+			retainExecution: true);
 		var selection = AdvanceToInstruction<SelectPlayersInstruction>(
 			listener,
 			fixture.Session,
 			wake.CreateResponse(),
-			"Fox center selection");
+			"Fox center selection",
+			retainExecution: true);
 		var nonWerewolfNeighborhoodCenterId = fixture.Players
 			.Select(player =>
 			{
@@ -360,7 +366,8 @@ internal static class ActorBorrowedInstructionFixture
 			listener,
 			fixture.Session,
 			selection.CreateResponse([nonWerewolfNeighborhoodCenterId]),
-			"Fox result");
+			"Fox result",
+			retainExecution: true);
 		var commit = fixture.Session.GetActorBorrowedFoxCheckCommits().Single();
 		if (commit.SpentResourceIdentity is not { } spentResource)
 		{
@@ -994,23 +1001,27 @@ internal static class ActorBorrowedInstructionFixture
 		IGameHookListener listener,
 		GameSession session,
 		StartGameConfirmationInstruction start,
-		Guid selectedCardId)
+		Guid selectedCardId,
+		bool retainExecution = false)
 	{
 		var wake = AdvanceToInstruction<ConfirmationInstruction>(
 			listener,
 			session,
 			start.CreateResponse(),
-			"Actor wake");
+			"Actor wake",
+			retainExecution);
 		var choice = AdvanceToInstruction<SelectOptionsInstruction>(
 			listener,
 			session,
 			wake.CreateResponse(),
-			"Actor setup-card choice");
+			"Actor setup-card choice",
+			retainExecution);
 		var sleep = AdvanceToInstruction<ConfirmationInstruction>(
 			listener,
 			session,
 			choice.CreateResponse(selectedCardId.ToString("D")),
-			"Actor sleep");
+			"Actor sleep",
+			retainExecution);
 		var activation = session
 			.GetModeratorActiveActorBorrowedRolePowerActivation()
 			?? throw new InvalidOperationException(
@@ -1022,12 +1033,17 @@ internal static class ActorBorrowedInstructionFixture
 		IGameHookListener listener,
 		CoreFixture fixture,
 		ModeratorResponse response,
-		string step)
+		string step,
+		bool retainExecution = false)
 		where TInstruction : ModeratorInstruction
 	{
 		for (var attempt = 0; attempt < 20; attempt++)
 		{
-			var instruction = Advance(listener, fixture.Session, response).Instruction
+			var instruction = Advance(
+				listener,
+				fixture.Session,
+				response,
+				retainExecution).Instruction
 				?? throw new InvalidOperationException(
 					$"The Actor UI fixture completed the Night hook before {step}.");
 			if (instruction is TInstruction typed &&
@@ -1095,10 +1111,15 @@ internal static class ActorBorrowedInstructionFixture
 		IGameHookListener listener,
 		GameSession session,
 		ModeratorResponse response,
-		string step)
+		string step,
+		bool retainExecution = false)
 		where TInstruction : ModeratorInstruction =>
 		RequireInstruction<TInstruction>(
-			Advance(listener, session, response).Instruction,
+			Advance(
+				listener,
+				session,
+				response,
+				retainExecution).Instruction,
 			step);
 
 	private static TInstruction RequireInstruction<TInstruction>(
@@ -1127,10 +1148,27 @@ internal static class ActorBorrowedInstructionFixture
 	private static ListenerAdvanceResult Advance(
 		IGameHookListener listener,
 		GameSession session,
-		ModeratorResponse response)
+		ModeratorResponse response,
+		bool retainExecution = false)
 	{
+		var consumedInstruction = retainExecution
+			? session.Execution.PendingInstruction
+				?? throw new InvalidOperationException(
+					"The Actor borrowed Fox UI fixture requires one Pending Instruction.")
+			: null;
 		_ = session.GetOrCreateListener(listener.Id, () => listener);
 		var result = NightActionLoop.Execute(session, response);
+		if (retainExecution && result.ModeratorInstruction is { } nextInstruction)
+		{
+			session.CommitExecution(
+				ExecutionCommitKey,
+				ExecutionCommit.RetainRecoveryBoundary(
+					session.Execution,
+					consumedInstruction!,
+					response,
+					nextInstruction));
+		}
+
 		return new ListenerAdvanceResult(
 			result is StayInSubPhaseHandlerResult { StageComplete: false }
 				? HookListenerOutcome.NeedInput

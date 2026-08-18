@@ -2913,6 +2913,7 @@ internal static class GameFlowManager
                 admissions,
                 (id, factory) =>
                     session.GetOrCreateListener(id, factory),
+				pendingInstruction,
                 cursor))
         {
             throw new InvalidOperationException(
@@ -3016,7 +3017,8 @@ internal static class GameFlowManager
             NightMainActionLoop,
             session,
             pendingInstruction,
-            admissions);
+			admissions,
+			domainRecoveryCursor: cursor);
         if (listenerContinuation != null)
         {
             if (listenerContinuation.Value.Listener !=

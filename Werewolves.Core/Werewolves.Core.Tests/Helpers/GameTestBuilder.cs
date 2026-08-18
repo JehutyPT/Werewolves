@@ -82,6 +82,7 @@ public class GameTestBuilder
 {
     private List<string> _playerNames = [];
     private List<MainRoleType> _roles = [];
+	private ActorSetupCards? _actorSetupCards;
     private GameService _gameService = new();
     private Guid _gameId;
     private bool _gameStarted;
@@ -180,6 +181,19 @@ public class GameTestBuilder
         return this;
     }
 
+	internal GameTestBuilder WithActorSetupCards(ActorSetupCards setupCards)
+	{
+		if (_gameStarted)
+		{
+			throw new InvalidOperationException(
+				"Actor Setup Cards must be configured before starting the game.");
+		}
+
+		_actorSetupCards = setupCards ??
+			throw new ArgumentNullException(nameof(setupCards));
+		return this;
+	}
+
     /// <summary>
     /// Creates a simple game with werewolves, seer, and villagers.
     /// </summary>
@@ -222,7 +236,16 @@ public class GameTestBuilder
             throw new InvalidOperationException(
                 CoreTestReferences.ExceptionMessages.PlayerCountMustMatchRoleCount(_playerNames.Count, _roles.Count));
 
-        var instruction = _gameService.StartNewGameWithObserver(_playerNames, _roles, stateChangeObserver: _diagnosticObserver);
+		var instruction = _actorSetupCards == null
+			? _gameService.StartNewGameWithObserver(
+				_playerNames,
+				_roles,
+				stateChangeObserver: _diagnosticObserver)
+			: _gameService.StartNewGame(
+				new GameSessionConfig(
+					_playerNames,
+					_roles,
+					_actorSetupCards));
         _lastInstruction = instruction;
 		_gameId = instruction.GameGuid;
         _gameStarted = true;

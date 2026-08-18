@@ -896,8 +896,23 @@ public sealed class ActorBorrowedPrivacyTests
 	{
 		var wake = Advance(fixture, fixture.OpeningResponse).Instruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
-		var instruction = Advance(fixture, wake.CreateResponse()).Instruction
-			.Should().BeOfType<TInstruction>().Subject;
+		TInstruction instruction;
+		if (fixture.SourceRole == MainRoleType.Fox)
+		{
+			fixture.RestoreAt(wake);
+			instruction = GameFlowManager.HandleInput(
+					fixture.Session,
+					wake.CreateResponse(),
+					SupportedRoleCatalog.Admissions)
+				.ModeratorInstruction.Should()
+				.BeOfType<TInstruction>().Subject;
+		}
+		else
+		{
+			instruction = Advance(fixture, wake.CreateResponse()).Instruction
+				.Should().BeOfType<TInstruction>().Subject;
+		}
+
 		if (fixture.SourceRole is MainRoleType.Seer or MainRoleType.Fox)
 		{
 			SeedKnownWerewolfAgentFacts(
