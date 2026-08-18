@@ -31,8 +31,6 @@ public sealed class ActorBorrowedHunterElderTests
 	private static readonly PhysicalCharacterCard ElderCard = new(
 		Guid.Parse("00000000-0000-0000-0000-000000000149"),
 		MainRoleType.Elder);
-	private static readonly TestGameFlowManagerKey FlowKey = new();
-
 	[Fact]
 	public void BorrowedElder_FirstCollectiveAttackResistsSilentlyAndContinuesWithoutSourceLeak()
 	{
@@ -526,10 +524,11 @@ public sealed class ActorBorrowedHunterElderTests
 		historical.EliminatePlayer(
 			fixture.ActorId,
 			EliminationReason.EventElimination);
-		historical.CaptureRecoveryBoundary(FlowKey);
+		var historicalPayload = RecoveryPayloadTestDriver.Capture(historical)
+			.Serialize();
 		var historicalService = new GameService();
 		var historicalGameId = historicalService.RehydrateSession(
-			historical.Serialize());
+			historicalPayload);
 		var historicalNightStart = historicalService
 			.GetCurrentInstruction(historicalGameId)
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
@@ -1656,14 +1655,15 @@ public sealed class ActorBorrowedHunterElderTests
 				entry.PlayerId == pending.Fixture.ShotTargetId &&
 				entry.Reason == EliminationReason.EventElimination);
 		arranged.TryExpireActorBorrowedRolePowerActivation().Should().BeTrue();
-		arranged.CaptureRecoveryBoundary(FlowKey);
+		var arrangedPayload = RecoveryPayloadTestDriver.Capture(arranged)
+			.Serialize();
 
 		var recoveredService = CreateServiceWithForcedReaction(
 			new ForcedDescendantReaction(
 				pending.Fixture.ActorId,
 				pending.Fixture.ForcedVictimId));
 		var recoveredGameId = recoveredService.RehydrateSession(
-			arranged.Serialize());
+			arrangedPayload);
 		var recoveredNightStart = recoveredService
 			.GetCurrentInstruction(recoveredGameId)
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
@@ -2062,8 +2062,9 @@ public sealed class ActorBorrowedHunterElderTests
 		SeedRequiredFactionBeneficiaryFacts(session);
 		session.TransitionMainPhase(GamePhase.Day);
 		session.PerformDayActionNoTarget(DayPowerType.JudgeExtraVote);
-		session.SetPendingModeratorInstruction(FlowKey, start);
-		session.CaptureRecoveryBoundary(FlowKey);
+		session = RecoveryPayloadTestDriver.Capture(session)
+			.WithPendingInstruction(start)
+			.RehydrateGameSession();
 		return new ElderSuppressionFixture(
 			session,
 			actorId,
@@ -2127,8 +2128,9 @@ public sealed class ActorBorrowedHunterElderTests
 				ElderCard.Id,
 				out _).Should().BeTrue();
 		}
-		session.SetPendingModeratorInstruction(FlowKey, start);
-		session.CaptureRecoveryBoundary(FlowKey);
+		session = RecoveryPayloadTestDriver.Capture(session)
+			.WithPendingInstruction(start)
+			.RehydrateGameSession();
 		return new ElderFixture(session, actorId, werewolfId);
 	}
 
@@ -2186,8 +2188,9 @@ public sealed class ActorBorrowedHunterElderTests
 			[wolfFatherId],
 			MainRoleType.AccursedWolfFather);
 		session.PerformNightAction(NightActionType.DefenderProtect, actorId);
-		session.SetPendingModeratorInstruction(FlowKey, start);
-		session.CaptureRecoveryBoundary(FlowKey);
+		session = RecoveryPayloadTestDriver.Capture(session)
+			.WithPendingInstruction(start)
+			.RehydrateGameSession();
 		return new ElderInfectionFixture(
 			session,
 			actorId,
@@ -2255,8 +2258,9 @@ public sealed class ActorBorrowedHunterElderTests
 			[wolfFatherId],
 			MainRoleType.AccursedWolfFather);
 		session.IdentifyRole([witchId], MainRoleType.Witch);
-		session.SetPendingModeratorInstruction(FlowKey, start);
-		session.CaptureRecoveryBoundary(FlowKey);
+		session = RecoveryPayloadTestDriver.Capture(session)
+			.WithPendingInstruction(start)
+			.RehydrateGameSession();
 		return new ElderWitchRestorationFixture(
 			session,
 			actorId,
@@ -2344,8 +2348,9 @@ public sealed class ActorBorrowedHunterElderTests
 		session.PerformNightAction(
 			NightActionType.DefenderProtect,
 			collectiveTargetId);
-		session.SetPendingModeratorInstruction(FlowKey, start);
-		session.CaptureRecoveryBoundary(FlowKey);
+		session = RecoveryPayloadTestDriver.Capture(session)
+			.WithPendingInstruction(start)
+			.RehydrateGameSession();
 		return new ElderAdditionalAttackFixture(
 			session,
 			actorId,
@@ -2407,8 +2412,9 @@ public sealed class ActorBorrowedHunterElderTests
 			actorCard.Card.Id).Should().BeTrue();
 		session.IdentifyRole([actorId], MainRoleType.Actor);
 		session.IdentifyRole([defenderId], MainRoleType.Defender);
-		session.SetPendingModeratorInstruction(FlowKey, start);
-		session.CaptureRecoveryBoundary(FlowKey);
+		session = RecoveryPayloadTestDriver.Capture(session)
+			.WithPendingInstruction(start)
+			.RehydrateGameSession();
 		return new ElderDefenderFixture(
 			session,
 			actorId,
@@ -2468,8 +2474,9 @@ public sealed class ActorBorrowedHunterElderTests
 			out var activation).Should().BeTrue();
 		SeedRequiredFactionBeneficiaryFacts(session);
 		session.TransitionMainPhase(GamePhase.Day);
-		session.SetPendingModeratorInstruction(FlowKey, start);
-		session.CaptureRecoveryBoundary(FlowKey);
+		session = RecoveryPayloadTestDriver.Capture(session)
+			.WithPendingInstruction(start)
+			.RehydrateGameSession();
 		return new HunterFixture(
 			session,
 			actorId,
@@ -2629,5 +2636,4 @@ public sealed class ActorBorrowedHunterElderTests
 		Guid DefenderId,
 		Guid WerewolfId);
 
-	private sealed class TestGameFlowManagerKey : IGameFlowManagerKey;
 }

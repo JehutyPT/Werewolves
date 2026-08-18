@@ -18,8 +18,6 @@ namespace Werewolves.Core.Tests.Integration;
 
 public sealed class StutteringJudgeRoleTests : DiagnosticTestBase
 {
-	private static readonly TestGameFlowManagerKey RecoveryKey = new();
-
 	public StutteringJudgeRoleTests(ITestOutputHelper output) : base(output) { }
 
 	[Fact]
@@ -258,16 +256,16 @@ public sealed class StutteringJudgeRoleTests : DiagnosticTestBase
 			privateInstruction,
 			affectedPlayerIds,
 			signal.InstructionId);
-		session.SetPendingModeratorInstruction(RecoveryKey, tampered);
-		session.CaptureRecoveryBoundary(RecoveryKey);
-		var recovered = new GameSession(session.Serialize());
+		var serialized = RecoveryPayloadTestDriver.Capture(session)
+			.WithPendingInstruction(tampered)
+			.Serialize();
+		var service = new GameService();
 
-		var restore = () => GameFlowManager.RestoreDurableContinuation(
-			recovered,
-			SupportedRoleCatalog.Admissions);
+		var restore = () => service.RehydrateSession(serialized);
 
 		restore.Should().Throw<InvalidOperationException>()
 			.WithMessage("*Stuttering Judge signal instruction*structurally invalid*");
+		service.GetGameStateView(session.Id).Should().BeNull();
 		MarkTestCompleted();
 	}
 
@@ -278,16 +276,16 @@ public sealed class StutteringJudgeRoleTests : DiagnosticTestBase
 		var signal = ReachSignalObservation(builder);
 		var session = (GameSession)builder.GetGameState()!;
 		session.PerformDayVote(null);
-		session.SetPendingModeratorInstruction(RecoveryKey, signal);
-		session.CaptureRecoveryBoundary(RecoveryKey);
-		var recovered = new GameSession(session.Serialize());
+		var serialized = RecoveryPayloadTestDriver.Capture(session)
+			.WithPendingInstruction(signal)
+			.Serialize();
+		var service = new GameService();
 
-		var restore = () => GameFlowManager.RestoreDurableContinuation(
-			recovered,
-			SupportedRoleCatalog.Admissions);
+		var restore = () => service.RehydrateSession(serialized);
 
 		restore.Should().Throw<InvalidOperationException>()
 			.WithMessage("*Stuttering Judge signal instruction*structurally invalid*");
+		service.GetGameStateView(session.Id).Should().BeNull();
 		MarkTestCompleted();
 	}
 
@@ -1130,8 +1128,6 @@ public sealed class StutteringJudgeRoleTests : DiagnosticTestBase
 				? RolePowerAvailabilityResult.Allowed
 					: RolePowerAvailabilityResult.Denied;
 	}
-
-	private sealed class TestGameFlowManagerKey : IGameFlowManagerKey;
 
 	public enum NativeSignalRecoveryTamper
 	{

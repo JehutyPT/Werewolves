@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using Werewolves.Core.GameLogic.Interfaces;
 using Werewolves.Core.GameLogic.Models.EliminationCascades;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
+using Werewolves.Core.GameLogic.Models.StateMachine;
 using Werewolves.Core.GameLogic.RolePowers;
 using Werewolves.Core.GameLogic.Roles.MainRoles;
 using Werewolves.Core.GameLogic.Services;
@@ -51,6 +52,218 @@ internal sealed class RecoveryPayloadTestDriver
 			?? throw new InvalidOperationException(
 				"The recovery test payload could not be deserialized.");
 		return new RecoveryPayloadTestDriver(payload);
+	}
+
+	internal static RecoveryPayloadTestDriver Capture(GameSession session)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		var driver = Parse(session.Serialize());
+		var payload = driver._payload;
+		var execution = session.Execution;
+		var actorSetupCards = session.GetModeratorActorSetupCards();
+		var actorActivation =
+			session.GetModeratorActiveActorBorrowedRolePowerActivation();
+
+		payload.Id = session.Id;
+		payload.TurnNumber = session.TurnNumber;
+		payload.SeatingOrder = session.GetPlayers()
+			.Select(player => player.Id)
+			.ToList();
+		payload.RolesInPlay = session.RoleLockIn.DealPool
+			.Select(card => card.PrintedRole)
+			.ToList();
+		payload.RoleLockIn = RoleLockInDto.FromValue(session.RoleLockIn);
+		payload.PublicGroupPartition = session.PublicGroupPartition is null
+			? null
+			: PublicGroupPartitionDto.FromValue(session.PublicGroupPartition);
+		payload.ActorSetupCards = ActorSetupCardsDto.FromValue(actorSetupCards);
+		payload.ActiveActorBorrowedRolePowerActivation = actorActivation is null
+			? null
+			: ActorBorrowedRolePowerActivationDto.FromValue(actorActivation);
+		if (actorActivation != null)
+		{
+			driver.RecordActorSetupCardSpend(actorActivation);
+		}
+
+		payload.ActorBorrowedSeerCheckCommits = session
+			.GetActorBorrowedSeerCheckCommits()
+			.Select(ActorBorrowedSeerCheckCommitDto.FromValue)
+			.ToList();
+		payload.ActorBorrowedDefenderProtectionCommits = session
+			.GetActorBorrowedDefenderProtectionCommits()
+			.Select(ActorBorrowedDefenderProtectionCommitDto.FromValue)
+			.ToList();
+		payload.ActorBorrowedFoxCheckCommits = session
+			.GetActorBorrowedFoxCheckCommits()
+			.Select(ActorBorrowedFoxCheckCommitDto.FromValue)
+			.ToList();
+		payload.ActorBorrowedBearTamerGrowlCommits = session
+			.GetActorBorrowedBearTamerGrowlCommits()
+			.Select(ActorBorrowedBearTamerGrowlCommitDto.FromValue)
+			.ToList();
+		payload.ActorBorrowedKnightRustySwordScheduleCommits = session
+			.GetActorBorrowedKnightRustySwordScheduleCommits()
+			.Select(ActorBorrowedKnightRustySwordScheduleCommitDto.FromValue)
+			.ToList();
+		payload.ActorBorrowedHunterFinalShotCommits = session
+			.GetActorBorrowedHunterFinalShotCommits()
+			.Select(ActorBorrowedHunterFinalShotCommitDto.FromValue)
+			.ToList();
+		payload.ActorBorrowedElderResistanceCommits = session
+			.GetActorBorrowedElderResistanceCommits()
+			.Select(ActorBorrowedElderResistanceCommitDto.FromValue)
+			.ToList();
+		payload.ActorBorrowedElderSuppressionCommits = session
+			.GetActorBorrowedElderSuppressionCommits()
+			.Select(ActorBorrowedElderSuppressionCommitDto.FromValue)
+			.ToList();
+		payload.ActorBorrowedScapegoatTieReplacementCommits = session
+			.GetActorBorrowedScapegoatTieReplacementCommits()
+			.Select(ActorBorrowedScapegoatTieReplacementCommitDto.FromValue)
+			.ToList();
+		payload.ActorBorrowedScapegoatVoterRestrictionCommits = session
+			.GetActorBorrowedScapegoatVoterRestrictionCommits()
+			.Select(ActorBorrowedScapegoatVoterRestrictionCommitDto.FromValue)
+			.ToList();
+		payload.ActorBorrowedVillageIdiotPardonCommits = session
+			.GetActorBorrowedVillageIdiotPardonCommits()
+			.Select(ActorBorrowedVillageIdiotPardonCommitDto.FromValue)
+			.ToList();
+		payload.ActorBorrowedWitchPotionUseCommits = session
+			.GetActorBorrowedWitchPotionUseCommits()
+			.Select(ActorBorrowedWitchPotionUseCommitDto.FromValue)
+			.ToList();
+		payload.ActorBorrowedWitchPotionDeclineCommits = session
+			.GetActorBorrowedWitchPotionDeclineCommits()
+			.Select(ActorBorrowedWitchPotionDeclineCommitDto.FromValue)
+			.ToList();
+		payload.ActorBorrowedCupidLoversCommits = session
+			.GetActorBorrowedCupidLoversCommits()
+			.Select(ActorBorrowedCupidLoversCommitDto.FromValue)
+			.ToList();
+		payload.ActorBorrowedStutteringJudgeSignalSetupCommits = session
+			.GetActorBorrowedStutteringJudgeSignalSetupCommits()
+			.Select(ActorBorrowedStutteringJudgeSignalSetupCommitDto.FromValue)
+			.ToList();
+		payload.ActorBorrowedStutteringJudgeSignalObservationCommits = session
+			.GetActorBorrowedStutteringJudgeSignalObservationCommits()
+			.Select(ActorBorrowedStutteringJudgeSignalObservationCommitDto.FromValue)
+			.ToList();
+		payload.PhysicalCharacterCards = session
+			.GetModeratorPhysicalCharacterCards()
+			.Select(state => new PhysicalCharacterCardStateDto
+			{
+				CardId = state.Card.Id,
+				Zone = state.Zone,
+				OwnerPlayerId = state.OwnerPlayerId
+			})
+			.ToList();
+		payload.Players = session.GetPlayers()
+			.Select(player => new PlayerDto
+			{
+				Id = player.Id,
+				Name = player.Name,
+				MainRole = player.State.MainRole,
+				PhysicalCharacterCardId =
+					player.State.PhysicalCharacterCardId,
+				PhysicalCharacterCardRole =
+					player.State.PhysicalCharacterCardRole,
+				ModeratorKnownRole = player.State.ModeratorKnownRole,
+				PubliclyRevealedRole = player.State.PubliclyRevealedRole,
+				ActiveEffects = player.State.GetActiveStatusEffects()
+					.Aggregate(
+						StatusEffectTypes.None,
+						(current, effect) => current | effect),
+				Health = player.State.Health,
+				HasVotingRight = player.State.HasVotingRight,
+				DurableVotingPower = player.State.DurableVotingPower,
+				FactionBeneficiary = player.State.FactionBeneficiary,
+				FactionAgentKnowledge = Enum.GetValues<Faction>()
+					.ToDictionary(
+						faction => faction,
+						faction => player.State
+							.GetFactionAgentKnowledge(faction))
+			})
+			.ToList();
+		payload.GameHistoryLog = session.GameHistoryLog.ToList();
+		payload.PendingInstruction = execution.PendingInstruction;
+		payload.PendingInstructionSemantic =
+			execution.PendingInstruction?.Semantic;
+		payload.AcceptedObservationRecoveryCursor =
+			execution.AcceptedObservationRecoveryCursor;
+		payload.DomainRecoveryCursor = execution.DomainRecoveryCursor;
+		payload.PhaseStateCache = new GamePhaseStateCacheDto
+		{
+			CurrentPhase = execution.CurrentPhase,
+			SubPhase = execution.SubPhaseId,
+			CompletedSubPhaseStages = execution.CompletedSubPhaseStages.ToList()
+		};
+		payload.IsStableRecoveryBoundary = true;
+
+		return driver;
+	}
+
+	internal RecoveryPayloadTestDriver RecordActorSetupCardSpend(
+		ActorBorrowedRolePowerActivation activation)
+	{
+		ArgumentNullException.ThrowIfNull(activation);
+		_payload.ActorSetupCardSpends ??= [];
+		_payload.ActorSetupCardSpends.RemoveAll(spend =>
+			spend.CardId == activation.SelectedCardId);
+		_payload.ActorSetupCardSpends.Add(new ActorSetupCardSpendDto
+		{
+			CardId = activation.SelectedCardId,
+			ActivationId = activation.ActivationId
+		});
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver WithPendingInstruction(
+		ModeratorInstruction instruction)
+	{
+		ArgumentNullException.ThrowIfNull(instruction);
+		_payload.PendingInstruction = instruction;
+		_payload.PendingInstructionSemantic = instruction.Semantic;
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver WithRecoveryCursors(
+		AcceptedObservationRecoveryCursor? acceptedObservationRecoveryCursor = null,
+		DomainRecoveryCursor? domainRecoveryCursor = null)
+	{
+		_payload.AcceptedObservationRecoveryCursor =
+			acceptedObservationRecoveryCursor;
+		_payload.DomainRecoveryCursor = domainRecoveryCursor;
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver WithSubPhase(Enum? subPhase)
+	{
+		_payload.PhaseStateCache.SubPhase = subPhase?.ToString();
+		_payload.PhaseStateCache.ActiveSubPhaseStage = null;
+		_payload.PhaseStateCache.CurrentListenerId = null;
+		_payload.PhaseStateCache.CurrentListenerType = null;
+		_payload.PhaseStateCache.CurrentListenerState = null;
+		return this;
+	}
+
+	internal ModeratorInstruction? PendingInstruction =>
+		_payload.PendingInstruction;
+
+	internal AcceptedObservationRecoveryCursor?
+		AcceptedObservationRecoveryCursor =>
+		_payload.AcceptedObservationRecoveryCursor;
+
+	internal DomainRecoveryCursor? DomainRecoveryCursor =>
+		_payload.DomainRecoveryCursor;
+
+	internal GameSession RehydrateGameSession()
+	{
+		var service = new GameService();
+		var gameId = service.RehydrateSession(Serialize());
+		return (GameSession)(service.GetGameStateView(gameId)
+			?? throw new InvalidOperationException(
+				"The recovery test payload did not register a Game Session."));
 	}
 
 	internal static ActorBorrowedHunterPendingRecoverySnapshot
@@ -125,14 +338,13 @@ internal sealed class RecoveryPayloadTestDriver
 
 		SeedActorBorrowedHunterRecoveryFacts(sourceSession, players[1].Id);
 		sourceSession.TransitionMainPhase(GamePhase.Day);
-		sourceSession.SetPendingModeratorInstruction(
-			ActorBorrowedHunterRecoveryFlowKey.Instance,
-			start);
-		sourceSession.CaptureRecoveryBoundary(
-			ActorBorrowedHunterRecoveryFlowKey.Instance);
+		var serializedSource = RecoveryPayloadTestDriver.Capture(sourceSession)
+			.RecordActorSetupCardSpend(activation!)
+			.WithPendingInstruction(start)
+			.Serialize();
 
 		var service = new GameService();
-		var gameId = service.RehydrateSession(sourceSession.Serialize());
+		var gameId = service.RehydrateSession(serializedSource);
 		var recoveredStart = RequireActorBorrowedHunterInstruction<
 			StartGameConfirmationInstruction>(
 			service.GetCurrentInstruction(gameId));
@@ -266,14 +478,13 @@ internal sealed class RecoveryPayloadTestDriver
 
 		SeedActorBorrowedHunterRecoveryFacts(sourceSession, werewolfId);
 		sourceSession.TransitionMainPhase(GamePhase.Day);
-		sourceSession.SetPendingModeratorInstruction(
-			ActorBorrowedElderRecoveryFlowKey.Instance,
-			start);
-		sourceSession.CaptureRecoveryBoundary(
-			ActorBorrowedElderRecoveryFlowKey.Instance);
+		var serializedSource = Capture(sourceSession)
+			.RecordActorSetupCardSpend(activation!)
+			.WithPendingInstruction(start)
+			.Serialize();
 
 		var service = new GameService();
-		var gameId = service.RehydrateSession(sourceSession.Serialize());
+		var gameId = service.RehydrateSession(serializedSource);
 		var recoveredStart = RequireActorBorrowedElderInstruction<
 			StartGameConfirmationInstruction>(
 			service.GetCurrentInstruction(gameId));
@@ -453,14 +664,13 @@ internal sealed class RecoveryPayloadTestDriver
 
 		SeedActorBorrowedHunterRecoveryFacts(sourceSession, werewolfId);
 		sourceSession.TransitionMainPhase(GamePhase.Day);
-		sourceSession.SetPendingModeratorInstruction(
-			ActorBorrowedScapegoatRecoveryFlowKey.Instance,
-			start);
-		sourceSession.CaptureRecoveryBoundary(
-			ActorBorrowedScapegoatRecoveryFlowKey.Instance);
+		var serializedSource = RecoveryPayloadTestDriver.Capture(sourceSession)
+			.RecordActorSetupCardSpend(activation!)
+			.WithPendingInstruction(start)
+			.Serialize();
 
 		var service = new GameService();
-		var gameId = service.RehydrateSession(sourceSession.Serialize());
+		var gameId = service.RehydrateSession(serializedSource);
 		var recoveredStart = RequireActorBorrowedScapegoatInstruction<
 			StartGameConfirmationInstruction>(
 			service.GetCurrentInstruction(gameId));
@@ -499,7 +709,7 @@ internal sealed class RecoveryPayloadTestDriver
 			var pendingState = service.GetGameStateView(gameId) as GameSession
 				?? throw new InvalidOperationException(
 					"The Scapegoat recovery fixture lost its pending Game Session.");
-			var liveInstruction = pendingState.PendingModeratorInstruction;
+			var liveInstruction = service.GetCurrentInstruction(gameId);
 			if (liveInstruction == null ||
 				liveInstruction.InstructionId != instruction.InstructionId ||
 				liveInstruction.Semantic != instruction.Semantic)
@@ -508,17 +718,16 @@ internal sealed class RecoveryPayloadTestDriver
 					"The Scapegoat recovery fixture did not reach the requested live pending instruction.");
 			}
 
-			if (capturedStep == ActorBorrowedScapegoatRecoveryStep.Reveal)
-			{
-				// A tied Vote has no commit-based automatic recovery boundary.
-				// Capture the real pre-commit reveal explicitly before serializing.
-				pendingState.CaptureRecoveryBoundary(
-					ActorBorrowedScapegoatRecoveryFlowKey.Instance);
-			}
+			var serializedSession = capturedStep ==
+				ActorBorrowedScapegoatRecoveryStep.Reveal
+				? RecoveryPayloadTestDriver.Capture(pendingState)
+					.WithPendingInstruction(instruction)
+					.Serialize()
+				: pendingState.Serialize();
 
 			return new ActorBorrowedScapegoatPendingRecoverySnapshot(
 				capturedStep,
-				pendingState.Serialize(),
+				serializedSession,
 				gameId,
 				instruction,
 				scapegoatCard.Id,
@@ -672,14 +881,13 @@ internal sealed class RecoveryPayloadTestDriver
 
 		SeedActorBorrowedHunterRecoveryFacts(sourceSession, werewolfId);
 		sourceSession.TransitionMainPhase(GamePhase.Day);
-		sourceSession.SetPendingModeratorInstruction(
-			ActorBorrowedVillageIdiotRecoveryFlowKey.Instance,
-			start);
-		sourceSession.CaptureRecoveryBoundary(
-			ActorBorrowedVillageIdiotRecoveryFlowKey.Instance);
+		var serializedSource = Capture(sourceSession)
+			.RecordActorSetupCardSpend(activation!)
+			.WithPendingInstruction(start)
+			.Serialize();
 
 		var service = new GameService();
-		var gameId = service.RehydrateSession(sourceSession.Serialize());
+		var gameId = service.RehydrateSession(serializedSource);
 		var recoveredStart = RequireActorBorrowedVillageIdiotInstruction<
 			StartGameConfirmationInstruction>(
 			service.GetCurrentInstruction(gameId));
@@ -725,7 +933,7 @@ internal sealed class RecoveryPayloadTestDriver
 		var pendingState = service.GetGameStateView(gameId) as GameSession
 			?? throw new InvalidOperationException(
 				"The Village Idiot recovery fixture lost its pending Game Session.");
-		var liveInstruction = pendingState.PendingModeratorInstruction;
+		var liveInstruction = service.GetCurrentInstruction(gameId);
 		if (liveInstruction == null ||
 			liveInstruction.InstructionId != pardon.InstructionId ||
 			liveInstruction.Semantic != pardon.Semantic)
@@ -839,14 +1047,13 @@ internal sealed class RecoveryPayloadTestDriver
 			NightActionType.WerewolfVictimSelection,
 			victimId);
 		sourceSession.TransitionMainPhase(GamePhase.Dawn);
-		sourceSession.SetPendingModeratorInstruction(
-			ActorBorrowedBearTamerRecoveryFlowKey.Instance,
-			start);
-		sourceSession.CaptureRecoveryBoundary(
-			ActorBorrowedBearTamerRecoveryFlowKey.Instance);
+		var serializedSource = Capture(sourceSession)
+			.RecordActorSetupCardSpend(activation!)
+			.WithPendingInstruction(start)
+			.Serialize();
 
 		var service = new GameService();
-		var gameId = service.RehydrateSession(sourceSession.Serialize());
+		var gameId = service.RehydrateSession(serializedSource);
 		var recoveredStart = RequireActorBorrowedBearTamerInstruction<
 			StartGameConfirmationInstruction>(
 			service.GetCurrentInstruction(gameId));
@@ -901,7 +1108,7 @@ internal sealed class RecoveryPayloadTestDriver
 		var pendingState = service.GetGameStateView(gameId) as GameSession
 			?? throw new InvalidOperationException(
 				"The Bear Tamer recovery fixture lost its pending Game Session.");
-		var liveInstruction = pendingState.PendingModeratorInstruction;
+		var liveInstruction = service.GetCurrentInstruction(gameId);
 		var currentActivation = pendingState
 			.GetModeratorActiveActorBorrowedRolePowerActivation();
 		if (liveInstruction == null ||
@@ -1018,14 +1225,13 @@ internal sealed class RecoveryPayloadTestDriver
 			NightActionType.WerewolfVictimSelection,
 			actorId);
 		sourceSession.TransitionMainPhase(GamePhase.Dawn);
-		sourceSession.SetPendingModeratorInstruction(
-			ActorBorrowedKnightRecoveryFlowKey.Instance,
-			start);
-		sourceSession.CaptureRecoveryBoundary(
-			ActorBorrowedKnightRecoveryFlowKey.Instance);
+		var serializedSource = Capture(sourceSession)
+			.RecordActorSetupCardSpend(activation!)
+			.WithPendingInstruction(start)
+			.Serialize();
 
 		var service = new GameService();
-		var gameId = service.RehydrateSession(sourceSession.Serialize());
+		var gameId = service.RehydrateSession(serializedSource);
 		var recoveredStart = RequireActorBorrowedKnightInstruction<
 			StartGameConfirmationInstruction>(
 			service.GetCurrentInstruction(gameId));
@@ -1130,48 +1336,75 @@ internal sealed class RecoveryPayloadTestDriver
 
 		CommitActorBorrowedKnightCurrentWerewolfAgentFacts(
 			pendingState,
-			new HashSet<Guid> { otherWerewolfId });
-		if (!pendingState.TryEnterSubPhaseStage(
-				ActorBorrowedKnightRecoverySubPhaseKey.Instance,
-				GameHook.NightMainActionLoop.ToString()))
-		{
-			throw new InvalidOperationException(
-				"The Knight recovery fixture could not enter the following Night hook.");
-		}
-
-		IGameHookListener knight = new KnightWithTheRustySwordRole(
+			new HashSet<Guid>());
+		var knight = new KnightWithTheRustySwordRole(
 			new RolePowerAvailabilityGateway(
 				AllowAllRolePowerAvailabilityPolicy.Instance));
-		var consequence = knight.Execute(
-			pendingState,
-			start.CreateResponse());
-		if (consequence.Outcome != HookListenerOutcome.Complete ||
-			consequence.Instruction is not null ||
-			consequence.NextListenerPhase is null)
+		pendingState.GetOrCreateListener(knight.Id, () => knight);
+		var nightHook = new SubPhaseManager<RecoveryHookDriverSubPhase>(
+			RecoveryHookDriverSubPhase.Active,
+			[
+				HookSubPhaseStage.HookStage(GameHook.NightMainActionLoop),
+				NavigationSubPhaseStage.NavigationEndStageSilent(
+					RecoveryHookDriverSubPhase.Complete)
+			],
+			possibleNextSubPhases: [RecoveryHookDriverSubPhase.Complete]);
+		var nightResponse = start.CreateResponse();
+		var nightCompleted = false;
+		for (var step = 0; step < 20; step++)
 		{
-			throw new InvalidOperationException(
-				"The Knight recovery fixture did not convert its private schedule into the due consequence.");
+			var instruction = nightHook.Execute(pendingState, nightResponse)
+				.ModeratorInstruction;
+			if (instruction == null)
+			{
+				nightCompleted = true;
+				break;
+			}
+
+			nightResponse = instruction switch
+			{
+				ConfirmationInstruction confirmation =>
+					confirmation.CreateResponse(),
+				SelectPlayersInstruction
+				{
+					Semantic: ModeratorInstructionSemantic
+						.ObserveWerewolfFactionAgentGroup
+				} observation => observation.CreateResponse([]),
+				_ => throw new InvalidOperationException(
+					$"The Knight recovery fixture encountered unexpected following-Night instruction {instruction.Semantic}.")
+			};
 		}
 
-		pendingState.TransitionListenerStateCache(
-			ActorBorrowedKnightRecoveryHookKey.Instance,
-			knight.Id,
-			consequence.NextListenerPhase);
-		pendingState.ClearCurrentListenerCache(
-			ActorBorrowedKnightRecoveryHookKey.Instance);
+		if (!nightCompleted ||
+			pendingState.GameHistoryLog.OfType<NightActionLogEntry>().Any(entry =>
+				entry.ActionType == NightActionType.RustySword) ||
+			pendingState.GetPlayerState(targetId).HasStatusEffect(
+				StatusEffectTypes.RustySwordDisease))
+		{
+			throw new InvalidOperationException(
+				"The Knight recovery fixture did not carry its private schedule through the ordinary following-Night cadence.");
+		}
+
+		CommitActorBorrowedKnightCurrentWerewolfAgentFacts(
+			pendingState,
+			new HashSet<Guid> { otherWerewolfId });
+		pendingState.TransitionMainPhase(GamePhase.Dawn);
+		var serializedDueState = Capture(pendingState)
+			.RecordActorSetupCardSpend(activation!)
+			.WithPendingInstruction(start)
+			.Serialize();
+		service = new GameService();
+		gameId = service.RehydrateSession(serializedDueState);
+		pendingState = service.GetGameStateView(gameId) as GameSession
+			?? throw new InvalidOperationException(
+				"The Knight recovery fixture could not restore the due consequence state.");
 		EliminationCascadeRuntimeStore.Configure(
 			pendingState,
 			[
 				new EliminationCascadeReactionBinding(
-					(IEliminationCascadeReaction)knight,
+					knight,
 					EliminationCascadeReactionBoundary.PreReveal)
 			]);
-		pendingState.TransitionMainPhase(GamePhase.Dawn);
-		pendingState.SetPendingModeratorInstruction(
-			ActorBorrowedKnightRecoveryFlowKey.Instance,
-			start);
-		pendingState.CaptureRecoveryBoundary(
-			ActorBorrowedKnightRecoveryFlowKey.Instance);
 
 		var dueStart = RequireActorBorrowedKnightInstruction<
 			StartGameConfirmationInstruction>(
@@ -1227,7 +1460,7 @@ internal sealed class RecoveryPayloadTestDriver
 				"The Knight recovery fixture did not reach the canonical due Rusty Sword announcement.");
 		}
 
-		var liveInstruction = pendingState.PendingModeratorInstruction;
+		var liveInstruction = service.GetCurrentInstruction(gameId);
 		if (liveInstruction?.InstructionId != announcement.InstructionId ||
 			liveInstruction.Semantic != announcement.Semantic)
 		{
@@ -3432,56 +3665,10 @@ internal sealed class RecoveryPayloadTestDriver
 		?? throw new InvalidOperationException(
 			$"The Knight recovery fixture expected {typeof(TInstruction).Name}.");
 
-	private sealed class ActorBorrowedHunterRecoveryFlowKey : IGameFlowManagerKey
+	private enum RecoveryHookDriverSubPhase
 	{
-		internal static ActorBorrowedHunterRecoveryFlowKey Instance { get; } = new();
-	}
-
-	private sealed class ActorBorrowedElderRecoveryFlowKey : IGameFlowManagerKey
-	{
-		internal static ActorBorrowedElderRecoveryFlowKey Instance { get; } = new();
-	}
-
-	private sealed class ActorBorrowedScapegoatRecoveryFlowKey
-		: IGameFlowManagerKey
-	{
-		internal static ActorBorrowedScapegoatRecoveryFlowKey Instance { get; } =
-			new();
-	}
-
-	private sealed class ActorBorrowedVillageIdiotRecoveryFlowKey
-		: IGameFlowManagerKey
-	{
-		internal static ActorBorrowedVillageIdiotRecoveryFlowKey Instance { get; } =
-			new();
-	}
-
-	private sealed class ActorBorrowedBearTamerRecoveryFlowKey
-		: IGameFlowManagerKey
-	{
-		internal static ActorBorrowedBearTamerRecoveryFlowKey Instance { get; } =
-			new();
-	}
-
-	private sealed class ActorBorrowedKnightRecoveryFlowKey
-		: IGameFlowManagerKey
-	{
-		internal static ActorBorrowedKnightRecoveryFlowKey Instance { get; } =
-			new();
-	}
-
-	private sealed class ActorBorrowedKnightRecoverySubPhaseKey
-		: ISubPhaseManagerKey
-	{
-		internal static ActorBorrowedKnightRecoverySubPhaseKey Instance { get; } =
-			new();
-	}
-
-	private sealed class ActorBorrowedKnightRecoveryHookKey
-		: IHookSubPhaseKey
-	{
-		internal static ActorBorrowedKnightRecoveryHookKey Instance { get; } =
-			new();
+		Active,
+		Complete
 	}
 }
 

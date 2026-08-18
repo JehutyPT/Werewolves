@@ -1658,9 +1658,9 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 					session.GetPlayerState(playerId).Health ==
 					PlayerHealth.Alive)
 				.ToHashSet();
-			var pendingInstruction =
-				session.PendingModeratorInstruction as
-					SelectPlayersInstruction;
+			var pendingInstruction = RecoveryPayloadTestDriver
+				.Capture(session)
+				.PendingInstruction as SelectPlayersInstruction;
 			var isAwaitingPendingSelection =
 				pendingInstruction is
 				{

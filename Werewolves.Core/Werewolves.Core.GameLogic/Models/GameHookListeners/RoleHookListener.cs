@@ -397,9 +397,6 @@ internal abstract class RoleHookListener<TRoleStateEnum> : RoleHookListener wher
 			this.ShouldAdvanceState = ShouldAdvanceState;
 		}
 
-		private class HookStateMachineStageKey : IHookSubPhaseKey{}
-		private static readonly HookStateMachineStageKey Key = new();
-
 		/// <summary></summary>
 		public MainRoleType MainRoleType { get; init; }
 

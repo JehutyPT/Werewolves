@@ -149,15 +149,13 @@ public class PhaseTransitionTests : DiagnosticTestBase
 
     #endregion
 
-    #region PT-010 to PT-011: Phase Cache Behavior
+    #region PT-010 to PT-011: Public Phase Continuation
 
     /// <summary>
-    /// PT-010: Main phase transition clears sub-phase cache.
-    /// Verifies that when transitioning from Night to Dawn, the previous phase's
-    /// sub-phase stage and listener are cleared.
+    /// PT-010: Completing Night exposes a usable Dawn continuation.
     /// </summary>
     [Fact]
-    public void MainPhaseTransition_ClearsSubPhaseCache()
+    public void MainPhaseTransition_AdvancesPublicFlowToDawn()
     {
         // Arrange: Simple game
         var builder = CreateBuilder()
@@ -171,7 +169,7 @@ public class PhaseTransitionTests : DiagnosticTestBase
         var villager1 = players[2].Id;
         var villager2 = players[3].Id;
 
-        // Verify we're in Night phase with an active stage
+        // Verify we're in Night phase.
         var session = (GameSession)builder.GetGameState()!;
         session.GetCurrentPhase().Should().Be(GamePhase.Night);
 
@@ -182,28 +180,18 @@ public class PhaseTransitionTests : DiagnosticTestBase
             seerId: seerId,
             seerTargetId: villager2);
 
-        // Assert: Verify the phase transitioned correctly
+        // Assert: the public phase and instruction both moved to Dawn work.
         session.GetCurrentPhase().Should().Be(GamePhase.Dawn);
-
-        // The night listener should be cleared (no longer active)
-        var currentListener = session.GetCurrentListener();
-        if (currentListener != null)
-        {
-            // If there is a listener, it should not be a night role
-            currentListener.ListenerId.Should().NotBe(MainRoleType.SimpleWerewolf.ToString());
-            currentListener.ListenerId.Should().NotBe(MainRoleType.Seer.ToString());
-        }
+        builder.GetCurrentInstruction().Should().NotBeNull();
 
         MarkTestCompleted();
     }
 
     /// <summary>
-    /// PT-011: Sub-phase transition clears stage data.
-    /// Verifies that when transitioning between phases, the active sub-phase stage
-    /// from the previous phase is cleared.
+    /// PT-011: Completing Dawn exposes a usable Day continuation.
     /// </summary>
     [Fact]
-    public void SubPhaseTransition_ClearsStageData()
+    public void SubPhaseTransition_AdvancesPublicFlowToDay()
     {
         // Arrange: Simple game
         var builder = CreateBuilder()
@@ -227,29 +215,12 @@ public class PhaseTransitionTests : DiagnosticTestBase
         var session = (GameSession)builder.GetGameState()!;
         session.GetCurrentPhase().Should().Be(GamePhase.Dawn);
 
-        // Capture the Dawn stage before transitioning
-        var dawnStage = session.GetActiveSubPhaseStage();
-
         // Act: Complete dawn phase (transitions to Day)
         builder.CompleteDawnPhase();
 
-        // Assert: Verify we transitioned to Day
+        // Assert: the public phase and instruction both moved to Day work.
         session.GetCurrentPhase().Should().Be(GamePhase.Day);
-
-        // The Dawn stage should no longer be active
-        var currentStage = session.GetActiveSubPhaseStage();
-        if (dawnStage != null)
-        {
-            // If Dawn had an active stage, it should not be the same after transitioning
-            // (either cleared or set to a Day stage)
-            currentStage.Should().NotBe(dawnStage,
-                CoreTestReferences.AssertionReasons.DawnSubPhaseStageClearedAfterDayTransition);
-        }
-
-        // Listener should be cleared or be a Day-phase listener
-        var currentListener = session.GetCurrentListener();
-        // At Day.Debate, there shouldn't be an active listener yet
-        // (debate is a confirmation step, not a hook listener)
+        builder.GetCurrentInstruction().Should().NotBeNull();
 
         MarkTestCompleted();
     }

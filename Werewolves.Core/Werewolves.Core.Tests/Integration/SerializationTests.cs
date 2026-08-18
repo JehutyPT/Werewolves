@@ -849,16 +849,10 @@ public class SerializationTests : DiagnosticTestBase
             alivePlayerId,
             votedPlayerId,
             bystanderId));
-        var session = (GameSession)service.GetGameStateView(gameId)!;
-
-        session.GetSubPhase<DaySubPhases>().Should().Be(DaySubPhases.NormalVoting);
-        session.GetActiveSubPhaseStage().Should().BeNull();
-        session.GetCurrentListener().Should().BeNull();
-        session.GetCurrentListenerState<StandardNightRoleState>(
-            ListenerIdentifier.Listener(MainRoleType.SimpleWerewolf)).Should().BeNull();
-        service.GetCurrentInstruction(gameId).Should().BeOfType<SelectPlayersInstruction>();
-
-        var voteInstruction = (SelectPlayersInstruction)service.GetCurrentInstruction(gameId)!;
+        service.GetGameStateView(gameId)!.GetCurrentPhase().Should()
+            .Be(GamePhase.Day);
+        var voteInstruction = service.GetCurrentInstruction(gameId).Should()
+            .BeOfType<SelectPlayersInstruction>().Subject;
         service.ProcessInstruction(gameId, voteInstruction.CreateResponse([votedPlayerId]));
 
         var updatedSession = service.GetGameStateView(gameId)!;

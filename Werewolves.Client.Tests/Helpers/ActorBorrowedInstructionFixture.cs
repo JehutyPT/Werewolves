@@ -2,6 +2,7 @@ using Werewolves.Client.Services;
 using Werewolves.Core.GameLogic.Interfaces;
 using Werewolves.Core.GameLogic.Models.EliminationCascades;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
+using Werewolves.Core.GameLogic.Models.StateMachine;
 using Werewolves.Core.GameLogic.Queries;
 using Werewolves.Core.GameLogic.RolePowers;
 using Werewolves.Core.GameLogic.Roles;
@@ -75,9 +76,13 @@ internal static class ActorBorrowedInstructionFixture
 			MainRoleType.KnightWithRustySword)
 	];
 
-	private static readonly TestSubPhaseManagerKey SubPhaseKey = new();
-	private static readonly TestHookSubPhaseKey HookKey = new();
-	private static readonly TestGameFlowManagerKey FlowKey = new();
+	private static readonly SubPhaseManager<ListenerTestSubPhase>
+		NightActionLoop = new(
+			ListenerTestSubPhase.ActionLoop,
+			[
+				HookSubPhaseStage.HookStage(GameHook.NightMainActionLoop),
+				NavigationSubPhaseStage.NavigationEndStageSilent(GamePhase.Dawn)
+			]);
 
 	internal static ActorBorrowedInstructionScenario Create(
 		ActorBorrowedPowerFamily family)
@@ -176,15 +181,7 @@ internal static class ActorBorrowedInstructionFixture
 				players[^1].Id);
 		}
 
-		if (!session.TryEnterSubPhaseStage(
-				SubPhaseKey,
-				GameHook.NightMainActionLoop.ToString()))
-		{
-			throw new InvalidOperationException(
-				"The Actor UI fixture could not enter the night action loop.");
-		}
-
-		var activation = PerformSpendOpening(
+		var opening = PerformSpendOpening(
 			new ActorRole(CreateActorAvailabilityGateway()),
 			session,
 			start,
@@ -196,7 +193,8 @@ internal static class ActorBorrowedInstructionFixture
 			actorId,
 			werewolfId,
 			setupCards,
-			activation);
+			opening.Activation,
+			opening.Sleep);
 	}
 
 	private static FamilyOutput CreateInstruction(
@@ -226,10 +224,10 @@ internal static class ActorBorrowedInstructionFixture
 	private static FamilyOutput CreateSeerInstruction(CoreFixture fixture)
 	{
 		var listener = CreateSourceListener(MainRoleType.Seer);
-		var wake = AdvanceToInstruction<ConfirmationInstruction>(
+		var wake = AdvanceToActorInstruction<ConfirmationInstruction>(
 			listener,
-			fixture.Session,
-			fixture.Start.CreateResponse(),
+			fixture,
+			fixture.ActorSleep.CreateResponse(),
 			"Seer wake");
 		var selection = AdvanceToInstruction<SelectPlayersInstruction>(
 			listener,
@@ -247,10 +245,10 @@ internal static class ActorBorrowedInstructionFixture
 	private static FamilyOutput CreateCupidInstruction(CoreFixture fixture)
 	{
 		var listener = CreateSourceListener(MainRoleType.Cupid);
-		var wake = AdvanceToInstruction<ConfirmationInstruction>(
+		var wake = AdvanceToActorInstruction<ConfirmationInstruction>(
 			listener,
-			fixture.Session,
-			fixture.Start.CreateResponse(),
+			fixture,
+			fixture.ActorSleep.CreateResponse(),
 			"Cupid wake");
 		var selection = AdvanceToInstruction<SelectPlayersInstruction>(
 			listener,
@@ -280,10 +278,10 @@ internal static class ActorBorrowedInstructionFixture
 	private static FamilyOutput CreateWitchInstruction(CoreFixture fixture)
 	{
 		var listener = CreateSourceListener(MainRoleType.Witch);
-		var wake = AdvanceToInstruction<ConfirmationInstruction>(
+		var wake = AdvanceToActorInstruction<ConfirmationInstruction>(
 			listener,
-			fixture.Session,
-			fixture.Start.CreateResponse(),
+			fixture,
+			fixture.ActorSleep.CreateResponse(),
 			"Witch wake");
 		var selection = AdvanceToInstruction<SelectPlayersInstruction>(
 			listener,
@@ -306,7 +304,7 @@ internal static class ActorBorrowedInstructionFixture
 		var instruction = AdvanceToInstruction<SelectPlayersInstruction>(
 			CreateSourceListener(MainRoleType.LittleGirl),
 			fixture.Session,
-			fixture.Start.CreateResponse(),
+			fixture.ActorSleep.CreateResponse(),
 			"Little Girl Werewolf group observation");
 		return FamilyOutput.Passive(instruction);
 	}
@@ -314,10 +312,10 @@ internal static class ActorBorrowedInstructionFixture
 	private static FamilyOutput CreateDefenderInstruction(CoreFixture fixture)
 	{
 		var listener = CreateSourceListener(MainRoleType.Defender);
-		var wake = AdvanceToInstruction<ConfirmationInstruction>(
+		var wake = AdvanceToActorInstruction<ConfirmationInstruction>(
 			listener,
-			fixture.Session,
-			fixture.Start.CreateResponse(),
+			fixture,
+			fixture.ActorSleep.CreateResponse(),
 			"Defender wake");
 		var selection = AdvanceToInstruction<SelectPlayersInstruction>(
 			listener,
@@ -330,10 +328,10 @@ internal static class ActorBorrowedInstructionFixture
 	private static FamilyOutput CreateFoxInstruction(CoreFixture fixture)
 	{
 		var listener = CreateSourceListener(MainRoleType.Fox);
-		var wake = AdvanceToInstruction<ConfirmationInstruction>(
+		var wake = AdvanceToActorInstruction<ConfirmationInstruction>(
 			listener,
-			fixture.Session,
-			fixture.Start.CreateResponse(),
+			fixture,
+			fixture.ActorSleep.CreateResponse(),
 			"Fox wake");
 		var selection = AdvanceToInstruction<SelectPlayersInstruction>(
 			listener,
@@ -381,10 +379,10 @@ internal static class ActorBorrowedInstructionFixture
 		CoreFixture fixture)
 	{
 		var listener = CreateSourceListener(MainRoleType.StutteringJudge);
-		var wake = AdvanceToInstruction<ConfirmationInstruction>(
+		var wake = AdvanceToActorInstruction<ConfirmationInstruction>(
 			listener,
-			fixture.Session,
-			fixture.Start.CreateResponse(),
+			fixture,
+			fixture.ActorSleep.CreateResponse(),
 			"Stuttering Judge wake");
 		var setup = AdvanceToInstruction<ConfirmationInstruction>(
 			listener,
@@ -397,15 +395,14 @@ internal static class ActorBorrowedInstructionFixture
 			setup.CreateResponse(),
 			"Stuttering Judge sleep");
 		var terminal = Advance(listener, fixture.Session, sleep.CreateResponse());
-		if (terminal.Outcome != HookListenerOutcome.Complete)
+		if (terminal.Instruction is null &&
+			terminal.Outcome != HookListenerOutcome.Complete)
 		{
 			throw new InvalidOperationException(
 				"The Actor UI fixture did not finish Stuttering Judge setup.");
 		}
-		fixture.Session.ClearCurrentListenerCache(HookKey);
 
 		fixture.Session.TransitionMainPhase(GamePhase.Day);
-		fixture.Session.SetPendingModeratorInstruction(FlowKey, fixture.Start);
 		var debate = RequireInstruction<ConfirmationInstruction>(
 			GameFlowManager.HandleInput(
 				fixture.Session,
@@ -490,7 +487,6 @@ internal static class ActorBorrowedInstructionFixture
 			NightActionType.WerewolfVictimSelection,
 			fixture.ActorId);
 		fixture.Session.TransitionMainPhase(GamePhase.Dawn);
-		fixture.Session.SetPendingModeratorInstruction(FlowKey, fixture.Start);
 		var debate = RequireSemantic<ConfirmationInstruction>(
 			AdvanceMainFlow(fixture.Session, fixture.Start.CreateResponse()),
 			ModeratorInstructionSemantic.StartDayDebate,
@@ -597,7 +593,6 @@ internal static class ActorBorrowedInstructionFixture
 			NightActionType.WerewolfVictimSelection,
 			victimId);
 		fixture.Session.TransitionMainPhase(GamePhase.Dawn);
-		fixture.Session.SetPendingModeratorInstruction(FlowKey, fixture.Start);
 		var growl = AdvanceDawnToConfirmation(
 			fixture,
 			fixture.Start.CreateResponse(),
@@ -624,8 +619,7 @@ internal static class ActorBorrowedInstructionFixture
 			NightActionType.WerewolfVictimSelection,
 			fixture.ActorId);
 		fixture.Session.TransitionMainPhase(GamePhase.Dawn);
-		fixture.Session.SetPendingModeratorInstruction(FlowKey, fixture.Start);
-		_ = AdvanceDawnToConfirmation(
+		var debate = AdvanceDawnToConfirmation(
 			fixture,
 			fixture.Start.CreateResponse(),
 			ModeratorInstructionSemantic.StartDayDebate,
@@ -642,37 +636,25 @@ internal static class ActorBorrowedInstructionFixture
 				"The Actor UI fixture did not silently schedule the first clockwise Werewolf Agent.");
 		}
 
+		UpdateKnownWerewolfAgentFacts(fixture.Session, new HashSet<Guid>());
 		fixture.Session.TransitionMainPhase(GamePhase.Night);
 		if (!fixture.Session.TryExpireActorBorrowedRolePowerActivation())
 		{
 			throw new InvalidOperationException(
 				"The Actor UI fixture could not expire the borrowed Knight activation before its scheduled consequence.");
 		}
-		if (!fixture.Session.TryEnterSubPhaseStage(
-				SubPhaseKey,
-				GameHook.NightMainActionLoop.ToString()))
-		{
-			throw new InvalidOperationException(
-				"The Actor UI fixture could not enter the following Night action loop.");
-		}
-
-		var conversion = Advance(
+		DriveNightHookToCompletion(
 			knight,
-			fixture.Session,
+			fixture,
 			fixture.Start.CreateResponse());
-		if (conversion.Outcome != HookListenerOutcome.Complete ||
-			conversion.Instruction is not null)
-		{
-			throw new InvalidOperationException(
-				"The due borrowed Knight disease did not convert silently.");
-		}
 
-		fixture.Session.ClearCurrentListenerCache(HookKey);
+		UpdateKnownWerewolfAgentFacts(
+			fixture.Session,
+			new HashSet<Guid> { fixture.WerewolfId });
 		fixture.Session.TransitionMainPhase(GamePhase.Dawn);
-		fixture.Session.SetPendingModeratorInstruction(FlowKey, fixture.Start);
 		var announcement = AdvanceDawnToConfirmation(
 			fixture,
-			fixture.Start.CreateResponse(),
+			debate.CreateResponse(),
 			ModeratorInstructionSemantic.AnnounceDawnVictims,
 			playerId => playerId == fixture.WerewolfId
 				? MainRoleType.SimpleWerewolf
@@ -950,7 +932,6 @@ internal static class ActorBorrowedInstructionFixture
 	private static SelectPlayersInstruction BeginDayVote(CoreFixture fixture)
 	{
 		fixture.Session.TransitionMainPhase(GamePhase.Day);
-		fixture.Session.SetPendingModeratorInstruction(FlowKey, fixture.Start);
 		var debate = RequireSemantic<ConfirmationInstruction>(
 			AdvanceMainFlow(fixture.Session, fixture.Start.CreateResponse()),
 			ModeratorInstructionSemantic.StartDayDebate,
@@ -1009,7 +990,7 @@ internal static class ActorBorrowedInstructionFixture
 			$"The Actor UI fixture did not reach {step}.");
 	}
 
-	private static ActorBorrowedRolePowerActivation PerformSpendOpening(
+	private static SpendOpeningResult PerformSpendOpening(
 		IGameHookListener listener,
 		GameSession session,
 		StartGameConfirmationInstruction start,
@@ -1034,14 +1015,80 @@ internal static class ActorBorrowedInstructionFixture
 			.GetModeratorActiveActorBorrowedRolePowerActivation()
 			?? throw new InvalidOperationException(
 				"The Actor setup-card choice did not establish an activation.");
-		var completed = Advance(listener, session, sleep.CreateResponse());
-		if (completed.Outcome != HookListenerOutcome.Complete)
+		return new SpendOpeningResult(activation, sleep);
+	}
+
+	private static TInstruction AdvanceToActorInstruction<TInstruction>(
+		IGameHookListener listener,
+		CoreFixture fixture,
+		ModeratorResponse response,
+		string step)
+		where TInstruction : ModeratorInstruction
+	{
+		for (var attempt = 0; attempt < 20; attempt++)
 		{
-			throw new InvalidOperationException(
-				"The Actor setup-card opening did not complete.");
+			var instruction = Advance(listener, fixture.Session, response).Instruction
+				?? throw new InvalidOperationException(
+					$"The Actor UI fixture completed the Night hook before {step}.");
+			if (instruction is TInstruction typed &&
+				instruction.AffectedPlayerIds?.Contains(fixture.ActorId) == true)
+			{
+				return typed;
+			}
+
+			response = CreateInterveningNightResponse(instruction, fixture);
 		}
-		session.ClearCurrentListenerCache(HookKey);
-		return activation;
+
+		throw new InvalidOperationException(
+			$"The Actor UI fixture did not reach {step}.");
+	}
+
+	private static ModeratorResponse CreateInterveningNightResponse(
+		ModeratorInstruction instruction,
+		CoreFixture fixture) => instruction switch
+	{
+		ConfirmationInstruction confirmation => confirmation.CreateResponse(),
+		SelectPlayersInstruction
+		{
+			Semantic: ModeratorInstructionSemantic.SelectWerewolfVictim
+		} selection => selection.CreateResponse(
+			[
+				selection.SelectablePlayerIds.Contains(fixture.Players[^1].Id)
+					? fixture.Players[^1].Id
+					: selection.SelectablePlayerIds.First()
+			]),
+		SelectPlayersInstruction
+		{
+			Semantic:
+				ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup
+		} observation => observation.CreateResponse([fixture.WerewolfId]),
+		SelectOptionsInstruction options => options.CreateResponse(),
+		_ => throw new InvalidOperationException(
+			$"The Actor UI fixture cannot pass intervening Night instruction {instruction.Semantic}.")
+	};
+
+	private static void DriveNightHookToCompletion(
+		IGameHookListener listener,
+		CoreFixture fixture,
+		ModeratorResponse response)
+	{
+		for (var attempt = 0; attempt < 30; attempt++)
+		{
+			var result = Advance(listener, fixture.Session, response);
+			if (result.Outcome == HookListenerOutcome.Complete &&
+				result.Instruction is null)
+			{
+				return;
+			}
+
+			response = CreateInterveningNightResponse(
+				result.Instruction ?? throw new InvalidOperationException(
+					"The Actor UI fixture paused the Night hook without an instruction."),
+				fixture);
+		}
+
+		throw new InvalidOperationException(
+			"The Actor UI fixture did not complete the Night hook.");
 	}
 
 	private static TInstruction AdvanceToInstruction<TInstruction>(
@@ -1077,21 +1124,18 @@ internal static class ActorBorrowedInstructionFixture
 		return typed;
 	}
 
-	private static HookListenerActionResult Advance(
+	private static ListenerAdvanceResult Advance(
 		IGameHookListener listener,
 		GameSession session,
 		ModeratorResponse response)
 	{
-		var result = listener.Execute(session, response);
-		if (result.Outcome != HookListenerOutcome.Skip)
-		{
-			session.TransitionListenerStateCache(
-				HookKey,
-				listener.Id,
-				result.NextListenerPhase!);
-		}
-
-		return result;
+		_ = session.GetOrCreateListener(listener.Id, () => listener);
+		var result = NightActionLoop.Execute(session, response);
+		return new ListenerAdvanceResult(
+			result is StayInSubPhaseHandlerResult { StageComplete: false }
+				? HookListenerOutcome.NeedInput
+				: HookListenerOutcome.Complete,
+			result.ModeratorInstruction);
 	}
 
 	private static void SeedKnownActorBeneficiary(
@@ -1159,6 +1203,36 @@ internal static class ActorBorrowedInstructionFixture
 		}
 	}
 
+	private static void UpdateKnownWerewolfAgentFacts(
+		GameSession session,
+		IReadOnlySet<Guid> werewolfIds)
+	{
+		var boundary = new FactionFactEffectiveBoundary(
+			session.TurnNumber,
+			session.GetCurrentPhase(),
+			session.GameHistoryLog.Count());
+		session.CommitFactionFactBatch(context =>
+			new FactionFactsCommittedLogEntry
+			{
+				Timestamp = context.Timestamp,
+				TurnNumber = context.TurnNumber,
+				CurrentPhase = context.CurrentPhase,
+				Source = new FactionFactSource(
+					FactionFactSourceKind.ExplicitTransition,
+					"actor-borrowed-ui-fixture-werewolf-agents"),
+				Facts =
+				[
+					.. session.GetPlayers().Select(player => FactionFact.Agent(
+						player.Id,
+						Faction.Werewolf,
+						werewolfIds.Contains(player.Id)
+							? FactionAgentKnowledge.KnownAgent
+							: FactionAgentKnowledge.KnownNonAgent,
+						boundary))
+				]
+			});
+	}
+
 	private static PhysicalCharacterCard Card(string id, MainRoleType role) =>
 		new(Guid.Parse(id), role);
 
@@ -1169,7 +1243,8 @@ internal static class ActorBorrowedInstructionFixture
 		Guid ActorId,
 		Guid WerewolfId,
 		IReadOnlyList<PhysicalCharacterCard> SetupCards,
-		ActorBorrowedRolePowerActivation Activation);
+		ActorBorrowedRolePowerActivation Activation,
+		ConfirmationInstruction ActorSleep);
 
 	private sealed record FamilyOutput(
 		IReadOnlyList<ModeratorInstruction> Instructions,
@@ -1196,7 +1271,15 @@ internal static class ActorBorrowedInstructionFixture
 			new(instruction, [], SelectedOptionId: null, ResourceIds: []);
 	}
 
-	private sealed class TestSubPhaseManagerKey : ISubPhaseManagerKey;
-	private sealed class TestHookSubPhaseKey : IHookSubPhaseKey;
-	private sealed class TestGameFlowManagerKey : IGameFlowManagerKey;
+	private sealed record ListenerAdvanceResult(
+		HookListenerOutcome Outcome,
+		ModeratorInstruction? Instruction);
+	private sealed record SpendOpeningResult(
+		ActorBorrowedRolePowerActivation Activation,
+		ConfirmationInstruction Sleep);
+
+	private enum ListenerTestSubPhase
+	{
+		ActionLoop
+	}
 }

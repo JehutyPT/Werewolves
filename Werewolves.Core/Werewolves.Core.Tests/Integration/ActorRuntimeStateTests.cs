@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Werewolves.Core.Tests.Helpers;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
@@ -207,25 +208,26 @@ public sealed class ActorRuntimeStateTests
 			ModeratorInstructionSemantic.PutRoleToSleep,
 			publicAnnouncement: "sleep",
 			affectedPlayerIds: [actor.Id]);
-		session.SetPendingModeratorInstruction(RecoveryBoundaryKey.Instance, sleep);
-		session.CaptureRecoveryBoundary(
-			RecoveryBoundaryKey.Instance,
-			domainRecoveryCursor: new DomainRecoveryCursor
-			{
-				Version = DomainRecoveryCursor.CurrentVersion,
-				Kind = DomainRecoveryCursorKind.ActorSetupCardSpendCommit,
-				CommittedActionType = NightActionType.Unknown,
-				ActingPlayerId = actor.Id,
-				SourceRole = MainRoleType.Seer,
-				ActorSetupCardId = SeerCard.Id,
-				ActorBorrowedActivationId = activation!.ActivationId,
-				CommittedTargetIds = [],
-				NextInstructionSemantic =
-					ModeratorInstructionSemantic.PutRoleToSleep,
-				NextInstructionId = sleep.InstructionId
-			});
+		var recoveryPayload = RecoveryPayloadTestDriver.Capture(session)
+			.RecordActorSetupCardSpend(activation!)
+			.WithPendingInstruction(sleep)
+			.WithRecoveryCursors(
+				domainRecoveryCursor: new DomainRecoveryCursor
+				{
+					Version = DomainRecoveryCursor.CurrentVersion,
+					Kind = DomainRecoveryCursorKind.ActorSetupCardSpendCommit,
+					CommittedActionType = NightActionType.Unknown,
+					ActingPlayerId = actor.Id,
+					SourceRole = MainRoleType.Seer,
+					ActorSetupCardId = SeerCard.Id,
+					ActorBorrowedActivationId = activation!.ActivationId,
+					CommittedTargetIds = [],
+					NextInstructionSemantic =
+						ModeratorInstructionSemantic.PutRoleToSleep,
+					NextInstructionId = sleep.InstructionId
+				});
 
-		var recovered = new GameSession(session.Serialize());
+		var recovered = recoveryPayload.RehydrateGameSession();
 
 		recovered.GetModeratorActorSetupCards().Should()
 			.Be(CreateActorSetupCards());
@@ -235,7 +237,8 @@ public sealed class ActorRuntimeStateTests
 		recovered.GetModeratorSpentActorSetupCards().Should().Equal(SeerCard);
 		recovered.GetModeratorActiveActorBorrowedRolePowerActivation().Should()
 			.Be(activation);
-		var recoveredSleep = recovered.PendingModeratorInstruction.Should()
+		var recoveredSleep = RecoveryPayloadTestDriver.Capture(recovered)
+			.PendingInstruction.Should()
 			.BeOfType<ConfirmationInstruction>().Subject;
 		recoveredSleep.InstructionId.Should().Be(sleep.InstructionId);
 		recoveredSleep.Semantic.Should()
@@ -261,12 +264,13 @@ public sealed class ActorRuntimeStateTests
 		var session = CreateActorSession(CreateActorSetupCards());
 		var actor = session.GetPlayers().First();
 		session.AssignRole(actor.Id, MainRoleType.Actor);
-		session.TrySpendActorSetupCard(actor.Id, SeerCard.Id, out _)
+		session.TrySpendActorSetupCard(actor.Id, SeerCard.Id, out var activation)
 			.Should().BeTrue();
 		session.TryExpireActorBorrowedRolePowerActivation().Should().BeTrue();
-		session.CaptureRecoveryBoundary(RecoveryBoundaryKey.Instance);
 
-		var recovered = new GameSession(session.Serialize());
+		var recovered = RecoveryPayloadTestDriver.Capture(session)
+			.RecordActorSetupCardSpend(activation!)
+			.RehydrateGameSession();
 
 		recovered.GetModeratorActiveActorBorrowedRolePowerActivation().Should()
 			.BeNull();
@@ -316,8 +320,4 @@ public sealed class ActorRuntimeStateTests
 		OutsideInventory
 	}
 
-	private sealed class RecoveryBoundaryKey : IGameFlowManagerKey
-	{
-		internal static RecoveryBoundaryKey Instance { get; } = new();
-	}
 }

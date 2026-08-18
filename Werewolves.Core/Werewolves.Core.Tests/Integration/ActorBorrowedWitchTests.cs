@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Werewolves.Core.GameLogic.Interfaces;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
+using Werewolves.Core.GameLogic.Models.StateMachine;
 using Werewolves.Core.GameLogic.Queries;
 using Werewolves.Core.GameLogic.RolePowers;
 using Werewolves.Core.GameLogic.Roles;
@@ -30,9 +31,12 @@ public sealed class ActorBorrowedWitchTests
 	private static readonly PhysicalCharacterCard FoxCard = new(
 		Guid.Parse("00000000-0000-0000-0000-000000000159"),
 		MainRoleType.Fox);
-	private static readonly TestSubPhaseManagerKey SubPhaseKey = new();
-	private static readonly TestHookSubPhaseKey HookKey = new();
-	private static readonly TestGameFlowManagerKey RecoveryKey = new();
+	private static readonly SubPhaseManager<NightSubPhases> NightActionLoop = new(
+		NightSubPhases.Start,
+		[
+			HookSubPhaseStage.HookStage(GameHook.NightMainActionLoop),
+			NavigationSubPhaseStage.NavigationEndStageSilent(NightSubPhases.Start)
+		]);
 
 	[Theory]
 	[InlineData(WitchRecoveryPresentationTamper.HealingPrivateInstruction)]
@@ -45,10 +49,6 @@ public sealed class ActorBorrowedWitchTests
 		WitchRecoveryPresentationTamper tamper)
 	{
 		var (session, start, _, attackTargetId) = CreateActorSession();
-		PerformSpendOpening(CreateActorRole(), session, start, WitchCard.Id);
-		session.PerformNightAction(
-			NightActionType.WerewolfVictimSelection,
-			attackTargetId);
 		IRolePowerAvailabilityPolicy policy = tamper switch
 		{
 			WitchRecoveryPresentationTamper.PoisonPrivateInstruction or
@@ -60,9 +60,14 @@ public sealed class ActorBorrowedWitchTests
 		};
 		IGameHookListener witch = new WitchRole(
 			new RolePowerAvailabilityGateway(policy));
-		var wake = Advance(witch, session, start.CreateResponse()).Instruction
-			.Should().BeOfType<ConfirmationInstruction>().Subject;
-		var pending = Advance(witch, session, wake.CreateResponse()).Instruction
+		var (_, wake) = PerformSpendOpening(
+			CreateActorRole(),
+			witch,
+			session,
+			start,
+			WitchCard.Id);
+		var pending = Advance(witch, session, wake.CreateResponse())
+			.ModeratorInstruction
 			?? throw new InvalidOperationException(
 				"Expected a borrowed Witch instruction after wake.");
 
@@ -111,19 +116,18 @@ public sealed class ActorBorrowedWitchTests
 			var poison = Advance(
 				witch,
 				session,
-				healing.CreateResponse([])).Instruction
+				healing.CreateResponse([])).ModeratorInstruction
 				.Should().BeOfType<SelectPlayersInstruction>().Subject;
 			pending = Advance(
 				witch,
 				session,
-				poison.CreateResponse([])).Instruction
+				poison.CreateResponse([])).ModeratorInstruction
 				.Should().BeOfType<ConfirmationInstruction>().Subject;
 			pending.PrivateInstruction.Should().BeNull();
 		}
 
-		session.SetPendingModeratorInstruction(RecoveryKey, pending);
-		session.CaptureRecoveryBoundary(RecoveryKey);
-		var driver = RecoveryPayloadTestDriver.Parse(session.Serialize());
+		var driver = RecoveryPayloadTestDriver.Capture(session)
+			.WithPendingInstruction(pending);
 		if (pending is SelectPlayersInstruction selection)
 		{
 			driver.RewritePendingPlayerSelectionPresentation(
@@ -146,10 +150,8 @@ public sealed class ActorBorrowedWitchTests
 				pending.SoundEffects);
 		}
 
-		var recovered = new GameSession(driver.Serialize());
-		Action restore = () => GameFlowManager.RestoreDurableContinuation(
-			recovered,
-			SupportedRoleCatalog.Admissions);
+		var service = new GameService();
+		Action restore = () => service.RehydrateSession(driver.Serialize());
 
 		restore.Should().Throw<InvalidOperationException>()
 			.WithMessage("*pending Actor borrowed Witch*invalid*");
@@ -162,8 +164,9 @@ public sealed class ActorBorrowedWitchTests
 		var policy = new RecordingPolicy();
 		IGameHookListener witch = new WitchRole(
 			new RolePowerAvailabilityGateway(policy));
-		var activation = PerformSpendOpening(
+		var (activation, wake) = PerformSpendOpening(
 			CreateActorRole(),
+			witch,
 			session,
 			start,
 			WitchCard.Id);
@@ -175,13 +178,6 @@ public sealed class ActorBorrowedWitchTests
 			.NotContain(entry =>
 				entry.ActionType == NightActionType.WitchSave ||
 				entry.ActionType == NightActionType.WitchKill);
-		session.PerformNightAction(
-			NightActionType.WerewolfVictimSelection,
-			attackTargetId);
-
-		var wake = Advance(witch, session, start.CreateResponse()).Instruction
-			.Should().BeOfType<ConfirmationInstruction>().Subject;
-
 		wake.Semantic.Should().Be(ModeratorInstructionSemantic.WakeRole);
 		wake.PublicAnnouncement.Should().Be(
 			GameStrings.RoleWakesUp.Format(GameStrings.ActorRoleName));
@@ -189,7 +185,8 @@ public sealed class ActorBorrowedWitchTests
 		wake.PrivateInstruction.Should().BeNull();
 		wake.AffectedPlayerIds.Should().Equal(actorId);
 
-		var healing = Advance(witch, session, wake.CreateResponse()).Instruction
+		var healing = Advance(witch, session, wake.CreateResponse())
+			.ModeratorInstruction
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
 
 		healing.Semantic.Should().Be(
@@ -206,7 +203,7 @@ public sealed class ActorBorrowedWitchTests
 		var poison = Advance(
 			witch,
 			session,
-			healing.CreateResponse([])).Instruction
+			healing.CreateResponse([])).ModeratorInstruction
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
 
 		poison.Semantic.Should().Be(
@@ -256,20 +253,17 @@ public sealed class ActorBorrowedWitchTests
 			player.Name == "Villager 1").Id;
 		session.AssignRole(attackTargetId, MainRoleType.SimpleVillager);
 		session.AssignRole(poisonTargetId, MainRoleType.SimpleVillager);
-		var activation = PerformSpendOpening(
-			CreateActorRole(),
-			session,
-			start,
-			WitchCard.Id);
-		session.PerformNightAction(
-			NightActionType.WerewolfVictimSelection,
-			attackTargetId);
 		IGameHookListener witch = new WitchRole(
 			new RolePowerAvailabilityGateway(
 				AllowAllRolePowerAvailabilityPolicy.Instance));
-		var wake = Advance(witch, session, start.CreateResponse()).Instruction
-			.Should().BeOfType<ConfirmationInstruction>().Subject;
-		var healing = Advance(witch, session, wake.CreateResponse()).Instruction
+		var (activation, wake) = PerformSpendOpening(
+			CreateActorRole(),
+			witch,
+			session,
+			start,
+			WitchCard.Id);
+		var healing = Advance(witch, session, wake.CreateResponse())
+			.ModeratorInstruction
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
 		var powerIdentity = new RolePowerInstanceIdentity(
 			actorId,
@@ -289,7 +283,7 @@ public sealed class ActorBorrowedWitchTests
 			OneUseResourceId = WitchRole.PoisonResourceId
 		};
 		var historyCountBeforeHealing = session.GameHistoryLog.Count();
-		session.SetPendingModeratorInstruction(RecoveryKey, healing);
+		session = RehydrateAtPendingInstruction(session, healing);
 
 		var poison = GameFlowManager.HandleInput(
 				session,
@@ -327,11 +321,12 @@ public sealed class ActorBorrowedWitchTests
 			session,
 			poisonResourceIdentity).Should().BeFalse();
 
-		var recoveredAtPoison = new GameSession(session.Serialize());
-		GameFlowManager.RestoreDurableContinuation(
-			recoveredAtPoison,
-			SupportedRoleCatalog.Admissions);
-		var recoveredPoison = recoveredAtPoison.PendingModeratorInstruction
+		var recoveredAtPoison = RecoveryPayloadTestDriver.Parse(
+				session.Serialize())
+			.RehydrateGameSession();
+		var recoveredPoison = RecoveryPayloadTestDriver.Capture(
+				recoveredAtPoison)
+			.PendingInstruction
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
 		recoveredPoison.InstructionId.Should().Be(poison.InstructionId);
 		recoveredPoison.SelectablePlayerIds.Should()
@@ -372,11 +367,12 @@ public sealed class ActorBorrowedWitchTests
 			recoveredAtPoison,
 			poisonResourceIdentity).Should().BeTrue();
 
-		var recoveredAtSleep = new GameSession(recoveredAtPoison.Serialize());
-		GameFlowManager.RestoreDurableContinuation(
-			recoveredAtSleep,
-			SupportedRoleCatalog.Admissions);
-		var recoveredSleep = recoveredAtSleep.PendingModeratorInstruction
+		var recoveredAtSleep = RecoveryPayloadTestDriver.Parse(
+				recoveredAtPoison.Serialize())
+			.RehydrateGameSession();
+		var recoveredSleep = RecoveryPayloadTestDriver.Capture(
+				recoveredAtSleep)
+			.PendingInstruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		recoveredSleep.InstructionId.Should().Be(sleep.InstructionId);
 		recoveredSleep.Semantic.Should().Be(
@@ -427,46 +423,30 @@ public sealed class ActorBorrowedWitchTests
 		recoveredAtSleep.TransitionMainPhase(GamePhase.Dawn);
 		recoveredAtSleep.TransitionMainPhase(GamePhase.Day);
 		recoveredAtSleep.TransitionMainPhase(GamePhase.Night);
-		recoveredAtSleep.TryEnterSubPhaseStage(
-			SubPhaseKey,
-			GameHook.NightMainActionLoop.ToString()).Should().BeTrue();
 
 		IGameHookListener nextActor = CreateActorRole();
 		var nextActorWake = Advance(
 			nextActor,
 			recoveredAtSleep,
-			start.CreateResponse()).Instruction
+			start.CreateResponse()).ModeratorInstruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		recoveredAtSleep.GetModeratorActiveActorBorrowedRolePowerActivation()
 			.Should().BeNull();
 		var nextActorChoice = Advance(
 			nextActor,
 			recoveredAtSleep,
-			nextActorWake.CreateResponse()).Instruction
+			nextActorWake.CreateResponse()).ModeratorInstruction
 			.Should().BeOfType<SelectOptionsInstruction>().Subject;
 		var nextActorSleep = Advance(
 			nextActor,
 			recoveredAtSleep,
-			nextActorChoice.CreateResponse()).Instruction
+			nextActorChoice.CreateResponse()).ModeratorInstruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
-		Advance(
+		CompleteCadence(
 			nextActor,
 			recoveredAtSleep,
-			nextActorSleep.CreateResponse()).Outcome.Should()
-			.Be(HookListenerOutcome.Complete);
-		recoveredAtSleep.ClearCurrentListenerCache(HookKey);
-		var historyCountBeforeExpiredSource =
-			recoveredAtSleep.GameHistoryLog.Count();
+			nextActorSleep.CreateResponse());
 
-		var expiredSource = Advance(
-			witch,
-			recoveredAtSleep,
-			start.CreateResponse());
-
-		expiredSource.Outcome.Should().Be(HookListenerOutcome.Skip);
-		expiredSource.Instruction.Should().BeNull();
-		recoveredAtSleep.GameHistoryLog.Should().HaveCount(
-			historyCountBeforeExpiredSource);
 		recoveredAtSleep.GetActorBorrowedWitchPotionUseCommits().Should()
 			.Equal(uses);
 		GameSessionQueries.IsOneUseRolePowerResourceCommitted(
@@ -485,20 +465,17 @@ public sealed class ActorBorrowedWitchTests
 	public void BorrowedWitch_ExplicitPotionDeclinesAreDurableRecoverableUnspentAndPrivate()
 	{
 		var (session, start, actorId, attackTargetId) = CreateActorSession();
-		var activation = PerformSpendOpening(
-			CreateActorRole(),
-			session,
-			start,
-			WitchCard.Id);
-		session.PerformNightAction(
-			NightActionType.WerewolfVictimSelection,
-			attackTargetId);
 		IGameHookListener witch = new WitchRole(
 			new RolePowerAvailabilityGateway(
 				AllowAllRolePowerAvailabilityPolicy.Instance));
-		var wake = Advance(witch, session, start.CreateResponse()).Instruction
-			.Should().BeOfType<ConfirmationInstruction>().Subject;
-		var healing = Advance(witch, session, wake.CreateResponse()).Instruction
+		var (activation, wake) = PerformSpendOpening(
+			CreateActorRole(),
+			witch,
+			session,
+			start,
+			WitchCard.Id);
+		var healing = Advance(witch, session, wake.CreateResponse())
+			.ModeratorInstruction
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
 		var powerIdentity = new RolePowerInstanceIdentity(
 			actorId,
@@ -518,7 +495,7 @@ public sealed class ActorBorrowedWitchTests
 			OneUseResourceId = WitchRole.PoisonResourceId
 		};
 		var historyCountBeforeHealingDecline = session.GameHistoryLog.Count();
-		session.SetPendingModeratorInstruction(RecoveryKey, healing);
+		session = RehydrateAtPendingInstruction(session, healing);
 
 		var poison = GameFlowManager.HandleInput(
 				session,
@@ -543,18 +520,20 @@ public sealed class ActorBorrowedWitchTests
 		GameSessionQueries.IsOneUseRolePowerResourceCommitted(
 			session,
 			healingResourceIdentity).Should().BeFalse();
-		var healingDeclineCursor = session.GetDomainRecoveryCursor(RecoveryKey)!;
+		var healingDeclineCursor = RecoveryPayloadTestDriver.Capture(session)
+			.DomainRecoveryCursor!;
 		healingDeclineCursor.Kind.Should().Be(
 			DomainRecoveryCursorKind.ActorBorrowedWitchPotionDeclineCommit);
 		healingDeclineCursor.ResourceIdentity.Should().Be(
 			healingResourceIdentity);
 		healingDeclineCursor.CommittedTargetIds.Should().BeEmpty();
 
-		var recoveredAtPoison = new GameSession(session.Serialize());
-		GameFlowManager.RestoreDurableContinuation(
-			recoveredAtPoison,
-			SupportedRoleCatalog.Admissions);
-		var recoveredPoison = recoveredAtPoison.PendingModeratorInstruction
+		var recoveredAtPoison = RecoveryPayloadTestDriver.Parse(
+				session.Serialize())
+			.RehydrateGameSession();
+		var recoveredPoison = RecoveryPayloadTestDriver.Capture(
+				recoveredAtPoison)
+			.PendingInstruction
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
 		recoveredPoison.InstructionId.Should().Be(poison.InstructionId);
 		recoveredAtPoison.GetActorBorrowedWitchPotionDeclineCommits().Should()
@@ -584,18 +563,20 @@ public sealed class ActorBorrowedWitchTests
 		GameSessionQueries.IsOneUseRolePowerResourceCommitted(
 			recoveredAtPoison,
 			poisonResourceIdentity).Should().BeFalse();
-		var poisonDeclineCursor = recoveredAtPoison.GetDomainRecoveryCursor(
-			RecoveryKey)!;
+		var poisonDeclineCursor = RecoveryPayloadTestDriver.Capture(
+				recoveredAtPoison)
+			.DomainRecoveryCursor!;
 		poisonDeclineCursor.Kind.Should().Be(
 			DomainRecoveryCursorKind.ActorBorrowedWitchPotionDeclineCommit);
 		poisonDeclineCursor.ResourceIdentity.Should().Be(poisonResourceIdentity);
 		poisonDeclineCursor.CommittedTargetIds.Should().BeEmpty();
 
-		var recoveredAtSleep = new GameSession(recoveredAtPoison.Serialize());
-		GameFlowManager.RestoreDurableContinuation(
-			recoveredAtSleep,
-			SupportedRoleCatalog.Admissions);
-		var recoveredSleep = recoveredAtSleep.PendingModeratorInstruction
+		var recoveredAtSleep = RecoveryPayloadTestDriver.Parse(
+				recoveredAtPoison.Serialize())
+			.RehydrateGameSession();
+		var recoveredSleep = RecoveryPayloadTestDriver.Capture(
+				recoveredAtSleep)
+			.PendingInstruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		recoveredSleep.InstructionId.Should().Be(sleep.InstructionId);
 		recoveredAtSleep.GetActorBorrowedWitchPotionDeclineCommits().Should()
@@ -623,17 +604,18 @@ public sealed class ActorBorrowedWitchTests
 	public void BorrowedWitch_UnavailableHealingSlotCreatesNoImplicitDeclineOrMarker()
 	{
 		var (session, start, _, attackTargetId) = CreateActorSession();
-		PerformSpendOpening(CreateActorRole(), session, start, WitchCard.Id);
-		session.PerformNightAction(
-			NightActionType.WerewolfVictimSelection,
-			attackTargetId);
 		IGameHookListener witch = new WitchRole(
 			new RolePowerAvailabilityGateway(
 				new HealingUnavailablePolicy()));
-		var wake = Advance(witch, session, start.CreateResponse()).Instruction
-			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var (_, wake) = PerformSpendOpening(
+			CreateActorRole(),
+			witch,
+			session,
+			start,
+			WitchCard.Id);
 
-		var poison = Advance(witch, session, wake.CreateResponse()).Instruction
+		var poison = Advance(witch, session, wake.CreateResponse())
+			.ModeratorInstruction
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
 
 		poison.Semantic.Should().Be(
@@ -643,7 +625,7 @@ public sealed class ActorBorrowedWitchTests
 		session.GameHistoryLog
 			.OfType<ActorBorrowedRolePowerCommittedLogEntry>().Should().BeEmpty();
 
-		session.SetPendingModeratorInstruction(RecoveryKey, poison);
+		session = RehydrateAtPendingInstruction(session, poison);
 		GameFlowManager.HandleInput(
 			session,
 			poison.CreateResponse([]),
@@ -663,27 +645,133 @@ public sealed class ActorBorrowedWitchTests
 			new VillagerRolePowerSuppressionPolicy(
 				AllowAllRolePowerAvailabilityPolicy.Instance)));
 
-	private static ActorBorrowedRolePowerActivation PerformSpendOpening(
-		IGameHookListener listener,
+	private static (
+		ActorBorrowedRolePowerActivation Activation,
+		ConfirmationInstruction SourceWake) PerformSpendOpening(
+		IGameHookListener actorListener,
+		IGameHookListener sourceListener,
 		GameSession session,
 		StartGameConfirmationInstruction start,
 		Guid selectedCardId)
 	{
-		var wake = Advance(listener, session, start.CreateResponse()).Instruction
+		var wake = Advance(actorListener, session, start.CreateResponse())
+			.ModeratorInstruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
-		var choice = Advance(listener, session, wake.CreateResponse()).Instruction
+		var choice = Advance(actorListener, session, wake.CreateResponse())
+			.ModeratorInstruction
 			.Should().BeOfType<SelectOptionsInstruction>().Subject;
 		var sleep = Advance(
-			listener,
+			actorListener,
 			session,
-			choice.CreateResponse(selectedCardId.ToString("D"))).Instruction
+			choice.CreateResponse(selectedCardId.ToString("D")))
+			.ModeratorInstruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		var activation = session
 			.GetModeratorActiveActorBorrowedRolePowerActivation()!;
-		Advance(listener, session, sleep.CreateResponse()).Outcome.Should()
-			.Be(HookListenerOutcome.Complete);
-		session.ClearCurrentListenerCache(HookKey);
-		return activation;
+		session.GetOrCreateListener(sourceListener.Id, () => sourceListener);
+		var sourceWake = AdvanceToBorrowedRoleWake(
+			actorListener,
+			session,
+			sleep.CreateResponse(),
+			activation.ActingPlayerId);
+		return (activation, sourceWake);
+	}
+
+	private static ConfirmationInstruction AdvanceToBorrowedRoleWake(
+		IGameHookListener listener,
+		GameSession session,
+		ModeratorResponse response,
+		Guid actorId)
+	{
+		var instruction = Advance(listener, session, response)
+			.ModeratorInstruction;
+		for (var step = 0; step < 20; step++)
+		{
+			if (instruction is ConfirmationInstruction
+			    {
+				    Semantic: ModeratorInstructionSemantic.WakeRole
+			    } wake &&
+			    wake.AffectedPlayerIds?.SequenceEqual([actorId]) == true)
+			{
+				return wake;
+			}
+
+			instruction = Advance(
+				listener,
+				session,
+				CreateCadenceResponse(session, instruction))
+					.ModeratorInstruction;
+		}
+
+		throw new InvalidOperationException(
+			"The test cadence did not reach the borrowed Role wake within 20 steps.");
+	}
+
+	private static ModeratorResponse CreateCadenceResponse(
+		GameSession session,
+		ModeratorInstruction? instruction) => instruction switch
+		{
+			SelectPlayersInstruction
+			{
+				Semantic:
+					ModeratorInstructionSemantic
+						.ObserveWerewolfFactionAgentGroup
+			} selection => CreateSingleSelectionResponse(
+				session,
+				selection,
+				"Werewolf"),
+			SelectPlayersInstruction
+			{
+				Semantic: ModeratorInstructionSemantic.SelectWerewolfVictim
+			} selection => CreateSingleSelectionResponse(
+				session,
+				selection,
+				"Villager 3"),
+			ConfirmationInstruction confirmation =>
+				confirmation.CreateResponse(),
+			_ => throw new InvalidOperationException(
+				$"The test cadence cannot answer '{instruction?.Semantic}'.")
+		};
+
+	private static ModeratorResponse CreateSingleSelectionResponse(
+		GameSession session,
+		SelectPlayersInstruction instruction,
+		string preferredPlayerName)
+	{
+		var preferredPlayerId = session.GetPlayers()
+			.Where(player => player.Name == preferredPlayerName)
+			.Select(player => player.Id)
+			.SingleOrDefault();
+		var selectedPlayerId = instruction.SelectablePlayerIds.Contains(
+			preferredPlayerId)
+			? preferredPlayerId
+			: instruction.SelectablePlayerIds.First();
+		return instruction.CreateResponse([selectedPlayerId]);
+	}
+
+	private static void CompleteCadence(
+		IGameHookListener listener,
+		GameSession session,
+		ModeratorResponse response)
+	{
+		var instruction = Advance(listener, session, response)
+			.ModeratorInstruction;
+		for (var step = 0; step < 20; step++)
+		{
+			if (instruction == null)
+			{
+				return;
+			}
+
+			instruction = Advance(
+				listener,
+				session,
+				CreateCadenceResponse(session, instruction))
+				.ModeratorInstruction;
+		}
+
+		throw new InvalidOperationException(
+			"The test cadence did not complete the Night hook within 20 steps.");
 	}
 
 	private static OneUseRolePowerResourceIdentity CreateResourceIdentity(
@@ -738,28 +826,24 @@ public sealed class ActorBorrowedWitchTests
 		var actorId = players[0].Id;
 		session.AssignRole(actorId, MainRoleType.Actor);
 		session.IdentifyRole([actorId], MainRoleType.Actor);
-		session.TryEnterSubPhaseStage(
-			SubPhaseKey,
-			GameHook.NightMainActionLoop.ToString()).Should().BeTrue();
 		return (session, start, actorId, players[4].Id);
 	}
 
-	private static HookListenerActionResult Advance(
+	private static PhaseHandlerResult Advance(
 		IGameHookListener listener,
 		GameSession session,
 		ModeratorResponse response)
 	{
-		var result = listener.Execute(session, response);
-		if (result.Outcome != HookListenerOutcome.Skip)
-		{
-			session.TransitionListenerStateCache(
-				HookKey,
-				listener.Id,
-				result.NextListenerPhase!);
-		}
-
-		return result;
+		session.GetOrCreateListener(listener.Id, () => listener);
+		return NightActionLoop.Execute(session, response);
 	}
+
+	private static GameSession RehydrateAtPendingInstruction(
+		GameSession session,
+		ModeratorInstruction instruction) =>
+		RecoveryPayloadTestDriver.Capture(session)
+			.WithPendingInstruction(instruction)
+			.RehydrateGameSession();
 
 	private sealed class RecordingPolicy : IRolePowerAvailabilityPolicy
 	{
@@ -796,7 +880,4 @@ public sealed class ActorBorrowedWitchTests
 		SleepDisclosedRosterInstruction
 	}
 
-	private sealed class TestSubPhaseManagerKey : ISubPhaseManagerKey;
-	private sealed class TestHookSubPhaseKey : IHookSubPhaseKey;
-	private sealed class TestGameFlowManagerKey : IGameFlowManagerKey;
 }

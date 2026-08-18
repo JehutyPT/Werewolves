@@ -117,15 +117,8 @@ internal class GameSession : IGameSession
     
 	#endregion
 
-	#region Internal Game Cache read-access
+	#region Internal execution read access
 	internal ExecutionView Execution => _gameSessionKernel.Execution;
-    internal ModeratorInstruction? PendingModeratorInstruction => _gameSessionKernel.PendingModeratorInstruction;
-    internal AcceptedObservationRecoveryCursor? GetAcceptedObservationRecoveryCursor(
-        IGameFlowManagerKey key) =>
-        _gameSessionKernel.AcceptedObservationRecoveryCursor;
-    internal DomainRecoveryCursor? GetDomainRecoveryCursor(
-        IGameFlowManagerKey key) =>
-        _gameSessionKernel.DomainRecoveryCursor;
 	internal IReadOnlyList<ActorBorrowedSeerCheckCommit>
 		GetActorBorrowedSeerCheckCommits() =>
 		_gameSessionKernel.GetActorBorrowedSeerCheckCommits();
@@ -174,18 +167,9 @@ internal class GameSession : IGameSession
 	internal IReadOnlyList<ActorBorrowedStutteringJudgeSignalObservationCommit>
 		GetActorBorrowedStutteringJudgeSignalObservationCommits() =>
 		_gameSessionKernel.GetActorBorrowedStutteringJudgeSignalObservationCommits();
-	internal T? GetSubPhase<T>() where T : struct, Enum => _gameSessionKernel.PhaseStateCache.GetSubPhase<T>();
-    internal string? GetSubPhaseId() => _gameSessionKernel.PhaseStateCache.GetSubPhaseId();
-    internal ListenerIdentifier? GetCurrentListener() => _gameSessionKernel.PhaseStateCache.GetCurrentListener();
-    internal string? GetActiveSubPhaseStage() => _gameSessionKernel.PhaseStateCache.GetActiveSubPhaseStage();
-
-    internal T? GetCurrentListenerState<T>(ListenerIdentifier listener) where T : struct, Enum =>
-        _gameSessionKernel.PhaseStateCache.GetCurrentListenerState<T>(listener);
-    internal bool TryGetActiveGameHook(out GameHook hook) =>
-	    Enum.TryParse(_gameSessionKernel.PhaseStateCache.GetActiveSubPhaseStage(), out hook);
 	#endregion
 
-	#region Internal Game Cache write-access
+	#region Internal execution write access
 
 	internal void CommitExecution(
 		IGameFlowManagerKey key,
@@ -208,19 +192,6 @@ internal class GameSession : IGameSession
 			activeSubPhaseStage,
 			listener,
 			listenerState);
-	}
-
-	internal void NormalizeLegacyRecurringRolePowerCommit(
-		IGameFlowManagerKey key,
-		NightActionType actionType,
-		Guid targetId,
-		RolePowerInstanceIdentity powerIdentity)
-	{
-		ArgumentNullException.ThrowIfNull(key);
-		_gameSessionKernel.NormalizeLegacyRecurringRolePowerCommit(
-			actionType,
-			targetId,
-			powerIdentity);
 	}
 
 	internal void TransitionSubPhase(
@@ -259,51 +230,6 @@ internal class GameSession : IGameSession
 		ArgumentNullException.ThrowIfNull(key);
 		_gameSessionKernel.ClearCurrentListener();
 	}
-
-	// Obsolete direct-cache adapters remain until #238's final contraction.
-
-	internal void SetPendingModeratorInstruction(
-		IGameFlowManagerKey key,
-		ModeratorInstruction instruction)
-	{
-		ArgumentNullException.ThrowIfNull(key);
-		_gameSessionKernel.SetPendingModeratorInstruction(instruction);
-	}
-
-    internal void CaptureRecoveryBoundary(
-        IGameFlowManagerKey key,
-        AcceptedObservationRecoveryCursor? acceptedObservationRecoveryCursor = null,
-		DomainRecoveryCursor? domainRecoveryCursor = null)
-	{
-		ArgumentNullException.ThrowIfNull(key);
-		_gameSessionKernel.CaptureRecoveryBoundary(
-			acceptedObservationRecoveryCursor,
-			domainRecoveryCursor);
-	}
-
-	internal void RestoreTransientContinuation(
-		IGameFlowManagerKey key,
-		string activeSubPhaseStage,
-		ListenerIdentifier listener,
-		string listenerState) =>
-		RestoreTransientContinuation(
-			key,
-			Execution,
-			activeSubPhaseStage,
-			listener,
-			listenerState);
-
-	internal void TransitionSubPhaseCache(IPhaseManagerKey key, Enum subPhase) =>
-		TransitionSubPhase(key, subPhase);
-
-	internal void CompleteSubPhaseStageCache(IPhaseManagerKey key) =>
-		CompleteSubPhaseStage(key);
-
-	internal void TransitionListenerStateCache(IHookSubPhaseKey key, ListenerIdentifier listener, string state)  =>
-		TransitionListenerState(key, listener, state);
-
-	internal void ClearCurrentListenerCache(IHookSubPhaseKey key) =>
-		ClearCurrentListener(key);
 
 	/// <summary>
 	/// Gets or creates a listener instance for this session. Listeners are cached per-session
@@ -1064,7 +990,7 @@ internal class GameSession : IGameSession
 		var context = new GameFactContext(
 			DateTimeOffset.UtcNow,
 			TurnNumber,
-			_gameSessionKernel.PhaseStateCache.GetCurrentPhase());
+			_gameSessionKernel.CurrentPhase);
 		var entry = entryFactory(context)
 			?? throw new InvalidOperationException(
 				$"The {entryDescription} factory returned no log entry.");
@@ -1109,7 +1035,7 @@ internal class GameSession : IGameSession
 		{
 			Timestamp = DateTimeOffset.UtcNow,
 			TurnNumber = TurnNumber,
-			CurrentPhase = _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+			CurrentPhase = _gameSessionKernel.CurrentPhase,
 			ActionType = actionType,
 			TargetIds = [targetId],
 			ActingPlayerId = resourceIdentity.ActingPlayerId,
@@ -1144,7 +1070,7 @@ internal class GameSession : IGameSession
             Timestamp = DateTimeOffset.UtcNow,
             TurnNumber = TurnNumber,
             CurrentPhase =
-                _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+                _gameSessionKernel.CurrentPhase,
             ActionType = actionType,
             TargetIds = [],
             ActingPlayerId = powerIdentity.ActingPlayerId,
@@ -1206,7 +1132,7 @@ internal class GameSession : IGameSession
 		{
 			Timestamp = DateTimeOffset.UtcNow,
 			TurnNumber = TurnNumber,
-			CurrentPhase = _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+			CurrentPhase = _gameSessionKernel.CurrentPhase,
 			ActionType = actionType,
 			TargetIds = deterministicTargetIds,
 			ActingPlayerId = powerIdentity.ActingPlayerId,
@@ -1247,7 +1173,7 @@ internal class GameSession : IGameSession
 				Timestamp = DateTimeOffset.UtcNow,
 				TurnNumber = TurnNumber,
 				CurrentPhase =
-					_gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+					_gameSessionKernel.CurrentPhase,
 				FirstPlayerId = canonicalPlayerIds[0],
 				SecondPlayerId = canonicalPlayerIds[1],
 				ActingPlayerId = powerIdentity.ActingPlayerId,
@@ -1259,7 +1185,7 @@ internal class GameSession : IGameSession
 					powerIdentity.PowerInstanceOrigin,
 				LinkBoundary = new FactionFactEffectiveBoundary(
 					TurnNumber,
-					_gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+					_gameSessionKernel.CurrentPhase,
 					GameHistoryLog.Count())
 			});
 	}
@@ -1270,7 +1196,7 @@ internal class GameSession : IGameSession
         {
             Timestamp = DateTimeOffset.UtcNow,
             TurnNumber = TurnNumber,
-            CurrentPhase = _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+            CurrentPhase = _gameSessionKernel.CurrentPhase,
             PlayerId = playerId,
             Reason = reason,
         };
@@ -1284,7 +1210,7 @@ internal class GameSession : IGameSession
 			{
 				Timestamp = DateTimeOffset.UtcNow,
 				TurnNumber = TurnNumber,
-				CurrentPhase = _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+				CurrentPhase = _gameSessionKernel.CurrentPhase,
 				PlayerId = playerId,
 				HasVotingRight = hasVotingRight
 			};
@@ -1304,7 +1230,7 @@ internal class GameSession : IGameSession
 		{
 			Timestamp = DateTimeOffset.UtcNow,
 			TurnNumber = TurnNumber,
-			CurrentPhase = _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+			CurrentPhase = _gameSessionKernel.CurrentPhase,
 			ScopeId = scopeId,
 			ReactionId = reactionId,
 			TriggeringEliminations = triggeringEliminations.ToList(),
@@ -1325,7 +1251,7 @@ internal class GameSession : IGameSession
 		{
 			Timestamp = DateTimeOffset.UtcNow,
 			TurnNumber = TurnNumber,
-			CurrentPhase = _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+			CurrentPhase = _gameSessionKernel.CurrentPhase,
 			ScopeId = scopeId,
 			RequestedEliminations = requestedEliminations.ToList(),
 			CommittedEliminations = committedEliminations.ToList()
@@ -1340,7 +1266,7 @@ internal class GameSession : IGameSession
 		{
 			Timestamp = DateTimeOffset.UtcNow,
 			TurnNumber = TurnNumber,
-			CurrentPhase = _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+			CurrentPhase = _gameSessionKernel.CurrentPhase,
 			ScopeId = scopeId
 		};
 
@@ -1353,7 +1279,7 @@ internal class GameSession : IGameSession
         {
             Timestamp = DateTimeOffset.UtcNow,
             TurnNumber = TurnNumber,
-            CurrentPhase = _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+            CurrentPhase = _gameSessionKernel.CurrentPhase,
             PlayerId = playerId,
             Reason = reason,
         };
@@ -1381,7 +1307,7 @@ internal class GameSession : IGameSession
         {
             Timestamp = DateTimeOffset.UtcNow,
             TurnNumber = TurnNumber,
-            CurrentPhase = _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+            CurrentPhase = _gameSessionKernel.CurrentPhase,
             PlayerIds = playerIds,
             AssignedMainRole = mainRoleType
         };
@@ -1395,7 +1321,7 @@ internal class GameSession : IGameSession
         {
             Timestamp = DateTimeOffset.UtcNow,
             TurnNumber = TurnNumber,
-            CurrentPhase = _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+            CurrentPhase = _gameSessionKernel.CurrentPhase,
             PlayerIds = playerIds,
             Role = role
         };
@@ -1416,7 +1342,7 @@ internal class GameSession : IGameSession
         {
             Timestamp = DateTimeOffset.UtcNow,
             TurnNumber = TurnNumber,
-            CurrentPhase = _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+            CurrentPhase = _gameSessionKernel.CurrentPhase,
 			PlayerId = playerId,
 			RoleLockInVersion = RoleLockIn.Version,
 			CardId = card.Id
@@ -1437,7 +1363,7 @@ internal class GameSession : IGameSession
         {
             Timestamp = DateTimeOffset.UtcNow,
             TurnNumber = TurnNumber,
-            CurrentPhase = _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+            CurrentPhase = _gameSessionKernel.CurrentPhase,
             RevealedRoles = revealedRoles.ToDictionary()
         };
 
@@ -1459,7 +1385,7 @@ internal class GameSession : IGameSession
         {
             Timestamp = DateTimeOffset.UtcNow,
             TurnNumber = TurnNumber,
-            CurrentPhase = _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+            CurrentPhase = _gameSessionKernel.CurrentPhase,
             PlayerId = playerId,
             EffectType = effectType,
             IsActive = isActive
@@ -1473,7 +1399,7 @@ internal class GameSession : IGameSession
         {
             Timestamp = DateTimeOffset.UtcNow,
             TurnNumber = TurnNumber,
-            CurrentPhase = _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+            CurrentPhase = _gameSessionKernel.CurrentPhase,
             ReportedOutcomePlayerId = reportedOutcomePlayerId ?? Guid.Empty
         };
 
@@ -1504,7 +1430,7 @@ internal class GameSession : IGameSession
         {
             Timestamp = DateTimeOffset.UtcNow,
             TurnNumber = TurnNumber,
-            CurrentPhase = _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+            CurrentPhase = _gameSessionKernel.CurrentPhase,
             GameResult = gameResult,
             VictoryCheckWindow = victoryCheckWindow
         };
@@ -1523,7 +1449,7 @@ internal class GameSession : IGameSession
 		{
 			Timestamp = DateTimeOffset.UtcNow,
 			TurnNumber = TurnNumber,
-			CurrentPhase = _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+			CurrentPhase = _gameSessionKernel.CurrentPhase,
 			ActionType = type,
 			TargetIds = null
 		};
@@ -1541,7 +1467,7 @@ internal class GameSession : IGameSession
         {
             Timestamp = DateTimeOffset.UtcNow,
             TurnNumber = TurnNumber,
-            CurrentPhase = _gameSessionKernel.PhaseStateCache.GetCurrentPhase(),
+            CurrentPhase = _gameSessionKernel.CurrentPhase,
             ActionType = type,
             TargetIds = targetIds,
         };

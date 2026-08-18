@@ -932,8 +932,9 @@ public sealed class CupidRoleTests(ITestOutputHelper output)
 			GameStrings.RoleHoldersGoToSleep.Format(
 				MainRoleType.TwoSisters.GetPublicName()));
 		var session = (GameSession)builder.GetGameState()!;
-		session.CaptureRecoveryBoundary(RecoveryBoundaryKey.Instance);
-		var serialized = session.Serialize();
+		var serialized = RecoveryPayloadTestDriver.Capture(session)
+			.WithRecoveryCursors()
+			.Serialize();
 		var freshService = new GameService();
 
 		var gameId = freshService.RehydrateSession(serialized);
@@ -1400,12 +1401,4 @@ public sealed class CupidRoleTests(ITestOutputHelper output)
 		ConfirmationInstruction Wake,
 		SelectPlayersInstruction Selection);
 
-	private sealed class RecoveryBoundaryKey : IGameFlowManagerKey
-	{
-		internal static RecoveryBoundaryKey Instance { get; } = new();
-
-		private RecoveryBoundaryKey()
-		{
-		}
-	}
 }

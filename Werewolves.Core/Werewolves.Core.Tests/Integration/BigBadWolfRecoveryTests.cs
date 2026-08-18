@@ -143,7 +143,7 @@ public sealed class BigBadWolfRecoveryTests
     }
 
     [Fact]
-    public void LegacyVersionOneCommittedTarget_FreshServiceNormalizesOwnedCommitAndRestoresExactSleep()
+    public void LegacyVersionOneCommittedTarget_FreshServiceRejectsBeforeRegisteringSession()
     {
         var (
             builder,
@@ -155,7 +155,7 @@ public sealed class BigBadWolfRecoveryTests
                 identification.CreateResponse([holderId]))
             .ModeratorInstruction.Should()
             .BeOfType<SelectPlayersInstruction>().Subject;
-        var expectedSleep = builder.Process(
+        _ = builder.Process(
                 targetSelection.CreateResponse([additionalVictimId]))
             .ModeratorInstruction.Should()
             .BeOfType<ConfirmationInstruction>().Subject;
@@ -165,59 +165,10 @@ public sealed class BigBadWolfRecoveryTests
             .Serialize();
         var freshService = new GameService();
 
-        var recoveredGameId = freshService.RehydrateSession(legacyPayload);
-        var recoveredSession =
-            freshService.GetGameStateView(recoveredGameId)!;
-        var recoveredSleep = freshService
-            .GetCurrentInstruction(recoveredGameId)
-            .Should().BeOfType<ConfirmationInstruction>().Subject;
+        Action rehydrate = () => freshService.RehydrateSession(legacyPayload);
 
-        AssertEquivalentInstruction(recoveredSleep, expectedSleep);
-        recoveredSession.GameHistoryLog
-            .OfType<RecurringRolePowerCommittedLogEntry>()
-            .Should().ContainSingle(entry =>
-                entry.ActionType ==
-                NightActionType.BigBadWolfVictimSelection &&
-                entry.ActingPlayerId == holderId &&
-                entry.TargetIds!.SequenceEqual(
-                    new[] { additionalVictimId }));
-        recoveredSession.GameHistoryLog.Should().NotContain(entry =>
-            entry.GetType() == typeof(NightActionLogEntry) &&
-            ((NightActionLogEntry)entry).ActionType ==
-            NightActionType.BigBadWolfVictimSelection);
-
-        freshService.ProcessInstruction(
-                recoveredGameId,
-                recoveredSleep.CreateResponse())
-            .IsSuccess.Should().BeTrue();
-    }
-
-    [Fact]
-    public void LegacyVersionOneCommittedTarget_CursorOwnerDifferentFromPendingSleepHolderIsRejected()
-    {
-        var (
-            builder,
-            holderId,
-            collectiveVictimId,
-            additionalVictimId,
-            identification) = CreateGameAtIdentification();
-        var targetSelection = builder.Process(
-                identification.CreateResponse([holderId]))
-            .ModeratorInstruction.Should()
-            .BeOfType<SelectPlayersInstruction>().Subject;
-        builder.Process(
-                targetSelection.CreateResponse([additionalVictimId]))
-            .IsSuccess.Should().BeTrue();
-        var tampered = RecoveryPayloadTestDriver
-            .Parse(builder.GetGameState()!.Serialize())
-            .RewriteRecurringActorAndCursor(collectiveVictimId)
-            .DowngradeLatestRecurringCommitToLegacyNightAction()
-            .Serialize();
-
-        Action deserializeStateModels = () => _ = new GameSession(tampered);
-
-        deserializeStateModels.Should().Throw<InvalidOperationException>()
-            .WithMessage("*legacy recurring Role Power*");
+        rehydrate.Should().Throw<InvalidOperationException>();
+        freshService.GetGameStateView(builder.GameId).Should().BeNull();
     }
 
     [Fact]
