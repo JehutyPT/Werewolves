@@ -47,6 +47,7 @@
 *   Monolithic for v1 — audio, persistence, and session management live in one class. The seams for future decomposition are clear (audio, persistence, session) but splitting is deferred until complexity warrants it.
 *   **Audio:** Coordinates `IInstructionAudioPlayback`. The shared implementation maps Core sound effects and delegates stream loading/player creation to host adapters. The mobile host uses app-package audio files and `Plugin.Maui.Audio`; tests use no-op or fake services.
 *   **Persistence:** Writes through `IGameSessionSaveStore` after successful `ProcessInput()`, but the Core payload represents only the latest stable Main Phase recovery boundary. The mobile host injects `FileGameSessionSaveStore` rooted at `FileSystem.AppDataDirectory`; shared UI tests and the browser QA host can inject in-memory or disabled storage.
+*   **Recoverable Lobby decisions:** `LobbySetupState` can decide a complete immutable next aggregate, its `Keep`/`Clear`/`Replace` persistence instruction, and the Canonical Simulation Scenario delta. Role Lock-In replacement is the current manager tracer: it persists before publishing the opaque commit, then reconciles memory and contains notification failures. Other recoverable entry points retain their existing orchestration until their dedicated migrations.
 
 ### 3.4. Browser QA Host
 *   `Werewolves.Client.BrowserQaHost` is a local-only ASP.NET Core Blazor composition root for browser inspection, screenshots, DOM inspection, viewport checks, and representative interactions.

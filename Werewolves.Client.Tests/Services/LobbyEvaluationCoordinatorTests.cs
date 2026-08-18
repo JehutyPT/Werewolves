@@ -2,6 +2,7 @@ using System.Text;
 using FluentAssertions;
 using Werewolves.Client.Services;
 using Werewolves.Client.Tests.Helpers;
+using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.GameLogic.Simulation;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Models;
@@ -98,6 +99,55 @@ public class LobbyEvaluationCoordinatorTests
 		local.ReadCount.Should().Be(1);
 		evaluator.Scenarios.Should().ContainSingle()
 			.Which.ToCanonical().Should().Be(new SimulationScenario(accepted).ToCanonical());
+	}
+
+	[Fact]
+	public async Task RoleLockInSaveFailure_LeavesAcceptedEvaluationAndRecoveryUnchanged()
+	{
+		var lobby = CreateLobby(
+			MainRoleType.Thief,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.Seer,
+			MainRoleType.Hunter);
+		var local = new ControlledReadLocalStore();
+		var store = new ToggleThrowSaveStore();
+		var manager = new GameClientManager(new GameService(), saveStore: store);
+		using var coordinator = new LobbyEvaluationCoordinator(
+			lobby,
+			local,
+			new RecordingEvaluator(new CouldNotEvaluateLobbyEvaluation()),
+			SafetyScreeningSettings,
+			TimeProvider.System,
+			(_, _) => new LobbyScenarioSupport(
+				RulesValid: true,
+				AppSupported: true,
+				SimulatorSupported: true));
+		manager.TryReplaceStagedRoleLockIn(
+			lobby,
+			expectedCurrentVersion: 0,
+			offer1: MainRoleType.Seer,
+			offer2: MainRoleType.Hunter).Should().BeTrue();
+		await WaitUntilAsync(() => local.ReadCount == 1);
+		var accepted = lobby.AcceptedRoleLockIn;
+		var acceptedIdentity = coordinator.State.Identity;
+		var acceptedBytes = store.Load();
+		store.ThrowOnSave = true;
+
+		manager.TryReplaceStagedRoleLockIn(
+			lobby,
+			expectedCurrentVersion: 1,
+			offer1: MainRoleType.Hunter,
+			offer2: MainRoleType.Seer).Should().BeFalse();
+
+		lobby.AcceptedRoleLockIn.Should().BeSameAs(accepted);
+		manager.StagedRoleLockIn.Should().BeSameAs(accepted);
+		store.Load().Should().Be(acceptedBytes);
+		coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.Pending);
+		coordinator.State.Identity.Should().Be(acceptedIdentity);
+		local.ReadCount.Should().Be(1);
 	}
 
 	[Fact]
@@ -1917,6 +1967,28 @@ public class LobbyEvaluationCoordinatorTests
 			await Task.Yield();
 		}
 		condition().Should().BeTrue();
+	}
+
+	private sealed class ToggleThrowSaveStore : IGameSessionSaveStore
+	{
+		private string? _payload;
+
+		public bool ThrowOnSave { get; set; }
+
+		public string? Load() => _payload;
+
+		public void Save(string serializedSession)
+		{
+			if (ThrowOnSave)
+			{
+				throw new IOException(
+					ClientTestReferences.ExceptionMessages.SaveFailed);
+			}
+
+			_payload = serializedSession;
+		}
+
+		public void Clear() => _payload = null;
 	}
 
 	private sealed class ControlledContinuationPump : SynchronizationContext

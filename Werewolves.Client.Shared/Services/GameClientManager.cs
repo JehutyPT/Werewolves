@@ -94,36 +94,68 @@ public sealed class GameClientManager
 	{
 		ArgumentNullException.ThrowIfNull(lobby);
 		ArgumentNullException.ThrowIfNull(replacement);
-		if (HasActiveSession ||
-			!lobby.CanReplaceRoleLockIn(expectedCurrentVersion, replacement))
+		if (HasActiveSession)
+		{
+			return false;
+		}
+
+		var decision = lobby.Decide(
+			new LobbyChange.ReplaceRoleLockIn(
+				expectedCurrentVersion,
+				replacement));
+		if (decision is null)
 		{
 			return false;
 		}
 
 		try
 		{
-			var proposedActorSetupCards =
-				lobby.GetRetainedActorSetupCardsForRoleLockIn(replacement);
-			var actorSetupIsPending = replacement.RoleComposition.Any(
-					card => card.PrintedRole == MainRoleType.Actor) &&
-				proposedActorSetupCards.Cards.Count == 0;
-			var proposedPartition = !actorSetupIsPending &&
-				replacement.RoleComposition.Any(
-					card => card.PrintedRole == MainRoleType.PrejudicedManipulator)
-				? lobby.AcceptedPublicGroupPartition
-				: null;
-			PersistStagedLobbyBeforeApply(
-				lobby.PlayerRoster,
-				replacement,
-				proposedActorSetupCards,
-				proposedPartition,
-				() => lobby.ApplyAcceptedRoleLockIn(replacement));
+			LobbyPersistenceExecutor.Execute(_saveStore, decision.Persistence);
 		}
 		catch (Exception)
 		{
 			return false;
 		}
+
+		lobby.Publish(decision.Commit);
+		ReconcilePublishedLobbyDecision(lobby, decision);
 		return true;
+	}
+
+	private void ReconcilePublishedLobbyDecision(
+		LobbySetupState lobby,
+		LobbyDecision decision)
+	{
+		switch (decision.Persistence)
+		{
+			case LobbyPersistenceInstruction.Clear:
+				_stagedLobby = null;
+				break;
+			case LobbyPersistenceInstruction.Replace replace:
+				var aggregate = replace.Aggregate;
+				_stagedLobby = new StagedLobbyRecoveryPayload(
+					aggregate.PlayerRoster,
+					aggregate.AcceptedRoleLockIn!,
+					aggregate.AcceptedActorSetupCards,
+					aggregate.AcceptedPublicGroupPartition);
+				break;
+		}
+
+		try
+		{
+			lobby.NotifySimulationScenarioChanged();
+		}
+		catch (Exception)
+		{
+		}
+
+		try
+		{
+			OnStateChanged();
+		}
+		catch (Exception)
+		{
+		}
 	}
 
 	public bool TryReplaceStagedActorSetupCards(
