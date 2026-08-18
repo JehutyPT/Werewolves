@@ -1632,7 +1632,7 @@ public class GameClientManagerTests
 	}
 
 	[Fact]
-	public void Restart_RestoresExactRosterRoleLockInAndPublicGroupPartition()
+	public void Restart_WhenLobbyObserverThrows_RestoresExactAggregateAndRetainsRecovery()
 	{
 		using var saveDirectory = TemporaryDirectory.Create();
 		var saveStore = new FileGameSessionSaveStore(saveDirectory.Path);
@@ -1655,11 +1655,19 @@ public class GameClientManagerTests
 			lobby.PlayerRoster.Skip(2).Select(player => player.Id));
 		manager.TryReplaceStagedPublicGroupPartition(lobby, partition)
 			.Should().BeTrue();
+		var durablePayload = saveStore.Load();
 
 		var recoveredLobby = CreatePrejudicedManipulatorLobby(withPlayers: false);
+		var lobbyObserverRan = false;
+		recoveredLobby.SimulationScenarioChanged += (_, _) =>
+		{
+			lobbyObserverRan = true;
+			throw new InvalidOperationException("notification failure");
+		};
+		var recoveryStore = new FileGameSessionSaveStore(saveDirectory.Path);
 		var recovered = new GameClientManager(
 			new GameService(),
-			saveStore: new FileGameSessionSaveStore(saveDirectory.Path),
+			saveStore: recoveryStore,
 			lobbySetupState: recoveredLobby);
 		recoveredLobby.PlayerRoster
 			.Select(player => (player.Id, player.Name))
@@ -1670,6 +1678,10 @@ public class GameClientManagerTests
 			.Select(card => (card.Id, card.PrintedRole))
 			.Should().Equal(roleLockIn.RoleComposition
 				.Select(card => (card.Id, card.PrintedRole)));
+		recovered.StagedRoleLockIn.Should().BeSameAs(
+			recoveredLobby.AcceptedRoleLockIn);
+		recoveryStore.Load().Should().Be(durablePayload);
+		lobbyObserverRan.Should().BeTrue();
 	}
 
 	[Fact]
@@ -2024,14 +2036,21 @@ public class GameClientManagerTests
 		manager.ProcessInput(startInstruction.CreateResponse());
 		var savedGameId = manager.ActiveGameId;
 		var savedPhase = manager.CurrentPhase;
+		var lobby = CreateSupportedLobby(withPlayers: false);
 
-		var resumed = new GameClientManager(new GameService(), saveStore: new FileGameSessionSaveStore(saveDirectory.Path));
+		var resumed = new GameClientManager(
+			new GameService(),
+			saveStore: new FileGameSessionSaveStore(saveDirectory.Path),
+			lobbySetupState: lobby);
 
 		resumed.HasActiveSession.Should().BeTrue();
 		resumed.ActiveGameId.Should().Be(savedGameId);
 		resumed.CurrentSession.Should().NotBeNull();
 		resumed.CurrentInstruction.Should().NotBeNull();
 		resumed.CurrentPhase.Should().Be(savedPhase);
+		resumed.StagedRoleLockIn.Should().BeNull();
+		lobby.PlayerRoster.Should().BeEmpty();
+		lobby.AcceptedRoleLockIn.Should().BeNull();
 	}
 
 	[Fact]
@@ -2176,6 +2195,25 @@ public class GameClientManagerTests
 		manager.HasActiveSession.Should().BeFalse();
 		incompatibleLobby.PlayerRoster.Should().BeEmpty();
 		incompatibleLobby.AcceptedRoleLockIn.Should().BeNull();
+		store.Load().Should().BeNull();
+	}
+
+	[Fact]
+	public void Constructor_WhenStagedRecoveryHasNoLobbyTarget_ExposesNothing()
+	{
+		var store = new RecordingSaveStore();
+		var sourceLobby = CreateSupportedLobby();
+		var sourceManager = new GameClientManager(
+			new GameService(),
+			saveStore: store);
+		sourceManager.TryEnsureStagedRoleLockIn(sourceLobby).Should().BeTrue();
+
+		var manager = new GameClientManager(
+			new GameService(),
+			saveStore: store);
+
+		manager.StagedRoleLockIn.Should().BeNull();
+		manager.HasActiveSession.Should().BeFalse();
 		store.Load().Should().BeNull();
 	}
 
