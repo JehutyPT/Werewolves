@@ -232,6 +232,46 @@ public class LobbySetupStateTests
 	}
 
 	[Fact]
+	public void DecideImplicitRoleLockIn_WithStaleExpectedVersion_RejectsWithoutPublishing()
+	{
+		var state = LobbySetupMetadataFixture.StateWithRoles(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.Seer);
+		foreach (var playerName in PlayerNames.DefaultFive)
+		{
+			state.AddPlayer(playerName).Should().Be(AddPlayerResult.Success);
+		}
+		state.IncrementRole(MainRoleType.SimpleWerewolf);
+		state.IncrementRole(MainRoleType.Seer);
+		for (var index = 0; index < 3; index++)
+		{
+			state.IncrementRole(MainRoleType.SimpleVillager);
+		}
+		var acceptedRoleLockIn = RoleLockIn.CreateFromPrintedRoles(
+			version: 1,
+			state.PlayerRoster.Count,
+			state.GetSelectedRoles());
+		var acceptedDecision = state.Decide(
+			new LobbyChange.AcceptImplicitRoleLockIn(
+				expectedCurrentVersion: 0,
+				acceptedRoleLockIn))!;
+		state.Publish(acceptedDecision.Commit);
+		var staleReplacement = RoleLockIn.CreateFromPrintedRoles(
+			version: 2,
+			state.PlayerRoster.Count,
+			state.GetSelectedRoles());
+
+		var staleDecision = state.Decide(
+			new LobbyChange.AcceptImplicitRoleLockIn(
+				expectedCurrentVersion: 0,
+				staleReplacement));
+
+		staleDecision.Should().BeNull();
+		state.AcceptedRoleLockIn.Should().BeSameAs(acceptedRoleLockIn);
+	}
+
+	[Fact]
 	public void DecideDraftSeatingOrderMove_KeepsPersistenceAndCanonicalIdentity()
 	{
 		var state = LobbySetupMetadataFixture.StateWithRoles(

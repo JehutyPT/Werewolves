@@ -684,6 +684,7 @@ public class LobbySetupState
 			new CanonicalSimulationScenarioDelta(
 				TryCreateCanonicalScenario(_current),
 				TryCreateCanonicalScenario(nextAggregate)),
+			!ReferenceEquals(_current, nextAggregate),
 			new Commit(CommitAuthority, nextAggregate));
 
 	private static CanonicalSimulationScenario? TryCreateCanonicalScenario(
@@ -1048,7 +1049,7 @@ public class LobbySetupState
 	private List<string> GetPlayerNames() =>
 		_current.PlayerRoster.Select(player => player.Name).ToList();
 
-	private GameSessionPlayerConfig CreatePlayerRosterEntry(string playerName)
+	internal GameSessionPlayerConfig CreatePlayerRosterEntry(string playerName)
 	{
 		Guid playerId;
 		do

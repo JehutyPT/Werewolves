@@ -423,7 +423,10 @@ public class LobbyEvaluationCoordinatorTests
 			MainRoleType.SimpleVillager,
 			MainRoleType.SimpleVillager,
 			MainRoleType.SimpleVillager);
-		var manager = new GameClientManager();
+		var saveStore = new ToggleThrowSaveStore();
+		var manager = new GameClientManager(
+			new GameService(),
+			saveStore: saveStore);
 		manager.TryReplaceStagedRoleLockIn(
 			lobby,
 			expectedCurrentVersion: 0,
@@ -452,7 +455,9 @@ public class LobbyEvaluationCoordinatorTests
 		coordinator.TryRequestLobbyExit().Should().BeFalse();
 		var call = await evaluator.NextCallAsync();
 
-		(moveUp ? lobby.MovePlayerUp(1) : lobby.MovePlayerDown(0)).Should().BeTrue();
+		(moveUp
+			? manager.TryMoveStagedPlayerUp(lobby, index: 1)
+			: manager.TryMoveStagedPlayerDown(lobby, index: 0)).Should().BeTrue();
 
 		lobby.AcceptedRoleLockIn.Should().BeSameAs(acceptedLockIn);
 		lobby.AcceptedPublicGroupPartition.Should().BeSameAs(partition);
@@ -467,6 +472,141 @@ public class LobbyEvaluationCoordinatorTests
 		coordinator.State.Identity!.Scenario.Should().Be(reorderedScenario.ToCanonical());
 		coordinator.TryRequestLobbyExit().Should().BeFalse();
 		evaluator.CallCount.Should().Be(2);
+		LocalRecoveryPayloadCodec.Deserialize(saveStore.Load()!)
+			.Should().BeOfType<StagedLobbyRecoveryPayload>()
+			.Which.PlayerRoster.Select(player => player.Id)
+			.Should().Equal(lobby.PlayerRoster.Select(player => player.Id));
+	}
+
+	[Fact]
+	public async Task CanonicallyEquivalentSeatingMove_KeepsMatchingInFlightEvaluationAfterDurablePublish()
+	{
+		var lobby = CreateLobby(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.Seer,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager);
+		var local = new ControlledReadLocalStore();
+		var store = new ToggleThrowSaveStore();
+		var manager = new GameClientManager(new GameService(), saveStore: store);
+		using var coordinator = new LobbyEvaluationCoordinator(
+			lobby,
+			local,
+			new RecordingEvaluator(new CouldNotEvaluateLobbyEvaluation()),
+			SafetyScreeningSettings,
+			TimeProvider.System,
+			(_, _) => new LobbyScenarioSupport(
+				RulesValid: true,
+				AppSupported: true,
+				SimulatorSupported: true));
+		manager.TryEnsureStagedRoleLockIn(lobby).Should().BeTrue();
+		var pendingRead = await local.NextReadAsync();
+		var pendingIdentity = coordinator.State.Identity;
+		var originalIds = lobby.PlayerRoster.Select(player => player.Id).ToArray();
+		var expectedIds = originalIds.ToArray();
+		(expectedIds[0], expectedIds[1]) = (expectedIds[1], expectedIds[0]);
+
+		manager.TryMoveStagedPlayerDown(lobby, index: 0).Should().BeTrue();
+
+		lobby.PlayerRoster.Select(player => player.Id).Should().Equal(expectedIds);
+		LocalRecoveryPayloadCodec.Deserialize(store.Load()!)
+			.Should().BeOfType<StagedLobbyRecoveryPayload>()
+			.Which.PlayerRoster.Select(player => player.Id)
+			.Should().Equal(expectedIds);
+		pendingRead.CancellationToken.IsCancellationRequested.Should().BeFalse();
+		coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.Pending);
+		coordinator.State.Identity.Should().Be(pendingIdentity);
+		local.ReadCount.Should().Be(1);
+	}
+
+	[Theory]
+	[InlineData(true)]
+	[InlineData(false)]
+	public async Task RosterMembershipClearFailure_KeepsAcceptedEvaluationAndRecoveryUnchanged(
+		bool addPlayer)
+	{
+		var lobby = CreateLobby(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.Seer,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager);
+		var local = new ControlledReadLocalStore();
+		var store = new ToggleThrowSaveStore();
+		var manager = new GameClientManager(new GameService(), saveStore: store);
+		using var coordinator = new LobbyEvaluationCoordinator(
+			lobby,
+			local,
+			new RecordingEvaluator(new CouldNotEvaluateLobbyEvaluation()),
+			SafetyScreeningSettings,
+			TimeProvider.System,
+			(_, _) => new LobbyScenarioSupport(
+				RulesValid: true,
+				AppSupported: true,
+				SimulatorSupported: true));
+		manager.TryEnsureStagedRoleLockIn(lobby).Should().BeTrue();
+		var pendingRead = await local.NextReadAsync();
+		var acceptedRoleLockIn = lobby.AcceptedRoleLockIn;
+		var acceptedIdentity = coordinator.State.Identity;
+		var acceptedPayload = store.Load();
+		var acceptedRoster = lobby.PlayerRoster.ToArray();
+		store.ThrowOnClear = true;
+
+		var accepted = addPlayer
+			? manager.TryAddStagedPlayer(lobby, "Fátima", out _)
+			: manager.TryRemoveStagedPlayer(lobby, index: 2);
+
+		accepted.Should().BeFalse();
+		lobby.PlayerRoster.Should().Equal(acceptedRoster);
+		lobby.AcceptedRoleLockIn.Should().BeSameAs(acceptedRoleLockIn);
+		manager.StagedRoleLockIn.Should().BeSameAs(acceptedRoleLockIn);
+		store.Load().Should().Be(acceptedPayload);
+		pendingRead.CancellationToken.IsCancellationRequested.Should().BeFalse();
+		coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.Pending);
+		coordinator.State.Identity.Should().Be(acceptedIdentity);
+		local.ReadCount.Should().Be(1);
+	}
+
+	[Theory]
+	[InlineData(true)]
+	[InlineData(false)]
+	public async Task RosterMembershipClear_InvalidatesEvaluationOnlyAfterDurablePublication(
+		bool addPlayer)
+	{
+		var lobby = CreateLobby(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.Seer,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager);
+		var local = new ControlledReadLocalStore();
+		var store = new ToggleThrowSaveStore();
+		var manager = new GameClientManager(new GameService(), saveStore: store);
+		using var coordinator = new LobbyEvaluationCoordinator(
+			lobby,
+			local,
+			new RecordingEvaluator(new CouldNotEvaluateLobbyEvaluation()),
+			SafetyScreeningSettings,
+			TimeProvider.System,
+			(_, _) => new LobbyScenarioSupport(
+				RulesValid: true,
+				AppSupported: true,
+				SimulatorSupported: true));
+		manager.TryEnsureStagedRoleLockIn(lobby).Should().BeTrue();
+		var pendingRead = await local.NextReadAsync();
+
+		var accepted = addPlayer
+			? manager.TryAddStagedPlayer(lobby, "Fátima", out _)
+			: manager.TryRemoveStagedPlayer(lobby, index: 2);
+
+		accepted.Should().BeTrue();
+		store.Load().Should().BeNull();
+		lobby.AcceptedRoleLockInRequiresReplacement.Should().BeTrue();
+		pendingRead.CancellationToken.IsCancellationRequested.Should().BeTrue();
+		coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.NotApplicable);
+		coordinator.State.Identity.Should().BeNull();
+		local.ReadCount.Should().Be(1);
 	}
 
 	[Fact]
@@ -2174,6 +2314,7 @@ public class LobbyEvaluationCoordinatorTests
 		private string? _payload;
 
 		public bool ThrowOnSave { get; set; }
+		public bool ThrowOnClear { get; set; }
 
 		public string? Load() => _payload;
 
@@ -2188,7 +2329,16 @@ public class LobbyEvaluationCoordinatorTests
 			_payload = serializedSession;
 		}
 
-		public void Clear() => _payload = null;
+		public void Clear()
+		{
+			if (ThrowOnClear)
+			{
+				throw new IOException(
+					ClientTestReferences.ExceptionMessages.SaveFailed);
+			}
+
+			_payload = null;
+		}
 	}
 
 	private sealed class ControlledContinuationPump : SynchronizationContext

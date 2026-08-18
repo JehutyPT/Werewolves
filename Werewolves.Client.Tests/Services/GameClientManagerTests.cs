@@ -703,6 +703,189 @@ public class GameClientManagerTests
 	}
 
 	[Fact]
+	public void EnsureStagedRoleLockIn_WhenNotificationThrows_RemainsAcceptedAndRecoverable()
+	{
+		var store = new RecordingSaveStore();
+		var lobby = CreateSupportedLobby();
+		var manager = new GameClientManager(new GameService(), saveStore: store);
+		RoleLockIn? observedPublishedRoleLockIn = null;
+		RoleLockIn? observedDurableRoleLockIn = null;
+		lobby.SimulationScenarioChanged += (_, _) =>
+		{
+			observedPublishedRoleLockIn = lobby.AcceptedRoleLockIn;
+			observedDurableRoleLockIn = LocalRecoveryPayloadCodec.Deserialize(store.Load()!)
+				.Should().BeOfType<StagedLobbyRecoveryPayload>()
+				.Which.RoleLockIn;
+			throw new InvalidOperationException("notification failure");
+		};
+		manager.StateChanged += (_, _) =>
+			throw new InvalidOperationException("notification failure");
+
+		var accepted = manager.TryEnsureStagedRoleLockIn(lobby);
+
+		accepted.Should().BeTrue();
+		lobby.AcceptedRoleLockIn.Should().NotBeNull();
+		lobby.AcceptedRoleLockIn!.Version.Should().Be(1);
+		observedPublishedRoleLockIn.Should().BeSameAs(lobby.AcceptedRoleLockIn);
+		observedDurableRoleLockIn!.Version.Should().Be(
+			lobby.AcceptedRoleLockIn.Version);
+		observedDurableRoleLockIn.RoleComposition.Select(card => card.Id)
+			.Should().Equal(lobby.AcceptedRoleLockIn.RoleComposition
+				.Select(card => card.Id));
+		var recoveredLobby = CreateSupportedLobby(withPlayers: false);
+		_ = new GameClientManager(
+			new GameService(),
+			saveStore: store,
+			lobbySetupState: recoveredLobby);
+		recoveredLobby.PlayerRoster.Select(player => player.Id)
+			.Should().Equal(lobby.PlayerRoster.Select(player => player.Id));
+		recoveredLobby.AcceptedRoleLockIn!.Version.Should().Be(
+			lobby.AcceptedRoleLockIn.Version);
+		recoveredLobby.AcceptedRoleLockIn.RoleComposition.Select(card => card.Id)
+			.Should().Equal(lobby.AcceptedRoleLockIn.RoleComposition
+				.Select(card => card.Id));
+	}
+
+	[Fact]
+	public void EnsureStagedRoleLockIn_WhenPersistenceFails_LeavesAcceptedAggregateAndGateUnchanged()
+	{
+		var store = new ToggleThrowSaveStore();
+		var lobby = CreateActorLobby();
+		var manager = new GameClientManager(new GameService(), saveStore: store);
+		manager.TryEnsureStagedRoleLockIn(lobby).Should().BeTrue();
+		var acceptedRoleLockIn = lobby.AcceptedRoleLockIn;
+		var durablePayload = store.Load();
+		var stagedRoleLockIn = manager.StagedRoleLockIn;
+		lobby.DecrementRole(MainRoleType.SimpleVillager);
+		lobby.IncrementRole(MainRoleType.Seer);
+		lobby.AcceptedRoleLockInRequiresReplacement.Should().BeTrue();
+		var requiresRoleLockIn = lobby.RequiresRoleLockIn;
+		var requiresActorSetupCards = lobby.RequiresActorSetupCards;
+		var lobbyNotified = false;
+		var managerNotified = false;
+		lobby.SimulationScenarioChanged += (_, _) => lobbyNotified = true;
+		manager.StateChanged += (_, _) => managerNotified = true;
+		store.ThrowOnSave = true;
+
+		var accepted = manager.TryEnsureStagedRoleLockIn(lobby);
+
+		accepted.Should().BeFalse();
+		lobby.AcceptedRoleLockIn.Should().BeSameAs(acceptedRoleLockIn);
+		lobby.AcceptedRoleLockInRequiresReplacement.Should().BeTrue();
+		lobby.RequiresRoleLockIn.Should().Be(requiresRoleLockIn);
+		lobby.RequiresActorSetupCards.Should().Be(requiresActorSetupCards);
+		store.Load().Should().Be(durablePayload);
+		manager.StagedRoleLockIn.Should().BeSameAs(stagedRoleLockIn);
+		lobbyNotified.Should().BeFalse();
+		managerNotified.Should().BeFalse();
+	}
+
+	[Theory]
+	[InlineData(true)]
+	[InlineData(false)]
+	public void EnsureStagedRoleLockIn_WhenThiefOrCompositionIsInvalid_RejectsWithoutMutation(
+		bool thiefEnabled)
+	{
+		var store = new RecordingSaveStore();
+		var lobby = thiefEnabled ? CreateThiefLobby() : CreateSupportedLobby();
+		if (thiefEnabled)
+		{
+			lobby.IncrementRole(MainRoleType.Thief);
+		}
+		else
+		{
+			lobby.DecrementRole(MainRoleType.Seer);
+		}
+		var manager = new GameClientManager(new GameService(), saveStore: store);
+		var originalRoster = lobby.PlayerRoster.ToArray();
+		var originalRoles = lobby.GetSelectedRoles().ToArray();
+		var lobbyNotified = false;
+		var managerNotified = false;
+		lobby.SimulationScenarioChanged += (_, _) => lobbyNotified = true;
+		manager.StateChanged += (_, _) => managerNotified = true;
+
+		manager.TryEnsureStagedRoleLockIn(lobby).Should().BeFalse();
+
+		lobby.PlayerRoster.Should().Equal(originalRoster);
+		lobby.GetSelectedRoles().Should().Equal(originalRoles);
+		lobby.AcceptedRoleLockIn.Should().BeNull();
+		manager.StagedRoleLockIn.Should().BeNull();
+		store.SavedPayloads.Should().BeEmpty();
+		store.Load().Should().BeNull();
+		lobbyNotified.Should().BeFalse();
+		managerNotified.Should().BeFalse();
+	}
+
+	[Fact]
+	public void EnsureStagedRoleLockIn_DuringActiveSession_RejectsWithoutMutation()
+	{
+		var store = new RecordingSaveStore();
+		var manager = new GameClientManager(new GameService(), saveStore: store);
+		StartSimpleGame(manager);
+		var durablePayload = store.Load();
+		var saveCount = store.SavedPayloads.Count;
+		var lobby = CreateSupportedLobby();
+		var originalRoster = lobby.PlayerRoster.ToArray();
+		var originalRoles = lobby.GetSelectedRoles().ToArray();
+		var lobbyNotified = false;
+		var managerNotified = false;
+		lobby.SimulationScenarioChanged += (_, _) => lobbyNotified = true;
+		manager.StateChanged += (_, _) => managerNotified = true;
+
+		manager.TryEnsureStagedRoleLockIn(lobby).Should().BeFalse();
+
+		manager.HasActiveSession.Should().BeTrue();
+		lobby.PlayerRoster.Should().Equal(originalRoster);
+		lobby.GetSelectedRoles().Should().Equal(originalRoles);
+		lobby.AcceptedRoleLockIn.Should().BeNull();
+		store.SavedPayloads.Should().HaveCount(saveCount);
+		store.Load().Should().Be(durablePayload);
+		lobbyNotified.Should().BeFalse();
+		managerNotified.Should().BeFalse();
+	}
+
+	[Fact]
+	public void EnsureStagedRoleLockIn_WhenNextVersionWouldOverflow_RejectsWithoutMutation()
+	{
+		var sourceLobby = CreateSupportedLobby();
+		var acceptedRoleLockIn = RoleLockIn.CreateFromPrintedRoles(
+			long.MaxValue,
+			sourceLobby.PlayerRoster.Count,
+			sourceLobby.GetSelectedRoles());
+		var store = new RecordingSaveStore();
+		store.Save(LocalRecoveryPayloadCodec.SerializeStagedLobby(
+			sourceLobby.PlayerRoster,
+			acceptedRoleLockIn,
+			ActorSetupCards.None,
+			publicGroupPartition: null));
+		var lobby = CreateSupportedLobby(withPlayers: false);
+		var manager = new GameClientManager(
+			new GameService(),
+			saveStore: store,
+			lobbySetupState: lobby);
+		lobby.DecrementRole(MainRoleType.Seer);
+		lobby.IncrementRole(MainRoleType.SimpleVillager);
+		var durablePayload = store.Load();
+		var saveCount = store.SavedPayloads.Count;
+		var stagedRoleLockIn = manager.StagedRoleLockIn;
+		var lobbyNotified = false;
+		var managerNotified = false;
+		lobby.SimulationScenarioChanged += (_, _) => lobbyNotified = true;
+		manager.StateChanged += (_, _) => managerNotified = true;
+
+		manager.TryEnsureStagedRoleLockIn(lobby).Should().BeFalse();
+
+		lobby.AcceptedRoleLockIn.Should().BeSameAs(stagedRoleLockIn);
+		lobby.AcceptedRoleLockIn!.Version.Should().Be(long.MaxValue);
+		lobby.AcceptedRoleLockInRequiresReplacement.Should().BeTrue();
+		manager.StagedRoleLockIn.Should().BeSameAs(stagedRoleLockIn);
+		store.SavedPayloads.Should().HaveCount(saveCount);
+		store.Load().Should().Be(durablePayload);
+		lobbyNotified.Should().BeFalse();
+		managerNotified.Should().BeFalse();
+	}
+
+	[Fact]
 	public void StartGame_AfterAcceptedThiefCompositionBecomesNonThief_ReplacesImplicitlyAtNextVersion()
 	{
 		var store = new RecordingSaveStore();
@@ -963,6 +1146,59 @@ public class GameClientManagerTests
 		persisted.PublicGroupPartition.Should().Be(partition);
 	}
 
+	[Theory]
+	[InlineData(false)]
+	[InlineData(true)]
+	public void MoveStagedPlayer_WhenNotificationThrows_RemainsAcceptedAndRecoverable(
+		bool moveUp)
+	{
+		var store = new RecordingSaveStore();
+		var lobby = CreatePrejudicedManipulatorLobby();
+		var manager = new GameClientManager(new GameService(), saveStore: store);
+		manager.TryEnsureStagedRoleLockIn(lobby).Should().BeTrue();
+		var rosterIds = lobby.PlayerRoster.Select(player => player.Id).ToArray();
+		var partition = PublicGroupPartition.Create(
+			rosterIds,
+			rosterIds.Take(2),
+			rosterIds.Skip(2));
+		manager.TryReplaceStagedPublicGroupPartition(lobby, partition)
+			.Should().BeTrue();
+		var expectedIds = rosterIds.ToArray();
+		(expectedIds[0], expectedIds[1]) = (expectedIds[1], expectedIds[0]);
+		Guid[]? observedPublishedIds = null;
+		Guid[]? observedDurableIds = null;
+		lobby.SimulationScenarioChanged += (_, _) =>
+		{
+			observedPublishedIds = lobby.PlayerRoster
+				.Select(player => player.Id)
+				.ToArray();
+			observedDurableIds = LocalRecoveryPayloadCodec.Deserialize(store.Load()!)
+				.Should().BeOfType<StagedLobbyRecoveryPayload>()
+				.Which.PlayerRoster
+				.Select(player => player.Id)
+				.ToArray();
+			throw new InvalidOperationException("notification failure");
+		};
+		manager.StateChanged += (_, _) =>
+			throw new InvalidOperationException("notification failure");
+
+		var accepted = moveUp
+			? manager.TryMoveStagedPlayerUp(lobby, index: 1)
+			: manager.TryMoveStagedPlayerDown(lobby, index: 0);
+
+		accepted.Should().BeTrue();
+		lobby.PlayerRoster.Select(player => player.Id).Should().Equal(expectedIds);
+		observedPublishedIds.Should().Equal(expectedIds);
+		observedDurableIds.Should().Equal(expectedIds);
+		var recoveredLobby = CreatePrejudicedManipulatorLobby(withPlayers: false);
+		_ = new GameClientManager(
+			new GameService(),
+			saveStore: store,
+			lobbySetupState: recoveredLobby);
+		recoveredLobby.PlayerRoster.Select(player => player.Id)
+			.Should().Equal(expectedIds);
+	}
+
 	[Fact]
 	public void MoveStagedPlayerUp_WhenPersistenceFails_ChangesNothing()
 	{
@@ -1011,6 +1247,10 @@ public class GameClientManagerTests
 
 		manager.TryMoveStagedPlayerDown(lobby, index: 0).Should().BeTrue();
 		manager.TryMoveStagedPlayerUp(lobby, index: 1).Should().BeTrue();
+		var lobbyNotified = false;
+		var managerNotified = false;
+		lobby.SimulationScenarioChanged += (_, _) => lobbyNotified = true;
+		manager.StateChanged += (_, _) => managerNotified = true;
 		manager.TryMoveStagedPlayerUp(lobby, index: 0).Should().BeFalse();
 		manager.TryMoveStagedPlayerDown(
 			lobby,
@@ -1020,6 +1260,73 @@ public class GameClientManagerTests
 			.Select(player => (player.Id, player.Name))
 			.Should().Equal(originalRoster);
 		store.SavedPayloads.Should().BeEmpty();
+		lobbyNotified.Should().BeFalse();
+		managerNotified.Should().BeFalse();
+	}
+
+	[Fact]
+	public void MoveStagedPlayer_WithoutAcceptedLock_PublishesKeepAndNotifiesWithoutPersistence()
+	{
+		var store = new RecordingSaveStore();
+		var lobby = CreateSupportedLobby();
+		var manager = new GameClientManager(new GameService(), saveStore: store);
+		var originalIds = lobby.PlayerRoster.Select(player => player.Id).ToArray();
+		var expectedIds = originalIds.ToArray();
+		(expectedIds[0], expectedIds[1]) = (expectedIds[1], expectedIds[0]);
+		var lobbyNotified = false;
+		var managerNotified = false;
+		lobby.SimulationScenarioChanged += (_, _) => lobbyNotified = true;
+		manager.StateChanged += (_, _) => managerNotified = true;
+
+		var accepted = manager.TryMoveStagedPlayerDown(lobby, index: 0);
+
+		accepted.Should().BeTrue();
+		lobby.PlayerRoster.Select(player => player.Id).Should().Equal(expectedIds);
+		store.SavedPayloads.Should().BeEmpty();
+		store.Load().Should().BeNull();
+		lobbyNotified.Should().BeTrue();
+		managerNotified.Should().BeTrue();
+	}
+
+	[Fact]
+	public void MoveStagedPlayer_WithStaleAcceptedLock_PublishesOnlyTheDraftAndKeepsRecovery()
+	{
+		var store = new RecordingSaveStore();
+		var lobby = CreateSupportedLobby();
+		var manager = new GameClientManager(new GameService(), saveStore: store);
+		manager.TryEnsureStagedRoleLockIn(lobby).Should().BeTrue();
+		var acceptedRoleLockIn = lobby.AcceptedRoleLockIn;
+		var durablePayload = store.Load();
+		var durableIds = lobby.PlayerRoster.Select(player => player.Id).ToArray();
+		lobby.DecrementRole(MainRoleType.Seer);
+		lobby.IncrementRole(MainRoleType.SimpleVillager);
+		lobby.AcceptedRoleLockInRequiresReplacement.Should().BeTrue();
+		var expectedDraftIds = durableIds.ToArray();
+		(expectedDraftIds[0], expectedDraftIds[1]) =
+			(expectedDraftIds[1], expectedDraftIds[0]);
+		var lobbyNotified = false;
+		var managerNotified = false;
+		lobby.SimulationScenarioChanged += (_, _) => lobbyNotified = true;
+		manager.StateChanged += (_, _) => managerNotified = true;
+
+		manager.TryMoveStagedPlayerDown(lobby, index: 0).Should().BeTrue();
+
+		lobby.PlayerRoster.Select(player => player.Id).Should().Equal(expectedDraftIds);
+		lobby.AcceptedRoleLockIn.Should().BeSameAs(acceptedRoleLockIn);
+		lobby.AcceptedRoleLockInRequiresReplacement.Should().BeTrue();
+		store.Load().Should().Be(durablePayload);
+		manager.StagedRoleLockIn.Should().BeSameAs(acceptedRoleLockIn);
+		lobbyNotified.Should().BeTrue();
+		managerNotified.Should().BeTrue();
+		var recoveredLobby = CreateSupportedLobby(withPlayers: false);
+		_ = new GameClientManager(
+			new GameService(),
+			saveStore: store,
+			lobbySetupState: recoveredLobby);
+		recoveredLobby.PlayerRoster.Select(player => player.Id)
+			.Should().Equal(durableIds);
+		recoveredLobby.AcceptedRoleLockIn!.Version.Should().Be(
+			acceptedRoleLockIn!.Version);
 	}
 
 	[Fact]
@@ -1070,6 +1377,48 @@ public class GameClientManagerTests
 	}
 
 	[Fact]
+	public void AddStagedPlayer_WhenNotificationThrows_RemainsAcceptedAndCleared()
+	{
+		var store = new RecordingSaveStore();
+		var lobby = CreatePrejudicedManipulatorLobby();
+		var manager = new GameClientManager(new GameService(), saveStore: store);
+		manager.TryEnsureStagedRoleLockIn(lobby).Should().BeTrue();
+		var rosterIds = lobby.PlayerRoster.Select(player => player.Id).ToArray();
+		var partition = PublicGroupPartition.Create(
+			rosterIds,
+			rosterIds.Take(2),
+			rosterIds.Skip(2));
+		manager.TryReplaceStagedPublicGroupPartition(lobby, partition)
+			.Should().BeTrue();
+		GameSessionPlayerConfig? observedAddedPlayer = null;
+		lobby.SimulationScenarioChanged += (_, _) =>
+		{
+			observedAddedPlayer = lobby.PlayerRoster[^1];
+			store.Load().Should().BeNull();
+			manager.StagedRoleLockIn.Should().BeNull();
+			throw new InvalidOperationException("notification failure");
+		};
+		manager.StateChanged += (_, _) =>
+			throw new InvalidOperationException("notification failure");
+
+		var accepted = manager.TryAddStagedPlayer(
+			lobby,
+			"  Fátima  ",
+			out var result);
+
+		accepted.Should().BeTrue();
+		result.Should().Be(AddPlayerResult.Success);
+		observedAddedPlayer.Should().BeSameAs(lobby.PlayerRoster[^1]);
+		observedAddedPlayer!.Name.Should().Be("Fátima");
+		observedAddedPlayer.Id.Should().NotBeEmpty();
+		rosterIds.Should().NotContain(observedAddedPlayer.Id);
+		lobby.AcceptedPublicGroupPartition.Should().BeNull();
+		lobby.AcceptedRoleLockInRequiresReplacement.Should().BeTrue();
+		store.Load().Should().BeNull();
+		manager.StagedRoleLockIn.Should().BeNull();
+	}
+
+	[Fact]
 	public void RemoveStagedPlayer_AfterAcceptedAggregate_ClearsObsoleteRecovery()
 	{
 		var store = new RecordingSaveStore();
@@ -1111,6 +1460,94 @@ public class GameClientManagerTests
 		recoveredLobby.AcceptedRoleLockIn.Should().BeNull();
 	}
 
+	[Fact]
+	public void RemoveStagedPlayer_WhenNotificationThrows_RemainsAcceptedAndCleared()
+	{
+		var store = new RecordingSaveStore();
+		var lobby = CreatePrejudicedManipulatorLobby();
+		var manager = new GameClientManager(new GameService(), saveStore: store);
+		manager.TryEnsureStagedRoleLockIn(lobby).Should().BeTrue();
+		var rosterIds = lobby.PlayerRoster.Select(player => player.Id).ToArray();
+		var partition = PublicGroupPartition.Create(
+			rosterIds,
+			rosterIds.Take(2),
+			rosterIds.Skip(2));
+		manager.TryReplaceStagedPublicGroupPartition(lobby, partition)
+			.Should().BeTrue();
+		var removedId = rosterIds[2];
+		var expectedIds = rosterIds.Where(playerId => playerId != removedId).ToArray();
+		Guid[]? observedPublishedIds = null;
+		lobby.SimulationScenarioChanged += (_, _) =>
+		{
+			observedPublishedIds = lobby.PlayerRoster
+				.Select(player => player.Id)
+				.ToArray();
+			store.Load().Should().BeNull();
+			manager.StagedRoleLockIn.Should().BeNull();
+			throw new InvalidOperationException("notification failure");
+		};
+		manager.StateChanged += (_, _) =>
+			throw new InvalidOperationException("notification failure");
+
+		var accepted = manager.TryRemoveStagedPlayer(lobby, index: 2);
+
+		accepted.Should().BeTrue();
+		lobby.PlayerRoster.Select(player => player.Id).Should().Equal(expectedIds);
+		observedPublishedIds.Should().Equal(expectedIds);
+		lobby.AcceptedPublicGroupPartition.Should().BeNull();
+		lobby.AcceptedRoleLockInRequiresReplacement.Should().BeTrue();
+		store.Load().Should().BeNull();
+		manager.StagedRoleLockIn.Should().BeNull();
+	}
+
+	[Theory]
+	[InlineData(true)]
+	[InlineData(false)]
+	public void RosterMembershipEdit_WithoutAcceptedLock_PublishesKeepAndNotifiesWithoutPersistence(
+		bool addPlayer)
+	{
+		var store = new RecordingSaveStore();
+		var lobby = CreateSupportedLobby();
+		var manager = new GameClientManager(new GameService(), saveStore: store);
+		var originalCount = lobby.PlayerRoster.Count;
+		var lobbyNotified = false;
+		var managerNotified = false;
+		lobby.SimulationScenarioChanged += (_, _) => lobbyNotified = true;
+		manager.StateChanged += (_, _) => managerNotified = true;
+
+		var accepted = addPlayer
+			? manager.TryAddStagedPlayer(lobby, "Fátima", out _)
+			: manager.TryRemoveStagedPlayer(lobby, index: 2);
+
+		accepted.Should().BeTrue();
+		lobby.PlayerRoster.Should().HaveCount(
+			addPlayer ? originalCount + 1 : originalCount - 1);
+		store.SavedPayloads.Should().BeEmpty();
+		store.Load().Should().BeNull();
+		lobbyNotified.Should().BeTrue();
+		managerNotified.Should().BeTrue();
+	}
+
+	[Fact]
+	public void RemoveThenAddStagedPlayer_DoesNotReuseTheRemovedPlayerIdentity()
+	{
+		var lobby = CreateSupportedLobby();
+		var manager = new GameClientManager();
+		var removedPlayer = lobby.PlayerRoster[2];
+
+		manager.TryRemoveStagedPlayer(lobby, index: 2).Should().BeTrue();
+		manager.TryAddStagedPlayer(
+			lobby,
+			removedPlayer.Name,
+			out var result).Should().BeTrue();
+
+		result.Should().Be(AddPlayerResult.Success);
+		lobby.PlayerRoster.Select(player => player.Id)
+			.Should().NotContain(removedPlayer.Id);
+		lobby.PlayerRoster[^1].Name.Should().Be(removedPlayer.Name);
+		lobby.PlayerRoster[^1].Id.Should().NotBeEmpty();
+	}
+
 	[Theory]
 	[InlineData(true)]
 	[InlineData(false)]
@@ -1138,6 +1575,10 @@ public class GameClientManagerTests
 			.Select(player => (player.Id, player.Name))
 			.ToArray();
 		var storedBytes = store.Load();
+		var lobbyNotified = false;
+		var managerNotified = false;
+		lobby.SimulationScenarioChanged += (_, _) => lobbyNotified = true;
+		manager.StateChanged += (_, _) => managerNotified = true;
 		store.ThrowOnClear = true;
 
 		var changed = addPlayer
@@ -1152,6 +1593,8 @@ public class GameClientManagerTests
 		lobby.AcceptedPublicGroupPartition.Should().BeSameAs(partition);
 		manager.StagedRoleLockIn.Should().BeSameAs(roleLockIn);
 		store.Load().Should().Be(storedBytes);
+		lobbyNotified.Should().BeFalse();
+		managerNotified.Should().BeFalse();
 	}
 
 	[Fact]
@@ -1165,6 +1608,10 @@ public class GameClientManagerTests
 			.Select(player => (player.Id, player.Name))
 			.ToArray();
 		var storedBytes = store.Load();
+		var lobbyNotified = false;
+		var managerNotified = false;
+		lobby.SimulationScenarioChanged += (_, _) => lobbyNotified = true;
+		manager.StateChanged += (_, _) => managerNotified = true;
 
 		manager.TryAddStagedPlayer(lobby, "  ", out var emptyResult)
 			.Should().BeFalse();
@@ -1180,6 +1627,8 @@ public class GameClientManagerTests
 			.Select(player => (player.Id, player.Name))
 			.Should().Equal(originalRoster);
 		store.Load().Should().Be(storedBytes);
+		lobbyNotified.Should().BeFalse();
+		managerNotified.Should().BeFalse();
 	}
 
 	[Fact]

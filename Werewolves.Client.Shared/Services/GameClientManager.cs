@@ -136,8 +136,11 @@ public sealed class GameClientManager
 	{
 		switch (decision.Persistence)
 		{
-			case LobbyPersistenceInstruction.Keep:
+			case LobbyPersistenceInstruction.Keep
+				when !decision.PublishesStateChange:
 				return;
+			case LobbyPersistenceInstruction.Keep:
+				break;
 			case LobbyPersistenceInstruction.Clear:
 				_stagedLobby = null;
 				break;
@@ -226,79 +229,17 @@ public sealed class GameClientManager
 	public bool TryMoveStagedPlayerDown(LobbySetupState lobby, int index)
 	{
 		ArgumentNullException.ThrowIfNull(lobby);
-		if (HasActiveSession || !lobby.CanMovePlayerDown(index))
-		{
-			return false;
-		}
-		if (lobby.AcceptedRoleLockIn is not { } roleLockIn ||
-			lobby.AcceptedRoleLockInRequiresReplacement)
-		{
-			return lobby.MovePlayerDown(index);
-		}
-
-		var proposedRoster = lobby.PlayerRoster.ToArray();
-		(proposedRoster[index], proposedRoster[index + 1]) =
-			(proposedRoster[index + 1], proposedRoster[index]);
-		try
-		{
-			PersistStagedLobbyBeforeApply(
-				proposedRoster,
-				roleLockIn,
-				lobby.AcceptedActorSetupCards,
-				lobby.AcceptedPublicGroupPartition,
-				() =>
-				{
-					if (!lobby.MovePlayerDown(index))
-					{
-						throw new InvalidOperationException(
-							"The staged Seating Order changed before it could be applied.");
-					}
-				});
-		}
-		catch (Exception)
-		{
-			return false;
-		}
-		return true;
+		return TryAcceptLobbyChange(
+			lobby,
+			new LobbyChange.MovePlayer(index, index + 1));
 	}
 
 	public bool TryMoveStagedPlayerUp(LobbySetupState lobby, int index)
 	{
 		ArgumentNullException.ThrowIfNull(lobby);
-		if (HasActiveSession || !lobby.CanMovePlayerUp(index))
-		{
-			return false;
-		}
-		if (lobby.AcceptedRoleLockIn is not { } roleLockIn ||
-			lobby.AcceptedRoleLockInRequiresReplacement)
-		{
-			return lobby.MovePlayerUp(index);
-		}
-
-		var proposedRoster = lobby.PlayerRoster.ToArray();
-		(proposedRoster[index - 1], proposedRoster[index]) =
-			(proposedRoster[index], proposedRoster[index - 1]);
-		try
-		{
-			PersistStagedLobbyBeforeApply(
-				proposedRoster,
-				roleLockIn,
-				lobby.AcceptedActorSetupCards,
-				lobby.AcceptedPublicGroupPartition,
-				() =>
-				{
-					if (!lobby.MovePlayerUp(index))
-					{
-						throw new InvalidOperationException(
-							"The staged Seating Order changed before it could be applied.");
-					}
-				});
-		}
-		catch (Exception)
-		{
-			return false;
-		}
-		return true;
+		return TryAcceptLobbyChange(
+			lobby,
+			new LobbyChange.MovePlayer(index, index - 1));
 	}
 
 	public bool TryAddStagedPlayer(
@@ -323,37 +264,23 @@ public sealed class GameClientManager
 		}
 
 		result = AddPlayerResult.Success;
-		if (HasActiveSession || !TryClearStagedRecoveryBeforeMembershipEdit(lobby))
-		{
-			return false;
-		}
-		if (lobby.AddPlayer(normalizedName) != AddPlayerResult.Success)
+		if (HasActiveSession)
 		{
 			return false;
 		}
 
-		OnStateChanged();
-		return true;
+		var player = lobby.CreatePlayerRosterEntry(normalizedName);
+		return TryAcceptLobbyChange(
+			lobby,
+			new LobbyChange.AddPlayer(player));
 	}
 
 	public bool TryRemoveStagedPlayer(LobbySetupState lobby, int index)
 	{
 		ArgumentNullException.ThrowIfNull(lobby);
-		if (HasActiveSession || index < 0 || index >= lobby.PlayerRoster.Count)
-		{
-			return false;
-		}
-		if (!TryClearStagedRecoveryBeforeMembershipEdit(lobby))
-		{
-			return false;
-		}
-		if (!lobby.RemovePlayerAt(index))
-		{
-			return false;
-		}
-
-		OnStateChanged();
-		return true;
+		return TryAcceptLobbyChange(
+			lobby,
+			new LobbyChange.RemovePlayer(index));
 	}
 
 	private bool TryClearStagedRecoveryBeforeMembershipEdit(
@@ -421,10 +348,11 @@ public sealed class GameClientManager
 			return false;
 		}
 
-		return TryReplaceStagedRoleLockIn(
+		return TryAcceptLobbyChange(
 			lobby,
-			expectedCurrentVersion,
-			replacement);
+			new LobbyChange.AcceptImplicitRoleLockIn(
+				expectedCurrentVersion,
+				replacement));
 	}
 
 	public StartGameConfirmationInstruction StartGame(LobbySetupState lobby)
