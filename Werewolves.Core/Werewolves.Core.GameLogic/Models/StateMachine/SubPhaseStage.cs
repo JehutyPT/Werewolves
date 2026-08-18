@@ -5,6 +5,7 @@ using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
+using Werewolves.Core.StateModels.Serialization;
 using static Werewolves.Core.GameLogic.Models.InternalMessages.StayInSubPhaseHandlerResult;
 
 namespace Werewolves.Core.GameLogic.Models.StateMachine;
@@ -170,7 +171,8 @@ internal sealed class HookSubPhaseStage : SubPhaseStage
         ResolvePendingInstructionContinuation(
             GameSession session,
             ModeratorInstruction pendingInstruction,
-            IRoleAdmissionSource admissions)
+            IRoleAdmissionSource admissions,
+            AcceptedObservationRecoveryCursor? acceptedObservationRecoveryCursor = null)
     {
         if (pendingInstruction is ConfirmationInstruction
             {
@@ -192,7 +194,8 @@ internal sealed class HookSubPhaseStage : SubPhaseStage
                     hook,
                     session,
                     pendingInstruction,
-                    admissions);
+                    admissions,
+                    acceptedObservationRecoveryCursor);
                 if (continuation == null)
                 {
                     continue;
@@ -217,7 +220,8 @@ internal sealed class HookSubPhaseStage : SubPhaseStage
             GameHook hook,
             GameSession session,
             ModeratorInstruction pendingInstruction,
-            IRoleAdmissionSource admissions)
+            IRoleAdmissionSource admissions,
+            AcceptedObservationRecoveryCursor? acceptedObservationRecoveryCursor = null)
     {
         var listenerState =
             RoleListenerDispatch.ResolvePendingInstructionContinuation(
@@ -227,7 +231,8 @@ internal sealed class HookSubPhaseStage : SubPhaseStage
                 (id, factory) =>
                     session.GetOrCreateListener(id, factory),
                 session,
-                pendingInstruction);
+                pendingInstruction,
+                acceptedObservationRecoveryCursor);
         return listenerState == null
             ? null
             : new PendingHookListenerContinuation(

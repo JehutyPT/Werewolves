@@ -2319,6 +2319,7 @@ internal static class GameFlowManager
             ModeratorInstructionSemantic.AnnounceScapegoatPermittedVoters or
             ModeratorInstructionSemantic.EstablishStutteringJudgeSignal or
             ModeratorInstructionSemantic.ObserveStutteringJudgeSignal or
+            ModeratorInstructionSemantic.SelectWildChildModel or
             ModeratorInstructionSemantic.ChooseWolfHoundAlignment or
             ModeratorInstructionSemantic.ChooseThiefOffer or
 			ModeratorInstructionSemantic.ChooseActorSetupCard or
@@ -2388,17 +2389,19 @@ internal static class GameFlowManager
                 werewolfListener.LittleGirlGuidanceDecision;
         }
 
-        ValidateAcceptedObservationRecoverySemantics(
-            session,
-            execution,
-            cursor,
-            nextInstruction);
+		ValidateAcceptedObservationRecoverySemantics(
+			session,
+			execution,
+			cursor,
+			nextInstruction,
+			admissions);
 		var continuation = ResolvePendingInstructionContinuation(
 			Listener(continuationRole),
 			NightMainActionLoop,
 			session,
 			nextInstruction,
-			admissions);
+			admissions,
+			cursor);
         if (continuation == null)
         {
             throw new InvalidOperationException(
@@ -2455,7 +2458,8 @@ internal static class GameFlowManager
         GameSession session,
         ExecutionView execution,
         AcceptedObservationRecoveryCursor cursor,
-        ModeratorInstruction pendingInstruction)
+        ModeratorInstruction pendingInstruction,
+        IRoleAdmissionSource admissions)
     {
         var continuationRole = cursor.ContinuationRole ?? cursor.ObservedRole;
         if (execution.CurrentPhase != GamePhase.Night ||
@@ -2470,6 +2474,18 @@ internal static class GameFlowManager
         {
             throw new InvalidOperationException(
                 "The Pending Instruction does not match the accepted observation continuation.");
+        }
+
+        if (RoleListenerDispatch.ValidateDeclaredWorkflowRecovery(
+                Listener(continuationRole),
+                NightMainActionLoop,
+                admissions,
+                (id, factory) => session.GetOrCreateListener(id, factory),
+                session,
+                pendingInstruction,
+                cursor))
+        {
+            return;
         }
 
         var matchesCommittedObservation =
@@ -2682,13 +2698,15 @@ internal static class GameFlowManager
             session,
             execution,
             cursor,
-            pendingInstruction);
+            pendingInstruction,
+            admissions);
 		var continuation = ResolvePendingInstructionContinuation(
 			Listener(continuationRole),
 			NightMainActionLoop,
 			session,
 			pendingInstruction,
-			admissions);
+			admissions,
+			cursor);
         if (continuation == null)
         {
             throw new InvalidOperationException(

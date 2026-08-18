@@ -1652,6 +1652,22 @@ internal sealed class RecoveryPayloadTestDriver
 		return this;
 	}
 
+	internal RecoveryPayloadTestDriver RemoveLatestNightAction(
+		NightActionType actionType)
+	{
+		var entryIndex = _payload.GameHistoryLog.FindLastIndex(entry =>
+			entry is NightActionLogEntry nightAction &&
+			nightAction.ActionType == actionType);
+		if (entryIndex < 0)
+		{
+			throw new InvalidOperationException(
+				$"The recovery test payload has no '{actionType}' Night Action.");
+		}
+
+		_payload.GameHistoryLog.RemoveAt(entryIndex);
+		return this;
+	}
+
 	internal RecoveryPayloadTestDriver RetargetLatestOneUseActionAndCursor(
 		Guid targetId)
 	{
@@ -1886,6 +1902,47 @@ internal sealed class RecoveryPayloadTestDriver
 		return this;
 	}
 
+	internal RecoveryPayloadTestDriver RewritePendingConfirmationInstructionId(
+		Guid instructionId)
+	{
+		if (instructionId == Guid.Empty ||
+		    _payload.PendingInstruction is not ConfirmationInstruction pending)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload requires a pending confirmation and a nonempty Instruction ID.");
+		}
+
+		_payload.PendingInstruction = new ConfirmationInstruction(
+			pending.Semantic,
+			pending.PublicAnnouncement,
+			pending.PrivateInstruction,
+			pending.AffectedPlayerIds,
+			instructionId,
+			pending.SoundEffects);
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver
+		ReplacePendingConfirmationWithPlayerSelection()
+	{
+		if (_payload.PendingInstruction is not ConfirmationInstruction pending)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no pending confirmation.");
+		}
+
+		_payload.PendingInstruction = new SelectPlayersInstruction(
+			pending.Semantic,
+			_payload.Players.Select(player => player.Id).ToHashSet(),
+			NumberRangeConstraint.Single,
+			pending.PublicAnnouncement,
+			pending.PrivateInstruction,
+			pending.AffectedPlayerIds,
+			roleIdentification: null,
+			instructionId: pending.InstructionId);
+		return this;
+	}
+
 	internal RecoveryPayloadTestDriver
 		RewritePendingConfirmationAffectedPlayer(Guid playerId)
 	{
@@ -1923,6 +1980,26 @@ internal sealed class RecoveryPayloadTestDriver
 			pending.AffectedPlayerIds,
 			pending.InstructionId,
 			soundEffects);
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver RewritePendingConfirmationLocalizedText(
+		string? publicAnnouncement,
+		string? privateInstruction)
+	{
+		if (_payload.PendingInstruction is not ConfirmationInstruction pending)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no pending confirmation.");
+		}
+
+		_payload.PendingInstruction = new ConfirmationInstruction(
+			pending.Semantic,
+			publicAnnouncement,
+			privateInstruction,
+			pending.AffectedPlayerIds,
+			pending.InstructionId,
+			pending.SoundEffects);
 		return this;
 	}
 
@@ -2676,6 +2753,13 @@ internal sealed class RecoveryPayloadTestDriver
 			ModeratorInstructionSemantic semantic)
 	{
 		RequireAcceptedObservationCursor().NextInstructionSemantic = semantic;
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver
+		RewriteAcceptedObservationCursorContinuationRole(MainRoleType role)
+	{
+		RequireAcceptedObservationCursor().ContinuationRole = role;
 		return this;
 	}
 
