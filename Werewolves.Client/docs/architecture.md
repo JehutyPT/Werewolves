@@ -71,16 +71,17 @@
 
 ## 5. Instruction Rendering
 
-### 5.1. Two-Part Flow
-*   When a `ModeratorInstruction` has both `PublicAnnouncement` and `PrivateInstruction`:
-    1. **First screen:** Public text only (the moderator reads this aloud).
-    2. **Second screen (after tap):** Private text + input controls.
-*   When only one text field is present (public or private), show it directly with the input controls. No extra tap.
+### 5.1. Single-Screen Presentation
+*   `InstructionRenderer` owns one presentation seam that classifies each current `ModeratorInstruction` family once for view routing, initial guidance expansion, and response-surface selection.
+*   Public and Moderator-private guidance render on the same screen. Public guidance remains visually dominant; private guidance remains subordinate. There is no public-to-private navigation step.
+*   For data-entry instructions with both guidance blocks, public guidance starts expanded and private guidance starts as a first-line preview. Expanding the collapsed block makes it the sole expanded block; response controls remain available throughout.
+*   For passive instructions, every present guidance block starts expanded and can be collapsed or expanded independently.
+*   A public-only or private-only instruction renders its one available block directly without a synthetic counterpart.
 
 ### 5.2. Transitions Between Instructions
 *   In-place transition: quick fade or right-to-left swipe animation.
 *   Haptic feedback fires on the game-progressing interaction itself—tap or successful hold—not on the transition animation.
-*   Haptic is limited to interactions that progress the game, not general UI interactions (dropdowns, tab switches).
+*   Instruction-guidance expansion retains its established lightweight click haptic. Other general UI interactions (dropdowns, tab switches) do not add haptic feedback.
 
 ### 5.3. Submission Behavior
 *   One-way Continue acknowledgments use a localized Continue control and submit `ExpectedInputType.Continue`, never a Boolean choice.
@@ -120,7 +121,7 @@
 *   This is a Moderator-only surface: it may show legitimately learned private state, but it does not imply that Players publicly know those Roles. PRD #93/#113 separates unknown, Moderator-known, and publicly revealed Role state; public roster/history projections use only public knowledge.
 
 ### 7.2. Action Tab
-*   Renders the current `ModeratorInstruction` via the two-part flow.
+*   Renders the current `ModeratorInstruction` through the single-screen presentation seam.
 *   Houses the count-up timer.
 *   Audio controls (mute/unmute).
 
