@@ -1061,12 +1061,7 @@ public class SerializationTests : DiagnosticTestBase
             PhaseStateCache = new GamePhaseStateCacheDto
             {
                 CurrentPhase = GamePhase.Day,
-                SubPhase = DaySubPhases.NormalVoting.ToString(),
-                ActiveSubPhaseStage = DaySubPhaseStage.RequestVote.ToString(),
-                CompletedSubPhaseStages = [DaySubPhaseStage.RequestVote.ToString()],
-                CurrentListenerId = MainRoleType.SimpleWerewolf.ToString(),
-                CurrentListenerType = GameHookListenerType.MainRole.ToString(),
-                CurrentListenerState = "Ignored"
+                SubPhase = DaySubPhases.NormalVoting.ToString()
             },
             Players =
             [
@@ -1136,7 +1131,14 @@ public class SerializationTests : DiagnosticTestBase
 			(votedPlayerId, MainRoleType.SimpleVillager),
 			(bystanderId, MainRoleType.SimpleVillager));
 
-		return SerializeWithCurrentFactionShape(dto);
+		return RecoveryPayloadTestDriver
+			.Parse(SerializeWithCurrentFactionShape(dto))
+			.RewriteDurableAndTransientContinuation(
+				DaySubPhaseStage.RequestVote.ToString(),
+				[DaySubPhaseStage.RequestVote.ToString()],
+				ListenerIdentifier.Listener(MainRoleType.SimpleWerewolf),
+				"Ignored")
+			.Serialize();
 	}
 
 	private static void AttachPhysicalCardState(

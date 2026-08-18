@@ -2390,6 +2390,86 @@ internal sealed class RecoveryPayloadTestDriver
 		return this;
 	}
 
+	internal RecoveryPayloadTestDriver RewriteCurrentPhase(GamePhase phase)
+	{
+		_payload.PhaseStateCache.CurrentPhase = phase;
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver RewriteSubPhase(Enum subPhase)
+	{
+		ArgumentNullException.ThrowIfNull(subPhase);
+		_payload.PhaseStateCache.SubPhase = subPhase.ToString();
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver RewriteDurableAndTransientContinuation(
+		string activeSubPhaseStage,
+		IEnumerable<string> completedSubPhaseStages,
+		ListenerIdentifier listener,
+		string listenerState)
+	{
+		ArgumentException.ThrowIfNullOrWhiteSpace(activeSubPhaseStage);
+		ArgumentNullException.ThrowIfNull(completedSubPhaseStages);
+		ArgumentNullException.ThrowIfNull(listener);
+		ArgumentException.ThrowIfNullOrWhiteSpace(listenerState);
+
+		_payload.PhaseStateCache.ActiveSubPhaseStage = activeSubPhaseStage;
+		_payload.PhaseStateCache.CompletedSubPhaseStages =
+			completedSubPhaseStages.ToList();
+		_payload.PhaseStateCache.CurrentListenerId = listener.ListenerId;
+		_payload.PhaseStateCache.CurrentListenerType =
+			listener.ListenerType.ToString();
+		_payload.PhaseStateCache.CurrentListenerState = listenerState;
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver RewritePendingInstructionSemanticCheckpoint(
+		ModeratorInstructionSemantic semantic)
+	{
+		_payload.PendingInstructionSemantic = semantic;
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver RewriteAcceptedObservationCursorVersion(
+		int version)
+	{
+		RequireAcceptedObservationCursor().Version = version;
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver
+		RewriteAcceptedObservationCursorNextSemantic(
+			ModeratorInstructionSemantic semantic)
+	{
+		RequireAcceptedObservationCursor().NextInstructionSemantic = semantic;
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver
+		RewriteLatestScheduledObservationSourceIdentifier(string identifier)
+	{
+		ArgumentException.ThrowIfNullOrWhiteSpace(identifier);
+		var entryIndex = _payload.GameHistoryLog.FindLastIndex(entry =>
+			entry is FactionFactsCommittedLogEntry
+			{
+				Source.Kind: FactionFactSourceKind.ScheduledObservation
+			});
+		if (entryIndex < 0 ||
+			_payload.GameHistoryLog[entryIndex] is not
+				FactionFactsCommittedLogEntry entry)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no scheduled observation.");
+		}
+
+		_payload.GameHistoryLog[entryIndex] = entry with
+		{
+			Source = new FactionFactSource(entry.Source.Kind, identifier)
+		};
+		return this;
+	}
+
 	internal StatusEffectTypes GetActiveEffects(Guid playerId) =>
 		_payload.Players.Single(player => player.Id == playerId).ActiveEffects;
 
@@ -3129,6 +3209,12 @@ internal sealed class RecoveryPayloadTestDriver
 		_payload.DomainRecoveryCursor
 		?? throw new InvalidOperationException(
 			"The recovery test payload has no committed domain continuation.");
+
+	private AcceptedObservationRecoveryCursor
+		RequireAcceptedObservationCursor() =>
+		_payload.AcceptedObservationRecoveryCursor
+		?? throw new InvalidOperationException(
+			"The recovery test payload has no accepted observation continuation.");
 
 	private void RequireCursorlessStableBoundary()
 	{

@@ -186,60 +186,124 @@ internal class GameSession : IGameSession
 	#endregion
 
 	#region Internal Game Cache write-access
-	// Only accessible by PhaseManager or GameFlowManager via key parameter
 
-	internal void SetPendingModeratorInstruction(IGameFlowManagerKey key, ModeratorInstruction instruction) =>
+	internal void CommitExecution(
+		IGameFlowManagerKey key,
+		ExecutionCommit commit)
+	{
+		ArgumentNullException.ThrowIfNull(key);
+		_gameSessionKernel.CommitExecution(commit);
+	}
+
+	internal void RestoreTransientContinuation(
+		IGameFlowManagerKey key,
+		ExecutionView expected,
+		string activeSubPhaseStage,
+		ListenerIdentifier listener,
+		string listenerState)
+	{
+		ArgumentNullException.ThrowIfNull(key);
+		_gameSessionKernel.RestoreTransientContinuation(
+			expected,
+			activeSubPhaseStage,
+			listener,
+			listenerState);
+	}
+
+	internal void NormalizeLegacyRecurringRolePowerCommit(
+		IGameFlowManagerKey key,
+		NightActionType actionType,
+		Guid targetId,
+		RolePowerInstanceIdentity powerIdentity)
+	{
+		ArgumentNullException.ThrowIfNull(key);
+		_gameSessionKernel.NormalizeLegacyRecurringRolePowerCommit(
+			actionType,
+			targetId,
+			powerIdentity);
+	}
+
+	internal void TransitionSubPhase(
+		IPhaseManagerKey key,
+		Enum subPhase)
+	{
+		ArgumentNullException.ThrowIfNull(key);
+		_gameSessionKernel.TransitionSubPhase(subPhase);
+	}
+
+	internal bool TryEnterSubPhaseStage(
+		ISubPhaseManagerKey key,
+		string subPhaseStageId)
+	{
+		ArgumentNullException.ThrowIfNull(key);
+		return _gameSessionKernel.TryEnterSubPhaseStage(subPhaseStageId);
+	}
+
+	internal void CompleteSubPhaseStage(IPhaseManagerKey key)
+	{
+		ArgumentNullException.ThrowIfNull(key);
+		_gameSessionKernel.CompleteSubPhaseStage();
+	}
+
+	internal void TransitionListenerState(
+		IHookSubPhaseKey key,
+		ListenerIdentifier listener,
+		string state)
+	{
+		ArgumentNullException.ThrowIfNull(key);
+		_gameSessionKernel.TransitionListenerAndState(listener, state);
+	}
+
+	internal void ClearCurrentListener(IHookSubPhaseKey key)
+	{
+		ArgumentNullException.ThrowIfNull(key);
+		_gameSessionKernel.ClearCurrentListener();
+	}
+
+	// Obsolete direct-cache adapters remain until #238's final contraction.
+
+	internal void SetPendingModeratorInstruction(
+		IGameFlowManagerKey key,
+		ModeratorInstruction instruction)
+	{
+		ArgumentNullException.ThrowIfNull(key);
 		_gameSessionKernel.SetPendingModeratorInstruction(instruction);
+	}
 
     internal void CaptureRecoveryBoundary(
         IGameFlowManagerKey key,
         AcceptedObservationRecoveryCursor? acceptedObservationRecoveryCursor = null,
-        DomainRecoveryCursor? domainRecoveryCursor = null) =>
+		DomainRecoveryCursor? domainRecoveryCursor = null)
+	{
+		ArgumentNullException.ThrowIfNull(key);
 		_gameSessionKernel.CaptureRecoveryBoundary(
-            acceptedObservationRecoveryCursor,
-            domainRecoveryCursor);
+			acceptedObservationRecoveryCursor,
+			domainRecoveryCursor);
+	}
 
-    internal void NormalizeLegacyRecurringRolePowerCommit(
-        IGameFlowManagerKey key,
-        NightActionType actionType,
-        Guid targetId,
-        RolePowerInstanceIdentity powerIdentity) =>
-        _gameSessionKernel.NormalizeLegacyRecurringRolePowerCommit(
-            actionType,
-            targetId,
-            powerIdentity);
-
-    internal void RestoreTransientContinuation(
-        IGameFlowManagerKey key,
-        string activeSubPhaseStage,
-        ListenerIdentifier listener,
-        string listenerState) =>
-        _gameSessionKernel.RestoreTransientContinuation(
-            activeSubPhaseStage,
-            listener,
-            listenerState);
+	internal void RestoreTransientContinuation(
+		IGameFlowManagerKey key,
+		string activeSubPhaseStage,
+		ListenerIdentifier listener,
+		string listenerState) =>
+		RestoreTransientContinuation(
+			key,
+			Execution,
+			activeSubPhaseStage,
+			listener,
+			listenerState);
 
 	internal void TransitionSubPhaseCache(IPhaseManagerKey key, Enum subPhase) =>
-        _gameSessionKernel.TransitionSubPhase(subPhase);
+		TransitionSubPhase(key, subPhase);
 
-    /// <summary>
-    /// Checks if the specified sub-phase stage can be entered,
-    /// and starts it if entering for the first time for the current sub-phase.
-    /// </summary>
-    /// <param name="key"></param>
-    /// <param name="subPhaseStageId"></param>
-    /// <returns></returns>
-	internal bool TryEnterSubPhaseStage(ISubPhaseManagerKey key, string subPhaseStageId)
-		=> _gameSessionKernel.TryEnterSubPhaseStage(subPhaseStageId);
-
-    internal void CompleteSubPhaseStageCache(IPhaseManagerKey key) =>
-        _gameSessionKernel.CompleteSubPhaseStage();
+	internal void CompleteSubPhaseStageCache(IPhaseManagerKey key) =>
+		CompleteSubPhaseStage(key);
 
 	internal void TransitionListenerStateCache(IHookSubPhaseKey key, ListenerIdentifier listener, string state)  =>
-        _gameSessionKernel.TransitionListenerAndState(listener, state);
+		TransitionListenerState(key, listener, state);
 
 	internal void ClearCurrentListenerCache(IHookSubPhaseKey key) =>
-		_gameSessionKernel.ClearCurrentListener();
+		ClearCurrentListener(key);
 
 	/// <summary>
 	/// Gets or creates a listener instance for this session. Listeners are cached per-session

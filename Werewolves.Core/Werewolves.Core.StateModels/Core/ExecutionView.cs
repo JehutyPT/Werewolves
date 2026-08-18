@@ -72,6 +72,56 @@ internal sealed class ExecutionView
 	internal bool HasSubPhaseStageCompleted(string subPhaseStageId) =>
 		CompletedSubPhaseStages.Contains(subPhaseStageId);
 
+	internal bool HasSameRecoveryCursors(ExecutionView other)
+	{
+		ArgumentNullException.ThrowIfNull(other);
+		return AcceptedObservationCursorEquals(
+			_acceptedObservationRecoveryCursor,
+			other._acceptedObservationRecoveryCursor) &&
+			DomainCursorEquals(
+				_domainRecoveryCursor,
+				other._domainRecoveryCursor);
+	}
+
+	private static bool AcceptedObservationCursorEquals(
+		AcceptedObservationRecoveryCursor? left,
+		AcceptedObservationRecoveryCursor? right) =>
+		ReferenceEquals(left, right) ||
+		left != null &&
+		right != null &&
+		left.Version == right.Version &&
+		left.AcceptedObservationSemantic == right.AcceptedObservationSemantic &&
+		left.ObservedRole == right.ObservedRole &&
+		left.ContinuationRole == right.ContinuationRole &&
+		left.RetainedLittleGirlGuidanceDecision ==
+			right.RetainedLittleGirlGuidanceDecision &&
+		left.NextInstructionSemantic == right.NextInstructionSemantic &&
+		left.NextInstructionId == right.NextInstructionId;
+
+	private static bool DomainCursorEquals(
+		DomainRecoveryCursor? left,
+		DomainRecoveryCursor? right) =>
+		ReferenceEquals(left, right) ||
+		left != null &&
+		right != null &&
+		left.Version == right.Version &&
+		left.Kind == right.Kind &&
+		left.SourceRole == right.SourceRole &&
+		left.CommittedActionType == right.CommittedActionType &&
+		left.CommittedDayActionType == right.CommittedDayActionType &&
+		left.ActingPlayerId == right.ActingPlayerId &&
+		StringComparer.Ordinal.Equals(
+			left.SourcePowerIdentifier,
+			right.SourcePowerIdentifier) &&
+		left.PowerInstanceId == right.PowerInstanceId &&
+		left.PowerInstanceOrigin == right.PowerInstanceOrigin &&
+		left.OneUseResourceId == right.OneUseResourceId &&
+		left.ActorSetupCardId == right.ActorSetupCardId &&
+		left.ActorBorrowedActivationId == right.ActorBorrowedActivationId &&
+		left.CommittedTargetIds.SequenceEqual(right.CommittedTargetIds) &&
+		left.NextInstructionSemantic == right.NextInstructionSemantic &&
+		left.NextInstructionId == right.NextInstructionId;
+
 	private static AcceptedObservationRecoveryCursor? Copy(
 		AcceptedObservationRecoveryCursor? cursor) =>
 		cursor == null

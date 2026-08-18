@@ -1,6 +1,5 @@
 using FluentAssertions;
 using FluentAssertions.Execution;
-using System.Text.Json.Nodes;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
@@ -595,14 +594,18 @@ public sealed class PendingInstructionRecoveryTests
         var identification = builder.GetCurrentInstruction()
             .Should().BeOfType<SelectPlayersInstruction>().Subject;
         builder.Process(identification.CreateResponse([werewolf.Id]));
-        var payload = JsonNode.Parse(builder.GetGameState()!.Serialize())!.AsObject();
-        payload["AcceptedObservationRecoveryCursor"]!["Version"] = int.MaxValue;
+        var gameId = builder.GetGameState()!.Id;
+        var payload = RecoveryPayloadTestDriver
+            .Parse(builder.GetGameState()!.Serialize())
+            .RewriteAcceptedObservationCursorVersion(int.MaxValue)
+            .Serialize();
         var service = new GameService();
 
-        Action rehydrate = () => service.RehydrateSession(payload.ToJsonString());
+        Action rehydrate = () => service.RehydrateSession(payload);
 
         rehydrate.Should().Throw<InvalidOperationException>()
             .WithMessage("*cursor version*");
+        service.GetGameStateView(gameId).Should().BeNull();
     }
 
     [Fact]
@@ -618,12 +621,14 @@ public sealed class PendingInstructionRecoveryTests
         var identification = builder.GetCurrentInstruction()
             .Should().BeOfType<SelectPlayersInstruction>().Subject;
         builder.Process(identification.CreateResponse([werewolf.Id]));
-        var payload = JsonNode.Parse(builder.GetGameState()!.Serialize())!.AsObject();
-        payload["PendingInstructionSemantic"] =
-            ModeratorInstructionSemantic.SelectSeerTarget.ToString();
+        var payload = RecoveryPayloadTestDriver
+            .Parse(builder.GetGameState()!.Serialize())
+            .RewritePendingInstructionSemanticCheckpoint(
+                ModeratorInstructionSemantic.SelectSeerTarget)
+            .Serialize();
         var service = new GameService();
 
-        Action rehydrate = () => service.RehydrateSession(payload.ToJsonString());
+        Action rehydrate = () => service.RehydrateSession(payload);
 
         rehydrate.Should().Throw<InvalidOperationException>()
             .WithMessage("*Pending Instruction Semantic*");
@@ -642,19 +647,15 @@ public sealed class PendingInstructionRecoveryTests
         var observation = builder.GetCurrentInstruction()
             .Should().BeOfType<SelectPlayersInstruction>().Subject;
         builder.Process(observation.CreateResponse([observedAgent.Id]));
-        var payload = JsonNode.Parse(
-            builder.GetGameState()!.Serialize())!.AsObject();
-        var scheduledObservation = payload["GameHistoryLog"]!.AsArray()
-            .Select(entry => entry!.AsObject())
-            .Single(entry =>
-                entry["Source"]?["Kind"]?.GetValue<string>() ==
-                FactionFactSourceKind.ScheduledObservation.ToString());
-        scheduledObservation["Source"]!["Identifier"] =
-            "foreign-scheduled-observation";
+        var payload = RecoveryPayloadTestDriver
+            .Parse(builder.GetGameState()!.Serialize())
+            .RewriteLatestScheduledObservationSourceIdentifier(
+                "foreign-scheduled-observation")
+            .Serialize();
         var service = new GameService();
 
         Action rehydrate = () =>
-            service.RehydrateSession(payload.ToJsonString());
+            service.RehydrateSession(payload);
 
         rehydrate.Should().Throw<InvalidOperationException>()
             .WithMessage("*committed observation*");
@@ -673,12 +674,38 @@ public sealed class PendingInstructionRecoveryTests
         var identification = builder.GetCurrentInstruction()
             .Should().BeOfType<SelectPlayersInstruction>().Subject;
         builder.Process(identification.CreateResponse([werewolf.Id]));
-        var payload = JsonNode.Parse(builder.GetGameState()!.Serialize())!.AsObject();
-        payload["PhaseStateCache"]!["SubPhase"] =
-            DawnSubPhases.CalculateVictims.ToString();
+        var payload = RecoveryPayloadTestDriver
+            .Parse(builder.GetGameState()!.Serialize())
+            .RewriteSubPhase(DawnSubPhases.CalculateVictims)
+            .Serialize();
         var service = new GameService();
 
-        Action rehydrate = () => service.RehydrateSession(payload.ToJsonString());
+        Action rehydrate = () => service.RehydrateSession(payload);
+
+        rehydrate.Should().Throw<InvalidOperationException>()
+            .WithMessage("*accepted observation continuation*");
+    }
+
+    [Fact]
+    public void AcceptedWerewolfAgentGroupObservation_MismatchedPhase_IsRejected()
+    {
+        var builder = GameTestBuilder.Create()
+            .WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);
+
+        builder.StartGame();
+        builder.ConfirmGameStart();
+        builder.ConfirmNightStart();
+        var werewolf = builder.GetGameState()!.GetPlayers().First();
+        var identification = builder.GetCurrentInstruction()
+            .Should().BeOfType<SelectPlayersInstruction>().Subject;
+        builder.Process(identification.CreateResponse([werewolf.Id]));
+        var payload = RecoveryPayloadTestDriver
+            .Parse(builder.GetGameState()!.Serialize())
+            .RewriteCurrentPhase(GamePhase.Day)
+            .Serialize();
+        var service = new GameService();
+
+        Action rehydrate = () => service.RehydrateSession(payload);
 
         rehydrate.Should().Throw<InvalidOperationException>()
             .WithMessage("*accepted observation continuation*");
