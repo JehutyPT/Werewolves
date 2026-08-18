@@ -16,9 +16,7 @@ public class NativeLobbyEvaluationCompositionTests
 		var capability = new SimulatorCapability(
 			SimulatorCapability.FullProbability.Identity,
 			[
-				new SimulatorProfileRoleDescriptor(
-					MainRoleType.SimpleVillager,
-					Faction.Villager)
+				(MainRoleType.SimpleVillager, Faction.Villager, [])
 			],
 			supportedEvaluationDepths:
 			[

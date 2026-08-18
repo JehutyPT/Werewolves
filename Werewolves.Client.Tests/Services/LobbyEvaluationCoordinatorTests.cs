@@ -818,11 +818,14 @@ public class LobbyEvaluationCoordinatorTests
 		await WaitForStateAsync(coordinator, LobbyEvaluationStateKind.Degenerate);
 
 		coordinator.EvaluationBlocksLobbyExit.Should().BeTrue();
-		var persisted = TerminalLobbyCache.ReadDocument(local.Writes.Single());
+		var persisted = TerminalLobbyCache.ReadDocument(
+			local.Writes.Single(),
+			SimulatorCapabilityRegistry.Production);
 		persisted.IsUsable.Should().BeTrue();
 		TerminalLobbyCache.TryGet(
 			persisted.Document!,
-			coordinator.State.Identity!,
+			lobby.CreateSimulationScenario(),
+			SimulatorCapability.SafetyScreening,
 			out var record).Should().BeTrue();
 		record.Should().BeOfType<DegenerateTerminalCacheRecord>();
 	}
@@ -857,11 +860,14 @@ public class LobbyEvaluationCoordinatorTests
 		coordinator.State.Identity!.Scenario.ActorSetupCards.Should().NotBeEmpty();
 		coordinator.State.Identity.Scenario.ThiefOfferBranchPolicy!.Branches.Should().HaveCount(
 			expectedAttemptCount / TerminalLobbyEvaluator.ScreeningAttemptCount);
-		var persisted = TerminalLobbyCache.ReadDocument(local.Writes.Single());
+		var persisted = TerminalLobbyCache.ReadDocument(
+			local.Writes.Single(),
+			SimulatorCapabilityRegistry.Production);
 		persisted.IsUsable.Should().BeTrue();
 		TerminalLobbyCache.TryGet(
 			persisted.Document!,
-			coordinator.State.Identity,
+			scenario,
+			SimulatorCapability.SafetyScreening,
 			out var record).Should().BeTrue();
 		var aggregate = record.Should().BeOfType<DegenerateTerminalCacheRecord>().Subject;
 		aggregate.AttemptedRunCount.Should().Be(TerminalLobbyEvaluator.ScreeningAttemptCount);
@@ -902,11 +908,14 @@ public class LobbyEvaluationCoordinatorTests
 		evaluation.ScreeningEvidence.IncompleteRunCount.Should().Be(incompleteSibling ? 1 : 0);
 		coordinator.EvaluationBlocksLobbyExit.Should().BeTrue();
 		coordinator.TryRequestLobbyExit().Should().BeFalse();
-		var persisted = TerminalLobbyCache.ReadDocument(local.Writes.Single());
+		var persisted = TerminalLobbyCache.ReadDocument(
+			local.Writes.Single(),
+			SimulatorCapabilityRegistry.Production);
 		persisted.IsUsable.Should().BeTrue();
 		TerminalLobbyCache.TryGet(
 			persisted.Document!,
-			coordinator.State.Identity!,
+			scenario,
+			SimulatorCapability.SafetyScreening,
 			out var record).Should().BeTrue();
 		var aggregate = record.Should().BeOfType<DegenerateTerminalCacheRecord>().Subject;
 		aggregate.AttemptedRunCount.Should().Be(TerminalLobbyEvaluator.ScreeningAttemptCount);
@@ -954,11 +963,14 @@ public class LobbyEvaluationCoordinatorTests
 		coordinator.State.Identity.Scenario.ThiefOfferBranchPolicy!.Branches.Should().HaveCount(3);
 		coordinator.EvaluationBlocksLobbyExit.Should().BeTrue();
 		coordinator.TryRequestLobbyExit().Should().BeFalse();
-		var persisted = TerminalLobbyCache.ReadDocument(local.Writes.Single());
+		var persisted = TerminalLobbyCache.ReadDocument(
+			local.Writes.Single(),
+			SimulatorCapabilityRegistry.Production);
 		persisted.IsUsable.Should().BeTrue();
 		TerminalLobbyCache.TryGet(
 			persisted.Document!,
-			coordinator.State.Identity,
+			scenario,
+			SimulatorCapability.SafetyScreening,
 			out var record).Should().BeTrue();
 		var aggregate = record.Should().BeOfType<DegenerateTerminalCacheRecord>().Subject;
 		aggregate.AttemptedRunCount.Should().Be(TerminalLobbyEvaluator.ScreeningAttemptCount);
@@ -1060,7 +1072,8 @@ public class LobbyEvaluationCoordinatorTests
 			var exactLocal = new DegenerateTerminalCacheRecord(
 				pendingIdentity,
 				AggregateRows(1_000, 750, 250),
-				AggregateCells(1_000, 750, 250, turnOneOnly: true));
+				AggregateCells(1_000, 750, 250, turnOneOnly: true),
+				SimulatorCapability.SafetyScreening);
 			read.Complete(DocumentBytes(exactLocal));
 			pump.Drain();
 
@@ -1105,7 +1118,9 @@ public class LobbyEvaluationCoordinatorTests
 		currentWrite.ReleaseCommitBoundary();
 		await WaitForStateAsync(coordinator, LobbyEvaluationStateKind.AlreadyDecided);
 
-		var persisted = TerminalLobbyCache.ReadDocument(local.CommittedBytes!.Value.Span);
+		var persisted = TerminalLobbyCache.ReadDocument(
+			local.CommittedBytes!.Value.Span,
+			SimulatorCapabilityRegistry.Production);
 		persisted.IsUsable.Should().BeTrue();
 		persisted.Document!.Records.Should().ContainSingle(record =>
 			record.CompatibilityIdentity.Equals(currentIdentity));
@@ -1167,9 +1182,17 @@ public class LobbyEvaluationCoordinatorTests
 		};
 		var cases = new (TerminalLobbyCacheRecord Record, LobbyEvaluationStateKind Kind, bool Blocks)[]
 		{
-			(new DegenerateTerminalCacheRecord(identity, rows1000, cells1000),
+			(new DegenerateTerminalCacheRecord(
+				identity,
+				rows1000,
+				cells1000,
+				SimulatorCapability.FullProbability),
 				LobbyEvaluationStateKind.Degenerate, true),
-			(new ProbabilityTerminalCacheRecord(identity, rows10000, cells10000),
+			(new ProbabilityTerminalCacheRecord(
+				identity,
+				rows10000,
+				cells10000,
+				SimulatorCapability.FullProbability),
 				LobbyEvaluationStateKind.Probability, false)
 		};
 
@@ -1215,7 +1238,8 @@ public class LobbyEvaluationCoordinatorTests
 		var cachedProbability = new ProbabilityTerminalCacheRecord(
 			identity,
 			AggregateRows(10_000, 7_000, 3_000),
-			AggregateCells(10_000, 7_000, 3_000, turnOneOnly: false));
+			AggregateCells(10_000, 7_000, 3_000, turnOneOnly: false),
+			SimulatorCapability.FullProbability);
 		var evaluator = new RecordingEvaluator(new CouldNotEvaluateLobbyEvaluation());
 
 		using var coordinator = new LobbyEvaluationCoordinator(
@@ -1250,7 +1274,8 @@ public class LobbyEvaluationCoordinatorTests
 		var cachedDegenerate = new DegenerateTerminalCacheRecord(
 			identity,
 			AggregateRows(1_000, 750, 250),
-			AggregateCells(1_000, 750, 250, turnOneOnly: true));
+			AggregateCells(1_000, 750, 250, turnOneOnly: true),
+			SimulatorCapability.SafetyScreening);
 		var evaluator = new RecordingEvaluator(new CouldNotEvaluateLobbyEvaluation());
 
 		using var coordinator = new LobbyEvaluationCoordinator(
@@ -1372,7 +1397,9 @@ public class LobbyEvaluationCoordinatorTests
 		await WaitForStateAsync(coordinator, LobbyEvaluationStateKind.AlreadyDecided);
 		evaluator.Depths.Should().Equal(LobbyEvaluationDepth.FullProbability);
 
-		var written = TerminalLobbyCache.ReadDocument(local.Writes.Single());
+		var written = TerminalLobbyCache.ReadDocument(
+			local.Writes.Single(),
+			SimulatorCapabilityRegistry.Production);
 		written.IsUsable.Should().BeTrue();
 		written.Document!.Records.Should().HaveCount(2);
 		written.Document.Records.Should().Contain(record =>
@@ -1402,7 +1429,9 @@ public class LobbyEvaluationCoordinatorTests
 		coordinator.TryRequestLobbyExit().Should().BeFalse();
 		await WaitForStateAsync(coordinator, LobbyEvaluationStateKind.AlreadyDecided);
 
-		var written = TerminalLobbyCache.ReadDocument(local.Writes.Single());
+		var written = TerminalLobbyCache.ReadDocument(
+			local.Writes.Single(),
+			SimulatorCapabilityRegistry.Production);
 		written.IsUsable.Should().BeTrue();
 		written.Document!.Records.Should().ContainSingle();
 	}
@@ -1442,7 +1471,9 @@ public class LobbyEvaluationCoordinatorTests
 		evaluator.Capabilities.Should().Equal(SimulatorCapability.FullProbability);
 		evaluator.Depths.Should().Equal(LobbyEvaluationDepth.FullProbability);
 		var writtenBytes = local.Writes.Should().ContainSingle().Subject;
-		var written = TerminalLobbyCache.ReadDocument(writtenBytes);
+		var written = TerminalLobbyCache.ReadDocument(
+			writtenBytes,
+			SimulatorCapabilityRegistry.Production);
 		written.IsUsable.Should().BeTrue();
 		written.Document!.Records.Should().ContainSingle()
 			.Which.CompatibilityIdentity.Should().Be(currentRecord.CompatibilityIdentity);
@@ -1699,11 +1730,14 @@ public class LobbyEvaluationCoordinatorTests
 
 		evaluator.CallCount.Should().Be(1);
 		local.Writes.Should().ContainSingle();
-		var persisted = TerminalLobbyCache.ReadDocument(local.Writes.Single());
+		var persisted = TerminalLobbyCache.ReadDocument(
+			local.Writes.Single(),
+			SimulatorCapabilityRegistry.Production);
 		persisted.IsUsable.Should().BeTrue();
 		TerminalLobbyCache.TryGet(
 			persisted.Document!,
-			coordinator.State.Identity!,
+			lobby.CreateSimulationScenario(),
+			SimulatorCapability.FullProbability,
 			out var record).Should().BeTrue();
 		record.Should().BeOfType<AlreadyDecidedTerminalCacheRecord>();
 		coordinator.TryRequestLobbyExit().Should().BeFalse(
@@ -1729,11 +1763,13 @@ public class LobbyEvaluationCoordinatorTests
 		var exactLocal = new DegenerateTerminalCacheRecord(
 			consumerIdentity,
 			AggregateRows(1_000, 750, 250),
-			AggregateCells(1_000, 750, 250, turnOneOnly: true));
+			AggregateCells(1_000, 750, 250, turnOneOnly: true),
+			SimulatorCapability.SafetyScreening);
 		var mismatchedRecord = new ProbabilityTerminalCacheRecord(
 			mismatchedIdentity,
 			AggregateRows(10_000, 7_000, 3_000),
-			AggregateCells(10_000, 7_000, 3_000, turnOneOnly: false));
+			AggregateCells(10_000, 7_000, 3_000, turnOneOnly: false),
+			SimulatorCapability.FullProbability);
 		var evaluator = new RecordingEvaluator(new CouldNotEvaluateLobbyEvaluation());
 		var local = new RecordingLocalStore(DocumentBytes(mismatchedRecord, exactLocal));
 		using var coordinator = new LobbyEvaluationCoordinator(
@@ -1764,7 +1800,8 @@ public class LobbyEvaluationCoordinatorTests
 		var exactLocal = new DegenerateTerminalCacheRecord(
 			identity,
 			AggregateRows(1_000, 750, 250),
-			AggregateCells(1_000, 750, 250, turnOneOnly: true));
+			AggregateCells(1_000, 750, 250, turnOneOnly: true),
+			SimulatorCapability.SafetyScreening);
 		var manager = new GameClientManager();
 
 		manager.TryReplaceStagedActorSetupCards(
@@ -1820,7 +1857,8 @@ public class LobbyEvaluationCoordinatorTests
 		var exactLocal = new DegenerateTerminalCacheRecord(
 			identity,
 			AggregateRows(1_000, 750, 250),
-			AggregateCells(1_000, 750, 250, turnOneOnly: true));
+			AggregateCells(1_000, 750, 250, turnOneOnly: true),
+			SimulatorCapability.SafetyScreening);
 		var evaluator = new RecordingEvaluator(new CouldNotEvaluateLobbyEvaluation());
 		var local = new RecordingLocalStore(DocumentBytes(exactLocal));
 		using var coordinator = new LobbyEvaluationCoordinator(
@@ -1872,7 +1910,8 @@ public class LobbyEvaluationCoordinatorTests
 				scenario.ToCanonical(),
 				SimulatorCapability.FullProbability.Identity),
 			AggregateRows(10_000, 7_000, 3_000),
-			AggregateCells(10_000, 7_000, 3_000, turnOneOnly: false));
+			AggregateCells(10_000, 7_000, 3_000, turnOneOnly: false),
+			SimulatorCapability.FullProbability);
 		var local = new RecordingLocalStore(DocumentBytes(mismatchedRecord));
 		var evaluator = new RecordingEvaluator(new ScreeningPassedLobbyEvaluation());
 		using var coordinator = new LobbyEvaluationCoordinator(
@@ -1915,7 +1954,8 @@ public class LobbyEvaluationCoordinatorTests
 		var currentRecord = new DegenerateTerminalCacheRecord(
 			consumerIdentity,
 			AggregateRows(1_000, 750, 250),
-			AggregateCells(1_000, 750, 250, turnOneOnly: true));
+			AggregateCells(1_000, 750, 250, turnOneOnly: true),
+			SimulatorCapability.SafetyScreening);
 		var nonCurrentBytes = Encoding.UTF8.GetBytes(
 			Encoding.UTF8.GetString(DocumentBytes(currentRecord)).Replace(
 				SimulatorCapability.SafetyScreening.Identity.ToString(),
@@ -1945,7 +1985,7 @@ public class LobbyEvaluationCoordinatorTests
 	}
 
 	[Fact]
-	public async Task SuccessfulFallback_PreservesRecordsFromOtherCurrentProducerProfiles()
+	public async Task SuccessfulFallback_PreservesRecordsFromOtherCurrentCapabilities()
 	{
 		var lobby = CreateLobby(
 			MainRoleType.SimpleWerewolf,
@@ -1959,7 +1999,8 @@ public class LobbyEvaluationCoordinatorTests
 				scenario.ToCanonical(),
 				SimulatorCapability.FullProbability.Identity),
 			new SingleFactionGameResult(Faction.Werewolf),
-			AlreadyDecidedReason.WerewolfControlShortcut);
+			AlreadyDecidedReason.WerewolfControlShortcut,
+			SimulatorCapability.FullProbability);
 		var local = new RecordingLocalStore(DocumentBytes(mismatchedLocal));
 		var evaluator = new RecordingEvaluator(new AlreadyDecidedTerminalEvaluation(
 			new SingleFactionGameResult(Faction.Werewolf),
@@ -1975,7 +2016,9 @@ public class LobbyEvaluationCoordinatorTests
 		await WaitForStateAsync(coordinator, LobbyEvaluationStateKind.AlreadyDecided);
 
 		evaluator.CallCount.Should().Be(1);
-		var persisted = TerminalLobbyCache.ReadDocument(local.Writes.Single());
+		var persisted = TerminalLobbyCache.ReadDocument(
+			local.Writes.Single(),
+			SimulatorCapabilityRegistry.Production);
 		persisted.IsUsable.Should().BeTrue();
 		persisted.Document!.Records.Should().HaveCount(2);
 		persisted.Document.Records.Should().Contain(record =>
@@ -2146,7 +2189,8 @@ public class LobbyEvaluationCoordinatorTests
 				scenario.ToCanonical(),
 				SimulatorCapability.FullProbability.Identity),
 			new SingleFactionGameResult(Faction.Werewolf),
-			AlreadyDecidedReason.WerewolfControlShortcut);
+			AlreadyDecidedReason.WerewolfControlShortcut,
+			SimulatorCapability.FullProbability);
 
 	private static byte[] DocumentBytes(params TerminalLobbyCacheRecord[] records) =>
 		TerminalLobbyCache.Write(TerminalLobbyCache.CreateDocument(records));

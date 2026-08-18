@@ -145,20 +145,6 @@ public static partial class TerminalLobbyCache
 
 	private static SimulationScenarioClassification ClassifyProducer(
 		SimulationCompatibilityIdentity identity,
-		bool probabilityRecord)
-	{
-		ArgumentNullException.ThrowIfNull(identity);
-		var producer = ResolveProducerProfile(identity.Profile, probabilityRecord);
-		return ClassifyProducer(
-			identity,
-			producer,
-			probabilityRecord
-				? LobbyEvaluationDepth.FullProbability
-				: LobbyEvaluationDepth.DegenerateScreeningOnly);
-	}
-
-	private static SimulationScenarioClassification ClassifyProducer(
-		SimulationCompatibilityIdentity identity,
 		SimulatorCapability capability,
 		LobbyEvaluationDepth depth)
 	{
@@ -192,38 +178,6 @@ public static partial class TerminalLobbyCache
 		}
 
 		return classification;
-	}
-
-	internal static SimulatorCapability ResolveProducerProfile(
-		SimulationCompatibilityIdentity identity,
-		bool probabilityRecord)
-	{
-		ArgumentNullException.ThrowIfNull(identity);
-		return ResolveProducerProfile(identity.Profile, probabilityRecord);
-	}
-
-	private static SimulatorCapability ResolveProducerProfile(
-		SimulatorProfileIdentity identity,
-		bool probabilityRecord)
-	{
-		ArgumentNullException.ThrowIfNull(identity);
-		if (!SimulatorCapabilityRegistry.Production.TryGet(identity, out var producer))
-		{
-			throw new ArgumentException(
-				"The cache identity does not name a known producer.",
-				nameof(identity));
-		}
-		var depth = probabilityRecord
-			? LobbyEvaluationDepth.FullProbability
-			: LobbyEvaluationDepth.DegenerateScreeningOnly;
-		if (!producer.SupportsEvaluationDepth(depth))
-		{
-			throw new ArgumentException(
-				"The cache record kind is not supported by its Simulator Capability.",
-				nameof(identity));
-		}
-
-		return producer;
 	}
 
 	private static void ValidateMaterializationBounds(

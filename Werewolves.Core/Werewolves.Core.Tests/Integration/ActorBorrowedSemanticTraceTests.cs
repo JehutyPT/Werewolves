@@ -58,10 +58,10 @@ public sealed class ActorBorrowedSemanticTraceTests
 		new(Guid.Parse("00000000-0000-0000-0000-000000000163"), MainRoleType.KnightWithRustySword)
 	];
 	private static readonly RunSeedMaterial SeedMaterial = CreateSeedMaterial(
-		BaselineRandomDecisionStrategy.Identity);
+		SimulatorCapability.FullProbability);
 	private static readonly RunSeedMaterial ScapegoatSeedMaterial =
 		CreateSeedMaterial(
-			BaselineRandomDecisionStrategy.SafetyScreeningIdentity);
+			SimulatorCapability.SafetyScreening);
 
 	private static readonly HeadlessResponsePolicy ExactActorPolicy = new(
 		BaselineRandomDecisionStrategy.Identity,
@@ -1183,7 +1183,10 @@ public sealed class ActorBorrowedSemanticTraceTests
 				policy,
 				sourceRole == MainRoleType.Scapegoat
 					? ScapegoatSeedMaterial
-					: SeedMaterial),
+					: SeedMaterial,
+				sourceRole == MainRoleType.Scapegoat
+					? SimulatorCapability.SafetyScreening
+					: SimulatorCapability.FullProbability),
 			recordingPolicy);
 	}
 
@@ -1211,11 +1214,13 @@ public sealed class ActorBorrowedSemanticTraceTests
 
 	private static BaselineRandomDecisionStrategy CreateStrategy(
 		HeadlessResponsePolicy policy,
-		RunSeedMaterial seedMaterial)
+		RunSeedMaterial seedMaterial,
+		SimulatorCapability capability)
 	{
 		var random = new DeterministicRandomSource(seedMaterial);
 		var startState = SimulationStartStateDeriver.Derive(
 			seedMaterial,
+			capability,
 			random);
 		return new BaselineRandomDecisionStrategy(
 			seedMaterial,
@@ -1330,7 +1335,7 @@ public sealed class ActorBorrowedSemanticTraceTests
 	}
 
 	private static RunSeedMaterial CreateSeedMaterial(
-		DecisionStrategyIdentity strategyIdentity)
+		SimulatorCapability capability)
 	{
 		var scenario = new SimulationScenario(
 			5,
@@ -1344,11 +1349,8 @@ public sealed class ActorBorrowedSemanticTraceTests
 		return new RunSeedMaterial(
 			new SimulationCompatibilityIdentity(
 				scenario.ToCanonical(),
-				strategyIdentity.Equals(
-						BaselineRandomDecisionStrategy.SafetyScreeningIdentity)
-					? SimulatorCapability.SafetyScreening.Identity
-					: SimulatorCapability.FullProbability.Identity),
-			strategyIdentity,
+				capability.Identity),
+			capability.HeadlessResponsePolicy.StrategyIdentity,
 			runNumber: 4);
 	}
 

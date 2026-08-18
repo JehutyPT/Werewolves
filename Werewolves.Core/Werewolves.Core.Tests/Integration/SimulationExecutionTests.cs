@@ -62,25 +62,26 @@ public class SimulationExecutionTests : DiagnosticTestBase
 		var scenario = new SimulationScenario(
 			roles.Length,
 			roles);
-		var roleDescriptor = role switch
+		var roleFact = role switch
 		{
-			MainRoleType.WhiteWerewolf => new SimulatorProfileRoleDescriptor(
+			MainRoleType.WhiteWerewolf => (
 				role,
 				Faction.WhiteWerewolf,
-				Faction.Werewolf),
-			MainRoleType.Piper => new SimulatorProfileRoleDescriptor(
+				new[] { Faction.Werewolf }),
+			MainRoleType.Piper => (
 				role,
-				Faction.Piper),
-			_ => new SimulatorProfileRoleDescriptor(role, Faction.Villager)
+				Faction.Piper,
+				Array.Empty<Faction>()),
+			_ => (role, Faction.Villager, Array.Empty<Faction>())
 		};
 		var capability = new SimulatorCapability(
 			new SimulatorProfileIdentity(
 				$"test-{role}-missing-{missingSemantic}",
 				"1"),
 			[
-				roleDescriptor,
-				new(MainRoleType.SimpleWerewolf, Faction.Werewolf, Faction.Werewolf),
-				new(MainRoleType.SimpleVillager, Faction.Villager)
+				roleFact,
+				(MainRoleType.SimpleWerewolf, Faction.Werewolf, [Faction.Werewolf]),
+				(MainRoleType.SimpleVillager, Faction.Villager, [])
 			],
 			headlessResponsePolicy: new HeadlessResponsePolicy(
 				BaselineRandomDecisionStrategy.SafetyScreeningIdentity,

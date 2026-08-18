@@ -8,7 +8,7 @@ using Xunit;
 
 namespace Werewolves.Core.Tests.Unit;
 
-public class SimulatorProfileTests
+public class SimulatorCapabilityTests
 {
 	[Fact]
 	public void SafetyScreeningCapability_UsesThiefBranchEvidenceIdentity()
@@ -384,15 +384,15 @@ public class SimulatorProfileTests
 		var safety = new SimulatorCapability(
 			new SimulatorProfileIdentity("test-safety", "1"),
 			[
-				new(MainRoleType.SimpleWerewolf, Faction.Werewolf),
-				new(MainRoleType.SimpleVillager, Faction.Villager)
+				(MainRoleType.SimpleWerewolf, Faction.Werewolf, []),
+				(MainRoleType.SimpleVillager, Faction.Villager, [])
 			]);
 		var probability = new SimulatorCapability(
 			new SimulatorProfileIdentity("test-probability", "1"),
 			[
-				new(MainRoleType.SimpleWerewolf, Faction.Werewolf),
-				new(MainRoleType.Seer, Faction.Villager),
-				new(MainRoleType.SimpleVillager, Faction.Villager)
+				(MainRoleType.SimpleWerewolf, Faction.Werewolf, []),
+				(MainRoleType.Seer, Faction.Villager, []),
+				(MainRoleType.SimpleVillager, Faction.Villager, [])
 			]);
 
 		var act = () => new SimulatorCapabilityRegistry(safety, probability);
@@ -474,20 +474,20 @@ public class SimulatorProfileTests
 	public void PossibleGameResults_UsesOnlyDeclaredApplicableSharedVictoryCapabilities()
 	{
 		var shared = new SharedVictoryGameResult([Faction.Villager, Faction.Werewolf]);
-		var profile = new SimulatorProfile(
+		var capability = new SimulatorCapability(
 			new SimulatorProfileIdentity("shared-capable", "1"),
 			[
-				new(MainRoleType.SimpleWerewolf, Faction.Werewolf),
-				new(MainRoleType.SimpleVillager, Faction.Villager)
+				(MainRoleType.SimpleWerewolf, Faction.Werewolf, [Faction.Werewolf]),
+				(MainRoleType.SimpleVillager, Faction.Villager, [])
 			],
 			[shared]);
 
-		profile.CreatePossibleGameResults([Faction.Villager, Faction.Werewolf]).Should().Equal(
+		capability.CreatePossibleGameResults([Faction.Villager, Faction.Werewolf]).Should().Equal(
 			new SingleFactionGameResult(Faction.Villager),
 			new SingleFactionGameResult(Faction.Werewolf),
 			shared,
 			new NoWinnerGameResult());
-		profile.CreatePossibleGameResults([Faction.Villager]).Should().Equal(
+		capability.CreatePossibleGameResults([Faction.Villager]).Should().Equal(
 			new SingleFactionGameResult(Faction.Villager),
 			new NoWinnerGameResult());
 		SimulatorCapability.FullProbability.SharedVictoryCapabilities.Should().BeEmpty();

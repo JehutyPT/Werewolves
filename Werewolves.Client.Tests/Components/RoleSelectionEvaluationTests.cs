@@ -138,9 +138,10 @@ public class RoleSelectionEvaluationTests
 			CreateIdentity(
 				villagers: 2,
 				werewolves: 3,
-				profile: SimulatorCapability.SafetyScreening),
+				capability: SimulatorCapability.SafetyScreening),
 			new SingleFactionGameResult(Faction.Werewolf),
-			AlreadyDecidedReason.WerewolfControlShortcut);
+			AlreadyDecidedReason.WerewolfControlShortcut,
+			SimulatorCapability.SafetyScreening);
 		using var context = CreateContext(
 			new SeededLocalStore(record),
 			depth: LobbyEvaluationDepth.DegenerateScreeningOnly,
@@ -169,7 +170,7 @@ public class RoleSelectionEvaluationTests
 		var werewolf = new SingleFactionGameResult(Faction.Werewolf);
 		var noWinner = new NoWinnerGameResult();
 		var record = new DegenerateTerminalCacheRecord(
-			CreateIdentity(profile: SimulatorCapability.SafetyScreening),
+			CreateIdentity(capability: SimulatorCapability.SafetyScreening),
 			[
 				new(villager, 750, 1_000),
 				new(werewolf, 250, 1_000),
@@ -178,7 +179,8 @@ public class RoleSelectionEvaluationTests
 			[
 				new(villager, 1, VictoryCheckWindow.Dawn, 750, 1_000),
 				new(werewolf, 1, VictoryCheckWindow.PreNight, 250, 1_000)
-			]);
+			],
+			SimulatorCapability.SafetyScreening);
 		using var context = CreateContext(
 			new SeededLocalStore(record),
 			depth: LobbyEvaluationDepth.DegenerateScreeningOnly,
@@ -216,7 +218,8 @@ public class RoleSelectionEvaluationTests
 			[
 				new(villager, 1, VictoryCheckWindow.Dawn, 7_000, 10_000),
 				new(werewolf, 2, VictoryCheckWindow.PreNight, 3_000, 10_000)
-			]);
+			],
+			SimulatorCapability.FullProbability);
 		using var context = CreateContext(
 			new SeededLocalStore(record),
 			depth: LobbyEvaluationDepth.FullProbability,
@@ -395,7 +398,8 @@ public class RoleSelectionEvaluationTests
 		var oldRecord = new AlreadyDecidedTerminalCacheRecord(
 			CreateIdentity(villagers: 2, werewolves: 3),
 			new SingleFactionGameResult(Faction.Werewolf),
-			AlreadyDecidedReason.WerewolfControlShortcut);
+			AlreadyDecidedReason.WerewolfControlShortcut,
+			SimulatorCapability.FullProbability);
 		using var context = CreateContext(
 			new SeededLocalStore(oldRecord),
 			timeProvider: new ManualTimeProvider());
@@ -532,7 +536,7 @@ public class RoleSelectionEvaluationTests
 	private static SimulationCompatibilityIdentity CreateIdentity(
 		int villagers = 3,
 		int werewolves = 2,
-		SimulatorProfile? profile = null)
+		SimulatorCapability? capability = null)
 	{
 		var scenario = new SimulationScenario(
 			5,
@@ -540,7 +544,7 @@ public class RoleSelectionEvaluationTests
 				.Concat(Enumerable.Repeat(MainRoleType.SimpleWerewolf, werewolves)));
 		return new(
 			scenario.ToCanonical(),
-			(profile ?? SimulatorCapability.FullProbability).Identity);
+			(capability ?? SimulatorCapability.FullProbability).Identity);
 	}
 
 	private static string TestId(string value) => $"[data-testid='{value}']";

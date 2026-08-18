@@ -57,17 +57,24 @@ public class BrowserQaHostCompositionTests
 	{
 		using var context = CreateBrowserQaHostContext(BrowserQaScenario.Degenerate);
 		var lobby = context.Services.GetRequiredService<LobbySetupState>();
+		var expectedScenario = lobby.CreateSimulationScenario();
 		var expectedIdentity = new SimulationCompatibilityIdentity(
-			lobby.CreateSimulationScenario().ToCanonical(),
+			expectedScenario.ToCanonical(),
 			SimulatorCapability.SafetyScreening.Identity);
 		var local = context.Services.GetRequiredService<ILocalTerminalLobbyCacheStore>();
 		var localBytes = await local.ReadAsync();
 
 		local.Should().BeOfType<BrowserQaScenarioTerminalLobbyCacheStore>();
 		localBytes.Should().NotBeNull();
-		var read = TerminalLobbyCache.ReadDocument(localBytes!.Value.Span);
+		var read = TerminalLobbyCache.ReadDocument(
+			localBytes!.Value.Span,
+			SimulatorCapabilityRegistry.Production);
 		read.IsUsable.Should().BeTrue();
-		TerminalLobbyCache.TryGet(read.Document!, expectedIdentity, out var record).Should().BeTrue();
+		TerminalLobbyCache.TryGet(
+			read.Document!,
+			expectedScenario,
+			SimulatorCapability.SafetyScreening,
+			out var record).Should().BeTrue();
 		record.Should().BeOfType<DegenerateTerminalCacheRecord>();
 		record!.CompatibilityIdentity.Should().Be(expectedIdentity);
 

@@ -12,42 +12,12 @@ internal sealed record PossibleGameResultInventory(
 		SimulatorCapability capability,
 		out PossibleGameResultInventory inventory)
 	{
-		ArgumentNullException.ThrowIfNull(capability);
-		return TryCreate(
-			scenario,
-			role => capability.TryGetBeneficiaryFaction(role, out var faction)
-				? faction
-				: null,
-			capability.CreatePossibleGameResults,
-			out inventory);
-	}
-
-	public static bool TryCreate(
-		SimulationScenario scenario,
-		SimulatorProfile profile,
-		out PossibleGameResultInventory inventory)
-	{
-		ArgumentNullException.ThrowIfNull(profile);
-		return TryCreate(
-			scenario,
-			role => profile.TryGetBeneficiaryFaction(role, out var faction)
-				? faction
-				: null,
-			profile.CreatePossibleGameResults,
-			out inventory);
-	}
-
-	private static bool TryCreate(
-		SimulationScenario scenario,
-		Func<MainRoleType, Faction?> getBeneficiaryFaction,
-		Func<IEnumerable<Faction>, GameResult[]> createPossibleGameResults,
-		out PossibleGameResultInventory inventory)
-	{
 		ArgumentNullException.ThrowIfNull(scenario);
+		ArgumentNullException.ThrowIfNull(capability);
 		var factions = new HashSet<Faction>();
 		foreach (var role in scenario.RoleCompositionCards.Distinct())
 		{
-			if (getBeneficiaryFaction(role) is not { } faction
+			if (!capability.TryGetBeneficiaryFaction(role, out var faction)
 				|| !Enum.IsDefined(faction))
 			{
 				inventory = null!;
@@ -68,7 +38,7 @@ internal sealed record PossibleGameResultInventory(
 		var orderedFactions = factions.Order().ToArray();
 		inventory = new PossibleGameResultInventory(
 			orderedFactions,
-			createPossibleGameResults(orderedFactions));
+			capability.CreatePossibleGameResults(orderedFactions));
 		return true;
 	}
 }

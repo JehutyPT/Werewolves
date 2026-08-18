@@ -27,7 +27,9 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 	public void BaselineRandomDecisionStrategy_WithSameShapeUnadmittedSemantic_RejectsInstruction()
 	{
 		var material = CreateRunSeedMaterial(runNumber: 7);
-		var startState = SimulationStartStateDeriver.Derive(material);
+		var startState = SimulationStartStateDeriver.Derive(
+			material,
+			SimulatorCapability.FullProbability);
 		var config = startState.CreateGameSessionConfig();
 		var builder = CreateBuilder()
 			.WithPlayers(config.Players.ToArray())
@@ -333,7 +335,9 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 				SimulatorCapability.FullProbability.Identity),
 			BaselineRandomDecisionStrategy.Identity,
 			runNumber: 3);
-		var startState = SimulationStartStateDeriver.Derive(material);
+		var startState = SimulationStartStateDeriver.Derive(
+			material,
+			SimulatorCapability.FullProbability);
 		var config = startState.CreateGameSessionConfig();
 		var builder = CreateBuilder()
 			.WithPlayers(config.Players.ToArray())
@@ -583,7 +587,9 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 	public void BaselineRandomDecisionStrategy_WithRoleIdentification_UsesCommittedCurrentRoleWithinSelectionContract()
 	{
 		var material = CreateRunSeedMaterial(runNumber: 13);
-		var startState = SimulationStartStateDeriver.Derive(material);
+		var startState = SimulationStartStateDeriver.Derive(
+			material,
+			SimulatorCapability.FullProbability);
 		var config = startState.CreateGameSessionConfig();
 		var builder = CreateBuilder()
 			.WithPlayers(config.Players.ToArray())
@@ -634,7 +640,9 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 	public void BaselineRandomDecisionStrategy_WithRoleReveal_UsesCurrentRoleThenSeededTruth()
 	{
 		var material = CreateRunSeedMaterial(runNumber: 13);
-		var startState = SimulationStartStateDeriver.Derive(material);
+		var startState = SimulationStartStateDeriver.Derive(
+			material,
+			SimulatorCapability.FullProbability);
 		var config = startState.CreateGameSessionConfig();
 		var builder = CreateBuilder()
 			.WithPlayers(config.Players.ToArray())
@@ -682,7 +690,9 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 	public void BaselineRandomDecisionStrategy_WithChoiceInstructions_ReturnsCompleteValidDeterministicResponses()
 	{
 		var material = CreateRunSeedMaterial(runNumber: 11);
-		var startState = SimulationStartStateDeriver.Derive(material);
+		var startState = SimulationStartStateDeriver.Derive(
+			material,
+			SimulatorCapability.FullProbability);
 		var config = startState.CreateGameSessionConfig();
 		var builder = CreateBuilder()
 			.WithPlayers(config.Players.ToArray())
@@ -1224,7 +1234,9 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 	public void BaselineRandomDecisionStrategy_WithKnownOptionalChoiceSeed_ReturnsEmptyValidResponse()
 	{
 		var material = CreateRunSeedMaterial(runNumber: 3);
-		var startState = SimulationStartStateDeriver.Derive(material);
+		var startState = SimulationStartStateDeriver.Derive(
+			material,
+			SimulatorCapability.FullProbability);
 		var config = startState.CreateGameSessionConfig();
 		var builder = CreateBuilder()
 			.WithPlayers(config.Players.ToArray())

@@ -24,20 +24,6 @@ public sealed record AlreadyDecidedTerminalCacheRecord : TerminalLobbyCacheRecor
 	public AlreadyDecidedTerminalCacheRecord(
 		SimulationCompatibilityIdentity identity,
 		GameResult gameResult,
-		AlreadyDecidedReason reason)
-		: this(
-			identity,
-			gameResult,
-			reason,
-			TerminalLobbyCache.ResolveProducerProfile(
-				identity,
-				probabilityRecord: false))
-	{
-	}
-
-	internal AlreadyDecidedTerminalCacheRecord(
-		SimulationCompatibilityIdentity identity,
-		GameResult gameResult,
 		AlreadyDecidedReason reason,
 		SimulatorCapability capability)
 		: base(identity)
@@ -176,22 +162,6 @@ public sealed record DegenerateTerminalCacheRecord : AggregateTerminalCacheRecor
 	public DegenerateTerminalCacheRecord(
 		SimulationCompatibilityIdentity identity,
 		IEnumerable<TerminalCacheGameResultFrequency> frequencies,
-		IEnumerable<TerminalCacheTurnWindowFrequency> cells)
-			: base(
-				identity,
-				TerminalLobbyEvaluator.ScreeningAttemptCount,
-				frequencies,
-				cells,
-				turnOneOnly: true,
-				capability: TerminalLobbyCache.ResolveProducerProfile(
-					identity,
-					probabilityRecord: false))
-	{
-	}
-
-	internal DegenerateTerminalCacheRecord(
-		SimulationCompatibilityIdentity identity,
-		IEnumerable<TerminalCacheGameResultFrequency> frequencies,
 		IEnumerable<TerminalCacheTurnWindowFrequency> cells,
 		SimulatorCapability capability)
 			: base(
@@ -208,22 +178,6 @@ public sealed record DegenerateTerminalCacheRecord : AggregateTerminalCacheRecor
 public sealed record ProbabilityTerminalCacheRecord : AggregateTerminalCacheRecord
 {
 	public ProbabilityTerminalCacheRecord(
-		SimulationCompatibilityIdentity identity,
-		IEnumerable<TerminalCacheGameResultFrequency> frequencies,
-		IEnumerable<TerminalCacheTurnWindowFrequency> cells)
-		: base(
-			identity,
-			TerminalLobbyEvaluator.ProbabilityAttemptCount,
-			frequencies,
-			cells,
-			turnOneOnly: false,
-			capability: TerminalLobbyCache.ResolveProducerProfile(
-				identity,
-				probabilityRecord: true))
-	{
-	}
-
-	internal ProbabilityTerminalCacheRecord(
 		SimulationCompatibilityIdentity identity,
 		IEnumerable<TerminalCacheGameResultFrequency> frequencies,
 		IEnumerable<TerminalCacheTurnWindowFrequency> cells,

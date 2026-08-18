@@ -44,13 +44,6 @@ public static partial class TerminalLobbyCache
 
 	public static TerminalLobbyCacheReadResult Read(
 		ReadOnlySpan<byte> utf8Json,
-		SimulationCompatibilityIdentity expectedIdentity)
-	{
-		return Read(utf8Json, expectedIdentity, resolveCapability: null);
-	}
-
-	public static TerminalLobbyCacheReadResult Read(
-		ReadOnlySpan<byte> utf8Json,
 		SimulationScenario scenario,
 		SimulatorCapability capability)
 	{
@@ -65,7 +58,7 @@ public static partial class TerminalLobbyCache
 	private static TerminalLobbyCacheReadResult Read(
 		ReadOnlySpan<byte> utf8Json,
 		SimulationCompatibilityIdentity expectedIdentity,
-		Func<SimulatorProfileIdentity, SimulatorCapability?>? resolveCapability)
+		Func<SimulatorProfileIdentity, SimulatorCapability?> resolveCapability)
 	{
 		ArgumentNullException.ThrowIfNull(expectedIdentity);
 		try
@@ -96,12 +89,6 @@ public static partial class TerminalLobbyCache
 	}
 
 	public static TerminalLobbyCacheDocumentReadResult ReadDocument(
-		ReadOnlySpan<byte> utf8Json)
-	{
-		return ReadDocument(utf8Json, resolveCapability: null);
-	}
-
-	public static TerminalLobbyCacheDocumentReadResult ReadDocument(
 		ReadOnlySpan<byte> utf8Json,
 		SimulatorCapabilityRegistry capabilityRegistry)
 	{
@@ -115,7 +102,7 @@ public static partial class TerminalLobbyCache
 
 	private static TerminalLobbyCacheDocumentReadResult ReadDocument(
 		ReadOnlySpan<byte> utf8Json,
-		Func<SimulatorProfileIdentity, SimulatorCapability?>? resolveCapability)
+		Func<SimulatorProfileIdentity, SimulatorCapability?> resolveCapability)
 	{
 		try
 		{
@@ -255,29 +242,24 @@ public static partial class TerminalLobbyCache
 
 	private static TerminalLobbyCacheRecord ParseRecord(
 		JsonElement element,
-		Func<SimulatorProfileIdentity, SimulatorCapability?>? resolveCapability)
+		Func<SimulatorProfileIdentity, SimulatorCapability?> resolveCapability)
 	{
 		var identity = SimulationCompatibilityIdentity.Parse(
 			RequiredString(element, "identity"));
-		var capability = resolveCapability?.Invoke(identity.Profile);
-		if (resolveCapability is not null && capability is null)
-		{
-			throw new FormatException(
+		var capability = resolveCapability(identity.Profile)
+			?? throw new FormatException(
 				"The cache identity does not name a current Simulator Capability.");
-		}
 		var kind = RequiredString(element, "kind");
 		if (kind == "alreadyDecided")
 		{
 			RequireProperties(element, "identity", "kind", "result", "reason");
 			var result = ParseResult(element.GetProperty("result"));
 			var reason = RequiredEnum<AlreadyDecidedReason>(element, "reason");
-			return capability is null
-				? new AlreadyDecidedTerminalCacheRecord(identity, result, reason)
-				: new AlreadyDecidedTerminalCacheRecord(
-					identity,
-					result,
-					reason,
-					capability);
+			return new AlreadyDecidedTerminalCacheRecord(
+				identity,
+				result,
+				reason,
+				capability);
 		}
 
 		var degenerate = kind == "degenerate";
@@ -319,16 +301,14 @@ public static partial class TerminalLobbyCache
 			.EnumerateArray()
 			.Select(ParseCell)
 			.ToArray();
-		return (degenerate, capability) switch
+		return degenerate switch
 		{
-			(true, null) => new DegenerateTerminalCacheRecord(identity, rows, cells),
-			(true, not null) => new DegenerateTerminalCacheRecord(
+			true => new DegenerateTerminalCacheRecord(
 				identity,
 				rows,
 				cells,
 				capability),
-			(false, null) => new ProbabilityTerminalCacheRecord(identity, rows, cells),
-			(false, not null) => new ProbabilityTerminalCacheRecord(
+			false => new ProbabilityTerminalCacheRecord(
 				identity,
 				rows,
 				cells,
