@@ -72,6 +72,45 @@ public sealed class PiperRecoveryTests
 	}
 
 	[Fact]
+	public void PendingTargetSelection_TamperedEligibleRosterIsRejected()
+	{
+		var builder = GameTestBuilder.Create()
+			.WithPlayers(7)
+			.WithRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Piper,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		builder.ArrangeKnownRole(players[1].Id, MainRoleType.Piper);
+		builder.ArrangeKnownWerewolfFactionAgentGroup(players[0].Id);
+		builder.ConfirmGameStart();
+		builder.ConfirmNightStart();
+		var wake =
+			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+				builder.CompleteWerewolfNightAction(
+					[players[0].Id],
+					players[6].Id));
+		var targetSelection =
+			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+				builder.Process(wake.CreateResponse()));
+		var tamperedRoster = targetSelection.SelectablePlayerIds.Skip(1);
+		var payload = RecoveryPayloadTestDriver
+			.Capture((GameSession)builder.GetGameState()!)
+			.RewritePendingPlayerSelectionSelectablePlayerIds(tamperedRoster)
+			.Serialize();
+
+		Action rehydrate = () => new GameService().RehydrateSession(payload);
+
+		rehydrate.Should().Throw<InvalidOperationException>()
+			.WithMessage("*Piper target selection*");
+	}
+
+	[Fact]
 	public void CommittedCharm_FreshServiceRestoresExactSleepAndGenericRemovalReplaysWithoutDuplicates()
 	{
 		var recovery = CreateCommittedCharm();
@@ -113,6 +152,17 @@ public sealed class PiperRecoveryTests
 		recognition.Semantic.Should().Be(
 			ModeratorInstructionSemantic.RecognizeCharmedPlayers);
 		recognition.AffectedPlayerIds.Should().BeEquivalentTo(recovery.TargetIds);
+		var recognitionRecoveryService = new GameService();
+		var recognitionRecoveryGameId = recognitionRecoveryService
+			.RehydrateSession(recoveredSession.Serialize());
+		var recoveredRecognition = recognitionRecoveryService
+			.GetCurrentInstruction(recognitionRecoveryGameId)
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		recoveredRecognition.Should().BeEquivalentTo(recognition);
+		AssertSingleCommittedCharm(
+			recognitionRecoveryService.GetGameStateView(
+				recognitionRecoveryGameId)!,
+			recovery);
 		var finishNight = freshService.ProcessInstruction(
 				recoveredGameId,
 				recognition.CreateResponse())

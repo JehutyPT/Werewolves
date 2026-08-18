@@ -212,6 +212,46 @@ public sealed class BearTamerRoleTests : DiagnosticTestBase
 	}
 
 	[Fact]
+	public void DawnGrowl_RecoveryWithAffectedAudience_IsRejectedBeforeSessionExposure()
+	{
+		var builder = CreateBuilder()
+			.WithPlayers(5)
+			.WithRoles(
+				MainRoleType.BearTamer,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		builder.ArrangeKnownRole(players[0].Id, MainRoleType.BearTamer);
+		builder.ArrangeKnownWerewolfFactionAgentGroup(players[1].Id);
+		builder.ConfirmGameStart();
+		builder.ConfirmNightStart();
+		var nightEnd = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+			builder.CompleteWerewolfNightAction(
+				[players[1].Id],
+				players[3].Id));
+		builder.Process(nightEnd.CreateResponse());
+		_ = AdvanceDawnToBearTamerGrowl(
+			builder,
+			new Dictionary<Guid, MainRoleType>
+			{
+				[players[3].Id] = MainRoleType.SimpleVillager
+			});
+		var tampered = RecoveryPayloadTestDriver
+			.Parse(builder.GetGameState()!.Serialize())
+			.RewritePendingConfirmationAffectedPlayer(players[0].Id)
+			.Serialize();
+
+		var service = new GameService();
+		Action rehydrate = () => service.RehydrateSession(tampered);
+
+		rehydrate.Should().Throw<InvalidOperationException>();
+		MarkTestCompleted();
+	}
+
+	[Fact]
 	public void Dawn_AutomaticPowerIsDenied_EvaluatesOnceAndSkipsWithoutGrowlOrFact()
 	{
 		var policy = new RecordingBearAvailabilityPolicy(isAvailable: false);
@@ -257,6 +297,77 @@ public sealed class BearTamerRoleTests : DiagnosticTestBase
 		builder.GetGameState()!.GameHistoryLog
 			.OfType<BearTamerGrowlOccurredLogEntry>()
 			.Should().BeEmpty();
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void Dawn_ActorBorrowsDifferentSource_EvaluatesNativeBearTamer()
+	{
+		var policy = new RecordingBearAvailabilityPolicy(isAvailable: true);
+		var actorSetupCards = new ActorSetupCards(
+			[
+				MainRoleType.Seer,
+				MainRoleType.Cupid,
+				MainRoleType.Witch
+			]);
+		var seerCard = actorSetupCards.Cards.Single(card =>
+			card.PrintedRole == MainRoleType.Seer);
+		var builder = CreateBuilder()
+			.WithRolePowerAvailabilityPolicy(policy)
+			.WithActorSetupCards(actorSetupCards)
+			.WithPlayers(
+				GameStrings.ActorRoleName,
+				"Bear Tamer",
+				"Werewolf",
+				"Victim",
+				"Villager")
+			.WithRoles(
+				MainRoleType.Actor,
+				MainRoleType.BearTamer,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		builder.ArrangeKnownRole(players[0].Id, MainRoleType.Actor);
+		builder.ArrangeKnownRole(players[1].Id, MainRoleType.BearTamer);
+		builder.ArrangeKnownWerewolfFactionAgentGroup(players[2].Id);
+		builder.ConfirmGameStart();
+		builder.ConfirmNightStart();
+		builder.CompleteActorNightAction(players[0].Id, seerCard.Id);
+		var seerWake = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+			builder.CompleteWerewolfNightAction(
+				[players[2].Id],
+				players[3].Id));
+		seerWake.Semantic.Should().Be(ModeratorInstructionSemantic.WakeRole);
+		seerWake.AffectedPlayerIds.Should().Equal(players[0].Id);
+		var seerTarget = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+			builder.Process(seerWake.CreateResponse()));
+		var seerResult = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+			builder.Process(seerTarget.CreateResponse([players[2].Id])));
+		var seerSleep = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+			builder.Process(seerResult.CreateResponse()));
+		var nightEnd = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+			builder.Process(seerSleep.CreateResponse()));
+		builder.Process(nightEnd.CreateResponse()).IsSuccess.Should().BeTrue();
+		builder.GetGameState()!
+			.GetModeratorActiveActorBorrowedRolePowerActivation()!
+			.SourceRole.Should().Be(MainRoleType.Seer);
+
+		var growl = AdvanceDawnToBearTamerGrowl(
+			builder,
+			new Dictionary<Guid, MainRoleType>
+			{
+				[players[3].Id] = MainRoleType.SimpleVillager
+			});
+
+		growl.Semantic.Should().Be(
+			ModeratorInstructionSemantic.AnnounceBearTamerGrowl);
+		var attempt = policy.BearAttempts.Should().ContainSingle().Subject;
+		attempt.ActingPlayer.Id.Should().Be(players[1].Id);
+		attempt.PowerInstance.Id.Should().Be(players[1].Id);
+		attempt.PowerInstance.Origin.Should().Be(
+			RolePowerInstanceOrigin.Native);
 		MarkTestCompleted();
 	}
 

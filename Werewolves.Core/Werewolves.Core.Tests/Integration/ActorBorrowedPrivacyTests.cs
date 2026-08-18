@@ -20,6 +20,9 @@ namespace Werewolves.Core.Tests.Integration;
 
 public sealed class ActorBorrowedPrivacyTests
 {
+	private sealed class TestExecutionCommitKey : IGameFlowManagerKey;
+	private static readonly TestExecutionCommitKey ExecutionCommitKey = new();
+
 	private static readonly PhysicalCharacterCard[] SourceCards =
 	[
 		Card("00000000-0000-0000-0000-000000000251", MainRoleType.Seer),
@@ -1054,12 +1057,21 @@ public sealed class ActorBorrowedPrivacyTests
 
 	private static HookListenerActionResult Advance(
 		PrivacyFixture fixture,
-		ModeratorResponse response) => Advance(fixture.Session, response);
+		ModeratorResponse response) => Advance(
+		fixture.Session,
+		response,
+		publishInstruction: fixture.SourceRole == MainRoleType.LittleGirl);
 
 	private static HookListenerActionResult Advance(
 		GameSession session,
-		ModeratorResponse response)
+		ModeratorResponse response,
+		bool publishInstruction = false)
 	{
+		var consumedInstruction = publishInstruction
+			? session.Execution.PendingInstruction ??
+			  throw new InvalidOperationException(
+				  "The Actor borrowed privacy harness requires one Pending Instruction.")
+			: null;
 		var manager = new SubPhaseManager<HookHarnessSubPhase>(
 			HookHarnessSubPhase.Active,
 			[
@@ -1071,8 +1083,30 @@ public sealed class ActorBorrowedPrivacyTests
 		if (!result.StageComplete)
 		{
 			result.ModeratorInstruction.Should().NotBeNull();
+			var nextInstruction = result.ModeratorInstruction!;
+			if (consumedInstruction != null)
+			{
+				var publicationResponse =
+					response.InstructionId == consumedInstruction.InstructionId
+						? response
+						: new ModeratorResponse
+						{
+							InstructionId = consumedInstruction.InstructionId,
+							Type = response.Type,
+							SelectedPlayerIds = response.SelectedPlayerIds,
+							AssignedPlayerRoles = response.AssignedPlayerRoles,
+							SelectedOptionIds = response.SelectedOptionIds
+						};
+				session.CommitExecution(
+					ExecutionCommitKey,
+					ExecutionCommit.RetainRecoveryBoundary(
+						session.Execution,
+						consumedInstruction,
+						publicationResponse,
+						nextInstruction));
+			}
 			return HookListenerActionResult.NeedInput(
-				result.ModeratorInstruction!,
+				nextInstruction,
 				HookHarnessListenerState.AwaitingInput);
 		}
 

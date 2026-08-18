@@ -2030,6 +2030,57 @@ internal sealed class RecoveryPayloadTestDriver
 		return this;
 	}
 
+	internal RecoveryPayloadTestDriver RewritePendingPlayerSelectionCountConstraint(
+		NumberRangeConstraint countConstraint)
+	{
+		if (_payload.PendingInstruction is not
+		    SelectPlayersInstruction pending)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no pending Player selection.");
+		}
+
+		_payload.PendingInstruction = new SelectPlayersInstruction(
+			pending.Semantic,
+			pending.SelectablePlayerIds.ToHashSet(),
+			countConstraint,
+			pending.PublicAnnouncement,
+			pending.PrivateInstruction,
+			pending.AffectedPlayerIds,
+			pending.RoleIdentification,
+			pending.InstructionId)
+		{
+			EmptySelectionOptionLabel = pending.EmptySelectionOptionLabel
+		};
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver RewritePendingPlayerSelectionSelectablePlayerIds(
+		IEnumerable<Guid> selectablePlayerIds)
+	{
+		ArgumentNullException.ThrowIfNull(selectablePlayerIds);
+		if (_payload.PendingInstruction is not
+		    SelectPlayersInstruction pending)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no pending Player selection.");
+		}
+
+		_payload.PendingInstruction = new SelectPlayersInstruction(
+			pending.Semantic,
+			selectablePlayerIds.ToHashSet(),
+			pending.CountConstraint,
+			pending.PublicAnnouncement,
+			pending.PrivateInstruction,
+			pending.AffectedPlayerIds,
+			pending.RoleIdentification,
+			pending.InstructionId)
+		{
+			EmptySelectionOptionLabel = pending.EmptySelectionOptionLabel
+		};
+		return this;
+	}
+
 	internal RecoveryPayloadTestDriver
 		RewriteActorBorrowedHunterPendingSelectorPrivateInstruction(
 			string privateInstruction)
