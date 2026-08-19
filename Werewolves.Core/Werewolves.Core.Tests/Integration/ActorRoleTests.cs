@@ -21,6 +21,9 @@ namespace Werewolves.Core.Tests.Integration;
 
 public sealed class ActorRoleTests
 {
+	private sealed class TestExecutionCommitKey : IGameFlowManagerKey;
+	private static readonly TestExecutionCommitKey ExecutionCommitKey = new();
+
 	private static readonly PhysicalCharacterCard SeerCard = new(
 		Guid.Parse("00000000-0000-0000-0000-000000000141"),
 		MainRoleType.Seer);
@@ -876,12 +879,49 @@ public sealed class ActorRoleTests
 		ModeratorResponse response)
 	{
 		_ = session.GetOrCreateListener(listener.Id, () => listener);
+		var consumedInstruction = session.Execution.PendingInstruction;
 		var result = NightActionLoop.Execute(session, response);
+		if (result is StayInSubPhaseHandlerResult { StageComplete: false }
+			&& result.ModeratorInstruction is { } nextInstruction)
+		{
+			if (consumedInstruction != null)
+			{
+				PublishPendingInstruction(
+					session, consumedInstruction, response, nextInstruction);
+			}
+			return new ListenerAdvanceResult(
+				HookListenerOutcome.NeedInput, nextInstruction);
+		}
+
 		return new ListenerAdvanceResult(
-			result is StayInSubPhaseHandlerResult { StageComplete: false }
-				? HookListenerOutcome.NeedInput
-				: HookListenerOutcome.Complete,
+			HookListenerOutcome.Complete,
 			result.ModeratorInstruction);
+	}
+
+	private static void PublishPendingInstruction(
+		GameSession session,
+		ModeratorInstruction consumedInstruction,
+		ModeratorResponse response,
+		ModeratorInstruction nextInstruction)
+	{
+		var publicationResponse =
+			response.InstructionId == consumedInstruction.InstructionId
+				? response
+				: new ModeratorResponse
+				{
+					InstructionId = consumedInstruction.InstructionId,
+					Type = response.Type,
+					SelectedPlayerIds = response.SelectedPlayerIds,
+					AssignedPlayerRoles = response.AssignedPlayerRoles,
+					SelectedOptionIds = response.SelectedOptionIds
+				};
+		session.CommitExecution(
+			ExecutionCommitKey,
+			ExecutionCommit.RetainRecoveryBoundary(
+				session.Execution,
+				consumedInstruction,
+				publicationResponse,
+				nextInstruction));
 	}
 
 	private static SpendOpeningResult PerformSpendOpening(

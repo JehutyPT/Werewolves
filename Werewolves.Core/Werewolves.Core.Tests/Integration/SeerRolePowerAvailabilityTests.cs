@@ -144,6 +144,61 @@ public sealed class SeerRolePowerAvailabilityTests : DiagnosticTestBase
 		MarkTestCompleted();
 	}
 
+	[Fact]
+	public void RehydrateSession_AllowedSeerAfterFeedback_ResumesTheSleepBoundaryWithoutRepeatingTheCheck()
+	{
+		var builder = CreateBuilder()
+			.WithRolePowerAvailabilityPolicy(
+				new RecordingPolicy(RolePowerAvailabilityResult.Allowed))
+			.WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);
+		builder.StartGame();
+		builder.ConfirmGameStart();
+		builder.ConfirmNightStart();
+		var players = builder.GetGameState()!.GetPlayers().ToList();
+		var werewolf = players[0];
+		var seer = players[1];
+		builder.CompleteWerewolfNightAction([werewolf.Id], players[4].Id);
+		var identifySeer = InstructionAssert.ExpectType<SelectPlayersInstruction>(
+			builder.GetCurrentInstruction());
+		var targetSelection =
+			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+				builder.Process(identifySeer.CreateResponse([seer.Id])));
+		var feedback =
+			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+				builder.Process(targetSelection.CreateResponse([werewolf.Id])));
+		var sleep = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+			builder.Process(feedback.CreateResponse()));
+		sleep.Semantic.Should().Be(ModeratorInstructionSemantic.PutRoleToSleep);
+		var serialized = builder.GetGameState()!.Serialize();
+		var rehydratedPolicy = new RecordingPolicy(
+			RolePowerAvailabilityResult.Allowed);
+		var rehydratedService = new GameService(rehydratedPolicy);
+
+		var rehydratedGameId = rehydratedService.RehydrateSession(serialized);
+
+		var rehydratedSleep = InstructionAssert.ExpectType<ConfirmationInstruction>(
+			rehydratedService.GetCurrentInstruction(rehydratedGameId));
+		rehydratedSleep.InstructionId.Should().Be(sleep.InstructionId);
+		rehydratedSleep.Semantic.Should().Be(
+			ModeratorInstructionSemantic.PutRoleToSleep);
+		rehydratedSleep.AffectedPlayerIds.Should().BeNull();
+
+		var afterSleep = InstructionAssert.ExpectSuccessWithType<ModeratorInstruction>(
+			rehydratedService.ProcessInstruction(
+				rehydratedGameId,
+				rehydratedSleep.CreateResponse()));
+
+		afterSleep.Semantic.Should().NotBe(
+			ModeratorInstructionSemantic.SelectSeerTarget);
+		rehydratedPolicy.ObservedAttempts.Should().BeEmpty();
+		rehydratedService.GetGameStateView(rehydratedGameId)!.GameHistoryLog
+			.OfType<NightActionLogEntry>()
+			.Where(entry => entry.ActionType == NightActionType.SeerCheck)
+			.Should().ContainSingle()
+			.Which.TargetIds.Should().Equal(werewolf.Id);
+		MarkTestCompleted();
+	}
+
 	private sealed class RecordingPolicy(RolePowerAvailabilityResult result)
 		: IRolePowerAvailabilityPolicy
 	{

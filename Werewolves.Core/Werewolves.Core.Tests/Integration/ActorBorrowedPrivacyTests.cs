@@ -900,7 +900,8 @@ public sealed class ActorBorrowedPrivacyTests
 		var wake = Advance(fixture, fixture.OpeningResponse).Instruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		TInstruction instruction;
-		if (fixture.SourceRole is MainRoleType.Fox or MainRoleType.Defender)
+		if (fixture.SourceRole is MainRoleType.Fox or MainRoleType.Defender
+			or MainRoleType.Seer)
 		{
 			fixture.RestoreAt(wake);
 			instruction = GameFlowManager.HandleInput(
