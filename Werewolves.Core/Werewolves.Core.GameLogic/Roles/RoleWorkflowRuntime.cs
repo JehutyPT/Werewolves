@@ -215,6 +215,34 @@ internal sealed class RoleWorkflowRuntime
 		};
 	}
 
+	internal bool TryValidateCommittedRecoveryBoundary(
+		GameSession session,
+		ModeratorInstruction? startingInstruction,
+		ModeratorResponse input,
+		OneUseRolePowerCommittedLogEntry committedBoundary,
+		ModeratorInstruction nextInstruction)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		ArgumentNullException.ThrowIfNull(input);
+		ArgumentNullException.ThrowIfNull(committedBoundary);
+		ArgumentNullException.ThrowIfNull(nextInstruction);
+		var claims = _waits
+			.Where(wait => wait.TryValidateCommittedRecoveryBoundary(
+				session,
+				startingInstruction,
+				input,
+				committedBoundary,
+				nextInstruction))
+			.ToArray();
+		return claims switch
+		{
+			[] => false,
+			[_] => true,
+			_ => throw new InvalidOperationException(
+				$"Committed One-Use boundary authenticates multiple waits for '{_listener}'.")
+		};
+	}
+
 	private void AuthenticateLiveWait(
 		GameSession session,
 		ModeratorResponse input,
@@ -293,6 +321,13 @@ internal interface IRecoverableWait : IRoleWorkflowStep
 		ModeratorResponse input,
 		RecurringRolePowerCommittedLogEntry committedBoundary,
 		ModeratorInstruction nextInstruction);
+
+	bool TryValidateCommittedRecoveryBoundary(
+		GameSession session,
+		ModeratorInstruction? startingInstruction,
+		ModeratorResponse input,
+		OneUseRolePowerCommittedLogEntry committedBoundary,
+		ModeratorInstruction nextInstruction);
 }
 
 internal enum RecoverableWaitDurability
@@ -340,6 +375,13 @@ internal sealed class RecoverableWait<TState, TInstruction> : IRecoverableWait
 		RecurringRolePowerCommittedLogEntry,
 		TInstruction,
 		bool>? _validateRecurringCommittedRecoveryBoundary;
+	private readonly Func<
+		GameSession,
+		ModeratorInstruction?,
+		ModeratorResponse,
+		OneUseRolePowerCommittedLogEntry,
+		TInstruction,
+		bool>? _validateOneUseCommittedRecoveryBoundary;
 
 	private RecoverableWait(
 		ListenerIdentifier listener,
@@ -375,7 +417,14 @@ internal sealed class RecoverableWait<TState, TInstruction> : IRecoverableWait
 			ModeratorResponse,
 			RecurringRolePowerCommittedLogEntry,
 			TInstruction,
-			bool>? validateRecurringCommittedRecoveryBoundary)
+			bool>? validateRecurringCommittedRecoveryBoundary,
+		Func<
+			GameSession,
+			ModeratorInstruction?,
+			ModeratorResponse,
+			OneUseRolePowerCommittedLogEntry,
+			TInstruction,
+			bool>? validateOneUseCommittedRecoveryBoundary)
 	{
 		if (!Enum.IsDefined(semantic) || !Enum.IsDefined(expectedResponseType))
 		{
@@ -407,14 +456,19 @@ internal sealed class RecoverableWait<TState, TInstruction> : IRecoverableWait
 			validateTargetPrivateCommittedRecoveryBoundary;
 		_validateRecurringCommittedRecoveryBoundary =
 			validateRecurringCommittedRecoveryBoundary;
+		_validateOneUseCommittedRecoveryBoundary =
+			validateOneUseCommittedRecoveryBoundary;
 		var hasAcceptedObservationPolicy =
 			validateDurableContext != null &&
 			existingCursorContinuationFactory != null;
+		var declaredDomainBoundaries =
+			(validateTargetPrivateCommittedRecoveryBoundary != null ? 1 : 0) +
+			(validateRecurringCommittedRecoveryBoundary != null ? 1 : 0) +
+			(validateOneUseCommittedRecoveryBoundary != null ? 1 : 0);
 		var hasDomainPolicy =
 			validateDomainContext != null &&
 			existingDomainCursorContinuationFactory != null &&
-			(validateTargetPrivateCommittedRecoveryBoundary != null) !=
-			(validateRecurringCommittedRecoveryBoundary != null);
+			declaredDomainBoundaries == 1;
 		if (durability switch
 		    {
 			    RecoverableWaitDurability.Replayable =>
@@ -463,7 +517,8 @@ internal sealed class RecoverableWait<TState, TInstruction> : IRecoverableWait
 			validateDomainContext: null,
 			existingDomainCursorContinuationFactory: null,
 			validateTargetPrivateCommittedRecoveryBoundary: null,
-			validateRecurringCommittedRecoveryBoundary: null);
+			validateRecurringCommittedRecoveryBoundary: null,
+			validateOneUseCommittedRecoveryBoundary: null);
 
 	internal static RecoverableWait<TState, TInstruction>
 		ReplayableWithAcceptedObservationHandoff(
@@ -500,7 +555,8 @@ internal sealed class RecoverableWait<TState, TInstruction> : IRecoverableWait
 			validateDomainContext: null,
 			existingDomainCursorContinuationFactory: null,
 			validateTargetPrivateCommittedRecoveryBoundary: null,
-			validateRecurringCommittedRecoveryBoundary: null);
+			validateRecurringCommittedRecoveryBoundary: null,
+			validateOneUseCommittedRecoveryBoundary: null);
 
 	internal static RecoverableWait<TState, TInstruction> Durable(
 		ListenerIdentifier listener,
@@ -536,7 +592,8 @@ internal sealed class RecoverableWait<TState, TInstruction> : IRecoverableWait
 			validateDomainContext: null,
 			existingDomainCursorContinuationFactory: null,
 			validateTargetPrivateCommittedRecoveryBoundary: null,
-			validateRecurringCommittedRecoveryBoundary: null);
+			validateRecurringCommittedRecoveryBoundary: null,
+			validateOneUseCommittedRecoveryBoundary: null);
 
 	internal static RecoverableWait<TState, TInstruction> DomainDurable(
 		ListenerIdentifier listener,
@@ -579,7 +636,8 @@ internal sealed class RecoverableWait<TState, TInstruction> : IRecoverableWait
 			validateDomainContext,
 			existingDomainCursorContinuationFactory,
 			validateCommittedRecoveryBoundary,
-			validateRecurringCommittedRecoveryBoundary: null);
+			validateRecurringCommittedRecoveryBoundary: null,
+			validateOneUseCommittedRecoveryBoundary: null);
 
 	internal static RecoverableWait<TState, TInstruction>
 		RecurringDomainDurable(
@@ -623,6 +681,52 @@ internal sealed class RecoverableWait<TState, TInstruction> : IRecoverableWait
 			validateDomainContext,
 			existingDomainCursorContinuationFactory,
 			validateTargetPrivateCommittedRecoveryBoundary: null,
+			validateCommittedRecoveryBoundary,
+			validateOneUseCommittedRecoveryBoundary: null);
+
+	internal static RecoverableWait<TState, TInstruction>
+		OneUseDomainDurable(
+			ListenerIdentifier listener,
+			GameHook hook,
+			TState? startState,
+			TState continuationState,
+			ModeratorInstructionSemantic semantic,
+			ExpectedInputType expectedResponseType,
+			Func<GameSession, bool> canIssue,
+			Action<GameSession, ModeratorResponse> beforeIssue,
+			Func<GameSession, TInstruction> instructionFactory,
+			Func<GameSession, ModeratorInstruction, bool> claimsCandidate,
+			Action<GameSession, TInstruction> validateInstructionContext,
+			Action<GameSession, TInstruction, DomainRecoveryCursor>
+				validateDomainContext,
+			Func<DomainRecoveryCursor, TState>
+				existingDomainCursorContinuationFactory,
+			Func<
+				GameSession,
+				ModeratorInstruction?,
+				ModeratorResponse,
+				OneUseRolePowerCommittedLogEntry,
+				TInstruction,
+				bool> validateCommittedRecoveryBoundary) =>
+		new(
+			listener,
+			hook,
+			startState,
+			continuationState,
+			semantic,
+			expectedResponseType,
+			canIssue,
+			beforeIssue,
+			instructionFactory,
+			claimsCandidate,
+			validateInstructionContext,
+			RecoverableWaitDurability.Domain,
+			validateDurableContext: null,
+			existingCursorContinuationFactory: null,
+			validateDomainContext,
+			existingDomainCursorContinuationFactory,
+			validateTargetPrivateCommittedRecoveryBoundary: null,
+			validateRecurringCommittedRecoveryBoundary: null,
 			validateCommittedRecoveryBoundary);
 
 	public ListenerIdentifier Listener { get; }
@@ -851,6 +955,35 @@ internal sealed class RecoverableWait<TState, TInstruction> : IRecoverableWait
 			typedInstruction);
 	}
 
+	public bool TryValidateCommittedRecoveryBoundary(
+		GameSession session,
+		ModeratorInstruction? startingInstruction,
+		ModeratorResponse input,
+		OneUseRolePowerCommittedLogEntry committedBoundary,
+		ModeratorInstruction nextInstruction)
+	{
+		if (_validateOneUseCommittedRecoveryBoundary == null ||
+		    _durability != RecoverableWaitDurability.Domain ||
+		    nextInstruction.Semantic != _semantic)
+		{
+			return false;
+		}
+
+		if (nextInstruction is not TInstruction typedInstruction)
+		{
+			throw new InvalidOperationException(
+				$"Committed boundary claims '{Listener}:{_semantic}' with invalid instruction type '{nextInstruction.GetType().Name}'.");
+		}
+
+		ValidateInstruction(session, typedInstruction);
+		return _validateOneUseCommittedRecoveryBoundary(
+			session,
+			startingInstruction,
+			input,
+			committedBoundary,
+			typedInstruction);
+	}
+
 	private bool Claims(
 		GameSession session,
 		ModeratorInstruction pendingInstruction) =>
@@ -990,6 +1123,13 @@ internal sealed class DelegatedRecoverableWait<TState> : IRecoverableWait
 		ModeratorInstruction? startingInstruction,
 		ModeratorResponse input,
 		RecurringRolePowerCommittedLogEntry committedBoundary,
+		ModeratorInstruction nextInstruction) => false;
+
+	public bool TryValidateCommittedRecoveryBoundary(
+		GameSession session,
+		ModeratorInstruction? startingInstruction,
+		ModeratorResponse input,
+		OneUseRolePowerCommittedLogEntry committedBoundary,
 		ModeratorInstruction nextInstruction) => false;
 }
 

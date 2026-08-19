@@ -2302,11 +2302,17 @@ internal static class GameFlowManager
 
         var committedTargetId = committedEntry.TargetIds[0];
         var roleOwnedCommitCorrelated =
-            AccursedWolfFatherRole.TryValidateCommittedRecoveryBoundary(
+            committedEntry.SourceRole == MainRoleType.AccursedWolfFather &&
+            RoleListenerDispatch.TryValidateOneUseCommittedRecoveryBoundary(
+                Listener(MainRoleType.AccursedWolfFather),
+                admissions,
+                (id, factory) =>
+                    session.GetOrCreateListener(id, factory),
                 session,
                 startingInstruction,
                 input,
-                committedEntry);
+                committedEntry,
+                nextInstruction);
         if (!roleOwnedCommitCorrelated &&
             (startingInstruction is not SelectPlayersInstruction ||
              input.SelectedPlayerIds is not
