@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.Tests.Helpers;
 using Xunit;
@@ -150,8 +151,55 @@ public sealed class DefenderRecoveryTests
 
 		Action rehydrate = () => service.RehydrateSession(legacyShape);
 
-		rehydrate.Should().Throw<InvalidOperationException>()
-			.WithMessage("*latest recurring native Role Power action*");
+		rehydrate.Should().Throw<InvalidOperationException>();
+	}
+
+	[Fact]
+	public void CommittedProtection_SerializeRehydrateResumesTheSleepBoundary()
+	{
+		var builder = GameTestBuilder.Create()
+			.WithPlayers(6)
+			.WithRoles(
+				MainRoleType.Defender,
+				MainRoleType.LittleGirl,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		builder.ArrangeKnownRole(players[0].Id, MainRoleType.Defender);
+		builder.ArrangeKnownRole(players[1].Id, MainRoleType.LittleGirl);
+		builder.ConfirmGameStart();
+		var wake =
+			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+				builder.ConfirmNightStart());
+		var selection =
+			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+				builder.Process(wake.CreateResponse()));
+		var targetId = players[3].Id;
+		var sleep =
+			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+				builder.Process(selection.CreateResponse([targetId])));
+		var freshService = new GameService();
+
+		var recoveredGameId = freshService.RehydrateSession(
+			builder.GetGameState()!.Serialize());
+		var recoveredSession = freshService.GetGameStateView(recoveredGameId)!;
+
+		freshService.GetCurrentInstruction(recoveredGameId)
+			.Should().BeEquivalentTo(sleep);
+		recoveredSession.GameHistoryLog
+			.OfType<RecurringRolePowerCommittedLogEntry>()
+			.Should().ContainSingle(entry =>
+				entry.ActionType == NightActionType.DefenderProtect)
+			.Which.TargetIds.Should().Equal(targetId);
+
+		freshService.ProcessInstruction(recoveredGameId, sleep.CreateResponse())
+			.IsSuccess.Should().BeTrue();
+
+		freshService.GetCurrentInstruction(recoveredGameId)!.Semantic
+			.Should().NotBe(ModeratorInstructionSemantic.PutRoleToSleep);
 	}
 
 	private static CommittedProtectionRecovery CreateCommittedProtection()

@@ -2229,12 +2229,17 @@ internal static class GameFlowManager
                                 recurringEntry,
                                 nextInstruction),
                     MainRoleType.Defender =>
-                        DefenderRole.TryValidateCommittedRecoveryBoundary(
-                            session,
-                            startingInstruction,
-                            input,
-                            recurringEntry,
-                            nextInstruction),
+                        RoleListenerDispatch
+                            .TryValidateRecurringCommittedRecoveryBoundary(
+                                Listener(MainRoleType.Defender),
+                                admissions,
+                                (id, factory) =>
+                                    session.GetOrCreateListener(id, factory),
+                                session,
+                                startingInstruction,
+                                input,
+                                recurringEntry,
+                                nextInstruction),
                     MainRoleType.WhiteWerewolf =>
                         RoleListenerDispatch
                             .TryValidateRecurringCommittedRecoveryBoundary(
@@ -2966,6 +2971,7 @@ internal static class GameFlowManager
             switch (sourceRole)
             {
                 case MainRoleType.BigBadWolf:
+                case MainRoleType.Defender:
                 case MainRoleType.Piper:
                 case MainRoleType.WhiteWerewolf:
 					if (!RoleListenerDispatch
@@ -2983,11 +2989,6 @@ internal static class GameFlowManager
 							$"Unsupported {sourceRole} recurring Role Power continuation.");
 					}
 					break;
-                case MainRoleType.Defender:
-                    DefenderRole.ValidateRecurringRecoveryCursorIdentity(
-						session,
-                        cursor);
-                    break;
                 case MainRoleType.Cupid:
 					CupidRole.ValidateRecurringRecoveryCursorIdentity(
 						session,
