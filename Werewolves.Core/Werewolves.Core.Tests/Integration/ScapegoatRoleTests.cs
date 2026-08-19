@@ -1046,6 +1046,112 @@ public sealed class ScapegoatRoleTests : DiagnosticTestBase
 		MarkTestCompleted();
 	}
 
+	[Fact]
+	public void PendingHolderObservation_WithForgedSelectableRoster_IsRejectedBeforeAUsableSession()
+	{
+		var builder = ArrangePendingHolderObservation(out var observation);
+
+		var forged = RecoveryPayloadTestDriver
+			.Capture((GameSession)builder.GetGameState()!)
+			.RewritePendingPlayerSelectionSelectablePlayerIds(
+				observation.SelectablePlayerIds.Take(1))
+			.Serialize();
+		var act = () => new GameService().RehydrateSession(forged);
+
+		act.Should().Throw<InvalidOperationException>();
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void PendingHolderObservation_WithForgedCountConstraint_IsRejectedBeforeAUsableSession()
+	{
+		var builder = ArrangePendingHolderObservation(out _);
+
+		var forged = RecoveryPayloadTestDriver
+			.Capture((GameSession)builder.GetGameState()!)
+			.RewritePendingPlayerSelectionCountConstraint(
+				NumberRangeConstraint.Exact(1))
+			.Serialize();
+		var act = () => new GameService().RehydrateSession(forged);
+
+		act.Should().Throw<InvalidOperationException>();
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void PendingTieReveal_WithForgedRevealedHolder_IsRejectedBeforeAUsableSession()
+	{
+		var builder = CreateBuilder()
+			.WithPlayers(5)
+			.WithRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Scapegoat,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		builder.ConfirmGameStart();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		var scapegoat = players[1];
+		var dawnVictim = players[4];
+		builder.ArrangeKnownPhysicalRole(scapegoat.Id, MainRoleType.Scapegoat);
+		builder.CompleteNightPhase([players[0].Id], dawnVictim.Id);
+		builder.CompleteDawnPhase(new Dictionary<Guid, MainRoleType>
+		{
+			[dawnVictim.Id] = MainRoleType.SimpleVillager
+		});
+		var debate = InstructionAssert.ExpectType<ConfirmationInstruction>(
+			builder.GetCurrentInstruction());
+		var vote = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+			builder.Process(debate.CreateResponse()));
+		var reveal =
+			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+				builder.Process(vote.CreateResponse([])));
+		reveal.Semantic.Should().Be(
+			ModeratorInstructionSemantic.RevealScapegoatForTie);
+
+		var forged = RecoveryPayloadTestDriver
+			.Capture((GameSession)builder.GetGameState()!)
+			.RewritePendingConfirmationAffectedPlayer(players[2].Id)
+			.Serialize();
+		var act = () => new GameService().RehydrateSession(forged);
+
+		act.Should().Throw<InvalidOperationException>();
+		MarkTestCompleted();
+	}
+
+	private GameTestBuilder ArrangePendingHolderObservation(
+		out SelectPlayersInstruction observation)
+	{
+		var builder = CreateBuilder()
+			.WithPlayers(5)
+			.WithRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Scapegoat,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		builder.ConfirmGameStart();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		var dawnVictim = players[4];
+		builder.CompleteNightPhase([players[0].Id], dawnVictim.Id);
+		builder.CompleteDawnPhase(new Dictionary<Guid, MainRoleType>
+		{
+			[dawnVictim.Id] = MainRoleType.SimpleVillager
+		});
+		var debate = InstructionAssert.ExpectType<ConfirmationInstruction>(
+			builder.GetCurrentInstruction());
+		var vote = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+			builder.Process(debate.CreateResponse()));
+		observation =
+			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+				builder.Process(vote.CreateResponse([])));
+		observation.Semantic.Should().Be(
+			ModeratorInstructionSemantic.ObserveScapegoatHolderForTie);
+		return builder;
+	}
+
 	private static void CompleteSubsequentNight(
 		GameTestBuilder builder,
 		Guid victimId)
