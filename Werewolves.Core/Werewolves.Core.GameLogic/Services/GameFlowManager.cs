@@ -2236,12 +2236,17 @@ internal static class GameFlowManager
                             recurringEntry,
                             nextInstruction),
                     MainRoleType.WhiteWerewolf =>
-                        WhiteWerewolfRole.TryValidateCommittedRecoveryBoundary(
-                            session,
-                            startingInstruction,
-                            input,
-                            recurringEntry,
-                            nextInstruction),
+                        RoleListenerDispatch
+                            .TryValidateRecurringCommittedRecoveryBoundary(
+                                Listener(MainRoleType.WhiteWerewolf),
+                                admissions,
+                                (id, factory) =>
+                                    session.GetOrCreateListener(id, factory),
+                                session,
+                                startingInstruction,
+                                input,
+                                recurringEntry,
+                                nextInstruction),
                     MainRoleType.Piper =>
                         RoleListenerDispatch
 							.TryValidateRecurringCommittedRecoveryBoundary(
@@ -2962,6 +2967,7 @@ internal static class GameFlowManager
             {
                 case MainRoleType.BigBadWolf:
                 case MainRoleType.Piper:
+                case MainRoleType.WhiteWerewolf:
 					if (!RoleListenerDispatch
 					    .TryValidateDeclaredDomainRecoveryCursorIdentity(
 						    session,
@@ -2979,11 +2985,6 @@ internal static class GameFlowManager
 					break;
                 case MainRoleType.Defender:
                     DefenderRole.ValidateRecurringRecoveryCursorIdentity(
-						session,
-                        cursor);
-                    break;
-                case MainRoleType.WhiteWerewolf:
-                    WhiteWerewolfRole.ValidateRecurringRecoveryCursorIdentity(
 						session,
                         cursor);
                     break;

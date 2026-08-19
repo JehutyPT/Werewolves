@@ -53,6 +53,42 @@ public sealed class WhiteWerewolfRecoveryTests
 	}
 
 	[Fact]
+	public void CommittedAttack_SerializeRehydrateResumesTheSleepBoundary()
+	{
+		var (builder, _, targetSelection) = CreateNightTwoTargetSelection();
+		var werewolfId = targetSelection.SelectablePlayerIds.Single();
+		var sleep = InstructionAssert
+			.ExpectSuccessWithType<ConfirmationInstruction>(
+				builder.Process(
+					targetSelection.CreateResponse([werewolfId])));
+		sleep.Semantic.Should().Be(
+			ModeratorInstructionSemantic.PutRoleToSleep);
+		var freshService = new GameService();
+
+		var recoveredGameId = freshService.RehydrateSession(
+			builder.GetGameState()!.Serialize());
+		var recoveredSession =
+			freshService.GetGameStateView(recoveredGameId)!;
+
+		freshService.GetCurrentInstruction(recoveredGameId)
+			.Should().BeEquivalentTo(sleep);
+		recoveredSession.GameHistoryLog
+			.OfType<RecurringRolePowerCommittedLogEntry>()
+			.Should().ContainSingle(entry =>
+				entry.ActionType ==
+				NightActionType.WhiteWerewolfVictimSelection)
+			.Which.TargetIds.Should().Equal(werewolfId);
+
+		freshService.ProcessInstruction(
+				recoveredGameId,
+				sleep.CreateResponse())
+			.IsSuccess.Should().BeTrue();
+
+		freshService.GetCurrentInstruction(recoveredGameId)!.Semantic
+			.Should().NotBe(ModeratorInstructionSemantic.PutRoleToSleep);
+	}
+
+	[Fact]
 	public void AcceptedIdentification_PreKnownWhiteBeneficiaryRehydratesDownstreamRole()
 	{
 		var recovery = CreateAcceptedWhiteIdentificationRecovery(
