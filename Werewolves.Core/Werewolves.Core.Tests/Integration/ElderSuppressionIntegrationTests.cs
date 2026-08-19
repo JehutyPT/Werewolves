@@ -438,4 +438,75 @@ public sealed class ElderSuppressionIntegrationTests(ITestOutputHelper output)
 				suppressionAnnouncement.InstructionId);
 		MarkTestCompleted();
 	}
+
+	[Fact]
+	public void PendingSuppressionAnnouncement_WithForgedAnnouncementCorrelation_IsRejectedBeforeAUsableSession()
+	{
+		var builder = ArrangePendingSuppressionAnnouncement(out _);
+
+		var forged = RecoveryPayloadTestDriver
+			.Parse(builder.GetGameState()!.Serialize())
+			.RewritePendingConfirmationInstructionId(Guid.NewGuid())
+			.Serialize();
+		var recoveredService = new GameService();
+		Action rehydrate = () => recoveredService.RehydrateSession(forged);
+
+		rehydrate.Should().Throw<InvalidOperationException>();
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void PendingSuppressionAnnouncement_WithForgedAnnouncementShape_IsRejectedBeforeAUsableSession()
+	{
+		var builder = ArrangePendingSuppressionAnnouncement(out _);
+		var bystander = builder.GetGameState()!.GetPlayers()
+			.First(player => player.State.Health == PlayerHealth.Alive);
+
+		var forged = RecoveryPayloadTestDriver
+			.Parse(builder.GetGameState()!.Serialize())
+			.RewritePendingConfirmationAffectedPlayer(bystander.Id)
+			.Serialize();
+		var recoveredService = new GameService();
+		Action rehydrate = () => recoveredService.RehydrateSession(forged);
+
+		rehydrate.Should().Throw<InvalidOperationException>();
+		MarkTestCompleted();
+	}
+
+	private GameTestBuilder ArrangePendingSuppressionAnnouncement(
+		out ConfirmationInstruction announcement)
+	{
+		var builder = CreateBuilder()
+			.WithPlayers(6)
+			.WithRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Elder,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		var werewolf = players[0];
+		var elder = players[1];
+		builder.ArrangeKnownPhysicalRole(elder.Id, MainRoleType.Elder);
+		builder.ConfirmGameStart();
+		builder.CompleteNightPhase([werewolf.Id], elder.Id);
+		builder.CompleteDawnPhase();
+		var debate = InstructionAssert.ExpectType<ConfirmationInstruction>(
+			builder.GetCurrentInstruction());
+		var vote = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+			builder.Process(debate.CreateResponse()));
+		var reveal = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+			builder.Process(vote.CreateResponse([elder.Id])));
+		var elimination =
+			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+				builder.Process(reveal.CreateResponse()));
+		announcement =
+			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+				builder.Process(elimination.CreateResponse()));
+		announcement.Semantic.Should().Be(
+			ModeratorInstructionSemantic.AnnounceVillagerRolePowerSuppression);
+		return builder;
+	}
 }

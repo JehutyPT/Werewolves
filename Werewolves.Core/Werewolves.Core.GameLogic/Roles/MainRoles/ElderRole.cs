@@ -28,7 +28,7 @@ internal readonly record struct ElderSuppressionExecution(
 	int TriggeringVoteOutcomeLogIndex,
 	string CascadeScopeId);
 
-internal sealed class ElderRole : RoleHookListener<ElderRoleState>
+internal sealed class ElderRole : RoleHookListener, IDeclaredRoleWorkflow
 {
 	private static readonly RolePowerDefinition ResistancePower = new(
 		new RolePowerIdentifier("elder-werewolf-attack-resistance"),
@@ -39,17 +39,76 @@ internal sealed class ElderRole : RoleHookListener<ElderRoleState>
 		RolePowerCategory.Reactive);
 
 	private readonly RolePowerAvailabilityGateway _availabilityGateway;
+	private readonly RoleWorkflowRuntime _voteWorkflowRuntime;
 
 	internal ElderRole(RolePowerAvailabilityGateway availabilityGateway)
 	{
 		ArgumentNullException.ThrowIfNull(availabilityGateway);
 		_availabilityGateway = availabilityGateway;
+
+		var suppressionAnnouncementWait =
+			RecoverableWait<ElderRoleState, ConfirmationInstruction>.Replayable(
+				Id,
+				GameHook.OnVoteConcluded,
+				startState: null,
+				ElderRoleState.AwaitingSuppressionAnnouncement,
+				ModeratorInstructionSemantic
+					.AnnounceVillagerRolePowerSuppression,
+				ExpectedInputType.Continue,
+				static _ => false,
+				static (_, _) => { },
+				CreateCommittedSuppressionAnnouncement,
+				static (_, instruction) =>
+					instruction.Semantic ==
+					ModeratorInstructionSemantic
+						.AnnounceVillagerRolePowerSuppression,
+				ValidateSuppressionAnnouncementInstruction);
+		_voteWorkflowRuntime = new RoleWorkflowRuntime(
+			Id,
+			GameHook.OnVoteConcluded,
+			[
+				suppressionAnnouncementWait,
+				new RoleWorkflowDecisionStep<ElderRoleState>(
+					Id,
+					GameHook.OnVoteConcluded,
+					startState: null,
+					static _ => true,
+					(session, input) => CommitSuppressionAndRequestAnnouncement(
+						session,
+						input,
+						suppressionAnnouncementWait)),
+				new RoleWorkflowDecisionStep<ElderRoleState>(
+					Id,
+					GameHook.OnVoteConcluded,
+					ElderRoleState.AwaitingSuppressionAnnouncement,
+					static _ => true,
+					AcknowledgeSuppressionAnnouncement),
+				new RoleWorkflowCompletionStep<ElderRoleState>(
+					Id,
+					GameHook.OnVoteConcluded,
+					ElderRoleState.Complete,
+					ElderRoleState.Complete,
+					static _ => true)
+			]);
 	}
 
 	internal override string PublicName => GameStrings.ElderRoleName;
 
 	public override ListenerIdentifier Id =>
 		ListenerIdentifier.Listener(MainRoleType.Elder);
+
+	RoleWorkflowRuntime IDeclaredRoleWorkflow.WorkflowRuntime =>
+		_voteWorkflowRuntime;
+
+	// The Elder keeps its first-Night hook registration, which declares no
+	// workflow and therefore still produces no first-Night instruction. Its
+	// Dawn resistance Role Identification stays centrally navigated.
+	RoleWorkflowRuntime? IDeclaredRoleWorkflow.GetWorkflowRuntime(
+		GameHook hook) => hook switch
+	{
+		GameHook.OnVoteConcluded => _voteWorkflowRuntime,
+		_ => null
+	};
 
 	internal bool IsResistanceAvailable(
 		GameSession session,
@@ -266,33 +325,6 @@ internal sealed class ElderRole : RoleHookListener<ElderRoleState>
 		session.IdentifyRole(selectedPlayerIds.ToHashSet(), MainRoleType.Elder);
 	}
 
-	public override bool TryResolvePendingInstructionContinuation(
-		GameHook hook,
-		GameSession session,
-		ModeratorInstruction pendingInstruction,
-		out string listenerState)
-	{
-		listenerState = string.Empty;
-		var suppression =
-			GameSessionQueries.GetVillagerRolePowerSuppression(session);
-		if (hook != GameHook.OnVoteConcluded ||
-		    suppression == null ||
-		    GameSessionQueries
-			    .IsVillagerRolePowerSuppressionAnnouncementAcknowledged(
-				    session,
-				    suppression.AnnouncementInstructionId) ||
-		    !MatchesSuppressionAnnouncement(
-			    pendingInstruction,
-			    suppression.AnnouncementInstructionId))
-		{
-			return false;
-		}
-
-		listenerState =
-			ElderRoleState.AwaitingSuppressionAnnouncement.ToString();
-		return true;
-	}
-
 	internal static void
 		ValidateBorrowedPendingSuppressionRecoveryInstruction(
 			GameSession session)
@@ -342,31 +374,19 @@ internal sealed class ElderRole : RoleHookListener<ElderRoleState>
 		return ExecuteCore(session, input);
 	}
 
-	protected override List<RoleStateMachineStage> DefineStateMachineStages() =>
-	[
-		CreateStage(
-			GameHook.OnVoteConcluded,
-			null,
-			[
-				ElderRoleState.AwaitingSuppressionAnnouncement,
-				ElderRoleState.Complete
-			],
-			CommitSuppressionAndRequestAnnouncement),
-		CreateStage(
-			GameHook.OnVoteConcluded,
-			ElderRoleState.AwaitingSuppressionAnnouncement,
-			ElderRoleState.Complete,
-			AcknowledgeSuppressionAnnouncement),
-		CreateEndStage(
-			GameHook.OnVoteConcluded,
-			ElderRoleState.Complete,
-			(_, _) => HookListenerActionResult.Complete(
-				ElderRoleState.Complete))
-	];
+	protected override HookListenerActionResult ExecuteCore(
+		GameSession session,
+		ModeratorResponse input) =>
+		_voteWorkflowRuntime.Execute(
+			session,
+			input,
+			session.Execution.GetCurrentListenerState<ElderRoleState>(Id));
 
 	private HookListenerActionResult CommitSuppressionAndRequestAnnouncement(
 		GameSession session,
-		ModeratorResponse input)
+		ModeratorResponse input,
+		RecoverableWait<ElderRoleState, ConfirmationInstruction>
+			suppressionAnnouncementWait)
 	{
 		if (!TryResolveVillageVoteSuppression(session, out var execution))
 		{
@@ -397,9 +417,48 @@ internal sealed class ElderRole : RoleHookListener<ElderRoleState>
 				AnnouncementInstructionId = announcementInstructionId
 			});
 
-		return HookListenerActionResult.NeedInput(
-			CreateSuppressionAnnouncement(announcementInstructionId),
-			ElderRoleState.AwaitingSuppressionAnnouncement);
+		return suppressionAnnouncementWait.Execute(session, input);
+	}
+
+	private static ConfirmationInstruction CreateCommittedSuppressionAnnouncement(
+		GameSession session)
+	{
+		var suppression =
+			GameSessionQueries.GetVillagerRolePowerSuppression(session)
+			?? throw new InvalidOperationException(
+				"The Elder suppression announcement requires a committed suppression fact.");
+		return CreateSuppressionAnnouncement(
+			suppression.AnnouncementInstructionId);
+	}
+
+	private static void ValidateSuppressionAnnouncementInstruction(
+		GameSession session,
+		ConfirmationInstruction instruction)
+	{
+		var suppression =
+			GameSessionQueries.GetVillagerRolePowerSuppression(session);
+		if (suppression == null)
+		{
+			throw new RoleWorkflowInputRejectionException(
+				"The Elder suppression announcement requires a committed suppression fact.");
+		}
+
+		if (GameSessionQueries
+		    .IsVillagerRolePowerSuppressionAnnouncementAcknowledged(
+			    session,
+			    suppression.AnnouncementInstructionId))
+		{
+			throw new RoleWorkflowInputRejectionException(
+				"The Elder suppression announcement was already acknowledged.");
+		}
+
+		if (!MatchesSuppressionAnnouncement(
+			    instruction,
+			    suppression.AnnouncementInstructionId))
+		{
+			throw new RoleWorkflowInputRejectionException(
+				"The Elder suppression announcement does not match its committed suppression fact.");
+		}
 	}
 
 	private static HookListenerActionResult
