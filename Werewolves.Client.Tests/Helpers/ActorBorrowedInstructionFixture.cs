@@ -238,7 +238,8 @@ internal static class ActorBorrowedInstructionFixture
 			listener,
 			fixture.Session,
 			wake.CreateResponse(),
-			"Seer target selection");
+			"Seer target selection",
+			retainExecution: true);
 		var feedback = AdvanceToInstruction<ConfirmationInstruction>(
 			listener,
 			fixture.Session,
@@ -322,7 +323,8 @@ internal static class ActorBorrowedInstructionFixture
 			listener,
 			fixture,
 			fixture.ActorSleep.CreateResponse(),
-			"Defender wake");
+			"Defender wake",
+			retainExecution: true);
 		var selection = AdvanceToInstruction<SelectPlayersInstruction>(
 			listener,
 			fixture.Session,
