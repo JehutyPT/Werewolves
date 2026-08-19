@@ -1,10 +1,12 @@
 using Werewolves.Core.GameLogic.Interfaces;
 using Werewolves.Core.GameLogic.Models.GameHookListeners;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
+using Werewolves.Core.GameLogic.Queries;
 using Werewolves.Core.GameLogic.RolePowers;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
+using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Resources;
@@ -12,33 +14,213 @@ using Werewolves.Core.StateModels.Serialization;
 
 namespace Werewolves.Core.GameLogic.Roles.MainRoles;
 
+internal enum SeerRoleState
+{
+	Awake,
+	AwaitingTargetSelection,
+	AwaitingFeedbackAcknowledgement,
+	ReadyToSleep,
+	Asleep
+}
+
 /// <summary>
-/// Seer role implementation using the polymorphic hook listener pattern.
-/// Inherits from StandardNightRoleHookListener for standard target selection workflow.
+/// Seer role implementation using declared recoverable waits.
 /// </summary>
-internal class SeerRole : ImmediateFeedbackNightRoleHookListener,
-	ITargetPrivateRolePowerRecoveryCapability
+internal sealed class SeerRole
+	: RoleHookListener,
+		IDeclaredRoleWorkflow
 {
 	private sealed record ExecutionContext(
 		IPlayer ActingPlayer,
 		RolePowerInstance PowerInstance,
 		bool IsBorrowed);
 
-	private readonly RolePowerAvailabilityGateway _rolePowerAvailabilityGateway;
+	private readonly RolePowerAvailabilityGateway _availabilityGateway;
+	private readonly RoleWorkflowRuntime _workflowRuntime;
 
 	private static readonly RolePowerDefinition WerewolfDetectionPower = new(
 		new RolePowerIdentifier("seer-werewolf-detection"),
 		RolePowerCategory.Chosen);
 
-	internal SeerRole(RolePowerAvailabilityGateway rolePowerAvailabilityGateway)
+	internal SeerRole(RolePowerAvailabilityGateway availabilityGateway)
 	{
-		ArgumentNullException.ThrowIfNull(rolePowerAvailabilityGateway);
-		_rolePowerAvailabilityGateway = rolePowerAvailabilityGateway;
+		ArgumentNullException.ThrowIfNull(availabilityGateway);
+		_availabilityGateway = availabilityGateway;
+
+		var identificationWait = RecoverableWait<
+				SeerRoleState,
+				SelectPlayersInstruction>
+			.ReplayableWithAcceptedObservationHandoff(
+				Id,
+				GameHook.NightMainActionLoop,
+				startState: null,
+				SeerRoleState.Awake,
+				ModeratorInstructionSemantic.IdentifyRoleHolders,
+				ExpectedInputType.PlayerSelection,
+				static _ => false,
+				static (_, _) => { },
+				CreateIdentificationInstruction,
+				static (_, instruction) =>
+					instruction is SelectPlayersInstruction
+					{
+						RoleIdentification: MainRoleType.Seer
+					},
+				ValidateIdentificationInstruction,
+				(_, _, cursor) => ValidateCallHandoff(cursor),
+				static _ => SeerRoleState.Awake);
+		var wakeWait = RecoverableWait<
+				SeerRoleState,
+				ConfirmationInstruction>
+			.ReplayableWithAcceptedObservationHandoff(
+				Id,
+				GameHook.NightMainActionLoop,
+				startState: null,
+				SeerRoleState.Awake,
+				ModeratorInstructionSemantic.WakeRole,
+				ExpectedInputType.Continue,
+				static _ => false,
+				static (_, _) => { },
+				CreateWakeInstruction,
+				ClaimsWakeRecoveryCandidate,
+				ValidateWakeInstruction,
+				(_, _, cursor) => ValidateCallHandoff(cursor),
+				static _ => SeerRoleState.Awake);
+		var targetSelectionWait = RecoverableWait<
+				SeerRoleState,
+				SelectPlayersInstruction>
+			.ReplayableWithAcceptedObservationHandoff(
+				Id,
+				GameHook.NightMainActionLoop,
+				SeerRoleState.Awake,
+				SeerRoleState.AwaitingTargetSelection,
+				ModeratorInstructionSemantic.SelectSeerTarget,
+				ExpectedInputType.PlayerSelection,
+				static _ => false,
+				static (_, _) => { },
+				CreateTargetSelectionInstruction,
+				(session, instruction) =>
+					instruction.Semantic ==
+					ModeratorInstructionSemantic.SelectSeerTarget &&
+					HasExpectedAffectedActingPlayer(session, instruction),
+				ValidateTargetSelectionInstruction,
+				(session, _, cursor) =>
+					ValidateIdentificationHandoff(session, cursor),
+				static _ => SeerRoleState.AwaitingTargetSelection);
+		var unavailableSleepWait = RecoverableWait<
+				SeerRoleState,
+				ConfirmationInstruction>
+			.ReplayableWithAcceptedObservationHandoff(
+				Id,
+				GameHook.NightMainActionLoop,
+				SeerRoleState.Awake,
+				SeerRoleState.ReadyToSleep,
+				ModeratorInstructionSemantic.PutRoleToSleep,
+				ExpectedInputType.Continue,
+				static _ => false,
+				static (_, _) => { },
+				CreateUnavailableSleepInstruction,
+				(session, instruction) =>
+					instruction.Semantic ==
+					ModeratorInstructionSemantic.PutRoleToSleep &&
+					CountCheckCommitsThisNight(session, 2) == 0 &&
+					HasExpectedAffectedActingPlayer(session, instruction),
+				ValidateUnavailableSleepInstruction,
+				(session, _, cursor) =>
+					ValidateIdentificationHandoff(session, cursor),
+				static _ => SeerRoleState.ReadyToSleep);
+		var feedbackWait = RecoverableWait<
+				SeerRoleState,
+				ConfirmationInstruction>
+			.DomainDurable(
+				Id,
+				GameHook.NightMainActionLoop,
+				SeerRoleState.AwaitingTargetSelection,
+				SeerRoleState.AwaitingFeedbackAcknowledgement,
+				ModeratorInstructionSemantic.RevealSeerResult,
+				ExpectedInputType.Continue,
+				static _ => false,
+				CommitTargetSelection,
+				CreateFeedbackInstruction,
+				ClaimsCommittedFeedback,
+				ValidateFeedbackInstruction,
+				ValidateFeedbackRecoveryContext,
+				static _ => SeerRoleState.AwaitingFeedbackAcknowledgement,
+				ValidateCommittedRecoveryBoundary);
+		var feedbackSleepWait = RecoverableWait<
+				SeerRoleState,
+				ConfirmationInstruction>
+			.Replayable(
+				Id,
+				GameHook.NightMainActionLoop,
+				SeerRoleState.AwaitingFeedbackAcknowledgement,
+				SeerRoleState.ReadyToSleep,
+				ModeratorInstructionSemantic.PutRoleToSleep,
+				ExpectedInputType.Continue,
+				static _ => true,
+				static (_, _) => { },
+				CreateFeedbackSleepInstruction,
+				static (_, _) => false,
+				ValidateFeedbackSleepInstruction);
+
+		_workflowRuntime = new RoleWorkflowRuntime(
+			Id,
+			GameHook.NightMainActionLoop,
+			[
+				identificationWait,
+				wakeWait,
+				targetSelectionWait,
+				unavailableSleepWait,
+				feedbackWait,
+				feedbackSleepWait,
+				new RoleWorkflowDecisionStep<SeerRoleState>(
+					Id,
+					GameHook.NightMainActionLoop,
+					startState: null,
+					static _ => true,
+					(session, input) => BeginCall(
+						session,
+						input,
+						identificationWait,
+						wakeWait)),
+				new RoleWorkflowDecisionStep<SeerRoleState>(
+					Id,
+					GameHook.NightMainActionLoop,
+					SeerRoleState.Awake,
+					static _ => true,
+					(session, input) => PrepareNightPower(
+						session,
+						input,
+						targetSelectionWait,
+						unavailableSleepWait)),
+				new RoleWorkflowDecisionStep<SeerRoleState>(
+					Id,
+					GameHook.NightMainActionLoop,
+					SeerRoleState.AwaitingTargetSelection,
+					static _ => true,
+					(session, input) =>
+						feedbackWait.Execute(session, input)),
+				new RoleWorkflowCompletionStep<SeerRoleState>(
+					Id,
+					GameHook.NightMainActionLoop,
+					SeerRoleState.ReadyToSleep,
+					SeerRoleState.Asleep,
+					static _ => true),
+				new RoleWorkflowCompletionStep<SeerRoleState>(
+					Id,
+					GameHook.NightMainActionLoop,
+					SeerRoleState.Asleep,
+					SeerRoleState.Asleep,
+					static _ => true)
+			]);
 	}
 
-    public override ListenerIdentifier Id => ListenerIdentifier.Listener(MainRoleType.Seer);
-    internal override string PublicName => GameStrings.SeerRoleName;
-    protected override bool HasNightPowers => true;
+	public override ListenerIdentifier Id =>
+		ListenerIdentifier.Listener(MainRoleType.Seer);
+
+	internal override string PublicName => GameStrings.SeerRoleName;
+
+	RoleWorkflowRuntime IDeclaredRoleWorkflow.WorkflowRuntime =>
+		_workflowRuntime;
 
 	public override HookListenerActionResult Execute(
 		GameSession session,
@@ -52,98 +234,20 @@ internal class SeerRole : ImmediateFeedbackNightRoleHookListener,
 		return base.Execute(session, input);
 	}
 
-	public override bool TryResolvePendingInstructionContinuation(
-		GameHook hook,
+	protected override HookListenerActionResult ExecuteCore(
 		GameSession session,
-		ModeratorInstruction pendingInstruction,
-		out string listenerState)
-	{
-		listenerState = string.Empty;
-		if (hook == GameHook.NightMainActionLoop &&
-		    TryResolveBorrowedExecution(session, out var execution))
-		{
-			switch (pendingInstruction)
-			{
-				case ConfirmationInstruction
-					{
-						Semantic: ModeratorInstructionSemantic.WakeRole
-					} wake:
-					ValidateBorrowedWake(execution, wake);
-					listenerState = WokenUpStateEnum.ToString();
-					return true;
-				case SelectPlayersInstruction
-					{
-						Semantic: ModeratorInstructionSemantic.SelectSeerTarget
-					} selection:
-					ValidateBorrowedSelectionInstruction(
-						session,
-						execution,
-						selection);
-					listenerState = AwaitingTargetSelectionEnum.ToString();
-					return true;
-				case ConfirmationInstruction
-					{
-						Semantic: ModeratorInstructionSemantic.RevealSeerResult
-					} feedback:
-					ValidateBorrowedFeedback(
-						session,
-						execution,
-						GetBorrowedCommit(session, execution),
-						feedback);
-					listenerState = AwaitingModeratorFeedbackEnum.ToString();
-					return true;
-				case ConfirmationInstruction
-					{
-						Semantic: ModeratorInstructionSemantic.PutRoleToSleep
-					} sleep:
-					ValidateBorrowedSleep(execution, sleep);
-					listenerState = ReadyToSleepStateEnum.ToString();
-					return true;
-			}
-		}
-
-		if (hook == GameHook.NightMainActionLoop &&
-		    HasExpectedAffectedRoleHolders(session, pendingInstruction))
-		{
-			switch (pendingInstruction)
-			{
-				case SelectPlayersInstruction
-				{
-					Semantic:
-						ModeratorInstructionSemantic.SelectSeerTarget
-				}:
-					listenerState =
-						ImmediateFeedbackNightRoleState
-							.AwaitingTargetSelection
-							.ToString();
-					return true;
-				case ConfirmationInstruction
-				{
-					Semantic:
-						ModeratorInstructionSemantic.PutRoleToSleep
-				}:
-					listenerState =
-						ImmediateFeedbackNightRoleState
-							.AwaitingSleepConfirmation
-							.ToString();
-					return true;
-			}
-		}
-
-		return base.TryResolvePendingInstructionContinuation(
-			hook,
+		ModeratorResponse input) =>
+		_workflowRuntime.Execute(
 			session,
-			pendingInstruction,
-			out listenerState);
-	}
+			input,
+			session.Execution.GetCurrentListenerState<SeerRoleState>(Id));
 
-	bool ITargetPrivateRolePowerRecoveryCapability
-		.TryValidateCommittedRecoveryBoundary(
-			GameSession session,
-			ModeratorInstruction? startingInstruction,
-			ModeratorResponse input,
-			TargetPrivateRolePowerRecoveryBoundary committedBoundary,
-			ModeratorInstruction nextInstruction)
+	private bool ValidateCommittedRecoveryBoundary(
+		GameSession session,
+		ModeratorInstruction? startingInstruction,
+		ModeratorResponse input,
+		TargetPrivateRolePowerRecoveryBoundary committedBoundary,
+		ConfirmationInstruction nextInstruction)
 	{
 		if (committedBoundary.ActionType != NightActionType.SeerCheck)
 		{
@@ -162,29 +266,30 @@ internal class SeerRole : ImmediateFeedbackNightRoleHookListener,
 			input.SelectedPlayerIds is not { Count: 1 } selectedPlayerIds ||
 			selectedPlayerIds.Single() != commit.TargetPlayerId ||
 			!selection.SelectablePlayerIds.Contains(commit.TargetPlayerId) ||
-			nextInstruction is not ConfirmationInstruction
-			{
-				Semantic: ModeratorInstructionSemantic.RevealSeerResult
-			} feedback)
+			nextInstruction.Semantic !=
+				ModeratorInstructionSemantic.RevealSeerResult)
 		{
 			throw new InvalidOperationException(
 				"The Actor borrowed Seer commit does not match its accepted target and feedback continuation.");
 		}
 
 		ValidateBorrowedSelectionInstruction(session, execution, selection);
-		ValidateBorrowedFeedback(session, execution, commit, feedback);
+		ValidateBorrowedFeedback(session, execution, commit, nextInstruction);
 		return true;
 	}
 
-	void ITargetPrivateRolePowerRecoveryCapability.ValidateRecoveryCursorIdentity(
+	private void ValidateFeedbackRecoveryContext(
 		GameSession session,
+		ConfirmationInstruction instruction,
 		DomainRecoveryCursor cursor)
 	{
 		ArgumentNullException.ThrowIfNull(cursor);
 		var execution = ResolveBorrowedExecution(session);
 		var commit = GetBorrowedCommit(session, execution);
-		var activation = session.GetModeratorActiveActorBorrowedRolePowerActivation()!;
-		if (cursor.Kind != DomainRecoveryCursorKind.TargetPrivateRolePowerCommit ||
+		var activation =
+			session.GetModeratorActiveActorBorrowedRolePowerActivation()!;
+		if (cursor.Kind !=
+				DomainRecoveryCursorKind.TargetPrivateRolePowerCommit ||
 			cursor.SourceRole != MainRoleType.Seer ||
 			cursor.CommittedActionType != NightActionType.SeerCheck ||
 			!StringComparer.Ordinal.Equals(
@@ -202,72 +307,149 @@ internal class SeerRole : ImmediateFeedbackNightRoleHookListener,
 			throw new InvalidOperationException(
 				"The Actor borrowed Seer recovery cursor has an invalid target-private Role Power identity.");
 		}
+
+		ValidateBorrowedFeedback(session, execution, commit, instruction);
 	}
 
-	protected override HookListenerActionResult HandleRoleWakeupAndId(
+	private HookListenerActionResult BeginCall(
 		GameSession session,
-		ModeratorResponse input)
+		ModeratorResponse input,
+		RecoverableWait<SeerRoleState, SelectPlayersInstruction>
+			identificationWait,
+		RecoverableWait<SeerRoleState, ConfirmationInstruction> wakeWait) =>
+		!TryResolveBorrowedExecution(session, out _) &&
+		!IsCompleteHolderSetKnown(session)
+			? identificationWait.Execute(session, input)
+			: wakeWait.Execute(session, input);
+
+	private HookListenerActionResult PrepareNightPower(
+		GameSession session,
+		ModeratorResponse input,
+		RecoverableWait<SeerRoleState, SelectPlayersInstruction>
+			targetSelectionWait,
+		RecoverableWait<SeerRoleState, ConfirmationInstruction> sleepWait)
 	{
-		if (!TryResolveBorrowedExecution(session, out var execution))
+		if (!TryResolveBorrowedExecution(session, out _) &&
+		    !IsCompleteHolderSetKnown(session))
 		{
-			return base.HandleRoleWakeupAndId(session, input);
+			IdentifyCompleteLivingRoleHolderSet(
+				session,
+				input.SelectedPlayerIds?.ToHashSet()
+				?? throw new InvalidOperationException(
+					"Seer identification requires a Player selection."));
 		}
 
-		return HookListenerActionResult.NeedInput(
-			new ConfirmationInstruction(
-				ModeratorInstructionSemantic.WakeRole,
-				GameStrings.RoleWakesUp.Format(GameStrings.ActorRoleName),
-				affectedPlayerIds: [execution.ActingPlayer.Id]),
-			WokenUpStateEnum);
-	}
-
-	protected override HookListenerActionResult HandleNightPowerUse_AndId(
-		GameSession session,
-		ModeratorResponse input) =>
-		TryResolveBorrowedExecution(session, out _)
-			? HandleNightPowerUse(session, input)
-			: base.HandleNightPowerUse_AndId(session, input);
-
-	protected override HookListenerActionResult HandleTargetSelectionRequest(
-		GameSession session,
-		ModeratorResponse input)
-	{
 		var execution = ResolveExecution(session);
-		var context = _rolePowerAvailabilityGateway.Evaluate(
+		var availability = _availabilityGateway.Evaluate(
 			new RolePowerAttempt(
 				session,
 				execution.ActingPlayer,
 				MainRoleType.Seer,
 				WerewolfDetectionPower,
 				execution.PowerInstance));
-
-		if (context.AvailabilityResult.IsAvailable)
+		if (!availability.AvailabilityResult.IsAvailable)
 		{
-			if (execution.IsBorrowed &&
-			    GetBorrowedPotentialTargets(
-				    session,
-				    execution.ActingPlayer.Id).Count == 0)
-			{
-				return PrepareSleepInstruction(session);
-			}
-
-			return base.HandleTargetSelectionRequest(session, input);
-		}
-		if (execution.IsBorrowed)
-		{
-			return PrepareSleepInstruction(session);
+			return sleepWait.Execute(session, input);
 		}
 
-		return HookListenerActionResult.NeedInput(
-			new ConfirmationInstruction(
-				ModeratorInstructionSemantic.PutRoleToSleep,
-				GameStrings.RoleGoesToSleepSingle.Format(PublicName),
-				affectedPlayerIds: [execution.ActingPlayer.Id]),
-			ReadyToSleepStateEnum);
+		return execution.IsBorrowed &&
+		       GetBorrowedPotentialTargets(
+			       session,
+			       execution.ActingPlayer.Id).Count == 0
+			? sleepWait.Execute(session, input)
+			: targetSelectionWait.Execute(session, input);
 	}
 
-    protected override ModeratorInstruction GenerateTargetSelectionInstruction(GameSession session, ModeratorResponse input)
-    {
+	private void CommitTargetSelection(
+		GameSession session,
+		ModeratorResponse input)
+	{
+		var execution = ResolveExecution(session);
+		if (!execution.IsBorrowed)
+		{
+			session.PerformNightAction(
+				NightActionType.SeerCheck,
+				input.SelectedPlayerIds!.First());
+			return;
+		}
+
+		if (input.SelectedPlayerIds is not { Count: 1 } selectedPlayerIds)
+		{
+			throw new InvalidOperationException(
+				GameStrings.ActorBorrowedRolePowerInvalidResponse);
+		}
+
+		var targetId = selectedPlayerIds.Single();
+		if (!GetBorrowedPotentialTargets(session, execution.ActingPlayer.Id)
+			    .Contains(targetId))
+		{
+			throw new InvalidOperationException(
+				GameStrings.ActorBorrowedRolePowerInvalidResponse);
+		}
+
+		var targetKnowledge = session.GetFactionAgentKnowledge(
+			targetId,
+			Faction.Werewolf);
+		if (targetKnowledge is not
+		    (FactionAgentKnowledge.KnownAgent or
+		     FactionAgentKnowledge.KnownNonAgent))
+		{
+			throw new InvalidOperationException(
+				"The current Werewolf Faction Agent fact is incomplete.");
+		}
+
+		session.CommitActorBorrowedSeerCheck(
+			CreatePowerIdentity(execution),
+			targetId,
+			targetKnowledge);
+	}
+
+	private SelectPlayersInstruction CreateIdentificationInstruction(
+		GameSession session)
+	{
+		var selectablePlayerIds = GetIdentificationCandidates(session);
+		var roleCount = GetExpectedLivingRoleHolderCount(session);
+		var committedLivingRoleHolderCount =
+			GetCommittedLivingRoleHolderIds(session).Count;
+		if (roleCount <= 0 ||
+		    committedLivingRoleHolderCount > roleCount ||
+		    selectablePlayerIds.Count < roleCount)
+		{
+			throw new InvalidOperationException(
+				"Confirmed Role knowledge contradicts the required Living Role Holder count.");
+		}
+
+		return new SelectPlayersInstruction(
+			ModeratorInstructionSemantic.IdentifyRoleHolders,
+			selectablePlayerIds: selectablePlayerIds,
+			countConstraint: NumberRangeConstraint.Exact(roleCount),
+			publicAnnouncement: GameStrings.RoleWakesUp.Format(PublicName),
+			privateInstruction: roleCount == 1
+				? GameStrings.RoleSingleIdentificationPrompt.Format(PublicName)
+				: GameStrings.RoleMultipleIdentificationPrompt.Format(
+					PublicName),
+			affectedPlayerIds: null,
+			roleIdentification: MainRoleType.Seer);
+	}
+
+	private ConfirmationInstruction CreateWakeInstruction(GameSession session)
+	{
+		if (!TryResolveBorrowedExecution(session, out var borrowedExecution))
+		{
+			return new ConfirmationInstruction(
+				ModeratorInstructionSemantic.WakeRole,
+				GameStrings.RoleWakesUp.Format(PublicName));
+		}
+
+		return new ConfirmationInstruction(
+			ModeratorInstructionSemantic.WakeRole,
+			GameStrings.RoleWakesUp.Format(GameStrings.ActorRoleName),
+			affectedPlayerIds: [borrowedExecution.ActingPlayer.Id]);
+	}
+
+	private SelectPlayersInstruction CreateTargetSelectionInstruction(
+		GameSession session)
+	{
 		var execution = ResolveExecution(session);
 		if (execution.IsBorrowed)
 		{
@@ -276,99 +458,343 @@ internal class SeerRole : ImmediateFeedbackNightRoleHookListener,
 				publicAnnouncement:
 					GameStrings.RoleWakesUp.Format(GameStrings.ActorRoleName),
 				countConstraint: NumberRangeConstraint.Single,
-				selectablePlayerIds:
-					GetBorrowedPotentialTargets(session, execution.ActingPlayer.Id),
+				selectablePlayerIds: GetBorrowedPotentialTargets(
+					session,
+					execution.ActingPlayer.Id),
 				privateInstruction: GameStrings.SeerNightActionPrompt,
 				affectedPlayerIds: [execution.ActingPlayer.Id]);
 		}
 
-		var potentialTargets = GetPotentialTargets(session, false);
-
-        return new SelectPlayersInstruction(
+		return new SelectPlayersInstruction(
 			ModeratorInstructionSemantic.SelectSeerTarget,
-            publicAnnouncement: GameStrings.SeerNightActionPrompt,
-            countConstraint: NumberRangeConstraint.Single,
-            selectablePlayerIds: potentialTargets,
-			affectedPlayerIds: new List<Guid> { execution.ActingPlayer.Id }
-        );
-    }
+			publicAnnouncement: GameStrings.SeerNightActionPrompt,
+			countConstraint: NumberRangeConstraint.Single,
+			selectablePlayerIds: GetPotentialTargets(session, false),
+			affectedPlayerIds: [execution.ActingPlayer.Id]);
+	}
 
-    protected override ModeratorInstruction ProcessTargetSelectionWithFeedback(GameSession session, ModeratorResponse input)
-    {
-		var execution = ResolveExecution(session);
-		if (execution.IsBorrowed)
+	private ConfirmationInstruction CreateFeedbackInstruction(
+		GameSession session)
+	{
+		if (TryResolveBorrowedExecution(session, out var borrowedExecution))
 		{
-			if (input.SelectedPlayerIds is not { Count: 1 } selectedPlayerIds)
-			{
-				throw new InvalidOperationException(
-					GameStrings.ActorBorrowedRolePowerInvalidResponse);
-			}
-
-			var borrowedTargetId = selectedPlayerIds.Single();
-			if (!GetBorrowedPotentialTargets(session, execution.ActingPlayer.Id)
-				    .Contains(borrowedTargetId))
-			{
-					throw new InvalidOperationException(
-						GameStrings.ActorBorrowedRolePowerInvalidResponse);
-			}
-
-			var targetKnowledge = session.GetFactionAgentKnowledge(
-				borrowedTargetId,
-				Faction.Werewolf);
-			if (targetKnowledge is not
-				(FactionAgentKnowledge.KnownAgent or
-				 FactionAgentKnowledge.KnownNonAgent))
-			{
-				throw new InvalidOperationException(
-					"The current Werewolf Faction Agent fact is incomplete.");
-			}
-
-			var target = session.GetPlayer(borrowedTargetId);
-			session.CommitActorBorrowedSeerCheck(
-				CreatePowerIdentity(execution),
-				borrowedTargetId,
-				targetKnowledge);
+			var commit = GetBorrowedCommit(session, borrowedExecution);
 			return new ConfirmationInstruction(
 				ModeratorInstructionSemantic.RevealSeerResult,
 				privateInstruction: FormatSeerFeedback(
-					target.Name,
-					targetKnowledge),
-				affectedPlayerIds: [execution.ActingPlayer.Id]);
+					session.GetPlayer(commit.TargetPlayerId).Name,
+					commit.TargetAgentKnowledge),
+				affectedPlayerIds: [borrowedExecution.ActingPlayer.Id]);
 		}
-
-		var targetId = input.SelectedPlayerIds!.First();
-        var targetPlayer = session.GetPlayer(targetId);
-
-        bool targetWakesWithWerewolves =
-            session.GetFactionAgentKnowledge(targetId, Faction.Werewolf) ==
-            FactionAgentKnowledge.KnownAgent;
-
-        var privateFeedback = (targetWakesWithWerewolves
-            ? GameStrings.SeerResultWerewolfTeam
-            : GameStrings.SeerResultNotWerewolfTeam).Format(targetPlayer.Name);
-
-        session.PerformNightAction(NightActionType.SeerCheck, targetId);
 
 		return new ConfirmationInstruction(
 			ModeratorInstructionSemantic.RevealSeerResult,
-			privateInstruction: privateFeedback);
+			privateInstruction: FormatSeerFeedback(
+				session,
+				GetCommittedNativeCheckTargetId(session)));
 	}
 
-	protected override HookListenerActionResult PrepareSleepInstruction(
+	private ConfirmationInstruction CreateUnavailableSleepInstruction(
 		GameSession session)
 	{
-		if (!TryResolveBorrowedExecution(session, out var execution))
+		var execution = ResolveExecution(session);
+		return new ConfirmationInstruction(
+			ModeratorInstructionSemantic.PutRoleToSleep,
+			GameStrings.RoleGoesToSleepSingle.Format(
+				execution.IsBorrowed
+					? GameStrings.ActorRoleName
+					: PublicName),
+			affectedPlayerIds: [execution.ActingPlayer.Id]);
+	}
+
+	private ConfirmationInstruction CreateFeedbackSleepInstruction(
+		GameSession session)
+	{
+		if (!TryResolveBorrowedExecution(session, out var borrowedExecution))
 		{
-			return base.PrepareSleepInstruction(session);
+			return new ConfirmationInstruction(
+				ModeratorInstructionSemantic.PutRoleToSleep,
+				GameStrings.RoleGoesToSleepSingle.Format(PublicName));
 		}
 
-		return HookListenerActionResult.NeedInput(
-			new ConfirmationInstruction(
-				ModeratorInstructionSemantic.PutRoleToSleep,
-				GameStrings.RoleGoesToSleepSingle.Format(
-					GameStrings.ActorRoleName),
-				affectedPlayerIds: [execution.ActingPlayer.Id]),
-			ReadyToSleepStateEnum);
+		return new ConfirmationInstruction(
+			ModeratorInstructionSemantic.PutRoleToSleep,
+			GameStrings.RoleGoesToSleepSingle.Format(
+				GameStrings.ActorRoleName),
+			affectedPlayerIds: [borrowedExecution.ActingPlayer.Id]);
+	}
+
+	private void ValidateIdentificationInstruction(
+		GameSession session,
+		SelectPlayersInstruction instruction)
+	{
+		var roleCount = GetExpectedLivingRoleHolderCount(session);
+		if (TryResolveBorrowedExecution(session, out _) ||
+		    instruction.RoleIdentification != MainRoleType.Seer ||
+		    instruction.AffectedPlayerIds != null ||
+		    roleCount <= 0 ||
+		    instruction.CountConstraint !=
+			    NumberRangeConstraint.Exact(roleCount) ||
+		    !instruction.SelectablePlayerIds.SetEquals(
+			    GetIdentificationCandidates(session)))
+		{
+			throw new InvalidOperationException(
+				"The Seer identification instruction has invalid workflow context.");
+		}
+	}
+
+	private bool ClaimsWakeRecoveryCandidate(
+		GameSession session,
+		ModeratorInstruction instruction)
+	{
+		if (instruction.Semantic != ModeratorInstructionSemantic.WakeRole)
+		{
+			return false;
+		}
+
+		return TryResolveBorrowedExecution(session, out var borrowedExecution)
+			? instruction.AffectedPlayerIds is { Count: 1 } affectedPlayerIds &&
+			  affectedPlayerIds.Single() == borrowedExecution.ActingPlayer.Id
+			: instruction.AffectedPlayerIds == null;
+	}
+
+	private void ValidateWakeInstruction(
+		GameSession session,
+		ConfirmationInstruction instruction)
+	{
+		if (TryResolveBorrowedExecution(session, out var borrowedExecution))
+		{
+			ValidateBorrowedWake(borrowedExecution, instruction);
+			return;
+		}
+
+		if (instruction.PublicAnnouncement !=
+			    GameStrings.RoleWakesUp.Format(PublicName) ||
+		    instruction.PrivateInstruction != null ||
+		    instruction.AffectedPlayerIds != null ||
+		    GetLivingHolderIds(session).Count == 0)
+		{
+			throw new InvalidOperationException(
+				"The Seer wake instruction has invalid workflow context.");
+		}
+	}
+
+	private void ValidateTargetSelectionInstruction(
+		GameSession session,
+		SelectPlayersInstruction instruction)
+	{
+		var execution = ResolveExecution(session);
+		if (execution.IsBorrowed)
+		{
+			ValidateBorrowedSelectionInstruction(
+				session,
+				execution,
+				instruction);
+			return;
+		}
+
+		if (instruction.RoleIdentification != null ||
+		    instruction.PublicAnnouncement !=
+			    GameStrings.SeerNightActionPrompt ||
+		    instruction.PrivateInstruction != null ||
+		    instruction.CountConstraint != NumberRangeConstraint.Single ||
+		    !instruction.SelectablePlayerIds.SetEquals(
+			    GetPotentialTargets(session, false)) ||
+		    !HasExpectedAffectedActingPlayer(session, instruction))
+		{
+			throw new InvalidOperationException(
+				"The Seer target selection has invalid workflow context.");
+		}
+	}
+
+	private bool ClaimsCommittedFeedback(
+		GameSession session,
+		ModeratorInstruction instruction) =>
+		instruction.Semantic ==
+		ModeratorInstructionSemantic.RevealSeerResult &&
+		TryResolveBorrowedExecution(session, out _);
+
+	private void ValidateFeedbackInstruction(
+		GameSession session,
+		ConfirmationInstruction instruction)
+	{
+		if (TryResolveBorrowedExecution(session, out var borrowedExecution))
+		{
+			ValidateBorrowedFeedback(
+				session,
+				borrowedExecution,
+				GetBorrowedCommit(session, borrowedExecution),
+				instruction);
+			return;
+		}
+
+		if (instruction.PublicAnnouncement != null ||
+		    instruction.AffectedPlayerIds != null ||
+		    instruction.PrivateInstruction != FormatSeerFeedback(
+			    session,
+			    GetCommittedNativeCheckTargetId(session)))
+		{
+			throw new InvalidOperationException(
+				"The Seer feedback does not match its committed check.");
+		}
+	}
+
+	private void ValidateUnavailableSleepInstruction(
+		GameSession session,
+		ConfirmationInstruction instruction)
+	{
+		var execution = ResolveExecution(session);
+		if (execution.IsBorrowed)
+		{
+			ValidateBorrowedSleep(execution, instruction);
+		}
+		else if (instruction.PublicAnnouncement !=
+				 GameStrings.RoleGoesToSleepSingle.Format(PublicName) ||
+		         instruction.PrivateInstruction != null ||
+		         !HasExpectedAffectedActingPlayer(session, instruction))
+		{
+			throw new InvalidOperationException(
+				"The Seer sleep instruction has invalid workflow context.");
+		}
+
+		if (CountCheckCommitsThisNight(session, 1) != 0)
+		{
+			throw new InvalidOperationException(
+				"The Seer unavailable sleep has invalid workflow context.");
+		}
+	}
+
+	private void ValidateFeedbackSleepInstruction(
+		GameSession session,
+		ConfirmationInstruction instruction)
+	{
+		if (TryResolveBorrowedExecution(session, out var borrowedExecution))
+		{
+			ValidateBorrowedSleep(borrowedExecution, instruction);
+		}
+		else if (instruction.PublicAnnouncement !=
+				 GameStrings.RoleGoesToSleepSingle.Format(PublicName) ||
+		         instruction.PrivateInstruction != null ||
+		         instruction.AffectedPlayerIds != null)
+		{
+			throw new InvalidOperationException(
+				"The Seer sleep instruction has invalid workflow context.");
+		}
+
+		if (CountCheckCommitsThisNight(session, 2) != 1)
+		{
+			throw new InvalidOperationException(
+				"The Seer feedback sleep requires its committed check.");
+		}
+	}
+
+	private static void ValidateCallHandoff(
+		AcceptedObservationRecoveryCursor cursor)
+	{
+		if (cursor.Version !=
+			    AcceptedObservationRecoveryCursor.CurrentVersion ||
+		    cursor.ContinuationRole != MainRoleType.Seer)
+		{
+			throw new InvalidOperationException(
+				"The Seer call has invalid accepted-observation handoff context.");
+		}
+	}
+
+	private void ValidateIdentificationHandoff(
+		GameSession session,
+		AcceptedObservationRecoveryCursor cursor)
+	{
+		if (TryResolveBorrowedExecution(session, out _) ||
+		    cursor.Version !=
+			    AcceptedObservationRecoveryCursor.CurrentVersion ||
+		    cursor.ContinuationRole != MainRoleType.Seer ||
+		    cursor.ObservedRole != MainRoleType.Seer ||
+		    cursor.AcceptedObservationSemantic !=
+			    ModeratorInstructionSemantic.IdentifyRoleHolders ||
+		    cursor.RetainedLittleGirlGuidanceDecision != null)
+		{
+			throw new InvalidOperationException(
+				"The Seer continuation has invalid accepted-observation handoff context.");
+		}
+
+		var livingHolderIds = GetLivingHolderIds(session);
+		if (livingHolderIds.Count == 0 ||
+		    !session.GameHistoryLog.OfType<RoleIdentificationLogEntry>()
+			    .Any(entry =>
+				    entry.TurnNumber == session.TurnNumber &&
+				    entry.CurrentPhase == GamePhase.Night &&
+				    entry.Role == MainRoleType.Seer &&
+				    entry.PlayerIds.SetEquals(livingHolderIds)))
+		{
+			throw new InvalidOperationException(
+				"The Seer identification continuation has invalid durable context.");
+		}
+	}
+
+	private bool IsCompleteHolderSetKnown(GameSession session) =>
+		GameSessionQueries.IsCompleteLivingRoleHolderSetKnown(
+			session,
+			MainRoleType.Seer);
+
+	private HashSet<Guid> GetIdentificationCandidates(GameSession session) =>
+		session.GetPlayers()
+			.WithHealth(PlayerHealth.Alive)
+			.Where(player =>
+				player.State.CurrentRole == MainRoleType.Seer ||
+				(player.State.CurrentRole == null &&
+				 (player.State.ModeratorKnownRole == null ||
+				  player.State.ModeratorKnownRole == MainRoleType.Seer)))
+			.ToIdSet();
+
+	private HashSet<Guid> GetLivingHolderIds(GameSession session) =>
+		GetAliveRolePlayers(session)?.Select(player => player.Id).ToHashSet()
+		?? [];
+
+	private bool HasExpectedAffectedActingPlayer(
+		GameSession session,
+		ModeratorInstruction instruction)
+	{
+		if (instruction.AffectedPlayerIds is not { Count: 1 } affectedPlayerIds)
+		{
+			return false;
+		}
+
+		if (TryResolveBorrowedExecution(session, out var borrowedExecution))
+		{
+			return affectedPlayerIds.Single() ==
+			       borrowedExecution.ActingPlayer.Id;
+		}
+
+		var livingHolderIds = GetLivingHolderIds(session);
+		return livingHolderIds.Count > 0 &&
+		       livingHolderIds.SetEquals(affectedPlayerIds);
+	}
+
+	private int CountCheckCommitsThisNight(GameSession session, int limit) =>
+		TryResolveBorrowedExecution(session, out var borrowedExecution)
+			? GetBorrowedCommitsThisNight(session, borrowedExecution)
+				.Take(limit)
+				.Count()
+			: GameSessionQueries
+				.GetOrderedNightActionsThisNight(
+					session,
+					[NightActionType.SeerCheck])
+				.Take(limit)
+				.Count();
+
+	private static Guid GetCommittedNativeCheckTargetId(GameSession session)
+	{
+		var commits = GameSessionQueries.GetOrderedNightActionsThisNight(
+				session,
+				[NightActionType.SeerCheck])
+			.ToArray();
+		if (commits is not [{ TargetIds: [var targetId] }])
+		{
+			throw new InvalidOperationException(
+				"The Seer feedback requires exactly one committed check.");
+		}
+
+		return targetId;
 	}
 
 	private ExecutionContext ResolveExecution(GameSession session) =>
@@ -445,17 +871,24 @@ internal class SeerRole : ImmediateFeedbackNightRoleHookListener,
 			.Where(player => player.Id != actorId)
 			.ToIdSet();
 
+	private static IEnumerable<ActorBorrowedSeerCheckCommit>
+		GetBorrowedCommitsThisNight(
+			GameSession session,
+			ExecutionContext execution)
+	{
+		var identity = CreatePowerIdentity(execution);
+		return session.GetActorBorrowedSeerCheckCommits()
+			.Where(commit =>
+				commit.PowerIdentity == identity &&
+				commit.TurnNumber == session.TurnNumber &&
+				commit.CurrentPhase == GamePhase.Night);
+	}
+
 	private static ActorBorrowedSeerCheckCommit GetBorrowedCommit(
 		GameSession session,
 		ExecutionContext execution)
 	{
-		var identity = CreatePowerIdentity(execution);
-		var commits = session.GetActorBorrowedSeerCheckCommits()
-			.Where(commit =>
-				commit.PowerIdentity == identity &&
-				commit.TurnNumber == session.TurnNumber &&
-				commit.CurrentPhase == GamePhase.Night)
-			.ToArray();
+		var commits = GetBorrowedCommitsThisNight(session, execution).ToArray();
 		if (commits is not [var commit])
 		{
 			throw new InvalidOperationException(
@@ -496,8 +929,8 @@ internal class SeerRole : ImmediateFeedbackNightRoleHookListener,
 			wake.AffectedPlayerIds is not { Count: 1 } affectedIds ||
 			affectedIds.Single() != execution.ActingPlayer.Id)
 		{
-			throw new InvalidOperationException(
-				"The Actor borrowed Seer wake instruction is invalid.");
+			throw new RoleWorkflowInputRejectionException(
+				GameStrings.ActorBorrowedRolePowerInvalidResponse);
 		}
 	}
 
@@ -520,8 +953,8 @@ internal class SeerRole : ImmediateFeedbackNightRoleHookListener,
 			!selection.SelectablePlayerIds.ToHashSet().SetEquals(
 				potentialTargets))
 		{
-			throw new InvalidOperationException(
-				"The Actor borrowed Seer target instruction is invalid.");
+			throw new RoleWorkflowInputRejectionException(
+				GameStrings.ActorBorrowedRolePowerInvalidResponse);
 		}
 	}
 
@@ -538,8 +971,8 @@ internal class SeerRole : ImmediateFeedbackNightRoleHookListener,
 			feedback.AffectedPlayerIds is not { Count: 1 } affectedIds ||
 			affectedIds.Single() != execution.ActingPlayer.Id)
 		{
-			throw new InvalidOperationException(
-				"The Actor borrowed Seer feedback does not match its private commit.");
+			throw new RoleWorkflowInputRejectionException(
+				GameStrings.ActorBorrowedRolePowerInvalidResponse);
 		}
 	}
 
@@ -548,15 +981,25 @@ internal class SeerRole : ImmediateFeedbackNightRoleHookListener,
 		ConfirmationInstruction sleep)
 	{
 		if (sleep.PublicAnnouncement !=
-				GameStrings.RoleGoesToSleepSingle.Format(GameStrings.ActorRoleName) ||
+				GameStrings.RoleGoesToSleepSingle.Format(
+					GameStrings.ActorRoleName) ||
 			sleep.PrivateInstruction is not null ||
 			sleep.AffectedPlayerIds is not { Count: 1 } affectedIds ||
 			affectedIds.Single() != execution.ActingPlayer.Id)
 		{
-			throw new InvalidOperationException(
-				"The Actor borrowed Seer sleep instruction is invalid.");
+			throw new RoleWorkflowInputRejectionException(
+				GameStrings.ActorBorrowedRolePowerInvalidResponse);
 		}
 	}
+
+	private static string FormatSeerFeedback(
+		GameSession session,
+		Guid targetId) =>
+		(session.GetFactionAgentKnowledge(targetId, Faction.Werewolf) ==
+		 FactionAgentKnowledge.KnownAgent
+			? GameStrings.SeerResultWerewolfTeam
+			: GameStrings.SeerResultNotWerewolfTeam)
+		.Format(session.GetPlayer(targetId).Name);
 
 	private static string FormatSeerFeedback(
 		string targetName,

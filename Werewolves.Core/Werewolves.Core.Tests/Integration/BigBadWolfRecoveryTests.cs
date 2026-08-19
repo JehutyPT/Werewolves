@@ -269,6 +269,55 @@ public sealed class BigBadWolfRecoveryTests
     }
 
     [Fact]
+    public void CommittedTarget_CursorlessSleepBoundaryIsRejected()
+    {
+        var (
+            builder,
+            holderId,
+            _,
+            additionalVictimId,
+            identification) = CreateGameAtIdentification();
+        var targetSelection = builder.Process(
+                identification.CreateResponse([holderId]))
+            .ModeratorInstruction.Should()
+            .BeOfType<SelectPlayersInstruction>().Subject;
+        builder.Process(
+                targetSelection.CreateResponse([additionalVictimId]))
+            .IsSuccess.Should().BeTrue();
+        var tampered = RecoveryPayloadTestDriver
+            .Parse(builder.GetGameState()!.Serialize())
+            .RemoveDomainRecoveryCursor()
+            .Serialize();
+        var freshService = new GameService();
+
+        Action rehydrate = () => freshService.RehydrateSession(tampered);
+
+        rehydrate.Should().Throw<InvalidOperationException>();
+        freshService.GetGameStateView(builder.GameId).Should().BeNull();
+    }
+
+    [Fact]
+    public void AcceptedIdentification_TamperedTargetSelectionRosterIsRejected()
+    {
+        var (builder, holderId, _, _, identification) =
+            CreateGameAtIdentification();
+        var targetSelection = builder.Process(
+                identification.CreateResponse([holderId]))
+            .ModeratorInstruction.Should()
+            .BeOfType<SelectPlayersInstruction>().Subject;
+        var tampered = RecoveryPayloadTestDriver
+            .Parse(builder.GetGameState()!.Serialize())
+            .RewritePendingPlayerSelectionSelectablePlayerIds(
+                targetSelection.SelectablePlayerIds.Skip(1))
+            .Serialize();
+
+        Action rehydrate = () => new GameService().RehydrateSession(tampered);
+
+        rehydrate.Should().Throw<InvalidOperationException>()
+            .WithMessage("*Big Bad Wolf target selection*");
+    }
+
+    [Fact]
     public void EliminatedAgentHistory_FreshServiceKeepsLaterSwappedHolderPowerDisabled()
     {
         var builder = GameTestBuilder.Create()

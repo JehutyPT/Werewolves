@@ -247,6 +247,36 @@ internal static class RoleListenerDispatch
 			nextInstruction) ?? false;
 	}
 
+	internal static bool TryValidateOneUseCommittedRecoveryBoundary(
+		ListenerIdentifier listenerId,
+		IRoleAdmissionSource admissions,
+		Func<ListenerIdentifier, Func<IGameHookListener>, IGameHookListener>
+			getOrCreateListener,
+		GameSession session,
+		ModeratorInstruction? startingInstruction,
+		ModeratorResponse input,
+		OneUseRolePowerCommittedLogEntry committedBoundary,
+		ModeratorInstruction nextInstruction)
+	{
+		var listener = GetActiveListener(
+			listenerId,
+			admissions,
+			getOrCreateListener);
+		if (listener is not IDeclaredRoleWorkflow declaredWorkflow ||
+		    !session.Execution.TryGetActiveGameHook(out var hook))
+		{
+			return false;
+		}
+
+		var runtime = declaredWorkflow.GetWorkflowRuntime(hook);
+		return runtime?.TryValidateCommittedRecoveryBoundary(
+			session,
+			startingInstruction,
+			input,
+			committedBoundary,
+			nextInstruction) ?? false;
+	}
+
 	internal static bool TryValidateDeclaredDomainRecoveryCursorIdentity(
 		GameSession session,
 		ListenerIdentifier listenerId,

@@ -900,7 +900,8 @@ public sealed class ActorBorrowedPrivacyTests
 		var wake = Advance(fixture, fixture.OpeningResponse).Instruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		TInstruction instruction;
-		if (fixture.SourceRole == MainRoleType.Fox)
+		if (fixture.SourceRole is MainRoleType.Fox or MainRoleType.Defender
+			or MainRoleType.Seer)
 		{
 			fixture.RestoreAt(wake);
 			instruction = GameFlowManager.HandleInput(
@@ -1060,7 +1061,8 @@ public sealed class ActorBorrowedPrivacyTests
 		ModeratorResponse response) => Advance(
 		fixture.Session,
 		response,
-		publishInstruction: fixture.SourceRole == MainRoleType.LittleGirl);
+		publishInstruction: fixture.SourceRole is
+			MainRoleType.LittleGirl or MainRoleType.Witch);
 
 	private static HookListenerActionResult Advance(
 		GameSession session,

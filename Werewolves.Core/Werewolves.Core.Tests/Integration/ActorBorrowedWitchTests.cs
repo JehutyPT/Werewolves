@@ -157,7 +157,7 @@ public sealed class ActorBorrowedWitchTests
 		Action restore = () => service.RehydrateSession(driver.Serialize());
 
 		restore.Should().Throw<InvalidOperationException>()
-			.WithMessage("*pending Actor borrowed Witch*invalid*");
+			.WithMessage(GameStrings.ActorBorrowedRolePowerInvalidResponse);
 	}
 
 	[Fact]
