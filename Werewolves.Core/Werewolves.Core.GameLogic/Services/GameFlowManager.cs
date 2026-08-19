@@ -2217,13 +2217,17 @@ internal static class GameFlowManager
                 recurringEntry.SourceRole switch
                 {
                     MainRoleType.BigBadWolf =>
-                        BigBadWolfRole.TryValidateCommittedRecoveryBoundary(
-                            session,
-                            startingInstruction,
-                            input,
-                            recurringEntry,
-                            nextInstruction,
-                            out _),
+                        RoleListenerDispatch
+                            .TryValidateRecurringCommittedRecoveryBoundary(
+                                Listener(MainRoleType.BigBadWolf),
+                                admissions,
+                                (id, factory) =>
+                                    session.GetOrCreateListener(id, factory),
+                                session,
+                                startingInstruction,
+                                input,
+                                recurringEntry,
+                                nextInstruction),
                     MainRoleType.Defender =>
                         DefenderRole.TryValidateCommittedRecoveryBoundary(
                             session,
@@ -2957,10 +2961,22 @@ internal static class GameFlowManager
             switch (sourceRole)
             {
                 case MainRoleType.BigBadWolf:
-                    BigBadWolfRole.ValidateRecurringRecoveryCursorIdentity(
-						session,
-                        cursor);
-                    break;
+                case MainRoleType.Piper:
+					if (!RoleListenerDispatch
+					    .TryValidateDeclaredDomainRecoveryCursorIdentity(
+						    session,
+						    Listener(sourceRole),
+						    NightMainActionLoop,
+						    admissions,
+						    (id, factory) =>
+							    session.GetOrCreateListener(id, factory),
+						    pendingInstruction,
+						    cursor))
+					{
+						throw new InvalidOperationException(
+							$"Unsupported {sourceRole} recurring Role Power continuation.");
+					}
+					break;
                 case MainRoleType.Defender:
                     DefenderRole.ValidateRecurringRecoveryCursorIdentity(
 						session,
@@ -2971,22 +2987,6 @@ internal static class GameFlowManager
 						session,
                         cursor);
                     break;
-                case MainRoleType.Piper:
-					if (!RoleListenerDispatch
-					    .TryValidateDeclaredDomainRecoveryCursorIdentity(
-						    session,
-						    Listener(MainRoleType.Piper),
-						    NightMainActionLoop,
-						    admissions,
-						    (id, factory) =>
-							    session.GetOrCreateListener(id, factory),
-						    pendingInstruction,
-						    cursor))
-					{
-						throw new InvalidOperationException(
-							"Unsupported Piper recurring Role Power continuation.");
-					}
-					break;
                 case MainRoleType.Cupid:
 					CupidRole.ValidateRecurringRecoveryCursorIdentity(
 						session,
