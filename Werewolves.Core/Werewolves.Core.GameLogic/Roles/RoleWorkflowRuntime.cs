@@ -901,6 +901,98 @@ internal sealed class RecoverableWait<TState, TInstruction> : IRecoverableWait
 		RoleWorkflowRecoveryCandidate.ClaimedButInvalid(failure);
 }
 
+/// <summary>
+/// A self-looping wait whose pause is owned by a centrally navigated
+/// Elimination Cascade. The cascade issues several instruction and response
+/// shapes, so this wait authenticates from the durable scope facts its
+/// declaring Role already commits instead of from one bound instruction
+/// semantic. Response-shape correlation stays with the pending instruction the
+/// cascade issued, which <see cref="Services.GameService"/> already enforces.
+/// </summary>
+internal sealed class DelegatedRecoverableWait<TState> : IRecoverableWait
+	where TState : struct, Enum
+{
+	private readonly TState _continuationState;
+	private readonly Func<GameSession, bool> _authenticatesScope;
+	private readonly Func<
+		GameSession,
+		ModeratorResponse,
+		HookListenerActionResult> _advance;
+
+	internal DelegatedRecoverableWait(
+		ListenerIdentifier listener,
+		GameHook hook,
+		TState continuationState,
+		Func<GameSession, bool> authenticatesScope,
+		Func<GameSession, ModeratorResponse, HookListenerActionResult> advance)
+	{
+		Listener = listener;
+		Hook = hook;
+		StartState = continuationState.ToString();
+		_continuationState = continuationState;
+		_authenticatesScope = authenticatesScope ??
+			throw new ArgumentNullException(nameof(authenticatesScope));
+		_advance = advance ?? throw new ArgumentNullException(nameof(advance));
+	}
+
+	public ListenerIdentifier Listener { get; }
+	public GameHook Hook { get; }
+	public string? StartState { get; }
+
+	public bool CanExecute(GameSession session) => true;
+
+	public HookListenerActionResult Execute(
+		GameSession session,
+		ModeratorResponse input) =>
+		_advance(session, input);
+
+	public RoleWorkflowRecoveryCandidate ClassifyLiveCandidate(
+		GameSession session,
+		ModeratorInstruction pendingInstruction,
+		ModeratorResponse input,
+		string currentState)
+	{
+		if (!StringComparer.Ordinal.Equals(
+			    _continuationState.ToString(),
+			    currentState) ||
+		    !_authenticatesScope(session))
+		{
+			return RoleWorkflowRecoveryCandidate.Unrelated();
+		}
+
+		return input.InstructionId == pendingInstruction.InstructionId
+			? RoleWorkflowRecoveryCandidate.Authenticated(currentState)
+			: RoleWorkflowRecoveryCandidate.ClaimedButInvalid(
+				$"Moderator Response does not authenticate the delegated '{Listener}:{currentState}' wait.");
+	}
+
+	public RoleWorkflowRecoveryCandidate ClassifyRecoveryCandidate(
+		GameSession session,
+		ModeratorInstruction pendingInstruction,
+		AcceptedObservationRecoveryCursor? acceptedObservationCursor,
+		DomainRecoveryCursor? domainCursor) =>
+		acceptedObservationCursor == null &&
+		domainCursor == null &&
+		_authenticatesScope(session)
+			? RoleWorkflowRecoveryCandidate.Authenticated(
+				_continuationState.ToString())
+			: RoleWorkflowRecoveryCandidate.Unrelated();
+
+	public bool TryValidateCommittedRecoveryBoundary(
+		GameSession session,
+		ModeratorInstruction? startingInstruction,
+		ModeratorResponse input,
+		TargetPrivateRolePowerRecoveryBoundary committedBoundary,
+		ModeratorInstruction nextInstruction) => false;
+
+	public bool TryValidateCommittedRecoveryBoundary(
+		GameSession session,
+		ModeratorInstruction? startingInstruction,
+		ModeratorResponse input,
+		RecurringRolePowerCommittedLogEntry committedBoundary,
+		ModeratorInstruction nextInstruction) => false;
+}
+
 internal sealed class RoleWorkflowDecisionStep<TState> : IRoleWorkflowStep
 	where TState : struct, Enum
 {
