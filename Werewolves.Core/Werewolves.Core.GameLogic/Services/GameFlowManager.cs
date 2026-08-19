@@ -38,29 +38,6 @@ internal static class GameFlowManager
 
 	private static readonly GameFlowManagerKey Key = new();
 
-	private enum AcceptedObservationInstructionShape
-    {
-        PlayerSelection,
-        Confirmation
-    }
-
-    private readonly record struct AcceptedObservationContinuation(
-        string ActiveSubPhaseStage,
-        ListenerIdentifier Listener,
-        string ListenerState,
-        AcceptedObservationInstructionShape InstructionShape)
-    {
-        internal bool Matches(ModeratorInstruction? instruction)
-            => InstructionShape switch
-            {
-                AcceptedObservationInstructionShape.PlayerSelection =>
-                    instruction?.GetType() == typeof(SelectPlayersInstruction),
-                AcceptedObservationInstructionShape.Confirmation =>
-                    instruction?.GetType() == typeof(ConfirmationInstruction),
-                _ => false
-            };
-    }
-
     #region Static Flow Definitions
     internal static readonly Dictionary<GameHook, List<ListenerIdentifier>> HookListeners = new()
     {
@@ -2302,9 +2279,10 @@ internal static class GameFlowManager
 
         var committedTargetId = committedEntry.TargetIds[0];
         var roleOwnedCommitCorrelated =
-            committedEntry.SourceRole == MainRoleType.AccursedWolfFather &&
+            committedEntry.SourceRole is
+                MainRoleType.AccursedWolfFather or MainRoleType.Witch &&
             RoleListenerDispatch.TryValidateOneUseCommittedRecoveryBoundary(
-                Listener(MainRoleType.AccursedWolfFather),
+                Listener(committedEntry.SourceRole),
                 admissions,
                 (id, factory) =>
                     session.GetOrCreateListener(id, factory),
@@ -3052,16 +3030,6 @@ internal static class GameFlowManager
             }
         }
 
-        var configuredContinuation = ResolveDomainContinuation(
-            sourceRole,
-            cursor.CommittedActionType,
-            cursor.NextInstructionSemantic);
-        if (sourceRole == Witch && configuredContinuation == null)
-        {
-            throw new InvalidOperationException(
-                $"Unsupported domain continuation '{sourceRole}:{cursor.CommittedActionType}:{cursor.NextInstructionSemantic}'.");
-        }
-
         var listenerContinuation = ResolvePendingInstructionContinuation(
             Listener(sourceRole),
             NightMainActionLoop,
@@ -3087,32 +3055,8 @@ internal static class GameFlowManager
             return;
         }
 
-        if (cursor.Kind ==
-            DomainRecoveryCursorKind.RecurringNativeRolePowerCommit)
-        {
-            throw new InvalidOperationException(
-                $"Unsupported domain continuation '{sourceRole}:{cursor.CommittedActionType}:{cursor.NextInstructionSemantic}'.");
-        }
-
-        var continuation = configuredContinuation;
-        if (continuation == null)
-        {
-            throw new InvalidOperationException(
-                $"Unsupported domain continuation '{sourceRole}:{cursor.CommittedActionType}:{cursor.NextInstructionSemantic}'.");
-        }
-
-        if (!continuation.Value.Matches(execution.PendingInstruction))
-        {
-            throw new InvalidOperationException(
-                "The Pending Instruction does not match the committed domain continuation.");
-        }
-
-		session.RestoreTransientContinuation(
-			Key,
-			execution,
-			continuation.Value.ActiveSubPhaseStage,
-			continuation.Value.Listener,
-			continuation.Value.ListenerState);
+        throw new InvalidOperationException(
+            $"Unsupported domain continuation '{sourceRole}:{cursor.CommittedActionType}:{cursor.NextInstructionSemantic}'.");
     }
 
     private static bool IsNightStartSubPhase(ExecutionView execution)
@@ -3123,34 +3067,6 @@ internal static class GameFlowManager
         return (subPhaseId == null || nightSubPhase != null) &&
             (nightSubPhase ?? NightSubPhases.Start) == NightSubPhases.Start;
     }
-
-    private static AcceptedObservationContinuation?
-        ResolveDomainContinuation(
-            MainRoleType sourceRole,
-            NightActionType committedActionType,
-            ModeratorInstructionSemantic nextInstructionSemantic)
-        => (sourceRole, committedActionType, nextInstructionSemantic) switch
-        {
-            (Witch, NightActionType.WitchSave, ModeratorInstructionSemantic.SelectWitchPoisonTarget) =>
-                new(
-                    NightMainActionLoop.ToString(),
-                    Listener(Witch),
-                    WitchRoleState.AwaitingPoisonSelection.ToString(),
-                    AcceptedObservationInstructionShape.PlayerSelection),
-            (Witch, NightActionType.WitchSave, ModeratorInstructionSemantic.PutRoleToSleep) =>
-                new(
-                    NightMainActionLoop.ToString(),
-                    Listener(Witch),
-                    WitchRoleState.ReadyToSleep.ToString(),
-                    AcceptedObservationInstructionShape.Confirmation),
-            (Witch, NightActionType.WitchKill, ModeratorInstructionSemantic.PutRoleToSleep) =>
-                new(
-                    NightMainActionLoop.ToString(),
-                    Listener(Witch),
-                    WitchRoleState.ReadyToSleep.ToString(),
-                    AcceptedObservationInstructionShape.Confirmation),
-            _ => null
-        };
 
     private static bool TryGetVictoryInstructions(GameSession session, GamePhase oldPhase, GamePhase newPhase,
 		out ModeratorInstruction? nextInstructionToSend)

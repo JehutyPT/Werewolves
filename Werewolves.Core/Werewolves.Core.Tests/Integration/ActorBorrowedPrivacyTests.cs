@@ -1061,7 +1061,8 @@ public sealed class ActorBorrowedPrivacyTests
 		ModeratorResponse response) => Advance(
 		fixture.Session,
 		response,
-		publishInstruction: fixture.SourceRole == MainRoleType.LittleGirl);
+		publishInstruction: fixture.SourceRole is
+			MainRoleType.LittleGirl or MainRoleType.Witch);
 
 	private static HookListenerActionResult Advance(
 		GameSession session,

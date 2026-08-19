@@ -822,7 +822,7 @@ public sealed class WitchRoleTests : DiagnosticTestBase
 			service.RehydrateSession(recoveryPayload);
 
 		rehydrate.Should().Throw<InvalidOperationException>()
-			.WithMessage("*Unsupported domain continuation*");
+			.WithMessage("*invalid One-Use Role Power identity*");
 		MarkTestCompleted();
 	}
 
@@ -841,7 +841,7 @@ public sealed class WitchRoleTests : DiagnosticTestBase
 			service.RehydrateSession(recoveryPayload);
 
 		rehydrate.Should().Throw<InvalidOperationException>()
-			.WithMessage("*does not match the committed domain continuation*");
+			.WithMessage("*invalid type 'ConfirmationInstruction'*");
 		MarkTestCompleted();
 	}
 
