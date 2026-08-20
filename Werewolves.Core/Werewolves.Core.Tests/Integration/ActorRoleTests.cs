@@ -131,12 +131,12 @@ public sealed class ActorRoleTests
 		var choice = Advance(listener, session, wake.CreateResponse()).Instruction
 			.Should().BeOfType<SelectOptionsInstruction>().Subject;
 		var tampered = CreateTamperedPendingChoice(choice, tamper);
+		Action rehydrateTamperedChoice = () =>
+			RecoveryPayloadTestDriver.Capture(session)
+				.WithPendingInstruction(tampered)
+				.RehydrateGameSession();
 
-		listener.TryResolvePendingInstructionContinuation(
-			GameHook.NightMainActionLoop,
-			session,
-			tampered,
-			out _).Should().BeFalse();
+		rehydrateTamperedChoice.Should().Throw<InvalidOperationException>();
 	}
 
 	[Fact]
@@ -501,12 +501,8 @@ public sealed class ActorRoleTests
 		var response = choice.CreateResponse(SeerCard.Id.ToString("D"));
 		var sleep = Advance(listener, session, response).Instruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
-		ActorRole.TryValidateCommittedRecoveryBoundary(
-			session,
-			choice,
-			response,
-			sleep,
-			out var activation).Should().BeTrue();
+		var activation =
+			session.GetModeratorActiveActorBorrowedRolePowerActivation();
 		activation.Should().NotBeNull();
 		var requiredActivation = activation!;
 		var recovered = RecoveryPayloadTestDriver.Capture(session)
@@ -554,7 +550,6 @@ public sealed class ActorRoleTests
 			.Should().BeOfType<SelectOptionsInstruction>().Subject;
 		var sleep = Advance(listener, session, choice.CreateResponse()).Instruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
-		ActorRole.HasExpectedDeclinedChoiceSleep(session, sleep).Should().BeTrue();
 		var recovered = RecoveryPayloadTestDriver.Capture(session)
 			.WithPendingInstruction(sleep)
 			.WithRecoveryCursors(

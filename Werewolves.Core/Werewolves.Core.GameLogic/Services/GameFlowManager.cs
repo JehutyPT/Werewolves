@@ -1598,18 +1598,25 @@ internal static class GameFlowManager
 
 		if (newActorSetupCardSpendEntries.Length > 0)
 		{
-			if (newActorSetupCardSpendEntries is not [_])
+			if (newActorSetupCardSpendEntries is not [var spendEntry])
 			{
 				throw new InvalidOperationException(
 					"One accepted response must produce exactly one correlated Actor setup-card spend.");
 			}
 
-			if (!ActorRole.TryValidateCommittedRecoveryBoundary(
-				    session,
-				    startingInstruction,
-				    input,
-				    nextInstruction,
-				    out var activation) ||
+			var activation =
+				session.GetModeratorActiveActorBorrowedRolePowerActivation();
+			if (!RoleListenerDispatch
+				    .TryValidateActorSetupCardSpendCommittedRecoveryBoundary(
+					    Listener(MainRoleType.Actor),
+					    admissions,
+					    (id, factory) =>
+						    session.GetOrCreateListener(id, factory),
+					    session,
+					    startingInstruction,
+					    input,
+					    spendEntry,
+					    nextInstruction) ||
 			    activation is null)
 			{
 				throw new InvalidOperationException(
@@ -2492,7 +2499,6 @@ internal static class GameFlowManager
 				ModeratorInstructionSemantic.IdentifyRoleHolders or
 				ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup or
 				ModeratorInstructionSemantic.EstablishStutteringJudgeSignal or
-				ModeratorInstructionSemantic.ChooseActorSetupCard or
 				ModeratorInstructionSemantic.RecognizeLovers;
 		var matchesCommittedObservation =
             cursor.AcceptedObservationSemantic switch
@@ -2519,12 +2525,6 @@ internal static class GameFlowManager
 					.EstablishStutteringJudgeSignal
 					when cursor.ObservedRole == StutteringJudge =>
 					StutteringJudgeRole.HasValidEstablishedSignal(
-						session,
-						pendingInstruction),
-				ModeratorInstructionSemantic.ChooseActorSetupCard
-					when cursor.ObservedRole == MainRoleType.Actor &&
-						 continuationRole == MainRoleType.Actor =>
-					ActorRole.HasExpectedDeclinedChoiceSleep(
 						session,
 						pendingInstruction),
                 ModeratorInstructionSemantic.RecognizeLovers
@@ -2862,7 +2862,8 @@ internal static class GameFlowManager
 				NightMainActionLoop,
 				session,
 				actorPendingInstruction,
-				admissions);
+				admissions,
+				domainRecoveryCursor: cursor);
 			if (actorContinuation == null ||
 			    actorContinuation.Value.Listener != Listener(MainRoleType.Actor))
 			{

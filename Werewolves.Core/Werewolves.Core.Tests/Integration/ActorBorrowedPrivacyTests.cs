@@ -878,13 +878,20 @@ public sealed class ActorBorrowedPrivacyTests
 		StartGameConfirmationInstruction start,
 		Guid selectedCardId)
 	{
-		var wake = Advance(session, start.CreateResponse()).Instruction
+		var wake = Advance(
+			session,
+			start.CreateResponse(),
+			publishInstruction: true).Instruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
-		var choice = Advance(session, wake.CreateResponse()).Instruction
+		var choice = Advance(
+			session,
+			wake.CreateResponse(),
+			publishInstruction: true).Instruction
 			.Should().BeOfType<SelectOptionsInstruction>().Subject;
 		var sleep = Advance(
 			session,
-			choice.CreateResponse(selectedCardId.ToString("D"))).Instruction
+			choice.CreateResponse(selectedCardId.ToString("D")),
+			publishInstruction: true).Instruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		var activation = session
 			.GetModeratorActiveActorBorrowedRolePowerActivation();
