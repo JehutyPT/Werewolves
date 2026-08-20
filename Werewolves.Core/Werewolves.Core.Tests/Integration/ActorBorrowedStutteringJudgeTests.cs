@@ -66,7 +66,11 @@ public sealed class ActorBorrowedStutteringJudgeTests
 		wake.PrivateInstruction.Should().BeNull();
 		wake.AffectedPlayerIds.Should().Equal(actorId);
 
-		var setup = Advance(listener, session, wake.CreateResponse()).Instruction
+		var setup = Advance(
+				listener,
+				session,
+				wake.CreateResponse(),
+				publishInstruction: true).Instruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		setup.Semantic.Should().Be(
 			ModeratorInstructionSemantic.EstablishStutteringJudgeSignal);
@@ -78,7 +82,11 @@ public sealed class ActorBorrowedStutteringJudgeTests
 		setupResponse.Type.Should().Be(ExpectedInputType.Continue);
 		var logCountBeforeSetup = session.GameHistoryLog.Count();
 
-		var sleep = Advance(listener, session, setupResponse).Instruction
+		var sleep = Advance(
+				listener,
+				session,
+				setupResponse,
+				publishInstruction: true).Instruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 
 		sleep.Semantic.Should().Be(ModeratorInstructionSemantic.PutRoleToSleep);

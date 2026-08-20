@@ -2498,8 +2498,11 @@ internal static class GameFlowManager
 			cursor.AcceptedObservationSemantic is
 				ModeratorInstructionSemantic.IdentifyRoleHolders or
 				ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup or
-				ModeratorInstructionSemantic.EstablishStutteringJudgeSignal or
-				ModeratorInstructionSemantic.RecognizeLovers;
+				ModeratorInstructionSemantic.RecognizeLovers ||
+			(cursor.AcceptedObservationSemantic ==
+				 ModeratorInstructionSemantic
+					 .EstablishStutteringJudgeSignal &&
+			 continuationRole != StutteringJudge);
 		var matchesCommittedObservation =
             cursor.AcceptedObservationSemantic switch
             {
@@ -2523,10 +2526,9 @@ internal static class GameFlowManager
                         .HasConsistentInitialBeneficiaryClosure(session),
 				ModeratorInstructionSemantic
 					.EstablishStutteringJudgeSignal
-					when cursor.ObservedRole == StutteringJudge =>
-					StutteringJudgeRole.HasValidEstablishedSignal(
-						session,
-						pendingInstruction),
+					when cursor.ObservedRole == StutteringJudge &&
+					     continuationRole != StutteringJudge =>
+					StutteringJudgeRole.HasValidEstablishedSignal(session),
                 ModeratorInstructionSemantic.RecognizeLovers
                     when cursor.ObservedRole == Cupid &&
                          continuationRole == Cupid =>

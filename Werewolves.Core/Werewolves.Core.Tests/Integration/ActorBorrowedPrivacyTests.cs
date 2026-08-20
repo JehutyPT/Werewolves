@@ -1069,7 +1069,8 @@ public sealed class ActorBorrowedPrivacyTests
 		fixture.Session,
 		response,
 		publishInstruction: fixture.SourceRole is
-			MainRoleType.LittleGirl or MainRoleType.Witch);
+			MainRoleType.LittleGirl or MainRoleType.Witch
+			or MainRoleType.StutteringJudge);
 
 	private static HookListenerActionResult Advance(
 		GameSession session,
