@@ -71,7 +71,7 @@ public sealed class ActorBorrowedPrivacyTests
 	[Theory]
 	[InlineData(BorrowedValidationBranch.SeerMissingSelection)]
 	[InlineData(BorrowedValidationBranch.SeerMultipleSelection)]
-	[InlineData(BorrowedValidationBranch.CupidMissingPendingSelection)]
+	[InlineData(BorrowedValidationBranch.CupidTamperedPendingSelection)]
 	[InlineData(BorrowedValidationBranch.CupidMalformedSelection)]
 	[InlineData(BorrowedValidationBranch.CupidAlreadyCommitted)]
 	[InlineData(BorrowedValidationBranch.WitchHealingMissingSelection)]
@@ -745,7 +745,7 @@ public sealed class ActorBorrowedPrivacyTests
 		{
 			BorrowedValidationBranch.SeerMissingSelection or
 				BorrowedValidationBranch.SeerMultipleSelection => MainRoleType.Seer,
-			BorrowedValidationBranch.CupidMissingPendingSelection or
+			BorrowedValidationBranch.CupidTamperedPendingSelection or
 				BorrowedValidationBranch.CupidMalformedSelection or
 				BorrowedValidationBranch.CupidAlreadyCommitted => MainRoleType.Cupid,
 			BorrowedValidationBranch.WitchHealingMissingSelection or
@@ -785,10 +785,17 @@ public sealed class ActorBorrowedPrivacyTests
 					selection,
 					selectedPlayerIds.Take(1).ToHashSet())
 				: CreateUncheckedResponse(selection, selectedPlayerIds);
-			if (branch !=
-			    BorrowedValidationBranch.CupidMissingPendingSelection)
+			fixture.RestoreAt(selection);
+			if (branch ==
+			    BorrowedValidationBranch.CupidTamperedPendingSelection)
 			{
-				fixture.RestoreAt(selection);
+				var tamperedSession = fixture.Session;
+				return new ValidationSubmission(
+					tamperedSession,
+					() => RecoveryPayloadTestDriver.Capture(tamperedSession)
+						.RewritePendingPlayerSelectionCountConstraint(
+							NumberRangeConstraint.Single)
+						.RehydrateGameSession());
 			}
 
 			if (branch == BorrowedValidationBranch.CupidAlreadyCommitted)
@@ -878,13 +885,20 @@ public sealed class ActorBorrowedPrivacyTests
 		StartGameConfirmationInstruction start,
 		Guid selectedCardId)
 	{
-		var wake = Advance(session, start.CreateResponse()).Instruction
+		var wake = Advance(
+			session,
+			start.CreateResponse(),
+			publishInstruction: true).Instruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
-		var choice = Advance(session, wake.CreateResponse()).Instruction
+		var choice = Advance(
+			session,
+			wake.CreateResponse(),
+			publishInstruction: true).Instruction
 			.Should().BeOfType<SelectOptionsInstruction>().Subject;
 		var sleep = Advance(
 			session,
-			choice.CreateResponse(selectedCardId.ToString("D"))).Instruction
+			choice.CreateResponse(selectedCardId.ToString("D")),
+			publishInstruction: true).Instruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		var activation = session
 			.GetModeratorActiveActorBorrowedRolePowerActivation();
@@ -1062,7 +1076,8 @@ public sealed class ActorBorrowedPrivacyTests
 		fixture.Session,
 		response,
 		publishInstruction: fixture.SourceRole is
-			MainRoleType.LittleGirl or MainRoleType.Witch);
+			MainRoleType.LittleGirl or MainRoleType.Witch
+			or MainRoleType.StutteringJudge or MainRoleType.Cupid);
 
 	private static HookListenerActionResult Advance(
 		GameSession session,
@@ -1191,7 +1206,7 @@ public sealed class ActorBorrowedPrivacyTests
 	{
 		SeerMissingSelection,
 		SeerMultipleSelection,
-		CupidMissingPendingSelection,
+		CupidTamperedPendingSelection,
 		CupidMalformedSelection,
 		CupidAlreadyCommitted,
 		WitchHealingMissingSelection,

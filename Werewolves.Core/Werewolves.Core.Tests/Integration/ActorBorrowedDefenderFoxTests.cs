@@ -571,14 +571,14 @@ public sealed class ActorBorrowedDefenderFoxTests
 		AdvanceToNextNight(recovered);
 
 		IGameHookListener nextActor = CreateActorRole();
-		var nextActorWake = AdvanceWithoutExecutionCommit(
+		var nextActorWake = Advance(
 			nextActor,
 			recovered,
 			start.CreateResponse())
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		recovered.GetModeratorActiveActorBorrowedRolePowerActivation().Should()
 			.BeNull();
-		var nextActorChoice = AdvanceWithoutExecutionCommit(
+		var nextActorChoice = Advance(
 			nextActor,
 			recovered,
 			nextActorWake.CreateResponse())
@@ -912,21 +912,26 @@ public sealed class ActorBorrowedDefenderFoxTests
 				ExecutionCommit.RetainRecoveryBoundary(
 					session.Execution,
 					consumedInstruction,
-					response,
+					CorrelateToConsumedInstruction(response, consumedInstruction),
 					nextInstruction));
 		}
 
 		return nextInstruction;
 	}
 
-	private static ModeratorInstruction? AdvanceWithoutExecutionCommit(
-		IGameHookListener listener,
-		GameSession session,
-		ModeratorResponse response)
-	{
-		session.GetOrCreateListener(listener.Id, () => listener);
-		return NightActionLoop.Execute(session, response).ModeratorInstruction;
-	}
+	private static ModeratorResponse CorrelateToConsumedInstruction(
+		ModeratorResponse response,
+		ModeratorInstruction consumedInstruction) =>
+		response.InstructionId == consumedInstruction.InstructionId
+			? response
+			: new ModeratorResponse
+			{
+				InstructionId = consumedInstruction.InstructionId,
+				Type = response.Type,
+				SelectedPlayerIds = response.SelectedPlayerIds,
+				AssignedPlayerRoles = response.AssignedPlayerRoles,
+				SelectedOptionIds = response.SelectedOptionIds
+			};
 
 	private static GameSession RestorePendingInstruction(
 		GameSession session,

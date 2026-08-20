@@ -1,12 +1,15 @@
 using Werewolves.Core.GameLogic.Models.GameHookListeners;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
+using Werewolves.Core.GameLogic.Queries;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
+using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Resources;
+using Werewolves.Core.StateModels.Serialization;
 
 namespace Werewolves.Core.GameLogic.Roles.MainRoles;
 
@@ -18,17 +21,95 @@ internal enum ThiefRoleState
 	Asleep
 }
 
-internal sealed class ThiefRole : NightRoleHookListener<ThiefRoleState>
+internal sealed class ThiefRole : RoleHookListener, IDeclaredRoleWorkflow
 {
+	private readonly RoleWorkflowRuntime _workflowRuntime;
+
+	internal ThiefRole()
+	{
+		_workflowRuntime = new RoleWorkflowRuntime(
+			Id,
+			GameHook.NightMainActionLoop,
+			[
+				RecoverableWait<ThiefRoleState, SelectPlayersInstruction>
+					.Replayable(
+						Id,
+						GameHook.NightMainActionLoop,
+						startState: null,
+						ThiefRoleState.Awake,
+						ModeratorInstructionSemantic.IdentifyRoleHolders,
+						ExpectedInputType.PlayerSelection,
+						session => !IsCompleteHolderSetKnown(session),
+						static (_, _) => { },
+						CreateIdentificationInstruction,
+						static (_, instruction) =>
+							instruction is SelectPlayersInstruction
+							{
+								Semantic:
+									ModeratorInstructionSemantic
+										.IdentifyRoleHolders,
+								RoleIdentification: MainRoleType.Thief
+							},
+						ValidateIdentificationInstruction),
+				RecoverableWait<ThiefRoleState, ConfirmationInstruction>
+					.Replayable(
+						Id,
+						GameHook.NightMainActionLoop,
+						startState: null,
+						ThiefRoleState.Awake,
+						ModeratorInstructionSemantic.WakeRole,
+						ExpectedInputType.Continue,
+						IsCompleteHolderSetKnown,
+						static (_, _) => { },
+						CreateWakeInstruction,
+						ClaimsHolderScopedCandidate,
+						ValidateWakeInstruction),
+				RecoverableWait<ThiefRoleState, SelectOptionsInstruction>
+					.ReplayableWithAcceptedObservationHandoff(
+						Id,
+						GameHook.NightMainActionLoop,
+						ThiefRoleState.Awake,
+						ThiefRoleState.AwaitingOfferChoice,
+						ModeratorInstructionSemantic.ChooseThiefOffer,
+						ExpectedInputType.OptionSelection,
+						static _ => true,
+						AcceptIdentificationIfNeeded,
+						CreateOfferInstruction,
+						ClaimsHolderScopedCandidate,
+						ValidateOfferInstruction,
+						ValidateIdentificationRecoveryBoundary,
+						static _ => ThiefRoleState.AwaitingOfferChoice),
+				RecoverableWait<ThiefRoleState, ConfirmationInstruction>
+					.Durable(
+						Id,
+						GameHook.NightMainActionLoop,
+						ThiefRoleState.AwaitingOfferChoice,
+						ThiefRoleState.ReadyToSleep,
+						ModeratorInstructionSemantic.PutRoleToSleep,
+						ExpectedInputType.Continue,
+						static _ => true,
+						CommitChoice,
+						CreateSleepInstruction,
+						static (_, _) => false,
+						ValidateSleepInstruction,
+						ValidateOfferRecoveryBoundary,
+						static _ => ThiefRoleState.ReadyToSleep),
+				new RoleWorkflowCompletionStep<ThiefRoleState>(
+					Id,
+					GameHook.NightMainActionLoop,
+					ThiefRoleState.ReadyToSleep,
+					ThiefRoleState.Asleep,
+					static _ => true)
+			]);
+	}
+
 	internal override string PublicName => GameStrings.ThiefRoleName;
 
 	public override ListenerIdentifier Id =>
 		ListenerIdentifier.Listener(MainRoleType.Thief);
 
-	protected override ThiefRoleState WokenUpStateEnum => ThiefRoleState.Awake;
-	protected override ThiefRoleState ReadyToSleepStateEnum => ThiefRoleState.ReadyToSleep;
-	protected override ThiefRoleState AsleepStateEnum => ThiefRoleState.Asleep;
-	protected override bool HasNightPowers => false;
+	RoleWorkflowRuntime IDeclaredRoleWorkflow.WorkflowRuntime =>
+		_workflowRuntime;
 
 	public override HookListenerActionResult Execute(
 		GameSession session,
@@ -42,107 +123,74 @@ internal sealed class ThiefRole : NightRoleHookListener<ThiefRoleState>
 		// A committed exchange removes the last active printed Thief card before
 		// the pending sleep confirmation is accepted. Resume the already-active
 		// listener directly so the hook loop can clear it and continue forward.
-		return GetCurrentListenerState(session) == null
+		return session.Execution.GetCurrentListenerState<ThiefRoleState>(Id)
+			       == null
 			? base.Execute(session, input)
 			: ExecuteCore(session, input);
 	}
 
-	protected override HookListenerActionResult HandleRoleWakeupAndId(
+	protected override HookListenerActionResult ExecuteCore(
 		GameSession session,
-		ModeratorResponse input)
+		ModeratorResponse input) =>
+		_workflowRuntime.Execute(
+			session,
+			input,
+			session.Execution.GetCurrentListenerState<ThiefRoleState>(Id));
+
+	private static bool IsCompleteHolderSetKnown(GameSession session) =>
+		GameSessionQueries.IsCompleteLivingRoleHolderSetKnown(
+			session,
+			MainRoleType.Thief);
+
+	private SelectPlayersInstruction CreateIdentificationInstruction(
+		GameSession session)
 	{
-		var result = base.HandleRoleWakeupAndId(session, input);
-		if (result.Instruction is not ConfirmationInstruction
-		    {
-			    Semantic: ModeratorInstructionSemantic.WakeRole
-		    })
+		var roleCount = GetExpectedLivingRoleHolderCount(session);
+		var committedHolderCount =
+			GetCommittedLivingRoleHolderIds(session).Count;
+		var selectablePlayerIds = GetIdentificationCandidates(session);
+		if (roleCount <= 0 ||
+		    committedHolderCount > roleCount ||
+		    selectablePlayerIds.Count < roleCount)
 		{
-			return result;
+			throw new InvalidOperationException(
+				"Confirmed Role knowledge contradicts the required Living Role Holder count.");
 		}
 
-		var holder = GetCurrentThief(session);
-		return HookListenerActionResult.NeedInput(
-			new ConfirmationInstruction(
-				ModeratorInstructionSemantic.WakeRole,
-				GameStrings.RoleWakesUp.Format(PublicName),
-				affectedPlayerIds: [holder.Id]),
-			ThiefRoleState.Awake);
+		var privateInstruction = roleCount == 1
+			? GameStrings.RoleSingleIdentificationPrompt.Format(PublicName)
+			: GameStrings.RoleMultipleIdentificationPrompt.Format(PublicName);
+		return new SelectPlayersInstruction(
+			ModeratorInstructionSemantic.IdentifyRoleHolders,
+			selectablePlayerIds: selectablePlayerIds,
+			countConstraint: NumberRangeConstraint.Exact(roleCount),
+			publicAnnouncement: GameStrings.RoleWakesUp.Format(PublicName),
+			privateInstruction: privateInstruction,
+			affectedPlayerIds: null,
+			roleIdentification: MainRoleType.Thief);
 	}
 
-	public override bool TryResolvePendingInstructionContinuation(
-		GameHook hook,
-		GameSession session,
-		ModeratorInstruction pendingInstruction,
-		out string listenerState)
-	{
-		listenerState = string.Empty;
-		if (hook == GameHook.NightMainActionLoop &&
-		    pendingInstruction is SelectOptionsInstruction
-		    {
-			    Semantic: ModeratorInstructionSemantic.ChooseThiefOffer
-		    } &&
-		    HasExpectedAffectedRoleHolders(session, pendingInstruction))
-		{
-			listenerState = ThiefRoleState.AwaitingOfferChoice.ToString();
-			return true;
-		}
+	private ConfirmationInstruction CreateWakeInstruction(GameSession session) =>
+		new(
+			ModeratorInstructionSemantic.WakeRole,
+			GameStrings.RoleWakesUp.Format(PublicName),
+			affectedPlayerIds: [GetCurrentThief(session).Id]);
 
-		if (hook != GameHook.NightMainActionLoop ||
-		    pendingInstruction is not ConfirmationInstruction
-		    {
-			    Semantic: ModeratorInstructionSemantic.PutRoleToSleep,
-			    AffectedPlayerIds: [var playerId]
-		    })
-		{
-			return base.TryResolvePendingInstructionContinuation(
-				hook,
-				session,
-				pendingInstruction,
-				out listenerState);
-		}
-
-		if (!ThiefOfferRules.HasValidCommittedChoice(session, playerId))
-		{
-			return false;
-		}
-
-		listenerState = ThiefRoleState.ReadyToSleep.ToString();
-		return true;
-	}
-
-	protected override List<RoleStateMachineStage> DefineStateMachineStages() =>
-	[
-		CreateStage(
-			GameHook.NightMainActionLoop,
-			null,
-			[ThiefRoleState.Awake, ThiefRoleState.Asleep],
-			HandleRoleWakeupAndId),
-		CreateStage(
-			GameHook.NightMainActionLoop,
-			ThiefRoleState.Awake,
-			ThiefRoleState.AwaitingOfferChoice,
-			HandleNightPowerUse_AndId),
-		CreateStage(
-			GameHook.NightMainActionLoop,
-			ThiefRoleState.AwaitingOfferChoice,
-			ThiefRoleState.ReadyToSleep,
-			CommitChoice),
-		CreateStage(
-			GameHook.NightMainActionLoop,
-			ThiefRoleState.ReadyToSleep,
-			ThiefRoleState.Asleep,
-			HandleAsleepConfirmation),
-		CreateEndStage(
-			GameHook.NightMainActionLoop,
-			ThiefRoleState.Asleep,
-			(_, _) => HookListenerActionResult.Complete(ThiefRoleState.Asleep))
-	];
-
-	protected override HookListenerActionResult HandleNightPowerUse(
-		GameSession session,
-		ModeratorResponse input)
+	private SelectOptionsInstruction CreateOfferInstruction(
+		GameSession session)
 	{
 		var holder = GetCurrentThief(session);
+		return new SelectOptionsInstruction(
+			ModeratorInstructionSemantic.ChooseThiefOffer,
+			CreateOfferOptions(session),
+			NumberRangeConstraint.Single,
+			privateInstruction: GameStrings.ThiefOfferSelectionInstruction,
+			affectedPlayerIds: [holder.Id]);
+	}
+
+	private static List<ModeratorOption> CreateOfferOptions(
+		GameSession session)
+	{
 		var offer1 = session.RoleLockIn.Offer1
 			?? throw new InvalidOperationException("Thief requires Offer1.");
 		var offer2 = session.RoleLockIn.Offer2
@@ -153,28 +201,33 @@ internal sealed class ThiefRole : NightRoleHookListener<ThiefRoleState>
 			new(ThiefOfferOptionIds.Offer2, offer2.PrintedRole.GetPublicName())
 		};
 		if (ThiefOfferRules.IsDeclineLegal(
-			offer1.PrintedRole,
-			offer2.PrintedRole))
+			    offer1.PrintedRole,
+			    offer2.PrintedRole))
 		{
 			options.Add(new ModeratorOption(
 				ThiefOfferOptionIds.Decline,
 				GameStrings.DeclineOption));
 		}
 
-		return HookListenerActionResult.NeedInput(
-			new SelectOptionsInstruction(
-				ModeratorInstructionSemantic.ChooseThiefOffer,
-				options,
-				NumberRangeConstraint.Single,
-				privateInstruction: GameStrings.ThiefOfferSelectionInstruction,
-				affectedPlayerIds: [holder.Id]),
-			ThiefRoleState.AwaitingOfferChoice);
+		return options;
 	}
 
-	protected override void ProcessRoleIdentification(
+	private ConfirmationInstruction CreateSleepInstruction(
+		GameSession session) =>
+		new(
+			ModeratorInstructionSemantic.PutRoleToSleep,
+			GameStrings.RoleGoesToSleepSingle.Format(PublicName),
+			affectedPlayerIds: [ResolveActingThief(session).Id]);
+
+	private void AcceptIdentificationIfNeeded(
 		GameSession session,
 		ModeratorResponse input)
 	{
+		if (IsCompleteHolderSetKnown(session))
+		{
+			return;
+		}
+
 		var holderId = input.SelectedPlayerIds?.SingleOrDefault()
 			?? throw new InvalidOperationException(
 				"Thief identification requires exactly one Player.");
@@ -203,12 +256,10 @@ internal sealed class ThiefRole : NightRoleHookListener<ThiefRoleState>
 			}
 		}
 
-		base.ProcessRoleIdentification(session, input);
+		IdentifyCompleteLivingRoleHolderSet(session, [holderId]);
 	}
 
-	private HookListenerActionResult CommitChoice(
-		GameSession session,
-		ModeratorResponse input)
+	private void CommitChoice(GameSession session, ModeratorResponse input)
 	{
 		var holder = GetCurrentThief(session);
 		var selectedOptionId = input.SelectedOptionIds?.SingleOrDefault()
@@ -224,14 +275,15 @@ internal sealed class ThiefRole : NightRoleHookListener<ThiefRoleState>
 					"The Thief decline could not be committed.");
 			}
 
-			return PrepareSleepInstruction(holder.Id);
+			return;
 		}
 
 		var selected = selectedOptionId switch
 		{
 			ThiefOfferOptionIds.Offer1 => (Selected: offer1, Other: offer2),
 			ThiefOfferOptionIds.Offer2 => (Selected: offer2, Other: offer1),
-			_ => throw new InvalidOperationException("The Thief option is unknown.")
+			_ => throw new InvalidOperationException(
+				"The Thief option is unknown.")
 		};
 		var outgoing = session.GetModeratorPhysicalCharacterCards()
 			.Single(state =>
@@ -248,27 +300,188 @@ internal sealed class ThiefRole : NightRoleHookListener<ThiefRoleState>
 		if (!PermanentRoleSwapRules.CanCommit(session, request) ||
 		    !session.TryCommitPermanentRoleSwap(request))
 		{
-			throw new InvalidOperationException("The Thief exchange could not be committed.");
+			throw new InvalidOperationException(
+				"The Thief exchange could not be committed.");
 		}
-
-		return PrepareSleepInstruction(holder.Id);
 	}
 
-	protected override HookListenerActionResult PrepareSleepInstruction(
-		GameSession session) => PrepareSleepInstruction(GetCurrentThief(session).Id);
+	private void ValidateIdentificationInstruction(
+		GameSession session,
+		SelectPlayersInstruction instruction)
+	{
+		if (instruction.RoleIdentification != MainRoleType.Thief ||
+		    instruction.AffectedPlayerIds != null ||
+		    !instruction.SelectablePlayerIds.SetEquals(
+			    GetIdentificationCandidates(session)) ||
+		    instruction.CountConstraint != NumberRangeConstraint.Exact(
+			    GetExpectedLivingRoleHolderCount(session)))
+		{
+			throw new InvalidOperationException(
+				"The Thief identification instruction has invalid workflow context.");
+		}
+	}
 
-	private HookListenerActionResult PrepareSleepInstruction(Guid playerId) =>
-		HookListenerActionResult.NeedInput(
-			new ConfirmationInstruction(
-				ModeratorInstructionSemantic.PutRoleToSleep,
-				GameStrings.RoleGoesToSleepSingle.Format(PublicName),
-				affectedPlayerIds: [playerId]),
-			ThiefRoleState.ReadyToSleep);
+	private void ValidateWakeInstruction(
+		GameSession session,
+		ConfirmationInstruction instruction)
+	{
+		if (!StringComparer.Ordinal.Equals(
+			    instruction.PublicAnnouncement,
+			    GameStrings.RoleWakesUp.Format(PublicName)) ||
+		    instruction.PrivateInstruction != null ||
+		    !HasExpectedAffectedRoleHolders(session, instruction))
+		{
+			throw new InvalidOperationException(
+				"The Thief wake instruction has invalid workflow context.");
+		}
+	}
+
+	private void ValidateOfferInstruction(
+		GameSession session,
+		SelectOptionsInstruction instruction)
+	{
+		if (instruction.PublicAnnouncement != null ||
+		    !StringComparer.Ordinal.Equals(
+			    instruction.PrivateInstruction,
+			    GameStrings.ThiefOfferSelectionInstruction) ||
+		    instruction.SelectionRange != NumberRangeConstraint.Single ||
+		    !instruction.Options.SequenceEqual(CreateOfferOptions(session)) ||
+		    !HasExpectedAffectedRoleHolders(session, instruction))
+		{
+			throw new InvalidOperationException(
+				"The Thief offer instruction has invalid workflow context.");
+		}
+	}
+
+	private void ValidateSleepInstruction(
+		GameSession session,
+		ConfirmationInstruction instruction)
+	{
+		if (!StringComparer.Ordinal.Equals(
+			    instruction.PublicAnnouncement,
+			    GameStrings.RoleGoesToSleepSingle.Format(PublicName)) ||
+		    instruction.PrivateInstruction != null ||
+		    instruction.AffectedPlayerIds is not [var playerId] ||
+		    playerId != ResolveActingThief(session).Id ||
+		    !ThiefOfferRules.HasValidCommittedChoice(session, playerId))
+		{
+			throw new InvalidOperationException(
+				"The pending Thief sleep instruction is structurally invalid.");
+		}
+	}
+
+	private void ValidateIdentificationRecoveryBoundary(
+		GameSession session,
+		SelectOptionsInstruction instruction,
+		AcceptedObservationRecoveryCursor cursor)
+	{
+		ValidateThiefCursor(
+			cursor,
+			ModeratorInstructionSemantic.IdentifyRoleHolders);
+		var livingHolderIds = GetLivingHolderIds(session);
+		if (livingHolderIds.Count == 0 ||
+		    !session.GameHistoryLog.OfType<RoleIdentificationLogEntry>().Any(
+			    entry =>
+				    entry.TurnNumber == session.TurnNumber &&
+				    entry.CurrentPhase == GamePhase.Night &&
+				    entry.Role == MainRoleType.Thief &&
+				    entry.PlayerIds.SetEquals(livingHolderIds)))
+		{
+			throw new InvalidOperationException(
+				"The Thief offer wait has no committed identification.");
+		}
+	}
+
+	private static void ValidateOfferRecoveryBoundary(
+		GameSession session,
+		ConfirmationInstruction instruction,
+		AcceptedObservationRecoveryCursor cursor) =>
+		ValidateThiefCursor(
+			cursor,
+			ModeratorInstructionSemantic.ChooseThiefOffer);
+
+	private static void ValidateThiefCursor(
+		AcceptedObservationRecoveryCursor cursor,
+		ModeratorInstructionSemantic acceptedSemantic)
+	{
+		if (cursor.Version != AcceptedObservationRecoveryCursor.CurrentVersion ||
+		    cursor.AcceptedObservationSemantic != acceptedSemantic ||
+		    cursor.ObservedRole != MainRoleType.Thief ||
+		    cursor.ContinuationRole != MainRoleType.Thief ||
+		    cursor.RetainedLittleGirlGuidanceDecision != null)
+		{
+			throw new InvalidOperationException(
+				"The Thief continuation cursor has invalid workflow context.");
+		}
+	}
+
+	private bool ClaimsHolderScopedCandidate(
+		GameSession session,
+		ModeratorInstruction instruction) =>
+		HasExpectedAffectedRoleHolders(session, instruction);
+
+	private bool HasExpectedAffectedRoleHolders(
+		GameSession session,
+		ModeratorInstruction instruction)
+	{
+		var holders = GetLivingHolderIds(session);
+		return holders.Count > 0 &&
+		       instruction.AffectedPlayerIds is { } affectedPlayerIds &&
+		       affectedPlayerIds.ToHashSet().SetEquals(holders);
+	}
+
+	private HashSet<Guid> GetLivingHolderIds(GameSession session) =>
+		GetAliveRolePlayers(session)?.Select(player => player.Id).ToHashSet()
+		?? [];
+
+	private HashSet<Guid> GetIdentificationCandidates(GameSession session) =>
+		session.GetPlayers()
+			.WithHealth(PlayerHealth.Alive)
+			.Where(player =>
+				player.State.CurrentRole == MainRoleType.Thief ||
+				(player.State.CurrentRole == null &&
+				 (player.State.ModeratorKnownRole == null ||
+				  player.State.ModeratorKnownRole == MainRoleType.Thief)))
+			.ToIdSet();
 
 	private static IPlayer GetCurrentThief(GameSession session) =>
 		session.GetPlayers()
 			.WithHealth(PlayerHealth.Alive)
-			.SingleOrDefault(player => player.State.CurrentRole == MainRoleType.Thief)
+			.SingleOrDefault(player =>
+				player.State.CurrentRole == MainRoleType.Thief)
 		?? throw new InvalidOperationException("No living Thief is available.");
 
+	/// <summary>
+	/// Resolves the Player who acted as the Thief. A committed exchange replaces
+	/// that Player's current Role, so the acting holder is recovered from the
+	/// committed exchange when no living printed Thief remains.
+	/// </summary>
+	private static IPlayer ResolveActingThief(GameSession session)
+	{
+		var holder = session.GetPlayers()
+			.WithHealth(PlayerHealth.Alive)
+			.SingleOrDefault(player =>
+				player.State.CurrentRole == MainRoleType.Thief);
+		if (holder != null)
+		{
+			return holder;
+		}
+
+		var exchangedPlayerIds = session.GameHistoryLog
+			.OfType<PermanentRoleSwapCommittedLogEntry>()
+			.Where(entry =>
+				entry.ExpectedCurrentRole == MainRoleType.Thief &&
+				entry.RoleLockInVersion == session.RoleLockIn.Version)
+			.Select(entry => entry.PlayerId)
+			.Distinct()
+			.ToArray();
+		return exchangedPlayerIds is [var playerId]
+			? session.GetPlayers()
+				  .WithHealth(PlayerHealth.Alive)
+				  .SingleOrDefault(player => player.Id == playerId)
+			  ?? throw new InvalidOperationException(
+				  "No living Thief is available.")
+			: throw new InvalidOperationException(
+				"No living Thief is available.");
+	}
 }
