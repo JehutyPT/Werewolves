@@ -21,16 +21,6 @@ internal abstract class RoleHookListener : IGameHookListener
 	
 	public abstract ListenerIdentifier Id { get; }
 
-	public virtual bool TryResolvePendingInstructionContinuation(
-		GameHook hook,
-		GameSession session,
-		ModeratorInstruction pendingInstruction,
-		out string listenerState)
-	{
-		listenerState = string.Empty;
-		return false;
-	}
-
 	public virtual HookListenerActionResult Execute(GameSession session, ModeratorResponse input)
 	{
 		if (GetExpectedLivingRoleHolderCount(session) == 0)

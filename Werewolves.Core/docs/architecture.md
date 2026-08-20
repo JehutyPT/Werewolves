@@ -218,23 +218,29 @@ Defines the contract for components that respond to game hooks (represents the *
         *   `HookListenerActionResult.NeedInput(instruction, nextPhase)`: Listener requires input, processing pauses.
         *   `HookListenerActionResult.Complete(nextPhase)`: Listener has finished processing a given game hook, after performing some work.
         *   `HookListenerActionResult.Skip()`: Listener has not done any work, as it detected it has nothing to do for a given game.
-*   **Advanced State Machine Features:** The implementation provides sophisticated state management capabilities including:
+*   **Advanced State Machine Features:** The `RoleHookListener<TRoleStateEnum>` stage engine provides:
     *   Declarative state machine definition with runtime validation
     *   Comprehensive error checking and state transition validation
     *   Support for open-ended stages with unknown valid end states at runtime in state flows
     *   Support for end stages that prevent further state changes in state flows
     *   Generic `HookListenerActionResult<T>` for precise state tracking with `NextListenerPhase`
     *   Built-in protection against invalid state transitions and handler overwrites
-*   **Polymorphic Listener Hierarchy:** The architecture provides a hierarchy of abstract base classes that implement `IGameHookListener`:
-    *   **`RoleHookListener`**: Universal base for all role listeners, providing core logic and stateless implementation support
-    *   **`RoleHookListener<TRoleStateEnum>`**: Base for stateful roles with a declarative state machine engine and runtime validation
-    *   **`NightRoleHookListener<T>`**: Specialized base for night roles with wake/act/sleep lifecycle and Night 1 identification support
-    *   **`StandardNightRoleHookListener<T>`**: Further specialization for standard "prompt target → process selection" workflow
-    *   **`StandardNightRoleHookListener`**: Non-generic version using default state enum
-    *   **`NightRoleIdOnlyHookListener`**: For roles that only require Night 1 identification without subsequent powers
-    *   **`ImmediateFeedbackNightRoleHookListener`**: Specialized base for roles that require immediate moderator feedback during target selection processing
-*   **Concrete Implementations:** All role classes inherit from appropriate base classes in the hierarchy, containing their complete state machine logic with built-in validation and state management. 
-*   **TurnNumber Pattern for First-Night-Only Roles:** Roles with actions exclusive to the first night (e.g., Cupid, Thief, WolfHound, WildChild) are handled automatically by the `NightRoleHookListener` base class, which includes Night 1 identification in the wake-up flow.
+*   **Declared Role Workflow Seam:** Every interactive Role expresses its moderator exchange as a *declared workflow* rather than as hand-written continuation matching. This is the single continuation authority for interactive Roles: there is no second matcher, and no listener can reclaim a Pending Instruction outside it.
+    *   **`IDeclaredRoleWorkflow`**: The seam a Role opts into. It exposes a `WorkflowRuntime` and a `GetWorkflowRuntime(GameHook)` lookup, so one Role can own declared steps on more than one hook (for example a Night cadence plus a Day-hook continuation).
+    *   **`RoleWorkflowRuntime`**: Owns one listener's ordered steps for one hook. `Execute` resolves **exactly one** step whose start state matches the current listener state and whose guard passes — the *one-listener-step rule*. Zero or multiple matches is a programming error and throws rather than guessing.
+    *   **`IRoleWorkflowStep`**: The step contract. Alongside the waits below, `RoleWorkflowDecisionStep<TState>` performs a silent branch and `RoleWorkflowCompletionStep<TState>` ends the Role's turn on the hook.
+    *   **`IRecoverableWait` / `RecoverableWait<TState, TInstruction>`**: A declared pause. A wait knows the instruction it issues, the response type it accepts, the continuation state it resumes into, and — critically — how to recognize *its own* Pending Instruction after Rehydration. Static factories select the durability the exchange needs (`RecoverableWaitDurability`): `Replayable`, `ReplayableWithAcceptedObservationHandoff`, `Durable`, and the domain-durable family `DomainDurable`, `RecurringDomainDurable`, `OneUseDomainDurable`, `ActorSetupCardSpendDomainDurable`, `LoversPairDomainDurable`, and `ActorBorrowedLoversDomainDurable`.
+    *   **Recovery classification:** `ClassifyRecoveryCandidate` returns `Unrelated` (this wait did not issue the Pending Instruction), `Authenticated` (it did, and here is the continuation state), or `ClaimedButInvalid` (it claims the instruction but its context does not check out). All three are terminal — a Role never falls back to another matcher — and `ClaimedButInvalid` **fails closed** by throwing. Two listeners resolving the same Pending Instruction is likewise a hard error.
+    *   **Committed recovery boundaries:** `TryValidateCommittedRecoveryBoundary` has six typed overloads on both `RoleWorkflowRuntime` and `IRecoverableWait`, one per committed-boundary shape (target-private Role Power, recurring Role Power, one-use Role Power, Actor setup-card spend, Lovers pair, and Actor-borrowed Cupid Lovers). A wait authenticates the boundary it actually declared; the others are not its business.
+    *   **`DelegatedRecoverableWait<TState>`**: A wait whose issue and recovery behavior is supplied by the Role itself, for exchanges that do not fit the standard factories. It stubs all six committed-boundary overloads.
+    *   **Transience:** None of this is serialized. Consistent with ADR-0002, the active listener, its state, and the active sub-phase stage are transient execution details; Rehydration re-derives the continuation by asking the declared waits which one owns the committed `PendingInstruction`.
+*   **Polymorphic Listener Hierarchy:** The architecture provides a small set of abstract base classes that implement `IGameHookListener`:
+    *   **`RoleHookListener`**: Universal base for all role listeners, providing core logic and stateless implementation support. Most interactive Roles derive from it directly and add `IDeclaredRoleWorkflow`.
+    *   **`RoleHookListener<TRoleStateEnum>`**: Base for stateful roles driven by the older declarative stage engine with runtime validation. Retained for `KnightWithTheRustySwordRole`.
+    *   **`CardinalityRoleHolderNightHookListener`**: Declared-workflow base for the shared cadence of Roles whose complete holder set recognizes one another on Night 1 and whose surviving quorum communicates on later Nights (`TwoSistersRole`, `ThreeBrothersRole`).
+    *   **`DeclaredRoleIdentificationOnlyHookListener`**: Declared-workflow base for Roles that only need Night 1 identification and no subsequent Night power (`LittleGirlRole`, `BearTamerRole`, `PrejudicedManipulatorRole`).
+*   **Concrete Implementations:** Each Role owns its own declared steps. There is deliberately no shared night-cadence builder: a Role's wake, act, and sleep exchanges are spelled out in its own workflow, which is what makes its recovery behavior readable in one place.
+*   **TurnNumber Pattern for First-Night-Only Roles:** Roles with actions exclusive to the first night (e.g., Cupid, Thief, WolfHound, WildChild) gate their own declared steps on `session.TurnNumber == 1`. The guard lives on the step, so a first-Night-only Role simply has no executable step on later Nights.
 
 ## `IPlayerState` Interface & `PlayerState` Class
 
@@ -548,8 +554,7 @@ Polymorphic instruction system for communication TO the moderator. **Assembly Lo
 *   `HookListenerOutcome`: `Skip`, `NeedInput`, `Complete`. Communicates listener state machine result back to GameFlowManager.
 
 ### Role State Machine Enums
-*   `StandardNightRoleState`: `AwaitingAwakeConfirmation`, `AwaitingTargetSelection`, `AwaitingSleepConfirmation`, `Asleep`. Standard state machine for night roles with "wake → select target → sleep" flow.
-*   `ImmediateFeedbackNightRoleState`: `AwaitingAwakeConfirmation`, `AwaitingTargetSelection`, `AwaitingModeratorFeedback`, `AwaitingSleepConfirmation`, `Asleep`. Extended state machine for roles requiring immediate moderator feedback during target selection.
+*   `StandardNightRoleState`: `AwaitingAwakeConfirmation`, `AwaitingTargetSelection`, `AwaitingSleepConfirmation`, `Asleep`. Continuation states for the "wake → select target → sleep" Night flow, used by `WildChildRole`'s declared workflow.
 
 ### Sub-Phase Enums
 *   `NightSubPhases`: `Start`.
