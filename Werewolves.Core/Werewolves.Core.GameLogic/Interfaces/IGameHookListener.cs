@@ -76,17 +76,3 @@ internal sealed record TargetPrivateRolePowerRecoveryBoundary(
 			commit.SpentResourceIdentity);
 	}
 }
-
-internal interface ITargetPrivateRolePowerRecoveryCapability
-{
-    bool TryValidateCommittedRecoveryBoundary(
-        GameSession session,
-        ModeratorInstruction? startingInstruction,
-        ModeratorResponse input,
-        TargetPrivateRolePowerRecoveryBoundary committedBoundary,
-        ModeratorInstruction nextInstruction);
-
-    void ValidateRecoveryCursorIdentity(
-		GameSession session,
-		DomainRecoveryCursor cursor);
-}

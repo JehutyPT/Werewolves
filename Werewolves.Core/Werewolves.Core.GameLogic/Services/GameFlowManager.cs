@@ -2915,6 +2915,7 @@ internal static class GameFlowManager
                 .TryValidateTargetPrivateRecoveryCursorIdentity(
 				session,
                 Listener(sourceRole),
+                NightMainActionLoop,
                 admissions,
                 (id, factory) =>
                     session.GetOrCreateListener(id, factory),
