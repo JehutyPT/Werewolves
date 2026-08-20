@@ -189,7 +189,7 @@ internal static class ActorBorrowedInstructionFixture
 			session,
 			start,
 			sourceCard.Id,
-			retainExecution: sourceRole == MainRoleType.Fox);
+			retainExecution: true);
 		return new CoreFixture(
 			session,
 			start,
@@ -255,12 +255,14 @@ internal static class ActorBorrowedInstructionFixture
 			listener,
 			fixture,
 			fixture.ActorSleep.CreateResponse(),
-			"Cupid wake");
+			"Cupid wake",
+			retainExecution: true);
 		var selection = AdvanceToInstruction<SelectPlayersInstruction>(
 			listener,
 			fixture.Session,
 			wake.CreateResponse(),
-			"Cupid target selection");
+			"Cupid target selection",
+			retainExecution: true);
 		var selectedPlayerIds = fixture.Players
 			.Select(player => player.Id)
 			.Where(playerId =>
@@ -394,18 +396,25 @@ internal static class ActorBorrowedInstructionFixture
 			listener,
 			fixture,
 			fixture.ActorSleep.CreateResponse(),
-			"Stuttering Judge wake");
+			"Stuttering Judge wake",
+			retainExecution: true);
 		var setup = AdvanceToInstruction<ConfirmationInstruction>(
 			listener,
 			fixture.Session,
 			wake.CreateResponse(),
-			"Stuttering Judge signal setup");
+			"Stuttering Judge signal setup",
+			retainExecution: true);
 		var sleep = AdvanceToInstruction<ConfirmationInstruction>(
 			listener,
 			fixture.Session,
 			setup.CreateResponse(),
-			"Stuttering Judge sleep");
-		var terminal = Advance(listener, fixture.Session, sleep.CreateResponse());
+			"Stuttering Judge sleep",
+			retainExecution: true);
+		var terminal = Advance(
+			listener,
+			fixture.Session,
+			sleep.CreateResponse(),
+			retainExecution: true);
 		if (terminal.Instruction is null &&
 			terminal.Outcome != HookListenerOutcome.Complete)
 		{
@@ -417,7 +426,7 @@ internal static class ActorBorrowedInstructionFixture
 		var debate = RequireInstruction<ConfirmationInstruction>(
 			GameFlowManager.HandleInput(
 				fixture.Session,
-				fixture.Start.CreateResponse(),
+				MainFlowHandoffResponse(fixture),
 				SupportedRoleCatalog.Admissions).ModeratorInstruction,
 			"day debate");
 		var conductVote = RequireInstruction<ConfirmationInstruction>(
@@ -499,7 +508,7 @@ internal static class ActorBorrowedInstructionFixture
 			fixture.ActorId);
 		fixture.Session.TransitionMainPhase(GamePhase.Dawn);
 		var debate = RequireSemantic<ConfirmationInstruction>(
-			AdvanceMainFlow(fixture.Session, fixture.Start.CreateResponse()),
+			AdvanceMainFlow(fixture.Session, MainFlowHandoffResponse(fixture)),
 			ModeratorInstructionSemantic.StartDayDebate,
 			"independent flow after silent borrowed Elder resistance");
 		if (fixture.Session.GetActorBorrowedElderResistanceCommits().Count != 1)
@@ -606,7 +615,7 @@ internal static class ActorBorrowedInstructionFixture
 		fixture.Session.TransitionMainPhase(GamePhase.Dawn);
 		var growl = AdvanceDawnToConfirmation(
 			fixture,
-			fixture.Start.CreateResponse(),
+			MainFlowHandoffResponse(fixture),
 			ModeratorInstructionSemantic.AnnounceBearTamerGrowl,
 			_ => MainRoleType.SimpleVillager,
 			"borrowed Bear Tamer growl");
@@ -632,7 +641,7 @@ internal static class ActorBorrowedInstructionFixture
 		fixture.Session.TransitionMainPhase(GamePhase.Dawn);
 		var debate = AdvanceDawnToConfirmation(
 			fixture,
-			fixture.Start.CreateResponse(),
+			MainFlowHandoffResponse(fixture),
 			ModeratorInstructionSemantic.StartDayDebate,
 			playerId => playerId == fixture.ActorId
 				? MainRoleType.Actor
@@ -657,7 +666,7 @@ internal static class ActorBorrowedInstructionFixture
 		DriveNightHookToCompletion(
 			knight,
 			fixture,
-			fixture.Start.CreateResponse());
+			MainFlowHandoffResponse(fixture));
 
 		UpdateKnownWerewolfAgentFacts(
 			fixture.Session,
@@ -944,7 +953,7 @@ internal static class ActorBorrowedInstructionFixture
 	{
 		fixture.Session.TransitionMainPhase(GamePhase.Day);
 		var debate = RequireSemantic<ConfirmationInstruction>(
-			AdvanceMainFlow(fixture.Session, fixture.Start.CreateResponse()),
+			AdvanceMainFlow(fixture.Session, MainFlowHandoffResponse(fixture)),
 			ModeratorInstructionSemantic.StartDayDebate,
 			"day debate");
 		return RequireSemantic<SelectPlayersInstruction>(
@@ -952,6 +961,18 @@ internal static class ActorBorrowedInstructionFixture
 			ModeratorInstructionSemantic.RecordDayVote,
 			"day vote");
 	}
+
+	/// <summary>
+	/// Declared Role workflows authenticate against the published Pending
+	/// Instruction, so the main-flow hand-off must correlate to it instead of
+	/// replaying the original Start Game response.
+	/// </summary>
+	private static ModeratorResponse MainFlowHandoffResponse(
+		CoreFixture fixture) =>
+		fixture.Session.Execution.PendingInstruction is ConfirmationInstruction
+			pending
+			? pending.CreateResponse()
+			: fixture.Start.CreateResponse();
 
 	private static ModeratorInstruction AdvanceMainFlow(
 		GameSession session,

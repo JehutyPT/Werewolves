@@ -271,6 +271,62 @@ internal sealed class RoleWorkflowRuntime
 		};
 	}
 
+	internal bool TryValidateCommittedRecoveryBoundary(
+		GameSession session,
+		ModeratorInstruction? startingInstruction,
+		ModeratorResponse input,
+		LoversPairCommittedLogEntry committedBoundary,
+		ModeratorInstruction nextInstruction)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		ArgumentNullException.ThrowIfNull(input);
+		ArgumentNullException.ThrowIfNull(committedBoundary);
+		ArgumentNullException.ThrowIfNull(nextInstruction);
+		var claims = _waits
+			.Where(wait => wait.TryValidateCommittedRecoveryBoundary(
+				session,
+				startingInstruction,
+				input,
+				committedBoundary,
+				nextInstruction))
+			.ToArray();
+		return claims switch
+		{
+			[] => false,
+			[_] => true,
+			_ => throw new InvalidOperationException(
+				$"Committed Lovers pair boundary authenticates multiple waits for '{_listener}'.")
+		};
+	}
+
+	internal bool TryValidateCommittedRecoveryBoundary(
+		GameSession session,
+		ModeratorInstruction? startingInstruction,
+		ModeratorResponse input,
+		ActorBorrowedCupidLoversCommit committedBoundary,
+		ModeratorInstruction nextInstruction)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		ArgumentNullException.ThrowIfNull(input);
+		ArgumentNullException.ThrowIfNull(committedBoundary);
+		ArgumentNullException.ThrowIfNull(nextInstruction);
+		var claims = _waits
+			.Where(wait => wait.TryValidateCommittedRecoveryBoundary(
+				session,
+				startingInstruction,
+				input,
+				committedBoundary,
+				nextInstruction))
+			.ToArray();
+		return claims switch
+		{
+			[] => false,
+			[_] => true,
+			_ => throw new InvalidOperationException(
+				$"Committed Actor borrowed Lovers boundary authenticates multiple waits for '{_listener}'.")
+		};
+	}
+
 	private void AuthenticateLiveWait(
 		GameSession session,
 		ModeratorResponse input,
@@ -363,6 +419,20 @@ internal interface IRecoverableWait : IRoleWorkflowStep
 		ModeratorResponse input,
 		ActorSetupCardSpendCommittedLogEntry committedBoundary,
 		ModeratorInstruction nextInstruction);
+
+	bool TryValidateCommittedRecoveryBoundary(
+		GameSession session,
+		ModeratorInstruction? startingInstruction,
+		ModeratorResponse input,
+		LoversPairCommittedLogEntry committedBoundary,
+		ModeratorInstruction nextInstruction);
+
+	bool TryValidateCommittedRecoveryBoundary(
+		GameSession session,
+		ModeratorInstruction? startingInstruction,
+		ModeratorResponse input,
+		ActorBorrowedCupidLoversCommit committedBoundary,
+		ModeratorInstruction nextInstruction);
 }
 
 internal enum RecoverableWaitDurability
@@ -424,6 +494,20 @@ internal sealed class RecoverableWait<TState, TInstruction> : IRecoverableWait
 		ActorSetupCardSpendCommittedLogEntry,
 		TInstruction,
 		bool>? _validateActorSetupCardSpendCommittedRecoveryBoundary;
+	private readonly Func<
+		GameSession,
+		ModeratorInstruction?,
+		ModeratorResponse,
+		LoversPairCommittedLogEntry,
+		TInstruction,
+		bool>? _validateLoversPairCommittedRecoveryBoundary;
+	private readonly Func<
+		GameSession,
+		ModeratorInstruction?,
+		ModeratorResponse,
+		ActorBorrowedCupidLoversCommit,
+		TInstruction,
+		bool>? _validateActorBorrowedLoversCommittedRecoveryBoundary;
 
 	private RecoverableWait(
 		ListenerIdentifier listener,
@@ -473,7 +557,21 @@ internal sealed class RecoverableWait<TState, TInstruction> : IRecoverableWait
 			ModeratorResponse,
 			ActorSetupCardSpendCommittedLogEntry,
 			TInstruction,
-			bool>? validateActorSetupCardSpendCommittedRecoveryBoundary)
+			bool>? validateActorSetupCardSpendCommittedRecoveryBoundary,
+		Func<
+			GameSession,
+			ModeratorInstruction?,
+			ModeratorResponse,
+			LoversPairCommittedLogEntry,
+			TInstruction,
+			bool>? validateLoversPairCommittedRecoveryBoundary,
+		Func<
+			GameSession,
+			ModeratorInstruction?,
+			ModeratorResponse,
+			ActorBorrowedCupidLoversCommit,
+			TInstruction,
+			bool>? validateActorBorrowedLoversCommittedRecoveryBoundary)
 	{
 		if (!Enum.IsDefined(semantic) || !Enum.IsDefined(expectedResponseType))
 		{
@@ -509,6 +607,10 @@ internal sealed class RecoverableWait<TState, TInstruction> : IRecoverableWait
 			validateOneUseCommittedRecoveryBoundary;
 		_validateActorSetupCardSpendCommittedRecoveryBoundary =
 			validateActorSetupCardSpendCommittedRecoveryBoundary;
+		_validateLoversPairCommittedRecoveryBoundary =
+			validateLoversPairCommittedRecoveryBoundary;
+		_validateActorBorrowedLoversCommittedRecoveryBoundary =
+			validateActorBorrowedLoversCommittedRecoveryBoundary;
 		var hasAcceptedObservationPolicy =
 			validateDurableContext != null &&
 			existingCursorContinuationFactory != null;
@@ -517,6 +619,10 @@ internal sealed class RecoverableWait<TState, TInstruction> : IRecoverableWait
 			(validateRecurringCommittedRecoveryBoundary != null ? 1 : 0) +
 			(validateOneUseCommittedRecoveryBoundary != null ? 1 : 0) +
 			(validateActorSetupCardSpendCommittedRecoveryBoundary != null
+				? 1
+				: 0) +
+			(validateLoversPairCommittedRecoveryBoundary != null ? 1 : 0) +
+			(validateActorBorrowedLoversCommittedRecoveryBoundary != null
 				? 1
 				: 0);
 		var hasDomainPolicy =
@@ -573,7 +679,9 @@ internal sealed class RecoverableWait<TState, TInstruction> : IRecoverableWait
 			validateTargetPrivateCommittedRecoveryBoundary: null,
 			validateRecurringCommittedRecoveryBoundary: null,
 			validateOneUseCommittedRecoveryBoundary: null,
-			validateActorSetupCardSpendCommittedRecoveryBoundary: null);
+			validateActorSetupCardSpendCommittedRecoveryBoundary: null,
+			validateLoversPairCommittedRecoveryBoundary: null,
+			validateActorBorrowedLoversCommittedRecoveryBoundary: null);
 
 	internal static RecoverableWait<TState, TInstruction>
 		ReplayableWithAcceptedObservationHandoff(
@@ -612,7 +720,9 @@ internal sealed class RecoverableWait<TState, TInstruction> : IRecoverableWait
 			validateTargetPrivateCommittedRecoveryBoundary: null,
 			validateRecurringCommittedRecoveryBoundary: null,
 			validateOneUseCommittedRecoveryBoundary: null,
-			validateActorSetupCardSpendCommittedRecoveryBoundary: null);
+			validateActorSetupCardSpendCommittedRecoveryBoundary: null,
+			validateLoversPairCommittedRecoveryBoundary: null,
+			validateActorBorrowedLoversCommittedRecoveryBoundary: null);
 
 	internal static RecoverableWait<TState, TInstruction> Durable(
 		ListenerIdentifier listener,
@@ -650,7 +760,9 @@ internal sealed class RecoverableWait<TState, TInstruction> : IRecoverableWait
 			validateTargetPrivateCommittedRecoveryBoundary: null,
 			validateRecurringCommittedRecoveryBoundary: null,
 			validateOneUseCommittedRecoveryBoundary: null,
-			validateActorSetupCardSpendCommittedRecoveryBoundary: null);
+			validateActorSetupCardSpendCommittedRecoveryBoundary: null,
+			validateLoversPairCommittedRecoveryBoundary: null,
+			validateActorBorrowedLoversCommittedRecoveryBoundary: null);
 
 	internal static RecoverableWait<TState, TInstruction> DomainDurable(
 		ListenerIdentifier listener,
@@ -695,7 +807,9 @@ internal sealed class RecoverableWait<TState, TInstruction> : IRecoverableWait
 			validateCommittedRecoveryBoundary,
 			validateRecurringCommittedRecoveryBoundary: null,
 			validateOneUseCommittedRecoveryBoundary: null,
-			validateActorSetupCardSpendCommittedRecoveryBoundary: null);
+			validateActorSetupCardSpendCommittedRecoveryBoundary: null,
+			validateLoversPairCommittedRecoveryBoundary: null,
+			validateActorBorrowedLoversCommittedRecoveryBoundary: null);
 
 	internal static RecoverableWait<TState, TInstruction>
 		RecurringDomainDurable(
@@ -741,7 +855,9 @@ internal sealed class RecoverableWait<TState, TInstruction> : IRecoverableWait
 			validateTargetPrivateCommittedRecoveryBoundary: null,
 			validateCommittedRecoveryBoundary,
 			validateOneUseCommittedRecoveryBoundary: null,
-			validateActorSetupCardSpendCommittedRecoveryBoundary: null);
+			validateActorSetupCardSpendCommittedRecoveryBoundary: null,
+			validateLoversPairCommittedRecoveryBoundary: null,
+			validateActorBorrowedLoversCommittedRecoveryBoundary: null);
 
 	internal static RecoverableWait<TState, TInstruction>
 		OneUseDomainDurable(
@@ -787,7 +903,9 @@ internal sealed class RecoverableWait<TState, TInstruction> : IRecoverableWait
 			validateTargetPrivateCommittedRecoveryBoundary: null,
 			validateRecurringCommittedRecoveryBoundary: null,
 			validateCommittedRecoveryBoundary,
-			validateActorSetupCardSpendCommittedRecoveryBoundary: null);
+			validateActorSetupCardSpendCommittedRecoveryBoundary: null,
+			validateLoversPairCommittedRecoveryBoundary: null,
+			validateActorBorrowedLoversCommittedRecoveryBoundary: null);
 
 	/// <summary>
 	/// Binds a wait whose committed durable boundary is one Actor setup-card
@@ -839,6 +957,115 @@ internal sealed class RecoverableWait<TState, TInstruction> : IRecoverableWait
 			validateTargetPrivateCommittedRecoveryBoundary: null,
 			validateRecurringCommittedRecoveryBoundary: null,
 			validateOneUseCommittedRecoveryBoundary: null,
+			validateCommittedRecoveryBoundary,
+			validateLoversPairCommittedRecoveryBoundary: null,
+			validateActorBorrowedLoversCommittedRecoveryBoundary: null);
+
+	/// <summary>
+	/// Binds a wait whose committed durable boundary is the native Lovers pair
+	/// commit. The pair is a private Cupid link with no recurring Role Power
+	/// log entry, so the declaring Role authenticates the acting holder, the
+	/// accepted selection, and the private recognition continuation itself.
+	/// </summary>
+	internal static RecoverableWait<TState, TInstruction>
+		LoversPairDomainDurable(
+			ListenerIdentifier listener,
+			GameHook hook,
+			TState? startState,
+			TState continuationState,
+			ModeratorInstructionSemantic semantic,
+			ExpectedInputType expectedResponseType,
+			Func<GameSession, bool> canIssue,
+			Action<GameSession, ModeratorResponse> beforeIssue,
+			Func<GameSession, TInstruction> instructionFactory,
+			Func<GameSession, ModeratorInstruction, bool> claimsCandidate,
+			Action<GameSession, TInstruction> validateInstructionContext,
+			Action<GameSession, TInstruction, DomainRecoveryCursor>
+				validateDomainContext,
+			Func<DomainRecoveryCursor, TState>
+				existingDomainCursorContinuationFactory,
+			Func<
+				GameSession,
+				ModeratorInstruction?,
+				ModeratorResponse,
+				LoversPairCommittedLogEntry,
+				TInstruction,
+				bool> validateCommittedRecoveryBoundary) =>
+		new(
+			listener,
+			hook,
+			startState,
+			continuationState,
+			semantic,
+			expectedResponseType,
+			canIssue,
+			beforeIssue,
+			instructionFactory,
+			claimsCandidate,
+			validateInstructionContext,
+			RecoverableWaitDurability.Domain,
+			validateDurableContext: null,
+			existingCursorContinuationFactory: null,
+			validateDomainContext,
+			existingDomainCursorContinuationFactory,
+			validateTargetPrivateCommittedRecoveryBoundary: null,
+			validateRecurringCommittedRecoveryBoundary: null,
+			validateOneUseCommittedRecoveryBoundary: null,
+			validateActorSetupCardSpendCommittedRecoveryBoundary: null,
+			validateCommittedRecoveryBoundary,
+			validateActorBorrowedLoversCommittedRecoveryBoundary: null);
+
+	/// <summary>
+	/// Binds a wait whose committed durable boundary is the Actor borrowed
+	/// Lovers commit. It mirrors <see cref="LoversPairDomainDurable"/> for the
+	/// Moderator projection the Actor commits while borrowing the source Role.
+	/// </summary>
+	internal static RecoverableWait<TState, TInstruction>
+		ActorBorrowedLoversDomainDurable(
+			ListenerIdentifier listener,
+			GameHook hook,
+			TState? startState,
+			TState continuationState,
+			ModeratorInstructionSemantic semantic,
+			ExpectedInputType expectedResponseType,
+			Func<GameSession, bool> canIssue,
+			Action<GameSession, ModeratorResponse> beforeIssue,
+			Func<GameSession, TInstruction> instructionFactory,
+			Func<GameSession, ModeratorInstruction, bool> claimsCandidate,
+			Action<GameSession, TInstruction> validateInstructionContext,
+			Action<GameSession, TInstruction, DomainRecoveryCursor>
+				validateDomainContext,
+			Func<DomainRecoveryCursor, TState>
+				existingDomainCursorContinuationFactory,
+			Func<
+				GameSession,
+				ModeratorInstruction?,
+				ModeratorResponse,
+				ActorBorrowedCupidLoversCommit,
+				TInstruction,
+				bool> validateCommittedRecoveryBoundary) =>
+		new(
+			listener,
+			hook,
+			startState,
+			continuationState,
+			semantic,
+			expectedResponseType,
+			canIssue,
+			beforeIssue,
+			instructionFactory,
+			claimsCandidate,
+			validateInstructionContext,
+			RecoverableWaitDurability.Domain,
+			validateDurableContext: null,
+			existingCursorContinuationFactory: null,
+			validateDomainContext,
+			existingDomainCursorContinuationFactory,
+			validateTargetPrivateCommittedRecoveryBoundary: null,
+			validateRecurringCommittedRecoveryBoundary: null,
+			validateOneUseCommittedRecoveryBoundary: null,
+			validateActorSetupCardSpendCommittedRecoveryBoundary: null,
+			validateLoversPairCommittedRecoveryBoundary: null,
 			validateCommittedRecoveryBoundary);
 
 	public ListenerIdentifier Listener { get; }
@@ -1125,6 +1352,64 @@ internal sealed class RecoverableWait<TState, TInstruction> : IRecoverableWait
 			typedInstruction);
 	}
 
+	public bool TryValidateCommittedRecoveryBoundary(
+		GameSession session,
+		ModeratorInstruction? startingInstruction,
+		ModeratorResponse input,
+		LoversPairCommittedLogEntry committedBoundary,
+		ModeratorInstruction nextInstruction)
+	{
+		if (_validateLoversPairCommittedRecoveryBoundary == null ||
+		    _durability != RecoverableWaitDurability.Domain ||
+		    nextInstruction.Semantic != _semantic)
+		{
+			return false;
+		}
+
+		if (nextInstruction is not TInstruction typedInstruction)
+		{
+			throw new InvalidOperationException(
+				$"Committed boundary claims '{Listener}:{_semantic}' with invalid instruction type '{nextInstruction.GetType().Name}'.");
+		}
+
+		ValidateInstruction(session, typedInstruction);
+		return _validateLoversPairCommittedRecoveryBoundary(
+			session,
+			startingInstruction,
+			input,
+			committedBoundary,
+			typedInstruction);
+	}
+
+	public bool TryValidateCommittedRecoveryBoundary(
+		GameSession session,
+		ModeratorInstruction? startingInstruction,
+		ModeratorResponse input,
+		ActorBorrowedCupidLoversCommit committedBoundary,
+		ModeratorInstruction nextInstruction)
+	{
+		if (_validateActorBorrowedLoversCommittedRecoveryBoundary == null ||
+		    _durability != RecoverableWaitDurability.Domain ||
+		    nextInstruction.Semantic != _semantic)
+		{
+			return false;
+		}
+
+		if (nextInstruction is not TInstruction typedInstruction)
+		{
+			throw new InvalidOperationException(
+				$"Committed boundary claims '{Listener}:{_semantic}' with invalid instruction type '{nextInstruction.GetType().Name}'.");
+		}
+
+		ValidateInstruction(session, typedInstruction);
+		return _validateActorBorrowedLoversCommittedRecoveryBoundary(
+			session,
+			startingInstruction,
+			input,
+			committedBoundary,
+			typedInstruction);
+	}
+
 	private bool Claims(
 		GameSession session,
 		ModeratorInstruction pendingInstruction) =>
@@ -1278,6 +1563,20 @@ internal sealed class DelegatedRecoverableWait<TState> : IRecoverableWait
 		ModeratorInstruction? startingInstruction,
 		ModeratorResponse input,
 		ActorSetupCardSpendCommittedLogEntry committedBoundary,
+		ModeratorInstruction nextInstruction) => false;
+
+	public bool TryValidateCommittedRecoveryBoundary(
+		GameSession session,
+		ModeratorInstruction? startingInstruction,
+		ModeratorResponse input,
+		LoversPairCommittedLogEntry committedBoundary,
+		ModeratorInstruction nextInstruction) => false;
+
+	public bool TryValidateCommittedRecoveryBoundary(
+		GameSession session,
+		ModeratorInstruction? startingInstruction,
+		ModeratorResponse input,
+		ActorBorrowedCupidLoversCommit committedBoundary,
 		ModeratorInstruction nextInstruction) => false;
 }
 

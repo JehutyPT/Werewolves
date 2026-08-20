@@ -1645,7 +1645,12 @@ internal static class GameFlowManager
         if (newLoversPairEntries.Count > 0)
         {
             if (newLoversPairEntries is not [var pair] ||
-                !CupidRole.TryValidateCommittedRecoveryBoundary(
+                !RoleListenerDispatch
+                    .TryValidateLoversPairCommittedRecoveryBoundary(
+                    Listener(MainRoleType.Cupid),
+                    admissions,
+                    (id, factory) =>
+                        session.GetOrCreateListener(id, factory),
                     session,
                     startingInstruction,
                     input,
@@ -2115,7 +2120,12 @@ internal static class GameFlowManager
 							session,
 							marker,
 							cupidCommit) ||
-						!CupidRole.TryValidateCommittedRecoveryBoundary(
+						!RoleListenerDispatch
+							.TryValidateActorBorrowedLoversCommittedRecoveryBoundary(
+							Listener(cupidCommit.PowerIdentity.SourceRole),
+							admissions,
+							(id, factory) =>
+								session.GetOrCreateListener(id, factory),
 							session,
 							startingInstruction,
 							input,
@@ -2497,8 +2507,7 @@ internal static class GameFlowManager
 		var hasCentralObservationContract =
 			cursor.AcceptedObservationSemantic is
 				ModeratorInstructionSemantic.IdentifyRoleHolders or
-				ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup or
-				ModeratorInstructionSemantic.RecognizeLovers ||
+				ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup ||
 			(cursor.AcceptedObservationSemantic ==
 				 ModeratorInstructionSemantic
 					 .EstablishStutteringJudgeSignal &&
@@ -2529,12 +2538,6 @@ internal static class GameFlowManager
 					when cursor.ObservedRole == StutteringJudge &&
 					     continuationRole != StutteringJudge =>
 					StutteringJudgeRole.HasValidEstablishedSignal(session),
-                ModeratorInstructionSemantic.RecognizeLovers
-                    when cursor.ObservedRole == Cupid &&
-                         continuationRole == Cupid =>
-                    CupidRole.HasExpectedCommittedPairSleep(
-                        session,
-                        pendingInstruction),
                 _ => false
             };
 		if (!matchesCommittedObservation)
@@ -2928,6 +2931,7 @@ internal static class GameFlowManager
             switch (sourceRole)
             {
                 case MainRoleType.BigBadWolf:
+                case MainRoleType.Cupid:
                 case MainRoleType.Defender:
                 case MainRoleType.Piper:
                 case MainRoleType.WhiteWerewolf:
@@ -2946,11 +2950,6 @@ internal static class GameFlowManager
 							$"Unsupported {sourceRole} recurring Role Power continuation.");
 					}
 					break;
-                case MainRoleType.Cupid:
-					CupidRole.ValidateRecurringRecoveryCursorIdentity(
-						session,
-						cursor);
-                    break;
                 default:
                     throw new InvalidOperationException(
                         $"Unsupported recurring Role Power continuation '{sourceRole}'.");
