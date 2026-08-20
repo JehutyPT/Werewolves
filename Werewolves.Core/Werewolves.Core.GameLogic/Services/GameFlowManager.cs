@@ -2492,8 +2492,6 @@ internal static class GameFlowManager
 				ModeratorInstructionSemantic.IdentifyRoleHolders or
 				ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup or
 				ModeratorInstructionSemantic.EstablishStutteringJudgeSignal or
-				ModeratorInstructionSemantic.ChooseWolfHoundAlignment or
-				ModeratorInstructionSemantic.ChooseThiefOffer or
 				ModeratorInstructionSemantic.ChooseActorSetupCard or
 				ModeratorInstructionSemantic.RecognizeLovers;
 		var matchesCommittedObservation =
@@ -2523,21 +2521,6 @@ internal static class GameFlowManager
 					StutteringJudgeRole.HasValidEstablishedSignal(
 						session,
 						pendingInstruction),
-                ModeratorInstructionSemantic.ChooseWolfHoundAlignment
-                    when cursor.ObservedRole == WolfHound =>
-                    HasCommittedWolfHoundAlignment(session),
-				ModeratorInstructionSemantic.ChooseThiefOffer
-					when cursor.ObservedRole == MainRoleType.Thief &&
-						 continuationRole == MainRoleType.Thief &&
-						 pendingInstruction is ConfirmationInstruction
-						 {
-							 Semantic:
-								 ModeratorInstructionSemantic.PutRoleToSleep,
-							 AffectedPlayerIds: [var thiefPlayerId]
-						 } =>
-					ThiefOfferRules.HasValidCommittedChoice(
-						session,
-						thiefPlayerId),
 				ModeratorInstructionSemantic.ChooseActorSetupCard
 					when cursor.ObservedRole == MainRoleType.Actor &&
 						 continuationRole == MainRoleType.Actor =>
@@ -2653,19 +2636,6 @@ internal static class GameFlowManager
                     .Select(fact => fact.PlayerId)
                     .ToHashSet()
                     .SetEquals(observedPlayerIds));
-    }
-
-    private static bool HasCommittedWolfHoundAlignment(GameSession session)
-    {
-        var holders = session.GetPlayers()
-            .Where(player =>
-                player.State.Health == PlayerHealth.Alive &&
-                player.State.CurrentRole == WolfHound)
-            .ToArray();
-        return holders is [var holder] &&
-               WolfHoundRole.HasValidCommittedAlignment(
-                   session,
-                   holder.Id);
     }
 
     private static bool RetainsLittleGirlGuidanceDecision(
