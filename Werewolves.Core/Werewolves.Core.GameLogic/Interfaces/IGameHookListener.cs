@@ -23,20 +23,6 @@ internal interface IGameHookListener
     /// <returns>A HookListenerActionResult indicating the outcome of the state machine advancement.</returns>
     HookListenerActionResult Execute(GameSession session, ModeratorResponse input);
 
-    /// <summary>
-    /// Lets a listener reclaim one unanswered durable instruction after
-    /// transient hook state has been discarded by serialization.
-    /// </summary>
-    bool TryResolvePendingInstructionContinuation(
-        GameHook hook,
-        GameSession session,
-        ModeratorInstruction pendingInstruction,
-        out string listenerState)
-    {
-        listenerState = string.Empty;
-        return false;
-    }
-
     ListenerIdentifier Id { get; }
 }
 

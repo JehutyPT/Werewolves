@@ -175,33 +175,19 @@ internal sealed class HookSubPhaseStage : SubPhaseStage
 			AcceptedObservationRecoveryCursor? acceptedObservationRecoveryCursor = null,
 			DomainRecoveryCursor? domainRecoveryCursor = null)
     {
-		var declaredWake = pendingInstruction is ConfirmationInstruction
-		{
-			Semantic: ModeratorInstructionSemantic.WakeRole
-		};
-
         PendingHookListenerContinuation? resolved = null;
         foreach (var (hook, listeners) in GameFlowManager.HookListeners)
         {
             foreach (var listenerId in listeners)
             {
-				var continuation = declaredWake
-					? ResolveDeclaredPendingInstructionContinuation(
-						listenerId,
-						hook,
-						session,
-						pendingInstruction,
-						admissions,
-						acceptedObservationRecoveryCursor,
-						domainRecoveryCursor)
-					: ResolvePendingInstructionContinuation(
-						listenerId,
-						hook,
-						session,
-						pendingInstruction,
-						admissions,
-						acceptedObservationRecoveryCursor,
-						domainRecoveryCursor);
+				var continuation = ResolvePendingInstructionContinuation(
+					listenerId,
+					hook,
+					session,
+					pendingInstruction,
+					admissions,
+					acceptedObservationRecoveryCursor,
+					domainRecoveryCursor);
                 if (continuation == null)
                 {
                     continue;
@@ -247,35 +233,6 @@ internal sealed class HookSubPhaseStage : SubPhaseStage
 					hook.ToString(),
 					listenerId,
 					listenerState);
-	}
-
-	private static PendingHookListenerContinuation?
-		ResolveDeclaredPendingInstructionContinuation(
-			ListenerIdentifier listenerId,
-		GameHook hook,
-		GameSession session,
-		ModeratorInstruction pendingInstruction,
-		IRoleAdmissionSource admissions,
-		AcceptedObservationRecoveryCursor? acceptedObservationRecoveryCursor,
-		DomainRecoveryCursor? domainRecoveryCursor)
-	{
-		var listenerState =
-			RoleListenerDispatch.ResolveDeclaredPendingInstructionContinuation(
-				listenerId,
-				hook,
-				admissions,
-				(id, factory) =>
-					session.GetOrCreateListener(id, factory),
-				session,
-				pendingInstruction,
-				acceptedObservationRecoveryCursor,
-				domainRecoveryCursor);
-		return listenerState == null
-			? null
-			: new PendingHookListenerContinuation(
-				hook.ToString(),
-				listenerId,
-				listenerState);
 	}
 
     private HookSubPhaseStage(GameHook hook) : base(hook)

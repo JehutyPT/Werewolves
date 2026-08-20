@@ -20,38 +20,6 @@ internal abstract class NightRoleHookListener<T> : RoleHookListener<T> where T :
 	protected abstract T AsleepStateEnum { get; }
 	protected abstract bool HasNightPowers { get; }
 
-	public override bool TryResolvePendingInstructionContinuation(
-		GameHook hook,
-		GameSession session,
-		ModeratorInstruction pendingInstruction,
-		out string listenerState)
-	{
-		listenerState = string.Empty;
-		if (hook != GameHook.NightMainActionLoop)
-		{
-			return false;
-		}
-
-		if ((pendingInstruction is SelectPlayersInstruction
-		     {
-			     Semantic: ModeratorInstructionSemantic.IdentifyRoleHolders,
-			     RoleIdentification: { } role
-		     } &&
-		     role == (MainRoleType)Id) ||
-		    (pendingInstruction is ConfirmationInstruction
-		     {
-			     Semantic: ModeratorInstructionSemantic.WakeRole
-		     } &&
-		     (pendingInstruction.AffectedPlayerIds == null ||
-		      HasExpectedAffectedRoleHolders(session, pendingInstruction))))
-		{
-			listenerState = WokenUpStateEnum.ToString();
-			return true;
-		}
-
-		return false;
-	}
-
 	protected override List<RoleStateMachineStage> DefineStateMachineStages() =>
 	[
 		CreateStage(GameHook.NightMainActionLoop, null, [WokenUpStateEnum, AsleepStateEnum], HandleRoleWakeupAndId),

@@ -38,73 +38,6 @@ internal static class RoleListenerDispatch
 			listenerId,
 			admissions,
 			getOrCreateListener);
-		if (listener == null)
-		{
-			return null;
-		}
-
-		if (listener is IDeclaredRoleWorkflow declaredWorkflow)
-		{
-			var runtime = declaredWorkflow.GetWorkflowRuntime(hook);
-			if (runtime == null)
-			{
-				return null;
-			}
-
-			var candidate = runtime.ClassifyRecoveryCandidate(
-						session,
-						pendingInstruction,
-						acceptedObservationRecoveryCursor,
-						domainRecoveryCursor);
-			return candidate.Kind switch
-			{
-				RoleWorkflowRecoveryCandidateKind.Unrelated => null,
-				RoleWorkflowRecoveryCandidateKind.Authenticated
-					when !string.IsNullOrWhiteSpace(candidate.ContinuationState) =>
-					candidate.ContinuationState,
-				RoleWorkflowRecoveryCandidateKind.Authenticated =>
-					throw new InvalidOperationException(
-						$"Declared workflow '{listenerId}' authenticated no continuation state."),
-				RoleWorkflowRecoveryCandidateKind.ClaimedButInvalid =>
-					throw new InvalidOperationException(candidate.Failure),
-				_ => throw new InvalidOperationException(
-					$"Unknown declared workflow recovery result for '{listenerId}'.")
-			};
-		}
-
-		if (!listener.TryResolvePendingInstructionContinuation(
-			    hook,
-			    session,
-			    pendingInstruction,
-			    out var listenerState))
-		{
-			return null;
-		}
-
-		if (string.IsNullOrWhiteSpace(listenerState))
-		{
-			throw new InvalidOperationException(
-				$"Listener '{listenerId}' resolved a pending instruction without a continuation state.");
-		}
-
-		return listenerState;
-	}
-
-	internal static string? ResolveDeclaredPendingInstructionContinuation(
-		ListenerIdentifier listenerId,
-		GameHook hook,
-		IRoleAdmissionSource admissions,
-		Func<ListenerIdentifier, Func<IGameHookListener>, IGameHookListener>
-			getOrCreateListener,
-		GameSession session,
-		ModeratorInstruction pendingInstruction,
-		AcceptedObservationRecoveryCursor? acceptedObservationRecoveryCursor,
-		DomainRecoveryCursor? domainRecoveryCursor)
-	{
-		var listener = GetActiveListener(
-			listenerId,
-			admissions,
-			getOrCreateListener);
 		if (listener is not IDeclaredRoleWorkflow declaredWorkflow)
 		{
 			return null;
@@ -117,10 +50,10 @@ internal static class RoleListenerDispatch
 		}
 
 		var candidate = runtime.ClassifyRecoveryCandidate(
-				session,
-				pendingInstruction,
-				acceptedObservationRecoveryCursor,
-				domainRecoveryCursor);
+					session,
+					pendingInstruction,
+					acceptedObservationRecoveryCursor,
+					domainRecoveryCursor);
 		return candidate.Kind switch
 		{
 			RoleWorkflowRecoveryCandidateKind.Unrelated => null,
