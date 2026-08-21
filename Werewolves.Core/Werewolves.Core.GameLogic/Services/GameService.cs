@@ -532,9 +532,22 @@ public class GameService
                 selectPlayers.CreateResponse(response.SelectedPlayerIds.ToHashSet());
                 break;
 
-            case AssignRolesInstruction assignRoles:
-                if (response.AssignedPlayerRoles is null ||
-                    response.SelectedPlayerIds is not null ||
+			case AssignRolesInstruction assignRoles:
+				if (assignRoles.PlayersForAssignment.Count == 0)
+				{
+					if (response.Type != ExpectedInputType.Continue)
+					{
+						throw new ArgumentException(
+							"Role confirmation response payload is malformed.");
+					}
+
+					EnsureNoPayload(response);
+					assignRoles.CreateResponse([]);
+					break;
+				}
+
+				if (response.AssignedPlayerRoles is null ||
+					response.SelectedPlayerIds is not null ||
                     response.SelectedOptionIds is not null)
                 {
                     throw new ArgumentException("Role assignment response payload is malformed.");
@@ -587,7 +600,10 @@ public class GameService
 			DevotedServantVoteWindowInstruction =>
 				response.Type is Continue or PlayerSelection,
             SelectPlayersInstruction => response.Type == PlayerSelection,
-            AssignRolesInstruction => response.Type == AssignPlayerRoles,
+			AssignRolesInstruction assignRoles =>
+				response.Type == (assignRoles.PlayersForAssignment.Count == 0
+					? Continue
+					: AssignPlayerRoles),
             SelectOptionsInstruction => response.Type == OptionSelection,
             _ => false,
         };

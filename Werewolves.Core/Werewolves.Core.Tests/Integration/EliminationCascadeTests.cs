@@ -23,16 +23,19 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 		var (builder, players, initialReveal) =
 			CreateDawnChainScenario(reaction);
 
-		initialReveal.PlayersForAssignment.Should().BeEquivalentTo(
+		initialReveal.SelectableRolesForPlayers.Keys.Should().BeEquivalentTo(
 			[players[2].Id, players[3].Id]);
-		initialReveal.RolesForAssignment.Should().Equal(
-			MainRoleType.SimpleWerewolf,
+		initialReveal.SelectableRolesForPlayers[players[2].Id].Should().Equal(
 			MainRoleType.SimpleVillager,
 			MainRoleType.SimpleVillager,
 			MainRoleType.SimpleVillager,
 			MainRoleType.SimpleVillager);
+		initialReveal.SelectableRolesForPlayers[players[3].Id].Should().Equal(
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager);
 
-		var reactionReveal = builder.Process(initialReveal.CreateResponse(new()
+		var reactionReveal = builder.Process(initialReveal.CreateObservedRoleResponse(new()
 			{
 				[players[2].Id] = MainRoleType.SimpleVillager,
 				[players[3].Id] = MainRoleType.SimpleVillager
@@ -44,17 +47,17 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 			.Be(PlayerHealth.Dead);
 		builder.GetGameState()!.GetPlayerState(players[3].Id).Health.Should()
 			.Be(PlayerHealth.Dead);
-		reactionReveal.PlayersForAssignment.Should().Equal(players[4].Id);
+		reactionReveal.SelectableRolesForPlayers.Keys.Should().Equal(players[4].Id);
 
-		var chainedReveal = builder.Process(reactionReveal.CreateResponse(new()
+		var chainedReveal = builder.Process(reactionReveal.CreateObservedRoleResponse(new()
 			{
 				[players[4].Id] = MainRoleType.SimpleVillager
 			}))
 			.ModeratorInstruction.Should()
 			.BeOfType<AssignRolesInstruction>().Subject;
-		chainedReveal.PlayersForAssignment.Should().Equal(players[5].Id);
+		chainedReveal.SelectableRolesForPlayers.Keys.Should().Equal(players[5].Id);
 
-		var afterCascade = builder.Process(chainedReveal.CreateResponse(new()
+		var afterCascade = builder.Process(chainedReveal.CreateObservedRoleResponse(new()
 		{
 			[players[5].Id] = MainRoleType.SimpleVillager
 		}));
@@ -151,7 +154,7 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 			.ModeratorInstruction.Should()
 			.BeOfType<AssignRolesInstruction>().Subject;
 
-		reveal.PlayersForAssignment.Should().Equal(players[3].Id);
+		reveal.SelectableRolesForPlayers.Keys.Should().Equal(players[3].Id);
 		reveal.PublicAnnouncement.Should().Contain(players[2].Name);
 		reveal.PublicAnnouncement.Should().Contain(players[3].Name);
 		builder.GetGameState()!.GetPlayerState(players[2].Id).Health
@@ -159,7 +162,7 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 		builder.GetGameState()!.GetPlayerState(players[3].Id).Health
 			.Should().Be(PlayerHealth.Alive);
 
-		builder.Process(reveal.CreateResponse(new()
+		builder.Process(reveal.CreateObservedRoleResponse(new()
 		{
 			[players[3].Id] = MainRoleType.SimpleVillager
 		}));
@@ -220,7 +223,7 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 		var initialReveal = builder.Process(finishNight.CreateResponse())
 			.ModeratorInstruction.Should()
 			.BeOfType<AssignRolesInstruction>().Subject;
-		var announcement = builder.Process(initialReveal.CreateResponse(new()
+		var announcement = builder.Process(initialReveal.CreateObservedRoleResponse(new()
 			{
 				[initialVictimId] = MainRoleType.SimpleVillager
 			}))
@@ -338,7 +341,7 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 			.ModeratorInstruction.Should()
 			.BeOfType<AssignRolesInstruction>().Subject;
 
-		reveal.PlayersForAssignment.Should().Equal(players[2].Id);
+		reveal.SelectableRolesForPlayers.Keys.Should().Equal(players[2].Id);
 		reveal.AffectedPlayerIds.Should().BeEquivalentTo(
 			[players[2].Id, players[1].Id]);
 		builder.GetGameState()!.GetPlayerState(players[1].Id).Health
@@ -379,7 +382,7 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 		builder.GetGameState()!.GetPlayerState(players[2].Id).ModeratorKnownRole
 			.Should().BeNull();
 
-		builder.Process(reveal.CreateResponse(new()
+		builder.Process(reveal.CreateObservedRoleResponse(new()
 		{
 			[players[2].Id] = MainRoleType.SimpleVillager
 		}));
@@ -484,7 +487,7 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 			ModeratorInstructionSemantic.AssignDawnVictimRoles);
 		var admittedReveal = recoveredService.ProcessInstruction(
 				recoveredGameId,
-				recoveredInitialReveal.CreateResponse(new()
+				recoveredInitialReveal.CreateObservedRoleResponse(new()
 				{
 					[players[2].Id] = MainRoleType.SimpleVillager,
 					[players[3].Id] = MainRoleType.SimpleVillager
@@ -494,7 +497,7 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 
 		admittedReveal.Semantic.Should().Be(
 			ModeratorInstructionSemantic.AssignEliminationCascadeRoles);
-		admittedReveal.PlayersForAssignment.Should().Equal(admittedVictimId);
+		admittedReveal.SelectableRolesForPlayers.Keys.Should().Equal(admittedVictimId);
 		var beforeAdmittedReveal = recoveredService.GetGameStateView(
 			recoveredGameId)!;
 		foreach (var initialVictimId in initialVictimIds)
@@ -507,7 +510,7 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 
 		var afterCascade = recoveredService.ProcessInstruction(
 			recoveredGameId,
-			admittedReveal.CreateResponse(new()
+			admittedReveal.CreateObservedRoleResponse(new()
 			{
 				[admittedVictimId] = MainRoleType.SimpleVillager
 			}));
@@ -623,7 +626,7 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 			initialReveal.InstructionId);
 
 		var liveReactionReveal = builder.Process(
-				initialReveal.CreateResponse(new()
+				initialReveal.CreateObservedRoleResponse(new()
 				{
 					[players[2].Id] = MainRoleType.SimpleVillager,
 					[players[3].Id] = MainRoleType.SimpleVillager
@@ -632,7 +635,7 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 			.BeOfType<AssignRolesInstruction>().Subject;
 		var recoveredReactionReveal = recoveredService.ProcessInstruction(
 				recoveredGameId,
-				recoveredInitialReveal.CreateResponse(new()
+				recoveredInitialReveal.CreateObservedRoleResponse(new()
 				{
 					[players[2].Id] = MainRoleType.SimpleVillager,
 					[players[3].Id] = MainRoleType.SimpleVillager
@@ -648,12 +651,12 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 		{
 			reactionReveal.Semantic.Should().Be(
 				ModeratorInstructionSemantic.AssignEliminationCascadeRoles);
-			reactionReveal.PlayersForAssignment.Should().BeEquivalentTo(
+			reactionReveal.SelectableRolesForPlayers.Keys.Should().BeEquivalentTo(
 				[scheduledVictimId, selectedVictimId]);
 		}
 		var afterCascade = recoveredService.ProcessInstruction(
 			recoveredGameId,
-			recoveredReactionReveal.CreateResponse(new()
+			recoveredReactionReveal.CreateObservedRoleResponse(new()
 			{
 				[scheduledVictimId] = MainRoleType.SimpleVillager,
 				[selectedVictimId] = MainRoleType.SimpleVillager
@@ -744,22 +747,22 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 			.ModeratorInstruction.Should()
 			.BeOfType<AssignRolesInstruction>().Subject;
 		var preRevealChildReveal = builder.Process(
-				initialReveal.CreateResponse(new()
+				initialReveal.CreateObservedRoleResponse(new()
 				{
 					[initialVictimId] = MainRoleType.SimpleVillager
 				}))
 			.ModeratorInstruction.Should()
 			.BeOfType<AssignRolesInstruction>().Subject;
-		preRevealChildReveal.PlayersForAssignment.Should().Equal(
+		preRevealChildReveal.SelectableRolesForPlayers.Keys.Should().Equal(
 			preRevealChildId);
 		var forcedSiblingReveal = builder.Process(
-				preRevealChildReveal.CreateResponse(new()
+				preRevealChildReveal.CreateObservedRoleResponse(new()
 				{
 					[preRevealChildId] = MainRoleType.SimpleVillager
 				}))
 			.ModeratorInstruction.Should()
 			.BeOfType<AssignRolesInstruction>().Subject;
-		forcedSiblingReveal.PlayersForAssignment.Should().Equal(
+		forcedSiblingReveal.SelectableRolesForPlayers.Keys.Should().Equal(
 			forcedSiblingId);
 		var serialized = builder.GetGameState()!.Serialize();
 
@@ -798,21 +801,21 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 
 		recoveredForcedSiblingReveal.InstructionId.Should().Be(
 			forcedSiblingReveal.InstructionId);
-		recoveredForcedSiblingReveal.PlayersForAssignment.Should().Equal(
+		recoveredForcedSiblingReveal.SelectableRolesForPlayers.Keys.Should().Equal(
 			forcedSiblingId);
 		var grandchildReveal = recoveredService.ProcessInstruction(
 				recoveredGameId,
-				recoveredForcedSiblingReveal.CreateResponse(new()
+				recoveredForcedSiblingReveal.CreateObservedRoleResponse(new()
 				{
 					[forcedSiblingId] = MainRoleType.SimpleVillager
 				}))
 			.ModeratorInstruction.Should()
 			.BeOfType<AssignRolesInstruction>().Subject;
-		grandchildReveal.PlayersForAssignment.Should().Equal(
+		grandchildReveal.SelectableRolesForPlayers.Keys.Should().Equal(
 			preRevealGrandchildId);
 		var afterCascade = recoveredService.ProcessInstruction(
 			recoveredGameId,
-			grandchildReveal.CreateResponse(new()
+			grandchildReveal.CreateObservedRoleResponse(new()
 			{
 				[preRevealGrandchildId] = MainRoleType.SimpleVillager
 			}));
@@ -846,14 +849,14 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 		var originalReaction = new PlayerChainReaction();
 		var (builder, players, initialReveal) =
 			CreateDawnChainScenario(originalReaction);
-		var reactionReveal = builder.Process(initialReveal.CreateResponse(new()
+		var reactionReveal = builder.Process(initialReveal.CreateObservedRoleResponse(new()
 			{
 				[players[2].Id] = MainRoleType.SimpleVillager,
 				[players[3].Id] = MainRoleType.SimpleVillager
 			}))
 			.ModeratorInstruction.Should()
 			.BeOfType<AssignRolesInstruction>().Subject;
-		var acceptedReactionResponse = reactionReveal.CreateResponse(new()
+		var acceptedReactionResponse = reactionReveal.CreateObservedRoleResponse(new()
 		{
 			[players[4].Id] = MainRoleType.SimpleVillager
 		});
@@ -883,7 +886,7 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 		recoveredReveal.InstructionId.Should().Be(chainedReveal.InstructionId);
 		recoveredReveal.Semantic.Should().Be(
 			ModeratorInstructionSemantic.AssignEliminationCascadeRoles);
-		recoveredReveal.PlayersForAssignment.Should().Equal(players[5].Id);
+		recoveredReveal.SelectableRolesForPlayers.Keys.Should().Equal(players[5].Id);
 
 		var beforeStaleResponse = recoveredService
 			.GetGameStateView(recoveredGameId)!.Serialize();
@@ -897,7 +900,7 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 
 		recoveredService.ProcessInstruction(
 			recoveredGameId,
-			recoveredReveal.CreateResponse(new()
+			recoveredReveal.CreateObservedRoleResponse(new()
 			{
 				[players[5].Id] = MainRoleType.SimpleVillager
 			}));
@@ -995,14 +998,14 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 		var modelReveal = builder.Process(finishNight.CreateResponse())
 			.ModeratorInstruction.Should()
 			.BeOfType<AssignRolesInstruction>().Subject;
-		var reactionReveal = builder.Process(modelReveal.CreateResponse(new()
+		var reactionReveal = builder.Process(modelReveal.CreateObservedRoleResponse(new()
 			{
 				[modelId] = MainRoleType.SimpleVillager
 			}))
 			.ModeratorInstruction.Should()
 			.BeOfType<AssignRolesInstruction>().Subject;
 
-		reactionReveal.PlayersForAssignment.Should().Equal(
+		reactionReveal.SelectableRolesForPlayers.Keys.Should().Equal(
 			reactionVictimId);
 		var interrupted = builder.GetGameState()!;
 		interrupted.GetPlayerState(wildChildId).CurrentRole.Should().Be(
@@ -1040,7 +1043,7 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 
 		recoveredService.ProcessInstruction(
 			recoveredGameId,
-			recoveredReveal.CreateResponse(new()
+			recoveredReveal.CreateObservedRoleResponse(new()
 			{
 				[reactionVictimId] = MainRoleType.SimpleVillager
 			}));
@@ -1298,7 +1301,7 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 		};
 		var reactionVictimId = players[4].Id;
 		var reactionPrompt = builder.Process(
-				initialReveal.CreateResponse(new()
+				initialReveal.CreateObservedRoleResponse(new()
 				{
 					[players[2].Id] = MainRoleType.SimpleVillager,
 					[players[3].Id] = MainRoleType.SimpleVillager
@@ -1338,7 +1341,7 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 
 		recoveredService.ProcessInstruction(
 			recoveredGameId,
-			reactionReveal.CreateResponse(new()
+			reactionReveal.CreateObservedRoleResponse(new()
 			{
 				[reactionVictimId] = MainRoleType.SimpleVillager
 			}));
@@ -1382,7 +1385,7 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 		};
 		var reactionVictimId = players[4].Id;
 		var reactionPrompt = builder.Process(
-				initialReveal.CreateResponse(new()
+				initialReveal.CreateObservedRoleResponse(new()
 				{
 					[players[2].Id] = MainRoleType.SimpleVillager,
 					[players[3].Id] = MainRoleType.SimpleVillager
@@ -1421,11 +1424,11 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 
 		recoveredReveal.InstructionId.Should().Be(
 			reactionReveal.InstructionId);
-		recoveredReveal.PlayersForAssignment.Should().Equal(
+		recoveredReveal.SelectableRolesForPlayers.Keys.Should().Equal(
 			reactionVictimId);
 		recoveredService.ProcessInstruction(
 			recoveredGameId,
-			recoveredReveal.CreateResponse(new()
+			recoveredReveal.CreateObservedRoleResponse(new()
 			{
 				[reactionVictimId] =
 					MainRoleType.SimpleVillager
@@ -1465,7 +1468,7 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 					[scenarioPlayers[2].Id, scenarioPlayers[3].Id]));
 
 		var afterCascade = builder.Process(
-			initialReveal.CreateResponse(new()
+			initialReveal.CreateObservedRoleResponse(new()
 			{
 				[players[2].Id] = MainRoleType.SimpleVillager,
 				[players[3].Id] = MainRoleType.SimpleVillager

@@ -1134,6 +1134,11 @@ public class GameTestBuilder
     /// <param name="overrideAssignments">The complete observed mapping.</param>
     private ProcessResult HandleAssignRolesInstruction(AssignRolesInstruction instruction, Dictionary<Guid, MainRoleType>? overrideAssignments = null)
     {
+		if (instruction.PlayersForAssignment.Count == 0)
+		{
+			return Process(instruction.CreateResponse([]));
+		}
+
         if (overrideAssignments is null ||
             instruction.PlayersForAssignment.Any(playerId =>
                 !overrideAssignments.ContainsKey(playerId)))

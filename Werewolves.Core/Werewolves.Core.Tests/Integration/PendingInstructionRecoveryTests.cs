@@ -133,7 +133,7 @@ public sealed class PendingInstructionRecoveryTests
 
         recoveredService.ProcessInstruction(
             recoveredGameId,
-            roleReveal.CreateResponse(new()
+            roleReveal.CreateObservedRoleResponse(new()
             {
                 [roleModelId] = MainRoleType.SimpleVillager
             })).IsSuccess.Should().BeTrue();
@@ -811,7 +811,7 @@ public sealed class PendingInstructionRecoveryTests
             elderIdentification.CreateResponse([fixture.ElderId]));
         service.ProcessInstruction(
             gameId,
-            dawnRoleAssignment.CreateResponse(new()
+            dawnRoleAssignment.CreateObservedRoleResponse(new()
             {
                 [fixture.NightVictimId] = MainRoleType.SimpleVillager
             })).IsSuccess.Should().BeTrue();

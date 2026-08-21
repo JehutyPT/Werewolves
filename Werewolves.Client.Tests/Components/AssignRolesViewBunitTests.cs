@@ -160,7 +160,7 @@ public class AssignRolesViewBunitTests
 	}
 
 	[Fact]
-	public void RoleAssignedToAnotherPlayer_IsUnavailableUnlessInstructionIncludesAnotherCopy()
+	public void PerPlayerRoleOptions_RenderOnlyForTheActivePlayer()
 	{
 		var anaId = Guid.NewGuid();
 		var brunoId = Guid.NewGuid();
@@ -169,37 +169,160 @@ public class AssignRolesViewBunitTests
 			CreateRosterEntry(anaId, 1, PlayerNames.Ana),
 			CreateRosterEntry(brunoId, 2, PlayerNames.Bruno)
 		};
-		var villagerLabel = MainRoleType.SimpleVillager.GetPublicName();
+		var instruction = CreateAssignRolesInstruction(
+			[anaId, brunoId],
+			new Dictionary<Guid, IReadOnlyList<MainRoleType>>
+			{
+				[anaId] = [MainRoleType.SimpleVillager, MainRoleType.Seer],
+				[brunoId] = [MainRoleType.SimpleWerewolf, MainRoleType.WhiteWerewolf]
+			});
+		using var context = new ModeratorComponentTestContext();
+		var cut = RenderAssignRolesView(context, instruction, roster);
 
-		using (var context = new ModeratorComponentTestContext())
+		VisibleButtonText(cut).Should()
+			.Contain(MainRoleType.SimpleVillager.GetPublicName())
+			.And.Contain(MainRoleType.Seer.GetPublicName())
+			.And.NotContain(MainRoleType.SimpleWerewolf.GetPublicName())
+			.And.NotContain(MainRoleType.WhiteWerewolf.GetPublicName());
+
+		cut.FindButtonByAccessibleName(ClientStrings.AssignRoles_NextPlayerAria).Click();
+
+		VisibleButtonText(cut).Should()
+			.Contain(MainRoleType.SimpleWerewolf.GetPublicName())
+			.And.Contain(MainRoleType.WhiteWerewolf.GetPublicName())
+			.And.NotContain(MainRoleType.SimpleVillager.GetPublicName())
+			.And.NotContain(MainRoleType.Seer.GetPublicName());
+	}
+
+	[Fact]
+	public void SameRoleOptionsRemainEnabledAndRequireEachPlayersExplicitSelection()
+	{
+		var anaId = Guid.NewGuid();
+		var brunoId = Guid.NewGuid();
+		var sharedOptions = new[]
 		{
-			var cut = RenderAssignRolesView(
-				context,
-				CreateAssignRolesInstruction(
-					[anaId, brunoId],
-					[MainRoleType.SimpleVillager, MainRoleType.SimpleWerewolf]),
-				roster);
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleWerewolf
+		};
+		using var context = new ModeratorComponentTestContext();
+		var cut = RenderAssignRolesView(
+			context,
+			CreateAssignRolesInstruction(
+				[anaId, brunoId],
+				new Dictionary<Guid, IReadOnlyList<MainRoleType>>
+				{
+					[anaId] = sharedOptions,
+					[brunoId] = sharedOptions
+				}),
+			[
+				CreateRosterEntry(anaId, 1, PlayerNames.Ana),
+				CreateRosterEntry(brunoId, 2, PlayerNames.Bruno)
+			]);
 
-			FindButtonByText(cut, villagerLabel).Click();
-			cut.FindButtonByAccessibleName(ClientStrings.AssignRoles_NextPlayerAria).Click();
+		FindButtonByText(cut, MainRoleType.SimpleVillager.GetPublicName()).Click();
+		FindHoldButton(cut).HasAttribute(Html.Attributes.Disabled).Should().BeTrue();
+		cut.FindButtonByAccessibleName(ClientStrings.AssignRoles_NextPlayerAria).Click();
 
-			VisibleButtonText(cut).Should().NotContain(villagerLabel);
-		}
+		var villager = FindButtonByText(
+			cut,
+			MainRoleType.SimpleVillager.GetPublicName());
+		var werewolf = FindButtonByText(
+			cut,
+			MainRoleType.SimpleWerewolf.GetPublicName());
+		villager.HasAttribute(Html.Attributes.Disabled).Should().BeFalse();
+		werewolf.HasAttribute(Html.Attributes.Disabled).Should().BeFalse();
+		villager.GetAttribute(Html.Attributes.AriaPressed).Should().Be(
+			Html.AriaValues.False);
+		werewolf.GetAttribute(Html.Attributes.AriaPressed).Should().Be(
+			Html.AriaValues.False);
+		FindHoldButton(cut).HasAttribute(Html.Attributes.Disabled).Should().BeTrue();
 
-		using (var context = new ModeratorComponentTestContext())
-		{
-			var cut = RenderAssignRolesView(
-				context,
-				CreateAssignRolesInstruction(
-					[anaId, brunoId],
-					[MainRoleType.SimpleVillager, MainRoleType.SimpleVillager]),
-				roster);
+		werewolf.Click();
 
-			FindButtonByText(cut, villagerLabel).Click();
-			cut.FindButtonByAccessibleName(ClientStrings.AssignRoles_NextPlayerAria).Click();
+		FindHoldButton(cut).HasAttribute(Html.Attributes.Disabled).Should().BeFalse();
+	}
 
-			VisibleButtonText(cut).Should().Contain(villagerLabel);
-		}
+	[Fact]
+	public async Task SingletonPlayer_RendersNamedConfirmationWithoutPickerAndSubmitsContinue()
+	{
+		var timing = new ControlledHoldButtonTiming();
+		using var context = new ModeratorComponentTestContext();
+		context.Services.AddSingleton<IHoldButtonTiming>(timing);
+		var playerId = Guid.NewGuid();
+		var responses = new List<ModeratorResponse>();
+		var cut = RenderAssignRolesView(
+			context,
+			CreateAssignRolesInstruction(
+				[],
+				new Dictionary<Guid, IReadOnlyList<MainRoleType>>
+				{
+					[playerId] = [
+						MainRoleType.SimpleVillager,
+						MainRoleType.SimpleVillager
+					]
+				}),
+			[CreateRosterEntry(playerId, 1, PlayerNames.Ana)],
+			responses);
+
+		AssignmentSurfaceText(cut).Should().ContainAll(
+			PlayerNames.Ana,
+			MainRoleType.SimpleVillager.GetPublicName());
+		cut.FindAll($"button[{Html.Attributes.AriaPressed}]").Should().BeEmpty();
+		FindHoldButton(cut).HasAttribute(Html.Attributes.Disabled).Should().BeFalse();
+
+		await RenderedHoldButtonDriver.CompleteHoldAsync(cut, FindHoldButton(cut), timing);
+
+		responses.Should().ContainSingle();
+		responses.Single().Type.Should().Be(ExpectedInputType.Continue);
+		responses.Single().AssignedPlayerRoles.Should().BeNull();
+	}
+
+	[Fact]
+	public async Task MixedSingletonAndMultiPlayers_SubmitsOnlyTheExplicitMapping()
+	{
+		var timing = new ControlledHoldButtonTiming();
+		using var context = new ModeratorComponentTestContext();
+		context.Services.AddSingleton<IHoldButtonTiming>(timing);
+		var anaId = Guid.NewGuid();
+		var brunoId = Guid.NewGuid();
+		var responses = new List<ModeratorResponse>();
+		var cut = RenderAssignRolesView(
+			context,
+			CreateAssignRolesInstruction(
+				[brunoId],
+				new Dictionary<Guid, IReadOnlyList<MainRoleType>>
+				{
+					[anaId] = [
+						MainRoleType.SimpleVillager,
+						MainRoleType.SimpleVillager
+					],
+					[brunoId] = [
+						MainRoleType.Seer,
+						MainRoleType.Hunter
+					]
+				}),
+			[
+				CreateRosterEntry(anaId, 1, PlayerNames.Ana),
+				CreateRosterEntry(brunoId, 2, PlayerNames.Bruno)
+			],
+			responses);
+
+		AssignmentSurfaceText(cut).Should().ContainAll(
+			PlayerNames.Ana,
+			MainRoleType.SimpleVillager.GetPublicName());
+		cut.FindAll($"button[{Html.Attributes.AriaPressed}]").Should().BeEmpty();
+		FindHoldButton(cut).HasAttribute(Html.Attributes.Disabled).Should().BeTrue();
+
+		cut.FindButtonByAccessibleName(ClientStrings.AssignRoles_NextPlayerAria).Click();
+		FindButtonByText(cut, MainRoleType.Seer.GetPublicName()).Click();
+		await RenderedHoldButtonDriver.CompleteHoldAsync(cut, FindHoldButton(cut), timing);
+
+		responses.Should().ContainSingle();
+		responses.Single().Type.Should().Be(ExpectedInputType.AssignPlayerRoles);
+		responses.Single().AssignedPlayerRoles.Should().ContainSingle()
+			.Which.Should().Be(new KeyValuePair<Guid, MainRoleType>(
+				brunoId,
+				MainRoleType.Seer));
 	}
 
 	[Fact]
@@ -339,6 +462,21 @@ public class AssignRolesViewBunitTests
 				Guid.Empty
 			]);
 
+	private static AssignRolesInstruction CreateAssignRolesInstruction(
+		IEnumerable<Guid> playersForAssignment,
+		IReadOnlyDictionary<Guid, IReadOnlyList<MainRoleType>>
+			selectableRolesForPlayers) =>
+		(AssignRolesInstruction)PerPlayerAssignRolesConstructor.Invoke(
+			[
+				ModeratorInstructionSemantic.AssignDawnVictimRoles,
+				playersForAssignment.ToImmutableHashSet(),
+				selectableRolesForPlayers,
+				null,
+				GameStrings.RevealRolePromptSpecify,
+				null,
+				Guid.Empty
+			]);
+
 	private static DashboardRosterEntry CreateRosterEntry(Guid playerId, int seatNumber, string name) =>
 		new(
 			playerId,
@@ -355,4 +493,12 @@ public class AssignRolesViewBunitTests
 		typeof(AssignRolesInstruction)
 			.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic)
 			.Single(ctor => ctor.GetParameters().Length == 6);
+
+	private static readonly ConstructorInfo PerPlayerAssignRolesConstructor =
+		typeof(AssignRolesInstruction)
+			.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic)
+			.Single(ctor =>
+				ctor.GetParameters() is { Length: 7 } parameters &&
+				parameters[2].ParameterType == typeof(
+					IReadOnlyDictionary<Guid, IReadOnlyList<MainRoleType>>));
 }

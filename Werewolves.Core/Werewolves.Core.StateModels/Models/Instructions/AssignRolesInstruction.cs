@@ -11,10 +11,15 @@ namespace Werewolves.Core.StateModels.Models.Instructions;
 public record AssignRolesInstruction : ModeratorInstruction
 {
     /// <summary>
-    /// Dictionary mapping player IDs to the list of roles that can be assigned to that player.
+    /// Players whose Role must be supplied explicitly by the Moderator.
     /// </summary>
     public ImmutableHashSet<Guid> PlayersForAssignment { get; }
-    public IReadOnlyList<MainRoleType> RolesForAssignment { get; }
+
+	/// <summary>
+	/// Duplicate-preserving possible printed Roles for each unknown Player.
+	/// </summary>
+	public IReadOnlyDictionary<Guid, IReadOnlyList<MainRoleType>>
+		SelectableRolesForPlayers { get; }
 
     /// <summary>
     /// Initializes a new instance of AssignRolesInstruction.
@@ -23,7 +28,6 @@ public record AssignRolesInstruction : ModeratorInstruction
     /// <param name="publicAnnouncement">The text to be read aloud to players.</param>
     /// <param name="privateInstruction">Private guidance for the moderator.</param>
     /// <param name="affectedPlayerIds">Optional list of affected player IDs for context.</param>
-    [JsonConstructor]
     internal AssignRolesInstruction(
         ImmutableHashSet<Guid> playersForAssignment,
         IReadOnlyList<MainRoleType> rolesForAssignment,
@@ -31,11 +35,13 @@ public record AssignRolesInstruction : ModeratorInstruction
         string? privateInstruction = null,
         IReadOnlyList<Guid>? affectedPlayerIds = null,
         Guid instructionId = default)
-		: this(
-			ModeratorInstructionSemantic.Unspecified,
-			playersForAssignment,
-			rolesForAssignment,
-			publicAnnouncement,
+			: this(
+				ModeratorInstructionSemantic.Unspecified,
+				playersForAssignment,
+				CreateSharedRoleOptions(
+					playersForAssignment,
+					rolesForAssignment),
+				publicAnnouncement,
 			privateInstruction,
 			affectedPlayerIds,
 			instructionId)
@@ -43,40 +49,75 @@ public record AssignRolesInstruction : ModeratorInstruction
 	}
 
 	internal AssignRolesInstruction(
-		ModeratorInstructionSemantic semantic,
-		ImmutableHashSet<Guid> playersForAssignment,
-		IReadOnlyList<MainRoleType> rolesForAssignment,
+			ModeratorInstructionSemantic semantic,
+			ImmutableHashSet<Guid> playersForAssignment,
+			IReadOnlyList<MainRoleType> rolesForAssignment,
 		string? publicAnnouncement = null,
 		string? privateInstruction = null,
 		IReadOnlyList<Guid>? affectedPlayerIds = null,
 		Guid instructionId = default)
-        : base(
-			publicAnnouncement,
+			: this(
+				semantic,
+				playersForAssignment,
+				CreateSharedRoleOptions(
+					playersForAssignment,
+					rolesForAssignment),
+				publicAnnouncement,
+				privateInstruction,
+				affectedPlayerIds,
+				instructionId)
+		{
+		}
+
+	[JsonConstructor]
+	internal AssignRolesInstruction(
+		ModeratorInstructionSemantic semantic,
+		ImmutableHashSet<Guid> playersForAssignment,
+		IReadOnlyDictionary<Guid, IReadOnlyList<MainRoleType>>
+			selectableRolesForPlayers,
+		string? publicAnnouncement = null,
+		string? privateInstruction = null,
+		IReadOnlyList<Guid>? affectedPlayerIds = null,
+		Guid instructionId = default)
+		: base(
+				publicAnnouncement,
 			privateInstruction,
 			affectedPlayerIds,
 			instructionId: instructionId,
 			semantic: semantic)
     {
-        PlayersForAssignment = playersForAssignment ?? throw new ArgumentNullException(nameof(playersForAssignment));
-
-        if (playersForAssignment.Count == 0)
-        {
-            throw new ArgumentException("PlayersForAssignment cannot be empty.", nameof(playersForAssignment));
-        }
-
-        ArgumentNullException.ThrowIfNull(rolesForAssignment);
-        RolesForAssignment = rolesForAssignment.ToImmutableArray();
-
-        if (rolesForAssignment.Count == 0)
-        {
-            throw new ArgumentException("RolesForAssignment cannot be empty.", nameof(rolesForAssignment));
+		ArgumentNullException.ThrowIfNull(playersForAssignment);
+		ArgumentNullException.ThrowIfNull(selectableRolesForPlayers);
+		if (selectableRolesForPlayers.Count == 0)
+		{
+			throw new ArgumentException(
+				"SelectableRolesForPlayers cannot be empty.",
+				nameof(selectableRolesForPlayers));
 		}
 
-        if (playersForAssignment.Count > rolesForAssignment.Count)
-        {
-            throw new InvalidOperationException("Not enough roles available for assignment.");
-        }
-    }
+		var roleOptions = selectableRolesForPlayers.ToImmutableDictionary(
+			entry => entry.Key,
+			entry => (IReadOnlyList<MainRoleType>)(entry.Value ??
+				throw new ArgumentException(
+					"Every Player must have a possible-Role multiset.",
+					nameof(selectableRolesForPlayers)))
+				.ToImmutableArray());
+		if (roleOptions.Any(entry => entry.Value.Count == 0))
+		{
+			throw new ArgumentException(
+				"Every Player must have at least one possible Role.",
+				nameof(selectableRolesForPlayers));
+		}
+		if (!playersForAssignment.IsSubsetOf(roleOptions.Keys))
+		{
+			throw new ArgumentException(
+				"Every Player requiring assignment must have Role options.",
+				nameof(playersForAssignment));
+		}
+
+		PlayersForAssignment = playersForAssignment;
+		SelectableRolesForPlayers = roleOptions;
+	}
 
     /// <summary>
     /// Creates a ModeratorResponse with the provided role assignments.
@@ -89,12 +130,18 @@ public record AssignRolesInstruction : ModeratorInstruction
     {
         ValidateAssignments(assignments);
 
-        return new ModeratorResponse
-        {
-            InstructionId = InstructionId,
-            Type = ExpectedInputType.AssignPlayerRoles,
-            AssignedPlayerRoles = assignments.ToImmutableDictionary()
-        };
+		return PlayersForAssignment.Count == 0
+			? new ModeratorResponse
+			{
+				InstructionId = InstructionId,
+				Type = ExpectedInputType.Continue
+			}
+			: new ModeratorResponse
+			{
+				InstructionId = InstructionId,
+				Type = ExpectedInputType.AssignPlayerRoles,
+				AssignedPlayerRoles = assignments.ToImmutableDictionary()
+			};
     }
 
     /// <summary>
@@ -117,32 +164,26 @@ public record AssignRolesInstruction : ModeratorInstruction
                 nameof(assignments));
         }
 
-        var assignedRoles = assignments.Values.ToList();
-
-		// Check that the assigned role count does not exceed the allowed quota for each role
-        foreach (var role in RolesForAssignment.Distinct())
-        {
-            int allowedCount = RolesForAssignment.Count(r => r == role);
-            int assignedCount = assignedRoles.Count(r => r == role);
-            if (assignedCount > allowedCount)
-            {
-                throw new ArgumentException($"Role {role} has been assigned {assignedCount} times, exceeding the allowed count of {allowedCount}.");
-            }
-		}
-
-
-		// Check that all assigned players are in the selectable list
 		foreach (var assignment in assignments)
-        {
-            if (!PlayersForAssignment.Contains(assignment.Key))
-            {
-                throw new ArgumentException($"Player {assignment.Key} is not in the list of players that can be assigned roles.");
-            }
+		{
+			if (!SelectableRolesForPlayers[assignment.Key]
+				.Contains(assignment.Value))
+			{
+				throw new ArgumentException(
+					$"MainRole {assignment.Value} is not in the list of assignable roles for player {assignment.Key}.");
+			}
+		}
+	}
 
-            if (!RolesForAssignment.Contains(assignment.Value))
-            {
-                throw new ArgumentException($"MainRole {assignment.Value} is not in the list of assignable roles for player {assignment.Key}.");
-            }
-        }
-    }
+	private static IReadOnlyDictionary<Guid, IReadOnlyList<MainRoleType>>
+		CreateSharedRoleOptions(
+			IReadOnlySet<Guid> playerIds,
+			IReadOnlyList<MainRoleType> roles)
+	{
+		ArgumentNullException.ThrowIfNull(playerIds);
+		ArgumentNullException.ThrowIfNull(roles);
+		return playerIds.ToDictionary(
+			playerId => playerId,
+			_ => roles);
+	}
 }

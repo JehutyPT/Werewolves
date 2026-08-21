@@ -25,36 +25,82 @@ internal static class RoleKnowledgeHandlers
             return null;
         }
 
-		var playersNeedingMapping = requestedPlayers
-			.Where(player => GameSessionQueries.GetEstablishedRole(player) is null)
-			.ToArray();
+			var playersWithUnknownRoles = requestedPlayers
+				.Where(player => GameSessionQueries.GetEstablishedRole(player) is null)
+				.ToArray();
         var affectedPlayerIds = requestedPlayers
             .Select(player => player.Id)
             .ToArray();
-		var privateInstruction = CreatePublicRoleRevealPrivateInstruction(
-			requestedPlayers);
-
-        if (playersNeedingMapping.Length == 0)
-        {
-            return new ConfirmationInstruction(
-                semantic,
-                publicAnnouncement: publicAnnouncement,
-				privateInstruction: privateInstruction,
+		if (playersWithUnknownRoles.Length == 0)
+		{
+			return new ConfirmationInstruction(
+				semantic,
+				publicAnnouncement: publicAnnouncement,
+				privateInstruction:
+					CreatePublicRoleRevealPrivateInstruction(requestedPlayers),
                 affectedPlayerIds: affectedPlayerIds);
         }
 
-		var rolesForAssignment = GameSessionQueries.GetUnclaimedRoles(session);
+		var selectableRolesForPlayers = CreateSelectableRolesForPlayers(
+			session,
+			playersWithUnknownRoles);
+		var playersForAssignment = selectableRolesForPlayers
+			.Where(entry => entry.Value.Distinct().Skip(1).Any())
+			.Select(entry => entry.Key)
+			.ToImmutableHashSet();
+		var privateInstruction = CreatePublicRoleRevealPrivateInstruction(
+			requestedPlayers,
+			selectableRolesForPlayers);
 
-        return new AssignRolesInstruction(
-            semantic,
-            playersForAssignment: playersNeedingMapping
-                .Select(player => player.Id)
-                .ToImmutableHashSet(),
-            rolesForAssignment: rolesForAssignment,
+		return new AssignRolesInstruction(
+			semantic,
+			playersForAssignment,
+			selectableRolesForPlayers,
             publicAnnouncement: publicAnnouncement,
 			privateInstruction: privateInstruction,
-            affectedPlayerIds: affectedPlayerIds);
-    }
+			affectedPlayerIds: affectedPlayerIds);
+	}
+
+	private static IReadOnlyDictionary<Guid, IReadOnlyList<MainRoleType>>
+		CreateSelectableRolesForPlayers(
+			GameSession session,
+			IReadOnlyCollection<IPlayer> players)
+	{
+		var roleOptions = players.ToDictionary(
+			player => player.Id,
+			player => GameSessionQueries.GetPossibleRoles(session, player.Id)
+				.ToList());
+		if (roleOptions.Any(entry => entry.Value.Count == 0))
+		{
+			throw new InvalidOperationException(
+				"An unknown Player has no possible Role for the pending public reveal.");
+		}
+
+		var reservedPlayers = new HashSet<Guid>();
+		while (roleOptions
+			.Where(entry => !reservedPlayers.Contains(entry.Key))
+			.FirstOrDefault(entry => entry.Value.Distinct().Take(2).Count() == 1)
+			is { Key: var playerId, Value: not null } singleton)
+		{
+			var role = singleton.Value[0];
+			reservedPlayers.Add(playerId);
+			foreach (var other in roleOptions.Where(entry =>
+				!reservedPlayers.Contains(entry.Key)))
+			{
+				other.Value.Remove(role);
+				if (other.Value.Count == 0)
+				{
+					throw new InvalidOperationException(
+						"Public Role Reveal singleton reservations exhausted a Player's possible Roles.");
+				}
+			}
+		}
+
+		return roleOptions.ToDictionary(
+			entry => entry.Key,
+			entry => (IReadOnlyList<MainRoleType>)Array.AsReadOnly(
+				entry.Value.ToArray()));
+	}
 
     internal static void RecordPublicRoleReveal(
         GameSession session,
@@ -64,12 +110,36 @@ internal static class RoleKnowledgeHandlers
         var requestedPlayers = players
             .Where(player => player.State.PubliclyRevealedRole == null)
             .ToArray();
-        if (requestedPlayers.Length == 0)
-        {
-            return;
-        }
+		if (requestedPlayers.Length == 0)
+		{
+			return;
+		}
+		var playersWithUnknownRoles = requestedPlayers
+			.Where(player => GameSessionQueries.GetEstablishedRole(player) is null)
+			.ToArray();
+		AssignRolesInstruction? assignmentInstruction = null;
+		IReadOnlyDictionary<Guid, IReadOnlyList<MainRoleType>>?
+			currentRoleOptions = null;
+		if (playersWithUnknownRoles.Length > 0)
+		{
+			assignmentInstruction = session.Execution.PendingInstruction
+				as AssignRolesInstruction
+				?? throw new InvalidOperationException(
+					"An unknown public Role Reveal has no pending assignment instruction.");
+			if (assignmentInstruction.InstructionId != input.InstructionId ||
+				!assignmentInstruction.SelectableRolesForPlayers.Keys.ToHashSet()
+					.SetEquals(playersWithUnknownRoles.Select(player => player.Id)))
+			{
+				throw new InvalidOperationException(
+					"The public Role Reveal response is not correlated with its offered Player Roles.");
+			}
 
-		var availableDealPoolCards = session
+			currentRoleOptions = CreateSelectableRolesForPlayers(
+				session,
+				playersWithUnknownRoles);
+		}
+
+			var availableDealPoolCards = session
 			.GetModeratorPhysicalCharacterCards()
 			.Where(state => state.Zone == PhysicalCharacterCardZone.DealPool)
 			.Select(state => state.Card)
@@ -103,20 +173,43 @@ internal static class RoleKnowledgeHandlers
 				continue;
 			}
 
-			var assignedRole = GameSessionQueries.GetEstablishedRole(player);
-			if (assignedRole is null &&
-				input.AssignedPlayerRoles?.TryGetValue(
-					player.Id,
-					out var mappedRole) == true)
-			{
-				if (!GameSessionQueries.GetPossibleRoles(session, player.Id)
-					.Contains(mappedRole))
+				var assignedRole = GameSessionQueries.GetEstablishedRole(player);
+				if (assignedRole is null)
 				{
-					throw new InvalidOperationException(
-						$"No available Deal Pool card matches the accepted Role Reveal for Player {player.Id}.");
+					var offeredRoles = assignmentInstruction!
+						.SelectableRolesForPlayers[player.Id];
+					if (assignmentInstruction.PlayersForAssignment.Contains(
+							player.Id))
+					{
+						if (input.AssignedPlayerRoles?.TryGetValue(
+								player.Id,
+								out var mappedRole) != true ||
+							!offeredRoles.Contains(mappedRole) ||
+							!currentRoleOptions![player.Id].Contains(mappedRole))
+						{
+							throw new InvalidOperationException(
+								$"No available Deal Pool card matches the accepted Role Reveal for Player {player.Id}.");
+						}
+
+						assignedRole = mappedRole;
+					}
+					else
+					{
+						var offeredRole = offeredRoles.Distinct().SingleOrDefault();
+						var currentRole = currentRoleOptions![player.Id]
+							.Distinct()
+							.SingleOrDefault();
+						if (offeredRole != currentRole ||
+							offeredRoles.Distinct().Count() != 1 ||
+							currentRoleOptions[player.Id].Distinct().Count() != 1)
+						{
+							throw new InvalidOperationException(
+								$"The confirmed Role Reveal for Player {player.Id} is no longer entailed.");
+						}
+
+						assignedRole = offeredRole;
+					}
 				}
-				assignedRole = mappedRole;
-			}
 			if (assignedRole is null)
 			{
 				throw new InvalidOperationException(
@@ -161,7 +254,9 @@ internal static class RoleKnowledgeHandlers
     }
 
 	internal static string CreatePublicRoleRevealPrivateInstruction(
-		IReadOnlyCollection<IPlayer> requestedPlayers)
+		IReadOnlyCollection<IPlayer> requestedPlayers,
+		IReadOnlyDictionary<Guid, IReadOnlyList<MainRoleType>>?
+			selectableRolesForPlayers = null)
 	{
 		var knownRoleDescriptions = requestedPlayers
 			.Select(player => (
@@ -172,16 +267,42 @@ internal static class RoleKnowledgeHandlers
 				$"{established.Player.Name}: " +
 				$"{established.Role!.Value.GetPublicName()}")
 			.ToArray();
-		if (knownRoleDescriptions.Length == 0)
+		var entailedRoleDescriptions = requestedPlayers
+			.Where(player =>
+				selectableRolesForPlayers?.TryGetValue(
+					player.Id,
+					out _) == true)
+			.Select(player => (
+				Player: player,
+				Roles: selectableRolesForPlayers![player.Id]))
+			.Where(entry => entry.Roles.Distinct().Take(2).Count() == 1)
+			.Select(entry =>
+				$"{entry.Player.Name}: {entry.Roles[0].GetPublicName()}")
+			.ToArray();
+		if (knownRoleDescriptions.Length == 0 &&
+			entailedRoleDescriptions.Length == 0)
 		{
 			return GameStrings.PublicRoleRevealInstruction;
 		}
 
-		return string.Concat(
-			GameStrings.PublicRoleRevealInstruction,
-			" ",
-			GameStrings.PublicRoleRevealKnownRolesInstruction.Format(
-				string.Join("; ", knownRoleDescriptions)));
+		var instructions = new List<string>
+		{
+			GameStrings.PublicRoleRevealInstruction
+		};
+		if (knownRoleDescriptions.Length > 0)
+		{
+			instructions.Add(
+				GameStrings.PublicRoleRevealKnownRolesInstruction.Format(
+					string.Join("; ", knownRoleDescriptions)));
+		}
+		if (entailedRoleDescriptions.Length > 0)
+		{
+			instructions.Add(
+				GameStrings.PublicRoleRevealEntailedRolesInstruction.Format(
+					string.Join("; ", entailedRoleDescriptions)));
+		}
+
+		return string.Join(" ", instructions);
 	}
 
     internal static ModeratorInstruction? RequestVillagerVillagerPublicFromDealObservation(

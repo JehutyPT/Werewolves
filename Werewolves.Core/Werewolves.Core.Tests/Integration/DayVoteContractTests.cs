@@ -174,11 +174,11 @@ public sealed class DayVoteContractTests
 					[secondVoteTargetId]))
 			.ModeratorInstruction.Should()
 			.BeOfType<AssignRolesInstruction>().Subject;
-		secondReveal.PlayersForAssignment.Should().Equal(
+		secondReveal.SelectableRolesForPlayers.Keys.Should().Equal(
 			secondVoteTargetId);
 		var secondAnnouncement = recoveredService.ProcessInstruction(
 				recoveredGameId,
-				secondReveal.CreateResponse(new()
+				secondReveal.CreateObservedRoleResponse(new()
 				{
 					[secondVoteTargetId] =
 						MainRoleType.SimpleVillager

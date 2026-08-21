@@ -198,7 +198,7 @@ public sealed class AngelRoleTests : DiagnosticTestBase
             .ModeratorInstruction.Should()
             .BeOfType<AssignRolesInstruction>().Subject;
         var secondAnnouncement = builder.Process(
-                angelReveal.CreateResponse(new()
+                angelReveal.CreateObservedRoleResponse(new()
                 {
                     [players[3].Id] = MainRoleType.Angel
                 }))
@@ -253,7 +253,7 @@ public sealed class AngelRoleTests : DiagnosticTestBase
             .ModeratorInstruction.Should()
             .BeOfType<AssignRolesInstruction>().Subject;
         var firstAnnouncement = builder.Process(
-                angelReveal.CreateResponse(new()
+                angelReveal.CreateObservedRoleResponse(new()
                 {
                     [players[1].Id] = MainRoleType.Angel
                 }))
@@ -278,7 +278,7 @@ public sealed class AngelRoleTests : DiagnosticTestBase
             .BeOfType<AssignRolesInstruction>().Subject;
         var secondAnnouncement = recoveredService.ProcessInstruction(
                 recoveredId,
-                secondReveal.CreateResponse(new()
+                secondReveal.CreateObservedRoleResponse(new()
                 {
                     [players[3].Id] = MainRoleType.SimpleVillager
                 }))
@@ -501,7 +501,7 @@ public sealed class AngelRoleTests : DiagnosticTestBase
         var reveal = builder.Process(vote.CreateResponse([players[3].Id]))
             .ModeratorInstruction.Should()
             .BeOfType<AssignRolesInstruction>().Subject;
-        var announcement = builder.Process(reveal.CreateResponse(new()
+        var announcement = builder.Process(reveal.CreateObservedRoleResponse(new()
             {
                 [players[3].Id] = MainRoleType.SimpleVillager
             }))
@@ -775,7 +775,7 @@ public sealed class AngelRoleTests : DiagnosticTestBase
         var reveal = builder.Process(vote.CreateResponse([players[1].Id]))
             .ModeratorInstruction.Should()
             .BeOfType<AssignRolesInstruction>().Subject;
-        var announcement = builder.Process(reveal.CreateResponse(new()
+        var announcement = builder.Process(reveal.CreateObservedRoleResponse(new()
             {
                 [players[1].Id] = MainRoleType.Angel
             }))

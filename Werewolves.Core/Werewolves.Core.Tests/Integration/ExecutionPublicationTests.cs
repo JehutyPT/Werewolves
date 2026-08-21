@@ -79,7 +79,7 @@ public sealed class ExecutionPublicationTests
 					player.State.PhysicalCharacterCardId,
 					player.State.PhysicalCharacterCardRole));
 		Action process = () => builder.Process(
-			pendingReveal.CreateResponse(new Dictionary<Guid, MainRoleType>
+			pendingReveal.CreateObservedRoleResponse(new Dictionary<Guid, MainRoleType>
 			{
 				[players[2].Id] = MainRoleType.SimpleVillager,
 				[players[3].Id] = MainRoleType.SimpleVillager

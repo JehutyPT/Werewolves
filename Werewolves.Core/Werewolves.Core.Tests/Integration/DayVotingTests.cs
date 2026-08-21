@@ -86,7 +86,7 @@ public class DayVotingTests : DiagnosticTestBase
 
     /// <summary>
     /// DV-002: Vote outcome publicly reveals the target before announcing elimination.
-    /// A sole remaining role type is not inferred.
+    /// A sole remaining role type is confirmed without a picker.
     /// </summary>
     [Fact]
     public void VoteOutcome_SinglePlayer_WithSinglePossibleRole_AnnouncesElimination()
@@ -132,11 +132,13 @@ public class DayVotingTests : DiagnosticTestBase
         var reveal = InstructionAssert.ExpectSuccessWithType<AssignRolesInstruction>(
             afterVote,
             CoreTestReferences.InstructionContexts.RoleAssignmentAfterLynch);
-        reveal.PlayersForAssignment.Should().Equal(villager2.Id);
+        reveal.PlayersForAssignment.Should().BeEmpty();
+        reveal.SelectableRolesForPlayers[villager2.Id].Should()
+            .OnlyContain(role => role == MainRoleType.SimpleVillager);
         builder.GetGameState()!.GetPlayer(villager2.Id).State.MainRole.Should().BeNull();
         builder.GetGameState()!.GetPlayer(villager2.Id).State.Health.Should().Be(PlayerHealth.Alive);
 
-        var afterReveal = builder.Process(reveal.CreateResponse(new()
+        var afterReveal = builder.Process(reveal.CreateObservedRoleResponse(new()
         {
             [villager2.Id] = MainRoleType.SimpleVillager
         }));
@@ -154,10 +156,10 @@ public class DayVotingTests : DiagnosticTestBase
     }
 
     /// <summary>
-    /// DV-005: Vote outcome with a sole remaining role type still requires public reveal mapping.
+    /// DV-005: Vote outcome with a sole remaining role type uses an entailed confirmation.
     /// </summary>
     [Fact]
-    public void VoteOutcome_SinglePossibleRole_RequiresRevealMappingAndAnnouncesElimination()
+    public void VoteOutcome_SinglePossibleRole_ConfirmsEntailedRoleAndAnnouncesElimination()
     {
         // Arrange: 1 Werewolf and 4 Villagers leaves only Villager roles unknown after night.
         var builder = CreateBuilder()
@@ -190,15 +192,17 @@ public class DayVotingTests : DiagnosticTestBase
         // Act: Vote to lynch a player whose only possible role type is SimpleVillager.
         var afterVote = builder.Process(votingInstruction.CreateResponse([lynchedPlayer.Id]));
 
-        // Assert: The engine does not infer the sole remaining role type.
+        // Assert: the repeated-copy singleton is confirmed without a picker.
         var reveal = InstructionAssert.ExpectSuccessWithType<AssignRolesInstruction>(
             afterVote,
             CoreTestReferences.InstructionContexts.RoleAssignmentAfterLynch);
-        reveal.PlayersForAssignment.Should().Equal(lynchedPlayer.Id);
+        reveal.PlayersForAssignment.Should().BeEmpty();
+        reveal.SelectableRolesForPlayers[lynchedPlayer.Id].Should()
+            .OnlyContain(role => role == MainRoleType.SimpleVillager);
         lynchedPlayer.State.MainRole.Should().BeNull();
         lynchedPlayer.State.Health.Should().Be(PlayerHealth.Alive);
 
-        var afterReveal = builder.Process(reveal.CreateResponse(new()
+        var afterReveal = builder.Process(reveal.CreateObservedRoleResponse(new()
         {
             [lynchedPlayer.Id] = MainRoleType.SimpleVillager
         }));
@@ -338,7 +342,7 @@ public class DayVotingTests : DiagnosticTestBase
             .ModeratorInstruction.Should()
             .BeOfType<AssignRolesInstruction>().Subject;
         var afterModelReveal = builder.Process(
-            roleModelReveal.CreateResponse(new()
+            roleModelReveal.CreateObservedRoleResponse(new()
             {
                 [roleModelId] = MainRoleType.SimpleVillager
             }));

@@ -109,7 +109,7 @@ public sealed class PrejudicedManipulatorVictoryIntegrationTests
 			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
 				service.ProcessInstruction(
 					start.GameGuid,
-					hunterReveal.CreateResponse(
+					hunterReveal.CreateObservedRoleResponse(
 						new Dictionary<Guid, MainRoleType>
 						{
 							[roster[3].Id] = MainRoleType.Hunter
@@ -124,7 +124,7 @@ public sealed class PrejudicedManipulatorVictoryIntegrationTests
 			.ExpectSuccessWithType<FinishedGameConfirmationInstruction>(
 				service.ProcessInstruction(
 					start.GameGuid,
-					angelReveal.CreateResponse(
+					angelReveal.CreateObservedRoleResponse(
 						new Dictionary<Guid, MainRoleType>
 						{
 							[roster[4].Id] = MainRoleType.Angel
@@ -266,7 +266,7 @@ public sealed class PrejudicedManipulatorVictoryIntegrationTests
 			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
 				service.ProcessInstruction(
 					start.GameGuid,
-					hunterReveal.CreateResponse(
+					hunterReveal.CreateObservedRoleResponse(
 						new Dictionary<Guid, MainRoleType>
 						{
 							[roster[3].Id] = MainRoleType.Hunter
@@ -281,7 +281,7 @@ public sealed class PrejudicedManipulatorVictoryIntegrationTests
 			.ExpectSuccessWithType<FinishedGameConfirmationInstruction>(
 				service.ProcessInstruction(
 					start.GameGuid,
-					opposingVillagerReveal.CreateResponse(
+					opposingVillagerReveal.CreateObservedRoleResponse(
 						new Dictionary<Guid, MainRoleType>
 						{
 							[roster[4].Id] = MainRoleType.SimpleVillager
@@ -383,7 +383,7 @@ public sealed class PrejudicedManipulatorVictoryIntegrationTests
 			.ExpectSuccessWithType<FinishedGameConfirmationInstruction>(
 				service.ProcessInstruction(
 					start.GameGuid,
-					angelReveal.CreateResponse(
+					angelReveal.CreateObservedRoleResponse(
 						new Dictionary<Guid, MainRoleType>
 						{
 							[roster[2].Id] = MainRoleType.Angel
@@ -514,7 +514,7 @@ public sealed class PrejudicedManipulatorVictoryIntegrationTests
 			.ExpectSuccessWithType<FinishedGameConfirmationInstruction>(
 				service.ProcessInstruction(
 					start.GameGuid,
-					opposingVillagerReveal.CreateResponse(
+					opposingVillagerReveal.CreateObservedRoleResponse(
 						new Dictionary<Guid, MainRoleType>
 						{
 							[roster[4].Id] = MainRoleType.SimpleVillager
@@ -621,7 +621,7 @@ public sealed class PrejudicedManipulatorVictoryIntegrationTests
 			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
 				service.ProcessInstruction(
 					start.GameGuid,
-					hunterReveal.CreateResponse(new Dictionary<Guid, MainRoleType>
+					hunterReveal.CreateObservedRoleResponse(new Dictionary<Guid, MainRoleType>
 					{
 						[roster[2].Id] = MainRoleType.Hunter
 					})));

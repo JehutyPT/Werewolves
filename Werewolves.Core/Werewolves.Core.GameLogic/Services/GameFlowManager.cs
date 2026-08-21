@@ -1103,13 +1103,14 @@ internal static class GameFlowManager
 				Semantic:
 					ModeratorInstructionSemantic.AssignDayVoteTargetRole,
 				PlayersForAssignment: var playersForAssignment,
-				RolesForAssignment: var rolesForAssignment,
+				SelectableRolesForPlayers: var selectableRolesForPlayers,
 				AffectedPlayerIds: [var affectedPlayerId]
 			} =>
 				affectedPlayerId == actingPlayerId &&
 				playersForAssignment.Count == 1 &&
 				playersForAssignment.Contains(actingPlayerId) &&
-				rolesForAssignment.Contains(MainRoleType.Actor) &&
+				selectableRolesForPlayers[actingPlayerId]
+					.Contains(MainRoleType.Actor) &&
 				IsExactActorRoleAssignmentResponse(input, actingPlayerId),
 			ConfirmationInstruction
 			{
@@ -1186,7 +1187,7 @@ internal static class GameFlowManager
 					Semantic:
 						ModeratorInstructionSemantic.AssignEliminationCascadeRoles
 				} assignment =>
-					assignment.PlayersForAssignment.SetEquals(
+					assignment.SelectableRolesForPlayers.Keys.ToHashSet().SetEquals(
 						[commit.TargetPlayerId]),
 				ConfirmationInstruction
 				{
