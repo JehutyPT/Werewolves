@@ -834,22 +834,21 @@ public sealed class PendingInstructionRecoveryTests
         debate.Semantic.Should().Be(ModeratorInstructionSemantic.StartDayDebate);
         var vote = ProcessAndExpect<SelectPlayersInstruction>(
             service, gameId, debate.CreateResponse());
-        var dayRoleAssignment = ProcessAndExpect<AssignRolesInstruction>(
-            service, gameId, vote.CreateResponse([fixture.ElderId]));
-        dayRoleAssignment.Semantic.Should().Be(
-            ModeratorInstructionSemantic.AssignDayVoteTargetRole);
-        dayRoleAssignment.PlayersForAssignment.Should().Equal(fixture.ElderId);
-        dayRoleAssignment.RolesForAssignment.Should().Contain(MainRoleType.Elder);
         var reveal = ProcessAndExpect<ConfirmationInstruction>(
-            service, gameId,
-            dayRoleAssignment.CreateResponse(new()
-            {
-                [fixture.ElderId] = MainRoleType.Elder
-            }));
+            service, gameId, vote.CreateResponse([fixture.ElderId]));
+        reveal.Semantic.Should().Be(
+            ModeratorInstructionSemantic.AssignDayVoteTargetRole);
+        reveal.AffectedPlayerIds.Should().Equal(fixture.ElderId);
         var dayTail = ProcessAndExpect<ConfirmationInstruction>(
             service, gameId, reveal.CreateResponse());
-        var secondNightStart = ProcessAndExpect<ConfirmationInstruction>(
+        dayTail.Semantic.Should().Be(
+            ModeratorInstructionSemantic.AnnounceDayElimination);
+        var suppressionAnnouncement = ProcessAndExpect<ConfirmationInstruction>(
             service, gameId, dayTail.CreateResponse());
+        suppressionAnnouncement.Semantic.Should().Be(
+            ModeratorInstructionSemantic.AnnounceVillagerRolePowerSuppression);
+        var secondNightStart = ProcessAndExpect<ConfirmationInstruction>(
+            service, gameId, suppressionAnnouncement.CreateResponse());
         secondNightStart.Semantic.Should().Be(
             ModeratorInstructionSemantic.StartNight);
         service.GetGameStateView(gameId)!.GetCurrentPhase().Should()

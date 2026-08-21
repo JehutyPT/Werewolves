@@ -197,6 +197,7 @@ internal sealed class ScapegoatRole
 					votedPlayerId == Guid.Empty &&
 					GetCurrentTieReplacement(session) == null &&
 					MatchesBorrowedTieReveal(
+						session,
 						pendingInstruction,
 						borrowedActorId);
 				break;
@@ -420,7 +421,10 @@ internal sealed class ScapegoatRole
 
 		if (TryGetActiveBorrowedActorId(session, out var borrowedActorId))
 		{
-			if (!MatchesBorrowedTieReveal(instruction, borrowedActorId))
+			if (!MatchesBorrowedTieReveal(
+					session,
+					instruction,
+					borrowedActorId))
 			{
 				throw new RoleWorkflowInputRejectionException(
 					"The Scapegoat tie reveal does not match its borrowed Actor context.");
@@ -939,9 +943,11 @@ internal sealed class ScapegoatRole
 	}
 
 	internal static bool MatchesBorrowedTieReveal(
+		GameSession session,
 		ModeratorInstruction? instruction,
 		Guid actorId)
 	{
+		ArgumentNullException.ThrowIfNull(session);
 		if (instruction is not (ConfirmationInstruction or
 		    AssignRolesInstruction) ||
 		    instruction.Semantic !=
@@ -953,7 +959,8 @@ internal sealed class ScapegoatRole
 			    GameStrings.ActorRoleName) ||
 		    !StringComparer.Ordinal.Equals(
 			    instruction.PrivateInstruction,
-			    GameStrings.PublicRoleRevealInstruction) ||
+			    RoleKnowledgeHandlers.CreatePublicRoleRevealPrivateInstruction(
+				    [session.GetPlayer(actorId)])) ||
 		    instruction.SoundEffects.Count != 0)
 		{
 			return false;

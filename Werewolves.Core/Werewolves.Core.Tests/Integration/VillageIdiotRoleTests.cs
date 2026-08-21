@@ -24,7 +24,9 @@ public sealed class VillageIdiotRoleTests
 				scenario.Instruction.CreateResponse(
 					[scenario.LivingTargetId]))
 			.ModeratorInstruction.Should()
-			.BeOfType<AssignRolesInstruction>().Subject;
+			.BeOfType<ConfirmationInstruction>().Subject;
+		reveal.AffectedPlayerIds.Should().Equal(
+			scenario.LivingTargetId);
 		var preRevealState = scenario.Builder.GetGameState()!
 			.GetPlayerState(scenario.LivingTargetId);
 		preRevealState.CurrentRole.Should().Be(
@@ -36,11 +38,7 @@ public sealed class VillageIdiotRoleTests
 			.Should().BeEmpty();
 
 		var pardon = scenario.Builder.Process(
-				reveal.CreateResponse(new Dictionary<Guid, MainRoleType>
-				{
-					[scenario.LivingTargetId] =
-						MainRoleType.SimpleVillager
-				}))
+				reveal.CreateResponse())
 			.ModeratorInstruction.Should()
 			.BeOfType<ConfirmationInstruction>().Subject;
 
@@ -50,7 +48,7 @@ public sealed class VillageIdiotRoleTests
 			.GetPlayerState(scenario.LivingTargetId);
 		state.CurrentRole.Should().Be(MainRoleType.VillageIdiot);
 		state.PubliclyRevealedRole.Should().Be(
-			MainRoleType.SimpleVillager);
+			MainRoleType.VillageIdiot);
 		state.DurableVotingPower.Should().Be(0);
 	}
 
@@ -60,9 +58,6 @@ public sealed class VillageIdiotRoleTests
 		var scenario = DayVoteScenario.Start(
 			livingTargetRole: MainRoleType.VillageIdiot,
 			arrangeKnownPhysicalRole: false);
-		scenario.Builder.ArrangeCurrentRole(
-			scenario.LivingTargetId,
-			MainRoleType.VillageIdiot);
 
 		var reveal = scenario.Builder.Process(
 				scenario.Instruction.CreateResponse(
@@ -506,10 +501,13 @@ public sealed class VillageIdiotRoleTests
 	private static DayVoteScenario StartWithPreRevealRoleChange()
 	{
 		var builder = GameTestBuilder.Create()
-			.WithSimpleGame(
-				playerCount: 5,
-				werewolfCount: 1,
-				includeSeer: true)
+			.WithPlayers(5)
+			.WithRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Seer,
+				MainRoleType.SimpleVillager,
+				MainRoleType.VillageIdiot,
+				MainRoleType.SimpleVillager)
 			.WithEliminationCascadeReaction(
 				new ChangeVoteTargetRoleReaction(),
 				EliminationCascadeReactionBoundary.PreReveal);

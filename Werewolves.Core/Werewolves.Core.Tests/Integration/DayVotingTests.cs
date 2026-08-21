@@ -223,35 +223,37 @@ public class DayVotingTests : DiagnosticTestBase
     {
         var scenario = DayVoteScenario.Start();
         var builder = scenario.Builder
+            .ArrangeKnownPhysicalRole(
+                scenario.LivingTargetId,
+                MainRoleType.SimpleVillager)
             .ArrangeCurrentRole(
                 scenario.LivingTargetId,
-                MainRoleType.SimpleVillager);
+                MainRoleType.Seer);
         var afterVote = builder.Process(
             scenario.Instruction.CreateResponse([scenario.LivingTargetId]));
-        var assignment = afterVote.ModeratorInstruction.Should()
-            .BeOfType<AssignRolesInstruction>().Subject;
+        var reveal = afterVote.ModeratorInstruction.Should()
+            .BeOfType<ConfirmationInstruction>().Subject;
 
-        assignment.PlayersForAssignment.Should().Equal(
+        reveal.AffectedPlayerIds.Should().Equal(
             scenario.LivingTargetId);
-        assignment.RolesForAssignment.Should().Contain(
-			MainRoleType.Seer);
         var playerState = builder.GetGameState()!.GetPlayerState(
             scenario.LivingTargetId);
-        playerState.CurrentRole.Should().Be(MainRoleType.SimpleVillager);
-        playerState.ModeratorKnownRole.Should().BeNull();
+        playerState.CurrentRole.Should().Be(MainRoleType.Seer);
+        playerState.ModeratorKnownRole.Should().Be(
+            MainRoleType.SimpleVillager);
+        playerState.PhysicalCharacterCardRole.Should().Be(
+            MainRoleType.SimpleVillager);
         playerState.Health.Should().Be(PlayerHealth.Alive);
 
-        var afterReveal = builder.Process(assignment.CreateResponse(new()
-        {
-			[scenario.LivingTargetId] = MainRoleType.Seer
-        }));
+        var afterReveal = builder.Process(reveal.CreateResponse());
 
         afterReveal.ModeratorInstruction.Should()
             .BeOfType<ConfirmationInstruction>();
-        playerState.CurrentRole.Should().Be(MainRoleType.SimpleVillager);
-		playerState.ModeratorKnownRole.Should().BeNull();
+        playerState.CurrentRole.Should().Be(MainRoleType.Seer);
+		playerState.ModeratorKnownRole.Should().Be(
+			MainRoleType.SimpleVillager);
         playerState.PubliclyRevealedRole.Should().Be(
-			MainRoleType.Seer);
+			MainRoleType.SimpleVillager);
         playerState.Health.Should().Be(PlayerHealth.Dead);
         builder.GetGameState()!.GameHistoryLog
             .OfType<RoleRevealLogEntry>()
@@ -259,7 +261,8 @@ public class DayVotingTests : DiagnosticTestBase
             .ContainSingle(entry =>
                 entry.RevealedRoles.Count == 1 &&
                 entry.RevealedRoles.GetValueOrDefault(
-					scenario.LivingTargetId) == MainRoleType.Seer);
+					scenario.LivingTargetId) ==
+					MainRoleType.SimpleVillager);
         builder.GetGameState()!.GameHistoryLog
             .OfType<PlayerEliminatedLogEntry>()
             .Should().ContainSingle(entry =>
@@ -359,9 +362,8 @@ public class DayVotingTests : DiagnosticTestBase
 		var reveal = builder.Process(
 				vote.CreateResponse([wildChildId]))
 			.ModeratorInstruction.Should()
-			.BeOfType<AssignRolesInstruction>().Subject;
-		reveal.PlayersForAssignment.Should().Equal(wildChildId);
-		reveal.RolesForAssignment.Should().Contain(MainRoleType.WildChild);
+			.BeOfType<ConfirmationInstruction>().Subject;
+		reveal.AffectedPlayerIds.Should().Equal(wildChildId);
         wildChildState.Health.Should().Be(PlayerHealth.Alive);
 
         session.GameHistoryLog
@@ -376,10 +378,7 @@ public class DayVotingTests : DiagnosticTestBase
                 entry.PlayerIds.SetEquals(new[] { wildChildId }) &&
                 entry.AssignedMainRole == MainRoleType.SimpleWerewolf);
 
-		var afterReveal = builder.Process(reveal.CreateResponse(new()
-		{
-			[wildChildId] = MainRoleType.WildChild
-		}));
+		var afterReveal = builder.Process(reveal.CreateResponse());
 
         afterReveal.ModeratorInstruction.Should()
             .BeOfType<ConfirmationInstruction>();
