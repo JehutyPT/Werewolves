@@ -238,7 +238,10 @@ public class DawnResolutionTests : DiagnosticTestBase
             seerTargetId: werewolf.Id);
 
         // Act - Complete dawn phase
-        builder.CompleteDawnPhase();
+        builder.CompleteDawnPhase(new()
+        {
+            [victim.Id] = MainRoleType.SimpleVillager
+        });
 
         // Assert - Victim should now be dead
         var victimAfter = gameState.GetPlayers().First(p => p.Id == victim.Id);

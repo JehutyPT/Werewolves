@@ -519,7 +519,10 @@ public sealed class VillageIdiotRoleTests
 			victimId: players[2].Id,
 			seerId: players[1].Id,
 			seerTargetId: players[3].Id);
-		builder.CompleteDawnPhase();
+		builder.CompleteDawnPhase(new()
+		{
+			[players[2].Id] = MainRoleType.SimpleVillager
+		});
 		var debate = builder.GetCurrentInstruction()
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		var vote = builder.Process(debate.CreateResponse())

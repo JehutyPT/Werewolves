@@ -1210,7 +1210,10 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 			nightVictimId,
 			seerId,
 			players[4].Id);
-		builder.CompleteDawnPhase();
+		builder.CompleteDawnPhase(new()
+		{
+			[nightVictimId] = MainRoleType.SimpleVillager
+		});
 
 		var debate = builder.GetCurrentInstruction()
 			.Should().BeOfType<ConfirmationInstruction>().Subject;

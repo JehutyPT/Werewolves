@@ -300,7 +300,10 @@ internal sealed record DayVoteScenario(
             victimId: nightVictimId,
             seerId: seerId,
             seerTargetId: livingTargetId);
-        builder.CompleteDawnPhase();
+        builder.CompleteDawnPhase(new()
+        {
+            [nightVictimId] = MainRoleType.SimpleVillager
+        });
 
         var debateInstruction = builder.GetCurrentInstruction()
             .Should().BeOfType<ConfirmationInstruction>().Subject;

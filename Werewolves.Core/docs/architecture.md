@@ -701,7 +701,7 @@ Fluent API for constructing game scenarios and advancing through phases.
 *   `CompleteDawnPhase(roleAssignments?)` → `ProcessResult`: Current helper that completes Dawn and historically defaults an omitted unknown Role to Simple Villager. That default is forbidden for PRD #93 evidence and is removed by #113; tests must supply physically observed mappings or seeded simulation truth through the production response contract.
 
 *   **Day Phase Helpers:**
-    *   `CompleteDayPhaseWithLynch(lynchTargetId)` → `ProcessResult`: Completes the Day Phase with a Vote resulting in Elimination — debate → vote → role assignment → transition to Night.
+    *   `CompleteDayPhaseWithLynch(lynchTargetId, roleAssignments?)` → `ProcessResult`: Completes the Day Phase with a Vote resulting in Elimination — debate → vote → role assignment → transition to Night. Tests must supply a physically observed mapping when the target Role is unknown.
     *   `CompleteDayPhaseWithTie()` → `ProcessResult`: Completes the Day Phase with a tied Vote (no Elimination) — debate → vote → transition to Night.
 
 *   **Extending for New Roles:** When implementing a new Role, add a `Complete[Role]NightAction` helper that handles the Role's full instruction/response cycle (identify → act → sleep). Then integrate it into `CompleteNightPhase` so it's called in the correct dispatch order.

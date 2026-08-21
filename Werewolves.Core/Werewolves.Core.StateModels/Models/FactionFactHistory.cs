@@ -180,3 +180,10 @@ public sealed record FactionFact
 			effectiveBoundary,
 			beneficiaryPrecedence: null);
 }
+
+/// <summary>
+/// Identifies the committed fact and source that first established Faction agency.
+/// </summary>
+public sealed record FactionAgentFactProvenance(
+	FactionFact Fact,
+	FactionFactSource Source);

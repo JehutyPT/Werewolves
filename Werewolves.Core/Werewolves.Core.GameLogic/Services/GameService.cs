@@ -10,6 +10,7 @@ using System.Collections.Immutable;
 using Werewolves.Core.GameLogic.Models.EliminationCascades;
 using Werewolves.Core.GameLogic.Models;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
+using Werewolves.Core.GameLogic.Queries;
 using Werewolves.Core.GameLogic.RolePowers;
 using Werewolves.Core.GameLogic.Roles;
 using Werewolves.Core.GameLogic.Roles.MainRoles;
@@ -389,13 +390,33 @@ public class GameService
     /// </summary>
     /// <param name="gameId">The ID of the game session.</param>
     /// <returns>The game session object, or null if not found.</returns>
-    public IGameSession? GetGameStateView(Guid gameId)
-    {
-        _sessions.TryGetValue(gameId, out var session);
-        return session; // Or throw GameNotFoundException, or return a dedicated DTO
-    }
+	public IGameSession? GetGameStateView(Guid gameId)
+	{
+		_sessions.TryGetValue(gameId, out var session);
+		return session; // Or throw GameNotFoundException, or return a dedicated DTO
+	}
 
-    /// <summary>
+	/// <summary>
+	/// Gets the printed Roles still possible for one Player from committed facts.
+	/// </summary>
+	public IReadOnlyList<MainRoleType> GetPossibleRoles(
+		Guid gameId,
+		Guid playerId) =>
+		GameSessionQueries.GetPossibleRoles(
+			GetRequiredSession(gameId),
+			playerId);
+
+	/// <summary>
+	/// Gets the earliest committed fact that established Werewolf Faction agency.
+	/// </summary>
+	public FactionAgentFactProvenance? GetEarliestWerewolfAgencyFact(
+		Guid gameId,
+		Guid playerId) =>
+		GameSessionQueries.GetEarliestWerewolfAgencyFact(
+			GetRequiredSession(gameId),
+			playerId);
+
+	/// <summary>
     /// Processes input provided by the moderator using the state machine.
     /// </summary>
     public ProcessResult ProcessInstruction(Guid gameId, ModeratorResponse? input)

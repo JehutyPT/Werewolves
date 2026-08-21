@@ -443,7 +443,10 @@ public class SerializationTests : DiagnosticTestBase
             victimId: villager1Id,
             seerId: seerId,
             seerTargetId: villager2Id);
-        builder.CompleteDawnPhase();
+        builder.CompleteDawnPhase(new()
+        {
+            [villager1Id] = MainRoleType.SimpleVillager
+        });
 
         var debateInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
