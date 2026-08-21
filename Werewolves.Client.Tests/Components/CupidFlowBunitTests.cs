@@ -275,7 +275,7 @@ public sealed class CupidFlowBunitTests
 		heartbreakReveal.Semantic.Should().Be(
 			ModeratorInstructionSemantic.AssignEliminationCascadeRoles);
 		heartbreakReveal.PlayersForAssignment.Should().Equal(hunterLover.Id);
-		heartbreakReveal.RolesForAssignment.Should().Contain(
+		heartbreakReveal.SelectableRolesForPlayers[hunterLover.Id].Should().Contain(
 			MainRoleType.Hunter);
 		var responses = new List<ModeratorResponse>();
 		var cut = RenderInstruction(

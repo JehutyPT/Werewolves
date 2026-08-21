@@ -169,6 +169,10 @@
 		<value>Papéis já conhecidos a confirmar: {0}.</value>
 		<comment/>
 	</data>
+	<data name="PublicRoleRevealEntailedRolesInstruction" xml:space="preserve">
+		<value>Papéis determinados a confirmar: {0}.</value>
+		<comment/>
+	</data>
 	<data name="DevotedServantVoteWindowAnnouncement" xml:space="preserve">
 		<value>Se a Serventa Devotada quiser usar o seu poder, deve revelar agora publicamente a sua carta. Caso contrário, continua.</value>
 		<comment/>

@@ -105,7 +105,7 @@
 
 ### 6.3. AssignRolesView
 *   Used during gameplay when a role is revealed (elimination, not setup).
-*   Typically one player at a time — a simple role picker from `RolesForAssignment` (unassigned roles).
+*   Renders every requested Player from the Core-provided `SelectableRolesForPlayers` map. A one-distinct-Role multiset is a named confirmation with no picker; a multi-option Player gets a printed-Role picker, and only the Core-provided `PlayersForAssignment` set is submitted as explicit mappings.
 
 ### 6.4. ConfirmationView
 *   Single localized "Continue" press-and-hold control that emits the instruction's one-way `ExpectedInputType.Continue` response after the hold completes.

@@ -242,11 +242,20 @@ public sealed class BaselineRandomDecisionStrategy : IModeratorDecisionStrategy
 	{
 		var players = GetPlayersMatchingStartState(session);
 		var effectiveRolesByPlayerId = CreateEffectiveRolesByPlayerId(players);
-		if (instruction.PlayersForAssignment.Any(playerId =>
+		if (instruction.SelectableRolesForPlayers.Keys.Any(playerId =>
 			!effectiveRolesByPlayerId.ContainsKey(playerId)))
 		{
 			throw new InvalidOperationException(
 				"Role assignment instruction refers to a Player outside the Game Session.");
+		}
+		foreach (var (playerId, offeredRoles) in
+			instruction.SelectableRolesForPlayers)
+		{
+			if (!offeredRoles.Contains(effectiveRolesByPlayerId[playerId]))
+			{
+				throw new InvalidOperationException(
+					"The seeded Role truth is absent from a Player's offered possible Roles.");
+			}
 		}
 
 		var assignments = instruction.PlayersForAssignment.ToDictionary(

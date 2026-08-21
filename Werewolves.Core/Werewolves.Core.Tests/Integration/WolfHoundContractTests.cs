@@ -283,7 +283,7 @@ public sealed class WolfHoundContractTests : DiagnosticTestBase
 			InstructionAssert.ExpectSuccessWithType<AssignRolesInstruction>(
 				scenario.Builder.Process(finishNight.CreateResponse()));
 		var afterVictimReveal = scenario.Builder.Process(
-			victimReveal.CreateResponse(new()
+			victimReveal.CreateObservedRoleResponse(new()
 			{
 				[victimId] = MainRoleType.SimpleVillager
 			}));

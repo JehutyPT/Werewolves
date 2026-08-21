@@ -49,7 +49,7 @@ public sealed class HunterRoleTests(ITestOutputHelper output)
 		var hunterReveal = builder.Process(finishNight.CreateResponse())
 			.ModeratorInstruction.Should()
 			.BeOfType<AssignRolesInstruction>().Subject;
-		var finalShot = builder.Process(hunterReveal.CreateResponse(new()
+		var finalShot = builder.Process(hunterReveal.CreateObservedRoleResponse(new()
 			{
 				[hunterId] = MainRoleType.Hunter
 			}))
@@ -73,8 +73,8 @@ public sealed class HunterRoleTests(ITestOutputHelper output)
 				finalShot.CreateResponse([shotTargetId]))
 			.ModeratorInstruction.Should()
 			.BeOfType<AssignRolesInstruction>().Subject;
-		targetReveal.PlayersForAssignment.Should().Equal(shotTargetId);
-		var afterCascade = builder.Process(targetReveal.CreateResponse(new()
+		targetReveal.SelectableRolesForPlayers.Keys.Should().Equal(shotTargetId);
+		var afterCascade = builder.Process(targetReveal.CreateObservedRoleResponse(new()
 		{
 			[shotTargetId] = MainRoleType.SimpleVillager
 		}));
@@ -191,7 +191,7 @@ public sealed class HunterRoleTests(ITestOutputHelper output)
 				recoveredShot.CreateResponse([shotTargetId]))
 			.ModeratorInstruction.Should()
 			.BeOfType<AssignRolesInstruction>().Subject;
-		targetReveal.PlayersForAssignment.Should().Equal(shotTargetId);
+		targetReveal.SelectableRolesForPlayers.Keys.Should().Equal(shotTargetId);
 
 		var beforeStaleReplay = recoveredService
 			.GetGameStateView(recoveredGameId)!
@@ -205,7 +205,7 @@ public sealed class HunterRoleTests(ITestOutputHelper output)
 
 		var afterCascade = recoveredService.ProcessInstruction(
 			recoveredGameId,
-			targetReveal.CreateResponse(new()
+			targetReveal.CreateObservedRoleResponse(new()
 			{
 				[shotTargetId] = MainRoleType.SimpleVillager
 			}));
@@ -239,11 +239,11 @@ public sealed class HunterRoleTests(ITestOutputHelper output)
 			.Should().BeOfType<AssignRolesInstruction>().Subject;
 
 		recoveredReveal.InstructionId.Should().Be(targetReveal.InstructionId);
-		recoveredReveal.PlayersForAssignment.Should().Equal(shotTargetId);
+		recoveredReveal.SelectableRolesForPlayers.Keys.Should().Equal(shotTargetId);
 
 		var afterCascade = recoveredService.ProcessInstruction(
 			recoveredGameId,
-			recoveredReveal.CreateResponse(new()
+			recoveredReveal.CreateObservedRoleResponse(new()
 			{
 				[shotTargetId] = MainRoleType.SimpleVillager
 			}));
@@ -269,7 +269,7 @@ public sealed class HunterRoleTests(ITestOutputHelper output)
 			StartDawnHunterElimination(policy);
 		var hunterId = players[1].Id;
 
-		var afterReveal = builder.Process(hunterReveal.CreateResponse(new()
+		var afterReveal = builder.Process(hunterReveal.CreateObservedRoleResponse(new()
 		{
 			[hunterId] = MainRoleType.Hunter
 		}));
@@ -417,9 +417,9 @@ public sealed class HunterRoleTests(ITestOutputHelper output)
 			.ModeratorInstruction.Should()
 			.BeOfType<AssignRolesInstruction>().Subject;
 
-		initialReveal.PlayersForAssignment.Should().BeEquivalentTo(
+		initialReveal.SelectableRolesForPlayers.Keys.Should().BeEquivalentTo(
 			[hunterId, poisonTargetId]);
-		var finalShot = builder.Process(initialReveal.CreateResponse(new()
+		var finalShot = builder.Process(initialReveal.CreateObservedRoleResponse(new()
 			{
 				[hunterId] = MainRoleType.Hunter,
 				[poisonTargetId] = MainRoleType.SimpleVillager
@@ -474,7 +474,7 @@ public sealed class HunterRoleTests(ITestOutputHelper output)
 			.ModeratorInstruction.Should()
 			.BeOfType<AssignRolesInstruction>().Subject;
 		var debate = builder.Process(
-				nightVictimReveal.CreateResponse(new()
+				nightVictimReveal.CreateObservedRoleResponse(new()
 				{
 					[nightVictimId] = MainRoleType.SimpleVillager
 				}))
@@ -487,7 +487,7 @@ public sealed class HunterRoleTests(ITestOutputHelper output)
 			.ModeratorInstruction.Should()
 			.BeOfType<AssignRolesInstruction>().Subject;
 		var announcement = builder.Process(
-				hunterReveal.CreateResponse(new()
+				hunterReveal.CreateObservedRoleResponse(new()
 				{
 					[hunterId] = MainRoleType.Hunter
 				}))
@@ -523,7 +523,7 @@ public sealed class HunterRoleTests(ITestOutputHelper output)
 			.BeOfType<AssignRolesInstruction>().Subject;
 		recoveredService.ProcessInstruction(
 			recoveredGameId,
-			targetReveal.CreateResponse(new()
+			targetReveal.CreateObservedRoleResponse(new()
 			{
 				[shotTargetId] = MainRoleType.SimpleVillager
 			}));
@@ -655,14 +655,14 @@ public sealed class HunterRoleTests(ITestOutputHelper output)
 			.ModeratorInstruction.Should()
 			.BeOfType<AssignRolesInstruction>().Subject;
 		var forcedReveal = builder.Process(
-				hunterReveal.CreateResponse(new()
+				hunterReveal.CreateObservedRoleResponse(new()
 				{
 					[hunterId] = MainRoleType.Hunter
 				}))
 			.ModeratorInstruction.Should()
 			.BeOfType<AssignRolesInstruction>().Subject;
 
-		forcedReveal.PlayersForAssignment.Should().BeEquivalentTo(
+		forcedReveal.SelectableRolesForPlayers.Keys.Should().BeEquivalentTo(
 			players
 				.Where(player => player.Id != hunterId)
 				.Select(player => player.Id));
@@ -690,8 +690,8 @@ public sealed class HunterRoleTests(ITestOutputHelper output)
 			.Should().BeOfType<AssignRolesInstruction>().Subject;
 		recoveredReveal.InstructionId.Should().Be(
 			forcedReveal.InstructionId);
-		recoveredReveal.PlayersForAssignment.Should().BeEquivalentTo(
-			forcedReveal.PlayersForAssignment);
+		recoveredReveal.SelectableRolesForPlayers.Keys.Should().BeEquivalentTo(
+			forcedReveal.SelectableRolesForPlayers.Keys);
 
 		var afterCascade = recoveredService.ProcessInstruction(
 			recoveredGameId,
@@ -771,7 +771,7 @@ public sealed class HunterRoleTests(ITestOutputHelper output)
 			.ModeratorInstruction.Should()
 			.BeOfType<AssignRolesInstruction>().Subject;
 		var finalShot = builder.Process(
-				initialReveal.CreateResponse(new()
+				initialReveal.CreateObservedRoleResponse(new()
 				{
 					[hunterId] = MainRoleType.Hunter,
 					[attackTargetId] = MainRoleType.SimpleVillager
@@ -782,7 +782,7 @@ public sealed class HunterRoleTests(ITestOutputHelper output)
 				finalShot.CreateResponse([shotTargetId]))
 			.ModeratorInstruction.Should()
 			.BeOfType<AssignRolesInstruction>().Subject;
-		builder.Process(targetReveal.CreateResponse(new()
+		builder.Process(targetReveal.CreateObservedRoleResponse(new()
 		{
 			[shotTargetId] = MainRoleType.SimpleVillager
 		}));
@@ -841,7 +841,7 @@ public sealed class HunterRoleTests(ITestOutputHelper output)
 			.ModeratorInstruction.Should()
 			.BeOfType<AssignRolesInstruction>().Subject;
 		var finalShot = builder.Process(
-				hunterReveal.CreateResponse(new()
+				hunterReveal.CreateObservedRoleResponse(new()
 				{
 					[hunterId] = MainRoleType.Hunter
 				}))
@@ -852,18 +852,18 @@ public sealed class HunterRoleTests(ITestOutputHelper output)
 			.ModeratorInstruction.Should()
 			.BeOfType<AssignRolesInstruction>().Subject;
 		var descendantReveal = builder.Process(
-				shotTargetReveal.CreateResponse(new()
+				shotTargetReveal.CreateObservedRoleResponse(new()
 				{
 					[shotTargetId] = MainRoleType.SimpleVillager
 				}))
 			.ModeratorInstruction.Should()
 			.BeOfType<AssignRolesInstruction>().Subject;
 
-		descendantReveal.PlayersForAssignment.Should().Equal(descendantId);
+		descendantReveal.SelectableRolesForPlayers.Keys.Should().Equal(descendantId);
 		builder.GetGameState()!.GetPlayerState(shotTargetId).Health.Should()
 			.Be(PlayerHealth.Dead);
 		var afterCascade = builder.Process(
-			descendantReveal.CreateResponse(new()
+			descendantReveal.CreateObservedRoleResponse(new()
 			{
 				[descendantId] = MainRoleType.SimpleVillager
 			}));
@@ -905,7 +905,7 @@ public sealed class HunterRoleTests(ITestOutputHelper output)
 	{
 		var (builder, players, hunterReveal) =
 			StartDawnHunterElimination(policy);
-		var finalShot = builder.Process(hunterReveal.CreateResponse(new()
+		var finalShot = builder.Process(hunterReveal.CreateObservedRoleResponse(new()
 			{
 				[players[1].Id] = MainRoleType.Hunter
 			}))

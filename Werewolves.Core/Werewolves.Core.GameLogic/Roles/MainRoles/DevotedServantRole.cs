@@ -173,7 +173,8 @@ internal sealed class DevotedServantRole
 			input.Type != ExpectedInputType.AssignPlayerRoles ||
 			input.AssignedPlayerRoles is not { Count: 1 } assignments ||
 			!assignments.TryGetValue(target.Id, out var observedPrintedRole) ||
-			!pending.RolesForAssignment.Contains(observedPrintedRole))
+			!pending.SelectableRolesForPlayers[target.Id]
+				.Contains(observedPrintedRole))
 		{
 			throw new InvalidOperationException(
 				"The Devoted Servant acquired-card response is invalid or uncorrelated.");

@@ -970,7 +970,8 @@ internal sealed class ScapegoatRole
 			instruction is AssignRolesInstruction assignment &&
 			assignment.PlayersForAssignment.Count == 1 &&
 			assignment.PlayersForAssignment.Contains(actorId) &&
-			assignment.RolesForAssignment.Contains(MainRoleType.Actor);
+			assignment.SelectableRolesForPlayers[actorId]
+				.Contains(MainRoleType.Actor);
 	}
 
 	internal static bool MatchesPermittedVoterSelection(

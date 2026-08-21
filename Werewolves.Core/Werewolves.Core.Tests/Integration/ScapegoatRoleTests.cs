@@ -300,7 +300,7 @@ public sealed class ScapegoatRoleTests : DiagnosticTestBase
 				builder.Process(announcement.CreateResponse()));
 
 		reaction.InvocationCount.Should().Be(1);
-		reactionReveal.PlayersForAssignment.Should().Equal(reactionVictim.Id);
+		reactionReveal.SelectableRolesForPlayers.Keys.Should().Equal(reactionVictim.Id);
 		var interrupted = builder.GetGameState()!;
 		var restriction = interrupted.GameHistoryLog
 			.OfType<VoterEligibilityRestrictionCommittedLogEntry>()
@@ -322,7 +322,7 @@ public sealed class ScapegoatRoleTests : DiagnosticTestBase
 		recoveredReveal.InstructionId.Should().Be(reactionReveal.InstructionId);
 		service.ProcessInstruction(
 			gameId,
-			recoveredReveal.CreateResponse(new Dictionary<Guid, MainRoleType>
+			recoveredReveal.CreateObservedRoleResponse(new Dictionary<Guid, MainRoleType>
 			{
 				[reactionVictim.Id] = MainRoleType.SimpleVillager
 			}));
