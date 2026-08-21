@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
@@ -235,7 +236,7 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
     }
 
     [Fact]
-	public void GenericRoleReveal_WhenRoleIsPrivatelyKnown_StillMapsPhysicalRoleAndCommitsPublicReveal()
+	public void GenericRoleReveal_WhenRoleIsPrivatelyKnown_AcknowledgesAndCommitsPublicReveal()
     {
         var builder = CreateBuilder()
             .WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);
@@ -256,16 +257,13 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
         });
 
 		var reveal = builder.GetCurrentInstruction()
-			.Should().BeOfType<AssignRolesInstruction>().Subject;
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		reveal.AffectedPlayerIds.Should().Equal(seer.Id);
-		reveal.PlayersForAssignment.Should().Equal(seer.Id);
-		reveal.RolesForAssignment.Should().Contain(MainRoleType.Seer);
+		reveal.PrivateInstruction.Should().Contain(
+			MainRoleType.Seer.GetPublicName());
 		seer.State.ModeratorKnownRole.Should().Be(MainRoleType.Seer);
 		seer.State.PubliclyRevealedRole.Should().BeNull();
-		var acceptedReveal = reveal.CreateResponse(new()
-		{
-			[seer.Id] = MainRoleType.Seer
-		});
+		var acceptedReveal = reveal.CreateResponse();
 
 		var afterReveal = builder.Process(acceptedReveal);
 
@@ -273,6 +271,13 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
         seer.State.CurrentRole.Should().Be(MainRoleType.Seer);
         seer.State.ModeratorKnownRole.Should().Be(MainRoleType.Seer);
         seer.State.PubliclyRevealedRole.Should().Be(MainRoleType.Seer);
+		seer.State.PhysicalCharacterCardRole.Should().Be(MainRoleType.Seer);
+		seer.State.PhysicalCharacterCardId.Should().NotBeNull();
+		builder.GetGameState()!.GetModeratorPhysicalCharacterCards()
+			.Single(state => state.Card.Id == seer.State.PhysicalCharacterCardId)
+			.Should().Match<PhysicalCharacterCardState>(state =>
+				state.Zone == PhysicalCharacterCardZone.PlayerOwned &&
+				state.OwnerPlayerId == seer.Id);
 		var revealEntry = builder.GetGameState()!.GameHistoryLog
 			.OfType<RoleRevealLogEntry>()
 			.Should().ContainSingle().Subject;
@@ -303,6 +308,296 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
 
         MarkTestCompleted();
     }
+
+	[Fact]
+	public void GenericRoleReveal_VoteVictimIdentifiedEarlier_AcknowledgesAndBindsCard()
+	{
+		var builder = CreateBuilder()
+			.WithSimpleGame(playerCount: 6, werewolfCount: 1, includeSeer: true);
+		builder.StartGame();
+		builder.ConfirmGameStart();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		var werewolf = players[0];
+		var seer = players[1];
+		var dawnVictim = players[2];
+		builder.CompleteNightPhase(new NightActionInputs
+		{
+			WerewolfIds = [werewolf.Id],
+			WerewolfVictimId = dawnVictim.Id,
+			SeerId = seer.Id,
+			SeerTargetId = players[3].Id
+		});
+		builder.CompleteDawnPhase(new()
+		{
+			[dawnVictim.Id] = MainRoleType.SimpleVillager
+		});
+		var debate = builder.GetCurrentInstruction()
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var vote = builder.Process(debate.CreateResponse())
+			.ModeratorInstruction.Should()
+			.BeOfType<SelectPlayersInstruction>().Subject;
+
+		var reveal = builder.Process(vote.CreateResponse([seer.Id]))
+			.ModeratorInstruction.Should()
+			.BeOfType<ConfirmationInstruction>().Subject;
+
+		reveal.AffectedPlayerIds.Should().Equal(seer.Id);
+		reveal.PrivateInstruction.Should().Contain(
+			MainRoleType.Seer.GetPublicName());
+		seer.State.ModeratorKnownRole.Should().Be(MainRoleType.Seer);
+		seer.State.PhysicalCharacterCardId.Should().BeNull();
+		seer.State.PubliclyRevealedRole.Should().BeNull();
+
+		var afterReveal = builder.Process(reveal.CreateResponse());
+
+		afterReveal.IsSuccess.Should().BeTrue();
+		seer.State.PhysicalCharacterCardRole.Should().Be(MainRoleType.Seer);
+		seer.State.PubliclyRevealedRole.Should().Be(MainRoleType.Seer);
+		builder.GetGameState()!.GameHistoryLog
+			.OfType<RoleRevealLogEntry>()
+			.Should().ContainSingle(entry =>
+				entry.RevealedRoles.ContainsKey(seer.Id) &&
+				entry.RevealedRoles[seer.Id] == MainRoleType.Seer);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void GenericRoleReveal_WithOneOfTwoWerewolvesEstablished_OffersOneUnclaimedCopy()
+	{
+		var builder = CreateBuilder()
+			.WithPlayers(6)
+			.WithRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		builder.ArrangeKnownRole(players[0].Id, MainRoleType.SimpleWerewolf);
+		builder.ConfirmGameStart();
+
+		builder.CompleteNightPhase(
+			[players[0].Id, players[1].Id],
+			players[2].Id);
+
+		var reveal = builder.GetCurrentInstruction()
+			.Should().BeOfType<AssignRolesInstruction>().Subject;
+		reveal.PlayersForAssignment.Should().Equal(players[2].Id);
+		reveal.RolesForAssignment.Should()
+			.ContainSingle(role => role == MainRoleType.SimpleWerewolf);
+
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void GenericRoleReveal_WithBothWerewolfCopiesEstablished_OffersNoWerewolfCopy()
+	{
+		var builder = CreateBuilder()
+			.WithPlayers(6)
+			.WithRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		builder.ArrangeKnownRole(players[0].Id, MainRoleType.SimpleWerewolf);
+		builder.ArrangeKnownRole(players[1].Id, MainRoleType.SimpleWerewolf);
+		builder.ConfirmGameStart();
+		builder.CompleteNightPhase(
+			[players[0].Id, players[1].Id],
+			players[2].Id);
+
+		var reveal = builder.GetCurrentInstruction()
+			.Should().BeOfType<AssignRolesInstruction>().Subject;
+
+		reveal.RolesForAssignment.Should()
+			.NotContain(MainRoleType.SimpleWerewolf);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void GenericRoleReveal_StaleOverAllocationIsRejectedBeforeLegalMappingCommits()
+	{
+		var builder = CreateBuilder()
+			.WithPlayers(6)
+			.WithRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		var victim = players[2];
+		builder.ArrangeKnownRole(players[0].Id, MainRoleType.SimpleWerewolf);
+		builder.ConfirmGameStart();
+		builder.CompleteNightPhase(
+			[players[0].Id, players[1].Id],
+			victim.Id);
+		var reveal = builder.GetCurrentInstruction()
+			.Should().BeOfType<AssignRolesInstruction>().Subject;
+		reveal.RolesForAssignment.Should()
+			.ContainSingle(role => role == MainRoleType.SimpleWerewolf);
+
+		builder.ArrangeKnownRole(players[1].Id, MainRoleType.SimpleWerewolf);
+		var session = builder.GetGameState()!;
+		var historyBefore = session.GameHistoryLog.ToArray();
+		var cardsBefore = session.GetModeratorPhysicalCharacterCards().ToArray();
+		var victimBefore = (
+			victim.State.CurrentRole,
+			victim.State.ModeratorKnownRole,
+			victim.State.PubliclyRevealedRole,
+			victim.State.PhysicalCharacterCardId);
+		var staleResponse = reveal.CreateResponse(new()
+		{
+			[victim.Id] = MainRoleType.SimpleWerewolf
+		});
+
+		Action submitStaleResponse = () => builder.Process(staleResponse);
+
+		submitStaleResponse.Should().Throw<InvalidOperationException>();
+		builder.GetCurrentInstruction()!.InstructionId.Should().Be(
+			reveal.InstructionId);
+		session.GameHistoryLog.Should().Equal(historyBefore);
+		session.GetModeratorPhysicalCharacterCards().Should().Equal(cardsBefore);
+		(
+			victim.State.CurrentRole,
+			victim.State.ModeratorKnownRole,
+			victim.State.PubliclyRevealedRole,
+			victim.State.PhysicalCharacterCardId).Should().Be(victimBefore);
+
+		var legalResult = builder.Process(reveal.CreateResponse(new()
+		{
+			[victim.Id] = MainRoleType.SimpleVillager
+		}));
+
+		legalResult.IsSuccess.Should().BeTrue();
+		victim.State.PubliclyRevealedRole.Should().Be(
+			MainRoleType.SimpleVillager);
+		victim.State.PhysicalCharacterCardRole.Should().Be(
+			MainRoleType.SimpleVillager);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void GenericRoleReveal_MixedDawnBatchAcknowledgesKnownAndMapsUnknownTogether()
+	{
+		var builder = CreateBuilder()
+			.WithPlayers(7)
+			.WithRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.BigBadWolf,
+				MainRoleType.Seer,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		builder.ConfirmGameStart();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		var knownVictim = players[2];
+		var unknownVictim = players[3];
+
+		builder.CompleteNightPhase(new NightActionInputs
+		{
+			WerewolfIds = [players[0].Id, players[1].Id],
+			WerewolfVictimId = knownVictim.Id,
+			SeerId = knownVictim.Id,
+			SeerTargetId = players[4].Id,
+			BigBadWolfId = players[1].Id,
+			BigBadWolfTargetId = unknownVictim.Id
+		});
+
+		var reveal = builder.GetCurrentInstruction()
+			.Should().BeOfType<AssignRolesInstruction>().Subject;
+		reveal.AffectedPlayerIds.Should().BeEquivalentTo(new[]
+		{
+			knownVictim.Id,
+			unknownVictim.Id
+		});
+		reveal.PlayersForAssignment.Should().Equal(unknownVictim.Id);
+		reveal.PrivateInstruction.Should().Contain(
+			MainRoleType.Seer.GetPublicName());
+		reveal.RolesForAssignment.Should().NotContain(MainRoleType.Seer);
+		reveal.RolesForAssignment.Should().NotContain(MainRoleType.BigBadWolf);
+
+		var afterReveal = builder.Process(reveal.CreateResponse(new()
+		{
+			[unknownVictim.Id] = MainRoleType.SimpleVillager
+		}));
+
+		afterReveal.IsSuccess.Should().BeTrue();
+		knownVictim.State.PubliclyRevealedRole.Should().Be(MainRoleType.Seer);
+		knownVictim.State.PhysicalCharacterCardRole.Should().Be(MainRoleType.Seer);
+		unknownVictim.State.PubliclyRevealedRole.Should().Be(
+			MainRoleType.SimpleVillager);
+		unknownVictim.State.PhysicalCharacterCardRole.Should().Be(
+			MainRoleType.SimpleVillager);
+		knownVictim.State.Health.Should().Be(PlayerHealth.Dead);
+		unknownVictim.State.Health.Should().Be(PlayerHealth.Dead);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void GenericRoleReveal_InfectedUnknownVoteVictimKeepsExactRoleOptionsUnrestricted()
+	{
+		var builder = CreateBuilder()
+			.WithPlayers(7)
+			.WithRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.AccursedWolfFather,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		builder.ConfirmGameStart();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		var infectedVictim = players[2];
+		builder.CompleteNightPhase(new NightActionInputs
+		{
+			WerewolfIds = [players[0].Id, players[1].Id],
+			WerewolfVictimId = infectedVictim.Id,
+			AccursedWolfFatherId = players[1].Id,
+			AccursedWolfFatherInfectsVictim = true
+		});
+		infectedVictim.State.HasStatusEffect(
+			StatusEffectTypes.LycanthropyInfection).Should().BeTrue();
+		infectedVictim.State.CurrentRole.Should().BeNull();
+		var debate = builder.GetCurrentInstruction()
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var vote = builder.Process(debate.CreateResponse())
+			.ModeratorInstruction.Should()
+			.BeOfType<SelectPlayersInstruction>().Subject;
+
+		var reveal = builder.Process(vote.CreateResponse([infectedVictim.Id]))
+			.ModeratorInstruction.Should()
+			.BeOfType<AssignRolesInstruction>().Subject;
+
+		reveal.RolesForAssignment.Should().Contain(MainRoleType.SimpleWerewolf);
+		reveal.RolesForAssignment.Should().Contain(MainRoleType.SimpleVillager);
+		reveal.RolesForAssignment.Should().NotContain(
+			MainRoleType.AccursedWolfFather);
+
+		var afterReveal = builder.Process(reveal.CreateResponse(new()
+		{
+			[infectedVictim.Id] = MainRoleType.SimpleVillager
+		}));
+
+		afterReveal.IsSuccess.Should().BeTrue();
+		infectedVictim.State.PubliclyRevealedRole.Should().Be(
+			MainRoleType.SimpleVillager);
+		infectedVictim.State.HasStatusEffect(
+			StatusEffectTypes.LycanthropyInfection).Should().BeTrue();
+		MarkTestCompleted();
+	}
 
     [Fact]
 	public void GenericRoleReveal_UnknownDawnVictim_BindsDealPoolCardAndRecordsInitialCurrentRole()

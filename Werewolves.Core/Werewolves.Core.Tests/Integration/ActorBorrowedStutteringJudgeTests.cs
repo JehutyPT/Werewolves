@@ -341,21 +341,17 @@ public sealed class ActorBorrowedStutteringJudgeTests
 		cursor.ResourceIdentity.Should().Be(resourceIdentity);
 		cursor.CommittedDayActionType.Should().Be(DayPowerType.JudgeExtraVote);
 		cursor.NextInstructionId.Should().Be(firstVote.InstructionId);
-		var targetRoleAssignment = GameFlowManager.HandleInput(
+		var targetRoleReveal = GameFlowManager.HandleInput(
 				session,
 				firstVote.CreateResponse([actorId]),
 				SupportedRoleCatalog.Admissions).ModeratorInstruction
-			.Should().BeOfType<AssignRolesInstruction>().Subject;
-		targetRoleAssignment.Semantic.Should().Be(
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		targetRoleReveal.Semantic.Should().Be(
 			ModeratorInstructionSemantic.AssignDayVoteTargetRole);
-		targetRoleAssignment.PlayersForAssignment.Should().Equal(actorId);
+		targetRoleReveal.AffectedPlayerIds.Should().Equal(actorId);
 		var firstAnnouncement = GameFlowManager.HandleInput(
 				session,
-				targetRoleAssignment.CreateResponse(
-					new Dictionary<Guid, MainRoleType>
-					{
-						[actorId] = MainRoleType.Actor
-					}),
+				targetRoleReveal.CreateResponse(),
 				SupportedRoleCatalog.Admissions).ModeratorInstruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		firstAnnouncement.Semantic.Should().Be(

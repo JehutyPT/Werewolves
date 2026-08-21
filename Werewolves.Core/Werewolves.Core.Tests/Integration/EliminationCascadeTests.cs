@@ -27,7 +27,6 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 			[players[2].Id, players[3].Id]);
 		initialReveal.RolesForAssignment.Should().Equal(
 			MainRoleType.SimpleWerewolf,
-			MainRoleType.Witch,
 			MainRoleType.SimpleVillager,
 			MainRoleType.SimpleVillager,
 			MainRoleType.SimpleVillager,
@@ -325,6 +324,13 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 				poison.CreateResponse([players[2].Id]))
 			.ModeratorInstruction.Should()
 			.BeOfType<ConfirmationInstruction>().Subject;
+		builder.ArrangeKnownPhysicalRole(
+			players[1].Id,
+			MainRoleType.SimpleVillager);
+		builder.ArrangeKnownRole(players[1].Id, MainRoleType.Witch);
+		var committedVictimCardId = builder.GetGameState()!
+			.GetPlayerState(players[1].Id)
+			.PhysicalCharacterCardId!.Value;
 		var finishNight = builder.Process(sleep.CreateResponse())
 			.ModeratorInstruction.Should()
 			.BeOfType<ConfirmationInstruction>().Subject;
@@ -332,8 +338,9 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 			.ModeratorInstruction.Should()
 			.BeOfType<AssignRolesInstruction>().Subject;
 
-		reveal.PlayersForAssignment.Should().BeEquivalentTo(
-			new[] { players[2].Id, players[1].Id });
+		reveal.PlayersForAssignment.Should().Equal(players[2].Id);
+		reveal.AffectedPlayerIds.Should().BeEquivalentTo(
+			[players[2].Id, players[1].Id]);
 		builder.GetGameState()!.GetPlayerState(players[1].Id).Health
 			.Should().Be(PlayerHealth.Alive);
 		builder.GetGameState()!.GetPlayerState(players[2].Id).Health
@@ -344,10 +351,7 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 		{
 			InstructionId = reveal.InstructionId,
 			Type = ExpectedInputType.AssignPlayerRoles,
-			AssignedPlayerRoles = new Dictionary<Guid, MainRoleType>
-			{
-				[players[2].Id] = MainRoleType.Witch
-			}
+			AssignedPlayerRoles = new Dictionary<Guid, MainRoleType>()
 		};
 		var invalidReveal = () => builder.Process(invalidResponse);
 
@@ -367,6 +371,9 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 			.Should().Be(MainRoleType.Witch);
 		builder.GetGameState()!.GetPlayerState(players[1].Id).ModeratorKnownRole
 			.Should().Be(MainRoleType.Witch);
+		builder.GetGameState()!.GetPlayerState(players[1].Id)
+			.PhysicalCharacterCardRole.Should()
+			.Be(MainRoleType.SimpleVillager);
 		builder.GetGameState()!.GetPlayerState(players[2].Id).CurrentRole
 			.Should().BeNull();
 		builder.GetGameState()!.GetPlayerState(players[2].Id).ModeratorKnownRole
@@ -374,7 +381,6 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 
 		builder.Process(reveal.CreateResponse(new()
 		{
-			[players[1].Id] = MainRoleType.SimpleVillager,
 			[players[2].Id] = MainRoleType.SimpleVillager
 		}));
 
@@ -388,8 +394,10 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 		ownerships.Select(entry => entry.PlayerId).Should().OnlyHaveUniqueItems();
 		var ownedCardIds = ownerships.Select(entry => entry.CardId).ToArray();
 		ownedCardIds.Should().OnlyHaveUniqueItems();
-		ownedCardIds.Should().OnlyContain(cardId =>
-			matchingUnusedDealPoolCardIds.Contains(cardId));
+		ownerships.Single(entry => entry.PlayerId == players[1].Id)
+			.CardId.Should().Be(committedVictimCardId);
+		matchingUnusedDealPoolCardIds.Should().Contain(
+			ownerships.Single(entry => entry.PlayerId == players[2].Id).CardId);
 		session.GetPlayerState(players[1].Id).CurrentRole.Should()
 			.Be(MainRoleType.Witch);
 		session.GetPlayerState(players[1].Id).ModeratorKnownRole.Should()
