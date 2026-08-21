@@ -77,7 +77,7 @@ public static class MainRoleTypeExtensions
         MainRoleType.SimpleWerewolf => RoleGroup.Werewolves,
         MainRoleType.BigBadWolf => RoleGroup.Werewolves,
         MainRoleType.AccursedWolfFather => RoleGroup.Werewolves,
-        MainRoleType.WhiteWerewolf => RoleGroup.Werewolves,
+        MainRoleType.WhiteWerewolf => RoleGroup.Loners,
 
         // Villagers
         MainRoleType.SimpleVillager => RoleGroup.Villagers,
