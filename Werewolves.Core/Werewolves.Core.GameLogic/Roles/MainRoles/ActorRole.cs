@@ -692,8 +692,10 @@ internal sealed class ActorRole : RoleHookListener, IDeclaredRoleWorkflow
 			.Where(player =>
 				player.State.CurrentRole == MainRoleType.Actor ||
 				(player.State.CurrentRole == null &&
-				 (player.State.ModeratorKnownRole == null ||
-				  player.State.ModeratorKnownRole == MainRoleType.Actor)))
+				 (player.State.ModeratorKnownRole == MainRoleType.Actor ||
+				  player.State.ModeratorKnownRole == null &&
+				  GameSessionQueries.GetPossibleRoles(session, player.Id)
+					  .Contains(MainRoleType.Actor))))
 			.ToIdSet();
 
 	private bool HasExpectedAffectedRoleHolders(

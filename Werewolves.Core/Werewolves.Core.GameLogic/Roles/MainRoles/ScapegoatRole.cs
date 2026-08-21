@@ -477,7 +477,12 @@ internal sealed class ScapegoatRole
 		GameSession session) =>
 		session.GetPlayers()
 			.WithHealth(PlayerHealth.Alive)
-			.Where(IsNonContradictoryScapegoatCandidate)
+			.Where(player =>
+				IsNonContradictoryScapegoatCandidate(player) &&
+				(player.State.CurrentRole == MainRoleType.Scapegoat ||
+				 player.State.ModeratorKnownRole == MainRoleType.Scapegoat ||
+				 GameSessionQueries.GetPossibleRoles(session, player.Id)
+					 .Contains(MainRoleType.Scapegoat)))
 			.Select(player => player.Id)
 			.ToHashSet();
 
@@ -550,6 +555,18 @@ internal sealed class ScapegoatRole
 		{
 			throw new InvalidOperationException(
 				"The observed Scapegoat holder contradicts committed Role or health facts.");
+		}
+
+		var isEstablishedHolder =
+			player.State.CurrentRole == MainRoleType.Scapegoat ||
+			player.State.ModeratorKnownRole == MainRoleType.Scapegoat ||
+			player.State.PhysicalCharacterCardRole == MainRoleType.Scapegoat;
+		if (!isEstablishedHolder &&
+		    !GameSessionQueries.GetPossibleRoles(session, player.Id)
+			    .Contains(MainRoleType.Scapegoat))
+		{
+			throw new InvalidOperationException(
+				"Role Identification contradicts committed Role knowledge.");
 		}
 
 		if (!IsTieReplacementAvailable(session, player))

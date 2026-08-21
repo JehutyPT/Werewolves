@@ -779,9 +779,10 @@ internal sealed class DefenderRole
 			.Where(player =>
 				player.State.CurrentRole == MainRoleType.Defender ||
 				(player.State.CurrentRole == null &&
-				 (player.State.ModeratorKnownRole == null ||
-				  player.State.ModeratorKnownRole ==
-					  MainRoleType.Defender)))
+				 (player.State.ModeratorKnownRole == MainRoleType.Defender ||
+				  player.State.ModeratorKnownRole == null &&
+				  GameSessionQueries.GetPossibleRoles(session, player.Id)
+					  .Contains(MainRoleType.Defender))))
 			.ToIdSet();
 
 	private HashSet<Guid> GetLivingHolderIds(GameSession session) =>

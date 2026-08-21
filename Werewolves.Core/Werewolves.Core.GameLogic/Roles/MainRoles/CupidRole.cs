@@ -1163,8 +1163,10 @@ internal sealed class CupidRole
 			.Where(player =>
 				player.State.CurrentRole == MainRoleType.Cupid ||
 				(player.State.CurrentRole == null &&
-				 (player.State.ModeratorKnownRole == null ||
-				  player.State.ModeratorKnownRole == MainRoleType.Cupid)))
+				 (player.State.ModeratorKnownRole == MainRoleType.Cupid ||
+				  player.State.ModeratorKnownRole == null &&
+				  GameSessionQueries.GetPossibleRoles(session, player.Id)
+					  .Contains(MainRoleType.Cupid))))
 			.ToIdSet();
 
 	private bool HasExpectedAffectedRoleHolders(
