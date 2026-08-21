@@ -35,10 +35,11 @@
 				<div class="ww-role-group-choices" role="group" aria-label="@group.DisplayName">
 					@foreach (var role in group.Roles)
 					{
-						<button type="button"
-								class="@RoleClass(activePlayerId, role)"
-								aria-pressed="@AriaPressed(IsRoleSelected(activePlayerId, role))"
-								@onclick="() => AssignRole(activePlayerId, role)">@role.GetPublicName()</button>
+							<button type="button"
+									class="@RoleClass(activePlayerId, role)"
+									aria-pressed="@AriaPressed(IsRoleSelected(activePlayerId, role))"
+									disabled="@(!IsRoleAvailable(activePlayerId, role))"
+									@onclick="() => AssignRole(activePlayerId, role)">@role.GetPublicName()</button>
 					}
 				</div>
 			</section>
@@ -194,6 +195,25 @@
 
 	private bool IsRoleSelected(Guid playerId, MainRoleType role) =>
 		_assignments.TryGetValue(playerId, out var assigned) && assigned == role;
+
+	private bool IsRoleAvailable(Guid playerId, MainRoleType role)
+	{
+		if (IsRoleSelected(playerId, role))
+		{
+			return true;
+		}
+
+		var copyBudget = Instruction.PlayersForAssignment
+			.Select(candidatePlayerId => Instruction.SelectableRolesForPlayers[candidatePlayerId]
+				.Count(candidateRole => candidateRole == role))
+			.DefaultIfEmpty()
+			.Max();
+		var claimedCopies = _assignments.Count(assignment =>
+			Instruction.PlayersForAssignment.Contains(assignment.Key) &&
+			assignment.Value == role);
+
+		return claimedCopies < copyBudget;
+	}
 
 	private static string AriaPressed(bool isSelected) =>
 		isSelected ? "true" : "false";

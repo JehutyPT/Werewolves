@@ -195,7 +195,7 @@ public class AssignRolesViewBunitTests
 	}
 
 	[Fact]
-	public void SameRoleOptionsRemainEnabledAndRequireEachPlayersExplicitSelection()
+	public void ExhaustedRole_RemainsOperableForOwnerAndReenablesForOthersAfterChangeOrClear()
 	{
 		var anaId = Guid.NewGuid();
 		var brunoId = Guid.NewGuid();
@@ -229,7 +229,7 @@ public class AssignRolesViewBunitTests
 		var werewolf = FindButtonByText(
 			cut,
 			MainRoleType.SimpleWerewolf.GetPublicName());
-		villager.HasAttribute(Html.Attributes.Disabled).Should().BeFalse();
+		villager.HasAttribute(Html.Attributes.Disabled).Should().BeTrue();
 		werewolf.HasAttribute(Html.Attributes.Disabled).Should().BeFalse();
 		villager.GetAttribute(Html.Attributes.AriaPressed).Should().Be(
 			Html.AriaValues.False);
@@ -237,9 +237,77 @@ public class AssignRolesViewBunitTests
 			Html.AriaValues.False);
 		FindHoldButton(cut).HasAttribute(Html.Attributes.Disabled).Should().BeTrue();
 
-		werewolf.Click();
+		cut.FindButtonByAccessibleName(ClientStrings.AssignRoles_PreviousPlayerAria).Click();
+		villager = FindButtonByText(cut, MainRoleType.SimpleVillager.GetPublicName());
+		villager.HasAttribute(Html.Attributes.Disabled).Should().BeFalse();
+		villager.GetAttribute(Html.Attributes.AriaPressed).Should().Be(Html.AriaValues.True);
+		FindButtonByText(cut, MainRoleType.SimpleWerewolf.GetPublicName()).Click();
 
-		FindHoldButton(cut).HasAttribute(Html.Attributes.Disabled).Should().BeFalse();
+		cut.FindButtonByAccessibleName(ClientStrings.AssignRoles_NextPlayerAria).Click();
+		FindButtonByText(cut, MainRoleType.SimpleVillager.GetPublicName())
+			.HasAttribute(Html.Attributes.Disabled).Should().BeFalse();
+		FindButtonByText(cut, MainRoleType.SimpleWerewolf.GetPublicName())
+			.HasAttribute(Html.Attributes.Disabled).Should().BeTrue();
+
+		cut.FindButtonByAccessibleName(ClientStrings.AssignRoles_PreviousPlayerAria).Click();
+		FindButtonByText(cut, MainRoleType.SimpleWerewolf.GetPublicName()).Click();
+		cut.FindButtonByAccessibleName(ClientStrings.AssignRoles_NextPlayerAria).Click();
+
+		FindButtonByText(cut, MainRoleType.SimpleVillager.GetPublicName())
+			.HasAttribute(Html.Attributes.Disabled).Should().BeFalse();
+		FindButtonByText(cut, MainRoleType.SimpleWerewolf.GetPublicName())
+			.HasAttribute(Html.Attributes.Disabled).Should().BeFalse();
+		FindHoldButton(cut).HasAttribute(Html.Attributes.Disabled).Should().BeTrue();
+	}
+
+	[Fact]
+	public void DuplicateRoleBudget_UsesGreatestPerPlayerCountWithoutAutoSelecting()
+	{
+		var anaId = Guid.NewGuid();
+		var brunoId = Guid.NewGuid();
+		var carlaId = Guid.NewGuid();
+		var oneCopyOptions = new[]
+		{
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager
+		};
+		var twoCopyOptions = new[]
+		{
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager
+		};
+		using var context = new ModeratorComponentTestContext();
+		var cut = RenderAssignRolesView(
+			context,
+			CreateAssignRolesInstruction(
+				[anaId, brunoId, carlaId],
+				new Dictionary<Guid, IReadOnlyList<MainRoleType>>
+				{
+					[anaId] = oneCopyOptions,
+					[brunoId] = twoCopyOptions,
+					[carlaId] = twoCopyOptions
+				}),
+			[
+				CreateRosterEntry(anaId, 1, PlayerNames.Ana),
+				CreateRosterEntry(brunoId, 2, PlayerNames.Bruno),
+				CreateRosterEntry(carlaId, 3, PlayerNames.Carla)
+			]);
+
+		FindButtonByText(cut, MainRoleType.SimpleWerewolf.GetPublicName()).Click();
+		cut.FindButtonByAccessibleName(ClientStrings.AssignRoles_NextPlayerAria).Click();
+
+		var secondWerewolf = FindButtonByText(cut, MainRoleType.SimpleWerewolf.GetPublicName());
+		secondWerewolf.HasAttribute(Html.Attributes.Disabled).Should().BeFalse();
+		secondWerewolf.Click();
+		cut.FindButtonByAccessibleName(ClientStrings.AssignRoles_NextPlayerAria).Click();
+
+		var thirdWerewolf = FindButtonByText(cut, MainRoleType.SimpleWerewolf.GetPublicName());
+		thirdWerewolf.HasAttribute(Html.Attributes.Disabled).Should().BeTrue();
+		thirdWerewolf.GetAttribute(Html.Attributes.AriaPressed).Should().Be(Html.AriaValues.False);
+		FindButtonByText(cut, MainRoleType.SimpleVillager.GetPublicName())
+			.GetAttribute(Html.Attributes.AriaPressed).Should().Be(Html.AriaValues.False);
+		FindHoldButton(cut).HasAttribute(Html.Attributes.Disabled).Should().BeTrue();
 	}
 
 	[Fact]
@@ -367,6 +435,7 @@ public class AssignRolesViewBunitTests
 		context.Services.AddSingleton<IHoldButtonTiming>(timing);
 		var anaId = Guid.NewGuid();
 		var brunoId = Guid.NewGuid();
+		var instructionId = Guid.NewGuid();
 		var responses = new List<ModeratorResponse>();
 		var expectedAssignments = new Dictionary<Guid, MainRoleType>
 		{
@@ -377,7 +446,8 @@ public class AssignRolesViewBunitTests
 			context,
 			CreateAssignRolesInstruction(
 				[anaId, brunoId],
-				[MainRoleType.SimpleVillager, MainRoleType.SimpleWerewolf]),
+				[MainRoleType.SimpleVillager, MainRoleType.SimpleWerewolf],
+				instructionId),
 			[
 				CreateRosterEntry(anaId, 1, PlayerNames.Ana),
 				CreateRosterEntry(brunoId, 2, PlayerNames.Bruno)
@@ -393,6 +463,7 @@ public class AssignRolesViewBunitTests
 		responses.Should().ContainSingle();
 		var response = responses.Single();
 		response.Type.Should().Be(ExpectedInputType.AssignPlayerRoles);
+		response.InstructionId.Should().Be(instructionId);
 		response.AssignedPlayerRoles.Should().BeEquivalentTo(expectedAssignments);
 	}
 
@@ -451,7 +522,8 @@ public class AssignRolesViewBunitTests
 
 	private static AssignRolesInstruction CreateAssignRolesInstruction(
 		IEnumerable<Guid> playerIds,
-		IReadOnlyList<MainRoleType> roles) =>
+		IReadOnlyList<MainRoleType> roles,
+		Guid instructionId = default) =>
 		(AssignRolesInstruction)AssignRolesConstructor.Invoke(
 			[
 				playerIds.ToImmutableHashSet(),
@@ -459,7 +531,7 @@ public class AssignRolesViewBunitTests
 				null,
 				GameStrings.RevealRolePromptSpecify,
 				null,
-				Guid.Empty
+				instructionId
 			]);
 
 	private static AssignRolesInstruction CreateAssignRolesInstruction(
