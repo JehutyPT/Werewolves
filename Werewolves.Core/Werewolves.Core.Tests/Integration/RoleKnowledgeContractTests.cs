@@ -1,10 +1,12 @@
 using FluentAssertions;
 using Werewolves.Core.GameLogic.Services;
+using Werewolves.Core.GameLogic.Simulation;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
+using Werewolves.Core.StateModels.Models.Simulation;
 using Werewolves.Core.Tests.Helpers;
 using Xunit;
 using Xunit.Abstractions;
@@ -486,6 +488,196 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
 	}
 
 	[Fact]
+	public void GenericRoleReveal_InitialObservedAgentRejectsVillagerRoleThenAcceptsInitialAgencyRole()
+	{
+		var builder = CreateBuilder()
+			.WithPlayers(5)
+			.WithRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		builder.ConfirmGameStart();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		var initialAgent = players[0];
+		var dawnVictim = players[1];
+		builder.CompleteNightPhase([initialAgent.Id], dawnVictim.Id);
+		builder.CompleteDawnPhase(new()
+		{
+			[dawnVictim.Id] = MainRoleType.SimpleVillager
+		});
+
+		builder.GameService.GetPossibleRoles(builder.GameId, initialAgent.Id)
+			.Should().Equal(MainRoleType.SimpleWerewolf);
+		var debate = builder.GetCurrentInstruction()
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var vote = builder.Process(debate.CreateResponse())
+			.ModeratorInstruction.Should()
+			.BeOfType<SelectPlayersInstruction>().Subject;
+		var reveal = builder.Process(vote.CreateResponse([initialAgent.Id]))
+			.ModeratorInstruction.Should()
+			.BeOfType<AssignRolesInstruction>().Subject;
+		AssertRoleMappingRejectedWithoutMutation(
+			builder,
+			reveal,
+			initialAgent.Id,
+			MainRoleType.SimpleVillager);
+
+		var legalResult = builder.Process(reveal.CreateResponse(new()
+		{
+			[initialAgent.Id] = MainRoleType.SimpleWerewolf
+		}));
+
+		legalResult.IsSuccess.Should().BeTrue();
+		initialAgent.State.PubliclyRevealedRole.Should().Be(
+			MainRoleType.SimpleWerewolf);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void SimulationStartStateAgent_UsesSameInitialAgencyConstraintAsLiveObservation()
+	{
+		MainRoleType[] roles =
+		[
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager
+		];
+		var scenario = new SimulationScenario(roles.Length, roles);
+		var capability = SimulatorCapability.SafetyScreening;
+		var material = new RunSeedMaterial(
+			capability.CreateCompatibilityIdentity(scenario),
+			capability.HeadlessResponsePolicy.StrategyIdentity,
+			runNumber: 270);
+		var startState = SimulationStartStateDeriver.Derive(
+			material,
+			capability);
+		var initialAgentSeat = startState.RoleAssignments.Single(assignment =>
+			assignment.Role.EstablishesInitialWerewolfAgency()).SeatNumber;
+		var config = startState.CreateGameSessionConfig();
+		var service = new GameService();
+		var start = service.StartNewSimulationGame(
+			config,
+			startState.FactionFacts);
+		var initialAgentId = config.PlayerRoster[initialAgentSeat - 1].Id;
+
+		service.GetPossibleRoles(start.GameGuid, initialAgentId)
+			.Should().Equal(MainRoleType.SimpleWerewolf);
+		var provenance = service.GetEarliestWerewolfAgencyFact(
+			start.GameGuid,
+			initialAgentId);
+		provenance.Should().NotBeNull();
+		provenance!.Source.Kind.Should().Be(
+			FactionFactSourceKind.SimulationStartState);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void GenericRoleReveal_KnownNonAgentRejectsInitialAgencyRoleThenAcceptsVillagerRole()
+	{
+		var builder = CreateBuilder()
+			.WithPlayers(5)
+			.WithRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		builder.ConfirmGameStart();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		var initialAgent = players[0];
+		var dawnVictim = players[1];
+		var knownNonAgent = players[2];
+		builder.CompleteNightPhase([initialAgent.Id], dawnVictim.Id);
+		builder.CompleteDawnPhase(new()
+		{
+			[dawnVictim.Id] = MainRoleType.SimpleVillager
+		});
+
+		var possibleRoles = builder.GameService.GetPossibleRoles(
+			builder.GameId,
+			knownNonAgent.Id);
+		possibleRoles.Should().Contain(MainRoleType.SimpleVillager);
+		possibleRoles.Should().NotContain(role =>
+			role.EstablishesInitialWerewolfAgency());
+		var debate = builder.GetCurrentInstruction()
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var vote = builder.Process(debate.CreateResponse())
+			.ModeratorInstruction.Should()
+			.BeOfType<SelectPlayersInstruction>().Subject;
+		var reveal = builder.Process(vote.CreateResponse([knownNonAgent.Id]))
+			.ModeratorInstruction.Should()
+			.BeOfType<AssignRolesInstruction>().Subject;
+		AssertRoleMappingRejectedWithoutMutation(
+			builder,
+			reveal,
+			knownNonAgent.Id,
+			MainRoleType.SimpleWerewolf);
+
+		var legalResult = builder.Process(reveal.CreateResponse(new()
+		{
+			[knownNonAgent.Id] = MainRoleType.SimpleVillager
+		}));
+
+		legalResult.IsSuccess.Should().BeTrue();
+		knownNonAgent.State.PubliclyRevealedRole.Should().Be(
+			MainRoleType.SimpleVillager);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void WerewolfAlignedWolfHound_EarliestAgencyFactIsAlignmentChoice()
+	{
+		var builder = CreateBuilder()
+			.WithPlayers(5)
+			.WithRoles(
+				MainRoleType.WolfHound,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		builder.ConfirmGameStart();
+		var identification = builder.ConfirmNightStart()
+			.ModeratorInstruction.Should()
+			.BeOfType<SelectPlayersInstruction>().Subject;
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		var wolfHound = players[0];
+		var simpleWerewolf = players[1];
+		var alignment = builder.Process(
+			identification.CreateResponse([wolfHound.Id]))
+			.ModeratorInstruction.Should()
+			.BeOfType<SelectOptionsInstruction>().Subject;
+		var sleep = builder.Process(alignment.CreateResponse(
+			WolfHoundAlignmentOptionIds.Werewolves))
+			.ModeratorInstruction.Should()
+			.BeOfType<ConfirmationInstruction>().Subject;
+		var observation = builder.Process(sleep.CreateResponse())
+			.ModeratorInstruction.Should()
+			.BeOfType<SelectPlayersInstruction>().Subject;
+		builder.Process(observation.CreateResponse([
+			wolfHound.Id,
+			simpleWerewolf.Id
+		]));
+
+		var provenance = builder.GameService.GetEarliestWerewolfAgencyFact(
+			builder.GameId,
+			wolfHound.Id);
+		provenance.Should().NotBeNull();
+
+		provenance!.Source.Kind.Should().Be(
+			FactionFactSourceKind.ExplicitTransition);
+		provenance.Fact.AgentKnowledge.Should().Be(
+			FactionAgentKnowledge.KnownAgent);
+		MarkTestCompleted();
+	}
+
+	[Fact]
 	public void GenericRoleReveal_MixedDawnBatchAcknowledgesKnownAndMapsUnknownTogether()
 	{
 		var builder = CreateBuilder()
@@ -571,6 +763,18 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
 		infectedVictim.State.HasStatusEffect(
 			StatusEffectTypes.LycanthropyInfection).Should().BeTrue();
 		infectedVictim.State.CurrentRole.Should().BeNull();
+		var possibleRoles = builder.GameService.GetPossibleRoles(
+			builder.GameId,
+			infectedVictim.Id);
+		possibleRoles.Should().Contain(MainRoleType.SimpleWerewolf);
+		possibleRoles.Should().Contain(MainRoleType.SimpleVillager);
+		possibleRoles.Should().NotContain(MainRoleType.AccursedWolfFather);
+		var provenance = builder.GameService.GetEarliestWerewolfAgencyFact(
+			builder.GameId,
+			infectedVictim.Id);
+		provenance.Should().NotBeNull();
+		provenance!.Source.Kind.Should().Be(
+			FactionFactSourceKind.ExplicitTransition);
 		var debate = builder.GetCurrentInstruction()
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		var vote = builder.Process(debate.CreateResponse())
@@ -730,6 +934,40 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
         recovered.GameHistoryLog.OfType<PlayerEliminatedLogEntry>().Should()
             .ContainSingle(entry => entry.PlayerId == unknownVictim.Id);
 
-        MarkTestCompleted();
-    }
+		MarkTestCompleted();
+	}
+
+	private static void AssertRoleMappingRejectedWithoutMutation(
+		GameTestBuilder builder,
+		AssignRolesInstruction reveal,
+		Guid playerId,
+		MainRoleType rejectedRole)
+	{
+		var session = builder.GetGameState()!;
+		var player = session.GetPlayer(playerId);
+		var historyBefore = session.GameHistoryLog.ToArray();
+		var cardsBefore = session.GetModeratorPhysicalCharacterCards().ToArray();
+		var playerBefore = (
+			player.State.CurrentRole,
+			player.State.ModeratorKnownRole,
+			player.State.PubliclyRevealedRole,
+			player.State.PhysicalCharacterCardId);
+
+		Action submitContradictoryMapping = () => builder.Process(
+			reveal.CreateResponse(new()
+			{
+				[playerId] = rejectedRole
+			}));
+
+		submitContradictoryMapping.Should().Throw<InvalidOperationException>();
+		builder.GetCurrentInstruction()!.InstructionId.Should().Be(
+			reveal.InstructionId);
+		session.GameHistoryLog.Should().Equal(historyBefore);
+		session.GetModeratorPhysicalCharacterCards().Should().Equal(cardsBefore);
+		(
+			player.State.CurrentRole,
+			player.State.ModeratorKnownRole,
+			player.State.PubliclyRevealedRole,
+			player.State.PhysicalCharacterCardId).Should().Be(playerBefore);
+	}
 }

@@ -16,7 +16,7 @@ When a Role specialization is silent, the shared interaction rules apply.
 
 ### Physical authority and Role knowledge
 
-- The physical table is authoritative. The app records the Role Composition and facts the Moderator observes; it does not shuffle, deal, or deduce an unknown Player-specific Role.
+- The physical table is authoritative. The app records the Role Composition and facts the Moderator observes; it does not shuffle, deal, guess, or probabilistically deduce an unknown Player-specific Role. It may deterministically constrain possible Roles when complete committed facts plus the locked Role Composition entail the constraint, as defined by [ADR-0015](../adr/0015-role-ownership-knowledge-and-public-reveal-are-separate.md); a candidate remains distinct from a known Role.
 - Physical Character Card Ownership, current Role, Moderator knowledge, and public reveal are separate facts.
 - A Player-to-Role observation records the printed Role and never asks the Moderator to distinguish identical copies; internal accounting-ID binding and configured slot identity are defined by the [domain invariants](../domain/invariants.md) and [ADR-0015](../adr/0015-role-ownership-knowledge-and-public-reveal-are-separate.md).
 - A Permanent Role Swap separately defines the new current Role, physical-card handling, and visibility.

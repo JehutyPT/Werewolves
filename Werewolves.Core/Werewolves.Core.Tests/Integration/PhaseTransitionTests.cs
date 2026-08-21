@@ -97,7 +97,10 @@ public class PhaseTransitionTests : DiagnosticTestBase
             seerTargetId: villager2);
 
         // Act: Complete dawn phase
-        builder.CompleteDawnPhase();
+        builder.CompleteDawnPhase(new()
+        {
+            [villager1] = MainRoleType.SimpleVillager
+        });
 
         // Assert: Should now be in Day phase
         var gameState = builder.GetGameState();
@@ -134,10 +137,16 @@ public class PhaseTransitionTests : DiagnosticTestBase
             seerTargetId: villager2);
 
         // Complete dawn phase
-        builder.CompleteDawnPhase();
+        builder.CompleteDawnPhase(new()
+        {
+            [villager1] = MainRoleType.SimpleVillager
+        });
 
         // Act: Complete day phase with a lynch (lynch a villager who is still alive)
-        builder.CompleteDayPhaseWithLynch(villager2);
+        builder.CompleteDayPhaseWithLynch(villager2, new()
+        {
+            [villager2] = MainRoleType.SimpleVillager
+        });
 
         // Assert: Should now be in Night phase with turn number incremented
         var gameState = builder.GetGameState();
@@ -216,7 +225,10 @@ public class PhaseTransitionTests : DiagnosticTestBase
         session.GetCurrentPhase().Should().Be(GamePhase.Dawn);
 
         // Act: Complete dawn phase (transitions to Day)
-        builder.CompleteDawnPhase();
+        builder.CompleteDawnPhase(new()
+        {
+            [villager1] = MainRoleType.SimpleVillager
+        });
 
         // Assert: the public phase and instruction both moved to Day work.
         session.GetCurrentPhase().Should().Be(GamePhase.Day);

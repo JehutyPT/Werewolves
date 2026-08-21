@@ -185,6 +185,39 @@ public class SimulationExecutionTests : DiagnosticTestBase
 	}
 
 	[Fact]
+	public void ExecuteBatch_WithInitialWerewolfAgentsAndSeer_CompletesEveryDeterministicRun()
+	{
+		MainRoleType[] roles =
+		[
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.BigBadWolf,
+			MainRoleType.AccursedWolfFather,
+			MainRoleType.WhiteWerewolf,
+			MainRoleType.Seer,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager
+		];
+		var scenario = new SimulationScenario(roles.Length, roles);
+		var capability = SimulatorCapability.SafetyScreening;
+		var identity = capability.CreateCompatibilityIdentity(scenario);
+
+		var batch = new SimulationExecutor().ExecuteBatch(
+			scenario,
+			capability,
+			identity,
+			runCount: 64);
+
+		batch.Records.Should().HaveCount(64);
+		batch.CompletedRunCount.Should().Be(64);
+		batch.IncompleteRunCount.Should().Be(0);
+		batch.Records.Should().OnlyContain(run =>
+			run is CompletedSimulationRun);
+		MarkTestCompleted();
+	}
+
+	[Fact]
 	public void ExecuteBatch_WithActorInDealPool_ProducesCompleteOneThousandAttemptSafetyEvidence()
 	{
 		var scenario = CreateDirectActorScenario();

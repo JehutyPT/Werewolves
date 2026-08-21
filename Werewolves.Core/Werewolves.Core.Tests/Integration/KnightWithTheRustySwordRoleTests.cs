@@ -956,7 +956,10 @@ public sealed class KnightWithTheRustySwordRoleTests : DiagnosticTestBase
 				entry.ActionType == NightActionType.RustySword);
 
 		builder.Process(firstNightEnd.CreateResponse());
-		builder.CompleteDawnPhase().IsSuccess.Should().BeTrue();
+		builder.CompleteDawnPhase(new()
+		{
+			[players[2].Id] = MainRoleType.SimpleVillager
+		}).IsSuccess.Should().BeTrue();
 		builder.CompleteDayPhaseWithTie().IsSuccess.Should().BeTrue();
 		builder.ConfirmNightStart();
 		InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(

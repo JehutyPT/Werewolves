@@ -31,6 +31,13 @@ public static class MainRoleTypeExtensions
 		or MainRoleType.BigBadWolf
 		or MainRoleType.AccursedWolfFather;
 
+	public static bool EstablishesInitialWerewolfAgency(
+		this MainRoleType role) => role is
+		MainRoleType.SimpleWerewolf
+		or MainRoleType.BigBadWolf
+		or MainRoleType.AccursedWolfFather
+		or MainRoleType.WhiteWerewolf;
+
 	public static bool IsHardAlignedVillager(this MainRoleType role) => role is
 		MainRoleType.SimpleVillager
 		or MainRoleType.VillagerVillager

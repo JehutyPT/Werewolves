@@ -25,9 +25,9 @@ internal static class RoleKnowledgeHandlers
             return null;
         }
 
-        var playersNeedingMapping = requestedPlayers
-			.Where(player => GetEstablishedRole(player) is null)
-            .ToArray();
+		var playersNeedingMapping = requestedPlayers
+			.Where(player => GameSessionQueries.GetEstablishedRole(player) is null)
+			.ToArray();
         var affectedPlayerIds = requestedPlayers
             .Select(player => player.Id)
             .ToArray();
@@ -43,7 +43,7 @@ internal static class RoleKnowledgeHandlers
                 affectedPlayerIds: affectedPlayerIds);
         }
 
-        var rolesForAssignment = GetUnclaimedRoles(session);
+		var rolesForAssignment = GameSessionQueries.GetUnclaimedRoles(session);
 
         return new AssignRolesInstruction(
             semantic,
@@ -81,7 +81,7 @@ internal static class RoleKnowledgeHandlers
 		{
 			if (requestedPlayerIds.Contains(player.Id) ||
 				player.State.PhysicalCharacterCardId is not null ||
-				GetEstablishedRole(player) is not { } establishedRole)
+				GameSessionQueries.GetEstablishedRole(player) is not { } establishedRole)
 			{
 				continue;
 			}
@@ -98,16 +98,23 @@ internal static class RoleKnowledgeHandlers
         {
 			if (player.State.PhysicalCharacterCardId is not null)
 			{
-				revealedRoles[player.Id] = GetEstablishedRole(player)!.Value;
+				revealedRoles[player.Id] =
+					GameSessionQueries.GetEstablishedRole(player)!.Value;
 				continue;
 			}
 
-			var assignedRole = GetEstablishedRole(player);
+			var assignedRole = GameSessionQueries.GetEstablishedRole(player);
 			if (assignedRole is null &&
 				input.AssignedPlayerRoles?.TryGetValue(
 					player.Id,
 					out var mappedRole) == true)
 			{
+				if (!GameSessionQueries.GetPossibleRoles(session, player.Id)
+					.Contains(mappedRole))
+				{
+					throw new InvalidOperationException(
+						$"No available Deal Pool card matches the accepted Role Reveal for Player {player.Id}.");
+				}
 				assignedRole = mappedRole;
 			}
 			if (assignedRole is null)
@@ -153,16 +160,13 @@ internal static class RoleKnowledgeHandlers
 		AngelLifecycleRules.ApplyExpiredHolderProjection(session, revealedRoles);
     }
 
-	private static MainRoleType? GetEstablishedRole(IPlayer player) =>
-		player.State.PhysicalCharacterCardRole ??
-		player.State.ModeratorKnownRole ??
-		player.State.CurrentRole;
-
 	internal static string CreatePublicRoleRevealPrivateInstruction(
 		IReadOnlyCollection<IPlayer> requestedPlayers)
 	{
 		var knownRoleDescriptions = requestedPlayers
-			.Select(player => (Player: player, Role: GetEstablishedRole(player)))
+			.Select(player => (
+				Player: player,
+				Role: GameSessionQueries.GetEstablishedRole(player)))
 			.Where(established => established.Role.HasValue)
 			.Select(established =>
 				$"{established.Player.Name}: " +
@@ -178,21 +182,6 @@ internal static class RoleKnowledgeHandlers
 			" ",
 			GameStrings.PublicRoleRevealKnownRolesInstruction.Format(
 				string.Join("; ", knownRoleDescriptions)));
-	}
-
-	private static List<MainRoleType> GetUnclaimedRoles(GameSession session)
-	{
-		var unclaimedRoles = GameSessionQueries.GetUnassignedRoles(session);
-		foreach (var player in session.GetPlayers())
-		{
-			if (player.State.PhysicalCharacterCardId is null &&
-				GetEstablishedRole(player) is { } establishedRole)
-			{
-				unclaimedRoles.Remove(establishedRole);
-			}
-		}
-
-		return unclaimedRoles;
 	}
 
     internal static ModeratorInstruction? RequestVillagerVillagerPublicFromDealObservation(

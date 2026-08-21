@@ -47,7 +47,10 @@ public class DayVotingTests : DiagnosticTestBase
             seerTargetId: villager2);
 
         // Complete dawn phase
-        builder.CompleteDawnPhase();
+        builder.CompleteDawnPhase(new()
+        {
+            [villager1] = MainRoleType.SimpleVillager
+        });
 
         // Assert: We're in Day phase, and should have a confirmation instruction for debate
         var gameState = builder.GetGameState()!;
@@ -106,7 +109,10 @@ public class DayVotingTests : DiagnosticTestBase
             victimId: villager1Id,
             seerId: seerId,
             seerTargetId: villager2.Id);
-        builder.CompleteDawnPhase();
+        builder.CompleteDawnPhase(new()
+        {
+            [villager1Id] = MainRoleType.SimpleVillager
+        });
 
         // Confirm debate
         var debateInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
@@ -167,7 +173,10 @@ public class DayVotingTests : DiagnosticTestBase
         builder.CompleteNightPhase(
             werewolfIds: [werewolf.Id],
             victimId: dawnVictim.Id);
-        builder.CompleteDawnPhase();
+        builder.CompleteDawnPhase(new()
+        {
+            [dawnVictim.Id] = MainRoleType.SimpleVillager
+        });
 
         var debateInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
@@ -429,7 +438,10 @@ public class DayVotingTests : DiagnosticTestBase
             victimId: villager1Id,
             seerId: seerId,
             seerTargetId: villager2Id);
-        builder.CompleteDawnPhase();
+        builder.CompleteDawnPhase(new()
+        {
+            [villager1Id] = MainRoleType.SimpleVillager
+        });
 
         // Confirm debate
         var debateInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
@@ -482,10 +494,16 @@ public class DayVotingTests : DiagnosticTestBase
             victimId: villager1Id,
             seerId: seerId,
             seerTargetId: villager2Id);
-        builder.CompleteDawnPhase();
+        builder.CompleteDawnPhase(new()
+        {
+            [villager1Id] = MainRoleType.SimpleVillager
+        });
 
         // Act: Complete day phase with lynch
-        builder.CompleteDayPhaseWithLynch(villager2Id);
+        builder.CompleteDayPhaseWithLynch(villager2Id, new()
+        {
+            [villager2Id] = MainRoleType.SimpleVillager
+        });
 
         // Assert: Lynched player should be dead
         var gameState = builder.GetGameState()!;
@@ -531,7 +549,10 @@ public class DayVotingTests : DiagnosticTestBase
             victimId: villager1Id,
             seerId: seerId,
             seerTargetId: villager2Id);
-        builder.CompleteDawnPhase();
+        builder.CompleteDawnPhase(new()
+        {
+            [villager1Id] = MainRoleType.SimpleVillager
+        });
 
         // Get the count of living players before voting
         var livingPlayersBefore = builder.GetGameState()!.GetPlayers()
@@ -596,7 +617,10 @@ public class DayVotingTests : DiagnosticTestBase
             victimId: villager1Id,
             seerId: seerId,
             seerTargetId: villager2Id);
-        builder.CompleteDawnPhase();
+        builder.CompleteDawnPhase(new()
+        {
+            [villager1Id] = MainRoleType.SimpleVillager
+        });
 
         // Confirm debate
         var debateInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
@@ -658,7 +682,10 @@ public class DayVotingTests : DiagnosticTestBase
             seerTargetId: villager2Id);
 
         // Complete Dawn 1: victim eliminated
-        builder.CompleteDawnPhase();
+        builder.CompleteDawnPhase(new()
+        {
+            [villager1Id] = MainRoleType.SimpleVillager
+        });
 
         // Verify villager1 is now dead
         var deadPlayer = builder.GetGameState()!.GetPlayers().First(p => p.Id == villager1Id);

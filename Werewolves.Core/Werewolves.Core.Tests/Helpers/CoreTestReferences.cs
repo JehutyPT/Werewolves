@@ -137,6 +137,9 @@ public static class CoreTestReferences
 		public static string NoCurrentInstructionDuringDawnPhase =>
 			"No current instruction available during dawn phase processing.";
 
+		public static string ObservedRoleAssignmentsRequired =>
+			"Role-reveal helpers require a complete physically observed Role mapping.";
+
 		public static string UnexpectedInstructionTypeDuringDawnPhase(string instructionType) =>
 			$"Unexpected instruction type during dawn phase: {instructionType}";
 

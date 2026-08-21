@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using Werewolves.Core.GameLogic.Queries;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 
@@ -686,11 +687,13 @@ internal static class InitialBeneficiaryClosureRules
 				continue;
 			}
 
-			Faction? exclusiveRoleFaction =
-				session.GetPlayerState(playerId).CurrentRole switch
+			var currentRole = session.GetPlayerState(playerId).CurrentRole;
+			Faction? exclusiveRoleFaction = currentRole switch
 				{
-					MainRoleType.WolfHound => Faction.Villager,
 					MainRoleType.WhiteWerewolf => Faction.WhiteWerewolf,
+					_ when currentRole?.EstablishesInitialWerewolfAgency() == true =>
+						Faction.Werewolf,
+					MainRoleType.WolfHound => Faction.Villager,
 					MainRoleType.Piper => Faction.Piper,
 					MainRoleType.PrejudicedManipulator =>
 						Faction.PrejudicedManipulator,

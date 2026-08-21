@@ -398,14 +398,20 @@ public class NightActionTests : DiagnosticTestBase
         gameState.GetCurrentPhase().Should().Be(GamePhase.Dawn);
 
         // === Dawn 1: villager1 is eliminated ===
-        builder.CompleteDawnPhase();
+        builder.CompleteDawnPhase(new()
+        {
+            [villager1.Id] = MainRoleType.SimpleVillager
+        });
 
         // Verify villager1 is now dead
         var deadVillager = gameState.GetPlayer(villager1.Id);
         deadVillager.State.Health.Should().Be(PlayerHealth.Dead);
 
         // === Day 1: Lynch villager2 (to avoid WW victory and continue game) ===
-        builder.CompleteDayPhaseWithLynch(villager2.Id);
+        builder.CompleteDayPhaseWithLynch(villager2.Id, new()
+        {
+            [villager2.Id] = MainRoleType.SimpleVillager
+        });
 
         // Verify we're back to Night phase (Night 2)
         gameState.GetCurrentPhase().Should().Be(GamePhase.Night);
@@ -559,7 +565,10 @@ public class NightActionTests : DiagnosticTestBase
         updatedSeer.State.Health.Should().Be(PlayerHealth.Dead);
 
         // === Day 1: Lynch a villager (to continue game) ===
-        builder.CompleteDayPhaseWithLynch(villager1.Id);
+        builder.CompleteDayPhaseWithLynch(villager1.Id, new()
+        {
+            [villager1.Id] = MainRoleType.SimpleVillager
+        });
 
         // Verify we're back to Night phase (Night 2)
         gameState.GetCurrentPhase().Should().Be(GamePhase.Night);
@@ -713,14 +722,20 @@ public class NightActionTests : DiagnosticTestBase
         gameState.GetCurrentPhase().Should().Be(GamePhase.Dawn);
 
         // === Dawn 1: villager1 is eliminated ===
-        builder.CompleteDawnPhase();
+        builder.CompleteDawnPhase(new()
+        {
+            [villager1.Id] = MainRoleType.SimpleVillager
+        });
 
         // Verify villager1 is now dead
         var deadVillager = gameState.GetPlayer(villager1.Id);
         deadVillager.State.Health.Should().Be(PlayerHealth.Dead);
 
         // === Day 1: Lynch villager2 (to avoid WW victory and continue game) ===
-        builder.CompleteDayPhaseWithLynch(villager2.Id);
+        builder.CompleteDayPhaseWithLynch(villager2.Id, new()
+        {
+            [villager2.Id] = MainRoleType.SimpleVillager
+        });
 
         // Verify we're back to Night phase (Night 2)
         gameState.GetCurrentPhase().Should().Be(GamePhase.Night);

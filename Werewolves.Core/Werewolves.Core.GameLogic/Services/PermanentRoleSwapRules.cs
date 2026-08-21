@@ -1,6 +1,7 @@
 using Werewolves.Core.GameLogic.Queries;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 
@@ -315,9 +316,8 @@ internal static class PermanentRoleSwapRules
 	private static FactionAgentKnowledge ExpectedAgentKnowledge(
 		MainRoleType role,
 		Faction faction) =>
-		role is MainRoleType.SimpleWerewolf or MainRoleType.BigBadWolf or
-			MainRoleType.AccursedWolfFather or MainRoleType.WhiteWerewolf &&
-		faction == Faction.Werewolf
-			? FactionAgentKnowledge.KnownAgent
+			role.EstablishesInitialWerewolfAgency() &&
+			faction == Faction.Werewolf
+				? FactionAgentKnowledge.KnownAgent
 			: FactionAgentKnowledge.KnownNonAgent;
 }
