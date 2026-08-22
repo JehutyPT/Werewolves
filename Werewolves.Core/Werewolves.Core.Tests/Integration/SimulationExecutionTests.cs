@@ -1,9 +1,11 @@
 using FluentAssertions;
 using Werewolves.Core.GameLogic.Interfaces;
+using Werewolves.Core.GameLogic.Queries;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.GameLogic.Simulation;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
@@ -1233,6 +1235,85 @@ public class SimulationExecutionTests : DiagnosticTestBase
 	}
 
 	[Fact]
+	public void HeadlessSafety_FixedRoleIdentificationRun_CompletesWithInfectionAndConsistentCommittedKnowledge()
+	{
+		MainRoleType[] roles =
+		[
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.AccursedWolfFather,
+			MainRoleType.BigBadWolf,
+			MainRoleType.WhiteWerewolf,
+			MainRoleType.Seer,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager
+		];
+		var scenario = new SimulationScenario(roles.Length, roles);
+		var identity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+		var material = new RunSeedMaterial(
+			identity,
+			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
+			runNumber: 0);
+		var random = new DeterministicRandomSource(material);
+		var startState = SimulationStartStateDeriver.Derive(
+			material,
+			SimulatorCapability.SafetyScreening,
+			random);
+		var assertedCommitBoundaries = 0;
+		var recorder = new RecordingDecisionStrategy(
+			new BaselineRandomDecisionStrategy(
+				material,
+				startState,
+				SimulatorCapability.SafetyScreening.HeadlessResponsePolicy,
+				random),
+			session =>
+			{
+				AssertRoleIdentificationKnowledgeConsistency(session);
+				assertedCommitBoundaries++;
+			});
+
+		var execution = new HeadlessGameDriver(recorder).CompleteGameSession(
+			startState.CreateGameSessionConfig(),
+			CancellationToken.None);
+
+		AssertRoleIdentificationKnowledgeConsistency(execution.Session);
+		execution.FinalInstruction.Should()
+			.BeOfType<FinishedGameConfirmationInstruction>();
+		assertedCommitBoundaries.Should().Be(
+			execution.ProcessedInstructionCount);
+		recorder.ObservedSemantics.Should().Contain(
+			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
+		recorder.Observations
+			.Where(observation =>
+				observation.Instruction.Semantic ==
+					ModeratorInstructionSemantic.IdentifyRoleHolders)
+			.Select(observation =>
+				((SelectPlayersInstruction)observation.Instruction)
+					.RoleIdentification)
+			.Should().Contain(MainRoleType.AccursedWolfFather)
+			.And.Contain(MainRoleType.BigBadWolf)
+			.And.Contain(MainRoleType.WhiteWerewolf)
+			.And.Contain(MainRoleType.Seer);
+		recorder.Observations.Should().ContainSingle(observation =>
+			observation.Instruction.Semantic ==
+				ModeratorInstructionSemantic.ChooseAccursedWolfFatherInfection &&
+			observation.Response.SelectedOptionIds != null &&
+			observation.Response.SelectedOptionIds.Contains(
+				AccursedWolfFatherInfectionOptionIds.Infect));
+		execution.Session.GameHistoryLog
+			.OfType<OneUseRolePowerCommittedLogEntry>()
+			.Should().Contain(entry =>
+				entry.SourceRole == MainRoleType.AccursedWolfFather &&
+				entry.ActionType ==
+					NightActionType.AccursedWolfFatherInfection);
+		MarkTestCompleted();
+	}
+
+	[Fact]
 	public void SafetyRunZero_BigBadWolfAvailableWithTarget_RecordsMandatorySelectionTrace()
 	{
 		var fixture = CreateSafetyRunZeroBigBadWolfTrace();
@@ -2323,11 +2404,15 @@ public class SimulationExecutionTests : DiagnosticTestBase
 	private sealed class RecordingDecisionStrategy : IModeratorDecisionStrategy
 	{
 		private readonly IModeratorDecisionStrategy _inner;
+		private readonly Action<IGameSession>? _beforeResponse;
 
-		internal RecordingDecisionStrategy(IModeratorDecisionStrategy inner)
+		internal RecordingDecisionStrategy(
+			IModeratorDecisionStrategy inner,
+			Action<IGameSession>? beforeResponse = null)
 		{
 			ArgumentNullException.ThrowIfNull(inner);
 			_inner = inner;
+			_beforeResponse = beforeResponse;
 		}
 
 		internal List<ModeratorInstructionSemantic> ObservedSemantics { get; } = [];
@@ -2340,10 +2425,29 @@ public class SimulationExecutionTests : DiagnosticTestBase
 			ModeratorInstruction instruction,
 			IGameSession session)
 		{
+			_beforeResponse?.Invoke(session);
 			ObservedSemantics.Add(instruction.Semantic);
 			var response = _inner.CreateResponse(instruction, session);
 			Observations.Add((instruction, response, session.TurnNumber));
 			return response;
+		}
+	}
+
+	private static void AssertRoleIdentificationKnowledgeConsistency(
+		IGameSession session)
+	{
+		foreach (var player in session.GetPlayers().Where(player =>
+			player.State.CurrentRole is { } role &&
+			!role.EstablishesInitialWerewolfAgency() &&
+				session.GetFactionAgentKnowledge(player.Id, Faction.Werewolf) ==
+					FactionAgentKnowledge.KnownAgent))
+		{
+			var provenance = GameSessionQueries.GetEarliestWerewolfAgencyFact(
+				session,
+				player.Id);
+			provenance.Should().NotBeNull();
+			provenance!.Source.Kind.Should().Be(
+				FactionFactSourceKind.ExplicitTransition);
 		}
 	}
 

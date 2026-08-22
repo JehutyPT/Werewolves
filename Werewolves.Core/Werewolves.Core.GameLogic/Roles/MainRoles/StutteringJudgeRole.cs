@@ -867,9 +867,11 @@ internal sealed class StutteringJudgeRole
 			.Where(player =>
 				player.State.CurrentRole == MainRoleType.StutteringJudge ||
 				(player.State.CurrentRole == null &&
-				 (player.State.ModeratorKnownRole == null ||
-				  player.State.ModeratorKnownRole ==
-					  MainRoleType.StutteringJudge)))
+				 (player.State.ModeratorKnownRole ==
+					  MainRoleType.StutteringJudge ||
+				  player.State.ModeratorKnownRole == null &&
+				  GameSessionQueries.GetPossibleRoles(session, player.Id)
+					  .Contains(MainRoleType.StutteringJudge))))
 			.ToIdSet();
 
 	private bool HasExpectedAffectedRoleHolders(

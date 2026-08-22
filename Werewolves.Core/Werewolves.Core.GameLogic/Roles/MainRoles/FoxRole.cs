@@ -901,8 +901,10 @@ internal sealed class FoxRole
 			.Where(player =>
 				player.State.CurrentRole == MainRoleType.Fox ||
 				(player.State.CurrentRole == null &&
-				 (player.State.ModeratorKnownRole == null ||
-				  player.State.ModeratorKnownRole == MainRoleType.Fox)))
+				 (player.State.ModeratorKnownRole == MainRoleType.Fox ||
+				  player.State.ModeratorKnownRole == null &&
+				  GameSessionQueries.GetPossibleRoles(session, player.Id)
+					  .Contains(MainRoleType.Fox))))
 			.ToIdSet();
 
 	private HashSet<Guid> GetLivingHolderIds(GameSession session) =>

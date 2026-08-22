@@ -652,8 +652,10 @@ internal sealed class PiperRole
 			.Where(player =>
 				player.State.CurrentRole == MainRoleType.Piper ||
 				(player.State.CurrentRole == null &&
-				 (player.State.ModeratorKnownRole == null ||
-				  player.State.ModeratorKnownRole == MainRoleType.Piper)))
+				 (player.State.ModeratorKnownRole == MainRoleType.Piper ||
+				  player.State.ModeratorKnownRole == null &&
+				  GameSessionQueries.GetPossibleRoles(session, player.Id)
+					  .Contains(MainRoleType.Piper))))
 			.ToIdSet();
 
 	private IPlayer GetHolder(GameSession session) =>

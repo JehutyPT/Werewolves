@@ -1,5 +1,6 @@
 using Werewolves.Core.GameLogic.Models.GameHookListeners;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
+using Werewolves.Core.GameLogic.Queries;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
@@ -28,6 +29,18 @@ internal sealed class PrejudicedManipulatorRole
 		{
 			throw new InvalidOperationException(
 				"Prejudiced Manipulator identification requires exactly one Player.");
+		}
+
+		var holder = session.GetPlayer(holderId);
+		if (holder.State.CurrentRole != MainRoleType.PrejudicedManipulator &&
+		    holder.State.ModeratorKnownRole != MainRoleType.PrejudicedManipulator &&
+		    holder.State.PhysicalCharacterCardRole !=
+			    MainRoleType.PrejudicedManipulator &&
+		    !GameSessionQueries.GetPossibleRoles(session, holderId)
+			    .Contains(MainRoleType.PrejudicedManipulator))
+		{
+			throw new InvalidOperationException(
+				"Role Identification contradicts committed Role knowledge.");
 		}
 
 		if (session.GetPlayerState(holderId).PhysicalCharacterCardId is null)

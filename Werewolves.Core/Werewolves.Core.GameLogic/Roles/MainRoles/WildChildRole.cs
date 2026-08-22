@@ -349,8 +349,10 @@ internal class WildChildRole :
             .Where(player =>
                 player.State.CurrentRole == MainRoleType.WildChild ||
                 (player.State.CurrentRole == null &&
-                 (player.State.ModeratorKnownRole == null ||
-                  player.State.ModeratorKnownRole == MainRoleType.WildChild)))
+                 (player.State.ModeratorKnownRole == MainRoleType.WildChild ||
+                  player.State.ModeratorKnownRole == null &&
+                  GameSessionQueries.GetPossibleRoles(session, player.Id)
+                      .Contains(MainRoleType.WildChild))))
             .ToIdSet();
 
     private HashSet<Guid> GetLivingHolderIds(GameSession session) =>

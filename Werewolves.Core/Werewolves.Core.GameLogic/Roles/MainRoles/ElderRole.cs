@@ -278,8 +278,10 @@ internal sealed class ElderRole : RoleHookListener, IDeclaredRoleWorkflow
 				player.State.Health == PlayerHealth.Alive &&
 				(player.State.CurrentRole == MainRoleType.Elder ||
 				 (player.State.CurrentRole == null &&
-				  player.State.ModeratorKnownRole is null or
-					  MainRoleType.Elder)))
+				  (player.State.ModeratorKnownRole == MainRoleType.Elder ||
+				   player.State.ModeratorKnownRole == null &&
+				   GameSessionQueries.GetPossibleRoles(session, player.Id)
+					   .Contains(MainRoleType.Elder)))))
 			.Select(player => player.Id)
 			.ToHashSet();
 
@@ -320,6 +322,20 @@ internal sealed class ElderRole : RoleHookListener, IDeclaredRoleWorkflow
 		{
 			throw new InvalidOperationException(
 				"Elder Role Identification cannot replace a committed living holder.");
+		}
+
+		if (selectedPlayerIds.Any(playerId =>
+			{
+				var player = session.GetPlayer(playerId);
+				return player.State.CurrentRole != MainRoleType.Elder &&
+				       player.State.ModeratorKnownRole != MainRoleType.Elder &&
+				       player.State.PhysicalCharacterCardRole != MainRoleType.Elder &&
+				       !GameSessionQueries.GetPossibleRoles(session, playerId)
+					       .Contains(MainRoleType.Elder);
+			}))
+		{
+			throw new InvalidOperationException(
+				"Role Identification contradicts committed Role knowledge.");
 		}
 
 		session.IdentifyRole(selectedPlayerIds.ToHashSet(), MainRoleType.Elder);

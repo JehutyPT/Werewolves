@@ -963,8 +963,10 @@ internal sealed class WitchRole
 			.Where(player =>
 				player.State.CurrentRole == MainRoleType.Witch ||
 				(player.State.CurrentRole == null &&
-				 (player.State.ModeratorKnownRole == null ||
-				  player.State.ModeratorKnownRole == MainRoleType.Witch)))
+				 (player.State.ModeratorKnownRole == MainRoleType.Witch ||
+				  player.State.ModeratorKnownRole == null &&
+				  GameSessionQueries.GetPossibleRoles(session, player.Id)
+					  .Contains(MainRoleType.Witch))))
 			.ToIdSet();
 
 	private HashSet<Guid> GetLivingHolderIds(GameSession session) =>
