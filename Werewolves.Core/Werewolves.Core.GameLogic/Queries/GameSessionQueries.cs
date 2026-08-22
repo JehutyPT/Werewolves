@@ -1123,7 +1123,7 @@ internal static class GameSessionQueries
 			playerId);
 		if (agencyKnowledge == FactionAgentKnowledge.KnownAgent &&
 			earliestAgencyFact is { } earliest &&
-			IsInitialAgencyBoundary(earliest.Source))
+			IsInitialWerewolfAgencyProvenance(earliest.Source))
 		{
 			return Array.AsReadOnly(possibleRoles
 				.Where(role => role.EstablishesInitialWerewolfAgency())
@@ -1168,7 +1168,8 @@ internal static class GameSessionQueries
 			.Cast<IndexedFactionAgentFact?>()
 			.FirstOrDefault();
 
-	private static bool IsInitialAgencyBoundary(FactionFactSource source) =>
+	private static bool IsInitialWerewolfAgencyProvenance(
+		FactionFactSource source) =>
 		source.Kind == FactionFactSourceKind.SimulationStartState ||
 		source.Kind == FactionFactSourceKind.ScheduledObservation &&
 		StringComparer.Ordinal.Equals(

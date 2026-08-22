@@ -936,11 +936,12 @@ public sealed class ActorBorrowedCommitProjectionTests
 		var players = session.GetPlayers().ToArray();
 		var actorId = players[0].Id;
 		session.AssignRole(actorId, MainRoleType.Actor);
-		FactionFactEffectiveBoundary? initialAgentGroupBoundary = null;
+		FactionFactEffectiveBoundary?
+			earliestCompleteWerewolfAgentPartitionBoundary = null;
 		if (sourceCard.PrintedRole == MainRoleType.Seer ||
 			mutation == ActorBorrowedPrivateCommitMutation.CupidDisposition)
 		{
-			initialAgentGroupBoundary =
+			earliestCompleteWerewolfAgentPartitionBoundary =
 				ArrangeCompleteWerewolfAgentFacts(session);
 		}
 
@@ -1012,7 +1013,7 @@ public sealed class ActorBorrowedCommitProjectionTests
 		{
 			InitialBeneficiaryClosureRules.TryCommitCurrentSession(
 					session,
-					initialAgentGroupBoundary)
+					earliestCompleteWerewolfAgentPartitionBoundary)
 				.Should().Be(InitialBeneficiaryClosureResult.Committed);
 			session.GetActorBorrowedCupidLoversCommits().Single().Disposition
 				.Should().Be(ActorBorrowedCupidLoversDisposition.SameFaction);
