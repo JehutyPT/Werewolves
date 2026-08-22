@@ -81,6 +81,31 @@ public sealed class WerewolfCollectiveTests
 	}
 
 	[Fact]
+	public void UnknownLivingAgentGroup_ObservationCandidatesRespectCommittedWerewolfAgency()
+	{
+		var builder = GameTestBuilder.Create()
+			.WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);
+		builder.StartGame();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		ArrangeWerewolfAgentKnowledge(
+			builder,
+			players[0].Id,
+			FactionAgentKnowledge.KnownAgent);
+		ArrangeWerewolfAgentKnowledge(
+			builder,
+			players[1].Id,
+			FactionAgentKnowledge.KnownNonAgent);
+
+		var observation =
+			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+				StartNight(builder));
+
+		observation.SelectablePlayerIds.Should().BeEquivalentTo(
+			players.Where(player => player.Id != players[1].Id)
+				.Select(player => player.Id));
+	}
+
+	[Fact]
 	public void KnownNonemptyLivingAgentGroup_WakesCollectiveAndTargetsOnlyKnownNonAgents()
 	{
 		var builder = GameTestBuilder.Create()
@@ -275,5 +300,24 @@ public sealed class WerewolfCollectiveTests
 		builder.ArrangeExplicitFactionTransition(
 			"test-known-werewolf-agent-group",
 			facts);
+	}
+
+	private static void ArrangeWerewolfAgentKnowledge(
+		GameTestBuilder builder,
+		Guid playerId,
+		FactionAgentKnowledge knowledge)
+	{
+		var session = builder.GetGameState()!;
+		var boundary = new FactionFactEffectiveBoundary(
+			session.TurnNumber,
+			session.GetCurrentPhase(),
+			session.GameHistoryLog.Count());
+		builder.ArrangeExplicitFactionTransition(
+			"test-partial-werewolf-agent-knowledge",
+			FactionFact.Agent(
+				playerId,
+				Faction.Werewolf,
+				knowledge,
+				boundary));
 	}
 }

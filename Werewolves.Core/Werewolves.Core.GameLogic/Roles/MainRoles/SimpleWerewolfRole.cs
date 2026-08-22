@@ -410,7 +410,7 @@ internal class SimpleWerewolfRole
 			: GameStrings.WerewolfFactionAgentObservationPrompt;
 		return new SelectPlayersInstruction(
 			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup,
-			GetLivingPlayers(session).Select(player => player.Id).ToHashSet(),
+			GetWerewolfFactionAgentGroupObservationCandidates(session),
 			NumberRangeConstraint.AtLeast(1),
 			publicAnnouncement: GameStrings.RoleHoldersWakeUp.Format(
 				GameStrings.WerewolvesGroupName),
@@ -483,13 +483,11 @@ internal class SimpleWerewolfRole
 		GameSession session,
 		SelectPlayersInstruction instruction)
 	{
-		var livingIds = GetLivingPlayers(session)
-			.Select(player => player.Id)
-			.ToHashSet();
 		if (instruction.RoleIdentification != null ||
 		    instruction.AffectedPlayerIds != null ||
 		    instruction.CountConstraint != NumberRangeConstraint.AtLeast(1) ||
-		    !instruction.SelectablePlayerIds.SetEquals(livingIds) ||
+		    !instruction.SelectablePlayerIds.SetEquals(
+			    GetWerewolfFactionAgentGroupObservationCandidates(session)) ||
 		    TryGetKnownLivingWerewolfAgents(session, out _))
 		{
 			throw new InvalidOperationException(
@@ -678,6 +676,17 @@ internal class SimpleWerewolfRole
 		session.GetPlayers()
 			.WithHealth(PlayerHealth.Alive)
 			.ToArray();
+
+	private static HashSet<Guid>
+		GetWerewolfFactionAgentGroupObservationCandidates(GameSession session) =>
+		GetLivingPlayers(session)
+			.Where(player =>
+				session.GetFactionAgentKnowledge(
+					player.Id,
+					Faction.Werewolf) !=
+				FactionAgentKnowledge.KnownNonAgent)
+			.Select(player => player.Id)
+			.ToHashSet();
 
 	private static bool TryGetKnownLivingWerewolfAgents(
 		GameSession session,

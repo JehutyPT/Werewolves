@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using FluentAssertions;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Extensions;
@@ -919,7 +920,7 @@ public class NightActionTests : DiagnosticTestBase
     [Theory]
     [InlineData(FactionAgentKnowledge.KnownAgent)]
     [InlineData(FactionAgentKnowledge.KnownNonAgent)]
-    public void FirstNight_PartiallyKnownAgentFact_IsMandatoryInCompleteObservation(
+    public void FirstNight_PartiallyKnownAgentFact_IsReflectedInObservationCandidatesAndCommitGuard(
         FactionAgentKnowledge committedKnowledge)
     {
         var builder = CreateBuilder()
@@ -951,15 +952,23 @@ public class NightActionTests : DiagnosticTestBase
         observation.Semantic.Should()
             .Be(ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
         observation.CountConstraint.Should().Be(NumberRangeConstraint.AtLeast(1));
+        var expectedCandidates = committedKnowledge ==
+                                 FactionAgentKnowledge.KnownNonAgent
+            ? players.Where(player => player.Id != committedPlayer.Id)
+            : players;
         observation.SelectablePlayerIds.Should().BeEquivalentTo(
-            players.Select(player => player.Id));
+            expectedCandidates.Select(player => player.Id));
         var historyBeforeContradiction = session.GameHistoryLog.ToArray();
         var contradictoryGroup = committedKnowledge ==
                                  FactionAgentKnowledge.KnownAgent
             ? new HashSet<Guid> { otherAgent.Id }
             : new HashSet<Guid> { committedPlayer.Id, otherAgent.Id };
-        var contradictoryResponse = observation.CreateResponse(
-            contradictoryGroup);
+        var contradictoryResponse = new ModeratorResponse
+        {
+            InstructionId = observation.InstructionId,
+            Type = ExpectedInputType.PlayerSelection,
+            SelectedPlayerIds = contradictoryGroup.ToImmutableHashSet()
+        };
         Action submitContradictoryResponse = () => builder.Process(contradictoryResponse);
 
         submitContradictoryResponse.Should().Throw<InvalidOperationException>();
