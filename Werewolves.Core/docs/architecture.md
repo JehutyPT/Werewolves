@@ -568,12 +568,12 @@ Polymorphic instruction system for communication TO the moderator. **Assembly Lo
 Located in `Werewolves.Core.StateModels/Extensions/MainRoleTypeExtensions.cs`. Provides extension methods for the `MainRoleType` enum.
 
 *   **`GetRoleGroup(this MainRoleType role)` (RoleGroup):** Returns the logical group that the specified role belongs to. Categorizes all 28 roles:
-    *   **Werewolves:** SimpleWerewolf, BigBadWolf, AccursedWolfFather, WhiteWerewolf
+    *   **Werewolves:** SimpleWerewolf, BigBadWolf, AccursedWolfFather
     *   **Villagers:** SimpleVillager, VillagerVillager, Seer, Cupid, Witch, Hunter, LittleGirl, Defender, Elder, Scapegoat, VillageIdiot, TwoSisters, ThreeBrothers, Fox, BearTamer, StutteringJudge, KnightWithRustySword, Actor
     *   **Ambiguous:** Thief, DevotedServant, WildChild, WolfHound (roles that can change sides or have flexible allegiance)
-    *   **Loners:** Angel, Piper, PrejudicedManipulator (roles with independent win conditions)
+    *   **Loners:** Angel, Piper, PrejudicedManipulator, WhiteWerewolf (roles with independent win conditions)
     *   **NewMoon:** Gypsy (expansion roles)
-*   **`IsHardAlignedVillager` / `IsHardAlignedWerewolf`:** Classify stable setup allegiance independently of UI Role Group. White Werewolf remains grouped with Werewolves but is not hard-aligned Werewolf; Actor is hard-aligned Villager.
+*   **`IsHardAlignedVillager` / `IsHardAlignedWerewolf`:** Classify stable setup allegiance independently of UI Role Group. White Werewolf is grouped with Loners for its solo win condition; its holder remains a Werewolf Faction Agent and White Werewolf Faction Beneficiary, and the Role is not hard-aligned Werewolf. Actor is hard-aligned Villager.
 *   **`IsEligibleActorSetupCard`:** Identifies hard-aligned Villager Roles whose individual powers can be used as Actor Setup Cards.
 *   **Usage:** `GetRoleGroup` supports UI grouping and role selection; the explicit hard-alignment predicates support setup validity.
 

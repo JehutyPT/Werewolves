@@ -21,7 +21,6 @@ public class ExtensionMethodTests
     [InlineData(MainRoleType.SimpleWerewolf)]
     [InlineData(MainRoleType.BigBadWolf)]
     [InlineData(MainRoleType.AccursedWolfFather)]
-    [InlineData(MainRoleType.WhiteWerewolf)]
     public void GetRoleGroup_Werewolves_ReturnsWerewolvesGroup(MainRoleType role)
     {
         // Act
@@ -98,6 +97,7 @@ public class ExtensionMethodTests
     [InlineData(MainRoleType.Angel)]
     [InlineData(MainRoleType.Piper)]
     [InlineData(MainRoleType.PrejudicedManipulator)]
+    [InlineData(MainRoleType.WhiteWerewolf)]
     public void GetRoleGroup_Loners_ReturnsLonersGroup(MainRoleType role)
     {
         // Act

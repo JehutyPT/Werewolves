@@ -1351,6 +1351,17 @@ public class LobbySetupStateTests
 	}
 
 	[Fact]
+	public void AvailableRoleGroups_PlacesWhiteWerewolfInLoners()
+	{
+		var state = LobbySetupMetadataFixture.StateWithRoles(MainRoleType.WhiteWerewolf);
+
+		var group = state.AvailableRoleGroups.Single(group =>
+			group.Roles.Any(role => role.Role == MainRoleType.WhiteWerewolf));
+
+		group.Group.Should().Be(RoleGroup.Loners);
+	}
+
+	[Fact]
 	public void AvailableRoleGroups_DoesNotDeriveGroupLabelFromFirstRoleInGroup()
 	{
 		var mislabeledFirstRole = LobbySetupMetadataFixture.RoleMetadata(MainRoleType.Seer) with

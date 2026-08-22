@@ -438,7 +438,7 @@ Tests for extension methods and helper utilities.
 
 ### 9.1 MainRoleTypeExtensions
 - **EX-001**: `GetRoleGroup_Werewolves_ReturnsWerewolvesGroup`
-  - Given: Werewolf roles (SimpleWerewolf, BigBadWolf, AccursedWolfFather, WhiteWerewolf)
+  - Given: Werewolf roles (SimpleWerewolf, BigBadWolf, AccursedWolfFather)
   - When: `GetRoleGroup()` is called
   - Then: Returns `RoleGroup.Werewolves`
 
@@ -453,7 +453,7 @@ Tests for extension methods and helper utilities.
   - Then: Returns `RoleGroup.Ambiguous`
 
 - **EX-004**: `GetRoleGroup_Loners_ReturnsLonersGroup`
-  - Given: Loner roles (Angel, Piper, PrejudicedManipulator)
+  - Given: Loner roles (Angel, Piper, PrejudicedManipulator, WhiteWerewolf)
   - When: `GetRoleGroup()` is called
   - Then: Returns `RoleGroup.Loners`
 
