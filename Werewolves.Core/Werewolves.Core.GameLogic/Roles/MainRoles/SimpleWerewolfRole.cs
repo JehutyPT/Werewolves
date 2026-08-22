@@ -834,13 +834,14 @@ internal class SimpleWerewolfRole
 
 	private static void TryCommitInitialBeneficiaryClosure(
 		GameSession session,
-		FactionFactEffectiveBoundary? initialAgentGroupBoundary = null)
+		FactionFactEffectiveBoundary?
+			earliestCompleteWerewolfAgentPartitionBoundary = null)
 	{
 		if (session.TurnNumber == 1)
 		{
 			_ = InitialBeneficiaryClosureRules.TryCommitCurrentSession(
 				session,
-				initialAgentGroupBoundary);
+				earliestCompleteWerewolfAgentPartitionBoundary);
 		}
 	}
 }

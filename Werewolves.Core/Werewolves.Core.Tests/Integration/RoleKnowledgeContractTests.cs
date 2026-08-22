@@ -183,6 +183,173 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
 		MarkTestCompleted();
 	}
 
+	[Fact]
+	public void RoleIdentifications_CompleteWerewolfAgentPartition_ClosureUsesIdentificationBoundaryWithoutObservation()
+	{
+		var cards = new[]
+		{
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.Thief),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.TwoSisters),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.TwoSisters),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.BearTamer),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.Defender),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.SimpleWerewolf),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.BigBadWolf)
+		};
+		var roleLockIn = new RoleLockIn(
+			version: 1,
+			playerCount: 5,
+			roleComposition: cards,
+			dealPoolCardIds: cards.Take(5).Select(card => card.Id),
+			offer1CardId: cards[5].Id,
+			offer2CardId: cards[6].Id);
+		var service = new GameService();
+		var start = service.StartNewGame(new GameSessionConfig(
+			["Thief", "Sister A", "Sister B", "Bear Tamer", "Defender"],
+			roleLockIn));
+		var session = service.GetGameStateView(start.GameGuid)!;
+		var players = session.GetPlayers().ToArray();
+		var roleHolders = new Dictionary<MainRoleType, HashSet<Guid>>
+		{
+			[MainRoleType.Thief] = [players[0].Id],
+			[MainRoleType.TwoSisters] = [players[1].Id, players[2].Id],
+			[MainRoleType.BearTamer] = [players[3].Id],
+			[MainRoleType.Defender] = [players[4].Id]
+		};
+		var seenSemantics = new List<ModeratorInstructionSemantic>();
+
+		var nightStart = service.ProcessInstruction(
+			start.GameGuid,
+			start.CreateResponse()).ModeratorInstruction.Should()
+			.BeOfType<ConfirmationInstruction>().Subject;
+		service.ProcessInstruction(start.GameGuid, nightStart.CreateResponse());
+		ConfirmationInstruction? collectiveWake = null;
+		for (var step = 0; step < 40 && collectiveWake == null; step++)
+		{
+			var instruction = service.GetCurrentInstruction(start.GameGuid)
+				?? throw new InvalidOperationException(
+					"The Night 1 workflow requires a Pending Instruction.");
+			seenSemantics.Add(instruction.Semantic);
+			if (instruction is ConfirmationInstruction
+				{
+					Semantic: ModeratorInstructionSemantic.WakeRole,
+					AffectedPlayerIds: [var affectedPlayerId]
+				} wake && affectedPlayerId == players[0].Id &&
+				session.GetPlayers().All(player =>
+					session.GetFactionAgentKnowledge(
+						player.Id,
+						Faction.Werewolf) != FactionAgentKnowledge.Unknown))
+			{
+				collectiveWake = wake;
+				break;
+			}
+
+			switch (instruction)
+			{
+				case SelectPlayersInstruction
+				{
+					RoleIdentification: { } role
+				} identification:
+					service.ProcessInstruction(
+						start.GameGuid,
+						identification.CreateResponse(roleHolders[role]));
+					break;
+				case SelectOptionsInstruction
+				{
+					Semantic: ModeratorInstructionSemantic
+							.ChooseThiefOffer
+				} offer:
+					service.ProcessInstruction(
+						start.GameGuid,
+						offer.CreateResponse(ThiefOfferOptionIds.Offer1));
+					break;
+				case SelectPlayersInstruction selection:
+					var selectedPlayerIds = selection.CountConstraint.IsOptional
+						? []
+						: selection.SelectablePlayerIds
+							.Take(selection.CountConstraint.Minimum)
+							.ToHashSet();
+					service.ProcessInstruction(
+						start.GameGuid,
+						selection.CreateResponse(selectedPlayerIds));
+					break;
+				case ConfirmationInstruction confirmation:
+					service.ProcessInstruction(
+						start.GameGuid,
+						confirmation.CreateResponse());
+					break;
+				default:
+					throw new InvalidOperationException(
+						$"Unexpected Night 1 instruction '{instruction.Semantic}'.");
+			}
+		}
+
+		collectiveWake.Should().NotBeNull();
+		seenSemantics.Should().NotContain(
+			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
+		var afterWake = service.ProcessInstruction(
+			start.GameGuid,
+			collectiveWake!.CreateResponse());
+		afterWake.ModeratorInstruction.Should()
+			.BeOfType<SelectPlayersInstruction>()
+			.Which.Semantic.Should().Be(
+				ModeratorInstructionSemantic.SelectWerewolfVictim);
+
+		var finalWerewolfAgentIdentificationBoundary = session.GameHistoryLog
+			.OfType<FactionFactsCommittedLogEntry>()
+			.Where(entry => entry.Source.Identifier == FactionFactSource
+				.RoleIdentificationWerewolfFactionAgencyEntailmentIdentifier)
+			.SelectMany(entry => entry.Facts)
+			.Single(fact => fact.PlayerId == players[4].Id)
+			.EffectiveBoundary;
+		var closure = session.GameHistoryLog
+			.OfType<FactionFactsCommittedLogEntry>()
+			.Single(entry => entry.Source.Kind ==
+				FactionFactSourceKind.InitialBeneficiaryClosure);
+		closure.Facts.Should().NotBeEmpty();
+		closure.Facts.Should().OnlyContain(fact =>
+			fact.EffectiveBoundary == finalWerewolfAgentIdentificationBoundary);
+		session.RequireKnownFactionBeneficiary(players[0].Id).Should().Be(
+			Faction.Werewolf);
+		players.Skip(1).Should().OnlyContain(player =>
+			session.RequireKnownFactionBeneficiary(player.Id) == Faction.Villager);
+
+		var recoveredService = new GameService();
+		var recoveredId = recoveredService.RehydrateSession(session.Serialize());
+		var recovered = recoveredService.GetGameStateView(recoveredId)!;
+		var recoveredResidualBeneficiaries = players
+			.Skip(1)
+			.Select(player => recovered.GetFactionBeneficiaryKnowledge(player.Id))
+			.ToArray();
+		recovered.GetFactionBeneficiaryKnowledge(players[0].Id).Should().Be(
+			session.GetFactionBeneficiaryKnowledge(players[0].Id));
+		var recoveredPreClosure = recoveredResidualBeneficiaries.All(
+			beneficiary => !beneficiary.IsKnown);
+		var recoveredPostClosure = recoveredResidualBeneficiaries.All(
+			beneficiary => beneficiary.IsKnown);
+		(recoveredPreClosure || recoveredPostClosure).Should().BeTrue();
+		if (recoveredPreClosure)
+		{
+			var recoveredWake = recoveredService.GetCurrentInstruction(recoveredId)
+				.Should().BeOfType<ConfirmationInstruction>().Subject;
+			recoveredWake.Semantic.Should().Be(
+				ModeratorInstructionSemantic.WakeRole);
+			recoveredService.ProcessInstruction(
+				recoveredId,
+				recoveredWake.CreateResponse()).IsSuccess.Should().BeTrue();
+		}
+		foreach (var player in players)
+		{
+			recovered.GetFactionBeneficiaryKnowledge(player.Id).Should().Be(
+				session.GetFactionBeneficiaryKnowledge(player.Id));
+		}
+		recovered.GameHistoryLog
+			.OfType<FactionFactsCommittedLogEntry>()
+			.Should().ContainSingle(entry => entry.Source.Kind ==
+				FactionFactSourceKind.InitialBeneficiaryClosure);
+		MarkTestCompleted();
+	}
+
     [Fact]
     public void RoleIdentification_HardAlignedVillagerRole_CommitsKnownWerewolfFactionNonAgent()
     {
