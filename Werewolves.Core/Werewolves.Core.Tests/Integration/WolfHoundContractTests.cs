@@ -156,6 +156,33 @@ public sealed class WolfHoundContractTests : DiagnosticTestBase
 		MarkTestCompleted();
 	}
 
+	[Theory]
+	[InlineData(WolfHoundAlignmentOptionIds.Villagers, false)]
+	[InlineData(WolfHoundAlignmentOptionIds.Werewolves, true)]
+	public void AlignmentChoice_FollowingCollectiveObservationOffersOnlyPossibleAgents(
+		string optionId,
+		bool expectsWolfHoundCandidate)
+	{
+		var scenario = CreateKnownWolfHoundScenario(
+			arrangeKnownWerewolfAgentGroup: false);
+		var alignment = ReachAlignmentChoice(scenario);
+		var wolfHoundSleep =
+			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+				scenario.Builder.Process(alignment.CreateResponse(optionId)));
+
+		var observation =
+			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+				scenario.Builder.Process(wolfHoundSleep.CreateResponse()));
+
+		observation.Semantic.Should().Be(
+			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
+		observation.SelectablePlayerIds.Contains(scenario.WolfHoundId)
+			.Should().Be(expectsWolfHoundCandidate);
+		observation.SelectablePlayerIds.Should().Contain(
+			scenario.SimpleWerewolfId);
+		MarkTestCompleted();
+	}
+
 	[Fact]
 	public void AlignmentChoice_InvalidPayloadsAreSideEffectFree()
 	{
@@ -342,7 +369,8 @@ public sealed class WolfHoundContractTests : DiagnosticTestBase
 		MarkTestCompleted();
 	}
 
-	private KnownWolfHoundScenario CreateKnownWolfHoundScenario()
+	private KnownWolfHoundScenario CreateKnownWolfHoundScenario(
+		bool arrangeKnownWerewolfAgentGroup = true)
 	{
 		var builder = CreateBuilder()
 			.WithPlayers(
@@ -365,8 +393,11 @@ public sealed class WolfHoundContractTests : DiagnosticTestBase
 			.ArrangeKnownPhysicalRole(wolfHoundId, MainRoleType.WolfHound)
 			.ArrangeKnownPhysicalRole(
 				simpleWerewolfId,
-				MainRoleType.SimpleWerewolf)
-			.ArrangeKnownWerewolfFactionAgentGroup(simpleWerewolfId);
+				MainRoleType.SimpleWerewolf);
+		if (arrangeKnownWerewolfAgentGroup)
+		{
+			builder.ArrangeKnownWerewolfFactionAgentGroup(simpleWerewolfId);
+		}
 		builder.ConfirmGameStart();
 		return new KnownWolfHoundScenario(
 			builder,

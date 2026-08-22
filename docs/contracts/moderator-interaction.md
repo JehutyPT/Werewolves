@@ -102,6 +102,8 @@ These sections state only the observable differences from the shared interaction
 
 ### Simple Werewolf
 
+- Faction Agent Group Observation offers living Players not already known to be non-Agents, including Players already known to be Werewolf Faction Agents.
+
 - On each collective call, public copy wakes the current Werewolf Faction Agents and opens the Little Girl spying interval.
 - When the app does not yet know the complete group, the Moderator performs Faction Agent Group Observation for the complete non-empty group that woke. When the complete group is already known, the Moderator only confirms that the physical wake occurred.
 - The group physically chooses one living non-Agent victim, which the Moderator records. Public copy then returns the group to sleep and closes the Little Girl spying interval.
