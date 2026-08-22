@@ -311,7 +311,13 @@ public class StatusEffectsTests : DiagnosticTestBase
         var wildChildIdentifyInstruction = InstructionAssert.ExpectType<SelectPlayersInstruction>(
             builder.GetCurrentInstruction(),
             CoreTestReferences.InstructionContexts.WildChildIdentification);
+        builder.GetGameState()!
+            .GetFactionAgentKnowledge(wildChild.Id, Faction.Werewolf).Should()
+            .Be(FactionAgentKnowledge.Unknown);
         var afterWildChildIdentify = builder.Process(wildChildIdentifyInstruction.CreateResponse([wildChild.Id]));
+        builder.GetGameState()!
+            .GetFactionAgentKnowledge(wildChild.Id, Faction.Werewolf).Should()
+            .Be(FactionAgentKnowledge.KnownNonAgent);
 
         var modelSelectionInstruction = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
             afterWildChildIdentify,

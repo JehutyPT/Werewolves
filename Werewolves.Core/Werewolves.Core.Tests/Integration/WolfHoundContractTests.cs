@@ -15,6 +15,49 @@ public sealed class WolfHoundContractTests : DiagnosticTestBase
 	public WolfHoundContractTests(ITestOutputHelper output) : base(output) { }
 
 	[Fact]
+	public void FirstNight_IdentificationLeavesWerewolfFactionAgencyUnknownUntilAlignmentChoice()
+	{
+		var builder = CreateBuilder()
+			.WithPlayers(
+				"Wolf Hound",
+				"Simple Werewolf",
+				"Villager A",
+				"Villager B",
+				"Villager C")
+			.WithRoles(
+				MainRoleType.WolfHound,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		builder.ConfirmGameStart();
+		builder.ConfirmNightStart();
+		var session = builder.GetGameState()!;
+		var wolfHound = session.GetPlayers().First();
+		var identification = builder.GetCurrentInstruction()
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		identification.RoleIdentification.Should().Be(MainRoleType.WolfHound);
+		session.GetFactionAgentKnowledge(wolfHound.Id, Faction.Werewolf).Should()
+			.Be(FactionAgentKnowledge.Unknown);
+
+		var wake = builder.Process(
+			identification.CreateResponse([wolfHound.Id]));
+
+		wake.IsSuccess.Should().BeTrue();
+		wake.ModeratorInstruction.Should().BeOfType<SelectOptionsInstruction>()
+			.Which.Semantic.Should().Be(
+				ModeratorInstructionSemantic.ChooseWolfHoundAlignment);
+		session.GetFactionAgentKnowledge(wolfHound.Id, Faction.Werewolf).Should()
+			.Be(FactionAgentKnowledge.Unknown);
+		session.GameHistoryLog.OfType<FactionFactsCommittedLogEntry>().Should()
+			.NotContain(entry => entry.Source.Identifier ==
+				FactionFactSource
+					.RoleIdentificationWerewolfFactionAgencyEntailmentIdentifier);
+		MarkTestCompleted();
+	}
+
+	[Fact]
 	public void FirstNight_KnownHolder_WakesAndChoosesWithoutRepeatedIdentification()
 	{
 		var scenario = CreateKnownWolfHoundScenario();
@@ -288,13 +331,24 @@ public sealed class WolfHoundContractTests : DiagnosticTestBase
 		MarkTestCompleted();
 	}
 
-	[Fact]
-	public void LaterPublicReveal_IdentifiesWolfHoundWithoutChangingOrDisclosingAlignment()
+	[Theory]
+	[InlineData(
+		WolfHoundAlignmentOptionIds.Villagers,
+		Faction.Villager,
+		FactionAgentKnowledge.KnownNonAgent)]
+	[InlineData(
+		WolfHoundAlignmentOptionIds.Werewolves,
+		Faction.Werewolf,
+		FactionAgentKnowledge.KnownAgent)]
+	public void LaterPublicReveal_IdentifiesWolfHoundWithoutChangingOrDisclosingAlignment(
+		string alignmentOptionId,
+		Faction expectedBeneficiary,
+		FactionAgentKnowledge expectedWerewolfFactionAgentKnowledge)
 	{
-		var scenario = CreateKnownWolfHoundScenario();
+		var scenario = CreateKnownWolfHoundScenario(playerCount: 6);
 		var collectiveWake = CommitAlignmentAndReachCollectiveWake(
 			scenario,
-			WolfHoundAlignmentOptionIds.Villagers);
+			alignmentOptionId);
 		var victimSelection =
 			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
 				scenario.Builder.Process(collectiveWake.CreateResponse()));
@@ -349,11 +403,11 @@ public sealed class WolfHoundContractTests : DiagnosticTestBase
 			physicalCardBeforeReveal);
 		session.GetFactionBeneficiaryKnowledge(scenario.WolfHoundId)
 			.Should().Be(
-				FactionBeneficiaryKnowledge.Known(Faction.Villager));
+				FactionBeneficiaryKnowledge.Known(expectedBeneficiary));
 		session.GetFactionAgentKnowledge(
 				scenario.WolfHoundId,
 				Faction.Werewolf)
-			.Should().Be(FactionAgentKnowledge.KnownNonAgent);
+			.Should().Be(expectedWerewolfFactionAgentKnowledge);
 		session.GameHistoryLog
 			.OfType<RoleRevealLogEntry>()
 			.Should().ContainSingle(entry =>
@@ -369,22 +423,55 @@ public sealed class WolfHoundContractTests : DiagnosticTestBase
 		MarkTestCompleted();
 	}
 
+	[Fact]
+	public void RoleIdentification_AfterWerewolvesAlignment_PreservesKnownWerewolfFactionAgent()
+	{
+		var scenario = CreateKnownWolfHoundScenario(playerCount: 6);
+		CommitAlignmentAndReachCollectiveWake(
+			scenario,
+			WolfHoundAlignmentOptionIds.Werewolves);
+		var session = scenario.Builder.GetGameState()!;
+		session.GetFactionAgentKnowledge(
+			scenario.WolfHoundId,
+			Faction.Werewolf).Should().Be(FactionAgentKnowledge.KnownAgent);
+		var provenanceBeforeIdentification =
+			scenario.Builder.GameService.GetEarliestWerewolfAgencyFact(
+				scenario.Builder.GameId,
+				scenario.WolfHoundId);
+
+		scenario.Builder.ArrangeKnownRole(
+			scenario.WolfHoundId,
+			MainRoleType.WolfHound);
+
+		session.GetFactionAgentKnowledge(
+			scenario.WolfHoundId,
+			Faction.Werewolf).Should().Be(FactionAgentKnowledge.KnownAgent);
+		scenario.Builder.GameService.GetEarliestWerewolfAgencyFact(
+			scenario.Builder.GameId,
+			scenario.WolfHoundId).Should().Be(provenanceBeforeIdentification);
+		session.GameHistoryLog
+			.OfType<FactionFactsCommittedLogEntry>()
+			.Should().NotContain(entry =>
+				entry.Source.Identifier == FactionFactSource
+					.RoleIdentificationWerewolfFactionAgencyEntailmentIdentifier &&
+				entry.Facts.Any(fact => fact.PlayerId == scenario.WolfHoundId));
+		MarkTestCompleted();
+	}
+
 	private KnownWolfHoundScenario CreateKnownWolfHoundScenario(
-		bool arrangeKnownWerewolfAgentGroup = true)
+		bool arrangeKnownWerewolfAgentGroup = true,
+		int playerCount = 5)
 	{
 		var builder = CreateBuilder()
-			.WithPlayers(
-				"Wolf Hound",
-				"Simple Werewolf",
-				"Villager A",
-				"Villager B",
-				"Villager C")
+			.WithPlayers(playerCount)
 			.WithRoles(
-				MainRoleType.WolfHound,
-				MainRoleType.SimpleWerewolf,
-				MainRoleType.SimpleVillager,
-				MainRoleType.SimpleVillager,
-				MainRoleType.SimpleVillager);
+				[
+					MainRoleType.WolfHound,
+					MainRoleType.SimpleWerewolf,
+					.. Enumerable.Repeat(
+						MainRoleType.SimpleVillager,
+						playerCount - 2)
+				]);
 		builder.StartGame();
 		var players = builder.GetGameState()!.GetPlayers().ToArray();
 		var wolfHoundId = players[0].Id;

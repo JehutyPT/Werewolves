@@ -126,6 +126,11 @@ public sealed class ActorBorrowedLittleGirlTests
 				actorSleep.CreateResponse())
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
 		var historyCount = session.GameHistoryLog.Count();
+		var werewolfFactionAgencyBefore = session.GetPlayers().ToDictionary(
+			player => player.Id,
+			player => session.GetFactionAgentKnowledge(
+				player.Id,
+				Faction.Werewolf));
 		var invalidResponses = new[]
 		{
 			new ModeratorResponse
@@ -149,11 +154,11 @@ public sealed class ActorBorrowedLittleGirlTests
 			act.Should().Throw<InvalidOperationException>().WithMessage(
 				GameStrings.ActorBorrowedRolePowerInvalidResponse);
 			session.GameHistoryLog.Should().HaveCount(historyCount);
-			session.GetPlayers().Should().AllSatisfy(player =>
-				session.GetFactionAgentKnowledge(
-						player.Id,
-						Faction.Werewolf)
-					.Should().Be(FactionAgentKnowledge.Unknown));
+			session.GetPlayers().ToDictionary(
+				player => player.Id,
+				player => session.GetFactionAgentKnowledge(
+					player.Id,
+					Faction.Werewolf)).Should().Equal(werewolfFactionAgencyBefore);
 			session.GetModeratorActiveActorBorrowedRolePowerActivation().Should()
 				.Be(activation);
 			session.GetPlayerState(actorId).CurrentRole.Should().Be(

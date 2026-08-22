@@ -150,7 +150,10 @@ public sealed class RoleKnowledgeFlowBunitTests
 			.Contain(GameStrings.WerewolfFactionAgentObservationPrompt)
 			.And.Contain(GameStrings.LittleGirlOpeningGuidance);
 		var playerOptions = dashboard.FindAll(PlayerOptionSelector);
-		playerOptions.Should().HaveCount(players.Length);
+		playerOptions.Should().HaveCount(players.Length - 1);
+		playerOptions.Should().NotContain(option => option.TextContent.Contains(
+			littleGirl.Name,
+			StringComparison.CurrentCulture));
 		dashboard.FindAll(HoldButtonSelector).Should().ContainSingle();
 		var observationHold = dashboard.Find(HoldButtonSelector);
 		observationHold.HasAttribute(Html.Attributes.Disabled).Should().BeTrue();

@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using FluentAssertions;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.GameLogic.Simulation;
@@ -7,6 +8,7 @@ using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Models.Simulation;
+using Werewolves.Core.StateModels.Serialization;
 using Werewolves.Core.Tests.Helpers;
 using Xunit;
 using Xunit.Abstractions;
@@ -16,6 +18,41 @@ namespace Werewolves.Core.Tests.Integration;
 public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
 {
     public RoleKnowledgeContractTests(ITestOutputHelper output) : base(output) { }
+
+	public static TheoryData<MainRoleType, FactionAgentKnowledge?>
+		RoleIdentificationWerewolfFactionAgencyEntailmentCases => new()
+		{
+			{ MainRoleType.SimpleWerewolf, FactionAgentKnowledge.KnownAgent },
+			{ MainRoleType.BigBadWolf, FactionAgentKnowledge.KnownAgent },
+			{ MainRoleType.AccursedWolfFather, FactionAgentKnowledge.KnownAgent },
+			{ MainRoleType.WhiteWerewolf, FactionAgentKnowledge.KnownAgent },
+			{ MainRoleType.SimpleVillager, FactionAgentKnowledge.KnownNonAgent },
+			{ MainRoleType.VillagerVillager, FactionAgentKnowledge.KnownNonAgent },
+			{ MainRoleType.Seer, FactionAgentKnowledge.KnownNonAgent },
+			{ MainRoleType.Cupid, FactionAgentKnowledge.KnownNonAgent },
+			{ MainRoleType.Witch, FactionAgentKnowledge.KnownNonAgent },
+			{ MainRoleType.Hunter, FactionAgentKnowledge.KnownNonAgent },
+			{ MainRoleType.LittleGirl, FactionAgentKnowledge.KnownNonAgent },
+			{ MainRoleType.Defender, FactionAgentKnowledge.KnownNonAgent },
+			{ MainRoleType.Elder, FactionAgentKnowledge.KnownNonAgent },
+			{ MainRoleType.Scapegoat, FactionAgentKnowledge.KnownNonAgent },
+			{ MainRoleType.VillageIdiot, FactionAgentKnowledge.KnownNonAgent },
+			{ MainRoleType.TwoSisters, FactionAgentKnowledge.KnownNonAgent },
+			{ MainRoleType.ThreeBrothers, FactionAgentKnowledge.KnownNonAgent },
+			{ MainRoleType.Fox, FactionAgentKnowledge.KnownNonAgent },
+			{ MainRoleType.BearTamer, FactionAgentKnowledge.KnownNonAgent },
+			{ MainRoleType.StutteringJudge, FactionAgentKnowledge.KnownNonAgent },
+			{ MainRoleType.KnightWithRustySword, FactionAgentKnowledge.KnownNonAgent },
+			{ MainRoleType.Actor, FactionAgentKnowledge.KnownNonAgent },
+			{ MainRoleType.Piper, FactionAgentKnowledge.KnownNonAgent },
+			{ MainRoleType.Angel, FactionAgentKnowledge.KnownNonAgent },
+			{ MainRoleType.PrejudicedManipulator, FactionAgentKnowledge.KnownNonAgent },
+			{ MainRoleType.Gypsy, FactionAgentKnowledge.KnownNonAgent },
+			{ MainRoleType.WildChild, FactionAgentKnowledge.KnownNonAgent },
+			{ MainRoleType.WolfHound, null },
+			{ MainRoleType.Thief, null },
+			{ MainRoleType.DevotedServant, null }
+		};
 
     [Fact]
     public void LiveGameSession_FromRoleComposition_LeavesEveryPlayerRoleFactUnknown()
@@ -85,6 +122,137 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
                 entry.PlayerIds.SetEquals(new[] { holder.Id }));
         session.GameHistoryLog.OfType<AssignRoleLogEntry>().Should().BeEmpty();
 
+        MarkTestCompleted();
+    }
+
+	[Theory]
+	[MemberData(nameof(RoleIdentificationWerewolfFactionAgencyEntailmentCases))]
+	public void RoleIdentification_CompleteRuleTable_ProjectsExpectedWerewolfFactionAgency(
+		MainRoleType role,
+		FactionAgentKnowledge? entailedKnowledge)
+	{
+		var builder = CreateBuilder()
+			.WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);
+		builder.StartGame();
+		var session = builder.GetGameState()!;
+		var holder = session.GetPlayers().ElementAt(2);
+		session.GetFactionAgentKnowledge(holder.Id, Faction.Werewolf).Should().Be(
+			FactionAgentKnowledge.Unknown);
+
+		builder.ArrangeKnownRole(holder.Id, role);
+
+		session.GetFactionAgentKnowledge(holder.Id, Faction.Werewolf).Should().Be(
+			entailedKnowledge ?? FactionAgentKnowledge.Unknown);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void RoleIdentification_WerewolfRole_UsesNonInitialAgencyProvenanceWithoutNarrowing()
+	{
+		var builder = CreateBuilder()
+			.WithPlayers(7)
+			.WithRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.BigBadWolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		var session = builder.GetGameState()!;
+		var players = session.GetPlayers().ToArray();
+
+		builder.ArrangeKnownRole(players[1].Id, MainRoleType.BigBadWolf);
+
+		session.GetFactionAgentKnowledge(players[1].Id, Faction.Werewolf)
+			.Should().Be(FactionAgentKnowledge.KnownAgent);
+		var provenance = builder.GameService.GetEarliestWerewolfAgencyFact(
+			builder.GameId,
+			players[1].Id);
+		provenance.Should().NotBeNull();
+		provenance!.Source.Kind.Should().Be(
+			FactionFactSourceKind.ScheduledObservation);
+		provenance.Source.Identifier.Should().Be(
+			"role-identification-werewolf-faction-agency-entailment");
+		provenance.Source.Identifier.Should().NotBe(
+			FactionFactSource.WerewolfFactionAgentGroupObservationIdentifier);
+		builder.GameService.GetPossibleRoles(builder.GameId, players[1].Id).Should()
+			.Contain(MainRoleType.SimpleWerewolf)
+			.And.Contain(MainRoleType.SimpleVillager);
+		MarkTestCompleted();
+	}
+
+    [Fact]
+    public void RoleIdentification_HardAlignedVillagerRole_CommitsKnownWerewolfFactionNonAgent()
+    {
+        var builder = CreateBuilder()
+            .WithPlayers(7)
+            .WithRoles(
+                MainRoleType.SimpleWerewolf,
+                MainRoleType.Cupid,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager);
+        builder.StartGame();
+        builder.ConfirmGameStart();
+        builder.ConfirmNightStart();
+        var session = builder.GetGameState()!;
+        var holder = session.GetPlayers().ElementAt(1);
+        var identification = builder.GetCurrentInstruction()
+            .Should().BeOfType<SelectPlayersInstruction>().Subject;
+        identification.RoleIdentification.Should().Be(MainRoleType.Cupid);
+        session.GetFactionAgentKnowledge(holder.Id, Faction.Werewolf).Should().Be(
+            FactionAgentKnowledge.Unknown);
+
+        var result = builder.Process(identification.CreateResponse([holder.Id]));
+
+        result.IsSuccess.Should().BeTrue();
+        session.GetFactionAgentKnowledge(holder.Id, Faction.Werewolf).Should().Be(
+            FactionAgentKnowledge.KnownNonAgent);
+		var history = session.GameHistoryLog.ToList();
+		var identificationEntry = history.OfType<RoleIdentificationLogEntry>()
+			.Should().ContainSingle(entry =>
+				entry.Role == MainRoleType.Cupid &&
+				entry.PlayerIds.SetEquals(new[] { holder.Id }))
+			.Subject;
+		var entailedBatch = history.OfType<FactionFactsCommittedLogEntry>()
+			.Should().ContainSingle(entry => entry.Source.Identifier ==
+				FactionFactSource
+					.RoleIdentificationWerewolfFactionAgencyEntailmentIdentifier)
+			.Subject;
+		entailedBatch.Source.Kind.Should().Be(
+			FactionFactSourceKind.ScheduledObservation);
+		var entailedFact = entailedBatch.Facts.Should().ContainSingle().Subject;
+		entailedFact.Should().Match<FactionFact>(fact =>
+			fact.PlayerId == holder.Id &&
+			fact.Type == FactionFactType.Agent &&
+			fact.Faction == Faction.Werewolf &&
+			fact.AgentKnowledge == FactionAgentKnowledge.KnownNonAgent);
+		entailedFact.EffectiveBoundary.TurnNumber.Should().Be(
+			identificationEntry.TurnNumber);
+		entailedFact.EffectiveBoundary.Phase.Should().Be(
+			identificationEntry.CurrentPhase);
+		entailedFact.EffectiveBoundary.Order.Should().BeGreaterThan(
+			history.IndexOf(identificationEntry));
+		builder.GameService.GetPossibleRoles(builder.GameId, holder.Id).Should()
+			.NotContain(role => role.EstablishesInitialWerewolfAgency());
+
+		var serialized = session.Serialize();
+		var payload = JsonNode.Parse(serialized)!.AsObject();
+		payload[nameof(GameSessionDto.RoleFactSchemaVersion)]!.GetValue<int>()
+			.Should().Be(RoleFactSchema.CurrentVersion);
+		payload[nameof(GameSessionDto.FactionFactSchemaVersion)]!.GetValue<int>()
+			.Should().Be(FactionFactSchema.CurrentVersion);
+		var recoveredService = new GameService();
+		var recoveredId = recoveredService.RehydrateSession(serialized);
+		var recovered = recoveredService.GetGameStateView(recoveredId)!;
+		recovered.GetPlayerState(holder.Id).ModeratorKnownRole.Should().Be(
+			MainRoleType.Cupid);
+		recovered.GetFactionAgentKnowledge(holder.Id, Faction.Werewolf).Should()
+			.Be(FactionAgentKnowledge.KnownNonAgent);
         MarkTestCompleted();
     }
 
@@ -1256,6 +1424,64 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
 
 		afterReveal.IsSuccess.Should().BeTrue();
 		infectedVictim.State.PubliclyRevealedRole.Should().Be(
+			MainRoleType.SimpleVillager);
+		infectedVictim.State.HasStatusEffect(
+			StatusEffectTypes.LycanthropyInfection).Should().BeTrue();
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void RoleIdentification_AfterInfection_PreservesKnownWerewolfFactionAgent()
+	{
+		var builder = CreateBuilder()
+			.WithPlayers(7)
+			.WithRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.AccursedWolfFather,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		builder.ConfirmGameStart();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		var infectedVictim = players[2];
+		builder.CompleteNightPhase(new NightActionInputs
+		{
+			WerewolfIds = [players[0].Id, players[1].Id],
+			WerewolfVictimId = infectedVictim.Id,
+			AccursedWolfFatherId = players[1].Id,
+			AccursedWolfFatherInfectsVictim = true
+		});
+		infectedVictim.State.HasStatusEffect(
+			StatusEffectTypes.LycanthropyInfection).Should().BeTrue();
+		infectedVictim.State.CurrentRole.Should().BeNull();
+		var possibleRoles = builder.GameService.GetPossibleRoles(
+			builder.GameId,
+			infectedVictim.Id);
+		possibleRoles.Should().Contain(MainRoleType.SimpleWerewolf);
+		possibleRoles.Should().Contain(MainRoleType.SimpleVillager);
+		possibleRoles.Should().NotContain(MainRoleType.AccursedWolfFather);
+		var provenance = builder.GameService.GetEarliestWerewolfAgencyFact(
+			builder.GameId,
+			infectedVictim.Id);
+		provenance.Should().NotBeNull();
+		provenance!.Source.Kind.Should().Be(
+			FactionFactSourceKind.ExplicitTransition);
+		builder.ArrangeKnownRole(
+			infectedVictim.Id,
+			MainRoleType.SimpleVillager);
+
+		infectedVictim.State.GetFactionAgentKnowledge(Faction.Werewolf).Should()
+			.Be(FactionAgentKnowledge.KnownAgent);
+		builder.GetGameState()!.GameHistoryLog
+			.OfType<FactionFactsCommittedLogEntry>()
+			.Should().NotContain(entry =>
+				entry.Source.Identifier == FactionFactSource
+					.RoleIdentificationWerewolfFactionAgencyEntailmentIdentifier &&
+				entry.Facts.Any(fact => fact.PlayerId == infectedVictim.Id));
+		infectedVictim.State.ModeratorKnownRole.Should().Be(
 			MainRoleType.SimpleVillager);
 		infectedVictim.State.HasStatusEffect(
 			StatusEffectTypes.LycanthropyInfection).Should().BeTrue();

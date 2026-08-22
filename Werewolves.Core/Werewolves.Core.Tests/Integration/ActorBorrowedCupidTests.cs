@@ -86,7 +86,9 @@ public sealed class ActorBorrowedCupidTests
 		lovers.Should().OnlyContain(playerId =>
 			!session.GetFactionBeneficiaryKnowledge(playerId).IsKnown);
 		session.GameHistoryLog.OfType<FactionFactsCommittedLogEntry>().Should()
-			.BeEmpty();
+			.ContainSingle(entry => entry.Source.Identifier ==
+				FactionFactSource
+					.RoleIdentificationWerewolfFactionAgencyEntailmentIdentifier);
 		session.GameHistoryLog
 			.OfType<ActorBorrowedRolePowerCommittedLogEntry>().Should()
 			.ContainSingle();
@@ -122,7 +124,9 @@ public sealed class ActorBorrowedCupidTests
 			.ContainSingle()
 			.Which.Should().BeOfType<ActorBorrowedRolePowerCommittedLogEntry>();
 		recovered.GameHistoryLog.OfType<FactionFactsCommittedLogEntry>().Should()
-			.BeEmpty();
+			.ContainSingle(entry => entry.Source.Identifier ==
+				FactionFactSource
+					.RoleIdentificationWerewolfFactionAgencyEntailmentIdentifier);
 		recovered.GameHistoryLog.OfType<LoversPairCommittedLogEntry>().Should()
 			.BeEmpty();
 

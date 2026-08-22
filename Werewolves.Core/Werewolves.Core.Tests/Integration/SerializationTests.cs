@@ -192,6 +192,65 @@ public class SerializationTests : DiagnosticTestBase
         MarkTestCompleted();
     }
 
+	[Fact]
+	public void SessionWithoutRoleIdentificationWerewolfFactionAgencyEntailment_RehydratesUnchanged()
+	{
+		var builder = CreateBuilder()
+			.WithPlayers(7)
+			.WithRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Cupid,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		builder.ConfirmGameStart();
+		builder.ConfirmNightStart();
+		var session = builder.GetGameState()!;
+		var holder = session.GetPlayers().ElementAt(1);
+		var identification = builder.GetCurrentInstruction()
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		var expectedNext = builder.Process(
+				identification.CreateResponse([holder.Id]))
+			.ModeratorInstruction.Should()
+			.BeOfType<ConfirmationInstruction>().Subject;
+		var legacy = JsonSerializer.Deserialize<GameSessionDto>(
+			session.Serialize(),
+			RecoverySerializationOptions)!;
+		legacy.GameHistoryLog.RemoveAll(entry =>
+			entry is FactionFactsCommittedLogEntry facts &&
+			facts.Source.Identifier == FactionFactSource
+				.RoleIdentificationWerewolfFactionAgencyEntailmentIdentifier);
+		legacy.Players.Single(player => player.Id == holder.Id)
+			.FactionAgentKnowledge![Faction.Werewolf] =
+				FactionAgentKnowledge.Unknown;
+		legacy.RoleFactSchemaVersion.Should().Be(RoleFactSchema.CurrentVersion);
+		legacy.FactionFactSchemaVersion.Should().Be(FactionFactSchema.CurrentVersion);
+		var legacyPayload = JsonSerializer.Serialize(
+			legacy,
+			RecoverySerializationOptions);
+		var recoveredService = new GameService();
+
+		var recoveredId = recoveredService.RehydrateSession(legacyPayload);
+		var recovered = recoveredService.GetGameStateView(recoveredId)!;
+		var recoveredNext = recoveredService.GetCurrentInstruction(recoveredId)
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+
+		recovered.GetPlayerState(holder.Id).ModeratorKnownRole.Should().Be(
+			MainRoleType.Cupid);
+		recovered.GetFactionAgentKnowledge(holder.Id, Faction.Werewolf).Should()
+			.Be(FactionAgentKnowledge.Unknown);
+		recoveredNext.InstructionId.Should().Be(expectedNext.InstructionId);
+		var continued = recoveredService.ProcessInstruction(
+			recoveredId,
+			recoveredNext.CreateResponse());
+		continued.IsSuccess.Should().BeTrue();
+		continued.ModeratorInstruction.Should().BeOfType<SelectPlayersInstruction>();
+		MarkTestCompleted();
+	}
+
     [Fact]
     public void LegacyPlayerPayload_WithoutVotingRight_DefaultsToEligible()
     {
