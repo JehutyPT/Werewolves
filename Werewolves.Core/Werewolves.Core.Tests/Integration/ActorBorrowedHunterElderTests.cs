@@ -58,7 +58,9 @@ public sealed class ActorBorrowedHunterElderTests
 		werewolfObservation.CountConstraint.Should().Be(
 			NumberRangeConstraint.AtLeast(1));
 		werewolfObservation.SelectablePlayerIds.Should().BeEquivalentTo(
-			fixture.Session.GetPlayers().Select(player => player.Id));
+			fixture.Session.GetPlayers()
+				.Select(player => player.Id)
+				.Where(playerId => playerId != fixture.ActorId));
 		var victimSelection = service.ProcessInstruction(
 				gameId,
 				werewolfObservation.CreateResponse([fixture.WerewolfId]))

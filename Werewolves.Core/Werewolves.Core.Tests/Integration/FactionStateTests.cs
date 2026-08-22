@@ -532,7 +532,7 @@ public class FactionStateTests
 			.Should().Be(InitialBeneficiaryClosureResult.Committed);
 		session.GameHistoryLog
 			.OfType<FactionFactsCommittedLogEntry>()
-			.Should().HaveCount(2);
+			.Should().HaveCount(3);
 		session.Serialize().Should().Be(stableBoundaryBeforeFactionFacts);
 
 		var recoveredService = new GameService();
@@ -556,13 +556,18 @@ public class FactionStateTests
 				options => options.WithStrictOrdering());
 		recovered.GameHistoryLog
 			.OfType<FactionFactsCommittedLogEntry>()
-			.Should().BeEmpty();
+			.Should().ContainSingle(entry =>
+				entry.Source.Identifier == FactionFactSource
+					.RoleIdentificationWerewolfFactionAgencyEntailmentIdentifier);
 		foreach (var player in recovered.GetPlayers())
 		{
 			recovered.GetFactionBeneficiaryKnowledge(player.Id).Should()
 				.Be(FactionBeneficiaryKnowledge.Unknown);
 			recovered.GetFactionAgentKnowledge(player.Id, Faction.Werewolf)
-				.Should().Be(FactionAgentKnowledge.Unknown);
+				.Should().Be(
+					player.Id == players[0].Id
+						? FactionAgentKnowledge.KnownNonAgent
+						: FactionAgentKnowledge.Unknown);
 		}
 		recovered.GameHistoryLog
 			.OfType<VictoryConditionMetLogEntry>()

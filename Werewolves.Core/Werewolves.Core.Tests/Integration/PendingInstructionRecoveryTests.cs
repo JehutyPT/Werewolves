@@ -302,6 +302,10 @@ public sealed class PendingInstructionRecoveryTests
         var acceptedIdentification = identification.CreateResponse([wildChild.Id]);
         var expectedNext = builder.Process(acceptedIdentification).ModeratorInstruction
             .Should().BeOfType<SelectPlayersInstruction>().Subject;
+        builder.GetGameState()!.GetFactionAgentKnowledge(
+                wildChild.Id,
+                Faction.Werewolf)
+            .Should().Be(FactionAgentKnowledge.KnownNonAgent);
 
         var firstService = new GameService();
         var firstGameId = firstService.RehydrateSession(
@@ -319,6 +323,10 @@ public sealed class PendingInstructionRecoveryTests
                 .ContainSingle(entry =>
                     entry.Role == MainRoleType.WildChild &&
                     entry.PlayerIds.SetEquals(new[] { wildChild.Id }));
+            secondRecovered.GetFactionAgentKnowledge(
+                    wildChild.Id,
+                    Faction.Werewolf)
+                .Should().Be(FactionAgentKnowledge.KnownNonAgent);
             secondNext.InstructionId.Should().Be(expectedNext.InstructionId);
             secondNext.Semantic.Should().Be(expectedNext.Semantic);
             secondNext.AffectedPlayerIds.Should().Equal(expectedNext.AffectedPlayerIds);
