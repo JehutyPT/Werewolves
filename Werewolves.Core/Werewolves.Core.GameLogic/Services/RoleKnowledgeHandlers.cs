@@ -314,12 +314,22 @@ internal static class RoleKnowledgeHandlers
             return null;
         }
 
+		var candidateIds = session.GetPlayers()
+			.Where(player => player.State.Health == PlayerHealth.Alive)
+			.Where(player =>
+				GameSessionQueries.GetEstablishedRole(player) is { } establishedRole
+					? establishedRole == MainRoleType.VillagerVillager
+					: GameSessionQueries.GetPossibleRoles(session, player.Id)
+						.Contains(MainRoleType.VillagerVillager))
+			.Select(player => player.Id)
+			.ToHashSet();
+
         return new SelectPlayersInstruction(
             ModeratorInstructionSemantic.ObserveVillagerVillagerFromDeal,
-            session.GetPlayers().Select(player => player.Id).ToHashSet(),
+			candidateIds,
             NumberRangeConstraint.Single,
             privateInstruction: GameStrings.VillagerVillagerPublicFromDealInstruction,
-            affectedPlayerIds: session.GetPlayers().Select(player => player.Id).ToArray());
+			affectedPlayerIds: candidateIds.ToArray());
     }
 
     internal static void RecordVillagerVillagerPublicFromDealObservation(

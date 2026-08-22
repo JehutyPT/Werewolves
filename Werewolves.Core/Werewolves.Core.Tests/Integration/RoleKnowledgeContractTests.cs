@@ -509,6 +509,8 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
         observation.CountConstraint.Should().Be(NumberRangeConstraint.Single);
         observation.SelectablePlayerIds.Should()
             .BeEquivalentTo(builder.GetGameState()!.GetPlayers().Select(player => player.Id));
+		observation.AffectedPlayerIds.Should()
+			.BeEquivalentTo(observation.SelectablePlayerIds);
 
         var holder = builder.GetGameState()!.GetPlayers().ElementAt(2);
         var accepted = builder.Process(observation.CreateResponse([holder.Id]));
@@ -525,6 +527,119 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
 
         MarkTestCompleted();
     }
+
+	[Fact]
+	public void VillagerVillager_AfterThiefSwapAndElimination_OffersOnlyLivingPossibleHolder()
+	{
+		var cards = new[]
+		{
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.Thief),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.SimpleWerewolf),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.Seer),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.SimpleVillager),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.SimpleVillager),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.VillagerVillager),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.SimpleVillager)
+		};
+		var lockIn = new RoleLockIn(
+			version: 1,
+			playerCount: 5,
+			cards,
+			cards.Take(5).Select(card => card.Id),
+			cards[5].Id,
+			cards[6].Id);
+		var service = new GameService();
+		var start = service.StartNewGame(new GameSessionConfig(
+			["Thief", "Werewolf", "Seer", "Villager", "Victim"],
+			lockIn));
+		var builder = GameTestBuilder.ForExistingGame(service, start.GameGuid);
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		var thief = players[0];
+		var werewolf = players[1];
+		var seer = players[2];
+		var victim = players[4];
+
+		var nightStart = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+			builder.Process(start.CreateResponse()));
+		var identifyThief = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+			builder.Process(nightStart.CreateResponse()));
+		var choice = InstructionAssert.ExpectSuccessWithType<SelectOptionsInstruction>(
+			builder.Process(identifyThief.CreateResponse([thief.Id])));
+		var sleepThief = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+			builder.Process(choice.CreateResponse(ThiefOfferOptionIds.Offer1)));
+		builder.Process(sleepThief.CreateResponse());
+		builder.CompleteWerewolfNightAction([werewolf.Id], victim.Id);
+		var afterSeer = builder.CompleteSeerNightAction(seer.Id, werewolf.Id);
+		var finishNight = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+			afterSeer);
+		builder.Process(finishNight.CreateResponse());
+		builder.CompleteDawnPhase(new()
+		{
+			[victim.Id] = MainRoleType.SimpleVillager
+		});
+		var afterDay = builder.CompleteDayPhaseWithTie();
+
+		var observation = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+			afterDay);
+
+		observation.Semantic.Should().Be(
+			ModeratorInstructionSemantic.ObserveVillagerVillagerFromDeal);
+		observation.SelectablePlayerIds.Should().Equal(thief.Id);
+		observation.AffectedPlayerIds.Should().Equal(thief.Id);
+		victim.State.Health.Should().Be(PlayerHealth.Dead);
+		seer.State.ModeratorKnownRole.Should().Be(MainRoleType.Seer);
+		var historyCountBeforeRejectedSubmission =
+			builder.GetGameState()!.GameHistoryLog.Count();
+		Action submitExcludedPlayer = () => builder.Process(new ModeratorResponse
+		{
+			InstructionId = observation.InstructionId,
+			Type = ExpectedInputType.PlayerSelection,
+			SelectedPlayerIds = new HashSet<Guid> { seer.Id }
+		});
+
+		submitExcludedPlayer.Should().Throw<InvalidOperationException>()
+			.WithMessage("*payload is not valid*");
+		builder.GetGameState()!.GameHistoryLog.Should()
+			.HaveCount(historyCountBeforeRejectedSubmission);
+		var stillPending = builder.GetCurrentInstruction()
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		stillPending.InstructionId.Should().Be(observation.InstructionId);
+		stillPending.SelectablePlayerIds.Should().Equal(thief.Id);
+
+		var recoveredService = new GameService();
+		var recoveredId = recoveredService.RehydrateSession(
+			builder.GetGameState()!.Serialize());
+		var recoveredPending = recoveredService.GetCurrentInstruction(recoveredId)
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		recoveredPending.InstructionId.Should().Be(observation.InstructionId);
+		recoveredPending.SelectablePlayerIds.Should().Equal(thief.Id);
+		recoveredPending.AffectedPlayerIds.Should().Equal(thief.Id);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void VillagerVillager_WithNoLivingPossibleHolder_FailsAsAnInvariant()
+	{
+		var builder = CreateBuilder()
+			.WithPlayers("Alice", "Bob", "Charlie", "Diana", "Eve")
+			.WithRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Seer,
+				MainRoleType.VillagerVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		foreach (var player in builder.GetGameState()!.GetPlayers())
+		{
+			builder.ArrangeEliminatedPlayer(player.Id);
+		}
+
+		Action confirmPhysicalDeal = () => builder.ConfirmGameStart();
+
+		confirmPhysicalDeal.Should().Throw<ArgumentException>()
+			.WithMessage("*SelectablePlayerIds cannot be empty*");
+		MarkTestCompleted();
+	}
 
     [Fact]
     public void VillagerVillager_AcceptedPublicFromDealObservation_RehydratesExactlyOnceAtNextInstruction()
