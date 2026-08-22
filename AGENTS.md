@@ -7,7 +7,7 @@
 
 ### Issue tracker
 
-Issues are tracked in GitHub Issues on bicheichane/Werewolves. External issues
+Issues are tracked in GitHub Issues on JehutyPT/Werewolves. External issues
 and pull requests are not external triage surfaces. See
 `docs/agents/issue-tracker.md`.
 

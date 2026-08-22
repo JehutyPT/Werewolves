@@ -92,7 +92,7 @@ absent.
 
 ## Current local-policy supersession from #148
 
-The settled local decision in [#148](https://github.com/bicheichane/Werewolves/issues/148)
+The settled local decision in [#148](https://github.com/JehutyPT/Werewolves/issues/148)
 supersedes this research's chance-determined “two undealt cards” premise for product
 implementation only; it does not rewrite or weaken the historical publisher evidence
 above. For the app, a Thief-enabled Role Composition has `P + 2` instances and is
@@ -106,7 +106,7 @@ from their offer slots to Set-Aside.
 Any Degenerate screening branch blocks; absent one, screening failures and timeouts
 remain nonblocking.
 
-This supersession leaves [#99](https://github.com/bicheichane/Werewolves/issues/99)'s
+This supersession leaves [#99](https://github.com/JehutyPT/Werewolves/issues/99)'s
 same-Night activation ruling intact; it changes the local card-source, setup, and
 screening implementation model, not the adopted activation timing.
 
