@@ -1,0 +1,222 @@
+<!--
+  PROTOTYPE — THROWAWAY. Not production code.
+  Question: what should a "recent setup" row look like on the new landing page?
+  Format under test: player count + emoji role-composition summary (counts on Simple
+  Villager / Simple Werewolf), per the lobby-UX grilling session (2026-08-19).
+  Three variants on one page, switchable via the floating bottom bar / arrow keys.
+  Run: open prototypes/recents-row.prototype.html
+-->
+<title>Recents Row Prototype</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ww-bg: #070C12;
+    --ww-bg-raised: #0C131D;
+    --ww-surface: #101926;
+    --ww-surface-hi: #172335;
+    --ww-border: rgba(63, 224, 200, 0.10);
+    --ww-border-strong: rgba(63, 224, 200, 0.28);
+    --ww-border-neutral: rgba(255, 255, 255, 0.06);
+    --ww-text: #EAF4FB;
+    --ww-text-dim: #A4BACE;
+    --ww-text-muted: #8498AD;
+    --ww-accent: #3FE0C8;
+    --ww-accent-soft: rgba(63, 224, 200, 0.12);
+    --ww-faction-werewolf: #FF6478;
+    --ww-faction-werewolf-soft: rgba(255, 100, 120, 0.12);
+    --ww-faction-villager: #3FE0C8;
+    --ww-faction-villager-soft: rgba(63, 224, 200, 0.10);
+    --ww-faction-loner: #B68BFF;
+    --ww-faction-loner-soft: rgba(182, 139, 255, 0.12);
+    --ww-faction-ambiguous: #FFB35A;
+    --ww-faction-ambiguous-soft: rgba(255, 179, 90, 0.12);
+    --ww-font: "Sora", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: #02050a; font-family: var(--ww-font); color: var(--ww-text); display: flex; justify-content: center; padding: 24px 8px 96px; }
+  .phone { width: 393px; min-height: 800px; background: var(--ww-bg); border: 1px solid var(--ww-border-neutral); border-radius: 28px; padding: 24px 16px 40px; }
+  h1 { font-size: 20px; font-weight: 700; letter-spacing: 0.5px; margin-bottom: 18px; }
+  .ww-label { font-size: 11px; font-weight: 700; letter-spacing: 1.4px; text-transform: uppercase; color: var(--ww-text-muted); }
+  .continue-card { background: linear-gradient(180deg, var(--ww-surface-hi) 0%, var(--ww-surface) 100%); border: 1px solid var(--ww-border-strong); border-radius: 14px; padding: 16px 20px; margin-bottom: 12px; box-shadow: 0 0 40px rgba(63, 224, 200, 0.18); }
+  .continue-card .meta { color: var(--ww-text-dim); font-size: 13px; margin: 6px 0 12px; }
+  .btn-primary { background: var(--ww-accent); border: none; border-radius: 14px; width: 100%; height: 48px; font-family: var(--ww-font); font-size: 13px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--ww-bg); cursor: pointer; }
+  .btn-ghost { background: var(--ww-surface); border: 1.5px solid var(--ww-accent); border-radius: 14px; width: 100%; height: 48px; font-family: var(--ww-font); font-size: 13px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--ww-accent); cursor: pointer; margin-bottom: 24px; }
+  .section-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+  .rows { display: flex; flex-direction: column; gap: 8px; }
+  .date { color: var(--ww-text-muted); font-size: 11px; white-space: nowrap; }
+  .count-pill { display: inline-flex; align-items: center; gap: 4px; background: var(--ww-accent-soft); border: 1px solid var(--ww-border); color: var(--ww-accent); border-radius: 8px; padding: 3px 8px; font-size: 13px; font-weight: 700; }
+  .mult { font-size: 11px; font-weight: 700; color: var(--ww-text-dim); }
+
+  /* Variant A — inline strip */
+  .row-a { display: flex; align-items: center; gap: 10px; background: var(--ww-surface); border: 1px solid var(--ww-border-neutral); border-radius: 12px; padding: 10px 12px; }
+  .row-a .glyphs { flex: 1; white-space: nowrap; overflow: hidden; font-size: 17px; letter-spacing: 2px; }
+  .row-a .glyphs .mult { letter-spacing: 0; margin-left: -1px; }
+  .row-a .more { color: var(--ww-text-muted); font-size: 11px; font-weight: 700; letter-spacing: 0; }
+  .row-a .chev { color: var(--ww-text-muted); font-size: 14px; }
+
+  /* Variant B — emoji grid card */
+  .row-b { background: var(--ww-surface); border: 1px solid var(--ww-border-neutral); border-radius: 14px; padding: 12px 14px; }
+  .row-b .head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+  .row-b .grid { display: flex; flex-wrap: wrap; gap: 5px; }
+  .tile { position: relative; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; font-size: 17px; border-radius: 8px; border: 1px solid var(--ww-border-neutral); }
+  .tile .badge { position: absolute; top: -5px; right: -5px; background: var(--ww-bg-raised); border: 1px solid var(--ww-border-strong); color: var(--ww-text); border-radius: 7px; font-size: 9px; font-weight: 700; padding: 0 4px; line-height: 12px; }
+  .tile.f-werewolf { background: var(--ww-faction-werewolf-soft); }
+  .tile.f-villager { background: var(--ww-faction-villager-soft); }
+  .tile.f-ambiguous { background: var(--ww-faction-ambiguous-soft); }
+  .tile.f-loner { background: var(--ww-faction-loner-soft); }
+
+  /* Variant C — faction split */
+  .row-c { display: flex; gap: 14px; background: var(--ww-surface); border: 1px solid var(--ww-border-neutral); border-radius: 14px; padding: 12px 14px; }
+  .row-c .num { display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 52px; border-right: 1px solid var(--ww-border-neutral); padding-right: 12px; }
+  .row-c .num b { font-size: 24px; font-weight: 700; }
+  .row-c .num span { font-size: 9px; letter-spacing: 1px; text-transform: uppercase; color: var(--ww-text-muted); }
+  .row-c .factions { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+  .fr { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+  .fr .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .fr .glyphline { letter-spacing: 1.5px; }
+  .balancebar { display: flex; height: 4px; border-radius: 2px; overflow: hidden; margin-top: 6px; }
+  .row-c .cdate { align-self: flex-start; }
+
+  /* Switcher */
+  .switcher { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 14px; background: #fff; color: #111; border-radius: 999px; padding: 8px 16px; font-size: 13px; font-weight: 700; box-shadow: 0 4px 24px rgba(0,0,0,0.6); z-index: 10; }
+  .switcher button { background: none; border: none; font-size: 16px; cursor: pointer; padding: 0 4px; }
+  .note { color: var(--ww-text-muted); font-size: 11px; margin-top: 16px; line-height: 1.5; }
+</style>
+
+<div class="phone">
+  <h1>Werewolves</h1>
+  <div class="continue-card">
+    <div class="ww-label" style="color: var(--ww-accent);">Game in progress</div>
+    <div class="meta">Night 2 · 8 of 10 alive · 41 min</div>
+    <button class="btn-primary">Continue game</button>
+  </div>
+  <button class="btn-ghost">＋ New game</button>
+  <div class="section-head">
+    <span class="ww-label">Recent setups</span>
+    <span class="ww-label" id="variant-name" style="color: var(--ww-accent);"></span>
+  </div>
+  <div class="rows" id="rows"></div>
+  <p class="note" id="variant-note"></p>
+</div>
+
+<div class="switcher">
+  <button id="prev">←</button><span id="switch-label"></span><button id="next">→</button>
+</div>
+
+<script>
+  const ROLES = {
+    SimpleWerewolf:       { e: "🐺", f: "werewolf" },
+    BigBadWolf:           { e: "👹", f: "werewolf" },
+    AccursedWolfFather:   { e: "🧛", f: "werewolf" },
+    WhiteWerewolf:        { e: "🌕", f: "werewolf" },
+    Seer:                 { e: "🔮", f: "villager" },
+    Witch:                { e: "🧪", f: "villager" },
+    Hunter:               { e: "🏹", f: "villager" },
+    Cupid:                { e: "💘", f: "villager" },
+    LittleGirl:           { e: "👧", f: "villager" },
+    Defender:             { e: "🛡️", f: "villager" },
+    Elder:                { e: "👴", f: "villager" },
+    Fox:                  { e: "🦊", f: "villager" },
+    BearTamer:            { e: "🐻", f: "villager" },
+    KnightWithRustySword: { e: "⚔️", f: "villager" },
+    StutteringJudge:      { e: "⚖️", f: "villager" },
+    TwoSisters:           { e: "👭", f: "villager" },
+    ThreeBrothers:        { e: "👬", f: "villager" },
+    SimpleVillager:       { e: "🧑‍🌾", f: "villager" },
+    Thief:                { e: "🥷", f: "ambiguous" },
+    DevotedServant:       { e: "🧹", f: "ambiguous" },
+    Actor:                { e: "🎭", f: "ambiguous" },
+    WildChild:            { e: "🐒", f: "ambiguous" },
+    Angel:                { e: "👼", f: "loner" },
+    Piper:                { e: "🪈", f: "loner" },
+    PrejudicedManipulator:{ e: "🧠", f: "loner" },
+  };
+  const COUNTED = new Set(["SimpleWerewolf", "SimpleVillager"]); // roles whose count is displayed
+  const FACTION_ORDER = ["werewolf", "villager", "ambiguous", "loner"];
+  const FACTION_COLOR = { werewolf: "var(--ww-faction-werewolf)", villager: "var(--ww-faction-villager)", ambiguous: "var(--ww-faction-ambiguous)", loner: "var(--ww-faction-loner)" };
+
+  // [roleKey, count] — counts > 1 only for simples & fixed multiples (Sisters ×2, Brothers ×3)
+  const SETUPS = [
+    { players: 5,  date: "2 h ago",  roles: [["SimpleWerewolf",1],["Seer",1],["SimpleVillager",3]] },
+    { players: 8,  date: "3 d ago",  roles: [["SimpleWerewolf",2],["Seer",1],["Witch",1],["Hunter",1],["Cupid",1],["SimpleVillager",2]] },
+    { players: 10, date: "1 w ago",  roles: [["SimpleWerewolf",2],["BigBadWolf",1],["Seer",1],["Witch",1],["Defender",1],["LittleGirl",1],["SimpleVillager",3],["Thief",1],["SimpleVillager",2]],
+      note: "Thief: 12 cards for 10 players" },
+    { players: 17, date: "2 w ago",  roles: [["SimpleWerewolf",3],["AccursedWolfFather",1],["Seer",1],["Witch",1],["Hunter",1],["Defender",1],["Elder",1],["Fox",1],["TwoSisters",2],["Piper",1],["SimpleVillager",4]] },
+    { players: 30, date: "1 mo ago", roles: [["SimpleWerewolf",5],["BigBadWolf",1],["WhiteWerewolf",1],["AccursedWolfFather",1],["Seer",1],["Witch",1],["Hunter",1],["Defender",1],["LittleGirl",1],["Elder",1],["Fox",1],["BearTamer",1],["KnightWithRustySword",1],["StutteringJudge",1],["TwoSisters",2],["ThreeBrothers",3],["Cupid",1],["WildChild",1],["DevotedServant",1],["Actor",1],["Angel",1],["Piper",1],["PrejudicedManipulator",1],["SimpleVillager",1]] },
+    { players: 9,  date: "2 mo ago", roles: [["SimpleWerewolf",1],["Seer",1],["Witch",1],["Hunter",1],["Defender",1],["Fox",1],["WolfHound",1],["Angel",1],["PrejudicedManipulator",1]],
+      note: "all-distinct edge case: does 🐺 show ×1?" },
+  ];
+  ROLES.WolfHound = { e: "🐕", f: "ambiguous" };
+
+  // merge duplicate role entries, sort by faction then simples-last within villagers
+  function normalized(setup) {
+    const merged = new Map();
+    for (const [k, c] of setup.roles) merged.set(k, (merged.get(k) || 0) + c);
+    return [...merged.entries()].sort((a, b) => {
+      const fa = FACTION_ORDER.indexOf(ROLES[a[0]].f), fb = FACTION_ORDER.indexOf(ROLES[b[0]].f);
+      if (fa !== fb) return fa - fb;
+      const sa = a[0] === "SimpleVillager" ? 1 : 0, sb = b[0] === "SimpleVillager" ? 1 : 0;
+      return sa - sb;
+    });
+  }
+  const glyph = (k, c) => ROLES[k].e + (COUNTED.has(k) && c >= 1 ? `<span class="mult">×${c}</span>` : "");
+
+  const VARIANTS = {
+    A: { name: "Inline strip",
+         note: "Single-line rows: count pill · emoji run (faction-ordered, ×N on simples) · date. Overflows clip with +N.",
+         render(s) {
+           const roles = normalized(s);
+           const MAX = 8;
+           const shown = roles.slice(0, MAX).map(([k, c]) => glyph(k, c)).join(" ");
+           const more = roles.length > MAX ? `<span class="more">+${roles.length - MAX}</span>` : "";
+           return `<div class="row-a"><span class="count-pill">👥 ${s.players}</span><span class="glyphs">${shown}</span>${more}<span class="date">${s.date}</span><span class="chev">›</span></div>`;
+         } },
+    B: { name: "Emoji grid card",
+         note: "Two-line cards: header (players + date), then one tile per role, faction-tinted, count badges on simples. Nothing truncated.",
+         render(s) {
+           const tiles = normalized(s).map(([k, c]) => {
+             const badge = COUNTED.has(k) && c >= 1 ? `<span class="badge">×${c}</span>` : "";
+             return `<span class="tile f-${ROLES[k].f}">${ROLES[k].e}${badge}</span>`;
+           }).join("");
+           return `<div class="row-b"><div class="head"><span class="count-pill">👥 ${s.players} players</span><span class="date">${s.date}</span></div><div class="grid">${tiles}</div></div>`;
+         } },
+    C: { name: "Faction split",
+         note: "Big player numeral, then one emoji line per faction with colored dots, plus a proportion bar (red = wolves).",
+         render(s) {
+           const roles = normalized(s);
+           const byFaction = {};
+           for (const [k, c] of roles) (byFaction[ROLES[k].f] ??= []).push([k, c]);
+           const lines = FACTION_ORDER.filter(f => byFaction[f]).map(f =>
+             `<div class="fr"><span class="dot" style="background:${FACTION_COLOR[f]}"></span><span class="glyphline">${byFaction[f].map(([k, c]) => glyph(k, c)).join(" ")}</span></div>`).join("");
+           const totals = FACTION_ORDER.map(f => (byFaction[f] || []).reduce((n, [, c]) => n + c, 0));
+           const sum = totals.reduce((a, b) => a + b, 0);
+           const bar = FACTION_ORDER.map((f, i) => totals[i] ? `<span style="flex:${totals[i] / sum};background:${FACTION_COLOR[f]}"></span>` : "").join("");
+           return `<div class="row-c"><div class="num"><b>${s.players}</b><span>players</span></div><div class="factions">${lines}<div class="balancebar">${bar}</div></div><span class="date cdate">${s.date}</span></div>`;
+         } },
+  };
+
+  const KEYS = Object.keys(VARIANTS);
+  let current = (location.hash.replace("#", "") || "A").toUpperCase();
+  if (!KEYS.includes(current)) current = "A";
+
+  function render() {
+    const v = VARIANTS[current];
+    document.getElementById("rows").innerHTML = SETUPS.map(v.render).join("");
+    document.getElementById("variant-name").textContent = current;
+    document.getElementById("switch-label").textContent = `${current} — ${v.name}`;
+    document.getElementById("variant-note").textContent = v.note +
+      " · Fixtures: 5p starter, 8p classic, 10p+Thief (12 cards), 17p, 30p max, 9p all-distinct.";
+    try { location.hash = current; } catch { /* data: URL previews block hash navigation */ }
+  }
+  function cycle(d) { current = KEYS[(KEYS.indexOf(current) + d + KEYS.length) % KEYS.length]; render(); }
+  document.getElementById("prev").onclick = () => cycle(-1);
+  document.getElementById("next").onclick = () => cycle(1);
+  document.addEventListener("keydown", e => {
+    if (["INPUT", "TEXTAREA"].includes(document.activeElement.tagName)) return;
+    if (e.key === "ArrowLeft") cycle(-1);
+    if (e.key === "ArrowRight") cycle(1);
+  });
+  render();
+</script>
