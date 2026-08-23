@@ -1598,6 +1598,41 @@ public class GameClientManagerTests
 	}
 
 	[Fact]
+	public void AddStagedPlayer_WhenRosterAtSupportedMaximum_RejectsWithoutEffects()
+	{
+		var store = new RecordingSaveStore();
+		var lobby = LobbySetupMetadataFixture.DefaultState();
+		for (var index = 0; index < GameSessionConfig.MaximumPlayerCount; index++)
+		{
+			lobby.AddPlayer(PlayerNames.GeneratedPlayer(index))
+				.Should().Be(AddPlayerResult.Success);
+		}
+		var originalRoster = lobby.PlayerRoster
+			.Select(player => (player.Id, player.Name))
+			.ToArray();
+		var manager = new GameClientManager(new GameService(), saveStore: store);
+		var lobbyNotifications = 0;
+		var managerNotifications = 0;
+		lobby.SimulationScenarioChanged += (_, _) => lobbyNotifications++;
+		manager.StateChanged += (_, _) => managerNotifications++;
+
+		var accepted = manager.TryAddStagedPlayer(
+			lobby,
+			PlayerNames.GeneratedPlayer(GameSessionConfig.MaximumPlayerCount),
+			out var result);
+
+		accepted.Should().BeFalse();
+		result.Should().Be(AddPlayerResult.PlayerLimitReached);
+		lobby.PlayerRoster
+			.Select(player => (player.Id, player.Name))
+			.Should().Equal(originalRoster);
+		store.SavedPayloads.Should().BeEmpty();
+		store.ClearCount.Should().Be(0);
+		lobbyNotifications.Should().Be(0);
+		managerNotifications.Should().Be(0);
+	}
+
+	[Fact]
 	public void InvalidRosterMembershipEdits_ClearNothingAndChangeNothing()
 	{
 		var store = new RecordingSaveStore();
@@ -3356,6 +3391,7 @@ public class GameClientManagerTests
 		private string? _payload;
 
 		public List<string> SavedPayloads { get; } = new();
+		public int ClearCount { get; private set; }
 
 		public string? Load() => _payload;
 
@@ -3365,7 +3401,11 @@ public class GameClientManagerTests
 			_payload = serializedSession;
 		}
 
-		public void Clear() => _payload = null;
+		public void Clear()
+		{
+			ClearCount++;
+			_payload = null;
+		}
 	}
 
 	[Fact]

@@ -6,7 +6,7 @@ using Werewolves.Core.StateModels.Models.Simulation;
 
 namespace Werewolves.Client.Services;
 
-public enum AddPlayerResult { Success, EmptyName, DuplicateName }
+public enum AddPlayerResult { Success, EmptyName, DuplicateName, PlayerLimitReached }
 
 public enum RoleAffordance { Stepper, Toggle }
 
@@ -144,6 +144,10 @@ public class LobbySetupState
 			StringComparison.OrdinalIgnoreCase)))
 		{
 			return AddPlayerResult.DuplicateName;
+		}
+		if (_current.PlayerRoster.Count >= GameSessionConfig.MaximumPlayerCount)
+		{
+			return AddPlayerResult.PlayerLimitReached;
 		}
 
 		var player = CreatePlayerRosterEntry(normalizedName);

@@ -421,6 +421,31 @@ public class LobbySetupStateTests
 	}
 
 	[Fact]
+	public void AddPlayer_WhenRosterAtSupportedMaximum_RejectsWithoutEffects()
+	{
+		var state = LobbySetupMetadataFixture.DefaultState();
+		for (var index = 0; index < GameSessionConfig.MaximumPlayerCount; index++)
+		{
+			state.AddPlayer(PlayerNames.GeneratedPlayer(index))
+				.Should().Be(AddPlayerResult.Success);
+		}
+		var originalRoster = state.PlayerRoster
+			.Select(player => (player.Id, player.Name))
+			.ToArray();
+		var notifications = 0;
+		state.SimulationScenarioChanged += (_, _) => notifications++;
+
+		var result = state.AddPlayer(
+			PlayerNames.GeneratedPlayer(GameSessionConfig.MaximumPlayerCount));
+
+		result.Should().Be(AddPlayerResult.PlayerLimitReached);
+		state.PlayerRoster
+			.Select(player => (player.Id, player.Name))
+			.Should().Equal(originalRoster);
+		notifications.Should().Be(0);
+	}
+
+	[Fact]
 	public void SimulationScenarioChanged_RaisesOnlyWhenScenarioIdentityMaterialChanges()
 	{
 		var state = LobbySetupMetadataFixture.DefaultState();

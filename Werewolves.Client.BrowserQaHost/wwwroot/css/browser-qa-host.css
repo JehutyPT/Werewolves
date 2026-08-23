@@ -54,19 +54,6 @@ body {
 		font-size: 30px;
 	}
 
-	.phone-frame .ww-add-row {
-		grid-template-columns: 1fr;
-	}
-
-	.phone-frame .ww-roster-item {
-		grid-template-columns: 28px minmax(0, 1fr);
-	}
-
-	.phone-frame .ww-row-actions {
-		grid-column: 1 / -1;
-		justify-content: flex-end;
-	}
-
 	.phone-frame .ww-dashboard-tab {
 		font-size: 11px;
 	}

@@ -17,15 +17,25 @@
 	<form class="ww-roster-form" @onsubmit="AddPlayer" @onsubmit:preventDefault="true">
 		<label for="player-name">@ClientStrings.LobbyRoster_PlayerNameLabel</label>
 		<div class="ww-add-row">
-			<input id="player-name"
-				   type="text"
-				   autocomplete="off"
-				   placeholder="@ClientStrings.LobbyRoster_PlayerNamePlaceholder"
-				   @bind="_draftPlayerName"
+				<input id="player-name"
+					   type="text"
+					   autocomplete="off"
+					   placeholder="@ClientStrings.LobbyRoster_PlayerNamePlaceholder"
+					   @ref="_playerNameInput"
+					   @bind="_draftPlayerName"
 				   @bind:event="oninput" />
-			<button type="submit">@ClientStrings.LobbyRoster_AddButton</button>
-		</div>
-		@if (_validationMessage is not null)
+				<button type="submit"
+						class="ww-add-button"
+						title="@ClientStrings.LobbyRoster_AddButton"
+						aria-label="@ClientStrings.LobbyRoster_AddButton"
+						aria-describedby="@(HasReachedPlayerLimit ? "player-limit-message" : null)"
+						disabled="@HasReachedPlayerLimit">+</button>
+			</div>
+			@if (HasReachedPlayerLimit)
+			{
+				<p id="player-limit-message" class="ww-visually-hidden">@ClientStrings.Validation_PlayerLimitReached</p>
+			}
+			@if (_validationMessage is not null)
 		{
 			<p class="ww-validation" role="alert">@_validationMessage</p>
 		}
@@ -113,6 +123,7 @@
 	public EventCallback OnShowLabs { get; set; }
 
 	private string _draftPlayerName = string.Empty;
+	private ElementReference _playerNameInput;
 	private string? _validationMessage;
 	private List<string> _rosterErrors = new();
 
@@ -124,12 +135,14 @@
 
 	private int MinPlayers => Lobby.MinimumPlayerCount;
 	private bool HasEnoughPlayers => Lobby.PlayerNames.Count >= MinPlayers;
+	private bool HasReachedPlayerLimit =>
+		Lobby.PlayerNames.Count >= GameSessionConfig.MaximumPlayerCount;
 
 	private string PlayerCountLabel => Lobby.PlayerNames.Count == 1
 		? ClientStrings.LobbyRoster_PlayerCountOne
 		: Format(ClientStrings.LobbyRoster_PlayerCountManyFormat, Lobby.PlayerNames.Count);
 
-	private void AddPlayer()
+	private async Task AddPlayer()
 	{
 		var added = Game.TryAddStagedPlayer(
 			Lobby,
@@ -140,6 +153,7 @@
 			_draftPlayerName = string.Empty;
 			_validationMessage = null;
 			_rosterErrors.Clear();
+			await _playerNameInput.FocusAsync();
 			return;
 		}
 
@@ -147,6 +161,7 @@
 		{
 			AddPlayerResult.EmptyName => ClientStrings.Validation_EmptyPlayerName,
 			AddPlayerResult.DuplicateName => ClientStrings.Validation_DuplicatePlayerName,
+			AddPlayerResult.PlayerLimitReached => ClientStrings.Validation_PlayerLimitReached,
 			_ => null
 		};
 	}

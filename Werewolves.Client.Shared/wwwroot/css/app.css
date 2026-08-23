@@ -147,6 +147,25 @@ button {
   text-transform: uppercase;
 }
 
+.ww-add-button {
+  width: 54px;
+  padding: 0;
+  font-size: 28px;
+  letter-spacing: 0;
+  line-height: 1;
+  text-transform: none;
+}
+
+.ww-add-button:focus-visible {
+  outline: 2px solid var(--ww-accent);
+  outline-offset: 2px;
+}
+
+.ww-add-button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
 .ww-validation {
   margin: 0;
   color: var(--ww-faction-werewolf);
@@ -187,11 +206,11 @@ button {
 
 .ww-roster-item {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) auto;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
-  min-height: 64px;
-  padding: 10px;
+  gap: 8px;
+  min-height: 48px;
+  padding: 4px 6px;
   border: 1px solid var(--ww-border-neutral);
   border-radius: var(--ww-radius-md);
   background: var(--ww-surface);
@@ -210,15 +229,23 @@ button {
 }
 
 .ww-player-name {
-  min-width: 0;
   overflow-wrap: anywhere;
   color: var(--ww-text);
   font-size: 17px;
   font-weight: 700;
 }
 
+.ww-roster-item .ww-player-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .ww-row-actions {
   display: flex;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 6px;
 }
@@ -1014,19 +1041,6 @@ button.ww-instruction-block {
 @media (max-width: 390px) {
   .ww-lobby-header h1 {
     font-size: 30px;
-  }
-
-  .ww-add-row {
-    grid-template-columns: 1fr;
-  }
-
-  .ww-roster-item {
-    grid-template-columns: 28px minmax(0, 1fr);
-  }
-
-  .ww-row-actions {
-    grid-column: 1 / -1;
-    justify-content: flex-end;
   }
 
   .ww-dashboard-tab {
