@@ -8,8 +8,6 @@ using Werewolves.Client.Components.Pages;
 using Werewolves.Client.Resources;
 using Werewolves.Client.Services;
 using Werewolves.Client.Tests.Helpers;
-using Werewolves.Core.GameLogic.RolePowers;
-using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
@@ -1156,16 +1154,14 @@ public sealed class RoleKnowledgeFlowBunitTests
 	public void BigBadWolfNoTargetFlow_RendersPublicSleepWithoutPrivateTargetControl()
 	{
 		using var context = new ModeratorComponentTestContext();
-		context.Services.AddSingleton(
-			new GameService(new BigBadWolfPowerUnavailablePolicy()));
 		var manager = context.Services.GetRequiredService<GameClientManager>();
 		var start = manager.StartGame(
 			PlayerNames.DefaultFive,
 			[
 				MainRoleType.SimpleWerewolf,
 				MainRoleType.BigBadWolf,
-				MainRoleType.SimpleVillager,
-				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleWerewolf,
 				MainRoleType.SimpleVillager
 			]);
 		manager.ProcessInput(start.CreateResponse()).IsSuccess.Should().BeTrue();
@@ -1179,7 +1175,12 @@ public sealed class RoleKnowledgeFlowBunitTests
 		var factionObservation = manager.CurrentInstruction
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
 		manager.ProcessInput(factionObservation.CreateResponse(
-				[players[0].Id, bigBadWolf.Id]))
+				[
+					players[0].Id,
+					bigBadWolf.Id,
+					players[2].Id,
+					players[3].Id
+				]))
 			.IsSuccess.Should().BeTrue();
 		var victimSelection = manager.CurrentInstruction
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
@@ -1626,14 +1627,5 @@ public sealed class RoleKnowledgeFlowBunitTests
 
 		throw new InvalidOperationException(
 			"The Stuttering Judge game did not reach the first Day debate.");
-	}
-
-	private sealed class BigBadWolfPowerUnavailablePolicy
-		: IRolePowerAvailabilityPolicy
-	{
-		public RolePowerAvailabilityResult Evaluate(RolePowerAttempt attempt) =>
-			attempt.SourceRole == MainRoleType.BigBadWolf
-				? RolePowerAvailabilityResult.Denied
-				: RolePowerAvailabilityResult.Allowed;
 	}
 }
