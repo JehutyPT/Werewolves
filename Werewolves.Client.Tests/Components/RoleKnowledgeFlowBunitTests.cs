@@ -8,6 +8,8 @@ using Werewolves.Client.Components.Pages;
 using Werewolves.Client.Resources;
 using Werewolves.Client.Services;
 using Werewolves.Client.Tests.Helpers;
+using Werewolves.Core.GameLogic.RolePowers;
+using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
@@ -130,16 +132,19 @@ public sealed class RoleKnowledgeFlowBunitTests
 
 		var observation = manager.CurrentInstruction
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		const int exactAgentCount = 1;
+		var observationPrompt = GameStrings.WerewolfFactionAgentObservationPrompt
+			.Format(exactAgentCount);
 		var wakeAnnouncement = GameStrings.RoleHoldersWakeUp.Format(
 			GameStrings.WerewolvesGroupName);
 		observation.Semantic.Should().Be(
 			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
 		observation.PublicAnnouncement.Should().Be(wakeAnnouncement);
 		observation.PrivateInstruction.Should()
-			.Contain(GameStrings.WerewolfFactionAgentObservationPrompt)
+			.Contain(observationPrompt)
 			.And.Contain(GameStrings.LittleGirlOpeningGuidance);
 		observation.CountConstraint.Should().Be(
-			NumberRangeConstraint.AtLeast(1));
+			NumberRangeConstraint.Exact(exactAgentCount));
 		observation.AffectedPlayerIds.Should().BeNull();
 
 		var dashboard = context.RenderModeratorComponent<DashboardPage>();
@@ -147,7 +152,7 @@ public sealed class RoleKnowledgeFlowBunitTests
 			.Contain(wakeAnnouncement);
 		dashboard.Find(PrivateInstructionSelector).Click();
 		dashboard.Find(PrivateInstructionSelector).TextContent.Should()
-			.Contain(GameStrings.WerewolfFactionAgentObservationPrompt)
+			.Contain(observationPrompt)
 			.And.Contain(GameStrings.LittleGirlOpeningGuidance);
 		var playerOptions = dashboard.FindAll(PlayerOptionSelector);
 		playerOptions.Should().HaveCount(players.Length - 1);
@@ -1151,6 +1156,8 @@ public sealed class RoleKnowledgeFlowBunitTests
 	public void BigBadWolfNoTargetFlow_RendersPublicSleepWithoutPrivateTargetControl()
 	{
 		using var context = new ModeratorComponentTestContext();
+		context.Services.AddSingleton(
+			new GameService(new BigBadWolfPowerUnavailablePolicy()));
 		var manager = context.Services.GetRequiredService<GameClientManager>();
 		var start = manager.StartGame(
 			PlayerNames.DefaultFive,
@@ -1172,7 +1179,7 @@ public sealed class RoleKnowledgeFlowBunitTests
 		var factionObservation = manager.CurrentInstruction
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
 		manager.ProcessInput(factionObservation.CreateResponse(
-				[players[0].Id, bigBadWolf.Id, players[2].Id, players[3].Id]))
+				[players[0].Id, bigBadWolf.Id]))
 			.IsSuccess.Should().BeTrue();
 		var victimSelection = manager.CurrentInstruction
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
@@ -1619,5 +1626,14 @@ public sealed class RoleKnowledgeFlowBunitTests
 
 		throw new InvalidOperationException(
 			"The Stuttering Judge game did not reach the first Day debate.");
+	}
+
+	private sealed class BigBadWolfPowerUnavailablePolicy
+		: IRolePowerAvailabilityPolicy
+	{
+		public RolePowerAvailabilityResult Evaluate(RolePowerAttempt attempt) =>
+			attempt.SourceRole == MainRoleType.BigBadWolf
+				? RolePowerAvailabilityResult.Denied
+				: RolePowerAvailabilityResult.Allowed;
 	}
 }

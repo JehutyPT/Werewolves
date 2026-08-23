@@ -229,7 +229,7 @@ public sealed class ActorBorrowedPowerBunitTests
 				return;
 			case ActorBorrowedPowerFamily.LittleGirl:
 				instruction.Should().BeOfType<SelectPlayersInstruction>()
-					.Which.CountConstraint.Should().Be(NumberRangeConstraint.AtLeast(1));
+					.Which.CountConstraint.Should().Be(NumberRangeConstraint.Exact(1));
 				return;
 			case ActorBorrowedPowerFamily.Defender:
 				instruction.Should().BeOfType<SelectPlayersInstruction>()
