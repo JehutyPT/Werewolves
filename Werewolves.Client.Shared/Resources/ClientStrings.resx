@@ -703,4 +703,40 @@
   <data name="RoleSelection_ReviewPublicGroupPartitionButton" xml:space="preserve">
     <value>Review or change public groups</value>
   </data>
+  <data name="Landing_NewGameButton" xml:space="preserve">
+    <value>New Game Session</value>
+  </data>
+  <data name="Landing_ContinueButton" xml:space="preserve">
+    <value>Continue Game Session</value>
+  </data>
+  <data name="Landing_NewGameDialogTitle" xml:space="preserve">
+    <value>Start a new Game Session?</value>
+  </data>
+  <data name="Landing_NewGameDialogDescription" xml:space="preserve">
+    <value>The current Game Session will be abandoned.</value>
+  </data>
+  <data name="Landing_NewGameCancelButton" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="Landing_NewGameConfirmButton" xml:space="preserve">
+    <value>Start new Game Session</value>
+  </data>
+  <data name="LobbyRoster_BackButton" xml:space="preserve">
+    <value>Back to home</value>
+  </data>
+  <data name="Landing_StepLabel" xml:space="preserve">
+    <value>Home</value>
+  </data>
+  <data name="Landing_Title" xml:space="preserve">
+    <value>Werewolves Moderator</value>
+  </data>
+  <data name="Landing_Description" xml:space="preserve">
+    <value>Continue a Game Session or prepare a new one for the table.</value>
+  </data>
+  <data name="Landing_ContinueDescription" xml:space="preserve">
+    <value>Return to the recovered Game Session and its pending Moderator Instruction.</value>
+  </data>
+  <data name="Landing_NewGameDescription" xml:space="preserve">
+    <value>Prepare the Players and Role Composition for a new Game Session.</value>
+  </data>
 </root>

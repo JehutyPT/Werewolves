@@ -52,8 +52,25 @@ public class ClientStringsTests
 		nameof(ClientStrings.RoleSelection_ReviewPublicGroupPartitionButton)
 	];
 
+	private static readonly string[] LandingUiResourceKeys =
+	[
+		nameof(ClientStrings.Landing_StepLabel),
+		nameof(ClientStrings.Landing_Title),
+		nameof(ClientStrings.Landing_Description),
+		nameof(ClientStrings.Landing_ContinueDescription),
+		nameof(ClientStrings.Landing_NewGameDescription),
+		nameof(ClientStrings.Landing_ContinueButton),
+		nameof(ClientStrings.Landing_NewGameButton),
+		nameof(ClientStrings.Landing_NewGameDialogTitle),
+		nameof(ClientStrings.Landing_NewGameDialogDescription),
+		nameof(ClientStrings.Landing_NewGameCancelButton),
+		nameof(ClientStrings.Landing_NewGameConfirmButton),
+		nameof(ClientStrings.LobbyRoster_BackButton)
+	];
+
 	private static readonly string[] LocalizedUiResourceKeys =
 	[
+		.. LandingUiResourceKeys,
 		nameof(ClientStrings.LobbyRoster_Title),
 		nameof(ClientStrings.Validation_EmptyPlayerName),
 		nameof(ClientStrings.RoleSelection_Title),

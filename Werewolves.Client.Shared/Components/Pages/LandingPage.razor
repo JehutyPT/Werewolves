@@ -1,0 +1,102 @@
+<main class="ww-app-shell ww-landing"
+	  aria-labelledby="landing-title"
+	  data-testid="@ModeratorUiTestIds.LandingShell">
+	<header class="ww-landing-header">
+		<p class="ww-step-label">@ClientStrings.Landing_StepLabel</p>
+		<h1 id="landing-title">@ClientStrings.Landing_Title</h1>
+		<p class="ww-page-copy">@ClientStrings.Landing_Description</p>
+	</header>
+
+	<section class="ww-landing-actions">
+		@if (CanContinue)
+		{
+			<article class="ww-landing-card">
+				<div>
+					<h2>@ClientStrings.Landing_ContinueButton</h2>
+					<p>@ClientStrings.Landing_ContinueDescription</p>
+				</div>
+				<button type="button"
+						class="ww-btn-primary"
+						data-testid="@ModeratorUiTestIds.LandingContinueButton"
+						@onclick="OnContinue">
+					@ClientStrings.Landing_ContinueButton
+				</button>
+			</article>
+		}
+
+		<article class="ww-landing-card">
+			<div>
+				<h2>@ClientStrings.Landing_NewGameButton</h2>
+				<p>@ClientStrings.Landing_NewGameDescription</p>
+			</div>
+			<button type="button"
+					class="ww-btn-primary"
+					data-testid="@ModeratorUiTestIds.LandingNewGameButton"
+					@onclick="BeginNewGame">
+				@ClientStrings.Landing_NewGameButton
+			</button>
+		</article>
+	</section>
+
+	@if (_showNewGameConfirmation)
+	{
+		<div class="ww-dialog-backdrop">
+			<section class="ww-dialog"
+					 role="dialog"
+					 aria-modal="true"
+					 aria-labelledby="landing-new-game-dialog-title">
+				<h2 id="landing-new-game-dialog-title">@ClientStrings.Landing_NewGameDialogTitle</h2>
+				<p>@ClientStrings.Landing_NewGameDialogDescription</p>
+				<div class="ww-action-pair">
+					<button type="button"
+							class="ww-secondary-button"
+							data-testid="@ModeratorUiTestIds.LandingNewGameCancel"
+							@onclick="CancelNewGame">
+						@ClientStrings.Landing_NewGameCancelButton
+					</button>
+					<button type="button"
+							class="ww-btn-primary"
+							data-testid="@ModeratorUiTestIds.LandingNewGameConfirm"
+							@onclick="ConfirmNewGame">
+						@ClientStrings.Landing_NewGameConfirmButton
+					</button>
+				</div>
+			</section>
+		</div>
+	}
+</main>
+
+@code {
+	private bool _showNewGameConfirmation;
+
+	[Parameter]
+	public bool CanContinue { get; set; }
+
+	[Parameter]
+	public EventCallback OnContinue { get; set; }
+
+	[Parameter]
+	public EventCallback OnNewGame { get; set; }
+
+	private Task BeginNewGame()
+	{
+		if (CanContinue)
+		{
+			_showNewGameConfirmation = true;
+			return Task.CompletedTask;
+		}
+
+		return OnNewGame.InvokeAsync();
+	}
+
+	private void CancelNewGame()
+	{
+		_showNewGameConfirmation = false;
+	}
+
+	private Task ConfirmNewGame()
+	{
+		_showNewGameConfirmation = false;
+		return OnNewGame.InvokeAsync();
+	}
+}

@@ -36,6 +36,7 @@ public sealed class PublicGroupPartitionFlowBunitTests
 	{
 		using var context = new ModeratorComponentTestContext();
 		var cut = context.RenderModeratorComponent<Routes>();
+		cut.Find(TestId(ModeratorUiTestIds.LandingNewGameButton)).Click();
 
 		foreach (var playerName in new[] { "Ana", "Bruno", "Catarina", "Diana", "Eduardo" })
 		{
@@ -65,6 +66,7 @@ public sealed class PublicGroupPartitionFlowBunitTests
 		var lobby = context.Services.GetRequiredService<LobbySetupState>();
 		var game = context.Services.GetRequiredService<GameClientManager>();
 		var cut = context.RenderModeratorComponent<Routes>();
+		cut.Find(TestId(ModeratorUiTestIds.LandingNewGameButton)).Click();
 
 		OpenNonThiefPrejudicedManipulatorPartition(cut);
 		ClientStrings.Culture!.Name.Should().Be(
@@ -162,6 +164,7 @@ public sealed class PublicGroupPartitionFlowBunitTests
 		using var context = new ModeratorComponentTestContext();
 		var lobby = context.Services.GetRequiredService<LobbySetupState>();
 		var cut = context.RenderModeratorComponent<Routes>();
+		cut.Find(TestId(ModeratorUiTestIds.LandingNewGameButton)).Click();
 		var playerNames = new[] { "Ana", "Bruno", "Catarina", "Diana", "Eduardo" };
 
 		foreach (var playerName in playerNames)
@@ -213,6 +216,7 @@ public sealed class PublicGroupPartitionFlowBunitTests
 		using var context = new ModeratorComponentTestContext();
 		var lobby = context.Services.GetRequiredService<LobbySetupState>();
 		var cut = context.RenderModeratorComponent<Routes>();
+		cut.Find(TestId(ModeratorUiTestIds.LandingNewGameButton)).Click();
 		OpenNonThiefPrejudicedManipulatorPartition(cut);
 		var roster = lobby.PlayerRoster.ToArray();
 		AssignPlayer(cut, playerIndex: 0, ModeratorUiTestIds.PublicGroupPartitionFirstChoice);
@@ -256,6 +260,7 @@ public sealed class PublicGroupPartitionFlowBunitTests
 		context.Services.AddSingleton<IGameSessionSaveStore>(store);
 		var lobby = context.Services.GetRequiredService<LobbySetupState>();
 		var cut = context.RenderModeratorComponent<Routes>();
+		cut.Find(TestId(ModeratorUiTestIds.LandingNewGameButton)).Click();
 		OpenNonThiefPrejudicedManipulatorPartition(cut);
 		AssignPlayer(cut, playerIndex: 0, ModeratorUiTestIds.PublicGroupPartitionFirstChoice);
 		for (var index = 1; index < lobby.PlayerRoster.Count; index++)
@@ -290,6 +295,7 @@ public sealed class PublicGroupPartitionFlowBunitTests
 		using var context = new ModeratorComponentTestContext();
 		var lobby = context.Services.GetRequiredService<LobbySetupState>();
 		var cut = context.RenderModeratorComponent<Routes>();
+		cut.Find(TestId(ModeratorUiTestIds.LandingNewGameButton)).Click();
 		foreach (var playerName in new[] { "Ana", "Bruno", "Catarina", "Diana", "Eduardo" })
 		{
 			cut.Find("#player-name").Input(playerName);
@@ -329,6 +335,7 @@ public sealed class PublicGroupPartitionFlowBunitTests
 		using var context = new ModeratorComponentTestContext();
 		var lobby = context.Services.GetRequiredService<LobbySetupState>();
 		var cut = context.RenderModeratorComponent<Routes>();
+		cut.Find(TestId(ModeratorUiTestIds.LandingNewGameButton)).Click();
 		foreach (var playerName in new[] { "Ana", "Bruno", "Catarina", "Diana", "Eduardo" })
 		{
 			cut.Find("#player-name").Input(playerName);
@@ -376,6 +383,7 @@ public sealed class PublicGroupPartitionFlowBunitTests
 		using var context = new ModeratorComponentTestContext();
 		var lobby = context.Services.GetRequiredService<LobbySetupState>();
 		var cut = context.RenderModeratorComponent<Routes>();
+		cut.Find(TestId(ModeratorUiTestIds.LandingNewGameButton)).Click();
 		foreach (var playerName in new[] { "Ana", "Bruno", "Catarina", "Diana", "Eduardo" })
 		{
 			cut.Find("#player-name").Input(playerName);
@@ -420,6 +428,7 @@ public sealed class PublicGroupPartitionFlowBunitTests
 			sp.GetRequiredService<TimeProvider>()));
 		var lobby = context.Services.GetRequiredService<LobbySetupState>();
 		var cut = context.RenderModeratorComponent<Routes>();
+		cut.Find(TestId(ModeratorUiTestIds.LandingNewGameButton)).Click();
 		foreach (var playerName in new[] { "Ana", "Bruno", "Catarina", "Diana", "Eduardo" })
 		{
 			cut.Find("#player-name").Input(playerName);
@@ -465,6 +474,7 @@ public sealed class PublicGroupPartitionFlowBunitTests
 		context.Services.AddSingleton<IGameSessionSaveStore>(store);
 		var lobby = context.Services.GetRequiredService<LobbySetupState>();
 		var cut = context.RenderModeratorComponent<Routes>();
+		cut.Find(TestId(ModeratorUiTestIds.LandingNewGameButton)).Click();
 		OpenNonThiefPrejudicedManipulatorPartition(cut);
 		AssignPlayer(cut, playerIndex: 0, ModeratorUiTestIds.PublicGroupPartitionFirstChoice);
 		for (var index = 1; index < lobby.PlayerRoster.Count; index++)
@@ -514,6 +524,7 @@ public sealed class PublicGroupPartitionFlowBunitTests
 		context.Services.AddSingleton<IGameSessionSaveStore>(store);
 		var lobby = context.Services.GetRequiredService<LobbySetupState>();
 		var cut = context.RenderModeratorComponent<Routes>();
+		cut.Find(TestId(ModeratorUiTestIds.LandingNewGameButton)).Click();
 		OpenNonThiefPrejudicedManipulatorPartition(cut);
 		AssignPlayer(cut, playerIndex: 0, ModeratorUiTestIds.PublicGroupPartitionFirstChoice);
 		for (var index = 1; index < lobby.PlayerRoster.Count; index++)
@@ -554,6 +565,7 @@ public sealed class PublicGroupPartitionFlowBunitTests
 		using var context = new ModeratorComponentTestContext();
 		var lobby = context.Services.GetRequiredService<LobbySetupState>();
 		var cut = context.RenderModeratorComponent<Routes>();
+		cut.Find(TestId(ModeratorUiTestIds.LandingNewGameButton)).Click();
 		OpenNonThiefPrejudicedManipulatorPartition(cut);
 
 		cut.FindAll(TestId(ModeratorUiTestIds.PublicGroupPartitionFirstChoice))

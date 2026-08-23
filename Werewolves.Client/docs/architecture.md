@@ -59,6 +59,7 @@
 ## 4. Navigation & Layout
 
 ### 4.1. Pages
+*   **Landing:** Cold-process launch hub. It renders before Lobby, Dashboard, or Victory, exposes Continue only for a recovered active or finished Game Session, and guards New Game Session with confirmation when abandonment is required. New Game Session enters the current in-process Lobby without resetting it; the Roster can return to Landing while preserving that Lobby. Ordinary foreground resume keeps the current surface, and Dashboard/Victory return-to-Lobby continues to render the Roster directly.
 *   **Lobby:** Game setup. Roster definition and Role Composition selection remain the first two steps. Conditional configuration then appears only when required: Actor Setup Cards when Actor is reachable from the committed setup, and the public two-group partition when Prejudiced Manipulator is reachable. These are lobby inputs, not Core Moderator Instructions; the client records the Moderator-created physical setup and never generates cards or balances groups. The current client preserves completed inputs on back-navigation. Before Lobby Exit, accepted Role Lock-In and Actor Setup Card artifacts remain replaceable; an equivalent replacement retains exact-current Safety-Screening, while a changed Canonical Simulation Scenario invalidates it. Navigation reaches Dashboard only after the applicable configuration is valid and `GameSessionConfig` is fulfilled. The landed Thief-specific Role Lock-In, partition, branch-screening, and card-zone flow is described below.
 *   **Dashboard:** Gameplay. Three tabs — Roster, Action, Stats.
 
@@ -162,7 +163,7 @@
 ## 9. Lifecycle
 
 *   **Wake Lock:** Active during Lobby and Dashboard.
-*   **Persistence:** Attempt to save after each successful `ProcessInput()`. Load on app start / `App.OnResume`. If a save file exists on launch, resume; otherwise show Lobby.
+*   **Persistence:** Attempt to save after each successful `ProcessInput()`. On cold process launch, recover the single-slot payload before the Landing surface is shown: a staged Lobby is decoded, validated, and published eagerly, while an active or finished Game Session makes Continue available without navigating into it. Empty or unreadable recovery produces no Continue action. Ordinary `App.OnResume` preserves the current in-process surface and state.
 *   **Stable recovery boundary:** A save attempt does not imply durable game progress advanced. `IGameSession.Serialize()` returns the Core's latest stable Main Phase recovery snapshot, so current-phase tail work remains volatile until Core captures a new boundary.
 *   **Transient state is not serialized** (see ADR-0002). On process kill and Rehydration, active sub-phase stage, active listener, and listener state are discarded; the game resumes from the committed boundary instruction and minimal phase cursor.
 *   **Committed response checkpoints:** A successful Thief choice or decline creates a narrow stable checkpoint atomically with its state transition and pending sleep instruction, so an already completed exchange is never requested or applied twice. An accepted Devoted Servant self-reveal similarly resumes only at the private printed-Role record, and an accepted swap resumes the same Vote Target's resolution; neither checkpoint claims arbitrary live-listener serialization.

@@ -226,6 +226,7 @@ public class RoleSelectionEvaluationTests
 			capability: SimulatorCapability.FullProbability);
 		SeedValidLobby(context.Services.GetRequiredService<LobbySetupState>());
 		var cut = context.RenderModeratorComponent<Routes>();
+		cut.Find(TestId(ModeratorUiTestIds.LandingNewGameButton)).Click();
 		cut.FindAll("button")
 			.Single(button => button.TextContent.Contains(ClientStrings.LobbyRoster_ContinueToRolesButton))
 			.Click();

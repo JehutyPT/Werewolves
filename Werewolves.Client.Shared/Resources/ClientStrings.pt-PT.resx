@@ -700,4 +700,40 @@
   <data name="RoleSelection_ReviewPublicGroupPartitionButton" xml:space="preserve">
     <value>Rever ou alterar grupos públicos</value>
   </data>
+  <data name="Landing_NewGameButton" xml:space="preserve">
+    <value>Nova sessão de jogo</value>
+  </data>
+  <data name="Landing_ContinueButton" xml:space="preserve">
+    <value>Continuar sessão de jogo</value>
+  </data>
+  <data name="Landing_NewGameDialogTitle" xml:space="preserve">
+    <value>Iniciar uma nova sessão de jogo?</value>
+  </data>
+  <data name="Landing_NewGameDialogDescription" xml:space="preserve">
+    <value>A sessão de jogo atual será abandonada.</value>
+  </data>
+  <data name="Landing_NewGameCancelButton" xml:space="preserve">
+    <value>Cancelar</value>
+  </data>
+  <data name="Landing_NewGameConfirmButton" xml:space="preserve">
+    <value>Iniciar nova sessão de jogo</value>
+  </data>
+  <data name="LobbyRoster_BackButton" xml:space="preserve">
+    <value>Voltar ao início</value>
+  </data>
+  <data name="Landing_StepLabel" xml:space="preserve">
+    <value>Início</value>
+  </data>
+  <data name="Landing_Title" xml:space="preserve">
+    <value>Moderador de Lobisomem</value>
+  </data>
+  <data name="Landing_Description" xml:space="preserve">
+    <value>Continue uma sessão de jogo ou prepare uma nova para a mesa.</value>
+  </data>
+  <data name="Landing_ContinueDescription" xml:space="preserve">
+    <value>Regresse à sessão de jogo recuperada e à instrução pendente do Moderador.</value>
+  </data>
+  <data name="Landing_NewGameDescription" xml:space="preserve">
+    <value>Prepare os jogadores e a composição de papéis para uma nova sessão de jogo.</value>
+  </data>
 </root>

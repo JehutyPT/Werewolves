@@ -24,8 +24,10 @@ public sealed class PostGameLobbyPrefillBunitTests
 		context.Services.GetRequiredService<GameClientManager>().StartGame(lobby);
 		var cut = context.RenderModeratorComponent<Routes>();
 
+		cut.Find(TestId(ModeratorUiTestIds.LandingContinueButton)).Click();
 		cut.Find(TestId(ModeratorUiTestIds.AbandonGameButton)).Click();
 
+		cut.FindAll(TestId(ModeratorUiTestIds.LandingShell)).Should().BeEmpty();
 		AssertPrefilledLobby(cut, DashboardRoleCounts);
 	}
 
@@ -39,10 +41,12 @@ public sealed class PostGameLobbyPrefillBunitTests
 		PlayToWerewolfVictoryAtDawn(manager, startInstruction);
 		var cut = context.RenderModeratorComponent<Routes>();
 
+		cut.Find(TestId(ModeratorUiTestIds.LandingContinueButton)).Click();
 		FindButtonByRenderedAccessibleName(
 			cut,
 			ClientStrings.Victory_ReturnToLobbyButton).Click();
 
+		cut.FindAll(TestId(ModeratorUiTestIds.LandingShell)).Should().BeEmpty();
 		AssertPrefilledLobby(cut, VictoryRoleCounts);
 	}
 
@@ -201,7 +205,7 @@ public sealed class PostGameLobbyPrefillBunitTests
 				(button.GetAttribute(ClientTestReferences.Html.Attributes.AriaLabel)
 					?? button.TextContent.Trim()) == accessibleName);
 
-	private static void PlayToWerewolfVictoryAtDawn(
+	internal static void PlayToWerewolfVictoryAtDawn(
 		GameClientManager manager,
 		StartGameConfirmationInstruction startInstruction)
 	{

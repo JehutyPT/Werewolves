@@ -31,6 +31,101 @@ button {
   background: var(--ww-bg);
 }
 
+.ww-landing {
+  display: grid;
+  align-content: start;
+  gap: 28px;
+  padding-top: max(28px, env(safe-area-inset-top));
+}
+
+.ww-landing-header {
+  max-width: 40rem;
+}
+
+.ww-landing-header h1 {
+  margin: 0;
+  color: var(--ww-text);
+  font-size: clamp(34px, 8vw, 52px);
+  font-weight: 800;
+  line-height: 1.02;
+}
+
+.ww-landing-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 14px;
+  width: 100%;
+  max-width: 52rem;
+}
+
+.ww-landing-card {
+  min-height: 230px;
+  border: 1px solid var(--ww-border-neutral);
+  border-radius: var(--ww-radius-card);
+  display: grid;
+  align-content: space-between;
+  gap: 24px;
+  padding: var(--ww-card-px);
+  background: var(--ww-surface);
+}
+
+.ww-landing-card h2 {
+  margin: 0;
+  color: var(--ww-text);
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.ww-landing-card p {
+  margin: 10px 0 0;
+  color: var(--ww-text-dim);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.ww-dialog-backdrop {
+  position: fixed;
+  z-index: 50;
+  inset: 0;
+  display: grid;
+  align-items: end;
+  padding: var(--ww-page-px);
+  background: color-mix(in srgb, var(--ww-bg) 84%, transparent);
+  backdrop-filter: blur(3px);
+}
+
+.ww-dialog {
+  width: min(100%, 30rem);
+  margin: 0 auto max(var(--ww-page-px), env(safe-area-inset-bottom));
+  border: 1px solid var(--ww-border-strong);
+  border-radius: var(--ww-radius-card);
+  padding: var(--ww-card-px);
+  background: var(--ww-surface-hi);
+  box-shadow: var(--ww-glow-accent);
+}
+
+.ww-dialog h2 {
+  margin: 0;
+  color: var(--ww-text);
+  font-size: 22px;
+}
+
+.ww-dialog p {
+  margin: 12px 0 22px;
+  color: var(--ww-text-dim);
+  line-height: 1.5;
+}
+
+@media (min-width: 560px) {
+  .ww-dialog-backdrop {
+    align-items: center;
+  }
+
+  .ww-dialog {
+    margin-bottom: 0;
+  }
+}
+
 .ww-lobby-header {
   position: sticky;
   top: 0;
