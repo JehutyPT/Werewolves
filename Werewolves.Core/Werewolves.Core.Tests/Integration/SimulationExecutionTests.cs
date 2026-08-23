@@ -1768,11 +1768,19 @@ public class SimulationExecutionTests : DiagnosticTestBase
 			SimulatorCapability.SafetyScreening,
 			identity,
 			runNumber: 17);
+		var batch = executor.ExecuteBatch(
+			scenario,
+			SimulatorCapability.SafetyScreening,
+			identity,
+			runCount: 16);
 
 		first.Should().BeOfType<CompletedSimulationRun>();
 		first.RunSeedMaterial.CompatibilityIdentity.Profile.Should()
 			.Be(SimulatorCapability.SafetyScreening.Identity);
 		replay.Should().Be(first);
+		batch.CompletedRunCount.Should().Be(16);
+		batch.IncompleteRunCount.Should().Be(0);
+		batch.Records.Should().OnlyContain(run => run is CompletedSimulationRun);
 		MarkTestCompleted();
 	}
 
