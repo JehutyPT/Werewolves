@@ -25,11 +25,19 @@ When a Role specialization is silent, the shared interaction rules apply.
 ### Participation and Role Identification
 
 - **Role Identification** privately records the complete living holder set observed during an exact-Role call. It neither assigns Character Cards nor reveals the Role publicly.
-- **Faction Agent Group Observation** privately records the complete non-empty group observed during a collective Faction call. It does not identify exact Roles.
+- **Faction Agent Group Observation** privately records the complete group observed during a collective Faction call. Its required cardinality is defined below, and it does not identify exact Roles.
 - **Role Reveal** records a public physical reveal. It changes public knowledge, not current Role.
 - An instruction that names, wakes, or privately addresses an exact Role holder requires an exact holder set. At the first genuine Role step that needs that set, the app requests Role Identification only while it is unknown. A known set suppresses only repeated identification; any remaining action, recognition, communication, feedback, or sleep step still occurs.
 - When the app knows that no living Player can answer a scheduled Night Role call, it omits that entire call. This rule does not suppress public reveals, Elimination reactions, automatic consequences, or other non-Night exchanges. An unknown participant set is not treated as empty.
 - An explicitly named identification-only slot occurs at its stated time and is omitted when the required identity is already known.
+
+### Faction Agent Group Observation
+
+- At the initial all-alive boundary, after earlier same-night effects have committed, the app derives the exact required cardinality for the Werewolf Faction Agent group from living committed Agents plus active agency-capable cards not already accounted to a committed Agent. It asks the Moderator to record the complete group of exactly the required number of Players.
+- The cardinality validates only whether the observation is complete. The observation establishes Player-specific Faction Agent membership; the cardinality does not identify exact Roles, Players, Beneficiaries, or a durable count or provenance fact.
+- If a dead or otherwise unresolved seat makes that cardinality merely an upper bound, the app neither offers nor accepts the observation and commits nothing. At the supported boundary, an invalid, stale, or wrong-sized response is rejected before mutation and leaves the same instruction pending.
+- A discrepancy with the physical wake group fails closed without a Moderator override or automatic correction of the Role Composition or committed facts.
+- The required count appears only in Moderator-private guidance and never appears in public-table copy or public history. Its provenance remains private as well.
 
 ### Generic Role Reveal
 
@@ -74,7 +82,7 @@ When a Role specialization is silent, the shared interaction rules apply.
 |---|---|
 | **Continue acknowledgment** | Confirm that the instructed announcement, feedback, or physical step is complete. |
 | **Identify exactly N Players** | Record the complete observed set of N exact-Role holders. |
-| **Observe a Faction Agent group** | Record the complete observed non-empty group for one Faction operation without identifying exact Roles. |
+| **Observe a Faction Agent group** | At a supported boundary, record the complete observed group of exactly the required number for one Faction operation without identifying exact Roles. |
 | **Select exactly one Player** | Record one Player chosen from the current legal set. |
 | **Select zero or one Player** | Record one legal Player or a permitted decline. |
 | **Select the required number** | Record the number of distinct Players required by the current state. |

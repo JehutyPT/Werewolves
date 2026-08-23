@@ -122,9 +122,11 @@ public sealed class WhiteWerewolfRecoveryTests
 		builder.ArrangeKnownRole(
 			whiteWerewolf.Id,
 			MainRoleType.WhiteWerewolf);
-		builder.ArrangeEliminatedPlayer(whiteWerewolf.Id);
+		builder.ArrangeCurrentRole(
+			whiteWerewolf.Id,
+			MainRoleType.SimpleVillager);
 		builder.ArrangeExplicitFactionTransition(
-			"test-dead-white-werewolf-agent",
+			"test-transitioned-white-werewolf-agent",
 			FactionFact.Agent(
 				whiteWerewolf.Id,
 				Faction.Werewolf,
@@ -133,6 +135,12 @@ public sealed class WhiteWerewolfRecoveryTests
 					session.TurnNumber,
 					session.GetCurrentPhase(),
 					session.GameHistoryLog.Count())));
+		whiteWerewolf.State.ModeratorKnownRole.Should().Be(
+			MainRoleType.WhiteWerewolf);
+		whiteWerewolf.State.CurrentRole.Should().Be(
+			MainRoleType.SimpleVillager);
+		session.GetPlayers().Should().NotContain(player =>
+			player.State.CurrentRole == MainRoleType.WhiteWerewolf);
 		session.RoleInPlayCount(MainRoleType.WhiteWerewolf).Should().Be(1);
 		builder.ConfirmGameStart();
 		builder.ConfirmNightStart();
@@ -140,7 +148,8 @@ public sealed class WhiteWerewolfRecoveryTests
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
 
 		var collectiveVictimSelection = builder.Process(
-				observation.CreateResponse([players[0].Id]))
+				observation.CreateResponse(
+					[players[0].Id, whiteWerewolf.Id]))
 			.ModeratorInstruction.Should()
 			.BeOfType<SelectPlayersInstruction>().Subject;
 		var closure = session.GameHistoryLog

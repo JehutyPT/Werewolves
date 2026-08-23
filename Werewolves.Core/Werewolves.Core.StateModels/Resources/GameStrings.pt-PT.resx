@@ -626,7 +626,7 @@
     <comment/>
   </data>
   <data name="WerewolfFactionAgentObservationPrompt" xml:space="preserve">
-    <value>Selecione todos os jogadores vivos que agem atualmente pela fação dos Lobisomens.</value>
+    <value>Selecione o número exato de jogadores vivos que agem atualmente pela fação dos Lobisomens: {0}.</value>
     <comment/>
   </data>
   <data name="LittleGirlOpeningGuidance" xml:space="preserve">

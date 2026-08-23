@@ -371,8 +371,8 @@ A private Moderator Response recording which Players were observed to hold an ex
 _Avoid_: Role assignment, reveal
 
 **Faction Agent Group Observation**:
-A private Moderator Response recording the Players observed to act together for a Faction.
-_Avoid_: Role Identification, Role assignment, Faction Beneficiary
+A private Moderator Response recording the complete set of Players observed acting together for a Faction at that boundary. It establishes Faction Agent membership, not exact Roles.
+_Avoid_: Partial Agent report, Role Identification, Role assignment, Faction Beneficiary
 
 **Moderator-Known Role**:
 A current Role privately known to the Moderator and the product.

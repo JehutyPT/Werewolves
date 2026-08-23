@@ -1010,7 +1010,8 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
 				MainRoleType.SimpleWerewolf,
 				MainRoleType.SimpleVillager,
 				MainRoleType.BigBadWolf,
-				MainRoleType.Witch
+				MainRoleType.Witch,
+				MainRoleType.SimpleVillager
 			}
 			: new[]
 			{
@@ -1021,7 +1022,7 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
 				MainRoleType.Witch
 			};
 		var builder = CreateBuilder()
-			.WithPlayers(5)
+			.WithPlayers(roles.Length)
 			.WithRoles(roles);
 		builder.StartGame();
 		var players = builder.GetGameState()!.GetPlayers().ToArray();
@@ -1030,12 +1031,22 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
 		var additionalVictim = players[2];
 		var bigBadWolf = players[3];
 		var witch = players[4];
+		var additionalInitialAgent = hasExtraWerewolfCopy
+			? players[5]
+			: null;
 		builder.ArrangeKnownRole(bigBadWolf.Id, MainRoleType.BigBadWolf);
 		builder.ArrangeKnownRole(witch.Id, MainRoleType.Witch);
 		builder.ConfirmGameStart();
 		builder.ConfirmNightStart();
+		HashSet<Guid> initialAgentGroup = additionalInitialAgent == null
+			? [initialAgent.Id, bigBadWolf.Id]
+			: [
+				initialAgent.Id,
+				additionalInitialAgent.Id,
+				bigBadWolf.Id
+			];
 		builder.CompleteWerewolfNightAction(
-			[initialAgent.Id, bigBadWolf.Id],
+			initialAgentGroup,
 			collectiveVictim.Id);
 		var witchWake = builder.CompleteBigBadWolfNightAction(
 				bigBadWolf.Id,
@@ -1052,11 +1063,23 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
 				poison.CreateResponse([initialAgent.Id]))
 			.ModeratorInstruction.Should()
 			.BeOfType<ConfirmationInstruction>().Subject;
-		builder.ArrangeKnownWerewolfFactionAgentGroup(
-			initialAgent.Id,
-			collectiveVictim.Id,
-			additionalVictim.Id,
-			bigBadWolf.Id);
+		var laterAgentGroup = additionalInitialAgent == null
+			? new[]
+			{
+				initialAgent.Id,
+				collectiveVictim.Id,
+				additionalVictim.Id,
+				bigBadWolf.Id
+			}
+			: new[]
+			{
+				initialAgent.Id,
+				collectiveVictim.Id,
+				additionalVictim.Id,
+				additionalInitialAgent.Id,
+				bigBadWolf.Id
+			};
+		builder.ArrangeKnownWerewolfFactionAgentGroup(laterAgentGroup);
 		var finishNight = builder.Process(witchSleep.CreateResponse())
 			.ModeratorInstruction.Should()
 			.BeOfType<ConfirmationInstruction>().Subject;
@@ -1077,11 +1100,13 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
 			reveal.SelectableRolesForPlayers[collectiveVictim.Id].Should()
 				.BeEquivalentTo([
 					MainRoleType.SimpleWerewolf,
+					MainRoleType.SimpleVillager,
 					MainRoleType.SimpleVillager
 				]);
 			reveal.SelectableRolesForPlayers[additionalVictim.Id].Should()
 				.BeEquivalentTo([
 					MainRoleType.SimpleWerewolf,
+					MainRoleType.SimpleVillager,
 					MainRoleType.SimpleVillager
 				]);
 			reveal.PlayersForAssignment.Should().BeEquivalentTo([

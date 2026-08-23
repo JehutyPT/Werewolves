@@ -56,7 +56,7 @@ public sealed class ActorBorrowedHunterElderTests
 			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
 		werewolfObservation.RoleIdentification.Should().BeNull();
 		werewolfObservation.CountConstraint.Should().Be(
-			NumberRangeConstraint.AtLeast(1));
+			NumberRangeConstraint.Exact(1));
 		werewolfObservation.SelectablePlayerIds.Should().BeEquivalentTo(
 			fixture.Session.GetPlayers()
 				.Select(player => player.Id)

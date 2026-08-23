@@ -1,10 +1,12 @@
 using System.Collections.Immutable;
 using FluentAssertions;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
+using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
+using Werewolves.Core.StateModels.Resources;
 using Werewolves.Core.Tests.Helpers;
 using Xunit;
 
@@ -31,9 +33,32 @@ public sealed class WerewolfCollectiveTests
 		observation.Semantic.Should().Be(
 			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
 		observation.RoleIdentification.Should().BeNull();
-		observation.CountConstraint.Should().Be(NumberRangeConstraint.AtLeast(1));
+		observation.CountConstraint.Should().Be(NumberRangeConstraint.Exact(1));
 		observation.SelectablePlayerIds.Should().BeEquivalentTo(
 			players.Select(player => player.Id));
+		var historyCount = session.GameHistoryLog.Count();
+
+		var oversizedResponse = new ModeratorResponse
+		{
+			InstructionId = observation.InstructionId,
+			Type = ExpectedInputType.PlayerSelection,
+			SelectedPlayerIds = new HashSet<Guid>
+			{
+				observedAgent.Id,
+				players[1].Id
+			}
+		};
+		var oversizedAct = () => builder.Process(oversizedResponse);
+
+		oversizedAct.Should().Throw<InvalidOperationException>();
+		session.GameHistoryLog.Should().HaveCount(historyCount);
+		players.Should().AllSatisfy(player =>
+			session.GetFactionAgentKnowledge(
+					player.Id,
+					Faction.Werewolf)
+				.Should().Be(FactionAgentKnowledge.Unknown));
+		builder.GetCurrentInstruction()!.InstructionId.Should().Be(
+			observation.InstructionId);
 
 		var afterObservation = builder.Process(
 			observation.CreateResponse([observedAgent.Id]));
@@ -81,28 +106,163 @@ public sealed class WerewolfCollectiveTests
 	}
 
 	[Fact]
-	public void UnknownLivingAgentGroup_ObservationCandidatesRespectCommittedWerewolfAgency()
+	public void UnknownLivingAgentGroup_WhiteWerewolfContributesToExactCapacity()
 	{
 		var builder = GameTestBuilder.Create()
-			.WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);
+			.WithPlayers(5)
+			.WithRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.WhiteWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
 		builder.StartGame();
-		var players = builder.GetGameState()!.GetPlayers().ToArray();
-		ArrangeWerewolfAgentKnowledge(
-			builder,
-			players[0].Id,
-			FactionAgentKnowledge.KnownAgent);
-		ArrangeWerewolfAgentKnowledge(
-			builder,
-			players[1].Id,
-			FactionAgentKnowledge.KnownNonAgent);
 
 		var observation =
 			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
 				StartNight(builder));
 
-		observation.SelectablePlayerIds.Should().BeEquivalentTo(
-			players.Where(player => player.Id != players[1].Id)
-				.Select(player => player.Id));
+		observation.Semantic.Should().Be(
+			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
+		observation.CountConstraint.Should().Be(NumberRangeConstraint.Exact(2));
+	}
+
+	[Fact]
+	public void KnownNonCardWolfHoundAgent_AddsToActiveAgencyCardCapacity()
+	{
+		var builder = GameTestBuilder.Create()
+			.WithPlayers(5)
+			.WithRoles(
+				MainRoleType.WolfHound,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		builder.ConfirmGameStart();
+		var holder = builder.GetGameState()!.GetPlayers().First();
+		var identification =
+			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+				builder.ConfirmNightStart());
+		var alignment =
+			InstructionAssert.ExpectSuccessWithType<SelectOptionsInstruction>(
+				builder.Process(identification.CreateResponse([holder.Id])));
+		var sleep =
+			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+				builder.Process(alignment.CreateResponse(
+					WolfHoundAlignmentOptionIds.Werewolves)));
+
+		var observation =
+			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+				builder.Process(sleep.CreateResponse()));
+
+		observation.Semantic.Should().Be(
+			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
+		observation.CountConstraint.Should().Be(NumberRangeConstraint.Exact(2));
+		observation.SelectablePlayerIds.Should().Contain(holder.Id);
+	}
+
+	[Fact]
+	public void ThiefAcquiredAgencyCard_CountsOnce_WhileSetAsideAgencyCardDoesNotCount()
+	{
+		var cards = new[]
+		{
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.Thief),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.SimpleWerewolf),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.SimpleVillager),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.SimpleVillager),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.SimpleVillager),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.WhiteWerewolf),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.BigBadWolf)
+		};
+		var lockIn = new RoleLockIn(
+			version: 1,
+			playerCount: 5,
+			cards,
+			cards.Take(5).Select(card => card.Id),
+			cards[5].Id,
+			cards[6].Id);
+		var service = new GameService();
+		var start = service.StartNewGame(new GameSessionConfig(
+			["Player1", "Player2", "Player3", "Player4", "Player5"],
+			lockIn));
+		var session = service.GetGameStateView(start.GameGuid)!;
+		var holder = session.GetPlayers().First();
+		var nightStart =
+			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+				service.ProcessInstruction(
+					start.GameGuid,
+					start.CreateResponse()));
+		var identification =
+			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+				service.ProcessInstruction(
+					start.GameGuid,
+					nightStart.CreateResponse()));
+		var choice =
+			InstructionAssert.ExpectSuccessWithType<SelectOptionsInstruction>(
+				service.ProcessInstruction(
+					start.GameGuid,
+					identification.CreateResponse([holder.Id])));
+		var sleep =
+			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+				service.ProcessInstruction(
+					start.GameGuid,
+					choice.CreateResponse(ThiefOfferOptionIds.Offer1)));
+
+		var observation =
+			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+				service.ProcessInstruction(
+					start.GameGuid,
+					sleep.CreateResponse()));
+
+		observation.Semantic.Should().Be(
+			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
+		observation.CountConstraint.Should().Be(NumberRangeConstraint.Exact(2));
+		session.GetModeratorPhysicalCharacterCards()
+			.Single(card => card.Card.Id == cards[5].Id)
+			.Should().Match<PhysicalCharacterCardState>(card =>
+				card.Zone == PhysicalCharacterCardZone.PlayerOwned &&
+				card.OwnerPlayerId == holder.Id);
+		session.GetModeratorPhysicalCharacterCards()
+			.Single(card => card.Card.Id == cards[6].Id)
+			.Zone.Should().Be(PhysicalCharacterCardZone.SetAside);
+	}
+
+	[Fact]
+	public void UnknownLivingAgentGroup_UnlinkedKnownAgent_FailsBeforeObservation()
+	{
+		var builder = GameTestBuilder.Create()
+			.WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);
+		builder.StartGame();
+		var session = builder.GetGameState()!;
+		var players = session.GetPlayers().ToArray();
+		ArrangeWerewolfAgentKnowledge(
+			builder,
+			players[0].Id,
+			FactionAgentKnowledge.KnownAgent);
+		var afterGameStart = builder.ConfirmGameStart();
+		var nightStart =
+			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+				afterGameStart);
+		var historyCount = session.GameHistoryLog.Count();
+
+		var act = () => builder.Process(nightStart.CreateResponse());
+
+		act.Should().Throw<InvalidOperationException>();
+		session.GameHistoryLog.Should().HaveCount(historyCount);
+		session.GameHistoryLog
+			.OfType<FactionFactsCommittedLogEntry>()
+			.Should().NotContain(entry =>
+				entry.Source.Kind ==
+					FactionFactSourceKind.ScheduledObservation ||
+				entry.Source.Kind ==
+					FactionFactSourceKind.InitialBeneficiaryClosure);
+		session.GetFactionAgentKnowledge(
+				players[0].Id,
+				Faction.Werewolf)
+			.Should().Be(FactionAgentKnowledge.KnownAgent);
+		builder.GetCurrentInstruction()!.InstructionId.Should().Be(
+			nightStart.InstructionId);
 	}
 
 	[Fact]
@@ -212,31 +372,38 @@ public sealed class WerewolfCollectiveTests
 	}
 
 	[Fact]
-	public void UnknownLivingGroup_WithUnknownDeadSeat_LeavesClosureIncompleteAndContinues()
+	public void UnknownLivingGroup_WithUnresolvedDeadSeat_FailsBeforeObservation()
 	{
 		var builder = GameTestBuilder.Create()
 			.WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);
 		builder.StartGame();
-		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		var session = builder.GetGameState()!;
+		var players = session.GetPlayers().ToArray();
 		builder.ArrangeEliminatedPlayer(players[^1].Id);
+		var afterGameStart = builder.ConfirmGameStart();
+		var nightStart =
+			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+				afterGameStart);
+		var historyCount = session.GameHistoryLog.Count();
 
-		var observation =
-			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
-				StartNight(builder));
-		observation.SelectablePlayerIds.Should().NotContain(players[^1].Id);
+		var act = () => builder.Process(nightStart.CreateResponse());
 
-		var afterObservation = builder.Process(
-			observation.CreateResponse([players[0].Id]));
-
-		InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
-				afterObservation)
-			.Semantic.Should().Be(
-				ModeratorInstructionSemantic.SelectWerewolfVictim);
-		builder.GetGameState()!.GameHistoryLog
+		act.Should().Throw<InvalidOperationException>();
+		session.GameHistoryLog.Should().HaveCount(historyCount);
+		session.GameHistoryLog
 			.OfType<FactionFactsCommittedLogEntry>()
 			.Should().NotContain(entry =>
 				entry.Source.Kind ==
-				FactionFactSourceKind.InitialBeneficiaryClosure);
+					FactionFactSourceKind.ScheduledObservation ||
+				entry.Source.Kind ==
+					FactionFactSourceKind.InitialBeneficiaryClosure);
+		session.GetPlayers().Should().AllSatisfy(player =>
+			session.GetFactionAgentKnowledge(
+					player.Id,
+					Faction.Werewolf)
+				.Should().Be(FactionAgentKnowledge.Unknown));
+		builder.GetCurrentInstruction()!.InstructionId.Should().Be(
+			nightStart.InstructionId);
 	}
 
 	[Fact]
