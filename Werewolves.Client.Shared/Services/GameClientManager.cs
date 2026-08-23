@@ -276,6 +276,11 @@ public sealed class GameClientManager
 			result = AddPlayerResult.DuplicateName;
 			return false;
 		}
+		if (lobby.PlayerRoster.Count >= GameSessionConfig.MaximumPlayerCount)
+		{
+			result = AddPlayerResult.PlayerLimitReached;
+			return false;
+		}
 
 		result = AddPlayerResult.Success;
 		if (HasActiveSession)

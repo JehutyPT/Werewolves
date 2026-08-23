@@ -133,6 +133,9 @@
   <data name="Validation_DuplicatePlayerName" xml:space="preserve">
     <value>Já existe um jogador com este nome.</value>
   </data>
+  <data name="Validation_PlayerLimitReached" xml:space="preserve">
+    <value>Foi atingido o máximo de 30 jogadores.</value>
+  </data>
   <data name="Common_NotAvailable" xml:space="preserve">
     <value>-</value>
   </data>
