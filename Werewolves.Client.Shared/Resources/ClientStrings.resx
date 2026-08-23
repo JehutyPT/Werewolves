@@ -247,6 +247,9 @@
   <data name="LobbyEvaluation_CouldNotEvaluate" xml:space="preserve">
     <value>The evaluation could not be completed.</value>
   </data>
+  <data name="LobbyEvaluation_CouldNotVerifyStartAvailable" xml:space="preserve">
+    <value>The setup could not be verified. You can still start the game.</value>
+  </data>
   <data name="LobbyEvaluation_Retry" xml:space="preserve">
     <value>Try again</value>
   </data>
