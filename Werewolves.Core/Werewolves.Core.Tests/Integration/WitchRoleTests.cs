@@ -220,6 +220,7 @@ public sealed class WitchRoleTests : DiagnosticTestBase
 		var (builder, players) = CreateStartedWitchGame(policy);
 		builder
 			.ArrangeKnownRole(players[1].Id, MainRoleType.Witch)
+			.ArrangeKnownWerewolfFactionAgentGroup(players[0].Id)
 			.ArrangeEliminatedPlayer(players[1].Id);
 		builder.ConfirmGameStart();
 		builder.ConfirmNightStart();

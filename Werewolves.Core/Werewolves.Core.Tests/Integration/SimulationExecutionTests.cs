@@ -204,8 +204,18 @@ public class SimulationExecutionTests : DiagnosticTestBase
 		var scenario = new SimulationScenario(roles.Length, roles);
 		var capability = SimulatorCapability.SafetyScreening;
 		var identity = capability.CreateCompatibilityIdentity(scenario);
+		var recorders = new List<RecordingDecisionStrategy>();
+		var executor = new SimulationExecutor(
+			SimulationStartStateDeriver.Derive,
+			strategy =>
+			{
+				var recorder = new RecordingDecisionStrategy(strategy);
+				recorders.Add(recorder);
+				return new HeadlessGameDriver(recorder);
+			},
+			SimulationExecutor.AdaptTerminalEvidence);
 
-		var batch = new SimulationExecutor().ExecuteBatch(
+		var batch = executor.ExecuteBatch(
 			scenario,
 			capability,
 			identity,
@@ -216,6 +226,11 @@ public class SimulationExecutionTests : DiagnosticTestBase
 		batch.IncompleteRunCount.Should().Be(0);
 		batch.Records.Should().OnlyContain(run =>
 			run is CompletedSimulationRun);
+		recorders.Should().HaveCount(64);
+		recorders.SelectMany(recorder => recorder.ObservedSemantics)
+			.Count(semantic => semantic ==
+				ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup)
+			.Should().Be(0);
 		MarkTestCompleted();
 	}
 

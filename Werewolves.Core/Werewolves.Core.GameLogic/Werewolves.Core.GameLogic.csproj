@@ -5,8 +5,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <!-- GitHub Packages requires a Repository URL to associate the package -->
-    <RepositoryUrl>https://github.com/bicheichane/Werewolves</RepositoryUrl>
-    <PackageId>bicheichane.Werewolves.Core.GameLogic</PackageId>
+    <RepositoryUrl>https://github.com/JehutyPT/Werewolves</RepositoryUrl>
+    <PackageId>JehutyPT.Werewolves.Core.GameLogic</PackageId>
     <Version>1.0</Version>
     <!-- Namespace convention matters here -->
   </PropertyGroup>

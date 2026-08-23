@@ -567,6 +567,8 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
 			builder.Process(identifyThief.CreateResponse([thief.Id])));
 		var sleepThief = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
 			builder.Process(choice.CreateResponse(ThiefOfferOptionIds.Offer1)));
+		builder.ArrangeStatusEffect(thief.Id, StatusEffectTypes.Charmed);
+		builder.ArrangeVotingRight(thief.Id, false);
 		builder.Process(sleepThief.CreateResponse());
 		builder.CompleteWerewolfNightAction([werewolf.Id], victim.Id);
 		var afterSeer = builder.CompleteSeerNightAction(seer.Id, werewolf.Id);
@@ -605,15 +607,201 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
 		stillPending.InstructionId.Should().Be(observation.InstructionId);
 		stillPending.SelectablePlayerIds.Should().Equal(thief.Id);
+		var pendingSnapshot = builder.GetGameState()!.Serialize();
 
 		var recoveredService = new GameService();
-		var recoveredId = recoveredService.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+		var recoveredId = recoveredService.RehydrateSession(pendingSnapshot);
 		var recoveredPending = recoveredService.GetCurrentInstruction(recoveredId)
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
 		recoveredPending.InstructionId.Should().Be(observation.InstructionId);
 		recoveredPending.SelectablePlayerIds.Should().Equal(thief.Id);
 		recoveredPending.AffectedPlayerIds.Should().Equal(thief.Id);
+		var recovered = recoveredService.GetGameStateView(recoveredId)!;
+		var recoveredThief = recovered.GetPlayer(thief.Id);
+		var acquiredCardId = recoveredThief.State.PhysicalCharacterCardId;
+		var acquiredCardBeforeObservation = recovered
+			.GetModeratorPhysicalCharacterCards()
+			.Single(state => state.Card.Id == acquiredCardId);
+		var swapBeforeObservation = recovered.GameHistoryLog
+			.OfType<PermanentRoleSwapCommittedLogEntry>()
+			.Should().ContainSingle().Subject;
+		var roleIdentificationsBeforeObservation = recovered.GameHistoryLog
+			.OfType<RoleIdentificationLogEntry>().Count();
+		var factionFactsBeforeObservation = recovered.GameHistoryLog
+			.OfType<FactionFactsCommittedLogEntry>().Count();
+		var preservedStateBeforeObservation = new
+		{
+			recoveredThief.State.Health,
+			recoveredThief.State.HasVotingRight,
+			recoveredThief.State.DurableVotingPower,
+			ActiveStatusEffects = recoveredThief.State.GetActiveStatusEffects()
+		};
+		var beneficiaryBeforeObservation =
+			recovered.GetFactionBeneficiaryKnowledge(thief.Id);
+		var agentsBeforeObservation = Enum.GetValues<Faction>()
+			.ToDictionary(
+				faction => faction,
+				faction => recovered.GetFactionAgentKnowledge(thief.Id, faction));
+
+		var accepted = recoveredService.ProcessInstruction(
+			recoveredId,
+			recoveredPending.CreateResponse([thief.Id]));
+
+		accepted.IsSuccess.Should().BeTrue();
+		recoveredThief.State.CurrentRole.Should().Be(MainRoleType.VillagerVillager);
+		recoveredThief.State.ModeratorKnownRole.Should().Be(
+			MainRoleType.VillagerVillager);
+		recoveredThief.State.PubliclyRevealedRole.Should().Be(
+			MainRoleType.VillagerVillager);
+		recoveredThief.State.PhysicalCharacterCardId.Should().Be(acquiredCardId);
+		recovered.GetModeratorPhysicalCharacterCards()
+			.Single(state => state.Card.Id == acquiredCardId)
+			.Should().Be(acquiredCardBeforeObservation);
+		recovered.GameHistoryLog.OfType<VillagerVillagerPublicFromDealLogEntry>()
+			.Should().ContainSingle(entry =>
+				entry.PlayerId == thief.Id &&
+				entry.CardId == acquiredCardId &&
+				!entry.BindsCardOwnership);
+		recovered.GameHistoryLog.OfType<PermanentRoleSwapCommittedLogEntry>()
+			.Should().ContainSingle().Which.Should().Be(swapBeforeObservation);
+		recovered.GameHistoryLog.OfType<RoleIdentificationLogEntry>().Should()
+			.HaveCount(roleIdentificationsBeforeObservation);
+		recovered.GameHistoryLog.OfType<FactionFactsCommittedLogEntry>().Should()
+			.HaveCount(factionFactsBeforeObservation);
+		new
+		{
+			recoveredThief.State.Health,
+			recoveredThief.State.HasVotingRight,
+			recoveredThief.State.DurableVotingPower,
+			ActiveStatusEffects = recoveredThief.State.GetActiveStatusEffects()
+		}.Should().BeEquivalentTo(preservedStateBeforeObservation);
+		recovered.GetFactionBeneficiaryKnowledge(thief.Id).Should()
+			.Be(beneficiaryBeforeObservation);
+		foreach (var (faction, expectedKnowledge) in agentsBeforeObservation)
+		{
+			recovered.GetFactionAgentKnowledge(thief.Id, faction).Should()
+				.Be(expectedKnowledge);
+		}
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void VillagerVillager_PublicObservationWithMismatchedExistingOwnership_RejectsBeforeMutation()
+	{
+		var cards = new[]
+		{
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.Thief),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.SimpleWerewolf),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.Seer),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.SimpleVillager),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.SimpleVillager),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.VillagerVillager),
+			new PhysicalCharacterCard(Guid.NewGuid(), MainRoleType.SimpleVillager)
+		};
+		var lockIn = new RoleLockIn(
+			version: 1,
+			playerCount: 5,
+			cards,
+			cards.Take(5).Select(card => card.Id),
+			cards[5].Id,
+			cards[6].Id);
+		var service = new GameService();
+		var start = service.StartNewGame(new GameSessionConfig(
+			["Thief", "Werewolf", "Seer", "Villager", "Victim"],
+			lockIn));
+		var builder = GameTestBuilder.ForExistingGame(service, start.GameGuid);
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		var thief = players[0];
+		var werewolf = players[1];
+		var seer = players[2];
+		var victim = players[4];
+
+		var nightStart = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+			builder.Process(start.CreateResponse()));
+		var identifyThief = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+			builder.Process(nightStart.CreateResponse()));
+		var choice = InstructionAssert.ExpectSuccessWithType<SelectOptionsInstruction>(
+			builder.Process(identifyThief.CreateResponse([thief.Id])));
+		var sleepThief = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+			builder.Process(choice.CreateResponse(ThiefOfferOptionIds.Offer1)));
+		builder.Process(sleepThief.CreateResponse());
+		builder.CompleteWerewolfNightAction([werewolf.Id], victim.Id);
+		var afterSeer = builder.CompleteSeerNightAction(seer.Id, werewolf.Id);
+		var finishNight = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+			afterSeer);
+		builder.Process(finishNight.CreateResponse());
+		builder.CompleteDawnPhase(new()
+		{
+			[victim.Id] = MainRoleType.SimpleVillager
+		});
+		var observation = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+			builder.CompleteDayPhaseWithTie());
+		observation.Semantic.Should().Be(
+			ModeratorInstructionSemantic.ObserveVillagerVillagerFromDeal);
+
+		var mismatchedPayload = JsonNode.Parse(
+			builder.GetGameState()!.Serialize())!.AsObject();
+		var mismatchedPendingPayload =
+			mismatchedPayload[nameof(GameSessionDto.PendingInstruction)]!.AsObject();
+		// The live workflow cannot publish this contradictory candidate set.
+		// Tamper only the recovered picker; the victim's public Role Reveal and
+		// Physical Character Card Ownership remain legitimate committed history.
+		mismatchedPendingPayload[
+			nameof(SelectPlayersInstruction.SelectablePlayerIds)] =
+			new JsonArray(JsonValue.Create(victim.Id));
+		mismatchedPendingPayload[nameof(ModeratorInstruction.AffectedPlayerIds)] =
+			new JsonArray(JsonValue.Create(victim.Id));
+		var mismatchedService = new GameService();
+		var mismatchedId = mismatchedService.RehydrateSession(
+			mismatchedPayload.ToJsonString());
+		var mismatchedPending = mismatchedService.GetCurrentInstruction(mismatchedId)
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		mismatchedPending.SelectablePlayerIds.Should().Equal(victim.Id);
+		var mismatchedSession = mismatchedService.GetGameStateView(mismatchedId)!;
+		var mismatchedOwner = mismatchedSession.GetPlayer(victim.Id);
+		var mismatchedCard = mismatchedSession.GetModeratorPhysicalCharacterCards()
+			.Single(state => state.Card.Id ==
+				mismatchedOwner.State.PhysicalCharacterCardId);
+		mismatchedCard.Card.PrintedRole.Should().Be(MainRoleType.SimpleVillager);
+		mismatchedCard.Zone.Should().Be(PhysicalCharacterCardZone.PlayerOwned);
+		mismatchedCard.OwnerPlayerId.Should().Be(victim.Id);
+		var mismatchedHistoryCount = mismatchedSession.GameHistoryLog.Count();
+		var mismatchedProjection = new
+		{
+			mismatchedOwner.State.CurrentRole,
+			mismatchedOwner.State.ModeratorKnownRole,
+			mismatchedOwner.State.PubliclyRevealedRole,
+			mismatchedOwner.State.PhysicalCharacterCardId,
+			mismatchedOwner.State.PhysicalCharacterCardRole,
+			mismatchedOwner.State.Health
+		};
+		Action submitMismatchedOwner = () => mismatchedService.ProcessInstruction(
+			mismatchedId,
+			mismatchedPending.CreateResponse([victim.Id]));
+
+		submitMismatchedOwner.Should().Throw<InvalidOperationException>()
+			.WithMessage("*ownership is invalid*");
+		mismatchedSession.GameHistoryLog.Should().HaveCount(mismatchedHistoryCount);
+		mismatchedSession.GetModeratorPhysicalCharacterCards()
+			.Single(state => state.Card.Id == mismatchedCard.Card.Id)
+			.Should().Be(mismatchedCard);
+		new
+		{
+			mismatchedOwner.State.CurrentRole,
+			mismatchedOwner.State.ModeratorKnownRole,
+			mismatchedOwner.State.PubliclyRevealedRole,
+			mismatchedOwner.State.PhysicalCharacterCardId,
+			mismatchedOwner.State.PhysicalCharacterCardRole,
+			mismatchedOwner.State.Health
+		}.Should().BeEquivalentTo(mismatchedProjection);
+		mismatchedSession.GameHistoryLog
+			.OfType<VillagerVillagerPublicFromDealLogEntry>().Should().BeEmpty();
+		var mismatchedStillPending = mismatchedService
+			.GetCurrentInstruction(mismatchedId)
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		mismatchedStillPending.InstructionId.Should()
+			.Be(mismatchedPending.InstructionId);
+		mismatchedStillPending.SelectablePlayerIds.Should().Equal(victim.Id);
 		MarkTestCompleted();
 	}
 
@@ -686,6 +874,60 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
 
         MarkTestCompleted();
     }
+
+	[Fact]
+	public void VillagerVillager_LegacyObservationWithoutBindingFlag_RehydratesOriginalDealPoolBinding()
+	{
+		var builder = CreateBuilder()
+			.WithPlayers("Alice", "Bob", "Charlie", "Diana", "Eve")
+			.WithRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Seer,
+				MainRoleType.VillagerVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		var observation = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+			builder.ConfirmGameStart());
+		var holder = builder.GetGameState()!.GetPlayers().ElementAt(2);
+		builder.Process(observation.CreateResponse([holder.Id])).IsSuccess.Should()
+			.BeTrue();
+		var payload = JsonNode.Parse(builder.GetGameState()!.Serialize())!.AsObject();
+		var legacyObservation = payload[nameof(GameSessionDto.GameHistoryLog)]!
+			.AsArray()
+			.Select(node => node!.AsObject())
+			.Single(entry => entry["$type"]!.GetValue<string>() ==
+				nameof(VillagerVillagerPublicFromDealLogEntry));
+		var originalCardId = legacyObservation[
+			nameof(VillagerVillagerPublicFromDealLogEntry.CardId)]!.GetValue<Guid>();
+		legacyObservation.Remove(
+			nameof(VillagerVillagerPublicFromDealLogEntry.BindsCardOwnership))
+			.Should().BeTrue();
+		var recoveredService = new GameService();
+
+		var recoveredId = recoveredService.RehydrateSession(payload.ToJsonString());
+
+		var recovered = recoveredService.GetGameStateView(recoveredId)!;
+		var recoveredHolder = recovered.GetPlayer(holder.Id);
+		recoveredHolder.State.CurrentRole.Should().Be(MainRoleType.VillagerVillager);
+		recoveredHolder.State.ModeratorKnownRole.Should().Be(
+			MainRoleType.VillagerVillager);
+		recoveredHolder.State.PubliclyRevealedRole.Should().Be(
+			MainRoleType.VillagerVillager);
+		var recoveredCard = recovered.GetModeratorPhysicalCharacterCards()
+			.Single(state => state.Card.Id ==
+				recoveredHolder.State.PhysicalCharacterCardId);
+		recoveredHolder.State.PhysicalCharacterCardId.Should().Be(originalCardId);
+		recoveredCard.Card.PrintedRole.Should().Be(MainRoleType.VillagerVillager);
+		recoveredCard.Zone.Should().Be(PhysicalCharacterCardZone.PlayerOwned);
+		recoveredCard.OwnerPlayerId.Should().Be(holder.Id);
+		recovered.GameHistoryLog.OfType<VillagerVillagerPublicFromDealLogEntry>()
+			.Should().ContainSingle(entry =>
+				entry.PlayerId == holder.Id &&
+				entry.CardId == originalCardId &&
+				entry.BindsCardOwnership);
+		MarkTestCompleted();
+	}
 
 	[Fact]
 	public void GenericRoleReveal_TwoUnknownVictimsExposeTheirOwnConstrainedRoleMultisets()
@@ -768,7 +1010,8 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
 				MainRoleType.SimpleWerewolf,
 				MainRoleType.SimpleVillager,
 				MainRoleType.BigBadWolf,
-				MainRoleType.Witch
+				MainRoleType.Witch,
+				MainRoleType.SimpleVillager
 			}
 			: new[]
 			{
@@ -779,7 +1022,7 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
 				MainRoleType.Witch
 			};
 		var builder = CreateBuilder()
-			.WithPlayers(5)
+			.WithPlayers(roles.Length)
 			.WithRoles(roles);
 		builder.StartGame();
 		var players = builder.GetGameState()!.GetPlayers().ToArray();
@@ -788,12 +1031,22 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
 		var additionalVictim = players[2];
 		var bigBadWolf = players[3];
 		var witch = players[4];
+		var additionalInitialAgent = hasExtraWerewolfCopy
+			? players[5]
+			: null;
 		builder.ArrangeKnownRole(bigBadWolf.Id, MainRoleType.BigBadWolf);
 		builder.ArrangeKnownRole(witch.Id, MainRoleType.Witch);
 		builder.ConfirmGameStart();
 		builder.ConfirmNightStart();
+		HashSet<Guid> initialAgentGroup = additionalInitialAgent == null
+			? [initialAgent.Id, bigBadWolf.Id]
+			: [
+				initialAgent.Id,
+				additionalInitialAgent.Id,
+				bigBadWolf.Id
+			];
 		builder.CompleteWerewolfNightAction(
-			[initialAgent.Id, bigBadWolf.Id],
+			initialAgentGroup,
 			collectiveVictim.Id);
 		var witchWake = builder.CompleteBigBadWolfNightAction(
 				bigBadWolf.Id,
@@ -810,11 +1063,23 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
 				poison.CreateResponse([initialAgent.Id]))
 			.ModeratorInstruction.Should()
 			.BeOfType<ConfirmationInstruction>().Subject;
-		builder.ArrangeKnownWerewolfFactionAgentGroup(
-			initialAgent.Id,
-			collectiveVictim.Id,
-			additionalVictim.Id,
-			bigBadWolf.Id);
+		var laterAgentGroup = additionalInitialAgent == null
+			? new[]
+			{
+				initialAgent.Id,
+				collectiveVictim.Id,
+				additionalVictim.Id,
+				bigBadWolf.Id
+			}
+			: new[]
+			{
+				initialAgent.Id,
+				collectiveVictim.Id,
+				additionalVictim.Id,
+				additionalInitialAgent.Id,
+				bigBadWolf.Id
+			};
+		builder.ArrangeKnownWerewolfFactionAgentGroup(laterAgentGroup);
 		var finishNight = builder.Process(witchSleep.CreateResponse())
 			.ModeratorInstruction.Should()
 			.BeOfType<ConfirmationInstruction>().Subject;
@@ -835,11 +1100,13 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
 			reveal.SelectableRolesForPlayers[collectiveVictim.Id].Should()
 				.BeEquivalentTo([
 					MainRoleType.SimpleWerewolf,
+					MainRoleType.SimpleVillager,
 					MainRoleType.SimpleVillager
 				]);
 			reveal.SelectableRolesForPlayers[additionalVictim.Id].Should()
 				.BeEquivalentTo([
 					MainRoleType.SimpleWerewolf,
+					MainRoleType.SimpleVillager,
 					MainRoleType.SimpleVillager
 				]);
 			reveal.PlayersForAssignment.Should().BeEquivalentTo([
