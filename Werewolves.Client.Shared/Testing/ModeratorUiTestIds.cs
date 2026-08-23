@@ -8,6 +8,7 @@ public static class ModeratorUiTestIds
 	public const string LandingNewGameCancel = "landing-new-game-cancel";
 	public const string LandingNewGameConfirm = "landing-new-game-confirm";
 	public const string LobbyRosterBack = "lobby-roster-back";
+	public const string LobbyRosterReset = "lobby-roster-reset";
 	public const string DashboardShell = "dashboard-shell";
 	public const string DashboardCompactTabs = "dashboard-compact-tabs";
 	public const string DashboardStatusBar = "dashboard-status-bar";
@@ -28,6 +29,7 @@ public static class ModeratorUiTestIds
 	public const string RoleSelectionStartGame = "role-selection-start-game";
 	public const string RoleSelectionConfigureRoleLockIn = "role-selection-configure-role-lock-in";
 	public const string RoleSelectionActionBar = "role-selection-action-bar";
+	public const string RoleSelectionReset = "role-selection-reset";
 	public const string ThiefRoleLockInPage = "thief-role-lock-in-page";
 	public const string ThiefOffer1Options = "thief-offer-1-options";
 	public const string ThiefOffer2Options = "thief-offer-2-options";

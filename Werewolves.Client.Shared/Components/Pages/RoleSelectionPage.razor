@@ -1,6 +1,7 @@
 @implements IDisposable
 @inject LobbySetupState Lobby
 @inject LobbyEvaluationCoordinator Evaluation
+@inject GameClientManager Game
 
 <main class="ww-app-shell" aria-labelledby="role-selection-title">
 	<section class="ww-lobby-header">
@@ -132,6 +133,15 @@
 		<LobbyEvaluationPanel State="@_evaluationState" OnRetry="RetryEvaluation" />
 	}
 
+	<section class="ww-scoped-reset"
+			 data-testid="@ModeratorUiTestIds.RoleSelectionReset"
+			 aria-label="@ClientStrings.RoleSelection_ResetButton">
+		<HoldButton @key="_resetHoldVersion"
+					Label="@ClientStrings.RoleSelection_ResetButton"
+					Disabled="@(Lobby.TotalSelectedRoleCount == 0)"
+					OnHoldComplete="ResetRoleCounts" />
+	</section>
+
 	<footer class="ww-action-bar" data-testid="@ModeratorUiTestIds.RoleSelectionActionBar">
 		@if (_validationErrors.Count > 0)
 		{
@@ -198,6 +208,7 @@
 	private LobbyEvaluationState _evaluationState = LobbyEvaluationState.NotApplicable();
 	private SimulationCompatibilityIdentity? _pendingBlockIdentity;
 	private string _blockAnnouncement = string.Empty;
+	private int _resetHoldVersion;
 
 	protected override void OnInitialized()
 	{
@@ -252,6 +263,15 @@
 		else
 			Lobby.IncrementRole(role);
 		RefreshValidation();
+	}
+
+	private void ResetRoleCounts()
+	{
+		if (Game.TryResetStagedRoleCounts(Lobby))
+		{
+			RefreshValidation();
+		}
+		_resetHoldVersion++;
 	}
 
 	private void RefreshValidation()

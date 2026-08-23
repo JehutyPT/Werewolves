@@ -487,6 +487,8 @@ public class LobbySetupState
 			LobbyChange.MovePlayer move => DecidePlayerMove(move),
 			LobbyChange.AddPlayer add => DecidePlayerAddition(add),
 			LobbyChange.RemovePlayer remove => DecidePlayerRemoval(remove),
+			LobbyChange.ResetPlayerRoster => DecidePlayerRosterReset(),
+			LobbyChange.ResetRoleCounts => DecideRoleCountReset(),
 			_ => null
 		};
 	}
@@ -687,6 +689,38 @@ public class LobbySetupState
 		return DecidePlayerMembershipChange(
 			roster,
 			_current.IssuedPlayerIds);
+	}
+
+	private LobbyDecision? DecidePlayerRosterReset()
+	{
+		if (_current.RoleLockInFinalized || _current.PlayerRoster.Count == 0)
+		{
+			return null;
+		}
+
+		return DecidePlayerMembershipChange([], _current.IssuedPlayerIds);
+	}
+
+	private LobbyDecision? DecideRoleCountReset()
+	{
+		if (_current.RoleLockInFinalized ||
+			_current.RoleCounts.Values.All(count => count == 0))
+		{
+			return null;
+		}
+
+		var nextAggregate = new LobbySetupAggregate(
+			_current.PlayerRoster,
+			_current.IssuedPlayerIds,
+			new Dictionary<MainRoleType, int>(),
+			AcceptedRoleLockIn,
+			AcceptedActorSetupCards,
+			AcceptedPublicGroupPartition,
+			_current.RoleLockInFinalized,
+			acceptedRoleLockInRequiresReplacement: AcceptedRoleLockIn is not null);
+		return CreateDecision(
+			nextAggregate,
+			new LobbyPersistenceInstruction.Keep());
 	}
 
 	private LobbyDecision DecidePlayerMembershipChange(

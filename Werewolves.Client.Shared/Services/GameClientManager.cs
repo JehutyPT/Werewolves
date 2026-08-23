@@ -292,6 +292,18 @@ public sealed class GameClientManager
 			new LobbyChange.RemovePlayer(index));
 	}
 
+	public bool TryResetStagedPlayerRoster(LobbySetupState lobby)
+	{
+		ArgumentNullException.ThrowIfNull(lobby);
+		return TryAcceptLobbyChange(lobby, new LobbyChange.ResetPlayerRoster());
+	}
+
+	public bool TryResetStagedRoleCounts(LobbySetupState lobby)
+	{
+		ArgumentNullException.ThrowIfNull(lobby);
+		return TryAcceptLobbyChange(lobby, new LobbyChange.ResetRoleCounts());
+	}
+
 	public StartGameConfirmationInstruction StartGame(
 		IReadOnlyList<string> playerNamesInOrder,
 		IReadOnlyList<MainRoleType> rolesInPlay)

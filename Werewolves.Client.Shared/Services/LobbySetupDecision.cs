@@ -88,6 +88,10 @@ internal abstract record LobbyChange
 
 		public int Index { get; }
 	}
+
+	internal sealed record ResetPlayerRoster : LobbyChange;
+
+	internal sealed record ResetRoleCounts : LobbyChange;
 }
 
 internal sealed class LobbySetupAggregate

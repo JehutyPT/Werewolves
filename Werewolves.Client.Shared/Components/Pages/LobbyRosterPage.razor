@@ -78,6 +78,15 @@
 		}
 	</section>
 
+	<section class="ww-scoped-reset"
+			 data-testid="@ModeratorUiTestIds.LobbyRosterReset"
+			 aria-label="@ClientStrings.LobbyRoster_ResetButton">
+		<HoldButton @key="_resetHoldVersion"
+					Label="@ClientStrings.LobbyRoster_ResetButton"
+					Disabled="@(Lobby.PlayerRoster.Count == 0)"
+					OnHoldComplete="ResetRoster" />
+	</section>
+
 	<footer class="ww-action-bar">
 		@if (_rosterErrors.Count > 0)
 		{
@@ -118,6 +127,7 @@
 	private string _draftPlayerName = string.Empty;
 	private string? _validationMessage;
 	private List<string> _rosterErrors = new();
+	private int _resetHoldVersion;
 
 #if DEBUG
 	private const bool IsDebugBuild = true;
@@ -170,6 +180,16 @@
 		{
 			_rosterErrors.Clear();
 		}
+	}
+
+	private void ResetRoster()
+	{
+		if (Game.TryResetStagedPlayerRoster(Lobby))
+		{
+			_validationMessage = null;
+			_rosterErrors.Clear();
+		}
+		_resetHoldVersion++;
 	}
 
 	private Task Continue()

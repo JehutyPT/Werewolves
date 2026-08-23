@@ -72,9 +72,11 @@ public class ClientStringsTests
 	[
 		.. LandingUiResourceKeys,
 		nameof(ClientStrings.LobbyRoster_Title),
+		nameof(ClientStrings.LobbyRoster_ResetButton),
 		nameof(ClientStrings.Validation_EmptyPlayerName),
 		nameof(ClientStrings.RoleSelection_Title),
 		nameof(ClientStrings.RoleSelection_StartGameButton),
+		nameof(ClientStrings.RoleSelection_ResetButton),
 		nameof(ClientStrings.LobbyEvaluation_Title),
 		nameof(ClientStrings.LobbyEvaluation_Pending),
 		nameof(ClientStrings.LobbyEvaluation_AlreadyDecided),

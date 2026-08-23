@@ -118,6 +118,9 @@
   <data name="LobbyRoster_ContinueToRolesButton" xml:space="preserve">
     <value>Avançar para papéis</value>
   </data>
+  <data name="LobbyRoster_ResetButton" xml:space="preserve">
+    <value>Limpar jogadores</value>
+  </data>
   <data name="LobbyRoster_PlayerCountOne" xml:space="preserve">
     <value>1 jogador</value>
   </data>
@@ -579,6 +582,9 @@
   </data>
   <data name="Common_HoldToConfirm" xml:space="preserve">
     <value>Manter premido para confirmar</value>
+  </data>
+  <data name="RoleSelection_ResetButton" xml:space="preserve">
+    <value>Limpar papéis</value>
   </data>
   <data name="Victory_Title" xml:space="preserve">
     <value>Fim de Jogo</value>

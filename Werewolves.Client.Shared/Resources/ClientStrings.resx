@@ -118,6 +118,9 @@
   <data name="LobbyRoster_ContinueToRolesButton" xml:space="preserve">
     <value>Continue to roles</value>
   </data>
+  <data name="LobbyRoster_ResetButton" xml:space="preserve">
+    <value>Clear players</value>
+  </data>
   <data name="LobbyRoster_PlayerCountOne" xml:space="preserve">
     <value>1 player</value>
   </data>
@@ -579,6 +582,9 @@
   </data>
   <data name="Common_HoldToConfirm" xml:space="preserve">
     <value>Hold to confirm</value>
+  </data>
+  <data name="RoleSelection_ResetButton" xml:space="preserve">
+    <value>Clear roles</value>
   </data>
   <data name="Victory_Title" xml:space="preserve">
     <value>Game Over</value>

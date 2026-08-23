@@ -362,6 +362,12 @@ button {
   margin-bottom: 20px;
 }
 
+.ww-scoped-reset {
+  margin: 24px 0 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--ww-border);
+}
+
 .ww-role-list {
   display: grid;
   gap: 6px;
