@@ -211,12 +211,33 @@ public sealed class PostGameLobbyPrefillBunitTests
 	{
 		manager.ProcessInput(startInstruction.CreateResponse());
 		var players = manager.CurrentSession!.GetPlayers().ToList();
-		var werewolfIds = players.Take(2).Select(player => player.Id).ToHashSet();
-		var victimId = players[2].Id;
 
 		ConfirmCurrentInstruction(manager);
-		SelectCurrentPlayers(manager, werewolfIds);
-		SelectCurrentPlayers(manager, [victimId]);
+		var werewolfObservation = manager.CurrentInstruction.Should()
+			.BeOfType<SelectPlayersInstruction>().Subject;
+		werewolfObservation.Semantic.Should().Be(
+			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
+		werewolfObservation.CountConstraint.Minimum.Should().Be(
+			werewolfObservation.CountConstraint.Maximum);
+		var werewolfIds = players
+			.Where(player =>
+				werewolfObservation.SelectablePlayerIds.Contains(player.Id))
+			.Take(werewolfObservation.CountConstraint.Minimum)
+			.Select(player => player.Id)
+			.ToHashSet();
+		werewolfIds.Should().HaveCount(
+			werewolfObservation.CountConstraint.Minimum);
+		manager.ProcessInput(werewolfObservation.CreateResponse(werewolfIds));
+
+		var victimInstruction = manager.CurrentInstruction.Should()
+			.BeOfType<SelectPlayersInstruction>().Subject;
+		victimInstruction.Semantic.Should().Be(
+			ModeratorInstructionSemantic.SelectWerewolfVictim);
+		var victimId = players
+			.Where(player => !werewolfIds.Contains(player.Id))
+			.Select(player => player.Id)
+			.First(victimInstruction.SelectablePlayerIds.Contains);
+		manager.ProcessInput(victimInstruction.CreateResponse([victimId]));
 		ConfirmCurrentInstruction(manager);
 		ConfirmCurrentInstruction(manager);
 
@@ -231,6 +252,19 @@ public sealed class PostGameLobbyPrefillBunitTests
 						assignRoles.PlayersForAssignment.ToDictionary(
 							playerId => playerId,
 							_ => MainRoleType.SimpleVillager)));
+					break;
+				case SelectPlayersInstruction
+					{
+						Semantic:
+							ModeratorInstructionSemantic.RecordDayVote
+							or ModeratorInstructionSemantic.SelectWerewolfVictim
+					} selectPlayers:
+					var selectedVillagerId = players
+						.Where(player => !werewolfIds.Contains(player.Id))
+						.Select(player => player.Id)
+						.First(selectPlayers.SelectablePlayerIds.Contains);
+					manager.ProcessInput(selectPlayers.CreateResponse(
+						[selectedVillagerId]));
 					break;
 				case ConfirmationInstruction confirmation:
 					manager.ProcessInput(confirmation.CreateResponse());
@@ -251,15 +285,6 @@ public sealed class PostGameLobbyPrefillBunitTests
 		var instruction = manager.CurrentInstruction.Should()
 			.BeOfType<ConfirmationInstruction>().Subject;
 		manager.ProcessInput(instruction.CreateResponse());
-	}
-
-	private static void SelectCurrentPlayers(
-		GameClientManager manager,
-		HashSet<Guid> playerIds)
-	{
-		var instruction = manager.CurrentInstruction.Should()
-			.BeOfType<SelectPlayersInstruction>().Subject;
-		manager.ProcessInput(instruction.CreateResponse(playerIds));
 	}
 
 	private static string TestId(string value) => $"[data-testid='{value}']";
