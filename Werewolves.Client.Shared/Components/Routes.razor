@@ -127,7 +127,7 @@ else
 			RefreshRecentSetups();
 		}
 		catch (Exception exception) when (
-			exception is IOException or UnauthorizedAccessException)
+			exception is IOException or UnauthorizedAccessException or InvalidDataException)
 		{
 		}
 	}

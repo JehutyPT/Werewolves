@@ -352,6 +352,44 @@ public sealed class LandingNavigationBunitTests
 	}
 
 	[Fact]
+	public void RecentSetup_CorruptFileDeleteKeepsRowAndActiveSessionLobbyAndRecoveryUnchanged()
+	{
+		var appDataDirectory = Directory.CreateTempSubdirectory();
+		try
+		{
+			var recoveryStore = new RecordingSaveStore();
+			var recentStore = new FileRecentSetupStore(appDataDirectory.FullName);
+			using var context = CreateContext(recoveryStore);
+			context.Services.AddSingleton<IRecentSetupStore>(recentStore);
+			StartRecoverableSession(context);
+			var manager = context.Services.GetRequiredService<GameClientManager>();
+			var lobby = context.Services.GetRequiredService<LobbySetupState>();
+			var recoveryPayload = recoveryStore.Load();
+			var recoverySaveCount = recoveryStore.SaveCount;
+			var recoveryClearCount = recoveryStore.ClearCount;
+			var lobbyRoster = lobby.PlayerRoster.ToArray();
+			var cut = context.RenderModeratorComponent<Routes>();
+			cut.FindAll(TestId(ModeratorUiTestIds.LandingRecentSetupRow)).Should().ContainSingle();
+
+			File.WriteAllText(
+				Path.Combine(appDataDirectory.FullName, FileRecentSetupStore.StoreFileName),
+				"{");
+			cut.Find(TestId(ModeratorUiTestIds.LandingRecentSetupDelete)).Click();
+
+			cut.FindAll(TestId(ModeratorUiTestIds.LandingRecentSetupRow)).Should().ContainSingle();
+			manager.HasActiveSession.Should().BeTrue();
+			lobby.PlayerRoster.Should().Equal(lobbyRoster);
+			recoveryStore.Load().Should().Be(recoveryPayload);
+			recoveryStore.SaveCount.Should().Be(recoverySaveCount);
+			recoveryStore.ClearCount.Should().Be(recoveryClearCount);
+		}
+		finally
+		{
+			appDataDirectory.Delete(recursive: true);
+		}
+	}
+
+	[Fact]
 	public void RecentSetup_FailedDeleteKeepsRowAndActiveSessionUnchanged()
 	{
 		var recoveryStore = new RecordingSaveStore();
