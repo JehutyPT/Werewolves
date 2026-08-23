@@ -35,6 +35,10 @@ on one dedicated branch and delivering it through one final PR.
 
 - Integrated, verified, and reviewed explicit Landing navigation through
   commit `b647de51491e9c76178720092fe4e5d476f908c0`.
+- Browser QA test-driver follow-up
+  `370285d6066ac6c35d49dd0007e035707e648617` adapted New Game and Continue
+  coverage to Landing-first navigation; it records test-only provenance, not
+  production behavior or a merge to `main`.
 
 ### 2026-08-23 — issue #298
 
