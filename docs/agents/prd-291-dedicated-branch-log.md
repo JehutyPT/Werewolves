@@ -40,3 +40,20 @@ on one dedicated branch and delivering it through one final PR.
 
 - Integrated, verified, and reviewed scoped Roster and Role Selection resets
   through commit `b32952b53823b1bf6cc314f01a952eb714883207`.
+
+### 2026-08-23 — issue #299
+
+- Integrated, verified, and reviewed recent-setup capture and reuse through
+  commit `9692869756119069d28eb9b1fc615dcda46897c5`.
+- Closed issue #299 as verified on `codex/prd-291` under this dedicated-branch
+  exception, without representing the commit as merged to `main`.
+
+## Final child set and pull request
+
+- The completed child set is #296, #297, #298, and #299, at the exact commits
+  recorded above. Each child is closed as integrated, verified, and reviewed
+  on `codex/prd-291`; the retained formal relationships remain authoritative.
+- The one final pull request from `codex/prd-291` into
+  `codex/role-workflow-workstream` is pending user review. None of the
+  dedicated-branch commits recorded here are claimed to be present on
+  `main`.
