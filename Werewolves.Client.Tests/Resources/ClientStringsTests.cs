@@ -64,6 +64,7 @@ public class ClientStringsTests
 		nameof(ClientStrings.LobbyEvaluation_Degenerate),
 		nameof(ClientStrings.LobbyEvaluation_Probability),
 		nameof(ClientStrings.LobbyEvaluation_CouldNotEvaluate),
+		nameof(ClientStrings.LobbyEvaluation_CouldNotVerifyStartAvailable),
 		nameof(ClientStrings.LobbyEvaluation_SimulatorUnavailable),
 		nameof(ClientStrings.LobbyEvaluation_GameResultShared),
 		nameof(ClientStrings.LobbyEvaluation_GameResultNoWinner),

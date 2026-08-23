@@ -353,8 +353,8 @@
 		LobbyEvaluationStateKind.AlreadyDecided => ClientStrings.LobbyEvaluation_AlreadyDecidedBlock,
 		LobbyEvaluationStateKind.Degenerate => ClientStrings.LobbyEvaluation_DegenerateBlock,
 		LobbyEvaluationStateKind.ScreeningPassed or
-		LobbyEvaluationStateKind.CouldNotEvaluate or
 		LobbyEvaluationStateKind.Probability => ClientStrings.LobbyEvaluation_CheckComplete,
+		LobbyEvaluationStateKind.CouldNotEvaluate => ClientStrings.LobbyEvaluation_CouldNotVerifyStartAvailable,
 		_ => string.Empty
 	};
 
