@@ -1407,13 +1407,28 @@ internal class GameSession : IGameSession
 
     internal void ObserveVillagerVillagerFromDeal(Guid playerId)
     {
-		var card = GetModeratorPhysicalCharacterCards()
-			.SingleOrDefault(state =>
+		var player = GetPlayer(playerId);
+		var cards = GetModeratorPhysicalCharacterCards();
+		var ownedCardId = player.State.PhysicalCharacterCardId;
+		var bindsCardOwnership = ownedCardId is null;
+		var card = bindsCardOwnership
+			? cards.SingleOrDefault(state =>
 				state.Card.PrintedRole == MainRoleType.VillagerVillager &&
 				state.Zone == PhysicalCharacterCardZone.DealPool &&
 				state.OwnerPlayerId is null)
-			?.Card ?? throw new InvalidOperationException(
-				"No unowned Villager-Villager Physical Character Card is available.");
+			: cards.SingleOrDefault(state =>
+				state.Card.Id == ownedCardId &&
+				state.Card.PrintedRole == MainRoleType.VillagerVillager &&
+				state.Zone == PhysicalCharacterCardZone.PlayerOwned &&
+				state.OwnerPlayerId == playerId);
+		if (card is null)
+		{
+			throw new InvalidOperationException(
+				bindsCardOwnership
+					? "No unowned Villager-Villager Physical Character Card is available."
+					: "The Villager-Villager Physical Character Card ownership is invalid.");
+		}
+
         var entry = new VillagerVillagerPublicFromDealLogEntry
         {
             Timestamp = DateTimeOffset.UtcNow,
@@ -1421,7 +1436,8 @@ internal class GameSession : IGameSession
             CurrentPhase = _gameSessionKernel.CurrentPhase,
 			PlayerId = playerId,
 			RoleLockInVersion = RoleLockIn.Version,
-			CardId = card.Id
+			CardId = card.Card.Id,
+			BindsCardOwnership = bindsCardOwnership
         };
 
         _gameSessionKernel.AddEntryAndUpdateState(entry);
