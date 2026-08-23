@@ -13,6 +13,7 @@ public sealed class GameClientManager
 	private readonly GameService _gameService;
 	private readonly IInstructionAudioPlayback _audioPlayback;
 	private readonly IGameSessionSaveStore _saveStore;
+	private readonly IRecentSetupStore _recentSetupStore;
 	private readonly TimeProvider _timeProvider;
 	private readonly LobbySetupState? _lobbySetupState;
 	private StagedLobbyRecoveryPayload? _stagedLobby;
@@ -29,11 +30,13 @@ public sealed class GameClientManager
 		IInstructionAudioPlayback? audioPlayback = null,
 		IGameSessionSaveStore? saveStore = null,
 		TimeProvider? timeProvider = null,
-		LobbySetupState? lobbySetupState = null)
+		LobbySetupState? lobbySetupState = null,
+		IRecentSetupStore? recentSetupStore = null)
 	{
 		_gameService = gameService;
 		_audioPlayback = audioPlayback ?? DisabledInstructionAudioPlayback.Instance;
 		_saveStore = saveStore ?? DisabledGameSessionSaveStore.Instance;
+		_recentSetupStore = recentSetupStore ?? DisabledRecentSetupStore.Instance;
 		_timeProvider = timeProvider ?? TimeProvider.System;
 		_lobbySetupState = lobbySetupState;
 		TryResumeSavedGame();
@@ -110,10 +113,11 @@ public sealed class GameClientManager
 	private bool TryAcceptLobbyChange(
 		LobbySetupState lobby,
 		LobbyChange change,
-		out bool persistenceAttempted)
+		out bool persistenceAttempted,
+		Action? afterPersistenceAccepted = null)
 	{
 		persistenceAttempted = false;
-		if (HasActiveSession)
+		if (HasActiveSession && afterPersistenceAccepted is null)
 		{
 			return false;
 		}
@@ -134,6 +138,7 @@ public sealed class GameClientManager
 			return false;
 		}
 
+		afterPersistenceAccepted?.Invoke();
 		lobby.Publish(decision.Commit);
 		ReconcilePublishedLobbyDecision(lobby, decision);
 		return true;
@@ -304,6 +309,39 @@ public sealed class GameClientManager
 		return TryAcceptLobbyChange(lobby, new LobbyChange.ResetRoleCounts());
 	}
 
+	public bool TryApplyRecentSetup(
+		LobbySetupState lobby,
+		RecentSetup setup)
+	{
+		ArgumentNullException.ThrowIfNull(lobby);
+		ArgumentNullException.ThrowIfNull(setup);
+		return TryAcceptLobbyChange(
+			lobby,
+			new LobbyChange.ApplyRecentSetup(setup));
+	}
+
+	public bool TryAbandonSessionAndApplyRecentSetup(
+		LobbySetupState lobby,
+		RecentSetup setup)
+	{
+		ArgumentNullException.ThrowIfNull(lobby);
+		ArgumentNullException.ThrowIfNull(setup);
+		if (!HasActiveSession)
+		{
+			return TryApplyRecentSetup(lobby, setup);
+		}
+
+		return TryAcceptLobbyChange(
+			lobby,
+			new LobbyChange.ApplyRecentSetup(setup, ClearsRecovery: true),
+			out _,
+			() =>
+			{
+				DiscardCurrentSession();
+				_activeSessionLobbyPayload = null;
+			});
+	}
+
 	public StartGameConfirmationInstruction StartGame(
 		IReadOnlyList<string> playerNamesInOrder,
 		IReadOnlyList<MainRoleType> rolesInPlay)
@@ -420,10 +458,37 @@ public sealed class GameClientManager
 		UpdateDebateTimer();
 		QueueAudioReconciliation();
 		OnStateChanged();
+		if (lobby is not null)
+		{
+			try
+			{
+				_recentSetupStore.Capture(
+					config.PlayerRoster.Select(player => player.Name).ToArray(),
+					config.RoleLockIn.RoleComposition
+						.GroupBy(card => card.PrintedRole)
+						.ToDictionary(group => group.Key, group => group.Count()));
+			}
+			catch
+			{
+			}
+		}
 		return instruction;
 	}
 
 	public void ClearSession()
+	{
+		DiscardCurrentSession();
+		if (!PrefillLobbyAfterSession(out var persistenceAttempted))
+		{
+			if (!persistenceAttempted)
+			{
+				ClearSavedGame();
+			}
+			OnStateChanged();
+		}
+	}
+
+	private void DiscardCurrentSession()
 	{
 		if (ActiveGameId is { } gameId)
 		{
@@ -433,14 +498,6 @@ public sealed class GameClientManager
 		ActiveGameId = null;
 		CurrentSession = null;
 		CurrentInstruction = null;
-		if (!PrefillLobbyAfterSession(out var persistenceAttempted))
-		{
-			if (!persistenceAttempted)
-			{
-				ClearSavedGame();
-			}
-			OnStateChanged();
-		}
 	}
 
 	private bool PrefillLobbyAfterSession(out bool persistenceAttempted)

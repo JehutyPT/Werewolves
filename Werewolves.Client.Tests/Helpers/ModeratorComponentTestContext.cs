@@ -24,6 +24,7 @@ public sealed class ModeratorComponentTestContext : BunitContext
 		Services.AddSingleton<IHapticFeedbackService, NoOpHapticFeedbackService>();
 		Services.AddSingleton<IInstructionAudioPlayback, NoOpInstructionAudioPlayback>();
 		Services.AddSingleton<IGameSessionSaveStore, InMemoryGameSessionSaveStore>();
+		Services.AddSingleton<IRecentSetupStore, InMemoryRecentSetupStore>();
 		Services.AddSingleton<IScreenWakeLock, NoOpScreenWakeLock>();
 		Services.AddSingleton<GameplayWakeLockController>();
 		Services.AddSingleton<GameService>();

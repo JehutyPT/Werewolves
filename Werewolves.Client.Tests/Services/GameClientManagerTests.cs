@@ -1980,6 +1980,318 @@ public class GameClientManagerTests
 	}
 
 	[Fact]
+	public void StartGame_FromLobbyCapturesRecentSetupAfterPublishingTheActiveSession()
+	{
+		var recoveryStore = new RecordingSaveStore();
+		var recentStore = new RecordingRecentSetupStore();
+		var lobby = CreateSupportedLobby();
+		var manager = new GameClientManager(
+			new GameService(),
+			saveStore: recoveryStore,
+			recentSetupStore: recentStore);
+		var stateChanged = false;
+		manager.StateChanged += (_, _) => stateChanged = true;
+		recentStore.OnCapture = () =>
+		{
+			stateChanged.Should().BeTrue();
+			manager.HasActiveSession.Should().BeTrue();
+			ReadRecoveryKind(recoveryStore.Load()).Should().Be("ActiveGame");
+		};
+
+		manager.StartGame(lobby);
+
+		recentStore.Captures.Should().ContainSingle();
+		var capture = recentStore.Captures.Single();
+		capture.PlayerNames.Should().Equal(lobby.PlayerNames);
+		capture.RoleCounts.Should().BeEquivalentTo(
+			lobby.AcceptedRoleLockIn!.RoleComposition
+				.GroupBy(card => card.PrintedRole)
+				.ToDictionary(group => group.Key, group => group.Count()));
+	}
+
+	[Fact]
+	public void StartGame_WhenRecentCaptureFailsKeepsThePublishedActiveSession()
+	{
+		var recoveryStore = new RecordingSaveStore();
+		var recentStore = new RecordingRecentSetupStore { ThrowOnCapture = true };
+		var lobby = CreateSupportedLobby();
+		var manager = new GameClientManager(
+			new GameService(),
+			saveStore: recoveryStore,
+			recentSetupStore: recentStore);
+
+		var act = () => manager.StartGame(lobby);
+
+		act.Should().NotThrow();
+		manager.HasActiveSession.Should().BeTrue();
+		ReadRecoveryKind(recoveryStore.Load()).Should().Be("ActiveGame");
+		lobby.AcceptedRoleLockIn.Should().NotBeNull();
+		recentStore.CaptureAttemptCount.Should().Be(1);
+		recentStore.Captures.Should().BeEmpty();
+	}
+
+	[Fact]
+	public void StartGame_WhenBlockingRecoveryWriteFailsCapturesNoRecentSetup()
+	{
+		var recoveryStore = new ToggleThrowSaveStore();
+		var recentStore = new RecordingRecentSetupStore();
+		var lobby = CreateSupportedLobby();
+		var manager = new GameClientManager(
+			new GameService(),
+			saveStore: recoveryStore,
+			recentSetupStore: recentStore);
+		manager.TryEnsureStagedRoleLockIn(lobby).Should().BeTrue();
+		recoveryStore.ThrowOnSave = true;
+
+		var act = () => manager.StartGame(lobby);
+
+		act.Should().Throw<IOException>();
+		manager.HasActiveSession.Should().BeFalse();
+		recentStore.CaptureAttemptCount.Should().Be(0);
+	}
+
+	[Fact]
+	public void StartGame_WithoutLobbyDoesNotCaptureRecentSetup()
+	{
+		var recentStore = new RecordingRecentSetupStore();
+		var manager = new GameClientManager(
+			new GameService(),
+			recentSetupStore: recentStore);
+
+		StartSimpleGame(manager);
+
+		recentStore.CaptureAttemptCount.Should().Be(0);
+	}
+
+	[Fact]
+	public void StartGame_CapturesTheFullThiefRoleCompositionIncludingOfferCards()
+	{
+		var recentStore = new RecordingRecentSetupStore();
+		var lobby = CreateThiefLobby();
+		var roleLockIn = CreateThiefRoleLockIn(
+			version: 1,
+			rotateOffer1IntoDealPool: false);
+		var manager = new GameClientManager(
+			new GameService(),
+			recentSetupStore: recentStore);
+		manager.TryReplaceStagedRoleLockIn(lobby, 0, roleLockIn).Should().BeTrue();
+
+		manager.StartGame(lobby);
+
+		var capture = recentStore.Captures.Should().ContainSingle().Subject;
+		capture.RoleCounts.Values.Sum().Should().Be(roleLockIn.RoleComposition.Count);
+		capture.RoleCounts.Should().BeEquivalentTo(
+			roleLockIn.RoleComposition
+				.GroupBy(card => card.PrintedRole)
+				.ToDictionary(group => group.Key, group => group.Count()));
+	}
+
+	[Fact]
+	public void TryApplyRecentSetup_AtomicallyReplacesLobbyWithFreshArtifactFreeSetup()
+	{
+		var recoveryStore = new RecordingSaveStore();
+		var lobby = CreateSupportedLobby();
+		var manager = new GameClientManager(new GameService(), saveStore: recoveryStore);
+		manager.TryEnsureStagedRoleLockIn(lobby).Should().BeTrue();
+		var originalIds = lobby.PlayerRoster.Select(player => player.Id).ToHashSet();
+		var setup = new RecentSetup(
+			["Lia", "Mário", "Nina", "Óscar", "Pia"],
+			new Dictionary<MainRoleType, int>
+			{
+				[MainRoleType.SimpleWerewolf] = 1,
+				[MainRoleType.Seer] = 1,
+				[MainRoleType.SimpleVillager] = 3
+			},
+			new DateTimeOffset(2026, 8, 23, 10, 0, 0, TimeSpan.Zero));
+
+		manager.TryApplyRecentSetup(lobby, setup).Should().BeTrue();
+
+		lobby.PlayerNames.Should().Equal("Lia", "Mário", "Nina", "Óscar", "Pia");
+		lobby.PlayerRoster.Select(player => player.Id).Should().OnlyHaveUniqueItems();
+		lobby.PlayerRoster.Select(player => player.Id).Should().NotIntersectWith(originalIds);
+		lobby.AvailableRoles.ToDictionary(role => role, lobby.GetRoleCount)
+			.Where(entry => entry.Value > 0)
+			.Should().BeEquivalentTo(setup.RoleCounts);
+		lobby.AcceptedRoleLockIn.Should().BeNull();
+		lobby.AcceptedActorSetupCards.Should().BeSameAs(ActorSetupCards.None);
+		lobby.AcceptedPublicGroupPartition.Should().BeNull();
+		recoveryStore.Load().Should().BeNull();
+		var firstLoadedIds = lobby.PlayerRoster.Select(player => player.Id).ToArray();
+
+		manager.TryApplyRecentSetup(lobby, setup).Should().BeTrue();
+
+		lobby.PlayerRoster.Select(player => player.Id)
+			.Should().NotIntersectWith(originalIds.Concat(firstLoadedIds));
+	}
+
+	[Fact]
+	public void TryApplyRecentSetup_WhenRecoveryClearFailsLeavesLobbyAtomicallyUnchanged()
+	{
+		var recoveryStore = new ToggleThrowSaveStore();
+		var lobby = CreateSupportedLobby();
+		var manager = new GameClientManager(new GameService(), saveStore: recoveryStore);
+		manager.TryEnsureStagedRoleLockIn(lobby).Should().BeTrue();
+		var rosterBefore = lobby.PlayerRoster.ToArray();
+		var roleLockInBefore = lobby.AcceptedRoleLockIn;
+		var payloadBefore = recoveryStore.Load();
+		recoveryStore.ThrowOnClear = true;
+		var setup = new RecentSetup(
+			["Lia", "Mário", "Nina", "Óscar", "Pia"],
+			new Dictionary<MainRoleType, int>
+			{
+				[MainRoleType.SimpleWerewolf] = 1,
+				[MainRoleType.SimpleVillager] = 4
+			},
+			DateTimeOffset.UnixEpoch);
+
+		manager.TryApplyRecentSetup(lobby, setup).Should().BeFalse();
+
+		lobby.PlayerRoster.Should().Equal(rosterBefore);
+		lobby.AcceptedRoleLockIn.Should().BeSameAs(roleLockInBefore);
+		recoveryStore.Load().Should().Be(payloadBefore);
+	}
+
+	[Fact]
+	public void TryApplyRecentSetup_ClearsEveryAcceptedLobbyArtifactInOnePublication()
+	{
+		var lobby = CreateActorAndPrejudicedManipulatorLobby();
+		var manager = new GameClientManager(new GameService());
+		ConfigureAcceptedActorAndPrejudicedManipulatorLobby(lobby, manager);
+		lobby.AcceptedRoleLockIn.Should().NotBeNull();
+		lobby.AcceptedActorSetupCards.Cards.Should().NotBeEmpty();
+		lobby.AcceptedPublicGroupPartition.Should().NotBeNull();
+		var lobbyNotifications = 0;
+		var managerNotifications = 0;
+		IReadOnlyList<string>? notifiedNames = null;
+		RoleLockIn? notifiedRoleLockIn = lobby.AcceptedRoleLockIn;
+		ActorSetupCards? notifiedActorCards = lobby.AcceptedActorSetupCards;
+		PublicGroupPartition? notifiedPartition = lobby.AcceptedPublicGroupPartition;
+		lobby.SimulationScenarioChanged += (_, _) =>
+		{
+			lobbyNotifications++;
+			notifiedNames = lobby.PlayerNames;
+			notifiedRoleLockIn = lobby.AcceptedRoleLockIn;
+			notifiedActorCards = lobby.AcceptedActorSetupCards;
+			notifiedPartition = lobby.AcceptedPublicGroupPartition;
+		};
+		manager.StateChanged += (_, _) => managerNotifications++;
+		var setup = new RecentSetup(
+			["Lia", "Mário", "Nina", "Óscar", "Pia"],
+			new Dictionary<MainRoleType, int>
+			{
+				[MainRoleType.SimpleWerewolf] = 1,
+				[MainRoleType.SimpleVillager] = 4
+			},
+			DateTimeOffset.UnixEpoch);
+
+		manager.TryApplyRecentSetup(lobby, setup).Should().BeTrue();
+
+		lobbyNotifications.Should().Be(1);
+		managerNotifications.Should().Be(1);
+		notifiedNames.Should().Equal(setup.PlayerNames);
+		notifiedRoleLockIn.Should().BeNull();
+		notifiedActorCards.Should().BeSameAs(ActorSetupCards.None);
+		notifiedPartition.Should().BeNull();
+	}
+
+	[Fact]
+	public void TryApplyRecentSetup_WhileSessionIsActiveChangesNeitherSessionNorLobby()
+	{
+		var recoveryStore = new ToggleThrowSaveStore();
+		var lobby = CreateActorAndPrejudicedManipulatorLobby();
+		var manager = new GameClientManager(new GameService(), saveStore: recoveryStore);
+		ConfigureAcceptedActorAndPrejudicedManipulatorLobby(lobby, manager);
+		manager.StartGame(lobby);
+		var activeGameIdBefore = manager.ActiveGameId;
+		var sessionBefore = manager.CurrentSession;
+		var serializedSessionBefore = sessionBefore!.Serialize();
+		var instructionBefore = manager.CurrentInstruction;
+		var rosterBefore = lobby.PlayerRoster.ToArray();
+		var roleCountsBefore = lobby.AvailableRoles.ToDictionary(role => role, lobby.GetRoleCount);
+		var roleLockInBefore = lobby.AcceptedRoleLockIn;
+		var actorCardsBefore = lobby.AcceptedActorSetupCards;
+		var partitionBefore = lobby.AcceptedPublicGroupPartition;
+		var recoveryPayloadBefore = recoveryStore.Load();
+		var saveCountBefore = recoveryStore.SaveCount;
+		var clearCountBefore = recoveryStore.ClearCount;
+		var managerNotifications = 0;
+		manager.StateChanged += (_, _) => managerNotifications++;
+		var setup = new RecentSetup(
+			["Lia", "Mário", "Nina", "Óscar", "Pia"],
+			new Dictionary<MainRoleType, int>
+			{
+				[MainRoleType.SimpleWerewolf] = 1,
+				[MainRoleType.SimpleVillager] = 4
+			},
+			DateTimeOffset.UnixEpoch);
+
+		manager.TryApplyRecentSetup(lobby, setup).Should().BeFalse();
+
+		manager.ActiveGameId.Should().Be(activeGameIdBefore);
+		manager.HasActiveSession.Should().BeTrue();
+		manager.CurrentSession.Should().BeSameAs(sessionBefore);
+		manager.CurrentSession!.Serialize().Should().Be(serializedSessionBefore);
+		manager.CurrentInstruction.Should().BeSameAs(instructionBefore);
+		lobby.PlayerRoster.Should().Equal(rosterBefore);
+		lobby.AvailableRoles.ToDictionary(role => role, lobby.GetRoleCount)
+			.Should().Equal(roleCountsBefore);
+		lobby.AcceptedRoleLockIn.Should().BeSameAs(roleLockInBefore);
+		lobby.AcceptedActorSetupCards.Should().BeSameAs(actorCardsBefore);
+		lobby.AcceptedPublicGroupPartition.Should().BeSameAs(partitionBefore);
+		recoveryStore.Load().Should().Be(recoveryPayloadBefore);
+		recoveryStore.SaveCount.Should().Be(saveCountBefore);
+		recoveryStore.ClearCount.Should().Be(clearCountBefore);
+		managerNotifications.Should().Be(0);
+	}
+
+	[Fact]
+	public void TryAbandonSessionAndApplyRecentSetup_WhenRecoveryClearFailsPreservesTheExactSessionLobbyAndRecovery()
+	{
+		var recoveryStore = new ToggleThrowSaveStore();
+		var lobby = CreateActorAndPrejudicedManipulatorLobby();
+		var manager = new GameClientManager(new GameService(), saveStore: recoveryStore);
+		ConfigureAcceptedActorAndPrejudicedManipulatorLobby(lobby, manager);
+		manager.StartGame(lobby);
+		var activeGameIdBefore = manager.ActiveGameId;
+		var sessionBefore = manager.CurrentSession;
+		var serializedSessionBefore = sessionBefore!.Serialize();
+		var instructionBefore = manager.CurrentInstruction;
+		var rosterBefore = lobby.PlayerRoster.ToArray();
+		var roleCountsBefore = lobby.AvailableRoles.ToDictionary(role => role, lobby.GetRoleCount);
+		var roleLockInBefore = lobby.AcceptedRoleLockIn;
+		var actorCardsBefore = lobby.AcceptedActorSetupCards;
+		var partitionBefore = lobby.AcceptedPublicGroupPartition;
+		var recoveryPayloadBefore = recoveryStore.Load();
+		var managerNotifications = 0;
+		manager.StateChanged += (_, _) => managerNotifications++;
+		recoveryStore.ThrowOnClear = true;
+		var setup = new RecentSetup(
+			["Lia", "Mário", "Nina", "Óscar", "Pia"],
+			new Dictionary<MainRoleType, int>
+			{
+				[MainRoleType.SimpleWerewolf] = 1,
+				[MainRoleType.SimpleVillager] = 4
+			},
+			DateTimeOffset.UnixEpoch);
+
+		manager.TryAbandonSessionAndApplyRecentSetup(lobby, setup).Should().BeFalse();
+
+		manager.ActiveGameId.Should().Be(activeGameIdBefore);
+		manager.CurrentSession.Should().BeSameAs(sessionBefore);
+		manager.CurrentSession!.Serialize().Should().Be(serializedSessionBefore);
+		manager.CurrentInstruction.Should().BeSameAs(instructionBefore);
+		lobby.PlayerRoster.Should().Equal(rosterBefore);
+		lobby.AvailableRoles.ToDictionary(role => role, lobby.GetRoleCount)
+			.Should().Equal(roleCountsBefore);
+		lobby.AcceptedRoleLockIn.Should().BeSameAs(roleLockInBefore);
+		lobby.AcceptedActorSetupCards.Should().BeSameAs(actorCardsBefore);
+		lobby.AcceptedPublicGroupPartition.Should().BeSameAs(partitionBefore);
+		recoveryStore.Load().Should().Be(recoveryPayloadBefore);
+		recoveryStore.ClearCount.Should().Be(1);
+		managerNotifications.Should().Be(0);
+	}
+
+	[Fact]
 	public void StartGame_FromLobbyConfiguration_CreatesCoreSessionAndExposesInstruction()
 	{
 		var manager = new GameClientManager();
@@ -3691,6 +4003,37 @@ public class GameClientManagerTests
 		{
 			ClearCount++;
 			_payload = null;
+		}
+	}
+
+	private sealed class RecordingRecentSetupStore : IRecentSetupStore
+	{
+		public List<(
+			IReadOnlyList<string> PlayerNames,
+			IReadOnlyDictionary<MainRoleType, int> RoleCounts)> Captures { get; } = [];
+		public Action? OnCapture { get; set; }
+		public bool ThrowOnCapture { get; set; }
+		public int CaptureAttemptCount { get; private set; }
+
+		public IReadOnlyList<RecentSetup> Load() => [];
+
+		public void Capture(
+			IReadOnlyList<string> playerNames,
+			IReadOnlyDictionary<MainRoleType, int> roleCounts)
+		{
+			CaptureAttemptCount++;
+			if (ThrowOnCapture)
+			{
+				throw new IOException("Recent setup store unavailable.");
+			}
+			OnCapture?.Invoke();
+			Captures.Add((
+				playerNames.ToArray(),
+				roleCounts.ToDictionary(entry => entry.Key, entry => entry.Value)));
+		}
+
+		public void Delete(RecentSetup setup)
+		{
 		}
 	}
 

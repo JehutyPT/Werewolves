@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <Compile Include="..\Werewolves.Client\Services\FileGameSessionSaveStore.cs" Link="Services\FileGameSessionSaveStore.cs" />
+	<Compile Include="..\Werewolves.Client\Services\FileRecentSetupStore.cs" Link="Services\FileRecentSetupStore.cs" />
 	<Compile Include="..\Werewolves.Client\Services\FileTerminalLobbyCacheStore.cs" Link="Services\FileTerminalLobbyCacheStore.cs" />
 	<Compile Include="..\Werewolves.Client\Services\NativeLobbyEvaluationServiceCollectionExtensions.cs" Link="Services\NativeLobbyEvaluationServiceCollectionExtensions.cs" />
   </ItemGroup>

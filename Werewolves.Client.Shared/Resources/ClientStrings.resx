@@ -745,4 +745,67 @@
   <data name="Landing_NewGameDescription" xml:space="preserve">
     <value>Prepare the Players and Role Composition for a new Game Session.</value>
   </data>
+  <data name="RecentSetup_RelativeNow" xml:space="preserve">
+    <value>now</value>
+  </data>
+  <data name="RecentSetup_RelativeMinute" xml:space="preserve">
+    <value>1 minute ago</value>
+  </data>
+  <data name="RecentSetup_RelativeMinutesFormat" xml:space="preserve">
+    <value>{0} minutes ago</value>
+  </data>
+  <data name="RecentSetup_RelativeHour" xml:space="preserve">
+    <value>1 hour ago</value>
+  </data>
+  <data name="RecentSetup_RelativeHoursFormat" xml:space="preserve">
+    <value>{0} hours ago</value>
+  </data>
+  <data name="RecentSetup_RelativeDay" xml:space="preserve">
+    <value>1 day ago</value>
+  </data>
+  <data name="RecentSetup_RelativeDaysFormat" xml:space="preserve">
+    <value>{0} days ago</value>
+  </data>
+  <data name="RecentSetup_RelativeWeek" xml:space="preserve">
+    <value>1 week ago</value>
+  </data>
+  <data name="RecentSetup_RelativeWeeksFormat" xml:space="preserve">
+    <value>{0} weeks ago</value>
+  </data>
+  <data name="RecentSetup_RelativeMonth" xml:space="preserve">
+    <value>1 month ago</value>
+  </data>
+  <data name="RecentSetup_RelativeMonthsFormat" xml:space="preserve">
+    <value>{0} months ago</value>
+  </data>
+  <data name="RecentSetup_RelativeYear" xml:space="preserve">
+    <value>1 year ago</value>
+  </data>
+  <data name="RecentSetup_RelativeYearsFormat" xml:space="preserve">
+    <value>{0} years ago</value>
+  </data>
+  <data name="Landing_RecentSetupsTitle" xml:space="preserve">
+    <value>Recent setups</value>
+  </data>
+  <data name="Landing_RecentPlayersLabel" xml:space="preserve">
+    <value>Players</value>
+  </data>
+  <data name="Landing_RecentRoleCountFormat" xml:space="preserve">
+    <value>{0}: {1}</value>
+  </data>
+  <data name="Landing_RecentSetupSummaryFormat" xml:space="preserve">
+    <value>setup for {0} Players: {1}; Roles: {2}; saved {3}</value>
+  </data>
+  <data name="Landing_RecentSetupSelectAriaFormat" xml:space="preserve">
+    <value>Load {0}</value>
+  </data>
+  <data name="Landing_RecentSetupDeleteAriaFormat" xml:space="preserve">
+    <value>Delete {0}</value>
+  </data>
+  <data name="Landing_RecentRoleGroupAriaFormat" xml:space="preserve">
+    <value>{0}: {1} Role cards</value>
+  </data>
+  <data name="Landing_RecentRoleBarAriaFormat" xml:space="preserve">
+    <value>{0} Role cards across the configured groups</value>
+  </data>
 </root>

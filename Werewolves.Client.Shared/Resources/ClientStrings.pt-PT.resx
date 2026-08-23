@@ -742,4 +742,67 @@
   <data name="Landing_NewGameDescription" xml:space="preserve">
     <value>Prepare os jogadores e a composição de papéis para uma nova sessão de jogo.</value>
   </data>
+  <data name="RecentSetup_RelativeNow" xml:space="preserve">
+    <value>agora</value>
+  </data>
+  <data name="RecentSetup_RelativeMinute" xml:space="preserve">
+    <value>há 1 minuto</value>
+  </data>
+  <data name="RecentSetup_RelativeMinutesFormat" xml:space="preserve">
+    <value>há {0} minutos</value>
+  </data>
+  <data name="RecentSetup_RelativeHour" xml:space="preserve">
+    <value>há 1 hora</value>
+  </data>
+  <data name="RecentSetup_RelativeHoursFormat" xml:space="preserve">
+    <value>há {0} horas</value>
+  </data>
+  <data name="RecentSetup_RelativeDay" xml:space="preserve">
+    <value>há 1 dia</value>
+  </data>
+  <data name="RecentSetup_RelativeDaysFormat" xml:space="preserve">
+    <value>há {0} dias</value>
+  </data>
+  <data name="RecentSetup_RelativeWeek" xml:space="preserve">
+    <value>há 1 semana</value>
+  </data>
+  <data name="RecentSetup_RelativeWeeksFormat" xml:space="preserve">
+    <value>há {0} semanas</value>
+  </data>
+  <data name="RecentSetup_RelativeMonth" xml:space="preserve">
+    <value>há 1 mês</value>
+  </data>
+  <data name="RecentSetup_RelativeMonthsFormat" xml:space="preserve">
+    <value>há {0} meses</value>
+  </data>
+  <data name="RecentSetup_RelativeYear" xml:space="preserve">
+    <value>há 1 ano</value>
+  </data>
+  <data name="RecentSetup_RelativeYearsFormat" xml:space="preserve">
+    <value>há {0} anos</value>
+  </data>
+  <data name="Landing_RecentSetupsTitle" xml:space="preserve">
+    <value>Configurações recentes</value>
+  </data>
+  <data name="Landing_RecentPlayersLabel" xml:space="preserve">
+    <value>jogadores</value>
+  </data>
+  <data name="Landing_RecentRoleCountFormat" xml:space="preserve">
+    <value>{0}: {1}</value>
+  </data>
+  <data name="Landing_RecentSetupSummaryFormat" xml:space="preserve">
+    <value>configuração para {0} jogadores: {1}; papéis: {2}; guardada {3}</value>
+  </data>
+  <data name="Landing_RecentSetupSelectAriaFormat" xml:space="preserve">
+    <value>Carregar {0}</value>
+  </data>
+  <data name="Landing_RecentSetupDeleteAriaFormat" xml:space="preserve">
+    <value>Eliminar {0}</value>
+  </data>
+  <data name="Landing_RecentRoleGroupAriaFormat" xml:space="preserve">
+    <value>{0}: {1} cartas de papel</value>
+  </data>
+  <data name="Landing_RecentRoleBarAriaFormat" xml:space="preserve">
+    <value>{0} cartas de papel nos grupos configurados</value>
+  </data>
 </root>

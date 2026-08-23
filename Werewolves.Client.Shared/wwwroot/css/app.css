@@ -83,6 +83,130 @@ button {
   line-height: 1.5;
 }
 
+.ww-recent-setups {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  max-width: 52rem;
+}
+
+.ww-recent-setups h2 {
+  margin: 0;
+  color: var(--ww-text);
+  font-size: 20px;
+}
+
+.ww-recent-setups ul {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ww-recent-setup-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 48px;
+  overflow: hidden;
+  border: 1px solid var(--ww-border-neutral);
+  border-radius: var(--ww-radius-card);
+  background: var(--ww-surface);
+  touch-action: pan-y;
+}
+
+.ww-recent-setup-select,
+.ww-recent-setup-delete {
+  border: 0;
+  color: inherit;
+  background: transparent;
+}
+
+.ww-recent-setup-select {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px 18px;
+  min-width: 0;
+  padding: 16px;
+  text-align: left;
+}
+
+.ww-recent-player-count {
+  grid-row: 1 / span 3;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  min-width: 62px;
+}
+
+.ww-recent-player-numeral {
+  font-size: 36px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.ww-recent-player-label,
+.ww-recent-setup-select time {
+  color: var(--ww-text-dim);
+  font-size: 12px;
+}
+
+.ww-recent-role-groups {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.ww-recent-role-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ww-recent-group-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.ww-recent-role-glyph {
+  display: inline-flex;
+  gap: 2px;
+  align-items: baseline;
+}
+
+.ww-recent-role-bar {
+  display: flex;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--ww-surface-hi);
+}
+
+.ww-recent-group-werewolves {
+  background: var(--ww-faction-werewolf);
+}
+
+.ww-recent-group-villagers {
+  background: var(--ww-faction-villager);
+}
+
+.ww-recent-group-ambiguous {
+  background: var(--ww-faction-ambiguous);
+}
+
+.ww-recent-group-loners {
+  background: var(--ww-faction-loner);
+}
+
+.ww-recent-setup-delete {
+  border-left: 1px solid var(--ww-border-neutral);
+  color: var(--ww-text-dim);
+  font-size: 24px;
+}
+
 .ww-dialog-backdrop {
   position: fixed;
   z-index: 50;

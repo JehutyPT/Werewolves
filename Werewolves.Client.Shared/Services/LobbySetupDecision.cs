@@ -92,6 +92,10 @@ internal abstract record LobbyChange
 	internal sealed record ResetPlayerRoster : LobbyChange;
 
 	internal sealed record ResetRoleCounts : LobbyChange;
+
+	internal sealed record ApplyRecentSetup(
+		RecentSetup Setup,
+		bool ClearsRecovery = false) : LobbyChange;
 }
 
 internal sealed class LobbySetupAggregate

@@ -95,6 +95,8 @@ public class BrowserQaHostCompositionTests
 		context.Services.GetRequiredService<IScreenWakeLock>().KeepScreenOn.Should().BeTrue();
 		context.Services.GetRequiredService<IHapticFeedbackService>().Invoking(haptic => haptic.Click()).Should().NotThrow();
 		context.Services.GetRequiredService<IGameSessionSaveStore>().Load().Should().BeNull();
+		context.Services.GetRequiredService<IRecentSetupStore>()
+			.Should().BeOfType<InMemoryRecentSetupStore>();
 		context.Services.GetRequiredService<LobbyEvaluationCoordinator>().Depth
 			.Should().Be(LobbyEvaluationDepth.DegenerateScreeningOnly);
 		context.Services.GetRequiredService<LobbyEvaluationCoordinator>().Capability

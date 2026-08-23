@@ -489,8 +489,55 @@ public class LobbySetupState
 			LobbyChange.RemovePlayer remove => DecidePlayerRemoval(remove),
 			LobbyChange.ResetPlayerRoster => DecidePlayerRosterReset(),
 			LobbyChange.ResetRoleCounts => DecideRoleCountReset(),
+			LobbyChange.ApplyRecentSetup apply => DecideRecentSetupApplication(apply),
 			_ => null
 		};
+	}
+
+	private LobbyDecision? DecideRecentSetupApplication(
+		LobbyChange.ApplyRecentSetup change)
+	{
+		var setup = change.Setup;
+		if ((_current.RoleLockInFinalized && !change.ClearsRecovery) ||
+			setup.PlayerNames.Count == 0 ||
+			setup.PlayerNames.Any(name =>
+				string.IsNullOrWhiteSpace(name) ||
+				!string.Equals(name, name.Trim(), StringComparison.Ordinal)) ||
+			setup.PlayerNames.Distinct(StringComparer.OrdinalIgnoreCase).Count() !=
+				setup.PlayerNames.Count ||
+			setup.RoleCounts.Count == 0 ||
+			setup.RoleCounts.Any(entry =>
+				entry.Value <= 0 || !_availableRoleMetadata.ContainsKey(entry.Key)))
+		{
+			return null;
+		}
+
+		var issuedPlayerIds = _current.IssuedPlayerIds.ToHashSet();
+		var roster = new List<GameSessionPlayerConfig>(setup.PlayerNames.Count);
+		foreach (var name in setup.PlayerNames)
+		{
+			Guid id;
+			do
+			{
+				id = Guid.NewGuid();
+			}
+			while (!issuedPlayerIds.Add(id));
+			roster.Add(new GameSessionPlayerConfig(id, name));
+		}
+
+		var nextAggregate = new LobbySetupAggregate(
+			roster,
+			issuedPlayerIds,
+			setup.RoleCounts,
+			acceptedRoleLockIn: null,
+			ActorSetupCards.None,
+			acceptedPublicGroupPartition: null,
+			roleLockInFinalized: false,
+			acceptedRoleLockInRequiresReplacement: false);
+		var persistence = AcceptedRoleLockIn is null && !change.ClearsRecovery
+			? (LobbyPersistenceInstruction)new LobbyPersistenceInstruction.Keep()
+			: new LobbyPersistenceInstruction.Clear();
+		return CreateDecision(nextAggregate, persistence);
 	}
 
 	private LobbyDecision DecidePostGameRecovery(

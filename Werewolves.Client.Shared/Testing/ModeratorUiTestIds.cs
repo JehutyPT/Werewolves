@@ -7,6 +7,12 @@ public static class ModeratorUiTestIds
 	public const string LandingNewGameButton = "landing-new-game-button";
 	public const string LandingNewGameCancel = "landing-new-game-cancel";
 	public const string LandingNewGameConfirm = "landing-new-game-confirm";
+	public const string LandingRecentSetups = "landing-recent-setups";
+	public const string LandingRecentSetupRow = "landing-recent-setup-row";
+	public const string LandingRecentSetupSelect = "landing-recent-setup-select";
+	public const string LandingRecentSetupDelete = "landing-recent-setup-delete";
+	public const string LandingRecentSetupGroup = "landing-recent-setup-group";
+	public const string LandingRecentSetupBar = "landing-recent-setup-bar";
 	public const string LobbyRosterBack = "lobby-roster-back";
 	public const string LobbyRosterReset = "lobby-roster-reset";
 	public const string DashboardShell = "dashboard-shell";

@@ -2,16 +2,23 @@
 @using Werewolves.Core.StateModels.Models.Instructions
 @using Werewolves.Core.StateModels.Enums
 @using Werewolves.Core.StateModels.Models.Simulation
+@using Werewolves.Core.GameLogic.Models
 @implements IDisposable
 @inject LobbySetupState Lobby
 @inject GameClientManager Game
 @inject GameplayWakeLockController WakeLock
+@inject IRecentSetupStore RecentSetupStore
+@inject LobbySetupMetadata LobbyMetadata
+@inject TimeProvider Clock
 
 @if (_currentStep == LobbyStep.Landing)
 {
 	<LandingPage CanContinue="Game.HasActiveSession"
+				 RecentSetups="_recentSetups"
 				 OnContinue="MoveToInitialStep"
-				 OnNewGame="HandleNewGame" />
+				 OnNewGame="HandleNewGame"
+				 OnRecentSetup="HandleRecentSetup"
+				 OnDeleteRecentSetup="HandleDeleteRecentSetup" />
 }
 else if (_currentStep == LobbyStep.Roster)
 {
@@ -56,10 +63,12 @@ else
 	private LobbyStep _currentStep = LobbyStep.Landing;
 	private GameResult? _gameResult;
 	private VictoryCheckWindow? _victoryCheckWindow;
+	private IReadOnlyList<RecentSetupRowPresentation> _recentSetups = [];
 
 	protected override void OnInitialized()
 	{
 		Game.StateChanged += HandleGameStateChanged;
+		RefreshRecentSetups();
 		MoveTo(LobbyStep.Landing);
 	}
 
@@ -88,6 +97,7 @@ else
 
 	private void ShowLanding()
 	{
+		RefreshRecentSetups();
 		MoveTo(LobbyStep.Landing);
 	}
 
@@ -99,6 +109,49 @@ else
 		}
 
 		MoveTo(LobbyStep.Roster);
+	}
+
+	private void HandleRecentSetup(RecentSetup setup)
+	{
+		if (Game.TryAbandonSessionAndApplyRecentSetup(Lobby, setup))
+		{
+			MoveTo(LobbyStep.Roster);
+		}
+	}
+
+	private void HandleDeleteRecentSetup(RecentSetup setup)
+	{
+		try
+		{
+			RecentSetupStore.Delete(setup);
+			RefreshRecentSetups();
+		}
+		catch (Exception exception) when (
+			exception is IOException or UnauthorizedAccessException)
+		{
+		}
+	}
+
+	private void RefreshRecentSetups()
+	{
+		IReadOnlyList<RecentSetup> setups;
+		try
+		{
+			setups = RecentSetupStore.Load();
+		}
+		catch (Exception exception) when (
+			exception is IOException or UnauthorizedAccessException)
+		{
+			_recentSetups = [];
+			return;
+		}
+
+		_recentSetups = setups
+			.Select(setup => RecentSetupProjection.Project(
+				setup,
+				LobbyMetadata,
+				Clock.GetUtcNow()))
+			.ToArray();
 	}
 
 	private void ShowRoleLockIn()
