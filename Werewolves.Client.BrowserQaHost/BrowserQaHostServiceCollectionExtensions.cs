@@ -23,6 +23,7 @@ public static class BrowserQaHostServiceCollectionExtensions
 		services.TryAddScoped<IHapticFeedbackService, BrowserSafeHapticFeedbackService>();
 		services.TryAddScoped<IScreenWakeLock, BrowserSafeScreenWakeLock>();
 		services.TryAddScoped<IGameSessionSaveStore, BrowserQaInMemoryGameSessionSaveStore>();
+		services.TryAddScoped<IRecentSetupStore, InMemoryRecentSetupStore>();
 		services.TryAddSingleton(
 			new LobbyEvaluationSettings(
 				SimulatorCapability.SafetyScreening,

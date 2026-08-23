@@ -56,6 +56,14 @@ internal abstract record LobbyChange
 	internal sealed record ReplacePublicGroupPartition(
 		PublicGroupPartition Replacement) : LobbyChange;
 
+	internal sealed record RecoverPostGameLobby(
+		IReadOnlyList<GameSessionPlayerConfig> PlayerRoster,
+		RoleLockIn RoleLockIn,
+		ActorSetupCards ActorSetupCards,
+		PublicGroupPartition? PublicGroupPartition) : LobbyChange;
+
+	internal sealed record WipePostGameLobby : LobbyChange;
+
 	internal sealed record MovePlayer : LobbyChange
 	{
 		public MovePlayer(int fromIndex, int toIndex)
@@ -80,6 +88,14 @@ internal abstract record LobbyChange
 
 		public int Index { get; }
 	}
+
+	internal sealed record ResetPlayerRoster : LobbyChange;
+
+	internal sealed record ResetRoleCounts : LobbyChange;
+
+	internal sealed record ApplyRecentSetup(
+		RecentSetup Setup,
+		bool ClearsRecovery = false) : LobbyChange;
 }
 
 internal sealed class LobbySetupAggregate

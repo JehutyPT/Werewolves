@@ -78,6 +78,15 @@
 		}
 	</section>
 
+	<section class="ww-scoped-reset"
+			 data-testid="@ModeratorUiTestIds.LobbyRosterReset"
+			 aria-label="@ClientStrings.LobbyRoster_ResetButton">
+		<HoldButton @key="_resetHoldVersion"
+					Label="@ClientStrings.LobbyRoster_ResetButton"
+					Disabled="@(Lobby.PlayerRoster.Count == 0)"
+					OnHoldComplete="ResetRoster" />
+	</section>
+
 	<footer class="ww-action-bar">
 		@if (_rosterErrors.Count > 0)
 		{
@@ -90,15 +99,15 @@
 		}
 		@if (IsDebugBuild && OnShowLabs.HasDelegate)
 		{
-			<div class="ww-action-pair">
-				<button type="button" class="ww-secondary-button" @onclick="ShowLabs">@ClientStrings.Common_Labs</button>
-				<button type="button" class="ww-btn-primary" disabled="@(!HasEnoughPlayers)" @onclick="Continue">@ClientStrings.LobbyRoster_ContinueToRolesButton</button>
-			</div>
+			<button type="button" class="ww-secondary-button" @onclick="ShowLabs">@ClientStrings.Common_Labs</button>
 		}
-		else
-		{
+		<div class="ww-action-pair">
+			<button type="button"
+					class="ww-secondary-button"
+					data-testid="@ModeratorUiTestIds.LobbyRosterBack"
+					@onclick="Back">@ClientStrings.LobbyRoster_BackButton</button>
 			<button type="button" class="ww-btn-primary" disabled="@(!HasEnoughPlayers)" @onclick="Continue">@ClientStrings.LobbyRoster_ContinueToRolesButton</button>
-		}
+		</div>
 	</footer>
 </main>
 
@@ -110,11 +119,15 @@
 	public EventCallback OnContinue { get; set; }
 
 	[Parameter]
+	public EventCallback OnBack { get; set; }
+
+	[Parameter]
 	public EventCallback OnShowLabs { get; set; }
 
 	private string _draftPlayerName = string.Empty;
 	private string? _validationMessage;
 	private List<string> _rosterErrors = new();
+	private int _resetHoldVersion;
 
 #if DEBUG
 	private const bool IsDebugBuild = true;
@@ -169,6 +182,16 @@
 		}
 	}
 
+	private void ResetRoster()
+	{
+		if (Game.TryResetStagedPlayerRoster(Lobby))
+		{
+			_validationMessage = null;
+			_rosterErrors.Clear();
+		}
+		_resetHoldVersion++;
+	}
+
 	private Task Continue()
 	{
 		if (Lobby.HasPlayerConfigIssues(out var issues))
@@ -182,6 +205,8 @@
 	}
 
 	private Task ShowLabs() => OnShowLabs.InvokeAsync();
+
+	private Task Back() => OnBack.InvokeAsync();
 
 	private static string Format(string format, params object[] args) =>
 		string.Format(CultureInfo.CurrentCulture, format, args);

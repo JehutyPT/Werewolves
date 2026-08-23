@@ -118,6 +118,9 @@
   <data name="LobbyRoster_ContinueToRolesButton" xml:space="preserve">
     <value>Continue to roles</value>
   </data>
+  <data name="LobbyRoster_ResetButton" xml:space="preserve">
+    <value>Clear players</value>
+  </data>
   <data name="LobbyRoster_PlayerCountOne" xml:space="preserve">
     <value>1 player</value>
   </data>
@@ -583,6 +586,9 @@
   <data name="Common_HoldToConfirm" xml:space="preserve">
     <value>Hold to confirm</value>
   </data>
+  <data name="RoleSelection_ResetButton" xml:space="preserve">
+    <value>Clear roles</value>
+  </data>
   <data name="Victory_Title" xml:space="preserve">
     <value>Game Over</value>
   </data>
@@ -705,5 +711,104 @@
   </data>
   <data name="RoleSelection_ReviewPublicGroupPartitionButton" xml:space="preserve">
     <value>Review or change public groups</value>
+  </data>
+  <data name="Landing_NewGameButton" xml:space="preserve">
+    <value>New Game Session</value>
+  </data>
+  <data name="Landing_ContinueButton" xml:space="preserve">
+    <value>Continue Game Session</value>
+  </data>
+  <data name="Landing_NewGameDialogTitle" xml:space="preserve">
+    <value>Start a new Game Session?</value>
+  </data>
+  <data name="Landing_NewGameDialogDescription" xml:space="preserve">
+    <value>The current Game Session will be abandoned.</value>
+  </data>
+  <data name="Landing_NewGameCancelButton" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="Landing_NewGameConfirmButton" xml:space="preserve">
+    <value>Start new Game Session</value>
+  </data>
+  <data name="LobbyRoster_BackButton" xml:space="preserve">
+    <value>Back to home</value>
+  </data>
+  <data name="Landing_StepLabel" xml:space="preserve">
+    <value>Home</value>
+  </data>
+  <data name="Landing_Title" xml:space="preserve">
+    <value>Werewolves Moderator</value>
+  </data>
+  <data name="Landing_Description" xml:space="preserve">
+    <value>Continue a Game Session or prepare a new one for the table.</value>
+  </data>
+  <data name="Landing_ContinueDescription" xml:space="preserve">
+    <value>Return to the recovered Game Session and its pending Moderator Instruction.</value>
+  </data>
+  <data name="Landing_NewGameDescription" xml:space="preserve">
+    <value>Prepare the Players and Role Composition for a new Game Session.</value>
+  </data>
+  <data name="RecentSetup_RelativeNow" xml:space="preserve">
+    <value>now</value>
+  </data>
+  <data name="RecentSetup_RelativeMinute" xml:space="preserve">
+    <value>1 minute ago</value>
+  </data>
+  <data name="RecentSetup_RelativeMinutesFormat" xml:space="preserve">
+    <value>{0} minutes ago</value>
+  </data>
+  <data name="RecentSetup_RelativeHour" xml:space="preserve">
+    <value>1 hour ago</value>
+  </data>
+  <data name="RecentSetup_RelativeHoursFormat" xml:space="preserve">
+    <value>{0} hours ago</value>
+  </data>
+  <data name="RecentSetup_RelativeDay" xml:space="preserve">
+    <value>1 day ago</value>
+  </data>
+  <data name="RecentSetup_RelativeDaysFormat" xml:space="preserve">
+    <value>{0} days ago</value>
+  </data>
+  <data name="RecentSetup_RelativeWeek" xml:space="preserve">
+    <value>1 week ago</value>
+  </data>
+  <data name="RecentSetup_RelativeWeeksFormat" xml:space="preserve">
+    <value>{0} weeks ago</value>
+  </data>
+  <data name="RecentSetup_RelativeMonth" xml:space="preserve">
+    <value>1 month ago</value>
+  </data>
+  <data name="RecentSetup_RelativeMonthsFormat" xml:space="preserve">
+    <value>{0} months ago</value>
+  </data>
+  <data name="RecentSetup_RelativeYear" xml:space="preserve">
+    <value>1 year ago</value>
+  </data>
+  <data name="RecentSetup_RelativeYearsFormat" xml:space="preserve">
+    <value>{0} years ago</value>
+  </data>
+  <data name="Landing_RecentSetupsTitle" xml:space="preserve">
+    <value>Recent setups</value>
+  </data>
+  <data name="Landing_RecentPlayersLabel" xml:space="preserve">
+    <value>Players</value>
+  </data>
+  <data name="Landing_RecentRoleCountFormat" xml:space="preserve">
+    <value>{0}: {1}</value>
+  </data>
+  <data name="Landing_RecentSetupSummaryFormat" xml:space="preserve">
+    <value>setup for {0} Players: {1}; Roles: {2}; saved {3}</value>
+  </data>
+  <data name="Landing_RecentSetupSelectAriaFormat" xml:space="preserve">
+    <value>Load {0}</value>
+  </data>
+  <data name="Landing_RecentSetupDeleteAriaFormat" xml:space="preserve">
+    <value>Delete {0}</value>
+  </data>
+  <data name="Landing_RecentRoleGroupAriaFormat" xml:space="preserve">
+    <value>{0}: {1} Role cards</value>
+  </data>
+  <data name="Landing_RecentRoleBarAriaFormat" xml:space="preserve">
+    <value>{0} Role cards across the configured groups</value>
   </data>
 </root>

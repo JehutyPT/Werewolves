@@ -1,0 +1,278 @@
+@using Microsoft.AspNetCore.Components.Web
+
+<main class="ww-app-shell ww-landing"
+	  aria-labelledby="landing-title"
+	  data-testid="@ModeratorUiTestIds.LandingShell">
+	<header class="ww-landing-header">
+		<p class="ww-step-label">@ClientStrings.Landing_StepLabel</p>
+		<h1 id="landing-title">@ClientStrings.Landing_Title</h1>
+		<p class="ww-page-copy">@ClientStrings.Landing_Description</p>
+	</header>
+
+	<section class="ww-landing-actions">
+		@if (CanContinue)
+		{
+			<article class="ww-landing-card">
+				<div>
+					<h2>@ClientStrings.Landing_ContinueButton</h2>
+					<p>@ClientStrings.Landing_ContinueDescription</p>
+				</div>
+				<button type="button"
+						class="ww-btn-primary"
+						data-testid="@ModeratorUiTestIds.LandingContinueButton"
+						@onclick="OnContinue">
+					@ClientStrings.Landing_ContinueButton
+				</button>
+			</article>
+		}
+
+		<article class="ww-landing-card">
+			<div>
+				<h2>@ClientStrings.Landing_NewGameButton</h2>
+				<p>@ClientStrings.Landing_NewGameDescription</p>
+			</div>
+			<button type="button"
+					class="ww-btn-primary"
+					data-testid="@ModeratorUiTestIds.LandingNewGameButton"
+					@onclick="BeginNewGame">
+				@ClientStrings.Landing_NewGameButton
+			</button>
+		</article>
+	</section>
+
+	@if (RecentSetups.Count > 0)
+	{
+		<section class="ww-recent-setups"
+				 aria-labelledby="landing-recent-setups-title"
+				 data-testid="@ModeratorUiTestIds.LandingRecentSetups">
+			<h2 id="landing-recent-setups-title">@ClientStrings.Landing_RecentSetupsTitle</h2>
+			<ul>
+				@foreach (var row in RecentSetups)
+				{
+					<li class="ww-recent-setup-row"
+						data-testid="@ModeratorUiTestIds.LandingRecentSetupRow"
+						@onpointerdown="args => BeginSwipe(row.Setup, args)"
+						@onpointerup="args => EndSwipe(row.Setup, args)"
+						@onpointercancel="CancelSwipe"
+						@onpointerleave="CancelSwipe">
+						<button type="button"
+								class="ww-recent-setup-select"
+								aria-label="@Format(ClientStrings.Landing_RecentSetupSelectAriaFormat, SetupSummary(row))"
+								data-testid="@ModeratorUiTestIds.LandingRecentSetupSelect"
+								@onclick="() => BeginRecentSetup(row.Setup)">
+							<span class="ww-recent-player-count">
+								<span class="ww-recent-player-numeral">@row.PlayerCount</span>
+								<span class="ww-recent-player-label">@ClientStrings.Landing_RecentPlayersLabel</span>
+							</span>
+							<span class="ww-recent-role-groups">
+								@foreach (var group in row.RoleGroups)
+								{
+									<span class="ww-recent-role-group"
+										  data-testid="@ModeratorUiTestIds.LandingRecentSetupGroup"
+										  aria-label="@Format(ClientStrings.Landing_RecentRoleGroupAriaFormat, group.DisplayName, group.RoleCardCount)">
+										<span class="ww-recent-group-dot @GroupClass(group.Group)" aria-hidden="true"></span>
+										@foreach (var role in group.Roles)
+										{
+											<span class="ww-recent-role-glyph" title="@role.DisplayName">
+												<span aria-hidden="true">@role.Glyph</span>
+												@if (role.Multiplier is { } multiplier)
+												{
+													<span aria-hidden="true">×@multiplier</span>
+												}
+											</span>
+										}
+									</span>
+								}
+							</span>
+							<span class="ww-recent-role-bar"
+								  role="img"
+								  aria-label="@Format(ClientStrings.Landing_RecentRoleBarAriaFormat, row.TotalRoleCardCount)"
+								  data-testid="@ModeratorUiTestIds.LandingRecentSetupBar">
+								@foreach (var group in row.RoleGroups)
+								{
+									<span class="@GroupClass(group.Group)"
+										  style="flex-grow: @group.RoleCardCount"
+										  aria-hidden="true"></span>
+								}
+							</span>
+							<time datetime="@row.Setup.CapturedAtUtc.ToString("O")">@row.RelativeDate</time>
+						</button>
+						<button type="button"
+								class="ww-recent-setup-delete"
+								aria-label="@Format(ClientStrings.Landing_RecentSetupDeleteAriaFormat, SetupSummary(row))"
+								data-testid="@ModeratorUiTestIds.LandingRecentSetupDelete"
+								@onclick="() => OnDeleteRecentSetup.InvokeAsync(row.Setup)">
+							<span aria-hidden="true">×</span>
+						</button>
+					</li>
+				}
+			</ul>
+		</section>
+	}
+
+	@if (_showNewGameConfirmation)
+	{
+		<div class="ww-dialog-backdrop">
+			<section class="ww-dialog"
+					 role="dialog"
+					 aria-modal="true"
+					 aria-labelledby="landing-new-game-dialog-title">
+				<h2 id="landing-new-game-dialog-title">@ClientStrings.Landing_NewGameDialogTitle</h2>
+				<p>@ClientStrings.Landing_NewGameDialogDescription</p>
+				<div class="ww-action-pair">
+					<button type="button"
+							class="ww-secondary-button"
+							data-testid="@ModeratorUiTestIds.LandingNewGameCancel"
+							@onclick="CancelNewGame">
+						@ClientStrings.Landing_NewGameCancelButton
+					</button>
+					<button type="button"
+							class="ww-btn-primary"
+							data-testid="@ModeratorUiTestIds.LandingNewGameConfirm"
+							@onclick="ConfirmNewGame">
+						@ClientStrings.Landing_NewGameConfirmButton
+					</button>
+				</div>
+			</section>
+		</div>
+	}
+</main>
+
+@code {
+	private bool _showNewGameConfirmation;
+
+	[Parameter]
+	public bool CanContinue { get; set; }
+
+	[Parameter]
+	public EventCallback OnContinue { get; set; }
+
+	[Parameter]
+	public EventCallback OnNewGame { get; set; }
+
+	[Parameter]
+	public IReadOnlyList<RecentSetupRowPresentation> RecentSetups { get; set; } = [];
+
+	[Parameter]
+	public EventCallback<RecentSetup> OnRecentSetup { get; set; }
+
+	[Parameter]
+	public EventCallback<RecentSetup> OnDeleteRecentSetup { get; set; }
+
+	private RecentSetup? _pendingRecentSetup;
+	private RecentSetup? _swipeSetup;
+	private RecentSetup? _suppressedClickSetup;
+	private double _swipeStartX;
+	private double _swipeStartY;
+
+	private Task BeginNewGame()
+	{
+		if (CanContinue)
+		{
+			_pendingRecentSetup = null;
+			_showNewGameConfirmation = true;
+			return Task.CompletedTask;
+		}
+
+		return OnNewGame.InvokeAsync();
+	}
+
+	private Task BeginRecentSetup(RecentSetup setup)
+	{
+		if (ReferenceEquals(_suppressedClickSetup, setup))
+		{
+			_suppressedClickSetup = null;
+			return Task.CompletedTask;
+		}
+
+		if (CanContinue)
+		{
+			_pendingRecentSetup = setup;
+			_showNewGameConfirmation = true;
+			return Task.CompletedTask;
+		}
+
+		return OnRecentSetup.InvokeAsync(setup);
+	}
+
+	private void BeginSwipe(RecentSetup setup, PointerEventArgs args)
+	{
+		_suppressedClickSetup = null;
+		_swipeSetup = setup;
+		_swipeStartX = args.ClientX;
+		_swipeStartY = args.ClientY;
+	}
+
+	private Task EndSwipe(RecentSetup setup, PointerEventArgs args)
+	{
+		if (!ReferenceEquals(_swipeSetup, setup))
+		{
+			CancelSwipe();
+			return Task.CompletedTask;
+		}
+
+		var horizontalDistance = args.ClientX - _swipeStartX;
+		var verticalDistance = args.ClientY - _swipeStartY;
+		CancelSwipe();
+		if (horizontalDistance > -48 ||
+			Math.Abs(horizontalDistance) <= Math.Abs(verticalDistance))
+		{
+			return Task.CompletedTask;
+		}
+
+		_suppressedClickSetup = setup;
+		return OnDeleteRecentSetup.InvokeAsync(setup);
+	}
+
+	private void CancelSwipe()
+	{
+		_swipeSetup = null;
+		_swipeStartX = 0;
+		_swipeStartY = 0;
+	}
+
+	private void CancelNewGame()
+	{
+		_showNewGameConfirmation = false;
+		_pendingRecentSetup = null;
+	}
+
+	private Task ConfirmNewGame()
+	{
+		_showNewGameConfirmation = false;
+		var recentSetup = _pendingRecentSetup;
+		_pendingRecentSetup = null;
+		return recentSetup is null
+			? OnNewGame.InvokeAsync()
+			: OnRecentSetup.InvokeAsync(recentSetup);
+	}
+
+	private static string Format(string format, params object[] values) =>
+		string.Format(System.Globalization.CultureInfo.CurrentCulture, format, values);
+
+	private static string SetupSummary(RecentSetupRowPresentation row) =>
+		Format(
+			ClientStrings.Landing_RecentSetupSummaryFormat,
+			row.PlayerCount,
+			string.Join(", ", row.Setup.PlayerNames),
+			RoleCompositionSummary(row),
+			row.RelativeDate);
+
+	private static string RoleCompositionSummary(RecentSetupRowPresentation row) =>
+		string.Join(
+			", ",
+			row.RoleGroups.SelectMany(group => group.Roles).Select(role =>
+				Format(
+					ClientStrings.Landing_RecentRoleCountFormat,
+					role.DisplayName,
+					row.Setup.RoleCounts[role.Role])));
+
+	private static string GroupClass(Werewolves.Core.StateModels.Extensions.RoleGroup group) => group switch
+	{
+		Werewolves.Core.StateModels.Extensions.RoleGroup.Werewolves => "ww-recent-group-werewolves",
+		Werewolves.Core.StateModels.Extensions.RoleGroup.Villagers => "ww-recent-group-villagers",
+		Werewolves.Core.StateModels.Extensions.RoleGroup.Ambiguous => "ww-recent-group-ambiguous",
+		Werewolves.Core.StateModels.Extensions.RoleGroup.Loners => "ww-recent-group-loners",
+		_ => string.Empty
+	};
+}
