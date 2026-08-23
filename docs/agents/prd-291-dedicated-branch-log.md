@@ -64,6 +64,11 @@ on one dedicated branch and delivering it through one final PR.
   `6ec2905931f85ab9eab0e9fd05502c0afb5d45ed`, then added test-only
   cardinality compatibility in
   `75c173fbad531e293e6e7783d5cc19ca7b392ad1`.
+- A later target-branch synchronization brought target workbranch commit
+  `d46b272fd9dd14f3b859edac6b3b43431df92911` (#302) into `codex/prd-291`
+  through merge commit `85f16f415db09366488046805f211fe55932a3e9`.
+  This records target-branch state, not PRD #291 child behavior or a merge to
+  `main`.
 - The one final pull request from `codex/prd-291` into
   `codex/role-workflow-workstream` is pending user review. None of the
   dedicated-branch commits recorded here are claimed to be present on
