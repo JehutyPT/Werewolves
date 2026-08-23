@@ -399,13 +399,11 @@ public sealed class GameClientManager
 		{
 			SaveCurrentSession();
 		}
-		_activeSessionLobbyPayload = lobby is null
-			? null
-			: new StagedLobbyRecoveryPayload(
-				config.PlayerRoster,
-				config.RoleLockIn,
-				config.ActorSetupCards,
-				config.PublicGroupPartition);
+		_activeSessionLobbyPayload = new StagedLobbyRecoveryPayload(
+			config.PlayerRoster,
+			config.RoleLockIn,
+			config.ActorSetupCards,
+			config.PublicGroupPartition);
 		_stagedLobby = null;
 		UpdateDebateTimer();
 		QueueAudioReconciliation();
@@ -577,6 +575,16 @@ public sealed class GameClientManager
 				case ActiveGameRecoveryPayload activeGame:
 					ActiveGameId = _gameService.RehydrateSession(activeGame.SerializedSession);
 					RefreshCurrentState();
+					var resumedSession = CurrentSession ??
+						throw new InvalidOperationException(
+							"Core did not publish the rehydrated Game Session.");
+					_activeSessionLobbyPayload = new StagedLobbyRecoveryPayload(
+						resumedSession.GetPlayers()
+							.Select(player => new GameSessionPlayerConfig(player.Id, player.Name))
+							.ToArray(),
+						resumedSession.RoleLockIn,
+						resumedSession.GetModeratorActorSetupCards(),
+						resumedSession.PublicGroupPartition);
 					UpdateDebateTimer();
 					break;
 			}
