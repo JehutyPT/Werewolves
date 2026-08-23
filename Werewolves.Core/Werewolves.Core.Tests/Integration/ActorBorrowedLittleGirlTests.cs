@@ -8,6 +8,7 @@ using Werewolves.Core.GameLogic.Roles.MainRoles;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
@@ -63,7 +64,7 @@ public sealed class ActorBorrowedLittleGirlTests
 			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
 		observation.PrivateInstruction.Should().Be(string.Join(
 			Environment.NewLine + Environment.NewLine,
-			GameStrings.WerewolfFactionAgentObservationPrompt,
+			GameStrings.WerewolfFactionAgentObservationPrompt.Format(1),
 			GameStrings.LittleGirlOpeningGuidance));
 		observation.AffectedPlayerIds.Should().BeNull();
 		var attempt = policy.ObservedAttempts.Should().ContainSingle().Subject;
@@ -425,7 +426,7 @@ public sealed class ActorBorrowedLittleGirlTests
 		observation.Semantic.Should().Be(
 			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
 		observation.PrivateInstruction.Should().Be(
-			GameStrings.WerewolfFactionAgentObservationPrompt);
+			GameStrings.WerewolfFactionAgentObservationPrompt.Format(1));
 		policy.ObservedAttempts.Should().ContainSingle();
 		session = RestorePendingInstruction(session, listener, observation);
 		var victimSelection = GameFlowManager.HandleInput(

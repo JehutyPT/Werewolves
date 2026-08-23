@@ -956,6 +956,9 @@ public sealed class ActorBorrowedCupidTests
 		var actorId = session.GetPlayers().First().Id;
 		session.AssignRole(actorId, MainRoleType.Actor);
 		session.IdentifyRole([actorId], MainRoleType.Actor);
+		var werewolfId = session.GetPlayers().Single(player =>
+			player.Name == "Werewolf").Id;
+		CommitCompleteWerewolfAgentPartition(session, werewolfId);
 		session.TransitionMainPhase(GamePhase.Day);
 		session.TransitionMainPhase(GamePhase.Night);
 		return (session, start, actorId);
