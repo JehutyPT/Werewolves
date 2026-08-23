@@ -44,15 +44,22 @@ on one dedicated branch and delivering it through one final PR.
 ### 2026-08-23 — issue #299
 
 - Integrated, verified, and reviewed recent-setup capture and reuse through
-  commit `9692869756119069d28eb9b1fc615dcda46897c5`.
+  original commit `9692869756119069d28eb9b1fc615dcda46897c5` and reviewed
+  production/test follow-up `fe47ffe8bc07a054066ed5253ba6ba6a21dcdfc4`
+  for corrupt-delete row retention.
 - Closed issue #299 as verified on `codex/prd-291` under this dedicated-branch
-  exception, without representing the commit as merged to `main`.
+  exception, without representing either commit as merged to `main`.
 
 ## Final child set and pull request
 
 - The completed child set is #296, #297, #298, and #299, at the exact commits
   recorded above. Each child is closed as integrated, verified, and reviewed
   on `codex/prd-291`; the retained formal relationships remain authoritative.
+- Final integration synchronized `codex/prd-291` with target branch
+  `codex/role-workflow-workstream` through merge commit
+  `6ec2905931f85ab9eab0e9fd05502c0afb5d45ed`, then added test-only
+  cardinality compatibility in
+  `75c173fbad531e293e6e7783d5cc19ca7b392ad1`.
 - The one final pull request from `codex/prd-291` into
   `codex/role-workflow-workstream` is pending user review. None of the
   dedicated-branch commits recorded here are claimed to be present on
