@@ -204,7 +204,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 		var scenario = new SimulationScenario(roles.Length, roles);
 		var capability = SimulatorCapability.SafetyScreening;
 		var identity = capability.CreateCompatibilityIdentity(scenario);
-		var recorders = new List<RecordingDecisionStrategy>();
+		var recorders = new System.Collections.Concurrent.ConcurrentBag<RecordingDecisionStrategy>();
 		var executor = new SimulationExecutor(
 			SimulationStartStateDeriver.Derive,
 			strategy =>
@@ -1550,7 +1550,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 		var identity = new SimulationCompatibilityIdentity(
 			scenario.ToCanonical(),
 			SimulatorCapability.FullProbability.Identity);
-		var recorders = new List<RecordingDecisionStrategy>();
+		var recorders = new System.Collections.Concurrent.ConcurrentBag<RecordingDecisionStrategy>();
 		var executor = new SimulationExecutor(
 			SimulationStartStateDeriver.Derive,
 			strategy =>
@@ -1800,32 +1800,55 @@ public class SimulationExecutionTests : DiagnosticTestBase
 	}
 
 	[Fact]
-	public void ExecuteBatch_WithDifferentScheduling_ReturnsAscendingStableSourceEvidenceAndCounts()
+	public void ExecuteBatch_WithSafetyScreeningAtScreeningScaleAndDifferentScheduling_ReturnsIdenticalOrderedEvidence()
 	{
-		var scenario = CreateKnownDawnOracle();
-		var identity = CreateIdentity(scenario);
+		const int replayRunNumber = 17;
+		var scenario = new SimulationScenario(
+			5,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+		var identity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
 		var executor = new SimulationExecutor();
 
 		SimulationBatchSourceEvidence sequential = executor.ExecuteBatch(
 			scenario,
-			SimulatorCapability.FullProbability,
+			SimulatorCapability.SafetyScreening,
 			identity,
-			runCount: 8,
+			runCount: TerminalLobbyEvaluator.ScreeningAttemptCount,
 			degreeOfParallelism: 1);
 		SimulationBatchSourceEvidence parallel = executor.ExecuteBatch(
 			scenario,
-			SimulatorCapability.FullProbability,
+			SimulatorCapability.SafetyScreening,
 			identity,
-			runCount: 8,
+			runCount: TerminalLobbyEvaluator.ScreeningAttemptCount,
 			degreeOfParallelism: 4);
+		var replay = executor.Execute(
+			scenario,
+			SimulatorCapability.SafetyScreening,
+			identity,
+			replayRunNumber);
 
 		sequential.CanonicalScenario.Should().Be(scenario.ToCanonical());
-		sequential.SimulatorProfile.Should().Be(SimulatorCapability.FullProbability.Identity);
-		sequential.DecisionStrategy.Should().Be(BaselineRandomDecisionStrategy.Identity);
-		sequential.Records.Select(record => record.RunSeedMaterial.RunNumber)
-			.Should().Equal(0, 1, 2, 3, 4, 5, 6, 7);
+		sequential.SimulatorProfile.Should().Be(SimulatorCapability.SafetyScreening.Identity);
+		sequential.DecisionStrategy.Should()
+			.Be(BaselineRandomDecisionStrategy.SafetyScreeningIdentity);
+		sequential.Records.Select(record => record.RunSeedMaterial).Should().Equal(
+			Enumerable.Range(0, TerminalLobbyEvaluator.ScreeningAttemptCount)
+				.Select(runNumber => new RunSeedMaterial(
+					identity,
+					BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
+					runNumber)));
 		sequential.Records.Should().Equal(parallel.Records);
-		sequential.CompletedRunCount.Should().Be(8);
+		sequential.Records[replayRunNumber].Should().Be(replay);
+		sequential.CompletedRunCount.Should()
+			.Be(TerminalLobbyEvaluator.ScreeningAttemptCount);
 		sequential.IncompleteRunCount.Should().Be(0);
 		(sequential.CompletedRunCount + sequential.IncompleteRunCount)
 			.Should().Be(sequential.Records.Count);
@@ -1833,7 +1856,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 	}
 
 	[Fact]
-	public void ExecuteBatch_WithControlledIncompleteRuns_ReportsCountsMatchingEveryRecord()
+	public void ExecuteBatch_WithControlledIncompleteRunsInParallel_ReportsCountsMatchingEveryRecord()
 	{
 		var scenario = CreateKnownDawnOracle();
 		var identity = CreateIdentity(scenario);
@@ -1848,7 +1871,8 @@ public class SimulationExecutionTests : DiagnosticTestBase
 			scenario,
 			SimulatorCapability.FullProbability,
 			identity,
-			runCount: 4);
+			runCount: 4,
+			degreeOfParallelism: 4);
 
 		batch.Records.Should().HaveCount(4);
 		batch.Records.Should().SatisfyRespectively(
@@ -1951,7 +1975,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 	}
 
 	[Fact]
-	public void ExecuteBatch_WhenCancelledBetweenAttempts_PropagatesCancellationWithoutBatchEvidence()
+	public void ExecuteBatch_WhenCancelledBetweenParallelAttempts_PropagatesCancellationWithoutBatchEvidence()
 	{
 		var scenario = CreateKnownDawnOracle();
 		var identity = CreateIdentity(scenario);
@@ -1972,7 +1996,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 			SimulatorCapability.FullProbability,
 			identity,
 			runCount: 3,
-			degreeOfParallelism: 1,
+			degreeOfParallelism: 4,
 			cancellation.Token);
 
 		execute.Should().Throw<OperationCanceledException>();

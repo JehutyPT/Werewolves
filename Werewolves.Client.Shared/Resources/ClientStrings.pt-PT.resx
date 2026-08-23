@@ -250,6 +250,9 @@
   <data name="LobbyEvaluation_CouldNotEvaluate" xml:space="preserve">
     <value>Não foi possível concluir a avaliação.</value>
   </data>
+  <data name="LobbyEvaluation_CouldNotVerifyStartAvailable" xml:space="preserve">
+    <value>Não foi possível verificar a configuração. Ainda podes iniciar o jogo.</value>
+  </data>
   <data name="LobbyEvaluation_Retry" xml:space="preserve">
     <value>Tentar novamente</value>
   </data>

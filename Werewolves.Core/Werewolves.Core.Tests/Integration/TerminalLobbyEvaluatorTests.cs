@@ -441,22 +441,42 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 	}
 
 	[Fact]
-	public void Evaluate_DegenerateScreeningOnly_VillagerVillagerCompletesTheRequiredRealScreen()
+	public void Evaluate_DegenerateScreeningOnly_TwoWerewolvesAndThreeVillagersReturnsKnownDegenerateOracle()
 	{
 		var scenario = Scenario(
 			MainRoleType.SimpleWerewolf,
-			MainRoleType.Seer,
-			MainRoleType.VillagerVillager,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
 			MainRoleType.SimpleVillager,
 			MainRoleType.SimpleVillager);
+		var identity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
 
 		var result = new TerminalLobbyEvaluator().Evaluate(
 			scenario,
 			SimulatorCapability.SafetyScreening,
 			LobbyEvaluationDepth.DegenerateScreeningOnly);
 
-		(result is DegenerateTerminalEvaluation or ScreeningPassedLobbyEvaluation)
-			.Should().BeTrue();
+		var evidence = result.Should().BeOfType<DegenerateTerminalEvaluation>()
+			.Subject.ScreeningEvidence;
+		evidence.AttemptedRunCount.Should()
+			.Be(TerminalLobbyEvaluator.ScreeningAttemptCount);
+		evidence.CompletedRunCount.Should()
+			.Be(TerminalLobbyEvaluator.ScreeningAttemptCount);
+		evidence.IncompleteRunCount.Should().Be(0);
+		evidence.Records.Select(record => record.RunSeedMaterial).Should().Equal(
+			Enumerable.Range(0, TerminalLobbyEvaluator.ScreeningAttemptCount)
+				.Select(runNumber => new RunSeedMaterial(
+					identity,
+					BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
+					runNumber)));
+		var completed = evidence.Records.OfType<CompletedSimulationRun>().ToArray();
+		completed.Should().HaveCount(TerminalLobbyEvaluator.ScreeningAttemptCount);
+		completed.Should().OnlyContain(run =>
+			run.EndingTurn == 1
+			&& run.VictoryCheckWindow == VictoryCheckWindow.Dawn
+			&& run.GameResult.Equals(new SingleFactionGameResult(Faction.Werewolf)));
 		MarkTestCompleted();
 	}
 
@@ -517,7 +537,7 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 	}
 
 	[Fact]
-	public void Evaluate_PolicyMissingReachableStartGameSemantic_UsesOneRealIncompleteScreeningBatch()
+	public void Evaluate_PolicyMissingReachableStartGameSemantic_UsesOneRealIncompleteParallelScreeningBatch()
 	{
 		const long runNumber = 41;
 		var scenario = SupportedScenario();
@@ -550,6 +570,7 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 					batchCapability,
 					batchIdentity,
 					count,
+					degreeOfParallelism: 4,
 					cancellationToken);
 				return screening;
 			});

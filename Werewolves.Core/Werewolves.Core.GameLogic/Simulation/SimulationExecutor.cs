@@ -70,7 +70,7 @@ public sealed class SimulationExecutor
 			capability,
 			compatibilityIdentity,
 			runCount,
-			degreeOfParallelism: 1,
+			degreeOfParallelism: Environment.ProcessorCount,
 			cancellationToken);
 
 	internal SimulationBatchSourceEvidence ExecuteBatch(
