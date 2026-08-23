@@ -742,8 +742,10 @@ internal sealed class SeerRole
 			.Where(player =>
 				player.State.CurrentRole == MainRoleType.Seer ||
 				(player.State.CurrentRole == null &&
-				 (player.State.ModeratorKnownRole == null ||
-				  player.State.ModeratorKnownRole == MainRoleType.Seer)))
+				 (player.State.ModeratorKnownRole == MainRoleType.Seer ||
+				  player.State.ModeratorKnownRole == null &&
+				  GameSessionQueries.GetPossibleRoles(session, player.Id)
+					  .Contains(MainRoleType.Seer))))
 			.ToIdSet();
 
 	private HashSet<Guid> GetLivingHolderIds(GameSession session) =>

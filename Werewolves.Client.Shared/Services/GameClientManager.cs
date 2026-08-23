@@ -13,9 +13,11 @@ public sealed class GameClientManager
 	private readonly GameService _gameService;
 	private readonly IInstructionAudioPlayback _audioPlayback;
 	private readonly IGameSessionSaveStore _saveStore;
+	private readonly IRecentSetupStore _recentSetupStore;
 	private readonly TimeProvider _timeProvider;
 	private readonly LobbySetupState? _lobbySetupState;
 	private StagedLobbyRecoveryPayload? _stagedLobby;
+	private StagedLobbyRecoveryPayload? _activeSessionLobbyPayload;
 	private DateTimeOffset? _debateStartedAt;
 
 	public GameClientManager()
@@ -28,11 +30,13 @@ public sealed class GameClientManager
 		IInstructionAudioPlayback? audioPlayback = null,
 		IGameSessionSaveStore? saveStore = null,
 		TimeProvider? timeProvider = null,
-		LobbySetupState? lobbySetupState = null)
+		LobbySetupState? lobbySetupState = null,
+		IRecentSetupStore? recentSetupStore = null)
 	{
 		_gameService = gameService;
 		_audioPlayback = audioPlayback ?? DisabledInstructionAudioPlayback.Instance;
 		_saveStore = saveStore ?? DisabledGameSessionSaveStore.Instance;
+		_recentSetupStore = recentSetupStore ?? DisabledRecentSetupStore.Instance;
 		_timeProvider = timeProvider ?? TimeProvider.System;
 		_lobbySetupState = lobbySetupState;
 		TryResumeSavedGame();
@@ -103,9 +107,17 @@ public sealed class GameClientManager
 
 	private bool TryAcceptLobbyChange(
 		LobbySetupState lobby,
-		LobbyChange change)
+		LobbyChange change) =>
+		TryAcceptLobbyChange(lobby, change, out _);
+
+	private bool TryAcceptLobbyChange(
+		LobbySetupState lobby,
+		LobbyChange change,
+		out bool persistenceAttempted,
+		Action? afterPersistenceAccepted = null)
 	{
-		if (HasActiveSession)
+		persistenceAttempted = false;
+		if (HasActiveSession && afterPersistenceAccepted is null)
 		{
 			return false;
 		}
@@ -118,6 +130,7 @@ public sealed class GameClientManager
 
 		try
 		{
+			persistenceAttempted = true;
 			LobbyPersistenceExecutor.Execute(_saveStore, decision.Persistence);
 		}
 		catch (Exception)
@@ -125,6 +138,7 @@ public sealed class GameClientManager
 			return false;
 		}
 
+		afterPersistenceAccepted?.Invoke();
 		lobby.Publish(decision.Commit);
 		ReconcilePublishedLobbyDecision(lobby, decision);
 		return true;
@@ -288,6 +302,51 @@ public sealed class GameClientManager
 			new LobbyChange.RemovePlayer(index));
 	}
 
+	public bool TryResetStagedPlayerRoster(LobbySetupState lobby)
+	{
+		ArgumentNullException.ThrowIfNull(lobby);
+		return TryAcceptLobbyChange(lobby, new LobbyChange.ResetPlayerRoster());
+	}
+
+	public bool TryResetStagedRoleCounts(LobbySetupState lobby)
+	{
+		ArgumentNullException.ThrowIfNull(lobby);
+		return TryAcceptLobbyChange(lobby, new LobbyChange.ResetRoleCounts());
+	}
+
+	public bool TryApplyRecentSetup(
+		LobbySetupState lobby,
+		RecentSetup setup)
+	{
+		ArgumentNullException.ThrowIfNull(lobby);
+		ArgumentNullException.ThrowIfNull(setup);
+		return TryAcceptLobbyChange(
+			lobby,
+			new LobbyChange.ApplyRecentSetup(setup));
+	}
+
+	public bool TryAbandonSessionAndApplyRecentSetup(
+		LobbySetupState lobby,
+		RecentSetup setup)
+	{
+		ArgumentNullException.ThrowIfNull(lobby);
+		ArgumentNullException.ThrowIfNull(setup);
+		if (!HasActiveSession)
+		{
+			return TryApplyRecentSetup(lobby, setup);
+		}
+
+		return TryAcceptLobbyChange(
+			lobby,
+			new LobbyChange.ApplyRecentSetup(setup, ClearsRecovery: true),
+			out _,
+			() =>
+			{
+				DiscardCurrentSession();
+				_activeSessionLobbyPayload = null;
+			});
+	}
+
 	public StartGameConfirmationInstruction StartGame(
 		IReadOnlyList<string> playerNamesInOrder,
 		IReadOnlyList<MainRoleType> rolesInPlay)
@@ -395,14 +454,46 @@ public sealed class GameClientManager
 		{
 			SaveCurrentSession();
 		}
+		_activeSessionLobbyPayload = new StagedLobbyRecoveryPayload(
+			config.PlayerRoster,
+			config.RoleLockIn,
+			config.ActorSetupCards,
+			config.PublicGroupPartition);
 		_stagedLobby = null;
 		UpdateDebateTimer();
 		QueueAudioReconciliation();
 		OnStateChanged();
+		if (lobby is not null)
+		{
+			try
+			{
+				_recentSetupStore.Capture(
+					config.PlayerRoster.Select(player => player.Name).ToArray(),
+					config.RoleLockIn.RoleComposition
+						.GroupBy(card => card.PrintedRole)
+						.ToDictionary(group => group.Key, group => group.Count()));
+			}
+			catch
+			{
+			}
+		}
 		return instruction;
 	}
 
 	public void ClearSession()
+	{
+		DiscardCurrentSession();
+		if (!PrefillLobbyAfterSession(out var persistenceAttempted))
+		{
+			if (!persistenceAttempted)
+			{
+				ClearSavedGame();
+			}
+			OnStateChanged();
+		}
+	}
+
+	private void DiscardCurrentSession()
 	{
 		if (ActiveGameId is { } gameId)
 		{
@@ -412,8 +503,34 @@ public sealed class GameClientManager
 		ActiveGameId = null;
 		CurrentSession = null;
 		CurrentInstruction = null;
-		ClearSavedGame();
-		OnStateChanged();
+	}
+
+	private bool PrefillLobbyAfterSession(out bool persistenceAttempted)
+	{
+		persistenceAttempted = false;
+		var lobby = _lobbySetupState;
+		var payload = _activeSessionLobbyPayload;
+		_activeSessionLobbyPayload = null;
+		if (lobby is null || payload is null)
+		{
+			return false;
+		}
+
+		if (TryAcceptLobbyChange(
+			lobby,
+			new LobbyChange.RecoverPostGameLobby(
+				payload.PlayerRoster,
+				payload.RoleLockIn,
+				payload.ActorSetupCards,
+				payload.PublicGroupPartition),
+			out persistenceAttempted))
+		{
+			return true;
+		}
+
+		return TryAcceptLobbyChange(
+			lobby,
+			new LobbyChange.WipePostGameLobby());
 	}
 
 	public ProcessResult ProcessInput(ModeratorResponse response)
@@ -532,6 +649,16 @@ public sealed class GameClientManager
 				case ActiveGameRecoveryPayload activeGame:
 					ActiveGameId = _gameService.RehydrateSession(activeGame.SerializedSession);
 					RefreshCurrentState();
+					var resumedSession = CurrentSession ??
+						throw new InvalidOperationException(
+							"Core did not publish the rehydrated Game Session.");
+					_activeSessionLobbyPayload = new StagedLobbyRecoveryPayload(
+						resumedSession.GetPlayers()
+							.Select(player => new GameSessionPlayerConfig(player.Id, player.Name))
+							.ToArray(),
+						resumedSession.RoleLockIn,
+						resumedSession.GetModeratorActorSetupCards(),
+						resumedSession.PublicGroupPartition);
 					UpdateDebateTimer();
 					break;
 			}

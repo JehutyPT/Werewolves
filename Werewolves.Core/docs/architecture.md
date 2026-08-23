@@ -568,12 +568,12 @@ Polymorphic instruction system for communication TO the moderator. **Assembly Lo
 Located in `Werewolves.Core.StateModels/Extensions/MainRoleTypeExtensions.cs`. Provides extension methods for the `MainRoleType` enum.
 
 *   **`GetRoleGroup(this MainRoleType role)` (RoleGroup):** Returns the logical group that the specified role belongs to. Categorizes all 28 roles:
-    *   **Werewolves:** SimpleWerewolf, BigBadWolf, AccursedWolfFather, WhiteWerewolf
+    *   **Werewolves:** SimpleWerewolf, BigBadWolf, AccursedWolfFather
     *   **Villagers:** SimpleVillager, VillagerVillager, Seer, Cupid, Witch, Hunter, LittleGirl, Defender, Elder, Scapegoat, VillageIdiot, TwoSisters, ThreeBrothers, Fox, BearTamer, StutteringJudge, KnightWithRustySword, Actor
     *   **Ambiguous:** Thief, DevotedServant, WildChild, WolfHound (roles that can change sides or have flexible allegiance)
-    *   **Loners:** Angel, Piper, PrejudicedManipulator (roles with independent win conditions)
+    *   **Loners:** Angel, Piper, PrejudicedManipulator, WhiteWerewolf (roles with independent win conditions)
     *   **NewMoon:** Gypsy (expansion roles)
-*   **`IsHardAlignedVillager` / `IsHardAlignedWerewolf`:** Classify stable setup allegiance independently of UI Role Group. White Werewolf remains grouped with Werewolves but is not hard-aligned Werewolf; Actor is hard-aligned Villager.
+*   **`IsHardAlignedVillager` / `IsHardAlignedWerewolf`:** Classify stable setup allegiance independently of UI Role Group. White Werewolf is grouped with Loners for its solo win condition; its holder remains a Werewolf Faction Agent and White Werewolf Faction Beneficiary, and the Role is not hard-aligned Werewolf. Actor is hard-aligned Villager.
 *   **`IsEligibleActorSetupCard`:** Identifies hard-aligned Villager Roles whose individual powers can be used as Actor Setup Cards.
 *   **Usage:** `GetRoleGroup` supports UI grouping and role selection; the explicit hard-alignment predicates support setup validity.
 
@@ -701,7 +701,7 @@ Fluent API for constructing game scenarios and advancing through phases.
 *   `CompleteDawnPhase(roleAssignments?)` → `ProcessResult`: Current helper that completes Dawn and historically defaults an omitted unknown Role to Simple Villager. That default is forbidden for PRD #93 evidence and is removed by #113; tests must supply physically observed mappings or seeded simulation truth through the production response contract.
 
 *   **Day Phase Helpers:**
-    *   `CompleteDayPhaseWithLynch(lynchTargetId)` → `ProcessResult`: Completes the Day Phase with a Vote resulting in Elimination — debate → vote → role assignment → transition to Night.
+    *   `CompleteDayPhaseWithLynch(lynchTargetId, roleAssignments?)` → `ProcessResult`: Completes the Day Phase with a Vote resulting in Elimination — debate → vote → role assignment → transition to Night. Tests must supply a physically observed mapping when the target Role is unknown.
     *   `CompleteDayPhaseWithTie()` → `ProcessResult`: Completes the Day Phase with a tied Vote (no Elimination) — debate → vote → transition to Night.
 
 *   **Extending for New Roles:** When implementing a new Role, add a `Complete[Role]NightAction` helper that handles the Role's full instruction/response cycle (identify → act → sleep). Then integrate it into `CompleteNightPhase` so it's called in the correct dispatch order.

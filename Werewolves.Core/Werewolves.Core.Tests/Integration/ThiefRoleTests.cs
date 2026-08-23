@@ -185,6 +185,8 @@ public sealed class ThiefRoleTests
 			service.ProcessInstruction(start.GameGuid, start.CreateResponse()));
 		var identification = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
 			service.ProcessInstruction(start.GameGuid, nightStart.CreateResponse()));
+		session.GetFactionAgentKnowledge(holder.Id, Faction.Werewolf).Should().Be(
+			FactionAgentKnowledge.Unknown);
 
 		var choice = InstructionAssert.ExpectSuccessWithType<SelectOptionsInstruction>(
 			service.ProcessInstruction(
@@ -193,6 +195,12 @@ public sealed class ThiefRoleTests
 
 		choice.Semantic.Should().Be(ModeratorInstructionSemantic.ChooseThiefOffer);
 		holder.State.CurrentRole.Should().Be(MainRoleType.Thief);
+		session.GetFactionAgentKnowledge(holder.Id, Faction.Werewolf).Should().Be(
+			FactionAgentKnowledge.Unknown);
+		session.GameHistoryLog.OfType<FactionFactsCommittedLogEntry>().Should()
+			.NotContain(entry => entry.Source.Identifier ==
+				FactionFactSource
+					.RoleIdentificationWerewolfFactionAgencyEntailmentIdentifier);
 		var ownedThief = session.GetModeratorPhysicalCharacterCards()
 			.Should().ContainSingle(state =>
 				state.Zone == PhysicalCharacterCardZone.PlayerOwned &&

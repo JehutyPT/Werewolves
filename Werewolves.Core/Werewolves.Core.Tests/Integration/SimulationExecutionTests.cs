@@ -1,9 +1,11 @@
 using FluentAssertions;
 using Werewolves.Core.GameLogic.Interfaces;
+using Werewolves.Core.GameLogic.Queries;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.GameLogic.Simulation;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
@@ -181,6 +183,54 @@ public class SimulationExecutionTests : DiagnosticTestBase
 		batch.IncompleteRunCount.Should().Be(0);
 		batch.Records.Should().OnlyContain(run =>
 			run is CompletedSimulationRun);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void ExecuteBatch_WithInitialWerewolfAgentsAndSeer_CompletesEveryDeterministicRun()
+	{
+		MainRoleType[] roles =
+		[
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.BigBadWolf,
+			MainRoleType.AccursedWolfFather,
+			MainRoleType.WhiteWerewolf,
+			MainRoleType.Seer,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager
+		];
+		var scenario = new SimulationScenario(roles.Length, roles);
+		var capability = SimulatorCapability.SafetyScreening;
+		var identity = capability.CreateCompatibilityIdentity(scenario);
+		var recorders = new System.Collections.Concurrent.ConcurrentBag<RecordingDecisionStrategy>();
+		var executor = new SimulationExecutor(
+			SimulationStartStateDeriver.Derive,
+			strategy =>
+			{
+				var recorder = new RecordingDecisionStrategy(strategy);
+				recorders.Add(recorder);
+				return new HeadlessGameDriver(recorder);
+			},
+			SimulationExecutor.AdaptTerminalEvidence);
+
+		var batch = executor.ExecuteBatch(
+			scenario,
+			capability,
+			identity,
+			runCount: 64);
+
+		batch.Records.Should().HaveCount(64);
+		batch.CompletedRunCount.Should().Be(64);
+		batch.IncompleteRunCount.Should().Be(0);
+		batch.Records.Should().OnlyContain(run =>
+			run is CompletedSimulationRun);
+		recorders.Should().HaveCount(64);
+		recorders.SelectMany(recorder => recorder.ObservedSemantics)
+			.Count(semantic => semantic ==
+				ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup)
+			.Should().Be(0);
 		MarkTestCompleted();
 	}
 
@@ -1200,6 +1250,85 @@ public class SimulationExecutionTests : DiagnosticTestBase
 	}
 
 	[Fact]
+	public void HeadlessSafety_FixedRoleIdentificationRun_CompletesWithInfectionAndConsistentCommittedKnowledge()
+	{
+		MainRoleType[] roles =
+		[
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.AccursedWolfFather,
+			MainRoleType.BigBadWolf,
+			MainRoleType.WhiteWerewolf,
+			MainRoleType.Seer,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager
+		];
+		var scenario = new SimulationScenario(roles.Length, roles);
+		var identity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
+		var material = new RunSeedMaterial(
+			identity,
+			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
+			runNumber: 0);
+		var random = new DeterministicRandomSource(material);
+		var startState = SimulationStartStateDeriver.Derive(
+			material,
+			SimulatorCapability.SafetyScreening,
+			random);
+		var assertedCommitBoundaries = 0;
+		var recorder = new RecordingDecisionStrategy(
+			new BaselineRandomDecisionStrategy(
+				material,
+				startState,
+				SimulatorCapability.SafetyScreening.HeadlessResponsePolicy,
+				random),
+			session =>
+			{
+				AssertRoleIdentificationKnowledgeConsistency(session);
+				assertedCommitBoundaries++;
+			});
+
+		var execution = new HeadlessGameDriver(recorder).CompleteGameSession(
+			startState.CreateGameSessionConfig(),
+			CancellationToken.None);
+
+		AssertRoleIdentificationKnowledgeConsistency(execution.Session);
+		execution.FinalInstruction.Should()
+			.BeOfType<FinishedGameConfirmationInstruction>();
+		assertedCommitBoundaries.Should().Be(
+			execution.ProcessedInstructionCount);
+		recorder.ObservedSemantics.Should().Contain(
+			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
+		recorder.Observations
+			.Where(observation =>
+				observation.Instruction.Semantic ==
+					ModeratorInstructionSemantic.IdentifyRoleHolders)
+			.Select(observation =>
+				((SelectPlayersInstruction)observation.Instruction)
+					.RoleIdentification)
+			.Should().Contain(MainRoleType.AccursedWolfFather)
+			.And.Contain(MainRoleType.BigBadWolf)
+			.And.Contain(MainRoleType.WhiteWerewolf)
+			.And.Contain(MainRoleType.Seer);
+		recorder.Observations.Should().ContainSingle(observation =>
+			observation.Instruction.Semantic ==
+				ModeratorInstructionSemantic.ChooseAccursedWolfFatherInfection &&
+			observation.Response.SelectedOptionIds != null &&
+			observation.Response.SelectedOptionIds.Contains(
+				AccursedWolfFatherInfectionOptionIds.Infect));
+		execution.Session.GameHistoryLog
+			.OfType<OneUseRolePowerCommittedLogEntry>()
+			.Should().Contain(entry =>
+				entry.SourceRole == MainRoleType.AccursedWolfFather &&
+				entry.ActionType ==
+					NightActionType.AccursedWolfFatherInfection);
+		MarkTestCompleted();
+	}
+
+	[Fact]
 	public void SafetyRunZero_BigBadWolfAvailableWithTarget_RecordsMandatorySelectionTrace()
 	{
 		var fixture = CreateSafetyRunZeroBigBadWolfTrace();
@@ -1421,7 +1550,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 		var identity = new SimulationCompatibilityIdentity(
 			scenario.ToCanonical(),
 			SimulatorCapability.FullProbability.Identity);
-		var recorders = new List<RecordingDecisionStrategy>();
+		var recorders = new System.Collections.Concurrent.ConcurrentBag<RecordingDecisionStrategy>();
 		var executor = new SimulationExecutor(
 			SimulationStartStateDeriver.Derive,
 			strategy =>
@@ -1654,41 +1783,72 @@ public class SimulationExecutionTests : DiagnosticTestBase
 			SimulatorCapability.SafetyScreening,
 			identity,
 			runNumber: 17);
+		var batch = executor.ExecuteBatch(
+			scenario,
+			SimulatorCapability.SafetyScreening,
+			identity,
+			runCount: 16);
 
 		first.Should().BeOfType<CompletedSimulationRun>();
 		first.RunSeedMaterial.CompatibilityIdentity.Profile.Should()
 			.Be(SimulatorCapability.SafetyScreening.Identity);
 		replay.Should().Be(first);
+		batch.CompletedRunCount.Should().Be(16);
+		batch.IncompleteRunCount.Should().Be(0);
+		batch.Records.Should().OnlyContain(run => run is CompletedSimulationRun);
 		MarkTestCompleted();
 	}
 
 	[Fact]
-	public void ExecuteBatch_WithDifferentScheduling_ReturnsAscendingStableSourceEvidenceAndCounts()
+	public void ExecuteBatch_WithSafetyScreeningAtScreeningScaleAndDifferentScheduling_ReturnsIdenticalOrderedEvidence()
 	{
-		var scenario = CreateKnownDawnOracle();
-		var identity = CreateIdentity(scenario);
+		const int replayRunNumber = 17;
+		var scenario = new SimulationScenario(
+			5,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			]);
+		var identity = new SimulationCompatibilityIdentity(
+			scenario.ToCanonical(),
+			SimulatorCapability.SafetyScreening.Identity);
 		var executor = new SimulationExecutor();
 
 		SimulationBatchSourceEvidence sequential = executor.ExecuteBatch(
 			scenario,
-			SimulatorCapability.FullProbability,
+			SimulatorCapability.SafetyScreening,
 			identity,
-			runCount: 8,
+			runCount: TerminalLobbyEvaluator.ScreeningAttemptCount,
 			degreeOfParallelism: 1);
 		SimulationBatchSourceEvidence parallel = executor.ExecuteBatch(
 			scenario,
-			SimulatorCapability.FullProbability,
+			SimulatorCapability.SafetyScreening,
 			identity,
-			runCount: 8,
+			runCount: TerminalLobbyEvaluator.ScreeningAttemptCount,
 			degreeOfParallelism: 4);
+		var replay = executor.Execute(
+			scenario,
+			SimulatorCapability.SafetyScreening,
+			identity,
+			replayRunNumber);
 
 		sequential.CanonicalScenario.Should().Be(scenario.ToCanonical());
-		sequential.SimulatorProfile.Should().Be(SimulatorCapability.FullProbability.Identity);
-		sequential.DecisionStrategy.Should().Be(BaselineRandomDecisionStrategy.Identity);
-		sequential.Records.Select(record => record.RunSeedMaterial.RunNumber)
-			.Should().Equal(0, 1, 2, 3, 4, 5, 6, 7);
+		sequential.SimulatorProfile.Should().Be(SimulatorCapability.SafetyScreening.Identity);
+		sequential.DecisionStrategy.Should()
+			.Be(BaselineRandomDecisionStrategy.SafetyScreeningIdentity);
+		sequential.Records.Select(record => record.RunSeedMaterial).Should().Equal(
+			Enumerable.Range(0, TerminalLobbyEvaluator.ScreeningAttemptCount)
+				.Select(runNumber => new RunSeedMaterial(
+					identity,
+					BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
+					runNumber)));
 		sequential.Records.Should().Equal(parallel.Records);
-		sequential.CompletedRunCount.Should().Be(8);
+		sequential.Records[replayRunNumber].Should().Be(replay);
+		sequential.CompletedRunCount.Should()
+			.Be(TerminalLobbyEvaluator.ScreeningAttemptCount);
 		sequential.IncompleteRunCount.Should().Be(0);
 		(sequential.CompletedRunCount + sequential.IncompleteRunCount)
 			.Should().Be(sequential.Records.Count);
@@ -1696,7 +1856,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 	}
 
 	[Fact]
-	public void ExecuteBatch_WithControlledIncompleteRuns_ReportsCountsMatchingEveryRecord()
+	public void ExecuteBatch_WithControlledIncompleteRunsInParallel_ReportsCountsMatchingEveryRecord()
 	{
 		var scenario = CreateKnownDawnOracle();
 		var identity = CreateIdentity(scenario);
@@ -1711,7 +1871,8 @@ public class SimulationExecutionTests : DiagnosticTestBase
 			scenario,
 			SimulatorCapability.FullProbability,
 			identity,
-			runCount: 4);
+			runCount: 4,
+			degreeOfParallelism: 4);
 
 		batch.Records.Should().HaveCount(4);
 		batch.Records.Should().SatisfyRespectively(
@@ -1814,7 +1975,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 	}
 
 	[Fact]
-	public void ExecuteBatch_WhenCancelledBetweenAttempts_PropagatesCancellationWithoutBatchEvidence()
+	public void ExecuteBatch_WhenCancelledBetweenParallelAttempts_PropagatesCancellationWithoutBatchEvidence()
 	{
 		var scenario = CreateKnownDawnOracle();
 		var identity = CreateIdentity(scenario);
@@ -1835,7 +1996,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 			SimulatorCapability.FullProbability,
 			identity,
 			runCount: 3,
-			degreeOfParallelism: 1,
+			degreeOfParallelism: 4,
 			cancellation.Token);
 
 		execute.Should().Throw<OperationCanceledException>();
@@ -2290,11 +2451,15 @@ public class SimulationExecutionTests : DiagnosticTestBase
 	private sealed class RecordingDecisionStrategy : IModeratorDecisionStrategy
 	{
 		private readonly IModeratorDecisionStrategy _inner;
+		private readonly Action<IGameSession>? _beforeResponse;
 
-		internal RecordingDecisionStrategy(IModeratorDecisionStrategy inner)
+		internal RecordingDecisionStrategy(
+			IModeratorDecisionStrategy inner,
+			Action<IGameSession>? beforeResponse = null)
 		{
 			ArgumentNullException.ThrowIfNull(inner);
 			_inner = inner;
+			_beforeResponse = beforeResponse;
 		}
 
 		internal List<ModeratorInstructionSemantic> ObservedSemantics { get; } = [];
@@ -2307,10 +2472,29 @@ public class SimulationExecutionTests : DiagnosticTestBase
 			ModeratorInstruction instruction,
 			IGameSession session)
 		{
+			_beforeResponse?.Invoke(session);
 			ObservedSemantics.Add(instruction.Semantic);
 			var response = _inner.CreateResponse(instruction, session);
 			Observations.Add((instruction, response, session.TurnNumber));
 			return response;
+		}
+	}
+
+	private static void AssertRoleIdentificationKnowledgeConsistency(
+		IGameSession session)
+	{
+		foreach (var player in session.GetPlayers().Where(player =>
+			player.State.CurrentRole is { } role &&
+			!role.EstablishesInitialWerewolfAgency() &&
+				session.GetFactionAgentKnowledge(player.Id, Faction.Werewolf) ==
+					FactionAgentKnowledge.KnownAgent))
+		{
+			var provenance = GameSessionQueries.GetEarliestWerewolfAgencyFact(
+				session,
+				player.Id);
+			provenance.Should().NotBeNull();
+			provenance!.Source.Kind.Should().Be(
+				FactionFactSourceKind.ExplicitTransition);
 		}
 	}
 

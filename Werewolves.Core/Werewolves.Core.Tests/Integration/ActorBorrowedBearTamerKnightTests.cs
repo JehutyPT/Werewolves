@@ -274,8 +274,9 @@ public sealed class ActorBorrowedBearTamerKnightTests
 				instruction.AffectedPlayerIds.SequenceEqual(
 					new[] { fixture.ActorId }))
 			.Should().ContainSingle().Subject;
-		reveal.PrivateInstruction.Should().Be(
-			GameStrings.PublicRoleRevealInstruction);
+		reveal.PrivateInstruction.Should()
+			.StartWith(GameStrings.PublicRoleRevealInstruction)
+			.And.Contain(GameStrings.ActorRoleName);
 		var state = (IGameSession)fixture.Session;
 		var actor = state.GetPlayerState(fixture.ActorId);
 		actor.Health.Should().Be(PlayerHealth.Dead);
@@ -766,6 +767,15 @@ public sealed class ActorBorrowedBearTamerKnightTests
 		var targetRoleAtFollowingDawn = MainRoleType.SimpleWerewolf;
 		if (mutation == BorrowedKnightCommittedTargetMutation.TargetRoleChanged)
 		{
+			var originalTargetCard = session
+				.GetModeratorPhysicalCharacterCards()
+				.First(card =>
+					card.Card.PrintedRole == MainRoleType.SimpleWerewolf &&
+					card.Zone == PhysicalCharacterCardZone.DealPool);
+			session.TryRecordPhysicalCharacterCardOwnership(
+				session.RoleLockIn.Version,
+				fixture.TargetId,
+				originalTargetCard.Card.Id).Should().BeTrue();
 			session.AssignRole(
 				fixture.TargetId,
 				MainRoleType.SimpleVillager);

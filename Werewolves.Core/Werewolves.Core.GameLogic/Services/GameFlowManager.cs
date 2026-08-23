@@ -1103,13 +1103,14 @@ internal static class GameFlowManager
 				Semantic:
 					ModeratorInstructionSemantic.AssignDayVoteTargetRole,
 				PlayersForAssignment: var playersForAssignment,
-				RolesForAssignment: var rolesForAssignment,
+				SelectableRolesForPlayers: var selectableRolesForPlayers,
 				AffectedPlayerIds: [var affectedPlayerId]
 			} =>
 				affectedPlayerId == actingPlayerId &&
 				playersForAssignment.Count == 1 &&
 				playersForAssignment.Contains(actingPlayerId) &&
-				rolesForAssignment.Contains(MainRoleType.Actor) &&
+				selectableRolesForPlayers[actingPlayerId]
+					.Contains(MainRoleType.Actor) &&
 				IsExactActorRoleAssignmentResponse(input, actingPlayerId),
 			ConfirmationInstruction
 			{
@@ -1179,13 +1180,23 @@ internal static class GameFlowManager
 			input.Type == ExpectedInputType.PlayerSelection &&
 			input.SelectedPlayerIds is { Count: 1 } selectedPlayerIds &&
 			selectedPlayerIds.Single() == commit.TargetPlayerId &&
-			nextInstruction is AssignRolesInstruction
+			(nextInstruction switch
 			{
-				Semantic:
-					ModeratorInstructionSemantic.AssignEliminationCascadeRoles
-			} assignment &&
-			assignment.PlayersForAssignment.SetEquals(
-				[commit.TargetPlayerId]) &&
+				AssignRolesInstruction
+				{
+					Semantic:
+						ModeratorInstructionSemantic.AssignEliminationCascadeRoles
+				} assignment =>
+					assignment.SelectableRolesForPlayers.Keys.ToHashSet().SetEquals(
+						[commit.TargetPlayerId]),
+				ConfirmationInstruction
+				{
+					Semantic:
+						ModeratorInstructionSemantic.AssignEliminationCascadeRoles,
+					AffectedPlayerIds: [var revealedPlayerId]
+				} => revealedPlayerId == commit.TargetPlayerId,
+				_ => false
+			}) &&
 			commit.TriggeringPlayerIds.Contains(actingPlayerId) &&
 			session.GameHistoryLog
 				.OfType<EliminationCascadeBatchResolvedLogEntry>()
@@ -1357,6 +1368,7 @@ internal static class GameFlowManager
 			vote.TurnNumber != commit.TurnNumber ||
 			reportedOutcomePlayerId != Guid.Empty ||
 			!ScapegoatRole.MatchesBorrowedTieReveal(
+				session,
 				startingInstruction,
 				actorPlayerId) ||
 			input.InstructionId != startingInstruction?.InstructionId ||

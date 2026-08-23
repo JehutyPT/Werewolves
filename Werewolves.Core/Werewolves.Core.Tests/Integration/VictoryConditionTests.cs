@@ -66,11 +66,11 @@ public class VictoryConditionTests : DiagnosticTestBase
         var dawnReveal = InstructionAssert.ExpectSuccessWithType<AssignRolesInstruction>(
             builder.Process(finishNight.CreateResponse()));
 
-        dawnReveal.PlayersForAssignment.Should().BeEquivalentTo(
+        dawnReveal.SelectableRolesForPlayers.Keys.Should().BeEquivalentTo(
             [werewolf.Id, attackVictim.Id]);
         var finished =
             InstructionAssert.ExpectSuccessWithType<FinishedGameConfirmationInstruction>(
-                builder.Process(dawnReveal.CreateResponse(new()
+                builder.Process(dawnReveal.CreateObservedRoleResponse(new()
                 {
                     [werewolf.Id] = MainRoleType.SimpleWerewolf,
                     [attackVictim.Id] = MainRoleType.SimpleVillager
@@ -154,8 +154,8 @@ public class VictoryConditionTests : DiagnosticTestBase
         var roleRevealInstruction = InstructionAssert.ExpectSuccessWithType<AssignRolesInstruction>(
             afterVote,
             CoreTestReferences.InstructionContexts.RoleAssignmentAfterLynch);
-        roleRevealInstruction.PlayersForAssignment.Should().Equal(werewolf.Id);
-        var afterRoleReveal = builder.Process(roleRevealInstruction.CreateResponse(new()
+        roleRevealInstruction.SelectableRolesForPlayers.Keys.Should().Equal(werewolf.Id);
+        var afterRoleReveal = builder.Process(roleRevealInstruction.CreateObservedRoleResponse(new()
         {
             [werewolf.Id] = MainRoleType.SimpleWerewolf
         }));
@@ -352,8 +352,8 @@ public class VictoryConditionTests : DiagnosticTestBase
         var roleRevealInstruction = InstructionAssert.ExpectSuccessWithType<AssignRolesInstruction>(
             afterVote,
             CoreTestReferences.InstructionContexts.RoleAssignmentAfterLynch);
-        roleRevealInstruction.PlayersForAssignment.Should().Equal(villager2.Id);
-        var afterRoleReveal = builder.Process(roleRevealInstruction.CreateResponse(new()
+        roleRevealInstruction.SelectableRolesForPlayers.Keys.Should().Equal(villager2.Id);
+        var afterRoleReveal = builder.Process(roleRevealInstruction.CreateObservedRoleResponse(new()
         {
             [villager2.Id] = MainRoleType.SimpleVillager
         }));
@@ -459,8 +459,8 @@ public class VictoryConditionTests : DiagnosticTestBase
         var roleRevealInstruction = InstructionAssert.ExpectSuccessWithType<AssignRolesInstruction>(
             afterVote,
             CoreTestReferences.InstructionContexts.RoleAssignmentAfterLynch);
-        roleRevealInstruction.PlayersForAssignment.Should().Equal(villager2.Id);
-        var afterRoleReveal = builder.Process(roleRevealInstruction.CreateResponse(new()
+        roleRevealInstruction.SelectableRolesForPlayers.Keys.Should().Equal(villager2.Id);
+        var afterRoleReveal = builder.Process(roleRevealInstruction.CreateObservedRoleResponse(new()
         {
             [villager2.Id] = MainRoleType.SimpleVillager
         }));
@@ -689,7 +689,7 @@ public class VictoryConditionTests : DiagnosticTestBase
                 afterVote,
                 CoreTestReferences.InstructionContexts.RoleAssignmentAfterLynch);
         var afterRoleReveal = builder.Process(
-            roleReveal.CreateResponse(new()
+            roleReveal.CreateObservedRoleResponse(new()
             {
                 [voteVictim.Id] = MainRoleType.SimpleVillager
             }));
@@ -1175,8 +1175,8 @@ public class VictoryConditionTests : DiagnosticTestBase
         var roleRevealInstruction = InstructionAssert.ExpectSuccessWithType<AssignRolesInstruction>(
             afterVote,
             CoreTestReferences.InstructionContexts.RoleAssignmentAfterLynch);
-        roleRevealInstruction.PlayersForAssignment.Should().Equal(werewolf.Id);
-        var afterRoleReveal = builder.Process(roleRevealInstruction.CreateResponse(new()
+        roleRevealInstruction.SelectableRolesForPlayers.Keys.Should().Equal(werewolf.Id);
+        var afterRoleReveal = builder.Process(roleRevealInstruction.CreateObservedRoleResponse(new()
         {
             [werewolf.Id] = MainRoleType.SimpleWerewolf
         }));

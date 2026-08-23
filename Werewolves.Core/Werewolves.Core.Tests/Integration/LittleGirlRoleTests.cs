@@ -143,7 +143,7 @@ public sealed class LittleGirlRoleTests : DiagnosticTestBase
 		observation.Semantic.Should().Be(
 			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
 		observation.PrivateInstruction.Should().Contain(
-			GameStrings.WerewolfFactionAgentObservationPrompt);
+			GameStrings.WerewolfFactionAgentObservationPrompt.Format(1));
 		observation.PrivateInstruction.Should().Contain(
 			GameStrings.LittleGirlOpeningGuidance);
 		observation.AffectedPlayerIds.Should().BeNull();
@@ -169,7 +169,7 @@ public sealed class LittleGirlRoleTests : DiagnosticTestBase
 
 		recoveredObservation.InstructionId.Should().Be(observation.InstructionId);
 		recoveredObservation.PrivateInstruction.Should().Contain(
-			GameStrings.WerewolfFactionAgentObservationPrompt);
+			GameStrings.WerewolfFactionAgentObservationPrompt.Format(1));
 		recoveredObservation.PrivateInstruction.Should().Contain(
 			GameStrings.LittleGirlOpeningGuidance);
 		wakeRecoveryPolicy.ObservedAttempts.Should().BeEmpty();
@@ -266,7 +266,7 @@ public sealed class LittleGirlRoleTests : DiagnosticTestBase
 				builder.Process(identification.CreateResponse([players[0].Id])));
 
 		observation.PrivateInstruction.Should().Be(
-			GameStrings.WerewolfFactionAgentObservationPrompt);
+			GameStrings.WerewolfFactionAgentObservationPrompt.Format(1));
 		originalPolicy.ObservedAttempts.Should().ContainSingle();
 		var wakeRecoveryPolicy =
 			new RecordingPolicy(RolePowerAvailabilityResult.Allowed);
@@ -279,7 +279,7 @@ public sealed class LittleGirlRoleTests : DiagnosticTestBase
 
 		recoveredObservation.InstructionId.Should().Be(observation.InstructionId);
 		recoveredObservation.PrivateInstruction.Should().Be(
-			GameStrings.WerewolfFactionAgentObservationPrompt);
+			GameStrings.WerewolfFactionAgentObservationPrompt.Format(1));
 		wakeRecoveryPolicy.ObservedAttempts.Should().BeEmpty();
 		var victimSelection =
 			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
@@ -462,7 +462,7 @@ public sealed class LittleGirlRoleTests : DiagnosticTestBase
 		else
 		{
 			werewolfInstruction.PrivateInstruction.Should().Be(
-				GameStrings.WerewolfFactionAgentObservationPrompt);
+				GameStrings.WerewolfFactionAgentObservationPrompt.Format(1));
 		}
 
 		if (collectiveKnown)
@@ -750,6 +750,7 @@ public sealed class LittleGirlRoleTests : DiagnosticTestBase
 				MainRoleType.SimpleVillager);
 		builder.StartGame();
 		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		builder.ArrangeKnownWerewolfFactionAgentGroup(players[1].Id);
 		builder.ArrangeEliminatedPlayer(players[4].Id);
 		builder.ConfirmGameStart();
 		var identification =

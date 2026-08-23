@@ -39,6 +39,17 @@ This document records short, stable domain facts that can be asserted without ca
 - Each Player has exactly one Faction Beneficiary at a time.
 - A Faction fact may be used only when known; unknown facts are never defaulted or inferred from remaining cards.
 - Faction Agent Group Observation establishes Agent membership, not a Faction Beneficiary.
+- A Role Identification entails a Faction fact only for Werewolf Faction Agent status. It entails no Faction Beneficiary fact and no Agent fact for any other Faction.
+
+| Identified Role class | Werewolf Faction Agent fact committed at the Role Identification's effective boundary |
+| --- | --- |
+| Simple Werewolf, Big Bad Wolf, Accursed Wolf-Father, White Werewolf | known Werewolf Faction Agent |
+| Simple Villager, Villager-Villager, Seer, Cupid, Witch, Hunter, Little Girl, Defender, Elder, Scapegoat, Village Idiot, Two Sisters, Three Brothers, Fox, Bear Tamer, Stuttering Judge, Knight with the Rusty Sword, Actor | known non-Agent |
+| Piper, Angel, Prejudiced Manipulator, Gypsy | known non-Agent |
+| Wild Child, before its transformation | known non-Agent |
+| Wolf Hound, Thief, Devoted Servant | no fact |
+
+- An entailed Werewolf Faction Agent fact is committed only when that Player's currently committed Werewolf Faction Agent knowledge is unknown. A Role Identification never supersedes an already-committed Werewolf Faction Agent fact; infection, Wolf Hound alignment, Wild Child transformation, and Permanent Role Swap continue to supersede at their rule-driven boundaries.
 - Initial Beneficiary Closure applies only after the committed determining inputs for every applicable initial non-Villager or Agent-with-different-Beneficiary exception are available.
 - Initial Beneficiary Closure places explicit facts and transitions at their effective historical boundaries before filling residual candidates, evaluates deferred rules at their own boundaries, and atomically appends only newly entailed residual and deferred facts.
 - Every fact in the Initial Beneficiary Closure batch retains its effective historical boundary. Previously committed explicit facts are neither rewritten nor re-appended; projecting all committed facts in effective-boundary order yields the final Known Faction State.

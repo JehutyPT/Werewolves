@@ -1128,28 +1128,29 @@ public class GameTestBuilder
     }
 
     /// <summary>
-    /// Handles AssignRolesInstruction by using provided assignments or defaulting to SimpleVillager.
+    /// Handles AssignRolesInstruction using a complete physically observed mapping.
     /// </summary>
     /// <param name="instruction">The role assignment instruction.</param>
-    /// <param name="overrideAssignments">Optional specific assignments. Missing players get SimpleVillager.</param>
+    /// <param name="overrideAssignments">The complete observed mapping.</param>
     private ProcessResult HandleAssignRolesInstruction(AssignRolesInstruction instruction, Dictionary<Guid, MainRoleType>? overrideAssignments = null)
     {
-        var assignments = new Dictionary<Guid, MainRoleType>();
-        
-        foreach (var playerId in instruction.PlayersForAssignment)
+		if (instruction.PlayersForAssignment.Count == 0)
+		{
+			return Process(instruction.CreateResponse([]));
+		}
+
+        if (overrideAssignments is null ||
+            instruction.PlayersForAssignment.Any(playerId =>
+                !overrideAssignments.ContainsKey(playerId)))
         {
-            if (overrideAssignments != null && overrideAssignments.TryGetValue(playerId, out var specifiedRole))
-            {
-                assignments[playerId] = specifiedRole;
-            }
-            else
-            {
-                // Default to first available role or SimpleVillager
-                var roleToAssign = instruction.RolesForAssignment.FirstOrDefault(MainRoleType.SimpleVillager);
-                assignments[playerId] = roleToAssign;
-            }
+			throw new InvalidOperationException(
+				CoreTestReferences.ExceptionMessages
+					.ObservedRoleAssignmentsRequired);
         }
 
+        var assignments = instruction.PlayersForAssignment.ToDictionary(
+            playerId => playerId,
+            playerId => overrideAssignments[playerId]);
         var response = instruction.CreateResponse(assignments);
         return Process(response);
     }
@@ -1163,10 +1164,13 @@ public class GameTestBuilder
     /// Flow: Debate → DetermineVoteType → NormalVoting → ProcessVoteOutcome → RoleAssignment → Finalize → Night.
     /// </summary>
     /// <param name="lynchTargetId">The ID of the player to be lynched.</param>
+    /// <param name="roleAssignments">The complete observed mapping when the target's Role is unknown.</param>
     /// <returns>The result of the final instruction that transitions to Night phase.</returns>
-    public ProcessResult CompleteDayPhaseWithLynch(Guid lynchTargetId)
+    public ProcessResult CompleteDayPhaseWithLynch(
+        Guid lynchTargetId,
+        Dictionary<Guid, MainRoleType>? roleAssignments = null)
     {
-        return CompleteDayPhaseCore(lynchTargetId);
+        return CompleteDayPhaseCore(lynchTargetId, roleAssignments);
     }
 
     /// <summary>
@@ -1176,7 +1180,7 @@ public class GameTestBuilder
     /// <returns>The result of the final instruction that transitions to Night phase.</returns>
     public ProcessResult CompleteDayPhaseWithTie()
     {
-        return CompleteDayPhaseCore(null);
+        return CompleteDayPhaseCore(null, roleAssignments: null);
     }
 
     /// <summary>
@@ -1184,8 +1188,11 @@ public class GameTestBuilder
     /// Handles both lynch and tie scenarios by processing instructions until Night phase is reached.
     /// </summary>
     /// <param name="lynchTargetId">The ID of the player to lynch, or null for a tie vote.</param>
+    /// <param name="roleAssignments">The complete observed mapping when a reveal requires one.</param>
     /// <returns>The result of the final instruction that transitions to Night phase.</returns>
-    private ProcessResult CompleteDayPhaseCore(Guid? lynchTargetId)
+    private ProcessResult CompleteDayPhaseCore(
+        Guid? lynchTargetId,
+        Dictionary<Guid, MainRoleType>? roleAssignments)
     {
         EnsureGameStarted();
 
@@ -1208,7 +1215,9 @@ public class GameTestBuilder
             result = instruction switch
             {
                 SelectPlayersInstruction selectPlayers => HandleDayVotingInstruction(selectPlayers, lynchTargetId),
-                AssignRolesInstruction assignRoles => HandleAssignRolesInstruction(assignRoles),
+                AssignRolesInstruction assignRoles => HandleAssignRolesInstruction(
+                    assignRoles,
+                    roleAssignments),
                 ConfirmationInstruction confirmation => Process(confirmation.CreateResponse()),
                 null => throw new InvalidOperationException(CoreTestReferences.ExceptionMessages.NoCurrentInstructionDuringDayPhase),
                 _ => throw new InvalidOperationException(

@@ -35,10 +35,11 @@
 				<div class="ww-role-group-choices" role="group" aria-label="@group.DisplayName">
 					@foreach (var role in group.Roles)
 					{
-						<button type="button"
-								class="@RoleClass(activePlayerId, role)"
-								aria-pressed="@AriaPressed(IsRoleSelected(activePlayerId, role))"
-								@onclick="() => AssignRole(activePlayerId, role)">@role.GetPublicName()</button>
+							<button type="button"
+									class="@RoleClass(activePlayerId, role)"
+									aria-pressed="@AriaPressed(IsRoleSelected(activePlayerId, role))"
+									disabled="@(!IsRoleAvailable(activePlayerId, role))"
+									@onclick="() => AssignRole(activePlayerId, role)">@role.GetPublicName()</button>
 					}
 				</div>
 			</section>
@@ -69,7 +70,7 @@
 		Instruction.PlayersForAssignment.All(p => _assignments.ContainsKey(p));
 
 	private IReadOnlyList<Guid> AssignmentPlayers =>
-		Instruction.PlayersForAssignment
+		Instruction.SelectableRolesForPlayers.Keys
 			.OrderBy(PlayerSeatOrder)
 			.ThenBy(ResolvePlayerName, StringComparer.CurrentCulture)
 			.ToArray();
@@ -95,10 +96,21 @@
 		return entry?.Name ?? playerId.ToString()[..8];
 	}
 
-	private string AssignmentLabel(Guid playerId) =>
-		_assignments.TryGetValue(playerId, out var role)
-			? role.GetPublicName()
+	private string AssignmentLabel(Guid playerId)
+	{
+		if (_assignments.TryGetValue(playerId, out var role))
+		{
+			return role.GetPublicName();
+		}
+
+		var distinctRoles = Instruction.SelectableRolesForPlayers[playerId]
+			.Distinct()
+			.Take(2)
+			.ToArray();
+		return distinctRoles.Length == 1
+			? distinctRoles[0].GetPublicName()
 			: ClientStrings.AssignRoles_SelectRolePrompt;
+	}
 
 	private void PreviousAssignmentPlayer()
 	{
@@ -121,29 +133,23 @@
 	}
 
 	private IEnumerable<MainRoleType> AvailableRolesForPlayer(Guid playerId)
-	{
-		var usedRoles = _assignments
-			.Where(a => a.Key != playerId)
-			.Select(a => a.Value)
-			.ToList();
+		=> Instruction.SelectableRolesForPlayers[playerId].Distinct();
 
-		var remaining = new List<MainRoleType>(Instruction.RolesForAssignment);
-		foreach (var used in usedRoles)
+	private IEnumerable<RoleGroupDisplay> RoleGroupsForPlayer(Guid playerId)
+	{
+		if (!Instruction.PlayersForAssignment.Contains(playerId))
 		{
-			remaining.Remove(used);
+			return [];
 		}
 
-		return remaining.Distinct();
-	}
-
-	private IEnumerable<RoleGroupDisplay> RoleGroupsForPlayer(Guid playerId) =>
-		AvailableRolesForPlayer(playerId)
+		return AvailableRolesForPlayer(playerId)
 			.GroupBy(role => role.GetRoleGroup())
 			.OrderBy(group => RoleGroupOrder(group.Key))
 			.Select(group => new RoleGroupDisplay(
 				group.Key,
 				group.Key.GetDisplayName(),
 				group.OrderBy(role => role.GetPublicName(), StringComparer.CurrentCulture).ToArray()));
+	}
 
 	private int PlayerSeatOrder(Guid playerId)
 	{
@@ -174,7 +180,11 @@
 
 	private Task HandleSubmit()
 	{
-		var response = Instruction.CreateResponse(new Dictionary<Guid, MainRoleType>(_assignments));
+		var response = Instruction.CreateResponse(
+			_assignments
+				.Where(assignment =>
+					Instruction.PlayersForAssignment.Contains(assignment.Key))
+				.ToDictionary());
 		return OnResponse.InvokeAsync(response);
 	}
 
@@ -185,6 +195,25 @@
 
 	private bool IsRoleSelected(Guid playerId, MainRoleType role) =>
 		_assignments.TryGetValue(playerId, out var assigned) && assigned == role;
+
+	private bool IsRoleAvailable(Guid playerId, MainRoleType role)
+	{
+		if (IsRoleSelected(playerId, role))
+		{
+			return true;
+		}
+
+		var copyBudget = Instruction.PlayersForAssignment
+			.Select(candidatePlayerId => Instruction.SelectableRolesForPlayers[candidatePlayerId]
+				.Count(candidateRole => candidateRole == role))
+			.DefaultIfEmpty()
+			.Max();
+		var claimedCopies = _assignments.Count(assignment =>
+			Instruction.PlayersForAssignment.Contains(assignment.Key) &&
+			assignment.Value == role);
+
+		return claimedCopies < copyBudget;
+	}
 
 	private static string AriaPressed(bool isSelected) =>
 		isSelected ? "true" : "false";

@@ -237,6 +237,17 @@ internal sealed class ThiefRole : RoleHookListener, IDeclaredRoleWorkflow
 				"Thief identification requires exactly one Player.");
 		}
 
+		var holder = session.GetPlayer(holderId);
+		if (holder.State.CurrentRole != MainRoleType.Thief &&
+		    holder.State.ModeratorKnownRole != MainRoleType.Thief &&
+		    holder.State.PhysicalCharacterCardRole != MainRoleType.Thief &&
+		    !GameSessionQueries.GetPossibleRoles(session, holderId)
+			    .Contains(MainRoleType.Thief))
+		{
+			throw new InvalidOperationException(
+				"Role Identification contradicts committed Role knowledge.");
+		}
+
 		if (session.GetPlayerState(holderId).PhysicalCharacterCardId is null)
 		{
 			var thiefCard = session.GetModeratorPhysicalCharacterCards()
@@ -440,8 +451,10 @@ internal sealed class ThiefRole : RoleHookListener, IDeclaredRoleWorkflow
 			.Where(player =>
 				player.State.CurrentRole == MainRoleType.Thief ||
 				(player.State.CurrentRole == null &&
-				 (player.State.ModeratorKnownRole == null ||
-				  player.State.ModeratorKnownRole == MainRoleType.Thief)))
+				 (player.State.ModeratorKnownRole == MainRoleType.Thief ||
+				  player.State.ModeratorKnownRole == null &&
+				  GameSessionQueries.GetPossibleRoles(session, player.Id)
+					  .Contains(MainRoleType.Thief))))
 			.ToIdSet();
 
 	private static IPlayer GetCurrentThief(GameSession session) =>

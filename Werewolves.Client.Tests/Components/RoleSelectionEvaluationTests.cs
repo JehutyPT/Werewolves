@@ -110,6 +110,47 @@ public class RoleSelectionEvaluationTests
 	}
 
 	[Fact]
+	public async Task PendingStartAttempt_WhenEvaluationCannotComplete_AnnouncesUnverifiedButStartAvailable()
+	{
+		var evaluator = new CompletingEvaluator();
+		using var context = CreateContext(
+			evaluator: evaluator,
+			depth: LobbyEvaluationDepth.DegenerateScreeningOnly,
+			capability: SimulatorCapability.SafetyScreening);
+		SeedValidLobby(context.Services.GetRequiredService<LobbySetupState>());
+		var starts = 0;
+		var cut = context.RenderModeratorComponent<RoleSelectionPage>(parameters => parameters
+			.Add(component => component.OnStartGame, EventCallback.Factory.Create(this, () => starts++)));
+
+		cut.Find(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Click();
+		await evaluator.Started.WaitAsync(TimeSpan.FromSeconds(5));
+		cut.Find(TestId(ModeratorUiTestIds.LobbyEvaluationStatus))
+			.TextContent.Should().Contain(ClientStrings.LobbyEvaluation_PendingBlock);
+
+		evaluator.Complete(new CouldNotEvaluateLobbyEvaluation());
+
+		cut.WaitForAssertion(() =>
+		{
+			context.Services.GetRequiredService<LobbyEvaluationCoordinator>()
+				.State.Kind.Should().Be(LobbyEvaluationStateKind.CouldNotEvaluate);
+			var status = cut.Find(TestId(ModeratorUiTestIds.LobbyEvaluationStatus));
+			status.TextContent.Should().Contain(ClientStrings.LobbyEvaluation_CouldNotVerifyStartAvailable);
+			status.TextContent.Should().NotContain(ClientStrings.LobbyEvaluation_CheckComplete);
+			status.GetAttribute("role").Should().Be("status");
+			status.GetAttribute("aria-live").Should().Be("polite");
+		});
+		starts.Should().Be(0);
+
+		cut.Find(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Click();
+
+		cut.WaitForAssertion(() =>
+		{
+			starts.Should().Be(1);
+			cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationStatus)).Should().BeEmpty();
+		});
+	}
+
+	[Fact]
 	public async Task StartHandler_RechecksOrdinaryValidationBeforeConsultingTheLiveGate()
 	{
 		using var context = CreateContext(evaluator: new ControlledEvaluator());
@@ -226,6 +267,7 @@ public class RoleSelectionEvaluationTests
 			capability: SimulatorCapability.FullProbability);
 		SeedValidLobby(context.Services.GetRequiredService<LobbySetupState>());
 		var cut = context.RenderModeratorComponent<Routes>();
+		cut.Find(TestId(ModeratorUiTestIds.LandingNewGameButton)).Click();
 		cut.FindAll("button")
 			.Single(button => button.TextContent.Contains(ClientStrings.LobbyRoster_ContinueToRolesButton))
 			.Click();

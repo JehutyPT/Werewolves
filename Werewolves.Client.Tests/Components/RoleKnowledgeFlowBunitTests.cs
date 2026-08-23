@@ -130,16 +130,19 @@ public sealed class RoleKnowledgeFlowBunitTests
 
 		var observation = manager.CurrentInstruction
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		const int exactAgentCount = 1;
+		var observationPrompt = GameStrings.WerewolfFactionAgentObservationPrompt
+			.Format(exactAgentCount);
 		var wakeAnnouncement = GameStrings.RoleHoldersWakeUp.Format(
 			GameStrings.WerewolvesGroupName);
 		observation.Semantic.Should().Be(
 			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
 		observation.PublicAnnouncement.Should().Be(wakeAnnouncement);
 		observation.PrivateInstruction.Should()
-			.Contain(GameStrings.WerewolfFactionAgentObservationPrompt)
+			.Contain(observationPrompt)
 			.And.Contain(GameStrings.LittleGirlOpeningGuidance);
 		observation.CountConstraint.Should().Be(
-			NumberRangeConstraint.AtLeast(1));
+			NumberRangeConstraint.Exact(exactAgentCount));
 		observation.AffectedPlayerIds.Should().BeNull();
 
 		var dashboard = context.RenderModeratorComponent<DashboardPage>();
@@ -147,10 +150,13 @@ public sealed class RoleKnowledgeFlowBunitTests
 			.Contain(wakeAnnouncement);
 		dashboard.Find(PrivateInstructionSelector).Click();
 		dashboard.Find(PrivateInstructionSelector).TextContent.Should()
-			.Contain(GameStrings.WerewolfFactionAgentObservationPrompt)
+			.Contain(observationPrompt)
 			.And.Contain(GameStrings.LittleGirlOpeningGuidance);
 		var playerOptions = dashboard.FindAll(PlayerOptionSelector);
-		playerOptions.Should().HaveCount(players.Length);
+		playerOptions.Should().HaveCount(players.Length - 1);
+		playerOptions.Should().NotContain(option => option.TextContent.Contains(
+			littleGirl.Name,
+			StringComparison.CurrentCulture));
 		dashboard.FindAll(HoldButtonSelector).Should().ContainSingle();
 		var observationHold = dashboard.Find(HoldButtonSelector);
 		observationHold.HasAttribute(Html.Attributes.Disabled).Should().BeTrue();
@@ -1154,8 +1160,8 @@ public sealed class RoleKnowledgeFlowBunitTests
 			[
 				MainRoleType.SimpleWerewolf,
 				MainRoleType.BigBadWolf,
-				MainRoleType.SimpleVillager,
-				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleWerewolf,
 				MainRoleType.SimpleVillager
 			]);
 		manager.ProcessInput(start.CreateResponse()).IsSuccess.Should().BeTrue();
@@ -1169,7 +1175,12 @@ public sealed class RoleKnowledgeFlowBunitTests
 		var factionObservation = manager.CurrentInstruction
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
 		manager.ProcessInput(factionObservation.CreateResponse(
-				[players[0].Id, bigBadWolf.Id, players[2].Id, players[3].Id]))
+				[
+					players[0].Id,
+					bigBadWolf.Id,
+					players[2].Id,
+					players[3].Id
+				]))
 			.IsSuccess.Should().BeTrue();
 		var victimSelection = manager.CurrentInstruction
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;

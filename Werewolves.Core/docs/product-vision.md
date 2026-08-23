@@ -15,7 +15,7 @@ A rules engine and state tracker for "The Werewolves of Miller's Hollow." Provid
 - **Render UI.** The library has no opinion on how instructions are displayed or how input is collected. It outputs structured data; the client decides how to present it.
 - **Make moderator decisions.** The library assumes moderator input is accurate and processes it. It never suggests actions, recommends targets, or evaluates strategy.
 - **Tally votes.** Voting happens physically at the table. The library accepts the outcome and tracks consequences.
-- **Know roles upfront.** Roles are learned incrementally as the moderator discovers them during gameplay. The library tracks what it's been told, not what it could infer.
+- **Know roles upfront.** Roles are learned incrementally as the Moderator discovers them during gameplay. The library may deterministically constrain possible Roles from complete committed facts plus the locked Role Composition; a candidate is never promoted to a known Role.
 
 ## Who Consumes It
 

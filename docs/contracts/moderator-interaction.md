@@ -16,7 +16,7 @@ When a Role specialization is silent, the shared interaction rules apply.
 
 ### Physical authority and Role knowledge
 
-- The physical table is authoritative. The app records the Role Composition and facts the Moderator observes; it does not shuffle, deal, or deduce an unknown Player-specific Role.
+- The physical table is authoritative. The app records the Role Composition and facts the Moderator observes; it does not shuffle, deal, guess, or probabilistically deduce an unknown Player-specific Role. It may deterministically constrain possible Roles when complete committed facts plus the locked Role Composition entail the constraint, as defined by [ADR-0015](../adr/0015-role-ownership-knowledge-and-public-reveal-are-separate.md); a candidate remains distinct from a known Role.
 - Physical Character Card Ownership, current Role, Moderator knowledge, and public reveal are separate facts.
 - A Player-to-Role observation records the printed Role and never asks the Moderator to distinguish identical copies; internal accounting-ID binding and configured slot identity are defined by the [domain invariants](../domain/invariants.md) and [ADR-0015](../adr/0015-role-ownership-knowledge-and-public-reveal-are-separate.md).
 - A Permanent Role Swap separately defines the new current Role, physical-card handling, and visibility.
@@ -25,11 +25,27 @@ When a Role specialization is silent, the shared interaction rules apply.
 ### Participation and Role Identification
 
 - **Role Identification** privately records the complete living holder set observed during an exact-Role call. It neither assigns Character Cards nor reveals the Role publicly.
-- **Faction Agent Group Observation** privately records the complete non-empty group observed during a collective Faction call. It does not identify exact Roles.
+- **Faction Agent Group Observation** privately records the complete group observed during a collective Faction call. Its required cardinality is defined below, and it does not identify exact Roles.
 - **Role Reveal** records a public physical reveal. It changes public knowledge, not current Role.
 - An instruction that names, wakes, or privately addresses an exact Role holder requires an exact holder set. At the first genuine Role step that needs that set, the app requests Role Identification only while it is unknown. A known set suppresses only repeated identification; any remaining action, recognition, communication, feedback, or sleep step still occurs.
 - When the app knows that no living Player can answer a scheduled Night Role call, it omits that entire call. This rule does not suppress public reveals, Elimination reactions, automatic consequences, or other non-Night exchanges. An unknown participant set is not treated as empty.
 - An explicitly named identification-only slot occurs at its stated time and is omitted when the required identity is already known.
+
+### Faction Agent Group Observation
+
+- At the initial all-alive boundary, after earlier same-night effects have committed, the app derives the exact required cardinality for the Werewolf Faction Agent group from living committed Agents plus active agency-capable cards not already accounted to a committed Agent. It asks the Moderator to record the complete group of exactly the required number of Players.
+- The cardinality validates only whether the observation is complete. The observation establishes Player-specific Faction Agent membership; the cardinality does not identify exact Roles, Players, Beneficiaries, or a durable count or provenance fact.
+- If a dead or otherwise unresolved seat makes that cardinality merely an upper bound, the app neither offers nor accepts the observation and commits nothing. At the supported boundary, an invalid, stale, or wrong-sized response is rejected before mutation and leaves the same instruction pending.
+- A discrepancy with the physical wake group fails closed without a Moderator override or automatic correction of the Role Composition or committed facts.
+- The required count appears only in Moderator-private guidance and never appears in public-table copy or public history. Its provenance remains private as well.
+
+### Generic Role Reveal
+
+- One pending instruction covers the complete reveal batch at the existing public-reveal boundary. Each requested Player physically reveals the applicable Character Card; public-table copy announces that action, while established Roles, possible Roles, and entailed singleton confirmations remain Moderator-only.
+- For each requested Player whose exact Role is unknown, the app publishes that Player's own duplicate-preserving multiset of Roles possible from complete committed facts. Before publication, every multiset containing one distinct printed Role reserves one copy of that Role, one copy is removed from each other unresolved Player's multiset, and newly created singletons repeat this propagation until stable. Another unreserved copy remains available elsewhere. The app performs no joint, matching, or probabilistic inference.
+- A known Role requires only acknowledgment. An unknown Role with one distinct possibility is named for confirmation without a picker, including when the multiset contains repeated copies; an unknown Role with two or more distinct possibilities requires the Moderator to record one offered printed Role. Only those multi-option Players appear in the existing assigned-Role response, and every one must appear exactly once. If none require a mapping, the existing Continue acknowledgment is used. Known, singleton, and multi-option entries may share one batch; there is no automatic commitment, decline, or new response type.
+- One press-and-hold submission commits the whole batch. Immediately before mutation, every explicit mapping is revalidated against its Player's offered multiset, the current possible-Role facts, and remaining Role Composition multiplicity, while singleton confirmations are revalidated against the same current facts. Invalid, stale, incomplete, canceled, or copy-overallocating input commits nothing and leaves the same instruction pending. Success commits the mappings and confirmations, the public Role Reveals, and deterministic matching-card binding at one boundary; the shared recovery rules apply without a new checkpoint.
+- A deterministic headless response uses seeded truth only when it belongs to every unknown Player's published multiset, supplies mappings only for multi-option Players, and confirms known or singleton entries through the same existing response forms. A seeded Role outside an offered multiset is a soundness failure and produces an Incomplete Simulation Run.
 
 ### Initial Beneficiary Closure
 
@@ -66,7 +82,7 @@ When a Role specialization is silent, the shared interaction rules apply.
 |---|---|
 | **Continue acknowledgment** | Confirm that the instructed announcement, feedback, or physical step is complete. |
 | **Identify exactly N Players** | Record the complete observed set of N exact-Role holders. |
-| **Observe a Faction Agent group** | Record the complete observed non-empty group for one Faction operation without identifying exact Roles. |
+| **Observe a Faction Agent group** | At a supported boundary, record the complete observed group of exactly the required number for one Faction operation without identifying exact Roles. |
 | **Select exactly one Player** | Record one Player chosen from the current legal set. |
 | **Select zero or one Player** | Record one legal Player or a permitted decline. |
 | **Select the required number** | Record the number of distinct Players required by the current state. |
@@ -93,6 +109,8 @@ The Moderator resolves the physical Vote and records one living Vote Target or a
 These sections state only the observable differences from the shared interaction rules. The linked game rules remain authoritative for eligibility, effects, outcomes, and the [canonical call order](../domain/game-rules.md#turn-order-summary-adapted-from-page-24-excluding-building-dependencies-and-incorporating-settled-rulings).
 
 ### Simple Werewolf
+
+- Faction Agent Group Observation offers living Players not already known to be non-Agents, including Players already known to be Werewolf Faction Agents.
 
 - On each collective call, public copy wakes the current Werewolf Faction Agents and opens the Little Girl spying interval.
 - When the app does not yet know the complete group, the Moderator performs Faction Agent Group Observation for the complete non-empty group that woke. When the complete group is already known, the Moderator only confirms that the physical wake occurred.

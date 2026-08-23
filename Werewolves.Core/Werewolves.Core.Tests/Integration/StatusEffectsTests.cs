@@ -311,7 +311,13 @@ public class StatusEffectsTests : DiagnosticTestBase
         var wildChildIdentifyInstruction = InstructionAssert.ExpectType<SelectPlayersInstruction>(
             builder.GetCurrentInstruction(),
             CoreTestReferences.InstructionContexts.WildChildIdentification);
+        builder.GetGameState()!
+            .GetFactionAgentKnowledge(wildChild.Id, Faction.Werewolf).Should()
+            .Be(FactionAgentKnowledge.Unknown);
         var afterWildChildIdentify = builder.Process(wildChildIdentifyInstruction.CreateResponse([wildChild.Id]));
+        builder.GetGameState()!
+            .GetFactionAgentKnowledge(wildChild.Id, Faction.Werewolf).Should()
+            .Be(FactionAgentKnowledge.KnownNonAgent);
 
         var modelSelectionInstruction = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
             afterWildChildIdentify,
@@ -347,10 +353,12 @@ public class StatusEffectsTests : DiagnosticTestBase
         var roleRevealInstruction = InstructionAssert.ExpectSuccessWithType<AssignRolesInstruction>(
             afterNightEnd,
             CoreTestReferences.InstructionContexts.RoleRevealForEliminatedModel);
-        roleRevealInstruction.PlayersForAssignment.Should().Equal(roleModel.Id);
+        roleRevealInstruction.PlayersForAssignment.Should().BeEmpty();
+        roleRevealInstruction.SelectableRolesForPlayers[roleModel.Id].Should()
+            .OnlyContain(role => role == MainRoleType.SimpleVillager);
 
         // Act
-        var afterTransformation = builder.Process(roleRevealInstruction.CreateResponse(new Dictionary<Guid, MainRoleType>
+        var afterTransformation = builder.Process(roleRevealInstruction.CreateObservedRoleResponse(new Dictionary<Guid, MainRoleType>
         {
             { roleModel.Id, MainRoleType.SimpleVillager }
         }));
@@ -491,7 +499,7 @@ public class StatusEffectsTests : DiagnosticTestBase
                 afterNightEnd,
                 CoreTestReferences.InstructionContexts.RoleRevealForEliminatedModel);
 
-        builder.Process(roleRevealInstruction.CreateResponse(
+        builder.Process(roleRevealInstruction.CreateObservedRoleResponse(
             new Dictionary<Guid, MainRoleType>
             {
                 { model.Id, MainRoleType.SimpleVillager }
@@ -569,7 +577,7 @@ public class StatusEffectsTests : DiagnosticTestBase
             InstructionAssert.ExpectSuccessWithType<AssignRolesInstruction>(
                 afterNightEnd,
                 CoreTestReferences.InstructionContexts.RoleRevealForEliminatedModel);
-        builder.Process(roleRevealInstruction.CreateResponse(
+        builder.Process(roleRevealInstruction.CreateObservedRoleResponse(
             new Dictionary<Guid, MainRoleType>
             {
                 { model.Id, MainRoleType.SimpleVillager }

@@ -639,9 +639,10 @@ internal sealed class WhiteWerewolfRole
 			.Where(player =>
 				player.State.CurrentRole == MainRoleType.WhiteWerewolf ||
 				(player.State.CurrentRole == null &&
-				 (player.State.ModeratorKnownRole == null ||
-				  player.State.ModeratorKnownRole ==
-				  MainRoleType.WhiteWerewolf)))
+				 (player.State.ModeratorKnownRole == MainRoleType.WhiteWerewolf ||
+				  player.State.ModeratorKnownRole == null &&
+				  GameSessionQueries.GetPossibleRoles(session, player.Id)
+					  .Contains(MainRoleType.WhiteWerewolf))))
 			.ToIdSet();
 
 	private IPlayer GetHolder(GameSession session) =>

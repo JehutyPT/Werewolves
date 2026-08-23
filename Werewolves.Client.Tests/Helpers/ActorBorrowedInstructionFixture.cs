@@ -175,8 +175,11 @@ internal static class ActorBorrowedInstructionFixture
 			SeedKnownWerewolfAgentFacts(session, werewolfIds);
 		}
 
-		session.TransitionMainPhase(GamePhase.Day);
-		session.TransitionMainPhase(GamePhase.Night);
+		if (sourceRole != MainRoleType.LittleGirl)
+		{
+			session.TransitionMainPhase(GamePhase.Day);
+			session.TransitionMainPhase(GamePhase.Night);
+		}
 		if (sourceRole == MainRoleType.Witch)
 		{
 			session.PerformNightAction(
@@ -315,7 +318,11 @@ internal static class ActorBorrowedInstructionFixture
 			fixture.Session,
 			fixture.ActorSleep.CreateResponse(),
 			"Little Girl Werewolf group observation");
-		return FamilyOutput.Passive(instruction);
+		return new FamilyOutput(
+			instruction,
+			SelectedPlayerIds: [fixture.WerewolfId],
+			SelectedOptionId: null,
+			ResourceIds: []);
 	}
 
 	private static FamilyOutput CreateDefenderInstruction(CoreFixture fixture)
@@ -794,7 +801,7 @@ internal static class ActorBorrowedInstructionFixture
 				fixture.Players[^1].Name)],
 		ActorBorrowedPowerFamily.LittleGirl =>
 			[
-				GameStrings.WerewolfFactionAgentObservationPrompt,
+				GameStrings.WerewolfFactionAgentObservationPrompt.Format(1),
 				GameStrings.LittleGirlOpeningGuidance
 			],
 		ActorBorrowedPowerFamily.Defender =>

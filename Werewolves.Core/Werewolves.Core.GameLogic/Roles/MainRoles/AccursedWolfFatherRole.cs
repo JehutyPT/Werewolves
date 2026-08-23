@@ -661,9 +661,11 @@ internal sealed class AccursedWolfFatherRole
 				player.State.CurrentRole ==
 					MainRoleType.AccursedWolfFather ||
 				(player.State.CurrentRole == null &&
-				 (player.State.ModeratorKnownRole == null ||
-				  player.State.ModeratorKnownRole ==
-					  MainRoleType.AccursedWolfFather)))
+				 (player.State.ModeratorKnownRole ==
+					  MainRoleType.AccursedWolfFather ||
+				  player.State.ModeratorKnownRole == null &&
+				  GameSessionQueries.GetPossibleRoles(session, player.Id)
+					  .Contains(MainRoleType.AccursedWolfFather))))
 			.ToIdSet();
 
 	private HashSet<Guid> GetLivingHolderIds(GameSession session) =>

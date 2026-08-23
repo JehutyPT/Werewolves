@@ -375,8 +375,10 @@ internal abstract class CardinalityRoleHolderNightHookListener
 			.Where(player =>
 				player.State.CurrentRole == (MainRoleType)Id ||
 				(player.State.CurrentRole == null &&
-				 (player.State.ModeratorKnownRole == null ||
-				  player.State.ModeratorKnownRole == (MainRoleType)Id)))
+				 (player.State.ModeratorKnownRole == (MainRoleType)Id ||
+				  player.State.ModeratorKnownRole == null &&
+				  GameSessionQueries.GetPossibleRoles(session, player.Id)
+					  .Contains((MainRoleType)Id))))
 			.ToIdSet();
 
 	private bool IsCompleteHolderSetKnown(GameSession session) =>

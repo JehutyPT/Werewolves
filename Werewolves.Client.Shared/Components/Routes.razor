@@ -2,14 +2,27 @@
 @using Werewolves.Core.StateModels.Models.Instructions
 @using Werewolves.Core.StateModels.Enums
 @using Werewolves.Core.StateModels.Models.Simulation
+@using Werewolves.Core.GameLogic.Models
 @implements IDisposable
 @inject LobbySetupState Lobby
 @inject GameClientManager Game
 @inject GameplayWakeLockController WakeLock
+@inject IRecentSetupStore RecentSetupStore
+@inject LobbySetupMetadata LobbyMetadata
+@inject TimeProvider Clock
 
-@if (_currentStep == LobbyStep.Roster)
+@if (_currentStep == LobbyStep.Landing)
 {
-	<LobbyRosterPage OnContinue="ShowRoleSelection" OnShowLabs="ShowLabs" />
+	<LandingPage CanContinue="Game.HasActiveSession"
+				 RecentSetups="_recentSetups"
+				 OnContinue="MoveToInitialStep"
+				 OnNewGame="HandleNewGame"
+				 OnRecentSetup="HandleRecentSetup"
+				 OnDeleteRecentSetup="HandleDeleteRecentSetup" />
+}
+else if (_currentStep == LobbyStep.Roster)
+{
+	<LobbyRosterPage OnBack="ShowLanding" OnContinue="ShowRoleSelection" OnShowLabs="ShowLabs" />
 }
 else if (_currentStep == LobbyStep.RoleSelection)
 {
@@ -47,14 +60,16 @@ else
 @using Werewolves.Client.Services
 
 @code {
-	private LobbyStep _currentStep = LobbyStep.Roster;
+	private LobbyStep _currentStep = LobbyStep.Landing;
 	private GameResult? _gameResult;
 	private VictoryCheckWindow? _victoryCheckWindow;
+	private IReadOnlyList<RecentSetupRowPresentation> _recentSetups = [];
 
 	protected override void OnInitialized()
 	{
 		Game.StateChanged += HandleGameStateChanged;
-		MoveToInitialStep();
+		RefreshRecentSetups();
+		MoveTo(LobbyStep.Landing);
 	}
 
 	private void MoveToInitialStep()
@@ -78,6 +93,65 @@ else
 	private void ShowRoster()
 	{
 		MoveTo(LobbyStep.Roster);
+	}
+
+	private void ShowLanding()
+	{
+		RefreshRecentSetups();
+		MoveTo(LobbyStep.Landing);
+	}
+
+	private void HandleNewGame()
+	{
+		if (Game.HasActiveSession)
+		{
+			Game.ClearSession();
+		}
+
+		MoveTo(LobbyStep.Roster);
+	}
+
+	private void HandleRecentSetup(RecentSetup setup)
+	{
+		if (Game.TryAbandonSessionAndApplyRecentSetup(Lobby, setup))
+		{
+			MoveTo(LobbyStep.Roster);
+		}
+	}
+
+	private void HandleDeleteRecentSetup(RecentSetup setup)
+	{
+		try
+		{
+			RecentSetupStore.Delete(setup);
+			RefreshRecentSetups();
+		}
+		catch (Exception exception) when (
+			exception is IOException or UnauthorizedAccessException or InvalidDataException)
+		{
+		}
+	}
+
+	private void RefreshRecentSetups()
+	{
+		IReadOnlyList<RecentSetup> setups;
+		try
+		{
+			setups = RecentSetupStore.Load();
+		}
+		catch (Exception exception) when (
+			exception is IOException or UnauthorizedAccessException)
+		{
+			_recentSetups = [];
+			return;
+		}
+
+		_recentSetups = setups
+			.Select(setup => RecentSetupProjection.Project(
+				setup,
+				LobbyMetadata,
+				Clock.GetUtcNow()))
+			.ToArray();
 	}
 
 	private void ShowRoleLockIn()
@@ -126,7 +200,6 @@ else
 	private void HandleReturnToLobby()
 	{
 		Game.ClearSession();
-		Lobby.Reset();
 		MoveTo(LobbyStep.Roster);
 	}
 
@@ -163,6 +236,7 @@ else
 
 	private enum LobbyStep
 	{
+			Landing,
 			Roster,
 			RoleSelection,
 			RoleLockIn,

@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using FluentAssertions;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Extensions;
@@ -398,14 +399,20 @@ public class NightActionTests : DiagnosticTestBase
         gameState.GetCurrentPhase().Should().Be(GamePhase.Dawn);
 
         // === Dawn 1: villager1 is eliminated ===
-        builder.CompleteDawnPhase();
+        builder.CompleteDawnPhase(new()
+        {
+            [villager1.Id] = MainRoleType.SimpleVillager
+        });
 
         // Verify villager1 is now dead
         var deadVillager = gameState.GetPlayer(villager1.Id);
         deadVillager.State.Health.Should().Be(PlayerHealth.Dead);
 
         // === Day 1: Lynch villager2 (to avoid WW victory and continue game) ===
-        builder.CompleteDayPhaseWithLynch(villager2.Id);
+        builder.CompleteDayPhaseWithLynch(villager2.Id, new()
+        {
+            [villager2.Id] = MainRoleType.SimpleVillager
+        });
 
         // Verify we're back to Night phase (Night 2)
         gameState.GetCurrentPhase().Should().Be(GamePhase.Night);
@@ -559,7 +566,10 @@ public class NightActionTests : DiagnosticTestBase
         updatedSeer.State.Health.Should().Be(PlayerHealth.Dead);
 
         // === Day 1: Lynch a villager (to continue game) ===
-        builder.CompleteDayPhaseWithLynch(villager1.Id);
+        builder.CompleteDayPhaseWithLynch(villager1.Id, new()
+        {
+            [villager1.Id] = MainRoleType.SimpleVillager
+        });
 
         // Verify we're back to Night phase (Night 2)
         gameState.GetCurrentPhase().Should().Be(GamePhase.Night);
@@ -713,14 +723,20 @@ public class NightActionTests : DiagnosticTestBase
         gameState.GetCurrentPhase().Should().Be(GamePhase.Dawn);
 
         // === Dawn 1: villager1 is eliminated ===
-        builder.CompleteDawnPhase();
+        builder.CompleteDawnPhase(new()
+        {
+            [villager1.Id] = MainRoleType.SimpleVillager
+        });
 
         // Verify villager1 is now dead
         var deadVillager = gameState.GetPlayer(villager1.Id);
         deadVillager.State.Health.Should().Be(PlayerHealth.Dead);
 
         // === Day 1: Lynch villager2 (to avoid WW victory and continue game) ===
-        builder.CompleteDayPhaseWithLynch(villager2.Id);
+        builder.CompleteDayPhaseWithLynch(villager2.Id, new()
+        {
+            [villager2.Id] = MainRoleType.SimpleVillager
+        });
 
         // Verify we're back to Night phase (Night 2)
         gameState.GetCurrentPhase().Should().Be(GamePhase.Night);
@@ -775,7 +791,7 @@ public class NightActionTests : DiagnosticTestBase
     /// private observation instruction for the Moderator.
     /// </summary>
     [Fact]
-    public void FirstNight_UnknownAgentGroup_RequestsCompleteNonemptyObservation()
+    public void FirstNight_UnknownAgentGroup_RequestsExactCompleteObservation()
     {
         // Arrange - 5 players: 1 WW, 1 Seer, 3 Villagers
         var builder = CreateBuilder()
@@ -792,7 +808,7 @@ public class NightActionTests : DiagnosticTestBase
         observation.Semantic.Should()
             .Be(ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
         observation.RoleIdentification.Should().BeNull();
-        observation.CountConstraint.Should().Be(NumberRangeConstraint.AtLeast(1));
+        observation.CountConstraint.Should().Be(NumberRangeConstraint.Exact(1));
         observation.SelectablePlayerIds.Should().BeEquivalentTo(
             builder.GetGameState()!.GetPlayers().Select(player => player.Id));
         observation.PublicAnnouncement.Should().Be(
@@ -801,7 +817,7 @@ public class NightActionTests : DiagnosticTestBase
         observation.PrivateInstruction.Should().NotBeNullOrWhiteSpace(
             CoreTestReferences.AssertionReasons.FirstNightWakeUpIncludesPrivateIdentificationPrompt);
         observation.PrivateInstruction.Should().Be(
-            GameStrings.WerewolfFactionAgentObservationPrompt);
+            GameStrings.WerewolfFactionAgentObservationPrompt.Format(1));
 
         MarkTestCompleted();
     }
@@ -871,7 +887,7 @@ public class NightActionTests : DiagnosticTestBase
 
         var session = builder.GetGameState()!;
         var players = session.GetPlayers().ToArray();
-        var observedAgent = players[0];
+        var observedAgents = players.Take(2).ToArray();
 
         builder.ConfirmGameStart();
         ConfirmNightStart(builder);
@@ -882,30 +898,51 @@ public class NightActionTests : DiagnosticTestBase
         observation.Semantic.Should()
             .Be(ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
         observation.RoleIdentification.Should().BeNull();
-        observation.CountConstraint.Should().Be(NumberRangeConstraint.AtLeast(1));
+        observation.CountConstraint.Should().Be(NumberRangeConstraint.Exact(2));
+		observation.PrivateInstruction.Should().Be(
+			GameStrings.WerewolfFactionAgentObservationPrompt.Format(2));
+		observation.PublicAnnouncement.Should().Be(
+			GameStrings.RoleHoldersWakeUp.Format(GameStrings.WerewolvesGroupName));
         session.RoleInPlayCount(MainRoleType.SimpleWerewolf).Should().Be(2);
+		var historyCount = session.GameHistoryLog.Count();
 
-        var accepted = builder.Process(observation.CreateResponse([observedAgent.Id]));
+		var incompleteResponse = new ModeratorResponse
+		{
+			InstructionId = observation.InstructionId,
+			Type = ExpectedInputType.PlayerSelection,
+			SelectedPlayerIds = new HashSet<Guid> { observedAgents[0].Id }
+		};
+		var incompleteAct = () => builder.Process(incompleteResponse);
+
+		incompleteAct.Should().Throw<InvalidOperationException>();
+		session.GameHistoryLog.Should().HaveCount(historyCount);
+		builder.GetCurrentInstruction()!.InstructionId.Should().Be(
+			observation.InstructionId);
+
+        var accepted = builder.Process(
+			observation.CreateResponse(
+				observedAgents.Select(player => player.Id).ToHashSet()));
         var victimInstruction = InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
             accepted,
             CoreTestReferences.InstructionContexts.WerewolfVictimSelection);
         victimInstruction.RoleIdentification.Should().BeNull();
         session.TryGetKnownFactionAgents(Faction.Werewolf, out var knownAgents)
             .Should().BeTrue();
-        knownAgents.Select(player => player.Id).Should().Equal(observedAgent.Id);
-        session.GetPlayerState(observedAgent.Id).CurrentRole.Should().BeNull();
-        session.GetPlayerState(players[1].Id).CurrentRole.Should().BeNull();
+        knownAgents.Select(player => player.Id).Should().Equal(
+			observedAgents.Select(player => player.Id));
+		observedAgents.Should().AllSatisfy(player =>
+		{
+			session.GetPlayerState(player.Id).CurrentRole.Should().BeNull();
+			session.GetPlayerState(player.Id).ModeratorKnownRole.Should().BeNull();
+		});
         session.GameHistoryLog.OfType<RoleIdentificationLogEntry>().Should()
             .NotContain(entry => entry.Role == MainRoleType.SimpleWerewolf);
 
         MarkTestCompleted();
     }
 
-    [Theory]
-    [InlineData(FactionAgentKnowledge.KnownAgent)]
-    [InlineData(FactionAgentKnowledge.KnownNonAgent)]
-    public void FirstNight_PartiallyKnownAgentFact_IsMandatoryInCompleteObservation(
-        FactionAgentKnowledge committedKnowledge)
+    [Fact]
+    public void FirstNight_PartiallyKnownNonAgent_IsReflectedInObservationCandidatesAndCommitGuard()
     {
         var builder = CreateBuilder()
             .WithSimpleGame(playerCount: 5, werewolfCount: 2, includeSeer: true);
@@ -924,7 +961,7 @@ public class NightActionTests : DiagnosticTestBase
             FactionFact.Agent(
                 committedPlayer.Id,
                 Faction.Werewolf,
-                committedKnowledge,
+                FactionAgentKnowledge.KnownNonAgent,
                 boundary));
 
         builder.ConfirmGameStart();
@@ -935,16 +972,23 @@ public class NightActionTests : DiagnosticTestBase
             CoreTestReferences.InstructionContexts.WerewolfWakeIdentification);
         observation.Semantic.Should()
             .Be(ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
-        observation.CountConstraint.Should().Be(NumberRangeConstraint.AtLeast(1));
+        observation.CountConstraint.Should().Be(NumberRangeConstraint.Exact(2));
+        var expectedCandidates = players.Where(
+			player => player.Id != committedPlayer.Id);
         observation.SelectablePlayerIds.Should().BeEquivalentTo(
-            players.Select(player => player.Id));
+            expectedCandidates.Select(player => player.Id));
         var historyBeforeContradiction = session.GameHistoryLog.ToArray();
-        var contradictoryGroup = committedKnowledge ==
-                                 FactionAgentKnowledge.KnownAgent
-            ? new HashSet<Guid> { otherAgent.Id }
-            : new HashSet<Guid> { committedPlayer.Id, otherAgent.Id };
-        var contradictoryResponse = observation.CreateResponse(
-            contradictoryGroup);
+        var contradictoryGroup = new HashSet<Guid>
+		{
+			committedPlayer.Id,
+			otherAgent.Id
+		};
+        var contradictoryResponse = new ModeratorResponse
+        {
+            InstructionId = observation.InstructionId,
+            Type = ExpectedInputType.PlayerSelection,
+            SelectedPlayerIds = contradictoryGroup.ToImmutableHashSet()
+        };
         Action submitContradictoryResponse = () => builder.Process(contradictoryResponse);
 
         submitContradictoryResponse.Should().Throw<InvalidOperationException>();
@@ -953,13 +997,14 @@ public class NightActionTests : DiagnosticTestBase
         session.GetFactionAgentKnowledge(
                 committedPlayer.Id,
                 Faction.Werewolf)
-            .Should().Be(committedKnowledge);
+            .Should().Be(FactionAgentKnowledge.KnownNonAgent);
         players.Should().OnlyContain(player => player.State.CurrentRole == null);
 
-        var acceptedGroup = committedKnowledge ==
-                            FactionAgentKnowledge.KnownAgent
-            ? new HashSet<Guid> { committedPlayer.Id, otherAgent.Id }
-            : new HashSet<Guid> { otherAgent.Id };
+        var acceptedGroup = players
+			.Skip(1)
+			.Take(2)
+			.Select(player => player.Id)
+			.ToHashSet();
         var accepted = builder.Process(observation.CreateResponse(acceptedGroup));
         InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
             accepted,

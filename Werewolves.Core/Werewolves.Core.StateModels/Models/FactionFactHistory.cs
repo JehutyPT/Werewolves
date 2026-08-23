@@ -15,6 +15,9 @@ public sealed record FactionFactSource
 {
 	internal const string WerewolfFactionAgentGroupObservationIdentifier =
 		"werewolf-faction-agent-group-observation";
+	internal const string
+		RoleIdentificationWerewolfFactionAgencyEntailmentIdentifier =
+			"role-identification-werewolf-faction-agency-entailment";
 
 	[JsonConstructor]
 	public FactionFactSource(FactionFactSourceKind kind, string identifier)
@@ -180,3 +183,10 @@ public sealed record FactionFact
 			effectiveBoundary,
 			beneficiaryPrecedence: null);
 }
+
+/// <summary>
+/// Identifies the committed fact and source that first established Faction agency.
+/// </summary>
+public sealed record FactionAgentFactProvenance(
+	FactionFact Fact,
+	FactionFactSource Source);

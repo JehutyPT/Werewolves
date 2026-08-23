@@ -210,7 +210,10 @@ public sealed class AccursedWolfFatherRoleTests : DiagnosticTestBase
 		finishNight.Semantic.Should().Be(
 			ModeratorInstructionSemantic.FinishNightActions);
 		builder.Process(finishNight.CreateResponse()).IsSuccess.Should().BeTrue();
-		builder.CompleteDawnPhase().IsSuccess.Should().BeTrue();
+		builder.CompleteDawnPhase(new()
+		{
+			[players[4].Id] = MainRoleType.SimpleVillager
+		}).IsSuccess.Should().BeTrue();
 		builder.CompleteDayPhaseWithTie().IsSuccess.Should().BeTrue();
 
 		builder.ConfirmNightStart();
@@ -288,6 +291,9 @@ public sealed class AccursedWolfFatherRoleTests : DiagnosticTestBase
 			.ArrangeKnownRole(
 				players[1].Id,
 				MainRoleType.AccursedWolfFather)
+			.ArrangeKnownWerewolfFactionAgentGroup(
+				players[0].Id,
+				players[1].Id)
 			.ArrangeEliminatedPlayer(players[1].Id);
 		builder.ConfirmGameStart();
 		builder.ConfirmNightStart();

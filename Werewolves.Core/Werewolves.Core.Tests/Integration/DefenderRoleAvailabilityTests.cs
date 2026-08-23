@@ -71,6 +71,7 @@ public sealed class DefenderRoleAvailabilityTests : DiagnosticTestBase
 		var defender = players[0];
 		builder
 			.ArrangeKnownRole(defender.Id, MainRoleType.Defender)
+			.ArrangeKnownWerewolfFactionAgentGroup(players[1].Id)
 			.ArrangeEliminatedPlayer(defender.Id);
 		builder.ConfirmGameStart();
 		builder.ConfirmNightStart();

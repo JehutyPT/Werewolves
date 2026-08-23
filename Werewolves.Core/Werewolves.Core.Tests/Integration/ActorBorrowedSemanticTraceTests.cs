@@ -244,19 +244,14 @@ public sealed class ActorBorrowedSemanticTraceTests
 		var targetReveal = service.ProcessInstruction(
 				fixture.Session.Id,
 				finalShotResponse).ModeratorInstruction.Should()
-			.BeOfType<AssignRolesInstruction>().Subject;
+			.BeOfType<ConfirmationInstruction>().Subject;
 		targetReveal.Semantic.Should().Be(
 			ModeratorInstructionSemantic.AssignEliminationCascadeRoles);
-		targetReveal.PlayersForAssignment.Should().Equal(
+		targetReveal.AffectedPlayerIds.Should().Equal(
 			finalShotResponse.SelectedPlayerIds!);
 		var continuation = service.ProcessInstruction(
 				fixture.Session.Id,
-				targetReveal.CreateResponse(
-					targetReveal.PlayersForAssignment.ToDictionary(
-						playerId => playerId,
-						playerId => fixture.Session
-							.GetPlayerState(playerId)
-							.CurrentRole!.Value))).ModeratorInstruction;
+				targetReveal.CreateResponse()).ModeratorInstruction;
 		continuation.Should().NotBeNull();
 		return [finalShot.Semantic];
 	}

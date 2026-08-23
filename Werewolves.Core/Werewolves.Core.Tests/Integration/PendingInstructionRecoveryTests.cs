@@ -133,7 +133,7 @@ public sealed class PendingInstructionRecoveryTests
 
         recoveredService.ProcessInstruction(
             recoveredGameId,
-            roleReveal.CreateResponse(new()
+            roleReveal.CreateObservedRoleResponse(new()
             {
                 [roleModelId] = MainRoleType.SimpleVillager
             })).IsSuccess.Should().BeTrue();
@@ -302,6 +302,10 @@ public sealed class PendingInstructionRecoveryTests
         var acceptedIdentification = identification.CreateResponse([wildChild.Id]);
         var expectedNext = builder.Process(acceptedIdentification).ModeratorInstruction
             .Should().BeOfType<SelectPlayersInstruction>().Subject;
+        builder.GetGameState()!.GetFactionAgentKnowledge(
+                wildChild.Id,
+                Faction.Werewolf)
+            .Should().Be(FactionAgentKnowledge.KnownNonAgent);
 
         var firstService = new GameService();
         var firstGameId = firstService.RehydrateSession(
@@ -319,6 +323,10 @@ public sealed class PendingInstructionRecoveryTests
                 .ContainSingle(entry =>
                     entry.Role == MainRoleType.WildChild &&
                     entry.PlayerIds.SetEquals(new[] { wildChild.Id }));
+            secondRecovered.GetFactionAgentKnowledge(
+                    wildChild.Id,
+                    Faction.Werewolf)
+                .Should().Be(FactionAgentKnowledge.KnownNonAgent);
             secondNext.InstructionId.Should().Be(expectedNext.InstructionId);
             secondNext.Semantic.Should().Be(expectedNext.Semantic);
             secondNext.AffectedPlayerIds.Should().Equal(expectedNext.AffectedPlayerIds);
@@ -811,7 +819,7 @@ public sealed class PendingInstructionRecoveryTests
             elderIdentification.CreateResponse([fixture.ElderId]));
         service.ProcessInstruction(
             gameId,
-            dawnRoleAssignment.CreateResponse(new()
+            dawnRoleAssignment.CreateObservedRoleResponse(new()
             {
                 [fixture.NightVictimId] = MainRoleType.SimpleVillager
             })).IsSuccess.Should().BeTrue();
@@ -834,22 +842,21 @@ public sealed class PendingInstructionRecoveryTests
         debate.Semantic.Should().Be(ModeratorInstructionSemantic.StartDayDebate);
         var vote = ProcessAndExpect<SelectPlayersInstruction>(
             service, gameId, debate.CreateResponse());
-        var dayRoleAssignment = ProcessAndExpect<AssignRolesInstruction>(
-            service, gameId, vote.CreateResponse([fixture.ElderId]));
-        dayRoleAssignment.Semantic.Should().Be(
-            ModeratorInstructionSemantic.AssignDayVoteTargetRole);
-        dayRoleAssignment.PlayersForAssignment.Should().Equal(fixture.ElderId);
-        dayRoleAssignment.RolesForAssignment.Should().Contain(MainRoleType.Elder);
         var reveal = ProcessAndExpect<ConfirmationInstruction>(
-            service, gameId,
-            dayRoleAssignment.CreateResponse(new()
-            {
-                [fixture.ElderId] = MainRoleType.Elder
-            }));
+            service, gameId, vote.CreateResponse([fixture.ElderId]));
+        reveal.Semantic.Should().Be(
+            ModeratorInstructionSemantic.AssignDayVoteTargetRole);
+        reveal.AffectedPlayerIds.Should().Equal(fixture.ElderId);
         var dayTail = ProcessAndExpect<ConfirmationInstruction>(
             service, gameId, reveal.CreateResponse());
-        var secondNightStart = ProcessAndExpect<ConfirmationInstruction>(
+        dayTail.Semantic.Should().Be(
+            ModeratorInstructionSemantic.AnnounceDayElimination);
+        var suppressionAnnouncement = ProcessAndExpect<ConfirmationInstruction>(
             service, gameId, dayTail.CreateResponse());
+        suppressionAnnouncement.Semantic.Should().Be(
+            ModeratorInstructionSemantic.AnnounceVillagerRolePowerSuppression);
+        var secondNightStart = ProcessAndExpect<ConfirmationInstruction>(
+            service, gameId, suppressionAnnouncement.CreateResponse());
         secondNightStart.Semantic.Should().Be(
             ModeratorInstructionSemantic.StartNight);
         service.GetGameStateView(gameId)!.GetCurrentPhase().Should()

@@ -165,6 +165,14 @@
     <value>Confirma que todos os jogadores indicados revelaram fisicamente a carta e regista os papéis ainda desconhecidos.</value>
     <comment/>
   </data>
+	<data name="PublicRoleRevealKnownRolesInstruction" xml:space="preserve">
+		<value>Papéis já conhecidos a confirmar: {0}.</value>
+		<comment/>
+	</data>
+	<data name="PublicRoleRevealEntailedRolesInstruction" xml:space="preserve">
+		<value>Papéis determinados a confirmar: {0}.</value>
+		<comment/>
+	</data>
 	<data name="DevotedServantVoteWindowAnnouncement" xml:space="preserve">
 		<value>Se a Serventa Devotada quiser usar o seu poder, deve revelar agora publicamente a sua carta. Caso contrário, continua.</value>
 		<comment/>
@@ -618,7 +626,7 @@
     <comment/>
   </data>
   <data name="WerewolfFactionAgentObservationPrompt" xml:space="preserve">
-    <value>Selecione todos os jogadores vivos que agem atualmente pela fação dos Lobisomens.</value>
+    <value>Selecione o número exato de jogadores vivos que agem atualmente pela fação dos Lobisomens: {0}.</value>
     <comment/>
   </data>
   <data name="LittleGirlOpeningGuidance" xml:space="preserve">

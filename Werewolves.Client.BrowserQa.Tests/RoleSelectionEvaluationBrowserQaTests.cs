@@ -34,6 +34,7 @@ public sealed class RoleSelectionEvaluationBrowserQaTests : PlaywrightTest, ICla
 		{
 			WaitUntil = BrowserQaPage.ScenarioWaitUntil
 		});
+		await page.GetByTestId(ModeratorUiTestIds.LandingNewGameButton).ClickAsync();
 
 		await page.GetByRole(AriaRole.Button, new() { Name = ClientStrings.LobbyRoster_ContinueToRolesButton })
 			.ClickAsync();
@@ -80,6 +81,7 @@ public sealed class RoleSelectionEvaluationBrowserQaTests : PlaywrightTest, ICla
 		{
 			WaitUntil = BrowserQaPage.ScenarioWaitUntil
 		});
+		await page.GetByTestId(ModeratorUiTestIds.LandingNewGameButton).ClickAsync();
 
 		await page.GetByRole(AriaRole.Button, new() { Name = ClientStrings.LobbyRoster_ContinueToRolesButton })
 			.ClickAsync();

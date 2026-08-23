@@ -19,6 +19,7 @@ public sealed class ActorSetupFlowBunitTests
 	{
 		using var context = new ModeratorComponentTestContext();
 		var cut = context.RenderModeratorComponent<Routes>();
+		OpenNewGameFromLanding(cut);
 
 		foreach (var playerName in new[] { "Ana", "Bruno", "Catarina", "Diana", "Eduardo" })
 		{
@@ -60,6 +61,7 @@ public sealed class ActorSetupFlowBunitTests
 		var lobby = context.Services.GetRequiredService<LobbySetupState>();
 		SeedActorAndPrejudicedManipulatorLobby(lobby);
 		var cut = context.RenderModeratorComponent<Routes>();
+		OpenNewGameFromLanding(cut);
 
 		OpenRoleSelection(cut);
 		cut.Find(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Click();
@@ -84,6 +86,7 @@ public sealed class ActorSetupFlowBunitTests
 		var lobby = context.Services.GetRequiredService<LobbySetupState>();
 		SeedActorLobby(lobby);
 		var cut = context.RenderModeratorComponent<Routes>();
+		OpenNewGameFromLanding(cut);
 
 		OpenRoleSelection(cut);
 		cut.Find(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Click();
@@ -150,6 +153,7 @@ public sealed class ActorSetupFlowBunitTests
 		var lobby = context.Services.GetRequiredService<LobbySetupState>();
 		SeedActorLobby(lobby);
 		var cut = context.RenderModeratorComponent<Routes>();
+		OpenNewGameFromLanding(cut);
 		OpenRoleSelection(cut);
 		cut.Find(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Click();
 		ClickActorCard(cut, MainRoleType.Cupid);
@@ -215,6 +219,9 @@ public sealed class ActorSetupFlowBunitTests
 		lobby.IncrementRole(MainRoleType.SimpleVillager);
 		lobby.IncrementRole(MainRoleType.Seer);
 	}
+
+	private static void OpenNewGameFromLanding(IRenderedComponent<Routes> cut) =>
+		cut.Find(TestId(ModeratorUiTestIds.LandingNewGameButton)).Click();
 
 	private static void OpenRoleSelection(IRenderedComponent<Routes> cut) =>
 		cut.FindAll("button")

@@ -191,6 +191,23 @@ public sealed class FoxRoleTests : DiagnosticTestBase
 		var eliminatedUnknown = players[5];
 		builder.ArrangeKnownRole(fox.Id, MainRoleType.Fox);
 		builder.ArrangeEliminatedPlayer(eliminatedUnknown.Id);
+		var session = builder.GetGameState()!;
+		var boundary = new FactionFactEffectiveBoundary(
+			session.TurnNumber,
+			session.GetCurrentPhase(),
+			session.GameHistoryLog.Count());
+		builder.ArrangeExplicitFactionTransition(
+			"fox-test-known-living-werewolf-agent-group",
+			players
+				.Where(player => player.Id != eliminatedUnknown.Id)
+				.Select(player => FactionFact.Agent(
+					player.Id,
+					Faction.Werewolf,
+					player.Id == werewolf.Id
+						? FactionAgentKnowledge.KnownAgent
+						: FactionAgentKnowledge.KnownNonAgent,
+					boundary))
+				.ToArray());
 		builder.ConfirmGameStart();
 		builder.ConfirmNightStart();
 

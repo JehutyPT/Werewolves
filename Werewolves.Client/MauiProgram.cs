@@ -58,6 +58,8 @@ namespace Werewolves.Client
             builder.Services.AddSingleton<IAudioPlayerFactory, PluginAudioPlayerFactory>();
             builder.Services.AddSingleton<IInstructionAudioPlayback, InstructionAudioPlayback>();
             builder.Services.AddSingleton<IGameSessionSaveStore>(FileGameSessionSaveStore.CreateDefault());
+			builder.Services.AddSingleton<IRecentSetupStore>(sp =>
+				FileRecentSetupStore.CreateDefault(sp.GetRequiredService<TimeProvider>()));
             builder.Services.AddSingleton<GameClientManager>();
             builder.Services.AddSingleton<IDeviceDisplay>(DeviceDisplay.Current);
             builder.Services.AddSingleton<IScreenWakeLock, DeviceDisplayScreenWakeLock>();

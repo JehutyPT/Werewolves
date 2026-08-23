@@ -197,6 +197,7 @@ internal sealed class ScapegoatRole
 					votedPlayerId == Guid.Empty &&
 					GetCurrentTieReplacement(session) == null &&
 					MatchesBorrowedTieReveal(
+						session,
 						pendingInstruction,
 						borrowedActorId);
 				break;
@@ -420,7 +421,10 @@ internal sealed class ScapegoatRole
 
 		if (TryGetActiveBorrowedActorId(session, out var borrowedActorId))
 		{
-			if (!MatchesBorrowedTieReveal(instruction, borrowedActorId))
+			if (!MatchesBorrowedTieReveal(
+					session,
+					instruction,
+					borrowedActorId))
 			{
 				throw new RoleWorkflowInputRejectionException(
 					"The Scapegoat tie reveal does not match its borrowed Actor context.");
@@ -473,7 +477,12 @@ internal sealed class ScapegoatRole
 		GameSession session) =>
 		session.GetPlayers()
 			.WithHealth(PlayerHealth.Alive)
-			.Where(IsNonContradictoryScapegoatCandidate)
+			.Where(player =>
+				IsNonContradictoryScapegoatCandidate(player) &&
+				(player.State.CurrentRole == MainRoleType.Scapegoat ||
+				 player.State.ModeratorKnownRole == MainRoleType.Scapegoat ||
+				 GameSessionQueries.GetPossibleRoles(session, player.Id)
+					 .Contains(MainRoleType.Scapegoat)))
 			.Select(player => player.Id)
 			.ToHashSet();
 
@@ -546,6 +555,18 @@ internal sealed class ScapegoatRole
 		{
 			throw new InvalidOperationException(
 				"The observed Scapegoat holder contradicts committed Role or health facts.");
+		}
+
+		var isEstablishedHolder =
+			player.State.CurrentRole == MainRoleType.Scapegoat ||
+			player.State.ModeratorKnownRole == MainRoleType.Scapegoat ||
+			player.State.PhysicalCharacterCardRole == MainRoleType.Scapegoat;
+		if (!isEstablishedHolder &&
+		    !GameSessionQueries.GetPossibleRoles(session, player.Id)
+			    .Contains(MainRoleType.Scapegoat))
+		{
+			throw new InvalidOperationException(
+				"Role Identification contradicts committed Role knowledge.");
 		}
 
 		if (!IsTieReplacementAvailable(session, player))
@@ -939,9 +960,11 @@ internal sealed class ScapegoatRole
 	}
 
 	internal static bool MatchesBorrowedTieReveal(
+		GameSession session,
 		ModeratorInstruction? instruction,
 		Guid actorId)
 	{
+		ArgumentNullException.ThrowIfNull(session);
 		if (instruction is not (ConfirmationInstruction or
 		    AssignRolesInstruction) ||
 		    instruction.Semantic !=
@@ -953,7 +976,8 @@ internal sealed class ScapegoatRole
 			    GameStrings.ActorRoleName) ||
 		    !StringComparer.Ordinal.Equals(
 			    instruction.PrivateInstruction,
-			    GameStrings.PublicRoleRevealInstruction) ||
+			    RoleKnowledgeHandlers.CreatePublicRoleRevealPrivateInstruction(
+				    [session.GetPlayer(actorId)])) ||
 		    instruction.SoundEffects.Count != 0)
 		{
 			return false;
@@ -963,7 +987,8 @@ internal sealed class ScapegoatRole
 			instruction is AssignRolesInstruction assignment &&
 			assignment.PlayersForAssignment.Count == 1 &&
 			assignment.PlayersForAssignment.Contains(actorId) &&
-			assignment.RolesForAssignment.Contains(MainRoleType.Actor);
+			assignment.SelectableRolesForPlayers[actorId]
+				.Contains(MainRoleType.Actor);
 	}
 
 	internal static bool MatchesPermittedVoterSelection(

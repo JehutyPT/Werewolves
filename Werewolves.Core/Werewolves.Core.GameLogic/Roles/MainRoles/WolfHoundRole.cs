@@ -396,8 +396,10 @@ internal sealed class WolfHoundRole : RoleHookListener, IDeclaredRoleWorkflow
 			.Where(player =>
 				player.State.CurrentRole == MainRoleType.WolfHound ||
 				(player.State.CurrentRole == null &&
-				 (player.State.ModeratorKnownRole == null ||
-				  player.State.ModeratorKnownRole == MainRoleType.WolfHound)))
+				 (player.State.ModeratorKnownRole == MainRoleType.WolfHound ||
+				  player.State.ModeratorKnownRole == null &&
+				  GameSessionQueries.GetPossibleRoles(session, player.Id)
+					  .Contains(MainRoleType.WolfHound))))
 			.ToIdSet();
 
 	private bool ClaimsHolderScopedCandidate(

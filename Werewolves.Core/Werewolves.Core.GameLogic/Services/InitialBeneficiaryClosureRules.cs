@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using Werewolves.Core.GameLogic.Queries;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 
@@ -108,13 +109,15 @@ internal sealed class InitialBeneficiaryClosureDeferredResult
 internal sealed class InitialBeneficiaryClosureRequest
 {
 	public InitialBeneficiaryClosureRequest(
-		FactionFactEffectiveBoundary initialAgentGroupBoundary,
+		FactionFactEffectiveBoundary
+			earliestCompleteWerewolfAgentPartitionBoundary,
 		IReadOnlyCollection<InitialBeneficiaryClosurePrerequisite>
 			applicableExceptionPrerequisites,
 		IReadOnlyCollection<InitialBeneficiaryClosureDeferredResult>
 			deferredResults)
 	{
-		ArgumentNullException.ThrowIfNull(initialAgentGroupBoundary);
+		ArgumentNullException.ThrowIfNull(
+			earliestCompleteWerewolfAgentPartitionBoundary);
 		ArgumentNullException.ThrowIfNull(applicableExceptionPrerequisites);
 		ArgumentNullException.ThrowIfNull(deferredResults);
 		if (applicableExceptionPrerequisites.Any(item => item is null)
@@ -137,19 +140,24 @@ internal sealed class InitialBeneficiaryClosureRequest
 				nameof(deferredResults));
 		}
 
-		InitialAgentGroupBoundary = initialAgentGroupBoundary;
+		EarliestCompleteWerewolfAgentPartitionBoundary =
+			earliestCompleteWerewolfAgentPartitionBoundary;
 		ApplicableExceptionPrerequisites = Array.AsReadOnly(
 			applicableExceptionPrerequisites.ToArray());
 		DeferredResults = Array.AsReadOnly(deferredResults.ToArray());
 	}
 
-	public FactionFactEffectiveBoundary InitialAgentGroupBoundary { get; }
+	public FactionFactEffectiveBoundary
+		EarliestCompleteWerewolfAgentPartitionBoundary
+	{ get; }
 
 	public IReadOnlyList<InitialBeneficiaryClosurePrerequisite>
-		ApplicableExceptionPrerequisites { get; }
+		ApplicableExceptionPrerequisites
+	{ get; }
 
 	public IReadOnlyList<InitialBeneficiaryClosureDeferredResult>
-		DeferredResults { get; }
+		DeferredResults
+	{ get; }
 }
 
 internal static class InitialBeneficiaryClosureRules
@@ -167,7 +175,8 @@ internal static class InitialBeneficiaryClosureRules
 
 	internal static InitialBeneficiaryClosureResult TryCommitCurrentSession(
 		GameSession session,
-		FactionFactEffectiveBoundary? initialAgentGroupBoundary = null)
+		FactionFactEffectiveBoundary?
+			earliestCompleteWerewolfAgentPartitionBoundary = null)
 	{
 		ArgumentNullException.ThrowIfNull(session);
 		if (session.TurnNumber != 1)
@@ -175,9 +184,9 @@ internal static class InitialBeneficiaryClosureRules
 			return InitialBeneficiaryClosureResult.Incomplete;
 		}
 
-		initialAgentGroupBoundary ??=
-			FindInitialCompleteWerewolfAgentGroupBoundary(session);
-		if (initialAgentGroupBoundary == null)
+		earliestCompleteWerewolfAgentPartitionBoundary ??=
+			FindEarliestCompleteWerewolfAgentPartitionBoundary(session);
+		if (earliestCompleteWerewolfAgentPartitionBoundary == null)
 		{
 			return InitialBeneficiaryClosureResult.Incomplete;
 		}
@@ -186,12 +195,12 @@ internal static class InitialBeneficiaryClosureRules
 		return TryCommit(
 			session,
 			new InitialBeneficiaryClosureRequest(
-				initialAgentGroupBoundary,
+				earliestCompleteWerewolfAgentPartitionBoundary,
 				applicableExceptionPrerequisites: [],
 				deferredResults:
 					CreateCurrentDeferredResults(
 						session,
-						initialAgentGroupBoundary,
+						earliestCompleteWerewolfAgentPartitionBoundary,
 						history)));
 	}
 
@@ -254,7 +263,7 @@ internal static class InitialBeneficiaryClosureRules
 					actorPair.PlayerIds,
 					actorPair.LinkBoundary,
 					history.OfType<IFactionFactBatchLogEntry>().ToArray(),
-					request.InitialAgentGroupBoundary);
+					request.EarliestCompleteWerewolfAgentPartitionBoundary);
 			if (disposition is null)
 			{
 				return InitialBeneficiaryClosureResult.Incomplete;
@@ -311,8 +320,7 @@ internal static class InitialBeneficiaryClosureRules
 		if (closureEntries.Length == 0)
 		{
 			return !allApplicableExceptionHolderSetsKnown ||
-			       FindInitialCompleteWerewolfAgentGroupBoundary(session) ==
-			       null;
+				FindEarliestCompleteWerewolfAgentPartitionBoundary(session) == null;
 		}
 
 		if (!allApplicableExceptionHolderSetsKnown)
@@ -351,19 +359,19 @@ internal static class InitialBeneficiaryClosureRules
 		var factionHistoryBeforeClosure = historyBeforeClosure
 			.OfType<IFactionFactBatchLogEntry>()
 			.ToArray();
-		var initialAgentGroupBoundary =
-			FindInitialCompleteWerewolfAgentGroupBoundary(
+		var earliestCompleteWerewolfAgentPartitionBoundary =
+			FindEarliestCompleteWerewolfAgentPartitionBoundary(
 				session,
 				factionHistoryBeforeClosure);
-		if (initialAgentGroupBoundary == null ||
+		if (earliestCompleteWerewolfAgentPartitionBoundary == null ||
 		    !TryBuildFacts(
 			    session,
 			    new InitialBeneficiaryClosureRequest(
-				    initialAgentGroupBoundary,
+				    earliestCompleteWerewolfAgentPartitionBoundary,
 				    applicableExceptionPrerequisites: [],
 				    deferredResults: CreateCurrentDeferredResults(
 					    session,
-					    initialAgentGroupBoundary,
+					    earliestCompleteWerewolfAgentPartitionBoundary,
 					    historyBeforeClosure)),
 			    factionHistoryBeforeClosure,
 			    out var expectedFacts) ||
@@ -407,7 +415,7 @@ internal static class InitialBeneficiaryClosureRules
 			session.Execution.CurrentPhase,
 			int.MaxValue);
 		if (FactionFactProjection.CompareBoundaries(
-			request.InitialAgentGroupBoundary,
+			request.EarliestCompleteWerewolfAgentPartitionBoundary,
 			currentBoundary) > 0)
 		{
 			throw new InvalidOperationException(
@@ -424,12 +432,14 @@ internal static class InitialBeneficiaryClosureRules
 		var playerIds = session.GetPlayers()
 			.Select(player => player.Id)
 			.ToArray();
-		var projectionAtGroupBoundary = FactionFactProjection.Create(
-			history,
-			playerIds,
-			request.InitialAgentGroupBoundary);
+		var projectionAtEarliestCompleteWerewolfAgentPartition =
+			FactionFactProjection.Create(
+				history,
+				playerIds,
+				request.EarliestCompleteWerewolfAgentPartitionBoundary);
 		if (playerIds.Any(playerId =>
-			projectionAtGroupBoundary.Agents[playerId][Faction.Werewolf] ==
+			projectionAtEarliestCompleteWerewolfAgentPartition
+				.Agents[playerId][Faction.Werewolf] ==
 			FactionAgentKnowledge.Unknown))
 		{
 			return false;
@@ -452,21 +462,23 @@ internal static class InitialBeneficiaryClosureRules
 		var facts = new List<FactionFact>();
 		foreach (var playerId in playerIds)
 		{
-			if (projectionAtGroupBoundary.Beneficiaries[playerId].IsKnown ||
+			if (projectionAtEarliestCompleteWerewolfAgentPartition
+					.Beneficiaries[playerId].IsKnown ||
 			    deferredBeneficiaryPlayerIds.Contains(playerId))
 			{
 				continue;
 			}
 
 			var faction =
-				projectionAtGroupBoundary.Agents[playerId][Faction.Werewolf] ==
+				projectionAtEarliestCompleteWerewolfAgentPartition
+					.Agents[playerId][Faction.Werewolf] ==
 				FactionAgentKnowledge.KnownAgent
 					? Faction.Werewolf
 					: Faction.Villager;
 			facts.Add(FactionFact.Beneficiary(
 				playerId,
 				faction,
-				request.InitialAgentGroupBoundary));
+				request.EarliestCompleteWerewolfAgentPartitionBoundary));
 		}
 
 		var players = playerIds.ToHashSet();
@@ -505,7 +517,8 @@ internal static class InitialBeneficiaryClosureRules
 			InitialBeneficiaryClosureDeferredResult>
 		CreateCurrentDeferredResults(
 			GameSession session,
-			FactionFactEffectiveBoundary initialAgentGroupBoundary,
+			FactionFactEffectiveBoundary
+				earliestCompleteWerewolfAgentPartitionBoundary,
 			IReadOnlyCollection<GameLogEntryBase> history)
 	{
 		var factionHistory = history
@@ -515,28 +528,28 @@ internal static class InitialBeneficiaryClosureRules
 			{
 				CreateCurrentExclusiveBeneficiaryResult(
 					session,
-					initialAgentGroupBoundary,
+					earliestCompleteWerewolfAgentPartitionBoundary,
 					factionHistory,
 					MainRoleType.WhiteWerewolf,
 					Faction.WhiteWerewolf,
 					WhiteWerewolfDeferredResultIdentifier),
 					CreateCurrentExclusiveBeneficiaryResult(
 						session,
-						initialAgentGroupBoundary,
+						earliestCompleteWerewolfAgentPartitionBoundary,
 						factionHistory,
 						MainRoleType.Piper,
 						Faction.Piper,
 						PiperDeferredResultIdentifier),
 					CreateCurrentExclusiveBeneficiaryResult(
 						session,
-						initialAgentGroupBoundary,
+						earliestCompleteWerewolfAgentPartitionBoundary,
 						factionHistory,
 						MainRoleType.PrejudicedManipulator,
 						Faction.PrejudicedManipulator,
 						PrejudicedManipulatorDeferredResultIdentifier),
 					CreateCurrentLoversResult(
 					session,
-					initialAgentGroupBoundary,
+					earliestCompleteWerewolfAgentPartitionBoundary,
 					history)
 			}
 			.OfType<InitialBeneficiaryClosureDeferredResult>()
@@ -546,7 +559,8 @@ internal static class InitialBeneficiaryClosureRules
 	private static InitialBeneficiaryClosureDeferredResult?
 		CreateCurrentLoversResult(
 			GameSession session,
-			FactionFactEffectiveBoundary initialAgentGroupBoundary,
+			FactionFactEffectiveBoundary
+				earliestCompleteWerewolfAgentPartitionBoundary,
 			IReadOnlyCollection<GameLogEntryBase> history)
 	{
 		var actorPair = GetInitialActorBorrowedCupidPair(session, history);
@@ -610,7 +624,7 @@ internal static class InitialBeneficiaryClosureRules
 			pairPlayerIds,
 			linkBoundary,
 			factionHistory,
-			initialAgentGroupBoundary);
+			earliestCompleteWerewolfAgentPartitionBoundary);
 		if (disposition is null)
 		{
 			return InitialBeneficiaryClosureDeferredResult.Pending(
@@ -650,13 +664,15 @@ internal static class InitialBeneficiaryClosureRules
 			IReadOnlyCollection<Guid> pairPlayerIds,
 			FactionFactEffectiveBoundary linkBoundary,
 			IReadOnlyCollection<IFactionFactBatchLogEntry> factionHistory,
-			FactionFactEffectiveBoundary initialAgentGroupBoundary)
+			FactionFactEffectiveBoundary
+				earliestCompleteWerewolfAgentPartitionBoundary)
 	{
 		ArgumentNullException.ThrowIfNull(session);
 		ArgumentNullException.ThrowIfNull(pairPlayerIds);
 		ArgumentNullException.ThrowIfNull(linkBoundary);
 		ArgumentNullException.ThrowIfNull(factionHistory);
-		ArgumentNullException.ThrowIfNull(initialAgentGroupBoundary);
+		ArgumentNullException.ThrowIfNull(
+			earliestCompleteWerewolfAgentPartitionBoundary);
 		var playerIds = session.GetPlayers()
 			.Select(player => player.Id)
 			.ToArray();
@@ -672,10 +688,11 @@ internal static class InitialBeneficiaryClosureRules
 			factionHistory,
 			playerIds,
 			linkBoundary);
-		var projectionAtInitialGroup = FactionFactProjection.Create(
-			factionHistory,
-			playerIds,
-			initialAgentGroupBoundary);
+		var projectionAtEarliestCompleteWerewolfAgentPartition =
+			FactionFactProjection.Create(
+				factionHistory,
+				playerIds,
+				earliestCompleteWerewolfAgentPartitionBoundary);
 		var candidates = new List<Faction>(2);
 		foreach (var playerId in pairPlayerIds)
 		{
@@ -686,11 +703,13 @@ internal static class InitialBeneficiaryClosureRules
 				continue;
 			}
 
-			Faction? exclusiveRoleFaction =
-				session.GetPlayerState(playerId).CurrentRole switch
+			var currentRole = session.GetPlayerState(playerId).CurrentRole;
+			Faction? exclusiveRoleFaction = currentRole switch
 				{
-					MainRoleType.WolfHound => Faction.Villager,
 					MainRoleType.WhiteWerewolf => Faction.WhiteWerewolf,
+					_ when currentRole?.EstablishesInitialWerewolfAgency() == true =>
+						Faction.Werewolf,
+					MainRoleType.WolfHound => Faction.Villager,
 					MainRoleType.Piper => Faction.Piper,
 					MainRoleType.PrejudicedManipulator =>
 						Faction.PrejudicedManipulator,
@@ -703,7 +722,8 @@ internal static class InitialBeneficiaryClosureRules
 			}
 
 			var werewolfAgency =
-				projectionAtInitialGroup.Agents[playerId][Faction.Werewolf];
+				projectionAtEarliestCompleteWerewolfAgentPartition
+					.Agents[playerId][Faction.Werewolf];
 			if (werewolfAgency == FactionAgentKnowledge.Unknown)
 			{
 				return null;
@@ -785,7 +805,8 @@ internal static class InitialBeneficiaryClosureRules
 	private static InitialBeneficiaryClosureDeferredResult?
 		CreateCurrentExclusiveBeneficiaryResult(
 			GameSession session,
-			FactionFactEffectiveBoundary initialAgentGroupBoundary,
+			FactionFactEffectiveBoundary
+				earliestCompleteWerewolfAgentPartitionBoundary,
 			IReadOnlyCollection<IFactionFactBatchLogEntry> history,
 			MainRoleType role,
 			Faction faction,
@@ -807,21 +828,22 @@ internal static class InitialBeneficiaryClosureRules
 		var playerIds = session.GetPlayers()
 			.Select(player => player.Id)
 			.ToArray();
-		var projectionAtGroupBoundary = FactionFactProjection.Create(
-			history,
-			playerIds,
-			initialAgentGroupBoundary);
+		var projectionAtEarliestCompleteWerewolfAgentPartition =
+			FactionFactProjection.Create(
+				history,
+				playerIds,
+				earliestCompleteWerewolfAgentPartitionBoundary);
 		var facts = session.GetPlayers()
 			.Where(player =>
 				player.State.Health == PlayerHealth.Alive &&
 				player.State.CurrentRole == role &&
-				!projectionAtGroupBoundary
+				!projectionAtEarliestCompleteWerewolfAgentPartition
 					.Beneficiaries[player.Id]
 					.IsKnown)
 			.Select(player => FactionFact.Beneficiary(
 				player.Id,
 				faction,
-				initialAgentGroupBoundary))
+				earliestCompleteWerewolfAgentPartitionBoundary))
 			.ToArray();
 		return InitialBeneficiaryClosureDeferredResult.Complete(
 			identifier,
@@ -829,7 +851,7 @@ internal static class InitialBeneficiaryClosureRules
 	}
 
 	private static FactionFactEffectiveBoundary?
-		FindInitialCompleteWerewolfAgentGroupBoundary(
+		FindEarliestCompleteWerewolfAgentPartitionBoundary(
 			GameSession session,
 			IReadOnlyCollection<IFactionFactBatchLogEntry>? history =
 				null)

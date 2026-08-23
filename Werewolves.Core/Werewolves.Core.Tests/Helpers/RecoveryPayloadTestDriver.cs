@@ -686,17 +686,13 @@ internal sealed class RecoveryPayloadTestDriver
 			ConfirmationInstruction>(
 			service.ProcessInstruction(gameId, vote.CreateResponse([]))
 				.ModeratorInstruction);
-		if (reveal.Semantic !=
-				ModeratorInstructionSemantic.RevealScapegoatForTie ||
-			reveal.AffectedPlayerIds is not [var affectedActorId] ||
-			affectedActorId != actorId ||
-			!StringComparer.Ordinal.Equals(
-				reveal.PublicAnnouncement,
-				GameStrings.ActorRoleName) ||
-			!StringComparer.Ordinal.Equals(
-				reveal.PrivateInstruction,
-				GameStrings.PublicRoleRevealInstruction) ||
-			reveal.SoundEffects.Count != 0)
+		var recoveredSession = service.GetGameStateView(gameId) as GameSession
+			?? throw new InvalidOperationException(
+				"The Scapegoat recovery fixture lost its Game Session.");
+		if (!ScapegoatRole.MatchesBorrowedTieReveal(
+				recoveredSession,
+				reveal,
+				actorId))
 		{
 			throw new InvalidOperationException(
 				"The Scapegoat recovery fixture did not reach the canonical borrowed reveal.");
