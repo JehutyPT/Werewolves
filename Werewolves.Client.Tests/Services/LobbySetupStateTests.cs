@@ -62,6 +62,90 @@ public class LobbySetupStateTests
 	}
 
 	[Fact]
+	public void DecidePostGameRecovery_ReturnsClearDecisionWithoutPublishing()
+	{
+		var source = CreateStateWithAcceptedRoleLockIn(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.Seer);
+		var target = LobbySetupMetadataFixture.StateWithRoles(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.Seer);
+		var expectedRoster = source.PlayerRoster.ToArray();
+		var expectedRoleLockIn = source.AcceptedRoleLockIn!;
+
+		var decision = target.Decide(
+			new LobbyChange.RecoverPostGameLobby(
+				expectedRoster,
+				expectedRoleLockIn,
+				source.AcceptedActorSetupCards,
+				source.AcceptedPublicGroupPartition));
+
+		decision.Should().NotBeNull();
+		decision!.Persistence.Should().BeOfType<LobbyPersistenceInstruction.Clear>();
+		decision.NextAggregate.PlayerRoster.Should().Equal(expectedRoster);
+		decision.NextAggregate.AcceptedRoleLockIn.Should().BeSameAs(expectedRoleLockIn);
+		target.PlayerRoster.Should().BeEmpty();
+		target.AcceptedRoleLockIn.Should().BeNull();
+	}
+
+	[Fact]
+	public void DecideInvalidPostGameRecovery_ReturnsClearWipeWithoutPublishing()
+	{
+		var source = CreateStateWithAcceptedRoleLockIn(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.Seer);
+		var target = LobbySetupMetadataFixture.StateWithRoles(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager);
+		target.AddPlayer("Temporary").Should().Be(AddPlayerResult.Success);
+		target.IncrementRole(MainRoleType.SimpleWerewolf);
+
+		var decision = target.Decide(
+			new LobbyChange.RecoverPostGameLobby(
+				source.PlayerRoster,
+				source.AcceptedRoleLockIn!,
+				source.AcceptedActorSetupCards,
+				source.AcceptedPublicGroupPartition));
+
+		decision.Should().NotBeNull();
+		decision!.Persistence.Should().BeOfType<LobbyPersistenceInstruction.Clear>();
+		decision.NextAggregate.PlayerRoster.Should().BeEmpty();
+		decision.NextAggregate.RoleCounts.Should().BeEmpty();
+		decision.NextAggregate.AcceptedRoleLockIn.Should().BeNull();
+		target.PlayerRoster.Should().ContainSingle();
+		target.GetRoleCount(MainRoleType.SimpleWerewolf).Should().Be(1);
+	}
+
+	[Fact]
+	public void DecidePostGameWipe_ReturnsKeepDecisionWithoutPublishing()
+	{
+		var target = CreateStateWithAcceptedRoleLockIn(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.Seer);
+		var acceptedRoleLockIn = target.AcceptedRoleLockIn;
+
+		var decision = target.Decide(new LobbyChange.WipePostGameLobby());
+
+		decision.Should().NotBeNull();
+		decision!.Persistence.Should().BeOfType<LobbyPersistenceInstruction.Keep>();
+		decision.NextAggregate.PlayerRoster.Should().BeEmpty();
+		decision.NextAggregate.RoleCounts.Should().BeEmpty();
+		decision.NextAggregate.AcceptedRoleLockIn.Should().BeNull();
+		target.PlayerRoster.Should().NotBeEmpty();
+		target.AcceptedRoleLockIn.Should().BeSameAs(acceptedRoleLockIn);
+	}
+
+	[Fact]
 	public void DecideActorSetupCards_ReturnsCompleteReplaceDecisionWithoutPublishing()
 	{
 		var state = CreateStateWithAcceptedRoleLockIn(

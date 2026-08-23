@@ -324,7 +324,12 @@ public class LobbySetupState
 			return;
 		}
 
-		_current = new LobbySetupAggregate(
+		_current = CreateWipedAggregate();
+		OnSimulationScenarioChanged();
+	}
+
+	private LobbySetupAggregate CreateWipedAggregate() =>
+		new(
 			playerRoster: [],
 			_current.IssuedPlayerIds,
 			roleCounts: new Dictionary<MainRoleType, int>(),
@@ -333,8 +338,6 @@ public class LobbySetupState
 			acceptedPublicGroupPartition: null,
 			roleLockInFinalized: false,
 			acceptedRoleLockInRequiresReplacement: false);
-		OnSimulationScenarioChanged();
-	}
 
 	public int TotalSelectedRoleCount => _current.RoleCounts.Values.Sum();
 
@@ -478,12 +481,42 @@ public class LobbySetupState
 				DecideActorSetupCardsReplacement(replace),
 			LobbyChange.ReplacePublicGroupPartition replace =>
 				DecidePublicGroupPartitionReplacement(replace),
+			LobbyChange.RecoverPostGameLobby recovery =>
+				DecidePostGameRecovery(recovery),
+			LobbyChange.WipePostGameLobby => DecidePostGameWipe(),
 			LobbyChange.MovePlayer move => DecidePlayerMove(move),
 			LobbyChange.AddPlayer add => DecidePlayerAddition(add),
 			LobbyChange.RemovePlayer remove => DecidePlayerRemoval(remove),
 			_ => null
 		};
 	}
+
+	private LobbyDecision DecidePostGameRecovery(
+		LobbyChange.RecoverPostGameLobby change)
+	{
+		LobbySetupAggregate nextAggregate;
+		try
+		{
+			nextAggregate = CreateRecoveryCommit(
+				change.PlayerRoster,
+				change.RoleLockIn,
+				change.ActorSetupCards,
+				change.PublicGroupPartition).NextAggregate;
+		}
+		catch (Exception exception) when (
+			exception is ArgumentException or InvalidOperationException)
+		{
+			nextAggregate = CreateWipedAggregate();
+		}
+		return CreateDecision(
+			nextAggregate,
+			new LobbyPersistenceInstruction.Clear());
+	}
+
+	private LobbyDecision DecidePostGameWipe() =>
+		CreateDecision(
+			CreateWipedAggregate(),
+			new LobbyPersistenceInstruction.Keep());
 
 	private LobbyDecision? DecideImplicitRoleLockIn(
 		LobbyChange.AcceptImplicitRoleLockIn change)

@@ -16,6 +16,7 @@ public sealed class GameClientManager
 	private readonly TimeProvider _timeProvider;
 	private readonly LobbySetupState? _lobbySetupState;
 	private StagedLobbyRecoveryPayload? _stagedLobby;
+	private StagedLobbyRecoveryPayload? _activeSessionLobbyPayload;
 	private DateTimeOffset? _debateStartedAt;
 
 	public GameClientManager()
@@ -103,8 +104,15 @@ public sealed class GameClientManager
 
 	private bool TryAcceptLobbyChange(
 		LobbySetupState lobby,
-		LobbyChange change)
+		LobbyChange change) =>
+		TryAcceptLobbyChange(lobby, change, out _);
+
+	private bool TryAcceptLobbyChange(
+		LobbySetupState lobby,
+		LobbyChange change,
+		out bool persistenceAttempted)
 	{
+		persistenceAttempted = false;
 		if (HasActiveSession)
 		{
 			return false;
@@ -118,6 +126,7 @@ public sealed class GameClientManager
 
 		try
 		{
+			persistenceAttempted = true;
 			LobbyPersistenceExecutor.Execute(_saveStore, decision.Persistence);
 		}
 		catch (Exception)
@@ -390,6 +399,13 @@ public sealed class GameClientManager
 		{
 			SaveCurrentSession();
 		}
+		_activeSessionLobbyPayload = lobby is null
+			? null
+			: new StagedLobbyRecoveryPayload(
+				config.PlayerRoster,
+				config.RoleLockIn,
+				config.ActorSetupCards,
+				config.PublicGroupPartition);
 		_stagedLobby = null;
 		UpdateDebateTimer();
 		QueueAudioReconciliation();
@@ -407,8 +423,42 @@ public sealed class GameClientManager
 		ActiveGameId = null;
 		CurrentSession = null;
 		CurrentInstruction = null;
-		ClearSavedGame();
-		OnStateChanged();
+		if (!PrefillLobbyAfterSession(out var persistenceAttempted))
+		{
+			if (!persistenceAttempted)
+			{
+				ClearSavedGame();
+			}
+			OnStateChanged();
+		}
+	}
+
+	private bool PrefillLobbyAfterSession(out bool persistenceAttempted)
+	{
+		persistenceAttempted = false;
+		var lobby = _lobbySetupState;
+		var payload = _activeSessionLobbyPayload;
+		_activeSessionLobbyPayload = null;
+		if (lobby is null || payload is null)
+		{
+			return false;
+		}
+
+		if (TryAcceptLobbyChange(
+			lobby,
+			new LobbyChange.RecoverPostGameLobby(
+				payload.PlayerRoster,
+				payload.RoleLockIn,
+				payload.ActorSetupCards,
+				payload.PublicGroupPartition),
+			out persistenceAttempted))
+		{
+			return true;
+		}
+
+		return TryAcceptLobbyChange(
+			lobby,
+			new LobbyChange.WipePostGameLobby());
 	}
 
 	public ProcessResult ProcessInput(ModeratorResponse response)
