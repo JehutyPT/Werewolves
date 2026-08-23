@@ -12,14 +12,19 @@ public sealed record VillagerVillagerPublicFromDealLogEntry : GameLogEntryBase
     public required Guid PlayerId { get; init; }
 	public required long RoleLockInVersion { get; init; }
 	public required Guid CardId { get; init; }
+	public bool BindsCardOwnership { get; init; } = true;
 
     protected override GameLogEntryBase InnerApply(ISessionMutator mutator)
     {
-		mutator.SetPhysicalCharacterCardOwnership(
-			RoleLockInVersion,
-			PlayerId,
-			CardId,
-			MainRoleType.VillagerVillager);
+		if (BindsCardOwnership)
+		{
+			mutator.SetPhysicalCharacterCardOwnership(
+				RoleLockInVersion,
+				PlayerId,
+				CardId,
+				MainRoleType.VillagerVillager);
+		}
+
         mutator.SetPlayerRole(PlayerId, MainRoleType.VillagerVillager);
         mutator.SetModeratorKnownRole(PlayerId, MainRoleType.VillagerVillager);
         mutator.SetPubliclyRevealedRole(PlayerId, MainRoleType.VillagerVillager);
