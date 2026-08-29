@@ -17,11 +17,10 @@ public sealed record LobbyEvaluationSettings
 		{
 			throw new ArgumentOutOfRangeException(nameof(depth));
 		}
-		if (depth == LobbyEvaluationDepth.FullProbability
-			&& !capability.Identity.Equals(SimulatorCapability.FullProbability.Identity))
+		if (!capability.SupportsEvaluationDepth(depth))
 		{
 			throw new ArgumentException(
-				"Full probability depth requires the full-probability simulator capability.",
+				"The simulator capability does not support the requested evaluation depth.",
 				nameof(depth));
 		}
 		Depth = depth;

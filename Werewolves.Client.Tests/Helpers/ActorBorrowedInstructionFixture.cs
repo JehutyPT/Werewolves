@@ -57,6 +57,9 @@ internal sealed record ActorBorrowedInstructionScenario(
 
 internal static class ActorBorrowedInstructionFixture
 {
+	private sealed class TestExecutionCommitKey : IGameFlowManagerKey;
+	private static readonly TestExecutionCommitKey ExecutionCommitKey = new();
+
 	private static readonly PhysicalCharacterCard[] SourceCards =
 	[
 		Card("72000000-0000-0000-0000-000000000101", MainRoleType.Seer),
@@ -172,8 +175,11 @@ internal static class ActorBorrowedInstructionFixture
 			SeedKnownWerewolfAgentFacts(session, werewolfIds);
 		}
 
-		session.TransitionMainPhase(GamePhase.Day);
-		session.TransitionMainPhase(GamePhase.Night);
+		if (sourceRole != MainRoleType.LittleGirl)
+		{
+			session.TransitionMainPhase(GamePhase.Day);
+			session.TransitionMainPhase(GamePhase.Night);
+		}
 		if (sourceRole == MainRoleType.Witch)
 		{
 			session.PerformNightAction(
@@ -185,7 +191,8 @@ internal static class ActorBorrowedInstructionFixture
 			new ActorRole(CreateActorAvailabilityGateway()),
 			session,
 			start,
-			sourceCard.Id);
+			sourceCard.Id,
+			retainExecution: true);
 		return new CoreFixture(
 			session,
 			start,
@@ -228,12 +235,14 @@ internal static class ActorBorrowedInstructionFixture
 			listener,
 			fixture,
 			fixture.ActorSleep.CreateResponse(),
-			"Seer wake");
+			"Seer wake",
+			retainExecution: true);
 		var selection = AdvanceToInstruction<SelectPlayersInstruction>(
 			listener,
 			fixture.Session,
 			wake.CreateResponse(),
-			"Seer target selection");
+			"Seer target selection",
+			retainExecution: true);
 		var feedback = AdvanceToInstruction<ConfirmationInstruction>(
 			listener,
 			fixture.Session,
@@ -249,12 +258,14 @@ internal static class ActorBorrowedInstructionFixture
 			listener,
 			fixture,
 			fixture.ActorSleep.CreateResponse(),
-			"Cupid wake");
+			"Cupid wake",
+			retainExecution: true);
 		var selection = AdvanceToInstruction<SelectPlayersInstruction>(
 			listener,
 			fixture.Session,
 			wake.CreateResponse(),
-			"Cupid target selection");
+			"Cupid target selection",
+			retainExecution: true);
 		var selectedPlayerIds = fixture.Players
 			.Select(player => player.Id)
 			.Where(playerId =>
@@ -282,7 +293,8 @@ internal static class ActorBorrowedInstructionFixture
 			listener,
 			fixture,
 			fixture.ActorSleep.CreateResponse(),
-			"Witch wake");
+			"Witch wake",
+			retainExecution: true);
 		var selection = AdvanceToInstruction<SelectPlayersInstruction>(
 			listener,
 			fixture.Session,
@@ -306,7 +318,11 @@ internal static class ActorBorrowedInstructionFixture
 			fixture.Session,
 			fixture.ActorSleep.CreateResponse(),
 			"Little Girl Werewolf group observation");
-		return FamilyOutput.Passive(instruction);
+		return new FamilyOutput(
+			instruction,
+			SelectedPlayerIds: [fixture.WerewolfId],
+			SelectedOptionId: null,
+			ResourceIds: []);
 	}
 
 	private static FamilyOutput CreateDefenderInstruction(CoreFixture fixture)
@@ -316,7 +332,8 @@ internal static class ActorBorrowedInstructionFixture
 			listener,
 			fixture,
 			fixture.ActorSleep.CreateResponse(),
-			"Defender wake");
+			"Defender wake",
+			retainExecution: true);
 		var selection = AdvanceToInstruction<SelectPlayersInstruction>(
 			listener,
 			fixture.Session,
@@ -332,12 +349,14 @@ internal static class ActorBorrowedInstructionFixture
 			listener,
 			fixture,
 			fixture.ActorSleep.CreateResponse(),
-			"Fox wake");
+			"Fox wake",
+			retainExecution: true);
 		var selection = AdvanceToInstruction<SelectPlayersInstruction>(
 			listener,
 			fixture.Session,
 			wake.CreateResponse(),
-			"Fox center selection");
+			"Fox center selection",
+			retainExecution: true);
 		var nonWerewolfNeighborhoodCenterId = fixture.Players
 			.Select(player =>
 			{
@@ -360,7 +379,8 @@ internal static class ActorBorrowedInstructionFixture
 			listener,
 			fixture.Session,
 			selection.CreateResponse([nonWerewolfNeighborhoodCenterId]),
-			"Fox result");
+			"Fox result",
+			retainExecution: true);
 		var commit = fixture.Session.GetActorBorrowedFoxCheckCommits().Single();
 		if (commit.SpentResourceIdentity is not { } spentResource)
 		{
@@ -383,18 +403,25 @@ internal static class ActorBorrowedInstructionFixture
 			listener,
 			fixture,
 			fixture.ActorSleep.CreateResponse(),
-			"Stuttering Judge wake");
+			"Stuttering Judge wake",
+			retainExecution: true);
 		var setup = AdvanceToInstruction<ConfirmationInstruction>(
 			listener,
 			fixture.Session,
 			wake.CreateResponse(),
-			"Stuttering Judge signal setup");
+			"Stuttering Judge signal setup",
+			retainExecution: true);
 		var sleep = AdvanceToInstruction<ConfirmationInstruction>(
 			listener,
 			fixture.Session,
 			setup.CreateResponse(),
-			"Stuttering Judge sleep");
-		var terminal = Advance(listener, fixture.Session, sleep.CreateResponse());
+			"Stuttering Judge sleep",
+			retainExecution: true);
+		var terminal = Advance(
+			listener,
+			fixture.Session,
+			sleep.CreateResponse(),
+			retainExecution: true);
 		if (terminal.Instruction is null &&
 			terminal.Outcome != HookListenerOutcome.Complete)
 		{
@@ -406,7 +433,7 @@ internal static class ActorBorrowedInstructionFixture
 		var debate = RequireInstruction<ConfirmationInstruction>(
 			GameFlowManager.HandleInput(
 				fixture.Session,
-				fixture.Start.CreateResponse(),
+				MainFlowHandoffResponse(fixture),
 				SupportedRoleCatalog.Admissions).ModeratorInstruction,
 			"day debate");
 		var conductVote = RequireInstruction<ConfirmationInstruction>(
@@ -488,7 +515,7 @@ internal static class ActorBorrowedInstructionFixture
 			fixture.ActorId);
 		fixture.Session.TransitionMainPhase(GamePhase.Dawn);
 		var debate = RequireSemantic<ConfirmationInstruction>(
-			AdvanceMainFlow(fixture.Session, fixture.Start.CreateResponse()),
+			AdvanceMainFlow(fixture.Session, MainFlowHandoffResponse(fixture)),
 			ModeratorInstructionSemantic.StartDayDebate,
 			"independent flow after silent borrowed Elder resistance");
 		if (fixture.Session.GetActorBorrowedElderResistanceCommits().Count != 1)
@@ -595,7 +622,7 @@ internal static class ActorBorrowedInstructionFixture
 		fixture.Session.TransitionMainPhase(GamePhase.Dawn);
 		var growl = AdvanceDawnToConfirmation(
 			fixture,
-			fixture.Start.CreateResponse(),
+			MainFlowHandoffResponse(fixture),
 			ModeratorInstructionSemantic.AnnounceBearTamerGrowl,
 			_ => MainRoleType.SimpleVillager,
 			"borrowed Bear Tamer growl");
@@ -621,7 +648,7 @@ internal static class ActorBorrowedInstructionFixture
 		fixture.Session.TransitionMainPhase(GamePhase.Dawn);
 		var debate = AdvanceDawnToConfirmation(
 			fixture,
-			fixture.Start.CreateResponse(),
+			MainFlowHandoffResponse(fixture),
 			ModeratorInstructionSemantic.StartDayDebate,
 			playerId => playerId == fixture.ActorId
 				? MainRoleType.Actor
@@ -646,7 +673,7 @@ internal static class ActorBorrowedInstructionFixture
 		DriveNightHookToCompletion(
 			knight,
 			fixture,
-			fixture.Start.CreateResponse());
+			MainFlowHandoffResponse(fixture));
 
 		UpdateKnownWerewolfAgentFacts(
 			fixture.Session,
@@ -774,7 +801,7 @@ internal static class ActorBorrowedInstructionFixture
 				fixture.Players[^1].Name)],
 		ActorBorrowedPowerFamily.LittleGirl =>
 			[
-				GameStrings.WerewolfFactionAgentObservationPrompt,
+				GameStrings.WerewolfFactionAgentObservationPrompt.Format(1),
 				GameStrings.LittleGirlOpeningGuidance
 			],
 		ActorBorrowedPowerFamily.Defender =>
@@ -933,7 +960,7 @@ internal static class ActorBorrowedInstructionFixture
 	{
 		fixture.Session.TransitionMainPhase(GamePhase.Day);
 		var debate = RequireSemantic<ConfirmationInstruction>(
-			AdvanceMainFlow(fixture.Session, fixture.Start.CreateResponse()),
+			AdvanceMainFlow(fixture.Session, MainFlowHandoffResponse(fixture)),
 			ModeratorInstructionSemantic.StartDayDebate,
 			"day debate");
 		return RequireSemantic<SelectPlayersInstruction>(
@@ -941,6 +968,18 @@ internal static class ActorBorrowedInstructionFixture
 			ModeratorInstructionSemantic.RecordDayVote,
 			"day vote");
 	}
+
+	/// <summary>
+	/// Declared Role workflows authenticate against the published Pending
+	/// Instruction, so the main-flow hand-off must correlate to it instead of
+	/// replaying the original Start Game response.
+	/// </summary>
+	private static ModeratorResponse MainFlowHandoffResponse(
+		CoreFixture fixture) =>
+		fixture.Session.Execution.PendingInstruction is ConfirmationInstruction
+			pending
+			? pending.CreateResponse()
+			: fixture.Start.CreateResponse();
 
 	private static ModeratorInstruction AdvanceMainFlow(
 		GameSession session,
@@ -994,23 +1033,27 @@ internal static class ActorBorrowedInstructionFixture
 		IGameHookListener listener,
 		GameSession session,
 		StartGameConfirmationInstruction start,
-		Guid selectedCardId)
+		Guid selectedCardId,
+		bool retainExecution = false)
 	{
 		var wake = AdvanceToInstruction<ConfirmationInstruction>(
 			listener,
 			session,
 			start.CreateResponse(),
-			"Actor wake");
+			"Actor wake",
+			retainExecution);
 		var choice = AdvanceToInstruction<SelectOptionsInstruction>(
 			listener,
 			session,
 			wake.CreateResponse(),
-			"Actor setup-card choice");
+			"Actor setup-card choice",
+			retainExecution);
 		var sleep = AdvanceToInstruction<ConfirmationInstruction>(
 			listener,
 			session,
 			choice.CreateResponse(selectedCardId.ToString("D")),
-			"Actor sleep");
+			"Actor sleep",
+			retainExecution);
 		var activation = session
 			.GetModeratorActiveActorBorrowedRolePowerActivation()
 			?? throw new InvalidOperationException(
@@ -1022,12 +1065,17 @@ internal static class ActorBorrowedInstructionFixture
 		IGameHookListener listener,
 		CoreFixture fixture,
 		ModeratorResponse response,
-		string step)
+		string step,
+		bool retainExecution = false)
 		where TInstruction : ModeratorInstruction
 	{
 		for (var attempt = 0; attempt < 20; attempt++)
 		{
-			var instruction = Advance(listener, fixture.Session, response).Instruction
+			var instruction = Advance(
+				listener,
+				fixture.Session,
+				response,
+				retainExecution).Instruction
 				?? throw new InvalidOperationException(
 					$"The Actor UI fixture completed the Night hook before {step}.");
 			if (instruction is TInstruction typed &&
@@ -1095,10 +1143,15 @@ internal static class ActorBorrowedInstructionFixture
 		IGameHookListener listener,
 		GameSession session,
 		ModeratorResponse response,
-		string step)
+		string step,
+		bool retainExecution = false)
 		where TInstruction : ModeratorInstruction =>
 		RequireInstruction<TInstruction>(
-			Advance(listener, session, response).Instruction,
+			Advance(
+				listener,
+				session,
+				response,
+				retainExecution).Instruction,
 			step);
 
 	private static TInstruction RequireInstruction<TInstruction>(
@@ -1127,10 +1180,38 @@ internal static class ActorBorrowedInstructionFixture
 	private static ListenerAdvanceResult Advance(
 		IGameHookListener listener,
 		GameSession session,
-		ModeratorResponse response)
+		ModeratorResponse response,
+		bool retainExecution = false)
 	{
+		var consumedInstruction = retainExecution
+			? session.Execution.PendingInstruction
+				?? throw new InvalidOperationException(
+					"The Actor borrowed Fox UI fixture requires one Pending Instruction.")
+			: null;
 		_ = session.GetOrCreateListener(listener.Id, () => listener);
 		var result = NightActionLoop.Execute(session, response);
+		if (retainExecution && result.ModeratorInstruction is { } nextInstruction)
+		{
+			var publicationResponse =
+				response.InstructionId == consumedInstruction!.InstructionId
+					? response
+					: new ModeratorResponse
+					{
+						InstructionId = consumedInstruction.InstructionId,
+						Type = response.Type,
+						SelectedPlayerIds = response.SelectedPlayerIds,
+						AssignedPlayerRoles = response.AssignedPlayerRoles,
+						SelectedOptionIds = response.SelectedOptionIds
+					};
+			session.CommitExecution(
+				ExecutionCommitKey,
+				ExecutionCommit.RetainRecoveryBoundary(
+					session.Execution,
+					consumedInstruction!,
+					publicationResponse,
+					nextInstruction));
+		}
+
 		return new ListenerAdvanceResult(
 			result is StayInSubPhaseHandlerResult { StageComplete: false }
 				? HookListenerOutcome.NeedInput

@@ -20,6 +20,9 @@ namespace Werewolves.Core.Tests.Integration;
 
 public sealed class ActorBorrowedCupidTests
 {
+	private sealed class TestExecutionCommitKey : IGameFlowManagerKey;
+	private static readonly TestExecutionCommitKey ExecutionCommitKey = new();
+
 	private static readonly PhysicalCharacterCard CupidCard = new(
 		Guid.Parse("00000000-0000-0000-0000-000000000145"),
 		MainRoleType.Cupid);
@@ -83,7 +86,9 @@ public sealed class ActorBorrowedCupidTests
 		lovers.Should().OnlyContain(playerId =>
 			!session.GetFactionBeneficiaryKnowledge(playerId).IsKnown);
 		session.GameHistoryLog.OfType<FactionFactsCommittedLogEntry>().Should()
-			.BeEmpty();
+			.ContainSingle(entry => entry.Source.Identifier ==
+				FactionFactSource
+					.RoleIdentificationWerewolfFactionAgencyEntailmentIdentifier);
 		session.GameHistoryLog
 			.OfType<ActorBorrowedRolePowerCommittedLogEntry>().Should()
 			.ContainSingle();
@@ -119,7 +124,9 @@ public sealed class ActorBorrowedCupidTests
 			.ContainSingle()
 			.Which.Should().BeOfType<ActorBorrowedRolePowerCommittedLogEntry>();
 		recovered.GameHistoryLog.OfType<FactionFactsCommittedLogEntry>().Should()
-			.BeEmpty();
+			.ContainSingle(entry => entry.Source.Identifier ==
+				FactionFactSource
+					.RoleIdentificationWerewolfFactionAgencyEntailmentIdentifier);
 		recovered.GameHistoryLog.OfType<LoversPairCommittedLogEntry>().Should()
 			.BeEmpty();
 
@@ -139,7 +146,7 @@ public sealed class ActorBorrowedCupidTests
 			.OfType<ActorBorrowedRolePowerCommittedLogEntry>().Should()
 			.ContainSingle();
 
-		var agentGroupBoundary = CommitCompleteWerewolfAgentObservation(
+		var agentGroupBoundary = CommitCompleteWerewolfAgentPartition(
 			recovered,
 			werewolfTargetId);
 		InitialBeneficiaryClosureRules.TryCommitCurrentSession(
@@ -169,10 +176,13 @@ public sealed class ActorBorrowedCupidTests
 	}
 
 	[Theory]
-	[InlineData(false)]
-	[InlineData(true)]
+	[InlineData(false, false)]
+	[InlineData(true, false)]
+	[InlineData(false, true)]
+	[InlineData(true, true)]
 	public void NightOneLoversClassification_NativeAndBorrowedPairsReachTheSameOutcomeInOneClosure(
-		bool crossFaction)
+		bool crossFaction,
+		bool werewolfAgentPartitionCompletedByRoleIdentification)
 	{
 		var native = CreateNativeFirstNightCupidSession();
 		var nativeLovers = SelectClassificationPair(
@@ -186,15 +196,17 @@ public sealed class ActorBorrowedCupidTests
 				CupidRole.LinkLoversPowerIdentifier.Value,
 				native.CupidId,
 				RolePowerInstanceOrigin.Native));
-		var nativeBoundary = CommitCompleteWerewolfAgentObservation(
-			native.Session,
-			native.WerewolfId);
+		var nativeCompleteWerewolfAgentPartitionBoundary =
+			CommitCompleteWerewolfAgentPartition(
+				native.Session,
+				native.WerewolfId,
+				werewolfAgentPartitionCompletedByRoleIdentification);
 		var nativeHistoryCountBeforeClosure =
 			native.Session.GameHistoryLog.Count();
 
 		InitialBeneficiaryClosureRules.TryCommitCurrentSession(
 				native.Session,
-				nativeBoundary)
+				nativeCompleteWerewolfAgentPartitionBoundary)
 			.Should().Be(InitialBeneficiaryClosureResult.Committed);
 
 		var (borrowedSession, start, _) = CreateFirstNightActorSession();
@@ -222,16 +234,18 @@ public sealed class ActorBorrowedCupidTests
 			borrowedSession,
 			selection.CreateResponse(borrowedLovers.ToHashSet()),
 			SupportedRoleCatalog.Admissions);
-		var borrowedBoundary = CommitCompleteWerewolfAgentObservation(
-			borrowedSession,
-			borrowedSession.GetPlayers().Single(player =>
-				player.Name == "Werewolf").Id);
+		var borrowedCompleteWerewolfAgentPartitionBoundary =
+			CommitCompleteWerewolfAgentPartition(
+				borrowedSession,
+				borrowedSession.GetPlayers().Single(player =>
+					player.Name == "Werewolf").Id,
+				werewolfAgentPartitionCompletedByRoleIdentification);
 		var borrowedHistoryCountBeforeClosure =
 			borrowedSession.GameHistoryLog.Count();
 
 		InitialBeneficiaryClosureRules.TryCommitCurrentSession(
 				borrowedSession,
-				borrowedBoundary)
+				borrowedCompleteWerewolfAgentPartitionBoundary)
 			.Should().Be(InitialBeneficiaryClosureResult.Committed);
 
 		var expectedFaction = crossFaction
@@ -247,16 +261,31 @@ public sealed class ActorBorrowedCupidTests
 			nativeHistoryCountBeforeClosure + 1);
 		borrowedSession.GameHistoryLog.Should().HaveCount(
 			borrowedHistoryCountBeforeClosure + 1);
-		native.Session.GameHistoryLog
+		var nativeClosure = native.Session.GameHistoryLog
 			.OfType<FactionFactsCommittedLogEntry>().Should()
 			.ContainSingle(entry =>
 				entry.Source.Kind ==
-				FactionFactSourceKind.InitialBeneficiaryClosure);
-		borrowedSession.GameHistoryLog
+				FactionFactSourceKind.InitialBeneficiaryClosure).Subject;
+		var nativeResidualFacts = nativeClosure.Facts
+			.Where(fact => !nativeLovers.Contains(fact.PlayerId))
+			.ToArray();
+		nativeResidualFacts.Should().NotBeEmpty();
+		nativeResidualFacts.Should().OnlyContain(fact =>
+			fact.EffectiveBoundary ==
+			nativeCompleteWerewolfAgentPartitionBoundary);
+
+		var borrowedClosure = borrowedSession.GameHistoryLog
 			.OfType<FactionFactsCommittedLogEntry>().Should()
 			.ContainSingle(entry =>
 				entry.Source.Kind ==
-				FactionFactSourceKind.InitialBeneficiaryClosure);
+				FactionFactSourceKind.InitialBeneficiaryClosure).Subject;
+		var borrowedResidualFacts = borrowedClosure.Facts
+			.Where(fact => !borrowedLovers.Contains(fact.PlayerId))
+			.ToArray();
+		borrowedResidualFacts.Should().NotBeEmpty();
+		borrowedResidualFacts.Should().OnlyContain(fact =>
+			fact.EffectiveBoundary ==
+			borrowedCompleteWerewolfAgentPartitionBoundary);
 		borrowedSession.GameHistoryLog
 			.OfType<ActorBorrowedRolePowerCommittedLogEntry>().Should()
 			.ContainSingle();
@@ -927,30 +956,39 @@ public sealed class ActorBorrowedCupidTests
 		var actorId = session.GetPlayers().First().Id;
 		session.AssignRole(actorId, MainRoleType.Actor);
 		session.IdentifyRole([actorId], MainRoleType.Actor);
+		var werewolfId = session.GetPlayers().Single(player =>
+			player.Name == "Werewolf").Id;
+		CommitCompleteWerewolfAgentPartition(session, werewolfId);
 		session.TransitionMainPhase(GamePhase.Day);
 		session.TransitionMainPhase(GamePhase.Night);
 		return (session, start, actorId);
 	}
 
 	private static FactionFactEffectiveBoundary
-		CommitCompleteWerewolfAgentObservation(
+		CommitCompleteWerewolfAgentPartition(
 			GameSession session,
-			Guid werewolfPlayerId)
+			Guid werewolfPlayerId,
+			bool werewolfAgentPartitionCompletedByRoleIdentification = false)
 	{
-		FactionFactEffectiveBoundary? observationBoundary = null;
+		FactionFactEffectiveBoundary? completeWerewolfAgentPartitionBoundary = null;
 		session.CommitFactionFactBatch(context =>
 		{
 			var boundary = new FactionFactEffectiveBoundary(
 				context.TurnNumber,
 				context.CurrentPhase,
 				session.GameHistoryLog.Count());
-			observationBoundary = boundary;
+			completeWerewolfAgentPartitionBoundary = boundary;
 			return new FactionFactsCommittedLogEntry
 			{
 				Timestamp = context.Timestamp,
 				TurnNumber = context.TurnNumber,
 				CurrentPhase = context.CurrentPhase,
-				Source = new FactionFactSource(
+				Source = werewolfAgentPartitionCompletedByRoleIdentification
+					? new FactionFactSource(
+						FactionFactSourceKind.ScheduledObservation,
+						FactionFactSource
+							.RoleIdentificationWerewolfFactionAgencyEntailmentIdentifier)
+					: new FactionFactSource(
 					FactionFactSourceKind.ScheduledObservation,
 					FactionFactSource
 						.WerewolfFactionAgentGroupObservationIdentifier),
@@ -968,7 +1006,7 @@ public sealed class ActorBorrowedCupidTests
 			};
 		});
 
-		return observationBoundary!;
+		return completeWerewolfAgentPartitionBoundary!;
 	}
 
 	private static void ArrangeKnownBeneficiaries(
@@ -1004,8 +1042,34 @@ public sealed class ActorBorrowedCupidTests
 		GameSession session,
 		ModeratorResponse response)
 	{
+		var consumedInstruction = session.Execution.PendingInstruction
+			?? throw new InvalidOperationException(
+				"The Actor borrowed Cupid test workflow requires one Pending Instruction.");
 		session.GetOrCreateListener(listener.Id, () => listener);
-		return NightActionLoop.Execute(session, response);
+		var result = NightActionLoop.Execute(session, response);
+		if (result.ModeratorInstruction is { } nextInstruction)
+		{
+			var publicationResponse =
+				response.InstructionId == consumedInstruction.InstructionId
+					? response
+					: new ModeratorResponse
+					{
+						InstructionId = consumedInstruction.InstructionId,
+						Type = response.Type,
+						SelectedPlayerIds = response.SelectedPlayerIds,
+						AssignedPlayerRoles = response.AssignedPlayerRoles,
+						SelectedOptionIds = response.SelectedOptionIds
+					};
+			session.CommitExecution(
+				ExecutionCommitKey,
+				ExecutionCommit.RetainRecoveryBoundary(
+					session.Execution,
+					consumedInstruction,
+					publicationResponse,
+					nextInstruction));
+		}
+
+		return result;
 	}
 
 	private static GameSession RehydrateAtPendingInstruction(

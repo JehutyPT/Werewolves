@@ -61,7 +61,11 @@ public class InstructionRendererHapticTests
 		return (AssignRolesInstruction)AssignRolesConstructor.Invoke(
 			[
 				ImmutableHashSet.Create(playerId),
-				new[] { MainRoleType.SimpleVillager },
+				new[]
+				{
+					MainRoleType.SimpleVillager,
+					MainRoleType.SimpleWerewolf
+				},
 				null,
 				nameof(InstructionRenderer_RemountsInputStateWhenInstructionChanges),
 				null,
@@ -71,10 +75,11 @@ public class InstructionRendererHapticTests
 
 	private static AssignRolesInstruction CreateInstructionWithNewIdentity(
 		AssignRolesInstruction instruction) =>
-		(AssignRolesInstruction)AssignRolesConstructor.Invoke(
+		(AssignRolesInstruction)PerPlayerAssignRolesConstructor.Invoke(
 			[
+				instruction.Semantic,
 				instruction.PlayersForAssignment,
-				instruction.RolesForAssignment,
+				instruction.SelectableRolesForPlayers,
 				instruction.PublicAnnouncement,
 				instruction.PrivateInstruction,
 				instruction.AffectedPlayerIds,
@@ -93,4 +98,12 @@ public class InstructionRendererHapticTests
 		typeof(AssignRolesInstruction)
 			.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic)
 			.Single(ctor => ctor.GetParameters().Length == 6);
+
+	private static readonly ConstructorInfo PerPlayerAssignRolesConstructor =
+		typeof(AssignRolesInstruction)
+			.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic)
+			.Single(ctor =>
+				ctor.GetParameters() is { Length: 7 } parameters &&
+				parameters[2].ParameterType == typeof(
+					IReadOnlyDictionary<Guid, IReadOnlyList<MainRoleType>>));
 }

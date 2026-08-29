@@ -33,6 +33,10 @@ public sealed class ActorBorrowedStutteringJudgeTests
 		Guid.Parse("00000000-0000-0000-0000-000000000147"),
 		MainRoleType.Fox);
 
+	private sealed class TestExecutionCommitKey : IGameFlowManagerKey;
+
+	private static readonly TestExecutionCommitKey ExecutionCommitKey = new();
+
 	private static readonly SubPhaseManager<NightSubPhases>
 		NightMainActionLoop = new(
 			NightSubPhases.Start,
@@ -62,7 +66,11 @@ public sealed class ActorBorrowedStutteringJudgeTests
 		wake.PrivateInstruction.Should().BeNull();
 		wake.AffectedPlayerIds.Should().Equal(actorId);
 
-		var setup = Advance(listener, session, wake.CreateResponse()).Instruction
+		var setup = Advance(
+				listener,
+				session,
+				wake.CreateResponse(),
+				publishInstruction: true).Instruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		setup.Semantic.Should().Be(
 			ModeratorInstructionSemantic.EstablishStutteringJudgeSignal);
@@ -74,7 +82,11 @@ public sealed class ActorBorrowedStutteringJudgeTests
 		setupResponse.Type.Should().Be(ExpectedInputType.Continue);
 		var logCountBeforeSetup = session.GameHistoryLog.Count();
 
-		var sleep = Advance(listener, session, setupResponse).Instruction
+		var sleep = Advance(
+				listener,
+				session,
+				setupResponse,
+				publishInstruction: true).Instruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 
 		sleep.Semantic.Should().Be(ModeratorInstructionSemantic.PutRoleToSleep);
@@ -240,11 +252,12 @@ public sealed class ActorBorrowedStutteringJudgeTests
 	public void BorrowedStutteringJudge_SignalOccurredAfterFirstVoteCommitsAndRecoversConsecutiveVote()
 	{
 		var (session, start, actorId) = CreateLaterNightActorSession();
-		var activation = PerformSpendOpening(
+		var opening = PerformSpendOpening(
 			CreateActorRole(),
 			session,
 			start,
-			StutteringJudgeCard.Id).Activation;
+			StutteringJudgeCard.Id);
+		var activation = opening.Activation;
 		var powerIdentity = new RolePowerInstanceIdentity(
 			actorId,
 			MainRoleType.StutteringJudge,
@@ -267,7 +280,7 @@ public sealed class ActorBorrowedStutteringJudgeTests
 
 		var debate = GameFlowManager.HandleInput(
 				session,
-				start.CreateResponse(),
+				opening.BorrowedRoleWake.CreateResponse(),
 				SupportedRoleCatalog.Admissions).ModeratorInstruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		var conductVote = GameFlowManager.HandleInput(
@@ -328,21 +341,17 @@ public sealed class ActorBorrowedStutteringJudgeTests
 		cursor.ResourceIdentity.Should().Be(resourceIdentity);
 		cursor.CommittedDayActionType.Should().Be(DayPowerType.JudgeExtraVote);
 		cursor.NextInstructionId.Should().Be(firstVote.InstructionId);
-		var targetRoleAssignment = GameFlowManager.HandleInput(
+		var targetRoleReveal = GameFlowManager.HandleInput(
 				session,
 				firstVote.CreateResponse([actorId]),
 				SupportedRoleCatalog.Admissions).ModeratorInstruction
-			.Should().BeOfType<AssignRolesInstruction>().Subject;
-		targetRoleAssignment.Semantic.Should().Be(
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		targetRoleReveal.Semantic.Should().Be(
 			ModeratorInstructionSemantic.AssignDayVoteTargetRole);
-		targetRoleAssignment.PlayersForAssignment.Should().Equal(actorId);
+		targetRoleReveal.AffectedPlayerIds.Should().Equal(actorId);
 		var firstAnnouncement = GameFlowManager.HandleInput(
 				session,
-				targetRoleAssignment.CreateResponse(
-					new Dictionary<Guid, MainRoleType>
-					{
-						[actorId] = MainRoleType.Actor
-					}),
+				targetRoleReveal.CreateResponse(),
 				SupportedRoleCatalog.Admissions).ModeratorInstruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		firstAnnouncement.Semantic.Should().Be(
@@ -414,11 +423,12 @@ public sealed class ActorBorrowedStutteringJudgeTests
 	public void BorrowedStutteringJudge_PendingObservationRejectsMismatchedActiveActivationOnRecovery()
 	{
 		var (session, start, actorId) = CreateLaterNightActorSession();
-		var activation = PerformSpendOpening(
+		var opening = PerformSpendOpening(
 			CreateActorRole(),
 			session,
 			start,
-			StutteringJudgeCard.Id).Activation;
+			StutteringJudgeCard.Id);
+		var activation = opening.Activation;
 		var powerIdentity = new RolePowerInstanceIdentity(
 			actorId,
 			MainRoleType.StutteringJudge,
@@ -429,7 +439,7 @@ public sealed class ActorBorrowedStutteringJudgeTests
 		session.TransitionMainPhase(GamePhase.Day);
 		var debate = GameFlowManager.HandleInput(
 				session,
-				start.CreateResponse(),
+				opening.BorrowedRoleWake.CreateResponse(),
 				SupportedRoleCatalog.Admissions).ModeratorInstruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		var conductVote = GameFlowManager.HandleInput(
@@ -564,11 +574,12 @@ public sealed class ActorBorrowedStutteringJudgeTests
 	public void BorrowedStutteringJudge_SignalDidNotOccurPreservesPowerAndDoesNotScheduleRepeat()
 	{
 		var (session, start, actorId) = CreateLaterNightActorSession();
-		var activation = PerformSpendOpening(
+		var opening = PerformSpendOpening(
 			CreateActorRole(),
 			session,
 			start,
-			StutteringJudgeCard.Id).Activation;
+			StutteringJudgeCard.Id);
+		var activation = opening.Activation;
 		var powerIdentity = new RolePowerInstanceIdentity(
 			actorId,
 			MainRoleType.StutteringJudge,
@@ -586,7 +597,7 @@ public sealed class ActorBorrowedStutteringJudgeTests
 		session.TransitionMainPhase(GamePhase.Day);
 		var debate = GameFlowManager.HandleInput(
 				session,
-				start.CreateResponse(),
+				opening.BorrowedRoleWake.CreateResponse(),
 				SupportedRoleCatalog.Admissions).ModeratorInstruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		var conductVote = GameFlowManager.HandleInput(
@@ -689,11 +700,12 @@ public sealed class ActorBorrowedStutteringJudgeTests
 	public void BorrowedStutteringJudge_PositiveSignalWithoutEligibleRepeatVotersSkipsSecondPhysicalVote()
 	{
 		var (session, start, actorId) = CreateLaterNightActorSession();
-		var activation = PerformSpendOpening(
+		var opening = PerformSpendOpening(
 			CreateActorRole(),
 			session,
 			start,
-			StutteringJudgeCard.Id).Activation;
+			StutteringJudgeCard.Id);
+		var activation = opening.Activation;
 		var powerIdentity = new RolePowerInstanceIdentity(
 			actorId,
 			MainRoleType.StutteringJudge,
@@ -711,7 +723,7 @@ public sealed class ActorBorrowedStutteringJudgeTests
 		session.TransitionMainPhase(GamePhase.Day);
 		var debate = GameFlowManager.HandleInput(
 				session,
-				start.CreateResponse(),
+				opening.BorrowedRoleWake.CreateResponse(),
 				SupportedRoleCatalog.Admissions).ModeratorInstruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		var conductVote = GameFlowManager.HandleInput(
@@ -799,11 +811,12 @@ public sealed class ActorBorrowedStutteringJudgeTests
 	{
 		var (session, start, actorId) = CreateLaterNightActorSession(
 			withPriorDayScapegoatRestriction);
-		var activation = PerformSpendOpening(
+		var opening = PerformSpendOpening(
 			CreateActorRole(),
 			session,
 			start,
-			StutteringJudgeCard.Id).Activation;
+			StutteringJudgeCard.Id);
+		var activation = opening.Activation;
 		var powerIdentity = new RolePowerInstanceIdentity(
 			actorId,
 			MainRoleType.StutteringJudge,
@@ -814,7 +827,7 @@ public sealed class ActorBorrowedStutteringJudgeTests
 		session.TransitionMainPhase(GamePhase.Day);
 		var debate = GameFlowManager.HandleInput(
 				session,
-				start.CreateResponse(),
+				opening.BorrowedRoleWake.CreateResponse(),
 				SupportedRoleCatalog.Admissions).ModeratorInstruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		var conductVote = GameFlowManager.HandleInput(
@@ -868,21 +881,31 @@ public sealed class ActorBorrowedStutteringJudgeTests
 		StartGameConfirmationInstruction start,
 		Guid selectedCardId)
 	{
-		var wake = Advance(listener, session, start.CreateResponse()).Instruction
+		var wake = Advance(
+			listener,
+			session,
+			start.CreateResponse(),
+			publishInstruction: true).Instruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
-		var choice = Advance(listener, session, wake.CreateResponse()).Instruction
+		var choice = Advance(
+			listener,
+			session,
+			wake.CreateResponse(),
+			publishInstruction: true).Instruction
 			.Should().BeOfType<SelectOptionsInstruction>().Subject;
 		var sleep = Advance(
 			listener,
 			session,
-			choice.CreateResponse(selectedCardId.ToString("D"))).Instruction
+			choice.CreateResponse(selectedCardId.ToString("D")),
+			publishInstruction: true).Instruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		var activation = session
 			.GetModeratorActiveActorBorrowedRolePowerActivation()!;
 		var borrowedRoleWake = Advance(
 				listener,
 				session,
-				sleep.CreateResponse()).Instruction
+				sleep.CreateResponse(),
+				publishInstruction: true).Instruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		borrowedRoleWake.Semantic.Should().Be(
 			ModeratorInstructionSemantic.WakeRole);
@@ -1004,10 +1027,43 @@ public sealed class ActorBorrowedStutteringJudgeTests
 	private static HookAdvanceResult Advance(
 		IGameHookListener listener,
 		GameSession session,
-		ModeratorResponse response)
+		ModeratorResponse response,
+		bool publishInstruction = false)
 	{
 		session.GetOrCreateListener(listener.Id, () => listener);
+		var consumedInstruction = publishInstruction
+			? session.Execution.PendingInstruction ??
+			  throw new InvalidOperationException(
+				  "The Actor borrowed Stuttering Judge fixture requires one Pending Instruction.")
+			: null;
 		var result = NightMainActionLoop.Execute(session, response);
+		if (consumedInstruction != null &&
+			result is StayInSubPhaseHandlerResult
+			{
+				StageComplete: false,
+				ModeratorInstruction: { } publishedInstruction
+			})
+		{
+			var publicationResponse =
+				response.InstructionId == consumedInstruction.InstructionId
+					? response
+					: new ModeratorResponse
+					{
+						InstructionId = consumedInstruction.InstructionId,
+						Type = response.Type,
+						SelectedPlayerIds = response.SelectedPlayerIds,
+						AssignedPlayerRoles = response.AssignedPlayerRoles,
+						SelectedOptionIds = response.SelectedOptionIds
+					};
+			session.CommitExecution(
+				ExecutionCommitKey,
+				ExecutionCommit.RetainRecoveryBoundary(
+					session.Execution,
+					consumedInstruction,
+					publicationResponse,
+					publishedInstruction));
+		}
+
 		return result switch
 		{
 			StayInSubPhaseHandlerResult

@@ -24,6 +24,9 @@ namespace Werewolves.Core.Tests.Integration;
 
 public sealed class ActorBorrowedSemanticTraceTests
 {
+	private sealed class TestExecutionCommitKey : IGameFlowManagerKey;
+	private static readonly TestExecutionCommitKey ExecutionCommitKey = new();
+
 	private static readonly MainRoleType[] SourceRoles =
 	[
 		MainRoleType.Seer,
@@ -58,10 +61,10 @@ public sealed class ActorBorrowedSemanticTraceTests
 		new(Guid.Parse("00000000-0000-0000-0000-000000000163"), MainRoleType.KnightWithRustySword)
 	];
 	private static readonly RunSeedMaterial SeedMaterial = CreateSeedMaterial(
-		BaselineRandomDecisionStrategy.Identity);
+		SimulatorCapability.FullProbability);
 	private static readonly RunSeedMaterial ScapegoatSeedMaterial =
 		CreateSeedMaterial(
-			BaselineRandomDecisionStrategy.SafetyScreeningIdentity);
+			SimulatorCapability.SafetyScreening);
 
 	private static readonly HeadlessResponsePolicy ExactActorPolicy = new(
 		BaselineRandomDecisionStrategy.Identity,
@@ -241,19 +244,14 @@ public sealed class ActorBorrowedSemanticTraceTests
 		var targetReveal = service.ProcessInstruction(
 				fixture.Session.Id,
 				finalShotResponse).ModeratorInstruction.Should()
-			.BeOfType<AssignRolesInstruction>().Subject;
+			.BeOfType<ConfirmationInstruction>().Subject;
 		targetReveal.Semantic.Should().Be(
 			ModeratorInstructionSemantic.AssignEliminationCascadeRoles);
-		targetReveal.PlayersForAssignment.Should().Equal(
+		targetReveal.AffectedPlayerIds.Should().Equal(
 			finalShotResponse.SelectedPlayerIds!);
 		var continuation = service.ProcessInstruction(
 				fixture.Session.Id,
-				targetReveal.CreateResponse(
-					targetReveal.PlayersForAssignment.ToDictionary(
-						playerId => playerId,
-						playerId => fixture.Session
-							.GetPlayerState(playerId)
-							.CurrentRole!.Value))).ModeratorInstruction;
+				targetReveal.CreateResponse()).ModeratorInstruction;
 		continuation.Should().NotBeNull();
 		return [finalShot.Semantic];
 	}
@@ -887,7 +885,17 @@ public sealed class ActorBorrowedSemanticTraceTests
 		var input = fixture.SourceOpeningResponse;
 		for (var step = 0; step < 8; step++)
 		{
-			var result = Advance(fixture.Listener, fixture.Session, input);
+			var result = fixture.SourceRole == MainRoleType.Fox && trace.Count > 0
+				? HookListenerActionResult.NeedInput(
+					GameFlowManager.HandleInput(
+							fixture.Session,
+							input,
+							SupportedRoleCatalog.Admissions)
+						.ModeratorInstruction ??
+						throw new InvalidOperationException(
+							"The Actor borrowed Fox production path emitted no instruction."),
+					HookHarnessListenerState.AwaitingInput)
+				: Advance(fixture.Listener, fixture.Session, input);
 			if (trace.LastOrDefault() ==
 				ModeratorInstructionSemantic.PutRoleToSleep)
 			{
@@ -918,6 +926,11 @@ public sealed class ActorBorrowedSemanticTraceTests
 			result.Instruction.Should().NotBeNull();
 			var instruction = result.Instruction!;
 			trace.Add(instruction.Semantic);
+			if (fixture.SourceRole == MainRoleType.Fox && trace.Count == 1)
+			{
+				fixture.RestoreAt(instruction);
+			}
+
 			if (fixture.SourceRole is MainRoleType.Seer or MainRoleType.Fox &&
 				instruction.Semantic is
 					ModeratorInstructionSemantic.SelectSeerTarget or
@@ -1183,7 +1196,10 @@ public sealed class ActorBorrowedSemanticTraceTests
 				policy,
 				sourceRole == MainRoleType.Scapegoat
 					? ScapegoatSeedMaterial
-					: SeedMaterial),
+					: SeedMaterial,
+				sourceRole == MainRoleType.Scapegoat
+					? SimulatorCapability.SafetyScreening
+					: SimulatorCapability.FullProbability),
 			recordingPolicy);
 	}
 
@@ -1211,11 +1227,13 @@ public sealed class ActorBorrowedSemanticTraceTests
 
 	private static BaselineRandomDecisionStrategy CreateStrategy(
 		HeadlessResponsePolicy policy,
-		RunSeedMaterial seedMaterial)
+		RunSeedMaterial seedMaterial,
+		SimulatorCapability capability)
 	{
 		var random = new DeterministicRandomSource(seedMaterial);
 		var startState = SimulationStartStateDeriver.Derive(
 			seedMaterial,
+			capability,
 			random);
 		return new BaselineRandomDecisionStrategy(
 			seedMaterial,
@@ -1330,7 +1348,7 @@ public sealed class ActorBorrowedSemanticTraceTests
 	}
 
 	private static RunSeedMaterial CreateSeedMaterial(
-		DecisionStrategyIdentity strategyIdentity)
+		SimulatorCapability capability)
 	{
 		var scenario = new SimulationScenario(
 			5,
@@ -1344,11 +1362,8 @@ public sealed class ActorBorrowedSemanticTraceTests
 		return new RunSeedMaterial(
 			new SimulationCompatibilityIdentity(
 				scenario.ToCanonical(),
-				strategyIdentity.Equals(
-						BaselineRandomDecisionStrategy.SafetyScreeningIdentity)
-					? SimulatorCapability.SafetyScreening.Identity
-					: SimulatorCapability.FullProbability.Identity),
-			strategyIdentity,
+				capability.Identity),
+			capability.HeadlessResponsePolicy.StrategyIdentity,
 			runNumber: 4);
 	}
 
@@ -1616,6 +1631,9 @@ public sealed class ActorBorrowedSemanticTraceTests
 		GameSession session,
 		ModeratorResponse response)
 	{
+		var consumedInstruction = session.Execution.PendingInstruction
+			?? throw new InvalidOperationException(
+				"The Actor borrowed semantic harness requires one Pending Instruction.");
 		session.GetOrCreateListener(listener.Id, () => listener);
 		var currentPhase = session.GetCurrentPhase();
 		var hook = currentPhase switch
@@ -1645,8 +1663,27 @@ public sealed class ActorBorrowedSemanticTraceTests
 		if (!result.StageComplete)
 		{
 			result.ModeratorInstruction.Should().NotBeNull();
+			var nextInstruction = result.ModeratorInstruction!;
+			var publicationResponse =
+				response.InstructionId == consumedInstruction.InstructionId
+					? response
+					: new ModeratorResponse
+					{
+						InstructionId = consumedInstruction.InstructionId,
+						Type = response.Type,
+						SelectedPlayerIds = response.SelectedPlayerIds,
+						AssignedPlayerRoles = response.AssignedPlayerRoles,
+						SelectedOptionIds = response.SelectedOptionIds
+					};
+			session.CommitExecution(
+				ExecutionCommitKey,
+				ExecutionCommit.RetainRecoveryBoundary(
+					session.Execution,
+					consumedInstruction,
+					publicationResponse,
+					nextInstruction));
 			return HookListenerActionResult.NeedInput(
-				result.ModeratorInstruction!,
+				nextInstruction,
 				HookHarnessListenerState.AwaitingInput);
 		}
 

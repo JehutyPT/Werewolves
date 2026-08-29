@@ -8,6 +8,7 @@ using Werewolves.Core.GameLogic.Roles.MainRoles;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
@@ -19,6 +20,9 @@ namespace Werewolves.Core.Tests.Integration;
 
 public sealed class ActorBorrowedLittleGirlTests
 {
+	private sealed class TestExecutionCommitKey : IGameFlowManagerKey;
+	private static readonly TestExecutionCommitKey ExecutionCommitKey = new();
+
 	private static readonly PhysicalCharacterCard LittleGirlCard = new(
 		Guid.Parse("00000000-0000-0000-0000-000000000142"),
 		MainRoleType.LittleGirl);
@@ -60,7 +64,7 @@ public sealed class ActorBorrowedLittleGirlTests
 			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
 		observation.PrivateInstruction.Should().Be(string.Join(
 			Environment.NewLine + Environment.NewLine,
-			GameStrings.WerewolfFactionAgentObservationPrompt,
+			GameStrings.WerewolfFactionAgentObservationPrompt.Format(1),
 			GameStrings.LittleGirlOpeningGuidance));
 		observation.AffectedPlayerIds.Should().BeNull();
 		var attempt = policy.ObservedAttempts.Should().ContainSingle().Subject;
@@ -123,6 +127,11 @@ public sealed class ActorBorrowedLittleGirlTests
 				actorSleep.CreateResponse())
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
 		var historyCount = session.GameHistoryLog.Count();
+		var werewolfFactionAgencyBefore = session.GetPlayers().ToDictionary(
+			player => player.Id,
+			player => session.GetFactionAgentKnowledge(
+				player.Id,
+				Faction.Werewolf));
 		var invalidResponses = new[]
 		{
 			new ModeratorResponse
@@ -146,11 +155,11 @@ public sealed class ActorBorrowedLittleGirlTests
 			act.Should().Throw<InvalidOperationException>().WithMessage(
 				GameStrings.ActorBorrowedRolePowerInvalidResponse);
 			session.GameHistoryLog.Should().HaveCount(historyCount);
-			session.GetPlayers().Should().AllSatisfy(player =>
-				session.GetFactionAgentKnowledge(
-						player.Id,
-						Faction.Werewolf)
-					.Should().Be(FactionAgentKnowledge.Unknown));
+			session.GetPlayers().ToDictionary(
+				player => player.Id,
+				player => session.GetFactionAgentKnowledge(
+					player.Id,
+					Faction.Werewolf)).Should().Equal(werewolfFactionAgencyBefore);
 			session.GetModeratorActiveActorBorrowedRolePowerActivation().Should()
 				.Be(activation);
 			session.GetPlayerState(actorId).CurrentRole.Should().Be(
@@ -417,7 +426,7 @@ public sealed class ActorBorrowedLittleGirlTests
 		observation.Semantic.Should().Be(
 			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
 		observation.PrivateInstruction.Should().Be(
-			GameStrings.WerewolfFactionAgentObservationPrompt);
+			GameStrings.WerewolfFactionAgentObservationPrompt.Format(1));
 		policy.ObservedAttempts.Should().ContainSingle();
 		session = RestorePendingInstruction(session, listener, observation);
 		var victimSelection = GameFlowManager.HandleInput(
@@ -548,8 +557,26 @@ public sealed class ActorBorrowedLittleGirlTests
 		GameSession session,
 		ModeratorResponse response)
 	{
+		var startingExecution = session.Execution;
+		var consumedInstruction = startingExecution.PendingInstruction
+			?? throw new InvalidOperationException(
+				"The Actor borrowed test workflow requires one Pending Instruction.");
 		session.GetOrCreateListener(listener.Id, () => listener);
-		return NightActionLoop.Execute(session, response).ModeratorInstruction;
+		var nextInstruction = NightActionLoop.Execute(
+			session,
+			response).ModeratorInstruction;
+		if (nextInstruction != null)
+		{
+			session.CommitExecution(
+				ExecutionCommitKey,
+				ExecutionCommit.RetainRecoveryBoundary(
+					session.Execution,
+					consumedInstruction,
+					response,
+					nextInstruction));
+		}
+
+		return nextInstruction;
 	}
 
 	private static GameSession RestorePendingInstruction(

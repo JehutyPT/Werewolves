@@ -78,17 +78,14 @@ public sealed class ActorBorrowedScapegoatVillageIdiotTests
 		var reactionReveal = Advance(
 				pending.Session,
 				announcement.CreateResponse())
-			.Should().BeOfType<AssignRolesInstruction>().Subject;
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
 
 		pending.Reaction.InvocationCount.Should().Be(1);
-		reactionReveal.PlayersForAssignment.Should().Equal(
+		reactionReveal.AffectedPlayerIds.Should().Equal(
 			pending.ReactionVictimId);
 		var cascadeAnnouncement = Advance(
 				pending.Session,
-				reactionReveal.CreateResponse(new Dictionary<Guid, MainRoleType>
-				{
-					[pending.ReactionVictimId] = MainRoleType.SimpleVillager
-				}))
+				reactionReveal.CreateResponse())
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		cascadeAnnouncement.Semantic.Should().Be(
 			ModeratorInstructionSemantic.AnnounceEliminationCascadeVictims);
@@ -211,7 +208,7 @@ public sealed class ActorBorrowedScapegoatVillageIdiotTests
 				announcementGameId,
 				recoveredAnnouncement.CreateResponse())
 			.ModeratorInstruction.Should()
-			.BeOfType<AssignRolesInstruction>().Subject;
+			.BeOfType<ConfirmationInstruction>().Subject;
 		var acknowledged = announcementService
 			.GetGameStateView(announcementGameId)!;
 		acknowledged.GameHistoryLog
@@ -235,11 +232,11 @@ public sealed class ActorBorrowedScapegoatVillageIdiotTests
 				acknowledged.Serialize());
 		var restoredReactionReveal = afterAcknowledgmentService
 			.GetCurrentInstruction(afterAcknowledgmentGameId)
-			.Should().BeOfType<AssignRolesInstruction>().Subject;
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
 
 		restoredReactionReveal.InstructionId.Should().Be(
 			reactionReveal.InstructionId);
-		restoredReactionReveal.PlayersForAssignment.Should().Equal(
+		restoredReactionReveal.AffectedPlayerIds.Should().Equal(
 			pending.ReactionVictimId);
 		var beforeReplay = afterAcknowledgmentService
 			.GetGameStateView(afterAcknowledgmentGameId)!.Serialize();
@@ -378,13 +375,10 @@ public sealed class ActorBorrowedScapegoatVillageIdiotTests
 		var reactionReveal = Advance(
 				pending.Session,
 				announcement.CreateResponse())
-			.Should().BeOfType<AssignRolesInstruction>().Subject;
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		var cascadeAnnouncement = Advance(
 				pending.Session,
-				reactionReveal.CreateResponse(new Dictionary<Guid, MainRoleType>
-				{
-					[pending.ReactionVictimId] = MainRoleType.SimpleVillager
-				}))
+				reactionReveal.CreateResponse())
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		var nightStart = Advance(
 				pending.Session,
@@ -487,15 +481,10 @@ public sealed class ActorBorrowedScapegoatVillageIdiotTests
 				gameId,
 				recoveredAnnouncement.CreateResponse())
 			.ModeratorInstruction.Should()
-			.BeOfType<AssignRolesInstruction>().Subject;
+			.BeOfType<ConfirmationInstruction>().Subject;
 		var cascadeAnnouncement = service.ProcessInstruction(
 				gameId,
-				reactionReveal.CreateResponse(
-					new Dictionary<Guid, MainRoleType>
-					{
-						[pending.ReactionVictimId] =
-							MainRoleType.SimpleVillager
-					}))
+				reactionReveal.CreateResponse())
 			.ModeratorInstruction.Should()
 			.BeOfType<ConfirmationInstruction>().Subject;
 		var nightStart = service.ProcessInstruction(

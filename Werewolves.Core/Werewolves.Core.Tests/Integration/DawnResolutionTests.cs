@@ -117,7 +117,7 @@ public class DawnResolutionTests : DiagnosticTestBase
     /// DR-010: A sole remaining role type is never inferred for a Dawn victim.
     /// </summary>
     [Fact]
-    public void VictimEliminated_SingleRemainingRoleType_StillRequiresPublicRevealMapping()
+    public void VictimEliminated_SingleRemainingRoleType_UsesEntailedPublicRevealConfirmation()
     {
         // Arrange
         var builder = CreateBuilder()
@@ -140,14 +140,16 @@ public class DawnResolutionTests : DiagnosticTestBase
         // Act - Get the next instruction after night.
         var instruction = builder.GetCurrentInstruction();
 
-        // Assert - public physical reveal still requires an exact Moderator mapping.
+        // Assert - the duplicate-preserving singleton is confirmed without a picker.
         var reveal = instruction.Should().BeOfType<AssignRolesInstruction>().Subject;
         reveal.PublicAnnouncement.Should().Contain(victim.Name);
-        reveal.PlayersForAssignment.Should().Equal(victim.Id);
+        reveal.PlayersForAssignment.Should().BeEmpty();
+        reveal.SelectableRolesForPlayers[victim.Id].Should()
+            .OnlyContain(role => role == MainRoleType.SimpleVillager);
         victim.State.MainRole.Should().BeNull();
         victim.State.Health.Should().Be(PlayerHealth.Alive);
 
-        builder.Process(reveal.CreateResponse(new()
+        builder.Process(reveal.CreateObservedRoleResponse(new()
         {
             [victim.Id] = MainRoleType.SimpleVillager
         })).IsSuccess.Should().BeTrue();
@@ -238,7 +240,10 @@ public class DawnResolutionTests : DiagnosticTestBase
             seerTargetId: werewolf.Id);
 
         // Act - Complete dawn phase
-        builder.CompleteDawnPhase();
+        builder.CompleteDawnPhase(new()
+        {
+            [victim.Id] = MainRoleType.SimpleVillager
+        });
 
         // Assert - Victim should now be dead
         var victimAfter = gameState.GetPlayers().First(p => p.Id == victim.Id);

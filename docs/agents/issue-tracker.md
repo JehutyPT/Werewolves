@@ -1,7 +1,7 @@
 # Issue Tracker: GitHub
 
 Issues and PRDs for this repository live as GitHub issues on
-`bicheichane/Werewolves`. Run the wrappers in this clone; the `gh` CLI infers
+`JehutyPT/Werewolves`. Run the wrappers in this clone; the `gh` CLI infers
 the repository from `git remote`.
 
 Read `docs/agents/issue-labels.md` for the readiness lifecycle and

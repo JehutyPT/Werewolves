@@ -22,6 +22,7 @@ public sealed class ThiefRoleLockInFlowBunitTests
 		var lobby = context.Services.GetRequiredService<LobbySetupState>();
 		SeedThiefLobby(lobby);
 		var cut = context.RenderModeratorComponent<Routes>();
+		OpenNewGameFromLanding(cut);
 		cut.FindAll("button")
 			.Single(button => button.TextContent.Contains(
 				ClientStrings.LobbyRoster_ContinueToRolesButton))
@@ -59,6 +60,7 @@ public sealed class ThiefRoleLockInFlowBunitTests
 		var lobby = context.Services.GetRequiredService<LobbySetupState>();
 		SeedPlayers(lobby);
 		var cut = context.RenderModeratorComponent<Routes>();
+		OpenNewGameFromLanding(cut);
 		cut.FindAll("button")
 			.Single(button => button.TextContent.Contains(
 				ClientStrings.LobbyRoster_ContinueToRolesButton))
@@ -187,6 +189,9 @@ public sealed class ThiefRoleLockInFlowBunitTests
 			cut.FindAll(TestId(ModeratorUiTestIds.ThiefRoleLockInPage))
 				.Should().ContainSingle());
 	}
+
+	private static void OpenNewGameFromLanding(IRenderedComponent<Routes> cut) =>
+		cut.Find(TestId(ModeratorUiTestIds.LandingNewGameButton)).Click();
 
 	private static string TestId(string value) => $"[data-testid='{value}']";
 }

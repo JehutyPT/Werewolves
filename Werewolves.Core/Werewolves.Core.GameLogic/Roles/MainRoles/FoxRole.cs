@@ -25,8 +25,8 @@ internal enum FoxRoleState
 }
 
 internal sealed class FoxRole
-	: NightRoleHookListener<FoxRoleState>,
-		ITargetPrivateRolePowerRecoveryCapability
+	: RoleHookListener,
+		IDeclaredRoleWorkflow
 {
 	private sealed record ExecutionContext(
 		IPlayer ActingPlayer,
@@ -34,6 +34,7 @@ internal sealed class FoxRole
 		bool IsBorrowed);
 
 	private readonly RolePowerAvailabilityGateway _availabilityGateway;
+	private readonly RoleWorkflowRuntime _workflowRuntime;
 	private bool? _powerIsAvailable;
 
 	private static readonly RolePowerDefinition NeighborhoodCheckPower = new(
@@ -47,6 +48,142 @@ internal sealed class FoxRole
 	{
 		ArgumentNullException.ThrowIfNull(availabilityGateway);
 		_availabilityGateway = availabilityGateway;
+
+		var identificationWait =
+			RecoverableWait<FoxRoleState, SelectPlayersInstruction>.Replayable(
+				Id,
+				GameHook.NightMainActionLoop,
+				startState: null,
+				FoxRoleState.Awake,
+				ModeratorInstructionSemantic.IdentifyRoleHolders,
+				ExpectedInputType.PlayerSelection,
+				static _ => false,
+				static (_, _) => { },
+				CreateIdentificationInstruction,
+				static (_, instruction) =>
+					instruction is SelectPlayersInstruction
+					{
+						RoleIdentification: MainRoleType.Fox
+					},
+				ValidateIdentificationInstruction);
+		var directWakeWait =
+			RecoverableWait<FoxRoleState, ConfirmationInstruction>.Replayable(
+				Id,
+				GameHook.NightMainActionLoop,
+				startState: null,
+				FoxRoleState.Awake,
+				ModeratorInstructionSemantic.WakeRole,
+				ExpectedInputType.Continue,
+				static _ => false,
+				static (_, _) => { },
+				CreateWakeInstruction,
+				ClaimsWakeRecoveryCandidate,
+				ValidateWakeInstruction);
+		var identifiedWakeWait =
+			RecoverableWait<FoxRoleState, ConfirmationInstruction>.Durable(
+				Id,
+				GameHook.NightMainActionLoop,
+				FoxRoleState.Awake,
+				FoxRoleState.AwaitingWakeAcknowledgement,
+				ModeratorInstructionSemantic.WakeRole,
+				ExpectedInputType.Continue,
+				static _ => false,
+				static (_, _) => { },
+				CreateWakeInstruction,
+				static (_, _) => false,
+				ValidateWakeInstruction,
+				ValidateIdentificationRecoveryBoundary,
+				static _ => FoxRoleState.AwaitingWakeAcknowledgement);
+		var centerSelectionWait =
+			RecoverableWait<FoxRoleState, SelectPlayersInstruction>.Replayable(
+				Id,
+				GameHook.NightMainActionLoop,
+				FoxRoleState.AwaitingWakeAcknowledgement,
+				FoxRoleState.AwaitingCenterSelection,
+				ModeratorInstructionSemantic.SelectFoxCenter,
+				ExpectedInputType.PlayerSelection,
+				static _ => true,
+				static (_, _) => { },
+				CreateCenterSelectionInstruction,
+				static (_, _) => false,
+				ValidateCenterSelectionInstruction);
+		var feedbackWait =
+			RecoverableWait<FoxRoleState, ConfirmationInstruction>.DomainDurable(
+				Id,
+				GameHook.NightMainActionLoop,
+				FoxRoleState.AwaitingCenterSelection,
+				FoxRoleState.AwaitingResultAcknowledgement,
+				ModeratorInstructionSemantic.RevealFoxResult,
+				ExpectedInputType.Continue,
+				static _ => false,
+				CommitCenterSelection,
+				CreateFeedbackInstruction,
+				ClaimsCommittedFeedback,
+				ValidateFeedbackInstruction,
+				ValidateFeedbackRecoveryContext,
+				static _ => FoxRoleState.AwaitingResultAcknowledgement,
+				ValidateCommittedRecoveryBoundary);
+		var sleepWait =
+			RecoverableWait<FoxRoleState, ConfirmationInstruction>.Replayable(
+				Id,
+				GameHook.NightMainActionLoop,
+				FoxRoleState.AwaitingResultAcknowledgement,
+				FoxRoleState.ReadyToSleep,
+				ModeratorInstructionSemantic.PutRoleToSleep,
+				ExpectedInputType.Continue,
+				static _ => true,
+				static (_, _) => { },
+				CreateSleepInstruction,
+				static (_, _) => false,
+				ValidateSleepInstruction);
+
+		_workflowRuntime = new RoleWorkflowRuntime(
+			Id,
+			GameHook.NightMainActionLoop,
+			[
+				identificationWait,
+				directWakeWait,
+				identifiedWakeWait,
+				centerSelectionWait,
+				feedbackWait,
+				sleepWait,
+				new RoleWorkflowDecisionStep<FoxRoleState>(
+					Id,
+					GameHook.NightMainActionLoop,
+					startState: null,
+					static _ => true,
+					(session, input) => BeginNightAction(
+						session,
+						input,
+						identificationWait,
+						directWakeWait)),
+				new RoleWorkflowDecisionStep<FoxRoleState>(
+					Id,
+					GameHook.NightMainActionLoop,
+					FoxRoleState.Awake,
+					static _ => true,
+					(session, input) => ContinueAfterWakeOrIdentification(
+						session,
+						input,
+						identifiedWakeWait,
+						centerSelectionWait)),
+				new RoleWorkflowDecisionStep<FoxRoleState>(
+					Id,
+					GameHook.NightMainActionLoop,
+					FoxRoleState.AwaitingCenterSelection,
+					static _ => true,
+					(session, input) => ContinueAfterCenterSelection(
+						session,
+						input,
+						feedbackWait,
+						sleepWait)),
+				new RoleWorkflowCompletionStep<FoxRoleState>(
+					Id,
+					GameHook.NightMainActionLoop,
+					FoxRoleState.ReadyToSleep,
+					FoxRoleState.Asleep,
+					static _ => true)
+			]);
 	}
 
 	internal override string PublicName => GameStrings.FoxRoleName;
@@ -54,13 +191,8 @@ internal sealed class FoxRole
 	public override ListenerIdentifier Id =>
 		ListenerIdentifier.Listener(MainRoleType.Fox);
 
-	protected override FoxRoleState WokenUpStateEnum => FoxRoleState.Awake;
-
-	protected override FoxRoleState ReadyToSleepStateEnum => FoxRoleState.ReadyToSleep;
-
-	protected override FoxRoleState AsleepStateEnum => FoxRoleState.Asleep;
-
-	protected override bool HasNightPowers => true;
+	RoleWorkflowRuntime IDeclaredRoleWorkflow.WorkflowRuntime =>
+		_workflowRuntime;
 
 	public override HookListenerActionResult Execute(
 		GameSession session,
@@ -74,193 +206,20 @@ internal sealed class FoxRole
 		return base.Execute(session, input);
 	}
 
-	protected override List<RoleStateMachineStage> DefineStateMachineStages() =>
-	[
-		CreateStage(
-			GameHook.NightMainActionLoop,
-			null,
-			[
-				FoxRoleState.Awake,
-				FoxRoleState.Asleep
-			],
-			BeginNightAction),
-		CreateStage(
-			GameHook.NightMainActionLoop,
-			FoxRoleState.Awake,
-			[
-				FoxRoleState.AwaitingWakeAcknowledgement,
-				FoxRoleState.AwaitingCenterSelection,
-				FoxRoleState.Asleep
-			],
-			ContinueAfterWakeOrIdentification),
-		CreateStage(
-			GameHook.NightMainActionLoop,
-			FoxRoleState.AwaitingWakeAcknowledgement,
-			FoxRoleState.AwaitingCenterSelection,
-			HandleNightPowerUse),
-		CreateStage(
-			GameHook.NightMainActionLoop,
-			FoxRoleState.AwaitingCenterSelection,
-			[
-				FoxRoleState.AwaitingResultAcknowledgement,
-				FoxRoleState.ReadyToSleep
-			],
-			CommitCenterSelection),
-		CreateStage(
-			GameHook.NightMainActionLoop,
-			FoxRoleState.AwaitingResultAcknowledgement,
-			FoxRoleState.ReadyToSleep,
-			(session, _) => PrepareSleepInstruction(session)),
-		CreateStage(
-			GameHook.NightMainActionLoop,
-			FoxRoleState.ReadyToSleep,
-			FoxRoleState.Asleep,
-			HandleAsleepConfirmation),
-		CreateEndStage(
-			GameHook.NightMainActionLoop,
-			FoxRoleState.Asleep,
-			(_, _) => HookListenerActionResult.Complete(FoxRoleState.Asleep))
-	];
-
-	public override bool TryResolvePendingInstructionContinuation(
-		GameHook hook,
+	protected override HookListenerActionResult ExecuteCore(
 		GameSession session,
-		ModeratorInstruction pendingInstruction,
-		out string listenerState)
-	{
-		listenerState = string.Empty;
-		if (hook == GameHook.NightMainActionLoop &&
-			TryResolveBorrowedExecution(session, out var borrowedExecution))
-		{
-			switch (pendingInstruction)
-			{
-				case SelectPlayersInstruction
-					{
-						Semantic:
-						ModeratorInstructionSemantic.SelectFoxCenter
-					} centerSelection:
-					ValidateBorrowedCenterSelectionInstruction(
-						session,
-						borrowedExecution,
-						centerSelection);
-					listenerState =
-						FoxRoleState.AwaitingCenterSelection.ToString();
-					return true;
-				case ConfirmationInstruction
-					{
-						Semantic:
-						ModeratorInstructionSemantic.RevealFoxResult
-					} borrowedFeedback:
-					var commit = GetBorrowedFoxCheckCommit(
-						session,
-						borrowedExecution);
-					ValidateBorrowedCommit(
-						session,
-						borrowedExecution,
-						commit);
-					ValidateBorrowedFeedback(
-						borrowedExecution,
-						commit,
-						borrowedFeedback);
-					listenerState = FoxRoleState
-						.AwaitingResultAcknowledgement
-						.ToString();
-					return true;
-				case ConfirmationInstruction
-					{
-						Semantic:
-						ModeratorInstructionSemantic.PutRoleToSleep
-					} sleep:
-					var commits = GetBorrowedFoxCheckCommitsThisNight(
-							session,
-							CreatePowerIdentity(borrowedExecution))
-						.ToArray();
-					if (commits.Length > 1)
-					{
-						throw new InvalidOperationException(
-							"The Actor borrowed Fox sleep continuation has multiple committed checks.");
-					}
-
-					if (commits is [var committedCheck])
-					{
-						ValidateBorrowedCommit(
-							session,
-							borrowedExecution,
-							committedCheck);
-					}
-
-					ValidateBorrowedSleep(borrowedExecution, sleep);
-					listenerState = FoxRoleState.ReadyToSleep.ToString();
-					return true;
-			}
-		}
-
-		if (hook == GameHook.NightMainActionLoop &&
-			pendingInstruction is SelectPlayersInstruction
-			{
-				Semantic: ModeratorInstructionSemantic.SelectFoxCenter
-			} &&
-			HasExpectedAffectedRoleHolders(session, pendingInstruction))
-		{
-			listenerState =
-				FoxRoleState.AwaitingCenterSelection.ToString();
-			return true;
-		}
-
-		if (hook == GameHook.NightMainActionLoop &&
-			pendingInstruction is ConfirmationInstruction
-			{
-				Semantic: ModeratorInstructionSemantic.RevealFoxResult
-			} feedback &&
-			HasExpectedAffectedRoleHolders(session, pendingInstruction))
-		{
-			var commit = GetFoxCheckCommitsThisNight(session).SingleOrDefault()
-				?? throw new InvalidOperationException(
-					"The Fox feedback requires one committed target-private check.");
-			ValidateOwnedCommit(session, commit);
-			ValidateFeedback(commit, feedback);
-			listenerState =
-				FoxRoleState.AwaitingResultAcknowledgement.ToString();
-			return true;
-		}
-
-		if (hook == GameHook.NightMainActionLoop &&
-			pendingInstruction is ConfirmationInstruction
-			{
-				Semantic: ModeratorInstructionSemantic.PutRoleToSleep
-			} &&
-			HasExpectedAffectedRoleHolders(session, pendingInstruction))
-		{
-			var commits = GetFoxCheckCommitsThisNight(session).ToArray();
-			if (commits.Length > 1)
-			{
-				throw new InvalidOperationException(
-					"The Fox sleep continuation has multiple committed checks.");
-			}
-
-			if (commits is [var commit])
-			{
-				ValidateOwnedCommit(session, commit);
-			}
-
-			listenerState = FoxRoleState.ReadyToSleep.ToString();
-			return true;
-		}
-
-		return base.TryResolvePendingInstructionContinuation(
-			hook,
+		ModeratorResponse input) =>
+		_workflowRuntime.Execute(
 			session,
-			pendingInstruction,
-			out listenerState);
-	}
+			input,
+			session.Execution.GetCurrentListenerState<FoxRoleState>(Id));
 
-	bool ITargetPrivateRolePowerRecoveryCapability
-		.TryValidateCommittedRecoveryBoundary(
+	private bool ValidateCommittedRecoveryBoundary(
 			GameSession session,
 			ModeratorInstruction? startingInstruction,
 			ModeratorResponse input,
 			TargetPrivateRolePowerRecoveryBoundary committedBoundary,
-			ModeratorInstruction nextInstruction)
+			ConfirmationInstruction nextInstruction)
 	{
 		if (committedBoundary.ActionType != NightActionType.FoxCheck)
 		{
@@ -293,10 +252,8 @@ internal sealed class FoxRole
 			selectedPlayerIds.Single() != commit.CenterPlayerId ||
 			!centerSelection.SelectablePlayerIds.Contains(
 				commit.CenterPlayerId) ||
-			nextInstruction is not ConfirmationInstruction
-			{
-				Semantic: ModeratorInstructionSemantic.RevealFoxResult
-			} feedback)
+			nextInstruction.Semantic !=
+				ModeratorInstructionSemantic.RevealFoxResult)
 		{
 			throw new InvalidOperationException(
 				"The Actor borrowed Fox commit does not match its accepted center and feedback continuation.");
@@ -306,7 +263,7 @@ internal sealed class FoxRole
 			session,
 			execution,
 			centerSelection);
-		ValidateBorrowedFeedback(execution, commit, feedback);
+		ValidateBorrowedFeedback(execution, nextInstruction);
 		return true;
 	}
 
@@ -315,7 +272,7 @@ internal sealed class FoxRole
 		ModeratorInstruction? startingInstruction,
 		ModeratorResponse input,
 		TargetPrivateRolePowerRecoveryBoundary committedBoundary,
-		ModeratorInstruction nextInstruction)
+		ConfirmationInstruction nextInstruction)
 	{
 		if (committedBoundary.ActionType != NightActionType.FoxCheck)
 		{
@@ -336,23 +293,21 @@ internal sealed class FoxRole
 				selectedPlayerIds.Single()) ||
 			selectedPlayerIds.Single() == Guid.Empty ||
 			committedBoundary.ActingPlayerId != affectedPlayerIds.Single() ||
-			nextInstruction is not ConfirmationInstruction
-			{
-				Semantic: ModeratorInstructionSemantic.RevealFoxResult
-			} feedback)
+			nextInstruction.Semantic !=
+				ModeratorInstructionSemantic.RevealFoxResult)
 		{
 			throw new InvalidOperationException(
 				"The Fox target-private commit does not match its accepted check and feedback continuation.");
 		}
 
-		ValidateFeedback(committedBoundary, feedback);
+		ValidateFeedback(committedBoundary, nextInstruction);
 		return true;
 	}
 
-	void ITargetPrivateRolePowerRecoveryCapability
-		.ValidateRecoveryCursorIdentity(
-			GameSession session,
-			DomainRecoveryCursor cursor)
+	private void ValidateFeedbackRecoveryContext(
+		GameSession session,
+		ConfirmationInstruction instruction,
+		DomainRecoveryCursor cursor)
 	{
 		if (TryResolveBorrowedExecution(session, out var execution))
 		{
@@ -364,6 +319,7 @@ internal sealed class FoxRole
 		}
 
 		ValidateTargetPrivateRecoveryCursorIdentity(session, cursor);
+		ValidateFeedbackInstruction(session, instruction);
 	}
 
 	private static void ValidateTargetPrivateRecoveryCursorIdentity(
@@ -372,6 +328,16 @@ internal sealed class FoxRole
 	{
 		ArgumentNullException.ThrowIfNull(session);
 		ArgumentNullException.ThrowIfNull(cursor);
+		var commits = GetFoxCheckCommitsThisNight(session).ToArray();
+		if (commits is not [var commit])
+		{
+			throw new InvalidOperationException(
+				"The Fox recovery cursor requires exactly one committed target-private check.");
+		}
+
+		ValidateOwnedCommit(session, commit);
+		var expectedResourceId =
+			commit.SpentResourceIdentity?.OneUseResourceId ?? Guid.Empty;
 		if (cursor.Kind !=
 				DomainRecoveryCursorKind.TargetPrivateRolePowerCommit ||
 			cursor.SourceRole != MainRoleType.Fox ||
@@ -385,8 +351,8 @@ internal sealed class FoxRole
 				CreatePowerInstance(
 					session,
 					session.GetPlayer(cursor.ActingPlayerId))) ||
-			cursor.OneUseResourceId != Guid.Empty &&
-			cursor.OneUseResourceId != NeighborhoodCheckResourceId ||
+			cursor.PowerIdentity != commit.PowerIdentity ||
+			cursor.OneUseResourceId != expectedResourceId ||
 			cursor.CommittedTargetIds.Count != 0 ||
 			cursor.NextInstructionSemantic !=
 				ModeratorInstructionSemantic.RevealFoxResult)
@@ -398,7 +364,11 @@ internal sealed class FoxRole
 
 	private HookListenerActionResult BeginNightAction(
 		GameSession session,
-		ModeratorResponse input)
+		ModeratorResponse input,
+		RecoverableWait<FoxRoleState, SelectPlayersInstruction>
+			identificationWait,
+		RecoverableWait<FoxRoleState, ConfirmationInstruction>
+			directWakeWait)
 	{
 		_powerIsAvailable = null;
 		if (TryResolveBorrowedExecution(session, out var borrowedExecution))
@@ -408,16 +378,12 @@ internal sealed class FoxRole
 				return HookListenerActionResult.Complete(FoxRoleState.Asleep);
 			}
 
-			return PrepareWakeInstruction(
-				borrowedExecution,
-				FoxRoleState.Awake);
+			return directWakeWait.Execute(session, input);
 		}
 
-		if (!GameSessionQueries.IsCompleteLivingRoleHolderSetKnown(
-				session,
-				MainRoleType.Fox))
+		if (!IsCompleteHolderSetKnown(session))
 		{
-			return base.HandleRoleWakeupAndId(session, input);
+			return identificationWait.Execute(session, input);
 		}
 
 		var execution = ResolveNativeExecution(session);
@@ -426,57 +392,86 @@ internal sealed class FoxRole
 			return HookListenerActionResult.Complete(FoxRoleState.Asleep);
 		}
 
-		return PrepareWakeInstruction(execution, FoxRoleState.Awake);
+		return directWakeWait.Execute(session, input);
 	}
 
 	private HookListenerActionResult ContinueAfterWakeOrIdentification(
 		GameSession session,
-		ModeratorResponse input)
+		ModeratorResponse input,
+		RecoverableWait<FoxRoleState, ConfirmationInstruction>
+			identifiedWakeWait,
+		RecoverableWait<FoxRoleState, SelectPlayersInstruction>
+			centerSelectionWait)
 	{
-		if (TryResolveBorrowedExecution(session, out _))
+		var pendingInstruction = session.Execution.PendingInstruction
+			?? throw new InvalidOperationException(
+				"The Fox workflow requires one Pending Instruction.");
+		if (pendingInstruction.Semantic ==
+		    ModeratorInstructionSemantic.WakeRole)
 		{
-			return HandleNightPowerUse(session, input);
+			return centerSelectionWait.Execute(session, input);
 		}
 
-		if (!GameSessionQueries.IsCompleteLivingRoleHolderSetKnown(
-				session,
-				MainRoleType.Fox))
+		if (pendingInstruction.Semantic !=
+		    ModeratorInstructionSemantic.IdentifyRoleHolders)
 		{
-			ProcessRoleIdentification(session, input);
-			var identifiedExecution = ResolveNativeExecution(session);
-			if (!EvaluateAvailability(session, identifiedExecution))
-			{
-				return HookListenerActionResult.Complete(FoxRoleState.Asleep);
-			}
-
-			return PrepareWakeInstruction(
-				identifiedExecution,
-				FoxRoleState.AwaitingWakeAcknowledgement);
+			throw new InvalidOperationException(
+				$"Unsupported Fox continuation '{pendingInstruction.Semantic}'.");
 		}
 
-		return HandleNightPowerUse(session, input);
+		AcceptIdentification(session, input);
+		var identifiedExecution = ResolveNativeExecution(session);
+		if (!EvaluateAvailability(session, identifiedExecution))
+		{
+			return HookListenerActionResult.Complete(FoxRoleState.Asleep);
+		}
+
+		return identifiedWakeWait.Execute(session, input);
 	}
 
-	private HookListenerActionResult PrepareWakeInstruction(
-		ExecutionContext execution,
-		FoxRoleState nextState) =>
-		HookListenerActionResult.NeedInput(
-			new ConfirmationInstruction(
+	private ConfirmationInstruction CreateWakeInstruction(
+		GameSession session)
+	{
+		var execution = ResolveExecution(session);
+		return new ConfirmationInstruction(
 				ModeratorInstructionSemantic.WakeRole,
 				GameStrings.RoleWakesUp.Format(
 					execution.IsBorrowed
 						? GameStrings.ActorRoleName
 						: PublicName),
-				affectedPlayerIds: [execution.ActingPlayer.Id]),
-			nextState);
+				affectedPlayerIds: [execution.ActingPlayer.Id]);
+	}
 
-	protected override HookListenerActionResult HandleNightPowerUse(
+	private bool ClaimsWakeRecoveryCandidate(
 		GameSession session,
-		ModeratorResponse input)
+		ModeratorInstruction instruction)
+	{
+		if (instruction is not ConfirmationInstruction
+		    {
+			    Semantic: ModeratorInstructionSemantic.WakeRole,
+			    AffectedPlayerIds: { Count: 1 } affectedPlayerIds
+		    })
+		{
+			return false;
+		}
+
+		var livingHolderIds = GetLivingHolderIds(session);
+		var actingPlayerId = TryResolveBorrowedExecution(
+			session,
+			out var borrowedExecution)
+			? borrowedExecution.ActingPlayer.Id
+			: livingHolderIds.Count == 1
+				? livingHolderIds.Single()
+				: Guid.Empty;
+		return actingPlayerId != Guid.Empty &&
+		       affectedPlayerIds.Single() == actingPlayerId;
+	}
+
+	private SelectPlayersInstruction CreateCenterSelectionInstruction(
+		GameSession session)
 	{
 		var execution = ResolveExecution(session);
-		return HookListenerActionResult.NeedInput(
-			new SelectPlayersInstruction(
+		return new SelectPlayersInstruction(
 				ModeratorInstructionSemantic.SelectFoxCenter,
 				session.GetPlayers()
 					.WithHealth(PlayerHealth.Alive)
@@ -487,26 +482,39 @@ internal sealed class FoxRole
 				affectedPlayerIds: [execution.ActingPlayer.Id])
 			{
 				EmptySelectionOptionLabel = GameStrings.DeclineOption
-			},
-			FoxRoleState.AwaitingCenterSelection);
+			};
 	}
 
-	private HookListenerActionResult CommitCenterSelection(
+	private HookListenerActionResult ContinueAfterCenterSelection(
 		GameSession session,
-		ModeratorResponse input)
+		ModeratorResponse input,
+		RecoverableWait<FoxRoleState, ConfirmationInstruction> feedbackWait,
+		RecoverableWait<FoxRoleState, ConfirmationInstruction> sleepWait)
 	{
-		var execution = ResolveExecution(session);
 		if (input.SelectedPlayerIds is not { Count: <= 1 } selectedPlayerIds)
 		{
 			throw new InvalidOperationException(
-				execution.IsBorrowed
+				TryResolveBorrowedExecution(session, out _)
 					? GameStrings.ActorBorrowedRolePowerInvalidResponse
 					: "The Fox may select at most one living Player.");
 		}
 
-		if (selectedPlayerIds.Count == 0)
+		return selectedPlayerIds.Count == 0
+			? sleepWait.Execute(session, input)
+			: feedbackWait.Execute(session, input);
+	}
+
+	private void CommitCenterSelection(
+		GameSession session,
+		ModeratorResponse input)
+	{
+		var execution = ResolveExecution(session);
+		if (input.SelectedPlayerIds is not { Count: 1 } selectedPlayerIds)
 		{
-			return PrepareSleepInstruction(session);
+			throw new InvalidOperationException(
+				execution.IsBorrowed
+					? GameStrings.ActorBorrowedRolePowerInvalidResponse
+					: "The Fox check requires exactly one living Player.");
 		}
 
 		var livingPlayers = session.GetPlayers()
@@ -571,15 +579,39 @@ internal sealed class FoxRole
 				powerIdentity,
 				spentResourceIdentity);
 		}
+	}
 
-		return HookListenerActionResult.NeedInput(
-			new ConfirmationInstruction(
-				ModeratorInstructionSemantic.RevealFoxResult,
-					privateInstruction: isAffirmative
-						? GameStrings.FoxAffirmativeFeedbackInstruction
-						: GameStrings.FoxNegativeFeedbackInstruction,
-					affectedPlayerIds: [execution.ActingPlayer.Id]),
-			FoxRoleState.AwaitingResultAcknowledgement);
+	private ConfirmationInstruction CreateFeedbackInstruction(
+		GameSession session)
+	{
+		var execution = ResolveExecution(session);
+		bool isAffirmative;
+		if (execution.IsBorrowed)
+		{
+			var commit = GetBorrowedFoxCheckCommit(session, execution);
+			ValidateBorrowedCommit(session, execution, commit);
+			isAffirmative = commit.NeighborhoodAgentKnowledge ==
+				FactionAgentKnowledge.KnownAgent;
+		}
+		else
+		{
+			var commits = GetFoxCheckCommitsThisNight(session).ToArray();
+			if (commits is not [var commit])
+			{
+				throw new InvalidOperationException(
+					"The Fox feedback requires one committed target-private check.");
+			}
+
+			ValidateOwnedCommit(session, commit);
+			isAffirmative = commit.SpentResourceIdentity == null;
+		}
+
+		return new ConfirmationInstruction(
+			ModeratorInstructionSemantic.RevealFoxResult,
+			privateInstruction: isAffirmative
+				? GameStrings.FoxAffirmativeFeedbackInstruction
+				: GameStrings.FoxNegativeFeedbackInstruction,
+			affectedPlayerIds: [execution.ActingPlayer.Id]);
 	}
 
 	private bool EvaluateAvailability(
@@ -616,20 +648,268 @@ internal sealed class FoxRole
 		return _powerIsAvailable.Value;
 	}
 
-	protected override HookListenerActionResult PrepareSleepInstruction(
+	private ConfirmationInstruction CreateSleepInstruction(
 		GameSession session)
 	{
 		var execution = ResolveExecution(session);
-		return HookListenerActionResult.NeedInput(
-			new ConfirmationInstruction(
+		return new ConfirmationInstruction(
 				ModeratorInstructionSemantic.PutRoleToSleep,
 				GameStrings.RoleGoesToSleepSingle.Format(
 					execution.IsBorrowed
 						? GameStrings.ActorRoleName
 						: PublicName),
-				affectedPlayerIds: [execution.ActingPlayer.Id]),
-			FoxRoleState.ReadyToSleep);
+				affectedPlayerIds: [execution.ActingPlayer.Id]);
 	}
+
+	private bool IsCompleteHolderSetKnown(GameSession session) =>
+		GameSessionQueries.IsCompleteLivingRoleHolderSetKnown(
+			session,
+			MainRoleType.Fox);
+
+	private SelectPlayersInstruction CreateIdentificationInstruction(
+		GameSession session)
+	{
+		var roleCount = GetExpectedLivingRoleHolderCount(session);
+		var committedHolderCount = GetCommittedLivingRoleHolderIds(session).Count;
+		var selectablePlayerIds = GetIdentificationCandidates(session);
+		if (roleCount <= 0 ||
+		    committedHolderCount > roleCount ||
+		    selectablePlayerIds.Count < roleCount)
+		{
+			throw new InvalidOperationException(
+				"Confirmed Role knowledge contradicts the required Fox holder count.");
+		}
+
+		var privateInstruction = roleCount == 1
+			? GameStrings.RoleSingleIdentificationPrompt.Format(PublicName)
+			: GameStrings.RoleMultipleIdentificationPrompt.Format(PublicName);
+		return new SelectPlayersInstruction(
+			ModeratorInstructionSemantic.IdentifyRoleHolders,
+			selectablePlayerIds,
+			NumberRangeConstraint.Exact(roleCount),
+			publicAnnouncement: GameStrings.RoleWakesUp.Format(PublicName),
+			privateInstruction: privateInstruction,
+			affectedPlayerIds: null,
+			roleIdentification: MainRoleType.Fox);
+	}
+
+	private void AcceptIdentification(
+		GameSession session,
+		ModeratorResponse input)
+	{
+		if (IsCompleteHolderSetKnown(session))
+		{
+			return;
+		}
+
+		IdentifyCompleteLivingRoleHolderSet(
+			session,
+			input.SelectedPlayerIds?.ToHashSet()
+			?? throw new InvalidOperationException(
+				"Fox identification requires a Player selection."));
+	}
+
+	private void ValidateIdentificationInstruction(
+		GameSession session,
+		SelectPlayersInstruction instruction)
+	{
+		if (instruction.RoleIdentification != MainRoleType.Fox ||
+		    instruction.AffectedPlayerIds != null ||
+		    !instruction.SelectablePlayerIds.SetEquals(
+			    GetIdentificationCandidates(session)) ||
+		    instruction.CountConstraint != NumberRangeConstraint.Exact(
+			    GetExpectedLivingRoleHolderCount(session)))
+		{
+			throw new InvalidOperationException(
+				"The Fox identification instruction has invalid workflow context.");
+		}
+	}
+
+	private void ValidateWakeInstruction(
+		GameSession session,
+		ConfirmationInstruction instruction)
+	{
+		var execution = ResolveExecution(session);
+		if (string.IsNullOrWhiteSpace(instruction.PublicAnnouncement) ||
+		    instruction.PrivateInstruction != null ||
+		    instruction.AffectedPlayerIds is not { Count: 1 } affectedIds ||
+		    affectedIds.Single() != execution.ActingPlayer.Id)
+		{
+			throw new InvalidOperationException(
+				"The Fox wake instruction has invalid workflow context.");
+		}
+	}
+
+	private void ValidateIdentificationRecoveryBoundary(
+		GameSession session,
+		ConfirmationInstruction instruction,
+		AcceptedObservationRecoveryCursor cursor)
+	{
+		if (cursor.Version != AcceptedObservationRecoveryCursor.CurrentVersion ||
+		    cursor.AcceptedObservationSemantic !=
+			    ModeratorInstructionSemantic.IdentifyRoleHolders ||
+		    cursor.ObservedRole != MainRoleType.Fox ||
+		    cursor.ContinuationRole != MainRoleType.Fox ||
+		    cursor.RetainedLittleGirlGuidanceDecision != null)
+		{
+			throw new InvalidOperationException(
+				"The Fox identification cursor has invalid workflow context.");
+		}
+
+		var livingHolderIds = GetLivingHolderIds(session);
+		if (livingHolderIds.Count == 0 ||
+		    !session.GameHistoryLog.OfType<RoleIdentificationLogEntry>().Any(entry =>
+			    entry.TurnNumber == session.TurnNumber &&
+			    entry.CurrentPhase == GamePhase.Night &&
+			    entry.Role == MainRoleType.Fox &&
+			    entry.PlayerIds.SetEquals(livingHolderIds)))
+		{
+			throw new InvalidOperationException(
+				"The Fox wake wait has no committed identification.");
+		}
+	}
+
+	private void ValidateCenterSelectionInstruction(
+		GameSession session,
+		SelectPlayersInstruction instruction)
+	{
+		var execution = ResolveExecution(session);
+		if (instruction.RoleIdentification != null ||
+		    instruction.PublicAnnouncement != null ||
+		    string.IsNullOrWhiteSpace(instruction.PrivateInstruction) ||
+		    instruction.AffectedPlayerIds is not { Count: 1 } affectedIds ||
+		    affectedIds.Single() != execution.ActingPlayer.Id ||
+		    !instruction.SelectablePlayerIds.SetEquals(
+			    session.GetPlayers().WithHealth(PlayerHealth.Alive).ToIdSet()) ||
+		    instruction.CountConstraint != NumberRangeConstraint.SingleOptional ||
+		    string.IsNullOrWhiteSpace(instruction.EmptySelectionOptionLabel))
+		{
+			if (execution.IsBorrowed)
+			{
+				throw new RoleWorkflowInputRejectionException(
+					GameStrings.ActorBorrowedRolePowerInvalidResponse);
+			}
+
+			throw new InvalidOperationException(
+				"The Fox center-selection instruction has invalid workflow context.");
+		}
+	}
+
+	private void ValidateFeedbackInstruction(
+		GameSession session,
+		ConfirmationInstruction instruction)
+	{
+		var execution = ResolveExecution(session);
+		if (execution.IsBorrowed)
+		{
+			var commit = GetBorrowedFoxCheckCommit(session, execution);
+			ValidateBorrowedCommit(session, execution, commit);
+		}
+		else
+		{
+			var commits = GetFoxCheckCommitsThisNight(session).ToArray();
+			if (commits is not [var commit])
+			{
+				throw new InvalidOperationException(
+					"The Fox feedback requires one committed target-private check.");
+			}
+
+			ValidateOwnedCommit(session, commit);
+		}
+
+		if (instruction.PublicAnnouncement != null ||
+		    string.IsNullOrWhiteSpace(instruction.PrivateInstruction) ||
+		    instruction.AffectedPlayerIds is not { Count: 1 } affectedIds ||
+		    affectedIds.Single() != execution.ActingPlayer.Id)
+		{
+			throw new InvalidOperationException(
+				"The Fox feedback has invalid private workflow context.");
+		}
+	}
+
+	private static bool ClaimsCommittedFeedback(
+		GameSession session,
+		ModeratorInstruction instruction)
+	{
+		if (instruction is not ConfirmationInstruction
+		    {
+			    Semantic: ModeratorInstructionSemantic.RevealFoxResult,
+			    AffectedPlayerIds: [var affectedPlayerId]
+		    })
+		{
+			return false;
+		}
+
+		return GetFoxCheckCommitsThisNight(session).Any(commit =>
+			       commit.ActingPlayerId == affectedPlayerId) ||
+		       session.GetActorBorrowedFoxCheckCommits().Any(commit =>
+			       commit.TurnNumber == session.TurnNumber &&
+			       commit.CurrentPhase == GamePhase.Night &&
+			       commit.PowerIdentity.ActingPlayerId == affectedPlayerId);
+	}
+
+	private void ValidateSleepInstruction(
+		GameSession session,
+		ConfirmationInstruction instruction)
+	{
+		var execution = ResolveExecution(session);
+		if (execution.IsBorrowed)
+		{
+			var commits = GetBorrowedFoxCheckCommitsThisNight(
+					session,
+					CreatePowerIdentity(execution))
+				.ToArray();
+			if (commits.Length > 1)
+			{
+				throw new InvalidOperationException(
+					"The Actor borrowed Fox sleep wait has multiple committed checks.");
+			}
+
+			if (commits is [var commit])
+			{
+				ValidateBorrowedCommit(session, execution, commit);
+			}
+		}
+		else
+		{
+			var commits = GetFoxCheckCommitsThisNight(session).ToArray();
+			if (commits.Length > 1)
+			{
+				throw new InvalidOperationException(
+					"The Fox sleep wait has multiple committed checks.");
+			}
+
+			if (commits is [var commit])
+			{
+				ValidateOwnedCommit(session, commit);
+			}
+		}
+
+		if (string.IsNullOrWhiteSpace(instruction.PublicAnnouncement) ||
+		    instruction.PrivateInstruction != null ||
+		    instruction.AffectedPlayerIds is not { Count: 1 } affectedIds ||
+		    affectedIds.Single() != execution.ActingPlayer.Id)
+		{
+			throw new InvalidOperationException(
+				"The Fox sleep instruction has invalid workflow context.");
+		}
+	}
+
+	private HashSet<Guid> GetIdentificationCandidates(GameSession session) =>
+		session.GetPlayers()
+			.WithHealth(PlayerHealth.Alive)
+			.Where(player =>
+				player.State.CurrentRole == MainRoleType.Fox ||
+				(player.State.CurrentRole == null &&
+				 (player.State.ModeratorKnownRole == MainRoleType.Fox ||
+				  player.State.ModeratorKnownRole == null &&
+				  GameSessionQueries.GetPossibleRoles(session, player.Id)
+					  .Contains(MainRoleType.Fox))))
+			.ToIdSet();
+
+	private HashSet<Guid> GetLivingHolderIds(GameSession session) =>
+		GetAliveRolePlayers(session)?.Select(player => player.Id).ToHashSet()
+		?? [];
 
 	private ExecutionContext ResolveExecution(GameSession session) =>
 		TryResolveBorrowedExecution(session, out var borrowed)
@@ -840,9 +1120,8 @@ internal sealed class FoxRole
 		if (selection.CountConstraint != NumberRangeConstraint.SingleOptional ||
 			selection.RoleIdentification is not null ||
 			selection.PublicAnnouncement is not null ||
-			selection.PrivateInstruction !=
-				GameStrings.FoxCenterSelectionInstruction ||
-			selection.EmptySelectionOptionLabel != GameStrings.DeclineOption ||
+			string.IsNullOrWhiteSpace(selection.PrivateInstruction) ||
+			string.IsNullOrWhiteSpace(selection.EmptySelectionOptionLabel) ||
 			selection.AffectedPlayerIds is not { Count: 1 } affectedIds ||
 			affectedIds.Single() != execution.ActingPlayer.Id ||
 			!selection.SelectablePlayerIds.ToHashSet().SetEquals(
@@ -857,38 +1136,15 @@ internal sealed class FoxRole
 
 	private static void ValidateBorrowedFeedback(
 		ExecutionContext execution,
-		ActorBorrowedFoxCheckCommit commit,
 		ConfirmationInstruction feedback)
 	{
-		var expectedPrivateInstruction = commit.NeighborhoodAgentKnowledge ==
-			FactionAgentKnowledge.KnownAgent
-				? GameStrings.FoxAffirmativeFeedbackInstruction
-				: GameStrings.FoxNegativeFeedbackInstruction;
 		if (feedback.PublicAnnouncement is not null ||
-			!StringComparer.Ordinal.Equals(
-				feedback.PrivateInstruction,
-				expectedPrivateInstruction) ||
+			string.IsNullOrWhiteSpace(feedback.PrivateInstruction) ||
 			feedback.AffectedPlayerIds is not { Count: 1 } affectedIds ||
 			affectedIds.Single() != execution.ActingPlayer.Id)
 		{
 			throw new InvalidOperationException(
 				"The Actor borrowed Fox feedback does not match its private commit.");
-		}
-	}
-
-	private static void ValidateBorrowedSleep(
-		ExecutionContext execution,
-		ConfirmationInstruction sleep)
-	{
-		if (sleep.PublicAnnouncement !=
-				GameStrings.RoleGoesToSleepSingle.Format(
-					GameStrings.ActorRoleName) ||
-			sleep.PrivateInstruction is not null ||
-			sleep.AffectedPlayerIds is not { Count: 1 } affectedIds ||
-			affectedIds.Single() != execution.ActingPlayer.Id)
-		{
-			throw new InvalidOperationException(
-				"The Actor borrowed Fox sleep instruction is invalid.");
 		}
 	}
 
@@ -954,24 +1210,11 @@ internal sealed class FoxRole
 	}
 
 	private static void ValidateFeedback(
-		TargetPrivateRolePowerCommittedLogEntry commit,
-		ConfirmationInstruction feedback) =>
-		ValidateFeedback(
-			TargetPrivateRolePowerRecoveryBoundary.FromCommittedEntry(commit),
-			feedback);
-
-	private static void ValidateFeedback(
 		TargetPrivateRolePowerRecoveryBoundary boundary,
 		ConfirmationInstruction feedback)
 	{
-		var expectedPrivateInstruction =
-			boundary.SpentResourceIdentity == null
-				? GameStrings.FoxAffirmativeFeedbackInstruction
-				: GameStrings.FoxNegativeFeedbackInstruction;
 		if (feedback.PublicAnnouncement != null ||
-			!StringComparer.Ordinal.Equals(
-				feedback.PrivateInstruction,
-				expectedPrivateInstruction) ||
+			string.IsNullOrWhiteSpace(feedback.PrivateInstruction) ||
 			feedback.AffectedPlayerIds is not { Count: 1 } affectedIds ||
 			affectedIds.Single() != boundary.ActingPlayerId)
 		{

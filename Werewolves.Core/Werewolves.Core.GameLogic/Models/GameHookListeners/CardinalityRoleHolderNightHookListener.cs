@@ -1,11 +1,15 @@
 using Werewolves.Core.GameLogic.Models.InternalMessages;
+using Werewolves.Core.GameLogic.Queries;
 using Werewolves.Core.GameLogic.RolePowers;
+using Werewolves.Core.GameLogic.Roles;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
+using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Resources;
+using Werewolves.Core.StateModels.Serialization;
 
 namespace Werewolves.Core.GameLogic.Models.GameHookListeners;
 
@@ -24,15 +28,126 @@ internal enum CardinalityRoleHolderNightState
 /// communicate together on selected later Nights.
 /// </summary>
 internal abstract class CardinalityRoleHolderNightHookListener
-	: RoleHookListener<CardinalityRoleHolderNightState>
+	: RoleHookListener,
+		IDeclaredRoleWorkflow
 {
 	private readonly RolePowerAvailabilityGateway _availabilityGateway;
+	private readonly RoleWorkflowRuntime _workflowRuntime;
 
 	protected CardinalityRoleHolderNightHookListener(
 		RolePowerAvailabilityGateway availabilityGateway)
 	{
 		ArgumentNullException.ThrowIfNull(availabilityGateway);
 		_availabilityGateway = availabilityGateway;
+
+		var identificationWait =
+			RecoverableWait<CardinalityRoleHolderNightState,
+				SelectPlayersInstruction>
+				.ReplayableWithAcceptedObservationHandoff(
+				Id,
+				GameHook.NightMainActionLoop,
+				startState: null,
+				CardinalityRoleHolderNightState.Identification,
+				ModeratorInstructionSemantic.IdentifyRoleHolders,
+				ExpectedInputType.PlayerSelection,
+				static _ => false,
+				static (_, _) => { },
+				CreateIdentificationInstruction,
+				(_, instruction) =>
+					instruction is SelectPlayersInstruction
+					{
+						RoleIdentification: { } role
+					} && role == (MainRoleType)Id,
+				ValidateIdentificationInstruction,
+				ValidateAcceptedObservationHandoff,
+				static _ => CardinalityRoleHolderNightState.Identification);
+		var recognitionWait =
+			RecoverableWait<CardinalityRoleHolderNightState,
+				ConfirmationInstruction>
+				.ReplayableWithAcceptedObservationHandoff(
+				Id,
+				GameHook.NightMainActionLoop,
+				startState: null,
+				CardinalityRoleHolderNightState.RecognitionConfirmation,
+				ModeratorInstructionSemantic.RecognizeRoleHolders,
+				ExpectedInputType.Continue,
+				static _ => false,
+				static (_, _) => { },
+				CreateRecognitionInstruction,
+				ClaimsRecognition,
+				ValidateRecognitionInstruction,
+				ValidateAcceptedObservationHandoff,
+				static _ =>
+					CardinalityRoleHolderNightState.RecognitionConfirmation);
+		var communicationWait =
+			RecoverableWait<CardinalityRoleHolderNightState,
+				ConfirmationInstruction>
+				.ReplayableWithAcceptedObservationHandoff(
+				Id,
+				GameHook.NightMainActionLoop,
+				startState: null,
+				CardinalityRoleHolderNightState.CommunicationConfirmation,
+				ModeratorInstructionSemantic.CommunicateAsRoleHolders,
+				ExpectedInputType.Continue,
+				static _ => false,
+				static (_, _) => { },
+				CreateCommunicationInstruction,
+				ClaimsCommunication,
+				ValidateCommunicationInstruction,
+				ValidateAcceptedObservationHandoff,
+				static _ =>
+					CardinalityRoleHolderNightState.CommunicationConfirmation);
+		var sleepWait = CreateSleepWait();
+
+		_workflowRuntime = new RoleWorkflowRuntime(
+			Id,
+			GameHook.NightMainActionLoop,
+			[
+				identificationWait,
+				recognitionWait,
+				communicationWait,
+				sleepWait,
+				new RoleWorkflowDecisionStep<CardinalityRoleHolderNightState>(
+					Id,
+					GameHook.NightMainActionLoop,
+					startState: null,
+					static _ => true,
+					(session, input) => BeginInterval(
+						session,
+						input,
+						identificationWait,
+						recognitionWait,
+						communicationWait)),
+				new RoleWorkflowDecisionStep<CardinalityRoleHolderNightState>(
+					Id,
+					GameHook.NightMainActionLoop,
+					CardinalityRoleHolderNightState.Identification,
+					static _ => true,
+					(session, input) => ContinueAfterIdentification(
+						session,
+						input,
+						recognitionWait,
+						sleepWait)),
+				new RoleWorkflowDecisionStep<CardinalityRoleHolderNightState>(
+					Id,
+					GameHook.NightMainActionLoop,
+					CardinalityRoleHolderNightState.CommunicationConfirmation,
+					static _ => true,
+					(session, input) =>
+						sleepWait.Execute(session, input)),
+				new RoleWorkflowCompletionStep<CardinalityRoleHolderNightState>(
+					Id,
+					GameHook.NightMainActionLoop,
+					CardinalityRoleHolderNightState.SleepConfirmation,
+					CardinalityRoleHolderNightState.Asleep,
+					static _ => true),
+				new RoleWorkflowCompletionStep<CardinalityRoleHolderNightState>(
+					Id,
+					GameHook.NightMainActionLoop,
+					CardinalityRoleHolderNightState.Asleep,
+					CardinalityRoleHolderNightState.Asleep,
+					static _ => true)
+			]);
 	}
 
 	protected abstract int InitialRoleHolderCardinality { get; }
@@ -41,115 +156,57 @@ internal abstract class CardinalityRoleHolderNightHookListener
 	protected abstract RolePowerDefinition CommunicationPower { get; }
 	protected abstract bool HasCommunicationInterval(int turnNumber);
 
-	public override bool TryResolvePendingInstructionContinuation(
-		GameHook hook,
+	RoleWorkflowRuntime IDeclaredRoleWorkflow.WorkflowRuntime =>
+		_workflowRuntime;
+
+	protected override HookListenerActionResult ExecuteCore(
 		GameSession session,
-		ModeratorInstruction pendingInstruction,
-		out string listenerState)
-	{
-		listenerState = string.Empty;
-		if (hook != GameHook.NightMainActionLoop)
-		{
-			return false;
-		}
+		ModeratorResponse input) =>
+		_workflowRuntime.Execute(
+			session,
+			input,
+			session.Execution.GetCurrentListenerState<
+				CardinalityRoleHolderNightState>(Id));
 
-		switch (pendingInstruction)
-		{
-			case SelectPlayersInstruction
-			{
-				Semantic: ModeratorInstructionSemantic.IdentifyRoleHolders,
-				RoleIdentification: { } role
-			} when role == (MainRoleType)Id:
-				listenerState =
-					CardinalityRoleHolderNightState.Identification.ToString();
-				return true;
-			case ConfirmationInstruction
-			{
-				Semantic: ModeratorInstructionSemantic.RecognizeRoleHolders
-			} when HasExpectedAffectedPlayers(session, pendingInstruction):
-				listenerState =
-					CardinalityRoleHolderNightState
-						.RecognitionConfirmation
-						.ToString();
-				return true;
-			case ConfirmationInstruction
-			{
-				Semantic: ModeratorInstructionSemantic.CommunicateAsRoleHolders
-			} when HasExpectedAffectedPlayers(session, pendingInstruction):
-				listenerState =
-					CardinalityRoleHolderNightState
-						.CommunicationConfirmation
-						.ToString();
-				return true;
-			case ConfirmationInstruction
-			{
-				Semantic: ModeratorInstructionSemantic.PutRoleToSleep
-			} when HasExpectedAffectedPlayers(session, pendingInstruction):
-				listenerState =
-					CardinalityRoleHolderNightState.SleepConfirmation.ToString();
-				return true;
-			default:
-				return false;
-		}
-	}
-
-	protected override List<RoleStateMachineStage> DefineStateMachineStages() =>
-	[
-		CreateStage(
-			GameHook.NightMainActionLoop,
-			null,
-			[
-				CardinalityRoleHolderNightState.Identification,
-				CardinalityRoleHolderNightState.RecognitionConfirmation,
-				CardinalityRoleHolderNightState.CommunicationConfirmation,
-				CardinalityRoleHolderNightState.Asleep
-			],
-			BeginInterval),
-		CreateStage(
-			GameHook.NightMainActionLoop,
-			CardinalityRoleHolderNightState.Identification,
-			[
-				CardinalityRoleHolderNightState.RecognitionConfirmation,
-				CardinalityRoleHolderNightState.SleepConfirmation
-			],
-			AcceptIdentification),
-		CreateStage(
+	private RecoverableWait<CardinalityRoleHolderNightState,
+		ConfirmationInstruction> CreateSleepWait() =>
+		RecoverableWait<CardinalityRoleHolderNightState,
+			ConfirmationInstruction>
+			.ReplayableWithAcceptedObservationHandoff(
+			Id,
 			GameHook.NightMainActionLoop,
 			CardinalityRoleHolderNightState.RecognitionConfirmation,
 			CardinalityRoleHolderNightState.SleepConfirmation,
-			(session, _) => PrepareSleepInstruction(session)),
-		CreateStage(
-			GameHook.NightMainActionLoop,
-			CardinalityRoleHolderNightState.CommunicationConfirmation,
-			CardinalityRoleHolderNightState.SleepConfirmation,
-			(session, _) => PrepareSleepInstruction(session)),
-		CreateStage(
-			GameHook.NightMainActionLoop,
-			CardinalityRoleHolderNightState.SleepConfirmation,
-			CardinalityRoleHolderNightState.Asleep,
-			(_, _) => HookListenerActionResult.Complete(
-				CardinalityRoleHolderNightState.Asleep)),
-		CreateEndStage(
-			GameHook.NightMainActionLoop,
-			CardinalityRoleHolderNightState.Asleep,
-			(_, _) => HookListenerActionResult.Complete(
-				CardinalityRoleHolderNightState.Asleep))
-	];
+			ModeratorInstructionSemantic.PutRoleToSleep,
+			ExpectedInputType.Continue,
+			static _ => true,
+			static (_, _) => { },
+			CreateSleepInstruction,
+			ClaimsSleep,
+			ValidateSleepInstruction,
+			ValidateAcceptedObservationHandoff,
+			static _ => CardinalityRoleHolderNightState.SleepConfirmation);
 
 	private HookListenerActionResult BeginInterval(
 		GameSession session,
-		ModeratorResponse _)
+		ModeratorResponse input,
+		RecoverableWait<CardinalityRoleHolderNightState,
+			SelectPlayersInstruction> identificationWait,
+		RecoverableWait<CardinalityRoleHolderNightState,
+			ConfirmationInstruction> recognitionWait,
+		RecoverableWait<CardinalityRoleHolderNightState,
+			ConfirmationInstruction> communicationWait)
 	{
 		if (session.TurnNumber == 1)
 		{
 			if (!IsCompleteHolderSetKnown(session))
 			{
-				return PrepareIdentificationInstruction(session);
+				return identificationWait.Execute(session, input);
 			}
 
 			var participants = GetLivingCurrentRoleHolders(session);
 			return AreAllPowersAvailable(session, participants, RecognitionPower)
-				? PrepareRecognitionInstruction(participants)
+				? recognitionWait.Execute(session, input)
 				: HookListenerActionResult.Complete(
 					CardinalityRoleHolderNightState.Asleep);
 		}
@@ -162,87 +219,172 @@ internal abstract class CardinalityRoleHolderNightHookListener
 
 		var currentParticipants = GetLivingCurrentRoleHolders(session);
 		if (currentParticipants.Count < MinimumCommunicationParticipants ||
-		    !AreAllPowersAvailable(session, currentParticipants, CommunicationPower))
+		    !AreAllPowersAvailable(
+			    session,
+			    currentParticipants,
+			    CommunicationPower))
 		{
 			return HookListenerActionResult.Complete(
 				CardinalityRoleHolderNightState.Asleep);
 		}
 
-		return HookListenerActionResult.NeedInput(
-			new ConfirmationInstruction(
-				ModeratorInstructionSemantic.CommunicateAsRoleHolders,
-				GameStrings.RoleHoldersCommunicationPrompt.Format(PublicName),
-				affectedPlayerIds: GetOrderedIds(currentParticipants)),
-			CardinalityRoleHolderNightState.CommunicationConfirmation);
+		return communicationWait.Execute(session, input);
 	}
 
-	private HookListenerActionResult AcceptIdentification(
+	private HookListenerActionResult ContinueAfterIdentification(
 		GameSession session,
-		ModeratorResponse input)
+		ModeratorResponse input,
+		RecoverableWait<CardinalityRoleHolderNightState,
+			ConfirmationInstruction> recognitionWait,
+		RecoverableWait<CardinalityRoleHolderNightState,
+			ConfirmationInstruction> sleepWait)
 	{
-		var selectedPlayerIds = input.SelectedPlayerIds?.ToHashSet()
+		IdentifyCompleteLivingRoleHolderSet(
+			session,
+			input.SelectedPlayerIds?.ToHashSet()
 			?? throw new InvalidOperationException(
-				"Role Holder Identification requires a Player selection.");
-		IdentifyCompleteLivingRoleHolderSet(session, selectedPlayerIds);
-
+				"Role Holder Identification requires a Player selection."));
 		var participants = GetLivingCurrentRoleHolders(session);
 		return AreAllPowersAvailable(session, participants, RecognitionPower)
-			? PrepareRecognitionInstruction(participants)
-			: PrepareSleepInstruction(session);
+			? recognitionWait.Execute(session, input)
+			: sleepWait.Execute(session, input);
 	}
 
-	private HookListenerActionResult PrepareIdentificationInstruction(GameSession session)
+	private SelectPlayersInstruction CreateIdentificationInstruction(
+		GameSession session) =>
+		new(
+			ModeratorInstructionSemantic.IdentifyRoleHolders,
+			GetIdentificationCandidates(session),
+			NumberRangeConstraint.Exact(InitialRoleHolderCardinality),
+			publicAnnouncement: GameStrings.RoleHoldersWakeUp.Format(PublicName),
+			privateInstruction:
+				GameStrings.RoleMultipleIdentificationPrompt.Format(PublicName),
+			roleIdentification: (MainRoleType)Id);
+
+	private ConfirmationInstruction CreateRecognitionInstruction(
+		GameSession session) =>
+		new(
+			ModeratorInstructionSemantic.RecognizeRoleHolders,
+			GameStrings.RoleHoldersRecognitionPrompt.Format(PublicName),
+			affectedPlayerIds: GetOrderedIds(
+				GetLivingCurrentRoleHolders(session)));
+
+	private ConfirmationInstruction CreateCommunicationInstruction(
+		GameSession session) =>
+		new(
+			ModeratorInstructionSemantic.CommunicateAsRoleHolders,
+			GameStrings.RoleHoldersCommunicationPrompt.Format(PublicName),
+			affectedPlayerIds: GetOrderedIds(
+				GetLivingCurrentRoleHolders(session)));
+
+	private ConfirmationInstruction CreateSleepInstruction(GameSession session) =>
+		new(
+			ModeratorInstructionSemantic.PutRoleToSleep,
+			GameStrings.RoleHoldersGoToSleep.Format(PublicName),
+			affectedPlayerIds: GetOrderedIds(
+				GetLivingCurrentRoleHolders(session)));
+
+	private void ValidateIdentificationInstruction(
+		GameSession session,
+		SelectPlayersInstruction instruction)
 	{
-		var selectablePlayerIds = session.GetPlayers()
+		if (session.TurnNumber != 1 ||
+		    instruction.RoleIdentification != (MainRoleType)Id ||
+		    instruction.AffectedPlayerIds != null ||
+		    instruction.CountConstraint !=
+		    NumberRangeConstraint.Exact(InitialRoleHolderCardinality) ||
+		    !instruction.SelectablePlayerIds.SetEquals(
+			    GetIdentificationCandidates(session)))
+		{
+			throw new InvalidOperationException(
+				$"The {PublicName} identification instruction has invalid workflow context.");
+		}
+	}
+
+	private void ValidateRecognitionInstruction(
+		GameSession session,
+		ConfirmationInstruction instruction)
+	{
+		if (session.TurnNumber != 1 ||
+		    !IsCompleteHolderSetKnown(session) ||
+		    !HasExactOrderedAffectedPlayers(session, instruction))
+		{
+			throw new InvalidOperationException(
+				$"The {PublicName} recognition instruction has invalid workflow context.");
+		}
+	}
+
+	private void ValidateCommunicationInstruction(
+		GameSession session,
+		ConfirmationInstruction instruction)
+	{
+		var participants = GetLivingCurrentRoleHolders(session);
+		if (!HasCommunicationInterval(session.TurnNumber) ||
+		    participants.Count < MinimumCommunicationParticipants ||
+		    !HasExactOrderedAffectedPlayers(session, instruction))
+		{
+			throw new InvalidOperationException(
+				$"The {PublicName} communication instruction has invalid workflow context.");
+		}
+	}
+
+	private void ValidateSleepInstruction(
+		GameSession session,
+		ConfirmationInstruction instruction)
+	{
+		if (!IsSleepCadence(session) ||
+		    GetLivingCurrentRoleHolders(session).Count == 0 ||
+		    !HasExactOrderedAffectedPlayers(session, instruction))
+		{
+			throw new InvalidOperationException(
+				$"The {PublicName} sleep instruction has invalid workflow context.");
+		}
+	}
+
+	private void ValidateAcceptedObservationHandoff<TInstruction>(
+		GameSession session,
+		TInstruction instruction,
+		AcceptedObservationRecoveryCursor cursor)
+		where TInstruction : ModeratorInstruction
+	{
+		var role = (MainRoleType)Id;
+		var continuesOwnIdentification =
+			cursor.AcceptedObservationSemantic ==
+			ModeratorInstructionSemantic.IdentifyRoleHolders &&
+			cursor.ObservedRole == role;
+		if (cursor.Version != AcceptedObservationRecoveryCursor.CurrentVersion ||
+		    cursor.ContinuationRole != role ||
+		    cursor.RetainedLittleGirlGuidanceDecision != null ||
+		    (instruction.Semantic ==
+		     ModeratorInstructionSemantic.PutRoleToSleep &&
+		     !continuesOwnIdentification) ||
+		    (continuesOwnIdentification &&
+		     (!HasCurrentTurnIdentificationBoundary(session) ||
+		      instruction.Semantic is not
+			      (ModeratorInstructionSemantic.RecognizeRoleHolders or
+			       ModeratorInstructionSemantic.PutRoleToSleep))))
+		{
+			throw new InvalidOperationException(
+				$"The {PublicName} workflow has invalid accepted-observation handoff context.");
+		}
+	}
+
+	private HashSet<Guid> GetIdentificationCandidates(GameSession session) =>
+		session.GetPlayers()
 			.WithHealth(PlayerHealth.Alive)
 			.Where(player =>
 				player.State.CurrentRole == (MainRoleType)Id ||
 				(player.State.CurrentRole == null &&
-				 (player.State.ModeratorKnownRole == null ||
-				  player.State.ModeratorKnownRole == (MainRoleType)Id)))
+				 (player.State.ModeratorKnownRole == (MainRoleType)Id ||
+				  player.State.ModeratorKnownRole == null &&
+				  GameSessionQueries.GetPossibleRoles(session, player.Id)
+					  .Contains((MainRoleType)Id))))
 			.ToIdSet();
 
-		return HookListenerActionResult.NeedInput(
-			new SelectPlayersInstruction(
-				ModeratorInstructionSemantic.IdentifyRoleHolders,
-				selectablePlayerIds,
-				NumberRangeConstraint.Exact(InitialRoleHolderCardinality),
-				publicAnnouncement: GameStrings.RoleHoldersWakeUp.Format(PublicName),
-				privateInstruction:
-					GameStrings.RoleMultipleIdentificationPrompt.Format(PublicName),
-				roleIdentification: (MainRoleType)Id),
-			CardinalityRoleHolderNightState.Identification);
-	}
-
-	private HookListenerActionResult PrepareRecognitionInstruction(
-		IReadOnlyList<IPlayer> participants) =>
-		HookListenerActionResult.NeedInput(
-			new ConfirmationInstruction(
-				ModeratorInstructionSemantic.RecognizeRoleHolders,
-				GameStrings.RoleHoldersRecognitionPrompt.Format(PublicName),
-				affectedPlayerIds: GetOrderedIds(participants)),
-			CardinalityRoleHolderNightState.RecognitionConfirmation);
-
-	private HookListenerActionResult PrepareSleepInstruction(GameSession session) =>
-		HookListenerActionResult.NeedInput(
-			new ConfirmationInstruction(
-				ModeratorInstructionSemantic.PutRoleToSleep,
-				GameStrings.RoleHoldersGoToSleep.Format(PublicName),
-				affectedPlayerIds: GetOrderedIds(
-					GetLivingCurrentRoleHolders(session))),
-			CardinalityRoleHolderNightState.SleepConfirmation);
-
-	private bool IsCompleteHolderSetKnown(GameSession session)
-	{
-		var knownLivingHolders = session.GetPlayers()
-			.WithHealth(PlayerHealth.Alive)
-			.Count(player =>
-				player.State.CurrentRole == (MainRoleType)Id &&
-				player.State.ModeratorKnownRole == (MainRoleType)Id);
-
-		return GetExpectedLivingRoleHolderCount(session) == InitialRoleHolderCardinality &&
-		       knownLivingHolders == InitialRoleHolderCardinality;
-	}
+	private bool IsCompleteHolderSetKnown(GameSession session) =>
+		GameSessionQueries.IsCompleteLivingRoleHolderSetKnown(
+			session,
+			(MainRoleType)Id);
 
 	private List<IPlayer> GetLivingCurrentRoleHolders(GameSession session) =>
 		session.GetPlayers()
@@ -251,12 +393,61 @@ internal abstract class CardinalityRoleHolderNightHookListener
 			.OrderBy(player => player.Id)
 			.ToList();
 
-	private bool HasExpectedAffectedPlayers(
+	private bool HasExactOrderedAffectedPlayers(
 		GameSession session,
-		ModeratorInstruction pendingInstruction) =>
-		pendingInstruction.AffectedPlayerIds is { } affectedPlayerIds &&
-		affectedPlayerIds.ToHashSet().SetEquals(
-			GetLivingCurrentRoleHolders(session).Select(player => player.Id));
+		ModeratorInstruction instruction) =>
+		instruction.AffectedPlayerIds is { } affectedPlayerIds &&
+		affectedPlayerIds.SequenceEqual(
+			GetOrderedIds(GetLivingCurrentRoleHolders(session)));
+
+	private bool ClaimsRecognition(
+		GameSession session,
+		ModeratorInstruction instruction) =>
+		instruction.Semantic ==
+			ModeratorInstructionSemantic.RecognizeRoleHolders &&
+		session.TurnNumber == 1 &&
+		HasExactOrderedAffectedPlayers(session, instruction);
+
+	private bool ClaimsCommunication(
+		GameSession session,
+		ModeratorInstruction instruction) =>
+		instruction.Semantic ==
+			ModeratorInstructionSemantic.CommunicateAsRoleHolders &&
+		session.TurnNumber > 1 &&
+		HasCommunicationInterval(session.TurnNumber) &&
+		GetLivingCurrentRoleHolders(session).Count >=
+		MinimumCommunicationParticipants &&
+		HasExactOrderedAffectedPlayers(session, instruction);
+
+	private bool ClaimsSleep(
+		GameSession session,
+		ModeratorInstruction instruction) =>
+		instruction.Semantic == ModeratorInstructionSemantic.PutRoleToSleep &&
+		IsSleepCadence(session) &&
+		HasExactOrderedAffectedPlayers(session, instruction);
+
+	private bool IsSleepCadence(GameSession session) =>
+		session.TurnNumber == 1 ||
+		session.TurnNumber > 1 &&
+		HasCommunicationInterval(session.TurnNumber) &&
+		GetLivingCurrentRoleHolders(session).Count >=
+		MinimumCommunicationParticipants;
+
+	private bool HasCurrentTurnIdentificationBoundary(GameSession session)
+	{
+		var role = (MainRoleType)Id;
+		var livingHolderIds = GetLivingCurrentRoleHolders(session)
+			.Select(player => player.Id)
+			.ToHashSet();
+		return livingHolderIds.Count == InitialRoleHolderCardinality &&
+		       session.GameHistoryLog
+			       .OfType<RoleIdentificationLogEntry>()
+			       .Any(entry =>
+				       entry.TurnNumber == session.TurnNumber &&
+				       entry.CurrentPhase == GamePhase.Night &&
+				       entry.Role == role &&
+				       entry.PlayerIds.SetEquals(livingHolderIds));
+	}
 
 	private bool AreAllPowersAvailable(
 		GameSession session,

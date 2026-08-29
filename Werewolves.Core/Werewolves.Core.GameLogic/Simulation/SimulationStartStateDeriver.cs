@@ -6,9 +6,6 @@ namespace Werewolves.Core.GameLogic.Simulation;
 
 public static class SimulationStartStateDeriver
 {
-	internal static SimulationStartState Derive(RunSeedMaterial material) =>
-		Derive(material, new DeterministicRandomSource(material));
-
 	public static SimulationStartState Derive(
 		RunSeedMaterial material,
 		SimulatorCapability capability)
@@ -25,31 +22,12 @@ public static class SimulationStartStateDeriver
 
 	internal static SimulationStartState Derive(
 		RunSeedMaterial material,
-		DeterministicRandomSource random)
-	{
-		ArgumentNullException.ThrowIfNull(material);
-		var capability = ResolveCurrentCapability(material);
-		EnsureMaterialMatchesCapability(material, capability);
-		return Derive(material, capability, random);
-	}
-
-	internal static SimulationStartState Derive(
-		RunSeedMaterial material,
 		SimulatorCapability capability,
 		DeterministicRandomSource random)
 	{
 		ArgumentNullException.ThrowIfNull(material);
 		ArgumentNullException.ThrowIfNull(capability);
 		ArgumentNullException.ThrowIfNull(random);
-		if (!material.DecisionStrategyIdentity.Equals(
-				BaselineRandomDecisionStrategy.Identity) &&
-		    !material.DecisionStrategyIdentity.Equals(
-			    BaselineRandomDecisionStrategy.SafetyScreeningIdentity))
-		{
-			throw new ArgumentException(
-				"Run Seed Material does not identify the active baseline decision strategy.",
-				nameof(material));
-		}
 		if (!random.Material.Equals(material))
 		{
 			throw new ArgumentException(
@@ -64,7 +42,7 @@ public static class SimulationStartStateDeriver
 		if (roles.Count != scenario.PlayerCount)
 		{
 			throw new InvalidOperationException(
-				"The active simulator profile requires exactly one Role Composition card per Player.");
+				"The selected Simulator Capability requires exactly one Deal Pool card per Player.");
 		}
 
 		random.Shuffle(roles);
@@ -103,25 +81,6 @@ public static class SimulationStartStateDeriver
 					: FactionAgentKnowledge.KnownNonAgent));
 	}
 
-	private static SimulatorCapability ResolveCurrentCapability(
-		RunSeedMaterial material)
-	{
-		var profile = material.CompatibilityIdentity.Profile;
-		var registry = SimulatorCapabilityRegistry.Production;
-		if (profile.Equals(registry.SafetyScreening.Identity))
-		{
-			return registry.SafetyScreening;
-		}
-		if (profile.Equals(registry.FullProbability.Identity))
-		{
-			return registry.FullProbability;
-		}
-
-		throw new ArgumentException(
-			"Run Seed Material does not identify a current Simulator Capability.",
-			nameof(material));
-	}
-
 	private static void EnsureMaterialMatchesCapability(
 		RunSeedMaterial material,
 		SimulatorCapability capability)
@@ -137,6 +96,19 @@ public static class SimulationStartStateDeriver
 		{
 			throw new ArgumentException(
 				"Run Seed Material does not identify the selected Simulator Capability response policy.",
+				nameof(material));
+		}
+
+		var scenario = SimulationScenario.FromCanonical(
+			material.CompatibilityIdentity.Scenario);
+		if (SimulationScenarioClassifier.ClassifyAdmission(
+				scenario,
+				capability,
+				material.CompatibilityIdentity)
+			!= SimulationScenarioAdmission.Admitted)
+		{
+			throw new ArgumentException(
+				"Run Seed Material does not identify a scenario supported by the selected Simulator Capability.",
 				nameof(material));
 		}
 	}

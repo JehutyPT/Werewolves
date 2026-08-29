@@ -118,6 +118,9 @@
   <data name="LobbyRoster_ContinueToRolesButton" xml:space="preserve">
     <value>Avançar para papéis</value>
   </data>
+  <data name="LobbyRoster_ResetButton" xml:space="preserve">
+    <value>Limpar jogadores</value>
+  </data>
   <data name="LobbyRoster_PlayerCountOne" xml:space="preserve">
     <value>1 jogador</value>
   </data>
@@ -129,6 +132,9 @@
   </data>
   <data name="Validation_DuplicatePlayerName" xml:space="preserve">
     <value>Já existe um jogador com este nome.</value>
+  </data>
+  <data name="Validation_PlayerLimitReached" xml:space="preserve">
+    <value>Foi atingido o máximo de 30 jogadores.</value>
   </data>
   <data name="Common_NotAvailable" xml:space="preserve">
     <value>-</value>
@@ -246,6 +252,9 @@
   </data>
   <data name="LobbyEvaluation_CouldNotEvaluate" xml:space="preserve">
     <value>Não foi possível concluir a avaliação.</value>
+  </data>
+  <data name="LobbyEvaluation_CouldNotVerifyStartAvailable" xml:space="preserve">
+    <value>Não foi possível verificar a configuração. Ainda podes iniciar o jogo.</value>
   </data>
   <data name="LobbyEvaluation_Retry" xml:space="preserve">
     <value>Tentar novamente</value>
@@ -580,6 +589,9 @@
   <data name="Common_HoldToConfirm" xml:space="preserve">
     <value>Manter premido para confirmar</value>
   </data>
+  <data name="RoleSelection_ResetButton" xml:space="preserve">
+    <value>Limpar papéis</value>
+  </data>
   <data name="Victory_Title" xml:space="preserve">
     <value>Fim de Jogo</value>
   </data>
@@ -699,5 +711,104 @@
   </data>
   <data name="RoleSelection_ReviewPublicGroupPartitionButton" xml:space="preserve">
     <value>Rever ou alterar grupos públicos</value>
+  </data>
+  <data name="Landing_NewGameButton" xml:space="preserve">
+    <value>Nova sessão de jogo</value>
+  </data>
+  <data name="Landing_ContinueButton" xml:space="preserve">
+    <value>Continuar sessão de jogo</value>
+  </data>
+  <data name="Landing_NewGameDialogTitle" xml:space="preserve">
+    <value>Iniciar uma nova sessão de jogo?</value>
+  </data>
+  <data name="Landing_NewGameDialogDescription" xml:space="preserve">
+    <value>A sessão de jogo atual será abandonada.</value>
+  </data>
+  <data name="Landing_NewGameCancelButton" xml:space="preserve">
+    <value>Cancelar</value>
+  </data>
+  <data name="Landing_NewGameConfirmButton" xml:space="preserve">
+    <value>Iniciar nova sessão de jogo</value>
+  </data>
+  <data name="LobbyRoster_BackButton" xml:space="preserve">
+    <value>Voltar ao início</value>
+  </data>
+  <data name="Landing_StepLabel" xml:space="preserve">
+    <value>Início</value>
+  </data>
+  <data name="Landing_Title" xml:space="preserve">
+    <value>Moderador de Lobisomem</value>
+  </data>
+  <data name="Landing_Description" xml:space="preserve">
+    <value>Continue uma sessão de jogo ou prepare uma nova para a mesa.</value>
+  </data>
+  <data name="Landing_ContinueDescription" xml:space="preserve">
+    <value>Regresse à sessão de jogo recuperada e à instrução pendente do Moderador.</value>
+  </data>
+  <data name="Landing_NewGameDescription" xml:space="preserve">
+    <value>Prepare os jogadores e a composição de papéis para uma nova sessão de jogo.</value>
+  </data>
+  <data name="RecentSetup_RelativeNow" xml:space="preserve">
+    <value>agora</value>
+  </data>
+  <data name="RecentSetup_RelativeMinute" xml:space="preserve">
+    <value>há 1 minuto</value>
+  </data>
+  <data name="RecentSetup_RelativeMinutesFormat" xml:space="preserve">
+    <value>há {0} minutos</value>
+  </data>
+  <data name="RecentSetup_RelativeHour" xml:space="preserve">
+    <value>há 1 hora</value>
+  </data>
+  <data name="RecentSetup_RelativeHoursFormat" xml:space="preserve">
+    <value>há {0} horas</value>
+  </data>
+  <data name="RecentSetup_RelativeDay" xml:space="preserve">
+    <value>há 1 dia</value>
+  </data>
+  <data name="RecentSetup_RelativeDaysFormat" xml:space="preserve">
+    <value>há {0} dias</value>
+  </data>
+  <data name="RecentSetup_RelativeWeek" xml:space="preserve">
+    <value>há 1 semana</value>
+  </data>
+  <data name="RecentSetup_RelativeWeeksFormat" xml:space="preserve">
+    <value>há {0} semanas</value>
+  </data>
+  <data name="RecentSetup_RelativeMonth" xml:space="preserve">
+    <value>há 1 mês</value>
+  </data>
+  <data name="RecentSetup_RelativeMonthsFormat" xml:space="preserve">
+    <value>há {0} meses</value>
+  </data>
+  <data name="RecentSetup_RelativeYear" xml:space="preserve">
+    <value>há 1 ano</value>
+  </data>
+  <data name="RecentSetup_RelativeYearsFormat" xml:space="preserve">
+    <value>há {0} anos</value>
+  </data>
+  <data name="Landing_RecentSetupsTitle" xml:space="preserve">
+    <value>Configurações recentes</value>
+  </data>
+  <data name="Landing_RecentPlayersLabel" xml:space="preserve">
+    <value>jogadores</value>
+  </data>
+  <data name="Landing_RecentRoleCountFormat" xml:space="preserve">
+    <value>{0}: {1}</value>
+  </data>
+  <data name="Landing_RecentSetupSummaryFormat" xml:space="preserve">
+    <value>configuração para {0} jogadores: {1}; papéis: {2}; guardada {3}</value>
+  </data>
+  <data name="Landing_RecentSetupSelectAriaFormat" xml:space="preserve">
+    <value>Carregar {0}</value>
+  </data>
+  <data name="Landing_RecentSetupDeleteAriaFormat" xml:space="preserve">
+    <value>Eliminar {0}</value>
+  </data>
+  <data name="Landing_RecentRoleGroupAriaFormat" xml:space="preserve">
+    <value>{0}: {1} cartas de papel</value>
+  </data>
+  <data name="Landing_RecentRoleBarAriaFormat" xml:space="preserve">
+    <value>{0} cartas de papel nos grupos configurados</value>
   </data>
 </root>

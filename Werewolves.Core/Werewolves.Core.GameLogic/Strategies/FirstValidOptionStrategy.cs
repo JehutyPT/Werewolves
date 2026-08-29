@@ -41,12 +41,72 @@ public sealed class FirstValidOptionStrategy : IModeratorDecisionStrategy
 			.Select(player => player.Id)
 			.Where(instruction.PlayersForAssignment.Contains)
 			.ToList();
+		var remainingRoleCopies = new Dictionary<MainRoleType, int>();
+		foreach (var playerId in playersForAssignment)
+		{
+			foreach (var roleCopies in instruction
+				.SelectableRolesForPlayers[playerId]
+				.GroupBy(role => role))
+			{
+				remainingRoleCopies[roleCopies.Key] = Math.Max(
+					remainingRoleCopies.GetValueOrDefault(roleCopies.Key),
+					roleCopies.Count());
+			}
+		}
 
-		var assignments = playersForAssignment
-			.Zip(instruction.RolesForAssignment, (playerId, role) => new KeyValuePair<Guid, MainRoleType>(playerId, role))
-			.ToDictionary(pair => pair.Key, pair => pair.Value);
+		var assignments = new Dictionary<Guid, MainRoleType>();
+		if (!TryAssignRoles(
+				playersForAssignment,
+				instruction.SelectableRolesForPlayers,
+				remainingRoleCopies,
+				assignments,
+				playerIndex: 0))
+		{
+			throw new InvalidOperationException(
+				"No complete first-valid Role assignment exists for the instruction.");
+		}
 
 		return instruction.CreateResponse(assignments);
+	}
+
+	private static bool TryAssignRoles(
+		IReadOnlyList<Guid> playerIds,
+		IReadOnlyDictionary<Guid, IReadOnlyList<MainRoleType>> roleOptions,
+		Dictionary<MainRoleType, int> remainingRoleCopies,
+		Dictionary<Guid, MainRoleType> assignments,
+		int playerIndex)
+	{
+		if (playerIndex == playerIds.Count)
+		{
+			return true;
+		}
+
+		var playerId = playerIds[playerIndex];
+		foreach (var role in roleOptions[playerId].Distinct())
+		{
+			var copies = remainingRoleCopies[role];
+			if (copies == 0)
+			{
+				continue;
+			}
+
+			assignments[playerId] = role;
+			remainingRoleCopies[role] = copies - 1;
+			if (TryAssignRoles(
+					playerIds,
+					roleOptions,
+					remainingRoleCopies,
+					assignments,
+					playerIndex + 1))
+			{
+				return true;
+			}
+
+			remainingRoleCopies[role] = copies;
+			assignments.Remove(playerId);
+		}
+
+		return false;
 	}
 
 	private static ModeratorResponse CreateOptionSelectionResponse(SelectOptionsInstruction instruction)

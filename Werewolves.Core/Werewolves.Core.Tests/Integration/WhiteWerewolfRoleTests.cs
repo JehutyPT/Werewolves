@@ -234,7 +234,7 @@ public sealed class WhiteWerewolfRoleTests : DiagnosticTestBase
 		var werewolf = players[0];
 		var originalWhiteWerewolf = players[1];
 		var laterWhiteWerewolf = players[2];
-		builder.ArrangeKnownRole(
+		builder.ArrangeKnownPhysicalRole(
 			originalWhiteWerewolf.Id,
 			MainRoleType.WhiteWerewolf);
 		builder.ArrangeKnownWerewolfFactionAgentGroup(
@@ -270,6 +270,9 @@ public sealed class WhiteWerewolfRoleTests : DiagnosticTestBase
 		{
 			[players[7].Id] = MainRoleType.SimpleVillager
 		}).IsSuccess.Should().BeTrue();
+		builder.ArrangeKnownPhysicalRole(
+			laterWhiteWerewolf.Id,
+			MainRoleType.SimpleVillager);
 		builder.ArrangeKnownRole(
 			laterWhiteWerewolf.Id,
 			MainRoleType.WhiteWerewolf);

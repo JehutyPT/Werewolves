@@ -110,6 +110,47 @@ public class RoleSelectionEvaluationTests
 	}
 
 	[Fact]
+	public async Task PendingStartAttempt_WhenEvaluationCannotComplete_AnnouncesUnverifiedButStartAvailable()
+	{
+		var evaluator = new CompletingEvaluator();
+		using var context = CreateContext(
+			evaluator: evaluator,
+			depth: LobbyEvaluationDepth.DegenerateScreeningOnly,
+			capability: SimulatorCapability.SafetyScreening);
+		SeedValidLobby(context.Services.GetRequiredService<LobbySetupState>());
+		var starts = 0;
+		var cut = context.RenderModeratorComponent<RoleSelectionPage>(parameters => parameters
+			.Add(component => component.OnStartGame, EventCallback.Factory.Create(this, () => starts++)));
+
+		cut.Find(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Click();
+		await evaluator.Started.WaitAsync(TimeSpan.FromSeconds(5));
+		cut.Find(TestId(ModeratorUiTestIds.LobbyEvaluationStatus))
+			.TextContent.Should().Contain(ClientStrings.LobbyEvaluation_PendingBlock);
+
+		evaluator.Complete(new CouldNotEvaluateLobbyEvaluation());
+
+		cut.WaitForAssertion(() =>
+		{
+			context.Services.GetRequiredService<LobbyEvaluationCoordinator>()
+				.State.Kind.Should().Be(LobbyEvaluationStateKind.CouldNotEvaluate);
+			var status = cut.Find(TestId(ModeratorUiTestIds.LobbyEvaluationStatus));
+			status.TextContent.Should().Contain(ClientStrings.LobbyEvaluation_CouldNotVerifyStartAvailable);
+			status.TextContent.Should().NotContain(ClientStrings.LobbyEvaluation_CheckComplete);
+			status.GetAttribute("role").Should().Be("status");
+			status.GetAttribute("aria-live").Should().Be("polite");
+		});
+		starts.Should().Be(0);
+
+		cut.Find(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Click();
+
+		cut.WaitForAssertion(() =>
+		{
+			starts.Should().Be(1);
+			cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationStatus)).Should().BeEmpty();
+		});
+	}
+
+	[Fact]
 	public async Task StartHandler_RechecksOrdinaryValidationBeforeConsultingTheLiveGate()
 	{
 		using var context = CreateContext(evaluator: new ControlledEvaluator());
@@ -138,9 +179,10 @@ public class RoleSelectionEvaluationTests
 			CreateIdentity(
 				villagers: 2,
 				werewolves: 3,
-				profile: SimulatorCapability.SafetyScreening),
+				capability: SimulatorCapability.SafetyScreening),
 			new SingleFactionGameResult(Faction.Werewolf),
-			AlreadyDecidedReason.WerewolfControlShortcut);
+			AlreadyDecidedReason.WerewolfControlShortcut,
+			SimulatorCapability.SafetyScreening);
 		using var context = CreateContext(
 			new SeededLocalStore(record),
 			depth: LobbyEvaluationDepth.DegenerateScreeningOnly,
@@ -169,7 +211,7 @@ public class RoleSelectionEvaluationTests
 		var werewolf = new SingleFactionGameResult(Faction.Werewolf);
 		var noWinner = new NoWinnerGameResult();
 		var record = new DegenerateTerminalCacheRecord(
-			CreateIdentity(profile: SimulatorCapability.SafetyScreening),
+			CreateIdentity(capability: SimulatorCapability.SafetyScreening),
 			[
 				new(villager, 750, 1_000),
 				new(werewolf, 250, 1_000),
@@ -178,7 +220,8 @@ public class RoleSelectionEvaluationTests
 			[
 				new(villager, 1, VictoryCheckWindow.Dawn, 750, 1_000),
 				new(werewolf, 1, VictoryCheckWindow.PreNight, 250, 1_000)
-			]);
+			],
+			SimulatorCapability.SafetyScreening);
 		using var context = CreateContext(
 			new SeededLocalStore(record),
 			depth: LobbyEvaluationDepth.DegenerateScreeningOnly,
@@ -216,13 +259,15 @@ public class RoleSelectionEvaluationTests
 			[
 				new(villager, 1, VictoryCheckWindow.Dawn, 7_000, 10_000),
 				new(werewolf, 2, VictoryCheckWindow.PreNight, 3_000, 10_000)
-			]);
+			],
+			SimulatorCapability.FullProbability);
 		using var context = CreateContext(
 			new SeededLocalStore(record),
 			depth: LobbyEvaluationDepth.FullProbability,
 			capability: SimulatorCapability.FullProbability);
 		SeedValidLobby(context.Services.GetRequiredService<LobbySetupState>());
 		var cut = context.RenderModeratorComponent<Routes>();
+		cut.Find(TestId(ModeratorUiTestIds.LandingNewGameButton)).Click();
 		cut.FindAll("button")
 			.Single(button => button.TextContent.Contains(ClientStrings.LobbyRoster_ContinueToRolesButton))
 			.Click();
@@ -395,7 +440,8 @@ public class RoleSelectionEvaluationTests
 		var oldRecord = new AlreadyDecidedTerminalCacheRecord(
 			CreateIdentity(villagers: 2, werewolves: 3),
 			new SingleFactionGameResult(Faction.Werewolf),
-			AlreadyDecidedReason.WerewolfControlShortcut);
+			AlreadyDecidedReason.WerewolfControlShortcut,
+			SimulatorCapability.FullProbability);
 		using var context = CreateContext(
 			new SeededLocalStore(oldRecord),
 			timeProvider: new ManualTimeProvider());
@@ -532,7 +578,7 @@ public class RoleSelectionEvaluationTests
 	private static SimulationCompatibilityIdentity CreateIdentity(
 		int villagers = 3,
 		int werewolves = 2,
-		SimulatorProfile? profile = null)
+		SimulatorCapability? capability = null)
 	{
 		var scenario = new SimulationScenario(
 			5,
@@ -540,7 +586,7 @@ public class RoleSelectionEvaluationTests
 				.Concat(Enumerable.Repeat(MainRoleType.SimpleWerewolf, werewolves)));
 		return new(
 			scenario.ToCanonical(),
-			(profile ?? SimulatorCapability.FullProbability).Identity);
+			(capability ?? SimulatorCapability.FullProbability).Identity);
 	}
 
 	private static string TestId(string value) => $"[data-testid='{value}']";

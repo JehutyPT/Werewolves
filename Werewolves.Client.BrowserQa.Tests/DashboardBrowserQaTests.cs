@@ -25,6 +25,7 @@ public sealed class DashboardBrowserQaTests : PlaywrightTest, IClassFixture<Brow
 	{
 		await using var browser = await Playwright.Chromium.LaunchAsync();
 		var page = await BrowserQaPage.OpenScenarioAsync(browser, _host.DashboardScenarioUri);
+		await page.GetByTestId(ModeratorUiTestIds.LandingContinueButton).ClickAsync();
 
 		var phoneFrame = page.Locator(BrowserQaCss.PhoneFrameSelector);
 		var shell = page.GetByTestId(ModeratorUiTestIds.DashboardShell);
@@ -78,6 +79,7 @@ public sealed class DashboardBrowserQaTests : PlaywrightTest, IClassFixture<Brow
 	{
 		await using var browser = await Playwright.Chromium.LaunchAsync();
 		var page = await BrowserQaPage.OpenScenarioAsync(browser, _host.DashboardScenarioUri);
+		await page.GetByTestId(ModeratorUiTestIds.LandingContinueButton).ClickAsync();
 
 		var shell = page.GetByTestId(ModeratorUiTestIds.DashboardShell);
 		var compactTabs = page.GetByTestId(ModeratorUiTestIds.DashboardCompactTabs);
@@ -132,6 +134,7 @@ public sealed class DashboardBrowserQaTests : PlaywrightTest, IClassFixture<Brow
 	{
 		await using var browser = await Playwright.Chromium.LaunchAsync();
 		var page = await BrowserQaPage.OpenScenarioAsync(browser, _host.DashboardScenarioUri);
+		await page.GetByTestId(ModeratorUiTestIds.LandingContinueButton).ClickAsync();
 
 		var initialActionZone = page.GetByTestId(ModeratorUiTestIds.DashboardActionZone);
 		var initialContinue = BrowserQaHoldProgress.HoldZoneIn(initialActionZone)
@@ -191,6 +194,7 @@ public sealed class DashboardBrowserQaTests : PlaywrightTest, IClassFixture<Brow
 		{
 			WaitUntil = WaitUntilState.NetworkIdle
 		});
+		await page.GetByTestId(ModeratorUiTestIds.LandingContinueButton).ClickAsync();
 
 		var instructionBlock = page.GetByTestId(ModeratorUiTestIds.InstructionBlock).First;
 

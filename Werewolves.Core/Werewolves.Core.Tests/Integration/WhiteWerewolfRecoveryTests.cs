@@ -53,6 +53,42 @@ public sealed class WhiteWerewolfRecoveryTests
 	}
 
 	[Fact]
+	public void CommittedAttack_SerializeRehydrateResumesTheSleepBoundary()
+	{
+		var (builder, _, targetSelection) = CreateNightTwoTargetSelection();
+		var werewolfId = targetSelection.SelectablePlayerIds.Single();
+		var sleep = InstructionAssert
+			.ExpectSuccessWithType<ConfirmationInstruction>(
+				builder.Process(
+					targetSelection.CreateResponse([werewolfId])));
+		sleep.Semantic.Should().Be(
+			ModeratorInstructionSemantic.PutRoleToSleep);
+		var freshService = new GameService();
+
+		var recoveredGameId = freshService.RehydrateSession(
+			builder.GetGameState()!.Serialize());
+		var recoveredSession =
+			freshService.GetGameStateView(recoveredGameId)!;
+
+		freshService.GetCurrentInstruction(recoveredGameId)
+			.Should().BeEquivalentTo(sleep);
+		recoveredSession.GameHistoryLog
+			.OfType<RecurringRolePowerCommittedLogEntry>()
+			.Should().ContainSingle(entry =>
+				entry.ActionType ==
+				NightActionType.WhiteWerewolfVictimSelection)
+			.Which.TargetIds.Should().Equal(werewolfId);
+
+		freshService.ProcessInstruction(
+				recoveredGameId,
+				sleep.CreateResponse())
+			.IsSuccess.Should().BeTrue();
+
+		freshService.GetCurrentInstruction(recoveredGameId)!.Semantic
+			.Should().NotBe(ModeratorInstructionSemantic.PutRoleToSleep);
+	}
+
+	[Fact]
 	public void AcceptedIdentification_PreKnownWhiteBeneficiaryRehydratesDownstreamRole()
 	{
 		var recovery = CreateAcceptedWhiteIdentificationRecovery(
@@ -86,9 +122,11 @@ public sealed class WhiteWerewolfRecoveryTests
 		builder.ArrangeKnownRole(
 			whiteWerewolf.Id,
 			MainRoleType.WhiteWerewolf);
-		builder.ArrangeEliminatedPlayer(whiteWerewolf.Id);
+		builder.ArrangeCurrentRole(
+			whiteWerewolf.Id,
+			MainRoleType.SimpleVillager);
 		builder.ArrangeExplicitFactionTransition(
-			"test-dead-white-werewolf-agent",
+			"test-transitioned-white-werewolf-agent",
 			FactionFact.Agent(
 				whiteWerewolf.Id,
 				Faction.Werewolf,
@@ -97,6 +135,12 @@ public sealed class WhiteWerewolfRecoveryTests
 					session.TurnNumber,
 					session.GetCurrentPhase(),
 					session.GameHistoryLog.Count())));
+		whiteWerewolf.State.ModeratorKnownRole.Should().Be(
+			MainRoleType.WhiteWerewolf);
+		whiteWerewolf.State.CurrentRole.Should().Be(
+			MainRoleType.SimpleVillager);
+		session.GetPlayers().Should().NotContain(player =>
+			player.State.CurrentRole == MainRoleType.WhiteWerewolf);
 		session.RoleInPlayCount(MainRoleType.WhiteWerewolf).Should().Be(1);
 		builder.ConfirmGameStart();
 		builder.ConfirmNightStart();
@@ -104,7 +148,8 @@ public sealed class WhiteWerewolfRecoveryTests
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
 
 		var collectiveVictimSelection = builder.Process(
-				observation.CreateResponse([players[0].Id]))
+				observation.CreateResponse(
+					[players[0].Id, whiteWerewolf.Id]))
 			.ModeratorInstruction.Should()
 			.BeOfType<SelectPlayersInstruction>().Subject;
 		var closure = session.GameHistoryLog

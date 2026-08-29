@@ -387,6 +387,31 @@ public sealed class StutteringJudgeRoleTests : DiagnosticTestBase
 	}
 
 	[Fact]
+	public void FirstDay_VoteConductRecoveryRejectsReportedVoteOutcome()
+	{
+		var (builder, _, _, _) = CreateGameAtFirstDay();
+		var debate = InstructionAssert.ExpectType<ConfirmationInstruction>(
+			builder.GetCurrentInstruction());
+		var conductVote =
+			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+				builder.Process(debate.CreateResponse()));
+		var session = (GameSession)builder.GetGameState()!;
+		session.PerformDayVote(null);
+		var serialized = RecoveryPayloadTestDriver.Capture(session)
+			.WithPendingInstruction(conductVote)
+			.Serialize();
+		var service = new GameService();
+
+		var restore = () => service.RehydrateSession(serialized);
+
+		restore.Should().Throw<InvalidOperationException>()
+			.WithMessage(
+				"*Stuttering Judge vote conduct instruction*structurally invalid*");
+		service.GetGameStateView(session.Id).Should().BeNull();
+		MarkTestCompleted();
+	}
+
+	[Fact]
 	public void FirstDay_UnansweredSignalRecovery_RestoresExactObservation()
 	{
 		var (builder, judge, _, _) = CreateGameAtFirstDay();

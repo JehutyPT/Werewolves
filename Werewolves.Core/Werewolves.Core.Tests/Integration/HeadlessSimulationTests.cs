@@ -27,7 +27,9 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 	public void BaselineRandomDecisionStrategy_WithSameShapeUnadmittedSemantic_RejectsInstruction()
 	{
 		var material = CreateRunSeedMaterial(runNumber: 7);
-		var startState = SimulationStartStateDeriver.Derive(material);
+		var startState = SimulationStartStateDeriver.Derive(
+			material,
+			SimulatorCapability.FullProbability);
 		var config = startState.CreateGameSessionConfig();
 		var builder = CreateBuilder()
 			.WithPlayers(config.Players.ToArray())
@@ -333,7 +335,9 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 				SimulatorCapability.FullProbability.Identity),
 			BaselineRandomDecisionStrategy.Identity,
 			runNumber: 3);
-		var startState = SimulationStartStateDeriver.Derive(material);
+		var startState = SimulationStartStateDeriver.Derive(
+			material,
+			SimulatorCapability.FullProbability);
 		var config = startState.CreateGameSessionConfig();
 		var builder = CreateBuilder()
 			.WithPlayers(config.Players.ToArray())
@@ -583,7 +587,9 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 	public void BaselineRandomDecisionStrategy_WithRoleIdentification_UsesCommittedCurrentRoleWithinSelectionContract()
 	{
 		var material = CreateRunSeedMaterial(runNumber: 13);
-		var startState = SimulationStartStateDeriver.Derive(material);
+		var startState = SimulationStartStateDeriver.Derive(
+			material,
+			SimulatorCapability.FullProbability);
 		var config = startState.CreateGameSessionConfig();
 		var builder = CreateBuilder()
 			.WithPlayers(config.Players.ToArray())
@@ -634,7 +640,9 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 	public void BaselineRandomDecisionStrategy_WithRoleReveal_UsesCurrentRoleThenSeededTruth()
 	{
 		var material = CreateRunSeedMaterial(runNumber: 13);
-		var startState = SimulationStartStateDeriver.Derive(material);
+		var startState = SimulationStartStateDeriver.Derive(
+			material,
+			SimulatorCapability.FullProbability);
 		var config = startState.CreateGameSessionConfig();
 		var builder = CreateBuilder()
 			.WithPlayers(config.Players.ToArray())
@@ -679,10 +687,50 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 	}
 
 	[Fact]
+	public void BaselineRandomDecisionStrategy_WithEntailedRoleOutsideSeededTruth_RejectsResponse()
+	{
+		var material = CreateRunSeedMaterial(runNumber: 13);
+		var startState = SimulationStartStateDeriver.Derive(
+			material,
+			SimulatorCapability.FullProbability);
+		var config = startState.CreateGameSessionConfig();
+		var builder = CreateBuilder()
+			.WithPlayers(config.Players.ToArray())
+			.WithRoles(config.Roles.ToArray());
+		builder.StartGame();
+		var session = builder.GetGameState()!;
+		var player = session.GetPlayers().First();
+		var seededTruth = startState.RoleAssignments[0].Role;
+		var differentRole = startState.RoleAssignments
+			.Select(assignment => assignment.Role)
+			.First(role => role != seededTruth);
+		var reveal = new AssignRolesInstruction(
+			ModeratorInstructionSemantic.AssignDawnVictimRoles,
+			ImmutableHashSet<Guid>.Empty,
+			new Dictionary<Guid, IReadOnlyList<MainRoleType>>
+			{
+				[player.Id] = [differentRole, differentRole]
+			},
+			privateInstruction: GameStrings.RevealRolePromptSpecify);
+		var strategy = new BaselineRandomDecisionStrategy(
+			material,
+			startState,
+			BaselineRandomDecisionStrategy.Policy);
+
+		Action createResponse = () => strategy.CreateResponse(reveal, session);
+
+		createResponse.Should().Throw<InvalidOperationException>()
+			.WithMessage("*offered possible Roles*");
+		MarkTestCompleted();
+	}
+
+	[Fact]
 	public void BaselineRandomDecisionStrategy_WithChoiceInstructions_ReturnsCompleteValidDeterministicResponses()
 	{
 		var material = CreateRunSeedMaterial(runNumber: 11);
-		var startState = SimulationStartStateDeriver.Derive(material);
+		var startState = SimulationStartStateDeriver.Derive(
+			material,
+			SimulatorCapability.FullProbability);
 		var config = startState.CreateGameSessionConfig();
 		var builder = CreateBuilder()
 			.WithPlayers(config.Players.ToArray())
@@ -1224,7 +1272,9 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 	public void BaselineRandomDecisionStrategy_WithKnownOptionalChoiceSeed_ReturnsEmptyValidResponse()
 	{
 		var material = CreateRunSeedMaterial(runNumber: 3);
-		var startState = SimulationStartStateDeriver.Derive(material);
+		var startState = SimulationStartStateDeriver.Derive(
+			material,
+			SimulatorCapability.FullProbability);
 		var config = startState.CreateGameSessionConfig();
 		var builder = CreateBuilder()
 			.WithPlayers(config.Players.ToArray())
@@ -1301,6 +1351,59 @@ public class HeadlessSimulationTests : DiagnosticTestBase
 			.WhoseValue.Should().Be(MainRoleType.SimpleVillager);
 		response.AssignedPlayerRoles.Should().ContainKey(players[4].Id)
 			.WhoseValue.Should().Be(MainRoleType.Seer);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void FirstValidOptionStrategy_BacktracksWhenAnEarlierPlayerConsumesAConstrainedRole()
+	{
+		var builder = CreateBuilder()
+			.WithPlayers("Alice", "Bruno", "Clara", "Dinis", "Eva")
+			.WithRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.WhiteWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		var session = builder.GetGameState()!;
+		var players = session.GetPlayers().ToList();
+		var instruction = new AssignRolesInstruction(
+			ModeratorInstructionSemantic.AssignEliminationCascadeRoles,
+			ImmutableHashSet.Create(
+				players[0].Id,
+				players[1].Id,
+				players[2].Id),
+			new Dictionary<Guid, IReadOnlyList<MainRoleType>>
+			{
+				[players[0].Id] =
+				[
+					MainRoleType.SimpleWerewolf,
+					MainRoleType.WhiteWerewolf,
+					MainRoleType.SimpleVillager
+				],
+				[players[1].Id] =
+				[
+					MainRoleType.SimpleWerewolf,
+					MainRoleType.WhiteWerewolf
+				],
+				[players[2].Id] =
+				[
+					MainRoleType.SimpleWerewolf,
+					MainRoleType.WhiteWerewolf
+				]
+			},
+			privateInstruction: GameStrings.RevealRolePromptSpecify);
+		var strategy = new FirstValidOptionStrategy();
+
+		var response = strategy.CreateResponse(instruction, session);
+
+		response.AssignedPlayerRoles.Should().Equal(new Dictionary<Guid, MainRoleType>
+		{
+			[players[0].Id] = MainRoleType.SimpleVillager,
+			[players[1].Id] = MainRoleType.SimpleWerewolf,
+			[players[2].Id] = MainRoleType.WhiteWerewolf
+		});
 		MarkTestCompleted();
 	}
 

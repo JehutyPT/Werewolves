@@ -2,6 +2,7 @@ using FluentAssertions;
 using Werewolves.Core.GameLogic.Queries;
 using Werewolves.Core.GameLogic.RolePowers;
 using Werewolves.Core.GameLogic.Services;
+using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
@@ -15,6 +16,16 @@ namespace Werewolves.Core.Tests.Integration;
 
 public sealed class FoxRoleTests : DiagnosticTestBase
 {
+	private static readonly PhysicalCharacterCard DefenderCard = new(
+		Guid.Parse("00000000-0000-0000-0000-000000000241"),
+		MainRoleType.Defender);
+	private static readonly PhysicalCharacterCard SeerCard = new(
+		Guid.Parse("00000000-0000-0000-0000-000000000242"),
+		MainRoleType.Seer);
+	private static readonly PhysicalCharacterCard FoxCard = new(
+		Guid.Parse("00000000-0000-0000-0000-000000000243"),
+		MainRoleType.Fox);
+
 	public enum InvalidFoxSelectionCase
 	{
 		Multiple,
@@ -180,6 +191,23 @@ public sealed class FoxRoleTests : DiagnosticTestBase
 		var eliminatedUnknown = players[5];
 		builder.ArrangeKnownRole(fox.Id, MainRoleType.Fox);
 		builder.ArrangeEliminatedPlayer(eliminatedUnknown.Id);
+		var session = builder.GetGameState()!;
+		var boundary = new FactionFactEffectiveBoundary(
+			session.TurnNumber,
+			session.GetCurrentPhase(),
+			session.GameHistoryLog.Count());
+		builder.ArrangeExplicitFactionTransition(
+			"fox-test-known-living-werewolf-agent-group",
+			players
+				.Where(player => player.Id != eliminatedUnknown.Id)
+				.Select(player => FactionFact.Agent(
+					player.Id,
+					Faction.Werewolf,
+					player.Id == werewolf.Id
+						? FactionAgentKnowledge.KnownAgent
+						: FactionAgentKnowledge.KnownNonAgent,
+					boundary))
+				.ToArray());
 		builder.ConfirmGameStart();
 		builder.ConfirmNightStart();
 
@@ -1024,6 +1052,341 @@ public sealed class FoxRoleTests : DiagnosticTestBase
             .ContainSingle();
         MarkTestCompleted();
     }
+
+    [Fact]
+    public void FeedbackRecovery_UsesSemanticContextInsteadOfLocalizedPresentationText()
+    {
+        var builder = CreateBuilder()
+            .WithPlayers(5)
+            .WithRoles(
+                MainRoleType.SimpleWerewolf,
+                MainRoleType.Fox,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager,
+                MainRoleType.SimpleVillager);
+        builder.StartGame();
+        var players = builder.GetGameState()!.GetPlayers().ToArray();
+        var werewolf = players[0];
+        var fox = players[1];
+        var victim = players[2];
+        builder.ArrangeKnownRole(fox.Id, MainRoleType.Fox);
+        builder.ArrangeKnownWerewolfFactionAgentGroup(werewolf.Id);
+        builder.ConfirmGameStart();
+        builder.ConfirmNightStart();
+        var wake =
+            InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+                builder.CompleteWerewolfNightAction(
+                    [werewolf.Id],
+                    victim.Id));
+        var selection =
+            InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+                builder.Process(wake.CreateResponse()));
+        var feedback =
+            InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+                builder.Process(selection.CreateResponse([werewolf.Id])));
+        var alternatePresentation = feedback.PrivateInstruction + " ";
+        var payload = RecoveryPayloadTestDriver
+            .Parse(builder.GetGameState()!.Serialize())
+            .RewritePendingConfirmationLocalizedText(
+                feedback.PublicAnnouncement,
+                alternatePresentation)
+            .Serialize();
+
+        var recoveredService = new GameService();
+        var recoveredId = recoveredService.RehydrateSession(payload);
+        var recoveredFeedback = InstructionAssert
+            .ExpectType<ConfirmationInstruction>(
+                recoveredService.GetCurrentInstruction(recoveredId));
+
+        recoveredFeedback.InstructionId.Should().Be(feedback.InstructionId);
+        recoveredFeedback.Semantic.Should().Be(
+            ModeratorInstructionSemantic.RevealFoxResult);
+        recoveredFeedback.PrivateInstruction.Should().Be(alternatePresentation);
+        recoveredFeedback.AffectedPlayerIds.Should().Equal(fox.Id);
+        var sleep = InstructionAssert
+            .ExpectSuccessWithType<ConfirmationInstruction>(
+                recoveredService.ProcessInstruction(
+                    recoveredId,
+                    recoveredFeedback.CreateResponse()));
+        sleep.Semantic.Should().Be(ModeratorInstructionSemantic.PutRoleToSleep);
+        recoveredService.GetGameStateView(recoveredId)!.GameHistoryLog
+            .OfType<TargetPrivateRolePowerCommittedLogEntry>()
+            .Should()
+            .ContainSingle();
+        MarkTestCompleted();
+    }
+
+	[Fact]
+	public void ActorBorrowedFeedback_RecoversThroughPublicGameServiceWithoutRecommit()
+	{
+		var builder = CreateBuilder()
+			.WithPlayers(5)
+			.WithRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Actor,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager)
+			.WithActorSetupCards(
+				new ActorSetupCards(
+					version: 1,
+					[DefenderCard, SeerCard, FoxCard]));
+		builder.StartGame();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		var werewolf = players[0];
+		var actor = players[1];
+		var victim = players[2];
+		builder.ArrangeKnownRole(werewolf.Id, MainRoleType.SimpleWerewolf);
+		builder.ArrangeKnownRole(actor.Id, MainRoleType.Actor);
+		builder.ConfirmGameStart();
+		builder.ConfirmNightStart();
+		builder.CompleteActorNightAction(actor.Id, FoxCard.Id);
+		var foxWake = InstructionAssert
+			.ExpectSuccessWithType<ConfirmationInstruction>(
+				builder.CompleteWerewolfNightAction([werewolf.Id], victim.Id));
+		foxWake.Semantic.Should().Be(ModeratorInstructionSemantic.WakeRole);
+		foxWake.AffectedPlayerIds.Should().Equal(actor.Id);
+		var centerSelection = InstructionAssert
+			.ExpectSuccessWithType<SelectPlayersInstruction>(
+				builder.Process(foxWake.CreateResponse()));
+		var feedback = InstructionAssert
+			.ExpectSuccessWithType<ConfirmationInstruction>(
+				builder.Process(
+					centerSelection.CreateResponse([werewolf.Id])));
+		var commitCountBeforeRecovery = builder.GetGameState()!.GameHistoryLog
+			.OfType<ActorBorrowedRolePowerCommittedLogEntry>()
+			.Count();
+
+		var alternatePresentation = feedback.PrivateInstruction + " ";
+		var payload = RecoveryPayloadTestDriver
+			.Parse(builder.GetGameState()!.Serialize())
+			.RewritePendingConfirmationLocalizedText(
+				feedback.PublicAnnouncement,
+				alternatePresentation)
+			.Serialize();
+		var recoveredService = new GameService();
+		var recoveredId = recoveredService.RehydrateSession(payload);
+		var recoveredFeedback = InstructionAssert
+			.ExpectType<ConfirmationInstruction>(
+				recoveredService.GetCurrentInstruction(recoveredId));
+
+		recoveredFeedback.InstructionId.Should().Be(feedback.InstructionId);
+		recoveredFeedback.Semantic.Should().Be(
+			ModeratorInstructionSemantic.RevealFoxResult);
+		recoveredFeedback.PrivateInstruction.Should().Be(alternatePresentation);
+		recoveredFeedback.AffectedPlayerIds.Should().Equal(actor.Id);
+		var sleep = InstructionAssert
+			.ExpectSuccessWithType<ConfirmationInstruction>(
+				recoveredService.ProcessInstruction(
+					recoveredId,
+					recoveredFeedback.CreateResponse()));
+		sleep.Semantic.Should().Be(ModeratorInstructionSemantic.PutRoleToSleep);
+		recoveredService.GetGameStateView(recoveredId)!.GameHistoryLog
+			.OfType<ActorBorrowedRolePowerCommittedLogEntry>()
+			.Should()
+			.HaveCount(commitCountBeforeRecovery);
+
+		var sleepTailService = new GameService();
+		var sleepTailId = sleepTailService.RehydrateSession(
+			recoveredService.GetGameStateView(recoveredId)!.Serialize());
+		var recoveredSleep = InstructionAssert
+			.ExpectType<ConfirmationInstruction>(
+				sleepTailService.GetCurrentInstruction(sleepTailId));
+		recoveredSleep.InstructionId.Should().Be(sleep.InstructionId);
+		recoveredSleep.Semantic.Should().Be(
+			ModeratorInstructionSemantic.PutRoleToSleep);
+		recoveredSleep.AffectedPlayerIds.Should().Equal(actor.Id);
+		sleepTailService.ProcessInstruction(
+			sleepTailId,
+			recoveredSleep.CreateResponse()).IsSuccess.Should().BeTrue();
+		sleepTailService.GetGameStateView(sleepTailId)!.GameHistoryLog
+			.OfType<ActorBorrowedRolePowerCommittedLogEntry>()
+			.Should()
+			.HaveCount(commitCountBeforeRecovery);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void ActorBorrowedFeedback_WithMismatchedDomainCursorIsRejected()
+	{
+		var builder = CreateBuilder()
+			.WithPlayers(5)
+			.WithRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Actor,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager)
+			.WithActorSetupCards(
+				new ActorSetupCards(
+					version: 1,
+					[DefenderCard, SeerCard, FoxCard]));
+		builder.StartGame();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		var werewolf = players[0];
+		var actor = players[1];
+		var victim = players[2];
+		builder.ArrangeKnownRole(werewolf.Id, MainRoleType.SimpleWerewolf);
+		builder.ArrangeKnownRole(actor.Id, MainRoleType.Actor);
+		builder.ConfirmGameStart();
+		builder.ConfirmNightStart();
+		builder.CompleteActorNightAction(actor.Id, FoxCard.Id);
+		var wake = InstructionAssert
+			.ExpectSuccessWithType<ConfirmationInstruction>(
+				builder.CompleteWerewolfNightAction(
+					[werewolf.Id],
+					victim.Id));
+		var center = InstructionAssert
+			.ExpectSuccessWithType<SelectPlayersInstruction>(
+				builder.Process(wake.CreateResponse()));
+		InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+			builder.Process(center.CreateResponse([werewolf.Id])));
+		var payload = RecoveryPayloadTestDriver
+			.Parse(builder.GetGameState()!.Serialize())
+			.MismatchOneUseResource(Guid.NewGuid())
+			.Serialize();
+
+		var act = () => new GameService().RehydrateSession(payload);
+
+		act.Should().Throw<InvalidOperationException>();
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void ActorBorrowedWakeCenterAndDeclineSleep_RecoverThroughFreshServices()
+	{
+		var builder = CreateBuilder()
+			.WithPlayers(5)
+			.WithRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Actor,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager)
+			.WithActorSetupCards(
+				new ActorSetupCards(
+					version: 1,
+					[DefenderCard, SeerCard, FoxCard]));
+		builder.StartGame();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		var werewolf = players[0];
+		var actor = players[1];
+		var victim = players[2];
+		builder.ArrangeKnownRole(werewolf.Id, MainRoleType.SimpleWerewolf);
+		builder.ArrangeKnownRole(actor.Id, MainRoleType.Actor);
+		builder.ConfirmGameStart();
+		builder.ConfirmNightStart();
+		builder.CompleteActorNightAction(actor.Id, FoxCard.Id);
+		var wake = InstructionAssert
+			.ExpectSuccessWithType<ConfirmationInstruction>(
+				builder.CompleteWerewolfNightAction([werewolf.Id], victim.Id));
+		wake.Semantic.Should().Be(ModeratorInstructionSemantic.WakeRole);
+		wake.AffectedPlayerIds.Should().Equal(actor.Id);
+
+		var wakeService = new GameService();
+		var wakeGameId = wakeService.RehydrateSession(
+			RecoveryPayloadTestDriver.Capture(
+				(GameSession)builder.GetGameState()!)
+				.WithRecoveryCursors()
+				.Serialize());
+		var recoveredWake = InstructionAssert
+			.ExpectType<ConfirmationInstruction>(
+				wakeService.GetCurrentInstruction(wakeGameId));
+		recoveredWake.Semantic.Should().Be(
+			ModeratorInstructionSemantic.WakeRole);
+		recoveredWake.AffectedPlayerIds.Should().Equal(actor.Id);
+		var centerResult = wakeService.ProcessInstruction(
+			wakeGameId,
+			recoveredWake.CreateResponse());
+		centerResult.IsSuccess.Should().BeTrue();
+		centerResult.ModeratorInstruction!.Semantic.Should().Be(
+			ModeratorInstructionSemantic.SelectFoxCenter);
+		var center = InstructionAssert
+			.ExpectSuccessWithType<SelectPlayersInstruction>(centerResult);
+
+		var centerService = new GameService();
+		var centerGameId = centerService.RehydrateSession(
+			RecoveryPayloadTestDriver.Capture(
+				(GameSession)wakeService.GetGameStateView(wakeGameId)!)
+				.WithRecoveryCursors()
+				.Serialize());
+		var recoveredCenter = InstructionAssert
+			.ExpectType<SelectPlayersInstruction>(
+				centerService.GetCurrentInstruction(centerGameId));
+		recoveredCenter.Should().BeEquivalentTo(
+			center,
+			options => options.Excluding(
+				instruction => instruction.InstructionId));
+		var sleep = InstructionAssert
+			.ExpectSuccessWithType<ConfirmationInstruction>(
+				centerService.ProcessInstruction(
+					centerGameId,
+					recoveredCenter.CreateResponse([])));
+
+		var sleepService = new GameService();
+		var sleepGameId = sleepService.RehydrateSession(
+			RecoveryPayloadTestDriver.Capture(
+				(GameSession)centerService.GetGameStateView(centerGameId)!)
+				.WithRecoveryCursors()
+				.Serialize());
+		var recoveredSleep = InstructionAssert
+			.ExpectType<ConfirmationInstruction>(
+				sleepService.GetCurrentInstruction(sleepGameId));
+		recoveredSleep.Should().BeEquivalentTo(
+			sleep,
+			options => options.Excluding(
+				instruction => instruction.InstructionId));
+		sleepService.ProcessInstruction(
+			sleepGameId,
+			recoveredSleep.CreateResponse()).IsSuccess.Should().BeTrue();
+		sleepService.GetGameStateView(sleepGameId)!.GameHistoryLog
+			.OfType<ActorBorrowedRolePowerCommittedLogEntry>()
+			.Should()
+			.BeEmpty();
+		wake.InstructionId.Should().Be(recoveredWake.InstructionId);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void CommittedFeedback_WithoutItsDomainCursorIsRejectedByPublicRehydration()
+	{
+		var builder = CreateBuilder()
+			.WithPlayers(5)
+			.WithRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Fox,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		var werewolf = players[0];
+		var fox = players[1];
+		var victim = players[2];
+		builder.ArrangeKnownRole(fox.Id, MainRoleType.Fox);
+		builder.ArrangeKnownWerewolfFactionAgentGroup(werewolf.Id);
+		builder.ConfirmGameStart();
+		builder.ConfirmNightStart();
+		var wake = InstructionAssert
+			.ExpectSuccessWithType<ConfirmationInstruction>(
+				builder.CompleteWerewolfNightAction(
+					[werewolf.Id],
+					victim.Id));
+		var selection = InstructionAssert
+			.ExpectSuccessWithType<SelectPlayersInstruction>(
+				builder.Process(wake.CreateResponse()));
+		InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+			builder.Process(selection.CreateResponse([werewolf.Id])));
+		var payload = RecoveryPayloadTestDriver
+			.Parse(builder.GetGameState()!.Serialize())
+			.RemoveDomainRecoveryCursor()
+			.Serialize();
+
+		var act = () => new GameService().RehydrateSession(payload);
+
+		act.Should().Throw<InvalidOperationException>();
+		MarkTestCompleted();
+	}
 
     private static OneUseRolePowerResourceIdentity CreateResourceIdentity(
         RolePowerAttempt attempt)

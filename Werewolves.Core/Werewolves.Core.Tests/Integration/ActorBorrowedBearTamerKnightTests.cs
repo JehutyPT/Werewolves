@@ -22,6 +22,9 @@ namespace Werewolves.Core.Tests.Integration;
 
 public sealed class ActorBorrowedBearTamerKnightTests
 {
+	private sealed class TestExecutionCommitKey : IGameFlowManagerKey;
+	private static readonly TestExecutionCommitKey ExecutionCommitKey = new();
+
 	private static readonly PhysicalCharacterCard BearTamerCard = new(
 		Guid.Parse("00000000-0000-0000-0000-000000000150"),
 		MainRoleType.BearTamer);
@@ -271,8 +274,9 @@ public sealed class ActorBorrowedBearTamerKnightTests
 				instruction.AffectedPlayerIds.SequenceEqual(
 					new[] { fixture.ActorId }))
 			.Should().ContainSingle().Subject;
-		reveal.PrivateInstruction.Should().Be(
-			GameStrings.PublicRoleRevealInstruction);
+		reveal.PrivateInstruction.Should()
+			.StartWith(GameStrings.PublicRoleRevealInstruction)
+			.And.Contain(GameStrings.ActorRoleName);
 		var state = (IGameSession)fixture.Session;
 		var actor = state.GetPlayerState(fixture.ActorId);
 		actor.Health.Should().Be(PlayerHealth.Dead);
@@ -763,6 +767,15 @@ public sealed class ActorBorrowedBearTamerKnightTests
 		var targetRoleAtFollowingDawn = MainRoleType.SimpleWerewolf;
 		if (mutation == BorrowedKnightCommittedTargetMutation.TargetRoleChanged)
 		{
+			var originalTargetCard = session
+				.GetModeratorPhysicalCharacterCards()
+				.First(card =>
+					card.Card.PrintedRole == MainRoleType.SimpleWerewolf &&
+					card.Zone == PhysicalCharacterCardZone.DealPool);
+			session.TryRecordPhysicalCharacterCardOwnership(
+				session.RoleLockIn.Version,
+				fixture.TargetId,
+				originalTargetCard.Card.Id).Should().BeTrue();
 			session.AssignRole(
 				fixture.TargetId,
 				MainRoleType.SimpleVillager);
@@ -1041,6 +1054,9 @@ public sealed class ActorBorrowedBearTamerKnightTests
 		var currentResponse = response;
 		for (var step = 0; step < 20; step++)
 		{
+			var consumedInstruction = session.Execution.PendingInstruction
+				?? throw new InvalidOperationException(
+					"The Actor borrowed test workflow requires one Pending Instruction.");
 			var instruction = hook.Execute(session, currentResponse)
 				.ModeratorInstruction;
 			if (instruction == null)
@@ -1049,6 +1065,24 @@ public sealed class ActorBorrowedBearTamerKnightTests
 			}
 
 			observed.Add(instruction);
+			var publicationResponse =
+				currentResponse.InstructionId == consumedInstruction.InstructionId
+					? currentResponse
+					: new ModeratorResponse
+					{
+						InstructionId = consumedInstruction.InstructionId,
+						Type = currentResponse.Type,
+						SelectedPlayerIds = currentResponse.SelectedPlayerIds,
+						AssignedPlayerRoles = currentResponse.AssignedPlayerRoles,
+						SelectedOptionIds = currentResponse.SelectedOptionIds
+					};
+			session.CommitExecution(
+				ExecutionCommitKey,
+				ExecutionCommit.RetainRecoveryBoundary(
+					session.Execution,
+					consumedInstruction,
+					publicationResponse,
+					instruction));
 			currentResponse = CreateNightHookResponse(
 				session,
 				instruction,

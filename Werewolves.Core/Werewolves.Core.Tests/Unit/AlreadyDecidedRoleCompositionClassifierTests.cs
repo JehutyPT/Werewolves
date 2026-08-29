@@ -40,14 +40,14 @@ public class AlreadyDecidedRoleCompositionClassifierTests
 	}
 
 	[Fact]
-	public void Map_WithProfileOwnedBeneficiaryDescriptor_ReturnsFactionBeneficiaryEvidence()
+	public void Map_WithCapabilityOwnedBeneficiaryFact_ReturnsFactionBeneficiaryEvidence()
 	{
-		var profile = new SimulatorProfile(
-			new SimulatorProfileIdentity("descriptor-test", "1"),
-			[new(MainRoleType.Seer, Faction.Villager)]);
+		var capability = new SimulatorCapability(
+			new SimulatorProfileIdentity("beneficiary-test", "1"),
+			[(MainRoleType.Seer, Faction.Villager, [])]);
 		var composition = CanonicalRoleComposition.Create([MainRoleType.Seer]);
 
-		var evidence = SimulatorFactionBeneficiaryBridge.Map(composition, profile);
+		var evidence = SimulatorFactionBeneficiaryBridge.Map(composition, capability);
 
 		evidence.GetBeneficiaryCount(Faction.Villager).Should().Be(1);
 		evidence.GetBeneficiaryCount(Faction.Werewolf).Should().Be(0);
@@ -56,17 +56,17 @@ public class AlreadyDecidedRoleCompositionClassifierTests
 	[Fact]
 	public void Classify_WithResolvedWhiteBeneficiaries_AppliesTheSharedThreeFactionRules()
 	{
-		var profile = new SimulatorProfile(
+		var capability = new SimulatorCapability(
 			new SimulatorProfileIdentity("three-faction-test", "1"),
 			[
-				new(MainRoleType.SimpleVillager, Faction.Villager),
-				new(MainRoleType.SimpleWerewolf, Faction.Werewolf),
-				new(MainRoleType.WhiteWerewolf, Faction.WhiteWerewolf)
+				(MainRoleType.SimpleVillager, Faction.Villager, []),
+				(MainRoleType.SimpleWerewolf, Faction.Werewolf, []),
+				(MainRoleType.WhiteWerewolf, Faction.WhiteWerewolf, [])
 			]);
 
 		var soleWhite = AlreadyDecidedRoleCompositionClassifier.Classify(
 			CanonicalRoleComposition.Create([MainRoleType.WhiteWerewolf]),
-			profile);
+			capability);
 		var werewolfControlBlocked = AlreadyDecidedRoleCompositionClassifier.Classify(
 			CanonicalRoleComposition.Create(
 				[
@@ -74,27 +74,27 @@ public class AlreadyDecidedRoleCompositionClassifierTests
 					MainRoleType.SimpleVillager,
 					MainRoleType.WhiteWerewolf
 				]),
-			profile);
+			capability);
 		var werewolfEliminationBlocked = AlreadyDecidedRoleCompositionClassifier.Classify(
 			CanonicalRoleComposition.Create(
 				[
 					MainRoleType.SimpleWerewolf,
 					MainRoleType.WhiteWerewolf
 				]),
-			profile);
+			capability);
 		var villagerVictoryBlocked = AlreadyDecidedRoleCompositionClassifier.Classify(
 			CanonicalRoleComposition.Create(
 				[
 					MainRoleType.SimpleVillager,
 					MainRoleType.WhiteWerewolf
 				]),
-			profile);
+			capability);
 		var soleWerewolf = AlreadyDecidedRoleCompositionClassifier.Classify(
 			CanonicalRoleComposition.Create([MainRoleType.SimpleWerewolf]),
-			profile);
+			capability);
 		var soleVillager = AlreadyDecidedRoleCompositionClassifier.Classify(
 			CanonicalRoleComposition.Create([MainRoleType.SimpleVillager]),
-			profile);
+			capability);
 
 		soleWhite.GameResult.Should().Be(
 			new SingleFactionGameResult(Faction.WhiteWerewolf));

@@ -1,5 +1,6 @@
 using Werewolves.Core.GameLogic.Models.GameHookListeners;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
+using Werewolves.Core.GameLogic.Queries;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
@@ -8,7 +9,8 @@ using Werewolves.Core.StateModels.Resources;
 
 namespace Werewolves.Core.GameLogic.Roles.MainRoles;
 
-internal sealed class PrejudicedManipulatorRole : NightRoleIdOnlyHookListener
+internal sealed class PrejudicedManipulatorRole
+	: DeclaredRoleIdentificationOnlyHookListener
 {
 	internal override string PublicName =>
 		GameStrings.PrejudicedManipulatorRoleName;
@@ -16,14 +18,7 @@ internal sealed class PrejudicedManipulatorRole : NightRoleIdOnlyHookListener
 	public override ListenerIdentifier Id =>
 		ListenerIdentifier.Listener(MainRoleType.PrejudicedManipulator);
 
-	public override HookListenerActionResult Execute(
-		GameSession session,
-		ModeratorResponse input) =>
-		session.TurnNumber == 1
-			? base.Execute(session, input)
-			: HookListenerActionResult.Skip();
-
-	protected override void ProcessRoleIdentification(
+	protected override void OnIdentificationAccepted(
 		GameSession session,
 		ModeratorResponse input)
 	{
@@ -34,6 +29,18 @@ internal sealed class PrejudicedManipulatorRole : NightRoleIdOnlyHookListener
 		{
 			throw new InvalidOperationException(
 				"Prejudiced Manipulator identification requires exactly one Player.");
+		}
+
+		var holder = session.GetPlayer(holderId);
+		if (holder.State.CurrentRole != MainRoleType.PrejudicedManipulator &&
+		    holder.State.ModeratorKnownRole != MainRoleType.PrejudicedManipulator &&
+		    holder.State.PhysicalCharacterCardRole !=
+			    MainRoleType.PrejudicedManipulator &&
+		    !GameSessionQueries.GetPossibleRoles(session, holderId)
+			    .Contains(MainRoleType.PrejudicedManipulator))
+		{
+			throw new InvalidOperationException(
+				"Role Identification contradicts committed Role knowledge.");
 		}
 
 		if (session.GetPlayerState(holderId).PhysicalCharacterCardId is null)
@@ -56,7 +63,7 @@ internal sealed class PrejudicedManipulatorRole : NightRoleIdOnlyHookListener
 			}
 		}
 
-		base.ProcessRoleIdentification(session, input);
+		base.OnIdentificationAccepted(session, input);
 		InitialBeneficiaryClosureRules.TryCommitCurrentSession(session);
 	}
 }

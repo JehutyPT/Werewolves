@@ -18,7 +18,7 @@ namespace Werewolves.Client.Tests.Styling;
 public class DarkThemeTokenTests
 {
 	private static readonly Regex ColorLiteralPattern = new(
-		@"#[0-9a-f]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\)|\b(?:black|white)\b",
+		@"#[0-9a-f]{3,8}\b|rgba?\([^)]*\)|hsla?\([^)]*\)|(?<!-)\b(?:black|white)\b(?!-)",
 		RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
 	[Fact]

@@ -22,6 +22,9 @@ namespace Werewolves.Core.Tests.Integration;
 
 public sealed class ActorBorrowedWitchTests
 {
+	private sealed class TestExecutionCommitKey : IGameFlowManagerKey;
+	private static readonly TestExecutionCommitKey ExecutionCommitKey = new();
+
 	private static readonly PhysicalCharacterCard WitchCard = new(
 		Guid.Parse("00000000-0000-0000-0000-000000000157"),
 		MainRoleType.Witch);
@@ -154,7 +157,7 @@ public sealed class ActorBorrowedWitchTests
 		Action restore = () => service.RehydrateSession(driver.Serialize());
 
 		restore.Should().Throw<InvalidOperationException>()
-			.WithMessage("*pending Actor borrowed Witch*invalid*");
+			.WithMessage(GameStrings.ActorBorrowedRolePowerInvalidResponse);
 	}
 
 	[Fact]
@@ -834,8 +837,34 @@ public sealed class ActorBorrowedWitchTests
 		GameSession session,
 		ModeratorResponse response)
 	{
+		var consumedInstruction = session.Execution.PendingInstruction
+			?? throw new InvalidOperationException(
+				"The Actor borrowed Witch test workflow requires one Pending Instruction.");
 		session.GetOrCreateListener(listener.Id, () => listener);
-		return NightActionLoop.Execute(session, response);
+		var result = NightActionLoop.Execute(session, response);
+		if (result.ModeratorInstruction is { } nextInstruction)
+		{
+			var publicationResponse =
+				response.InstructionId == consumedInstruction.InstructionId
+					? response
+					: new ModeratorResponse
+					{
+						InstructionId = consumedInstruction.InstructionId,
+						Type = response.Type,
+						SelectedPlayerIds = response.SelectedPlayerIds,
+						AssignedPlayerRoles = response.AssignedPlayerRoles,
+						SelectedOptionIds = response.SelectedOptionIds
+					};
+			session.CommitExecution(
+				ExecutionCommitKey,
+				ExecutionCommit.RetainRecoveryBoundary(
+					session.Execution,
+					consumedInstruction,
+					publicationResponse,
+					nextInstruction));
+		}
+
+		return result;
 	}
 
 	private static GameSession RehydrateAtPendingInstruction(

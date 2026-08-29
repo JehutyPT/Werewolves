@@ -3,14 +3,14 @@
 @using Werewolves.Core.StateModels.Models.Instructions
 @inject IHapticFeedbackService Haptic
 
-<div class="ww-instruction-stack" @key="_flow.TransitionKey">
-	@if (!_flow.HasInstruction)
+<div class="ww-instruction-stack" @key="TransitionKey">
+	@if (!_presentation.HasInstruction)
 	{
 		<p class="ww-empty-state">@ClientStrings.Dashboard_NoInstruction</p>
 	}
 	else
 	{
-		if (HasPublicAnnouncement)
+		if (_presentation.HasPublicGuidance)
 		{
 			var publicExpanded = IsExpanded(InstructionSection.Public);
 
@@ -31,7 +31,7 @@
 			</button>
 		}
 
-		if (HasPrivateInstruction)
+		if (_presentation.HasPrivateGuidance)
 		{
 			var privateExpanded = IsExpanded(InstructionSection.Private);
 
@@ -53,25 +53,28 @@
 		}
 	}
 
-	@if (_flow.HasInstruction)
+	@if (_presentation.HasInstruction)
 	{
-		if (Instruction is DevotedServantVoteWindowInstruction devotedServantVoteWindowInstruction)
+		switch (_presentation.ResponseSurface)
 		{
-			<DevotedServantVoteWindowView Instruction="devotedServantVoteWindowInstruction"
-										Roster="Roster"
-										OnResponse="OnResponse" />
-		}
-		else if (Instruction is SelectPlayersInstruction selectPlayersInstruction)
-		{
-			<SelectPlayersView Instruction="selectPlayersInstruction" Roster="Roster" OnResponse="OnResponse" />
-		}
-		else if (Instruction is SelectOptionsInstruction selectOptionsInstruction)
-		{
-			<SelectOptionsView Instruction="selectOptionsInstruction" OnResponse="OnResponse" />
-		}
-		else if (Instruction is AssignRolesInstruction assignRolesInstruction)
-		{
-			<AssignRolesView Instruction="assignRolesInstruction" OnResponse="OnResponse" Roster="Roster" />
+			case InstructionResponseSurface.DevotedServantVoteWindow:
+				var devotedServantVoteWindowInstruction = (DevotedServantVoteWindowInstruction)Instruction!;
+				<DevotedServantVoteWindowView Instruction="devotedServantVoteWindowInstruction"
+											Roster="Roster"
+											OnResponse="OnResponse" />
+				break;
+			case InstructionResponseSurface.SelectPlayers:
+				var selectPlayersInstruction = (SelectPlayersInstruction)Instruction!;
+				<SelectPlayersView Instruction="selectPlayersInstruction" Roster="Roster" OnResponse="OnResponse" />
+				break;
+			case InstructionResponseSurface.SelectOptions:
+				var selectOptionsInstruction = (SelectOptionsInstruction)Instruction!;
+				<SelectOptionsView Instruction="selectOptionsInstruction" OnResponse="OnResponse" />
+				break;
+			case InstructionResponseSurface.AssignRoles:
+				var assignRolesInstruction = (AssignRolesInstruction)Instruction!;
+				<AssignRolesView Instruction="assignRolesInstruction" OnResponse="OnResponse" Roster="Roster" />
+				break;
 		}
 	}
 </div>
@@ -84,25 +87,29 @@
 			@AudioControls
 		}
 
-		@if (_flow.HasInstruction)
+		@if (_presentation.HasInstruction)
 		{
-			if (Instruction is ConfirmationInstruction confirmationInstruction)
+			switch (_presentation.ResponseSurface)
 			{
-				<ConfirmationView @key="confirmationInstruction"
-								  Instruction="confirmationInstruction"
-								  OnResponse="OnResponse" />
-			}
-			else if (Instruction is not (DevotedServantVoteWindowInstruction or SelectPlayersInstruction or SelectOptionsInstruction or AssignRolesInstruction))
-			{
-				<button type="button" class="ww-btn-primary" disabled>@ClientStrings.Dashboard_RespondButton</button>
+				case InstructionResponseSurface.Confirmation:
+					var confirmationInstruction = (ConfirmationInstruction)Instruction!;
+					<ConfirmationView @key="confirmationInstruction"
+									  Instruction="confirmationInstruction"
+									  OnResponse="OnResponse" />
+					break;
+				case InstructionResponseSurface.Unavailable:
+					<button type="button" class="ww-btn-primary" disabled>@ClientStrings.Dashboard_RespondButton</button>
+					break;
 			}
 		}
 	</footer>
 }
 
 @code {
-	private readonly InstructionDisplayFlow _flow = new();
+	private InstructionPresentation _presentation;
+	private ModeratorInstruction? _renderedInstruction;
 	private InstructionSection _expandedSections;
+	private int _transitionVersion;
 
 	[Parameter]
 	public ModeratorInstruction? Instruction { get; set; }
@@ -118,25 +125,23 @@
 
 	protected override void OnParametersSet()
 	{
-		var previousInstruction = _flow.Instruction;
-		_flow.SetInstruction(Instruction);
-
-		if (!ReferenceEquals(previousInstruction, Instruction))
+		if (!ReferenceEquals(_renderedInstruction, Instruction))
 		{
-			_expandedSections = InitialExpandedSections(Instruction);
+			_renderedInstruction = Instruction;
+			_presentation = InstructionPresentation.For(Instruction);
+			_expandedSections = _presentation.InitialExpandedSections;
+			_transitionVersion++;
 		}
 	}
 
-	private bool HasPublicAnnouncement =>
-		!string.IsNullOrWhiteSpace(Instruction?.PublicAnnouncement);
-
-	private bool HasPrivateInstruction =>
-		!string.IsNullOrWhiteSpace(Instruction?.PrivateInstruction);
+	private object? TransitionKey =>
+		_presentation.HasInstruction ? _transitionVersion : null;
 
 	private bool ShouldRenderDashboardActionZone =>
 		AudioControls is not null ||
-		(_flow.HasInstruction &&
-			Instruction is not (DevotedServantVoteWindowInstruction or SelectPlayersInstruction or SelectOptionsInstruction or AssignRolesInstruction));
+		_presentation.ResponseSurface is
+			InstructionResponseSurface.Confirmation or
+			InstructionResponseSurface.Unavailable;
 
 	private bool IsExpanded(InstructionSection section) =>
 		_expandedSections.HasFlag(section);
@@ -174,7 +179,7 @@
 
 	private void Toggle(InstructionSection section)
 	{
-		if (Instruction is not null && ModeratorInstructionDisplayDefaults.RequiresModeratorDataEntryForDisplay(Instruction))
+		if (_presentation.GuidanceExpansion == GuidanceExpansion.Exclusive)
 		{
 			if (_expandedSections.HasFlag(section))
 			{
@@ -192,37 +197,6 @@
 		Haptic.TryClick();
 	}
 
-	private static InstructionSection InitialExpandedSections(ModeratorInstruction? instruction)
-	{
-		if (instruction is not null && !ModeratorInstructionDisplayDefaults.RequiresModeratorDataEntryForDisplay(instruction))
-		{
-			var expandedSections = InstructionSection.None;
-			if (!string.IsNullOrWhiteSpace(instruction.PublicAnnouncement))
-			{
-				expandedSections |= InstructionSection.Public;
-			}
-
-			if (!string.IsNullOrWhiteSpace(instruction.PrivateInstruction))
-			{
-				expandedSections |= InstructionSection.Private;
-			}
-
-			return expandedSections;
-		}
-
-		if (!string.IsNullOrWhiteSpace(instruction?.PublicAnnouncement))
-		{
-			return InstructionSection.Public;
-		}
-
-		if (!string.IsNullOrWhiteSpace(instruction?.PrivateInstruction))
-		{
-			return InstructionSection.Private;
-		}
-
-		return InstructionSection.None;
-	}
-
 	private static string InstructionToggleLabel(string label) =>
 		label;
 
@@ -231,4 +205,124 @@
 
 	[Flags]
 	private enum InstructionSection { None = 0, Public = 1, Private = 2 }
+
+	private enum GuidanceExpansion
+	{
+		Independent,
+		Exclusive
+	}
+
+	private enum InstructionResponseSurface
+	{
+		None,
+		Unavailable,
+		Confirmation,
+		DevotedServantVoteWindow,
+		SelectPlayers,
+		SelectOptions,
+		AssignRoles
+	}
+
+	private readonly record struct InstructionPresentation(
+		bool HasInstruction,
+		bool HasPublicGuidance,
+		bool HasPrivateGuidance,
+		InstructionSection InitialExpandedSections,
+		GuidanceExpansion GuidanceExpansion,
+		InstructionResponseSurface ResponseSurface)
+	{
+		public static InstructionPresentation For(ModeratorInstruction? instruction)
+		{
+			if (instruction is null)
+			{
+				return default;
+			}
+
+			var hasPublicGuidance = !string.IsNullOrWhiteSpace(instruction.PublicAnnouncement);
+			var hasPrivateGuidance = !string.IsNullOrWhiteSpace(instruction.PrivateInstruction);
+
+			return instruction switch
+			{
+				DevotedServantVoteWindowInstruction => DataEntry(
+					hasPublicGuidance,
+					hasPrivateGuidance,
+					InstructionResponseSurface.DevotedServantVoteWindow),
+				SelectPlayersInstruction => DataEntry(
+					hasPublicGuidance,
+					hasPrivateGuidance,
+					InstructionResponseSurface.SelectPlayers),
+				SelectOptionsInstruction => DataEntry(
+					hasPublicGuidance,
+					hasPrivateGuidance,
+					InstructionResponseSurface.SelectOptions),
+				AssignRolesInstruction => DataEntry(
+					hasPublicGuidance,
+					hasPrivateGuidance,
+					InstructionResponseSurface.AssignRoles),
+				ConfirmationInstruction => Passive(
+					hasPublicGuidance,
+					hasPrivateGuidance,
+					InstructionResponseSurface.Confirmation),
+				FinishedGameConfirmationInstruction => Passive(
+					hasPublicGuidance,
+					hasPrivateGuidance,
+					InstructionResponseSurface.Unavailable),
+				_ => Passive(
+					hasPublicGuidance,
+					hasPrivateGuidance,
+					InstructionResponseSurface.Unavailable)
+			};
+		}
+
+		private static InstructionPresentation DataEntry(
+			bool hasPublicGuidance,
+			bool hasPrivateGuidance,
+			InstructionResponseSurface responseSurface) =>
+			new(
+				HasInstruction: true,
+				hasPublicGuidance,
+				hasPrivateGuidance,
+				FirstAvailableGuidance(hasPublicGuidance, hasPrivateGuidance),
+				GuidanceExpansion.Exclusive,
+				responseSurface);
+
+		private static InstructionPresentation Passive(
+			bool hasPublicGuidance,
+			bool hasPrivateGuidance,
+			InstructionResponseSurface responseSurface) =>
+			new(
+				HasInstruction: true,
+				hasPublicGuidance,
+				hasPrivateGuidance,
+				AllAvailableGuidance(hasPublicGuidance, hasPrivateGuidance),
+				GuidanceExpansion.Independent,
+				responseSurface);
+
+		private static InstructionSection FirstAvailableGuidance(
+			bool hasPublicGuidance,
+			bool hasPrivateGuidance) =>
+			hasPublicGuidance
+				? InstructionSection.Public
+				: hasPrivateGuidance
+					? InstructionSection.Private
+					: InstructionSection.None;
+
+		private static InstructionSection AllAvailableGuidance(
+			bool hasPublicGuidance,
+			bool hasPrivateGuidance)
+		{
+			var sections = InstructionSection.None;
+			if (hasPublicGuidance)
+			{
+				sections |= InstructionSection.Public;
+			}
+
+			if (hasPrivateGuidance)
+			{
+				sections |= InstructionSection.Private;
+			}
+
+			return sections;
+		}
+	}
 }

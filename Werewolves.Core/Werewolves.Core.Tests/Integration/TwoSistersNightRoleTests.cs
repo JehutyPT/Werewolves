@@ -87,6 +87,25 @@ public sealed class TwoSistersNightRoleTests : DiagnosticTestBase
 	}
 
 	[Fact]
+	public void PendingIdentification_WithWrongCardinality_IsRejectedDuringPublicRehydration()
+	{
+		var builder = CreateTwoSistersBuilder(new RecordingPolicy());
+		builder.StartGame();
+		builder.ConfirmGameStart();
+		InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
+			builder.ConfirmNightStart());
+		var payload = RecoveryPayloadTestDriver
+			.Capture((GameSession)builder.GetGameState()!)
+			.RewritePendingPlayerSelectionCountConstraint(
+				NumberRangeConstraint.Single);
+
+		var act = payload.RehydrateGameSession;
+
+		act.Should().Throw<InvalidOperationException>();
+		MarkTestCompleted();
+	}
+
+	[Fact]
 	public void FirstNight_PartiallyKnownPair_RejectsIdentificationThatOmitsCommittedHolderWithoutStateAdvance()
 	{
 		var builder = CreateTwoSistersBuilder(new RecordingPolicy());
@@ -434,6 +453,88 @@ public sealed class TwoSistersNightRoleTests : DiagnosticTestBase
 		recognition.AffectedPlayerIds.Should().Equal(
 			sisters.Select(player => player.Id).Order());
 		policy.ObservedAttempts.Should().HaveCount(2);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void FirstNight_KnownPair_FreshServicesRestoreExactRecognitionAndSleep()
+	{
+		var builder = CreateTwoSistersBuilder(new RecordingPolicy());
+		builder.StartGame();
+		var session = (GameSession)builder.GetGameState()!;
+		var sisterIds = session.GetPlayers()
+			.Take(2)
+			.Select(player => player.Id)
+			.ToHashSet();
+		session.AssignRole(sisterIds, MainRoleType.TwoSisters);
+		session.IdentifyRole(sisterIds, MainRoleType.TwoSisters);
+		builder.ConfirmGameStart();
+		var expectedRecognition =
+			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+				builder.ConfirmNightStart());
+		var recognitionService = new GameService();
+
+		var recognitionGameId = recognitionService.RehydrateSession(
+			RecoveryPayloadTestDriver.Capture(session).Serialize());
+		var recoveredRecognition = recognitionService
+			.GetCurrentInstruction(recognitionGameId)
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		recoveredRecognition.Should().BeEquivalentTo(expectedRecognition);
+		var expectedSleep = recognitionService.ProcessInstruction(
+				recognitionGameId,
+				recoveredRecognition.CreateResponse())
+			.ModeratorInstruction.Should()
+			.BeOfType<ConfirmationInstruction>().Subject;
+		var sleepService = new GameService();
+
+		var sleepGameId = sleepService.RehydrateSession(
+			RecoveryPayloadTestDriver.Capture(
+				(GameSession)recognitionService.GetGameStateView(recognitionGameId)!)
+			.Serialize());
+		var recoveredSleep = sleepService.GetCurrentInstruction(sleepGameId)
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+
+		recoveredSleep.Should().BeEquivalentTo(expectedSleep);
+		MarkTestCompleted();
+	}
+
+	[Fact]
+	public void LaterCommunication_FreshServicesRestoreExactCommunicationAndSleep()
+	{
+		var fixture = StartTwoSistersGame(new RecordingPolicy());
+		var expectedCommunication = AdvanceUntil(
+			fixture,
+			(session, instruction) =>
+				session.TurnNumber == 3 &&
+				instruction.Semantic == ModeratorInstructionSemantic
+					.CommunicateAsRoleHolders)
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		var communicationService = new GameService();
+
+		var communicationGameId = communicationService.RehydrateSession(
+			RecoveryPayloadTestDriver.Capture(
+				(GameSession)fixture.Builder.GetGameState()!)
+			.Serialize());
+		var recoveredCommunication = communicationService
+			.GetCurrentInstruction(communicationGameId)
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		recoveredCommunication.Should().BeEquivalentTo(expectedCommunication);
+		var expectedSleep = communicationService.ProcessInstruction(
+				communicationGameId,
+				recoveredCommunication.CreateResponse())
+			.ModeratorInstruction.Should()
+			.BeOfType<ConfirmationInstruction>().Subject;
+		var sleepService = new GameService();
+
+		var sleepGameId = sleepService.RehydrateSession(
+			RecoveryPayloadTestDriver.Capture(
+				(GameSession)communicationService.GetGameStateView(
+					communicationGameId)!)
+			.Serialize());
+		var recoveredSleep = sleepService.GetCurrentInstruction(sleepGameId)
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+
+		recoveredSleep.Should().BeEquivalentTo(expectedSleep);
 		MarkTestCompleted();
 	}
 

@@ -14,8 +14,8 @@ public class SimulationRoleLockInTests
 	{
 		MainRoleType[] dealPool =
 		[
+			MainRoleType.Thief,
 			MainRoleType.SimpleWerewolf,
-			MainRoleType.Seer,
 			MainRoleType.SimpleVillager,
 			MainRoleType.SimpleVillager,
 			MainRoleType.SimpleVillager
@@ -28,16 +28,15 @@ public class SimulationRoleLockInTests
 			offer1Role: MainRoleType.Cupid,
 			offer2Role: MainRoleType.Defender);
 		var material = new RunSeedMaterial(
-			new SimulationCompatibilityIdentity(
-				scenario.ToCanonical(),
-				SimulatorCapability.FullProbability.Identity),
-			BaselineRandomDecisionStrategy.Identity,
+			SimulatorCapability.SafetyScreening.CreateCompatibilityIdentity(scenario),
+			SimulatorCapability.SafetyScreening.HeadlessResponsePolicy.StrategyIdentity,
 			runNumber: 31);
 
 		var startState = SimulationStartStateDeriver.Derive(
 			material,
-			SimulatorCapability.FullProbability);
+			SimulatorCapability.SafetyScreening);
 
+		startState.CanonicalScenario.Should().Be(scenario.ToCanonical());
 		CanonicalRoleComposition.Create(
 				startState.RoleAssignments.Select(assignment => assignment.Role))
 			.Should().Be(CanonicalRoleComposition.Create(dealPool));
@@ -49,7 +48,7 @@ public class SimulationRoleLockInTests
 	}
 
 	[Fact]
-	public void CreateGameSessionConfig_WithOffersButNoAssignedThief_RejectsRatherThanDroppingOffers()
+	public void Derive_WithOffersButNoDealPoolThief_RejectsBeforeCreatingRunState()
 	{
 		MainRoleType[] dealPool =
 		[
@@ -66,19 +65,16 @@ public class SimulationRoleLockInTests
 			dealPoolCards: dealPool,
 			offer1Role: MainRoleType.Cupid,
 			offer2Role: MainRoleType.Defender);
+		var capability = SimulatorCapability.SafetyScreening;
 		var material = new RunSeedMaterial(
-			new SimulationCompatibilityIdentity(
-				scenario.ToCanonical(),
-				SimulatorCapability.FullProbability.Identity),
-			BaselineRandomDecisionStrategy.Identity,
+			capability.CreateCompatibilityIdentity(scenario),
+			capability.HeadlessResponsePolicy.StrategyIdentity,
 			runNumber: 31);
-		var startState = SimulationStartStateDeriver.Derive(
+		var act = () => SimulationStartStateDeriver.Derive(
 			material,
-			SimulatorCapability.FullProbability);
+			capability);
 
-		var act = () => startState.CreateGameSessionConfig();
-
-		act.Should().Throw<InvalidOperationException>();
+		act.Should().Throw<ArgumentException>().WithParameterName("material");
 	}
 
 	[Fact]
@@ -129,9 +125,7 @@ public class SimulationRoleLockInTests
 		var scenario = new SimulationScenario(5, roles, setupArtifact);
 		var capability = SimulatorCapabilityRegistry.Production.SafetyScreening;
 		var material = new RunSeedMaterial(
-			new SimulationCompatibilityIdentity(
-				scenario.ToCanonical(),
-				capability.Identity),
+			capability.CreateCompatibilityIdentity(scenario),
 			capability.HeadlessResponsePolicy.StrategyIdentity,
 			runNumber: 144);
 
@@ -190,7 +184,13 @@ public class SimulationRoleLockInTests
 			offer2Role: MainRoleType.Seer,
 			new ActorSetupCards(
 				[MainRoleType.Cupid, MainRoleType.Elder, MainRoleType.Fox]));
-		var startState = CreateStartState(scenario, dealPool);
+		var capability = SimulatorCapability.SafetyScreening;
+		var startState = SimulationStartStateDeriver.Derive(
+			new RunSeedMaterial(
+				capability.CreateCompatibilityIdentity(scenario),
+				capability.HeadlessResponsePolicy.StrategyIdentity,
+				runNumber: 11),
+			capability);
 
 		var config = startState.CreateGameSessionConfig();
 
@@ -225,27 +225,13 @@ public class SimulationRoleLockInTests
 			MainRoleType.Seer,
 			MainRoleType.Seer,
 			publicGroupPartition: canonicalPartition);
-		var identity = new SimulationCompatibilityIdentity(
-			scenario.ToCanonical(),
-			SimulatorCapability.SafetyScreening.Identity);
-		var assignments = dealPool
-			.Select((role, index) => new SimulationPlayerRoleAssignment(index + 1, role))
-			.ToArray();
-		var factionFacts = assignments.Select(assignment =>
-			new SimulationPlayerFactionFacts(
-				assignment.SeatNumber,
-				FactionBeneficiaryKnowledge.Known(
-					assignment.Role == MainRoleType.SimpleWerewolf
-						? Faction.Werewolf
-						: Faction.Villager),
-				Enum.GetValues<Faction>().ToDictionary(
-					faction => faction,
-					faction => assignment.Role == MainRoleType.SimpleWerewolf &&
-						faction == Faction.Werewolf
-						? FactionAgentKnowledge.KnownAgent
-						: FactionAgentKnowledge.KnownNonAgent)))
-			.ToArray();
-		var startState = new SimulationStartState(identity, assignments, factionFacts);
+		var capability = SimulatorCapability.SafetyScreening;
+		var startState = SimulationStartStateDeriver.Derive(
+			new RunSeedMaterial(
+				capability.CreateCompatibilityIdentity(scenario),
+				capability.HeadlessResponsePolicy.StrategyIdentity,
+				runNumber: 17),
+			capability);
 
 		var config = startState.CreateGameSessionConfig();
 
@@ -273,36 +259,5 @@ public class SimulationRoleLockInTests
 		config.PublicGroupPartition.SecondGroupPlayerIds.Should().BeEquivalentTo(
 			canonicalPartition.SecondGroupSeatNumbers.Select(seatNumber =>
 				config.PlayerRoster[seatNumber - 1].Id));
-	}
-
-	private static SimulationStartState CreateStartState(
-		SimulationScenario scenario,
-		IReadOnlyList<MainRoleType> assignedRoles)
-	{
-		var identity = new SimulationCompatibilityIdentity(
-			scenario.ToCanonical(),
-			SimulatorCapability.SafetyScreening.Identity);
-		var assignments = assignedRoles
-			.Select((role, index) =>
-				new SimulationPlayerRoleAssignment(index + 1, role))
-			.ToArray();
-		var factionFacts = assignments.Select(assignment =>
-		{
-			var isWerewolf = assignment.Role is MainRoleType.SimpleWerewolf
-				or MainRoleType.BigBadWolf
-				or MainRoleType.AccursedWolfFather
-				or MainRoleType.WhiteWerewolf;
-			return new SimulationPlayerFactionFacts(
-				assignment.SeatNumber,
-				FactionBeneficiaryKnowledge.Known(
-					isWerewolf ? Faction.Werewolf : Faction.Villager),
-				Enum.GetValues<Faction>().ToDictionary(
-					faction => faction,
-					faction => isWerewolf && faction == Faction.Werewolf
-						? FactionAgentKnowledge.KnownAgent
-						: FactionAgentKnowledge.KnownNonAgent));
-		}).ToArray();
-
-		return new SimulationStartState(identity, assignments, factionFacts);
 	}
 }

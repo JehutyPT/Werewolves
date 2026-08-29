@@ -54,6 +54,9 @@ public sealed class PrejudicedManipulatorRoleTests
 				service.ProcessInstruction(
 					start.GameGuid,
 					identification.CreateResponse([roster[0].Id])));
+		service.GetGameStateView(start.GameGuid)!
+			.GetFactionAgentKnowledge(roster[0].Id, Faction.Werewolf).Should()
+			.Be(FactionAgentKnowledge.KnownNonAgent);
 		var committedNext =
 			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
 				service.ProcessInstruction(
@@ -77,6 +80,8 @@ public sealed class PrejudicedManipulatorRoleTests
 		recovered.PublicGroupPartition.Should().Be(partition);
 		recovered.GetPlayerState(roster[0].Id).PhysicalCharacterCardRole
 			.Should().Be(MainRoleType.PrejudicedManipulator);
+		recovered.GetFactionAgentKnowledge(roster[0].Id, Faction.Werewolf).Should()
+			.Be(FactionAgentKnowledge.KnownNonAgent);
 		recovered.RequireKnownFactionBeneficiary(roster[0].Id)
 			.Should().Be(Faction.PrejudicedManipulator);
 		recovered.RequireKnownFactionBeneficiary(roster[1].Id)

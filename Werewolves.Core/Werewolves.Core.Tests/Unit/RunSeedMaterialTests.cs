@@ -215,7 +215,7 @@ public class RunSeedMaterialTests
 	}
 
 	[Fact]
-	public void Derive_RequiresTheCapabilityNamedByRunSeedMaterial()
+	public void Derive_RequiresTheExactSelectedCapabilityAndItsDecisionStrategy()
 	{
 		var scenario = new SimulationScenario(
 			5,
@@ -226,23 +226,88 @@ public class RunSeedMaterialTests
 				MainRoleType.SimpleVillager,
 				MainRoleType.SimpleVillager
 			]);
+		var capability = SimulatorCapability.SafetyScreening;
 		var material = new RunSeedMaterial(
-			new SimulationCompatibilityIdentity(
-				scenario.ToCanonical(),
-				SimulatorCapability.SafetyScreening.Identity),
-			BaselineRandomDecisionStrategy.SafetyScreeningIdentity,
+			capability.CreateCompatibilityIdentity(scenario),
+			capability.HeadlessResponsePolicy.StrategyIdentity,
 			runNumber: 3);
 
 		var startState = SimulationStartStateDeriver.Derive(
 			material,
-			SimulatorCapability.SafetyScreening);
+			capability);
 		var mismatch = () => SimulationStartStateDeriver.Derive(
 			material,
 			SimulatorCapability.FullProbability);
+		var strategyMismatch = () => SimulationStartStateDeriver.Derive(
+			new RunSeedMaterial(
+				material.CompatibilityIdentity,
+				SimulatorCapability.FullProbability.HeadlessResponsePolicy.StrategyIdentity,
+				material.RunNumber),
+			capability);
 
 		startState.CompatibilityIdentity.Profile.Should().Be(
-			SimulatorCapability.SafetyScreening.Identity);
+			capability.Identity);
 		mismatch.Should().Throw<ArgumentException>().WithParameterName("capability");
+		strategyMismatch.Should().Throw<ArgumentException>()
+			.WithParameterName("material");
+	}
+
+	[Fact]
+	public void Derive_WithAppUnsupportedThiefOffer_RejectsTheCompleteScenarioAtThePublicBoundary()
+	{
+		var scenario = new SimulationScenario(
+			5,
+			[
+				MainRoleType.Thief,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.Gypsy,
+				MainRoleType.Seer
+			],
+			[
+				MainRoleType.Thief,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			],
+			MainRoleType.Gypsy,
+			MainRoleType.Seer);
+		var capability = SimulatorCapability.SafetyScreening;
+		var material = new RunSeedMaterial(
+			capability.CreateCompatibilityIdentity(scenario),
+			capability.HeadlessResponsePolicy.StrategyIdentity,
+			runNumber: 0);
+
+		var derive = () => SimulationStartStateDeriver.Derive(material, capability);
+
+		derive.Should().Throw<ArgumentException>().WithParameterName("material");
+	}
+
+	[Fact]
+	public void Derive_WithCapabilityUnsupportedRule_RejectsBeforeCreatingRunState()
+	{
+		var scenario = new SimulationScenario(
+			5,
+			[
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Seer,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager
+			],
+			ruleState: new SimulationRuleState(NewMoonEnabled: true));
+		var capability = SimulatorCapability.FullProbability;
+		var material = new RunSeedMaterial(
+			capability.CreateCompatibilityIdentity(scenario),
+			capability.HeadlessResponsePolicy.StrategyIdentity,
+			runNumber: 0);
+
+		var derive = () => SimulationStartStateDeriver.Derive(material, capability);
+
+		derive.Should().Throw<ArgumentException>().WithParameterName("material");
 	}
 
 	[Fact]

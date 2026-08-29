@@ -2,9 +2,11 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using FluentAssertions;
 using Werewolves.Client.Services;
+using Werewolves.Client.Tests.Helpers;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Models;
 using Xunit;
+using PlayerNames = Werewolves.Client.Tests.Helpers.ClientTestReferences.PlayerNames;
 
 namespace Werewolves.Client.Tests.Services;
 
@@ -14,6 +16,45 @@ public sealed class LocalRecoveryPayloadCodecTests
 	{
 		PropertyNamingPolicy = JsonNamingPolicy.CamelCase
 	};
+
+	[Fact]
+	public void StagedLobbyAggregate_RoundTripsTheCompleteAcceptedDecision()
+	{
+		var state = LobbySetupMetadataFixture.StateWithRoles(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleVillager);
+		foreach (var playerName in PlayerNames.DefaultFive)
+		{
+			state.AddPlayer(playerName);
+		}
+		state.IncrementRole(MainRoleType.SimpleWerewolf);
+		for (var index = 0; index < 4; index++)
+		{
+			state.IncrementRole(MainRoleType.SimpleVillager);
+		}
+		var roleLockIn = RoleLockIn.CreateFromPrintedRoles(
+			version: 1,
+			state.PlayerRoster.Count,
+			state.GetSelectedRoles());
+		var decision = state.Decide(
+			new LobbyChange.AcceptImplicitRoleLockIn(
+				expectedCurrentVersion: 0,
+				roleLockIn))!;
+
+		var serialized = LocalRecoveryPayloadCodec.SerializeStagedLobby(
+			decision.NextAggregate);
+		var recovered = LocalRecoveryPayloadCodec.Deserialize(serialized)
+			.Should().BeOfType<StagedLobbyRecoveryPayload>()
+			.Subject;
+
+		recovered.PlayerRoster.Select(player => (player.Id, player.Name))
+			.Should().Equal(decision.NextAggregate.PlayerRoster
+				.Select(player => (player.Id, player.Name)));
+		recovered.RoleLockIn.RoleComposition.Select(card => card.Id)
+			.Should().Equal(roleLockIn.RoleComposition.Select(card => card.Id));
+		recovered.ActorSetupCards.Should().Be(ActorSetupCards.None);
+		recovered.PublicGroupPartition.Should().BeNull();
+	}
 
 	[Fact]
 	public void StagedLobbySchema3_RoundTripsExactTypedSetupAggregate()

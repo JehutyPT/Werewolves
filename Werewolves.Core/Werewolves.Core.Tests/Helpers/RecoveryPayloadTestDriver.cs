@@ -686,17 +686,13 @@ internal sealed class RecoveryPayloadTestDriver
 			ConfirmationInstruction>(
 			service.ProcessInstruction(gameId, vote.CreateResponse([]))
 				.ModeratorInstruction);
-		if (reveal.Semantic !=
-				ModeratorInstructionSemantic.RevealScapegoatForTie ||
-			reveal.AffectedPlayerIds is not [var affectedActorId] ||
-			affectedActorId != actorId ||
-			!StringComparer.Ordinal.Equals(
-				reveal.PublicAnnouncement,
-				GameStrings.ActorRoleName) ||
-			!StringComparer.Ordinal.Equals(
-				reveal.PrivateInstruction,
-				GameStrings.PublicRoleRevealInstruction) ||
-			reveal.SoundEffects.Count != 0)
+		var recoveredSession = service.GetGameStateView(gameId) as GameSession
+			?? throw new InvalidOperationException(
+				"The Scapegoat recovery fixture lost its Game Session.");
+		if (!ScapegoatRole.MatchesBorrowedTieReveal(
+				recoveredSession,
+				reveal,
+				actorId))
 		{
 			throw new InvalidOperationException(
 				"The Scapegoat recovery fixture did not reach the canonical borrowed reveal.");
@@ -1652,6 +1648,22 @@ internal sealed class RecoveryPayloadTestDriver
 		return this;
 	}
 
+	internal RecoveryPayloadTestDriver RemoveLatestNightAction(
+		NightActionType actionType)
+	{
+		var entryIndex = _payload.GameHistoryLog.FindLastIndex(entry =>
+			entry is NightActionLogEntry nightAction &&
+			nightAction.ActionType == actionType);
+		if (entryIndex < 0)
+		{
+			throw new InvalidOperationException(
+				$"The recovery test payload has no '{actionType}' Night Action.");
+		}
+
+		_payload.GameHistoryLog.RemoveAt(entryIndex);
+		return this;
+	}
+
 	internal RecoveryPayloadTestDriver RetargetLatestOneUseActionAndCursor(
 		Guid targetId)
 	{
@@ -1886,6 +1898,47 @@ internal sealed class RecoveryPayloadTestDriver
 		return this;
 	}
 
+	internal RecoveryPayloadTestDriver RewritePendingConfirmationInstructionId(
+		Guid instructionId)
+	{
+		if (instructionId == Guid.Empty ||
+		    _payload.PendingInstruction is not ConfirmationInstruction pending)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload requires a pending confirmation and a nonempty Instruction ID.");
+		}
+
+		_payload.PendingInstruction = new ConfirmationInstruction(
+			pending.Semantic,
+			pending.PublicAnnouncement,
+			pending.PrivateInstruction,
+			pending.AffectedPlayerIds,
+			instructionId,
+			pending.SoundEffects);
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver
+		ReplacePendingConfirmationWithPlayerSelection()
+	{
+		if (_payload.PendingInstruction is not ConfirmationInstruction pending)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no pending confirmation.");
+		}
+
+		_payload.PendingInstruction = new SelectPlayersInstruction(
+			pending.Semantic,
+			_payload.Players.Select(player => player.Id).ToHashSet(),
+			NumberRangeConstraint.Single,
+			pending.PublicAnnouncement,
+			pending.PrivateInstruction,
+			pending.AffectedPlayerIds,
+			roleIdentification: null,
+			instructionId: pending.InstructionId);
+		return this;
+	}
+
 	internal RecoveryPayloadTestDriver
 		RewritePendingConfirmationAffectedPlayer(Guid playerId)
 	{
@@ -1926,6 +1979,26 @@ internal sealed class RecoveryPayloadTestDriver
 		return this;
 	}
 
+	internal RecoveryPayloadTestDriver RewritePendingConfirmationLocalizedText(
+		string? publicAnnouncement,
+		string? privateInstruction)
+	{
+		if (_payload.PendingInstruction is not ConfirmationInstruction pending)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no pending confirmation.");
+		}
+
+		_payload.PendingInstruction = new ConfirmationInstruction(
+			pending.Semantic,
+			publicAnnouncement,
+			privateInstruction,
+			pending.AffectedPlayerIds,
+			pending.InstructionId,
+			pending.SoundEffects);
+		return this;
+	}
+
 	internal RecoveryPayloadTestDriver RewritePendingPlayerSelectionPresentation(
 		string? publicAnnouncement,
 		string? privateInstruction,
@@ -1949,6 +2022,57 @@ internal sealed class RecoveryPayloadTestDriver
 			pending.InstructionId)
 		{
 			EmptySelectionOptionLabel = emptySelectionOptionLabel
+		};
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver RewritePendingPlayerSelectionCountConstraint(
+		NumberRangeConstraint countConstraint)
+	{
+		if (_payload.PendingInstruction is not
+		    SelectPlayersInstruction pending)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no pending Player selection.");
+		}
+
+		_payload.PendingInstruction = new SelectPlayersInstruction(
+			pending.Semantic,
+			pending.SelectablePlayerIds.ToHashSet(),
+			countConstraint,
+			pending.PublicAnnouncement,
+			pending.PrivateInstruction,
+			pending.AffectedPlayerIds,
+			pending.RoleIdentification,
+			pending.InstructionId)
+		{
+			EmptySelectionOptionLabel = pending.EmptySelectionOptionLabel
+		};
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver RewritePendingPlayerSelectionSelectablePlayerIds(
+		IEnumerable<Guid> selectablePlayerIds)
+	{
+		ArgumentNullException.ThrowIfNull(selectablePlayerIds);
+		if (_payload.PendingInstruction is not
+		    SelectPlayersInstruction pending)
+		{
+			throw new InvalidOperationException(
+				"The recovery test payload has no pending Player selection.");
+		}
+
+		_payload.PendingInstruction = new SelectPlayersInstruction(
+			pending.Semantic,
+			selectablePlayerIds.ToHashSet(),
+			pending.CountConstraint,
+			pending.PublicAnnouncement,
+			pending.PrivateInstruction,
+			pending.AffectedPlayerIds,
+			pending.RoleIdentification,
+			pending.InstructionId)
+		{
+			EmptySelectionOptionLabel = pending.EmptySelectionOptionLabel
 		};
 		return this;
 	}
@@ -2676,6 +2800,13 @@ internal sealed class RecoveryPayloadTestDriver
 			ModeratorInstructionSemantic semantic)
 	{
 		RequireAcceptedObservationCursor().NextInstructionSemantic = semantic;
+		return this;
+	}
+
+	internal RecoveryPayloadTestDriver
+		RewriteAcceptedObservationCursorContinuationRole(MainRoleType role)
+	{
+		RequireAcceptedObservationCursor().ContinuationRole = role;
 		return this;
 	}
 

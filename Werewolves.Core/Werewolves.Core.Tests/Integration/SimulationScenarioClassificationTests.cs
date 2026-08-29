@@ -70,7 +70,59 @@ public class SimulationScenarioClassificationTests : DiagnosticTestBase
 	}
 
 	[Fact]
-	public void Classify_WithRulesInvalidComposition_ReturnsStructuredErrorsWithoutEvaluatingLaterGates()
+	public void Classify_CommittedThiefOffersAffectCapabilitySupportButNotAlreadyDecided()
+	{
+		MainRoleType[] dealPool =
+		[
+			MainRoleType.Thief,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.BigBadWolf,
+			MainRoleType.SimpleVillager
+		];
+		var scenario = new SimulationScenario(
+			5,
+			dealPool.Concat([MainRoleType.Angel, MainRoleType.Cupid]),
+			dealPool,
+			MainRoleType.Angel,
+			MainRoleType.Cupid);
+
+		var safety = SimulationScenarioClassifier.Classify(
+			scenario,
+			SimulatorCapability.SafetyScreening);
+		var probability = SimulationScenarioClassifier.Classify(
+			scenario,
+			SimulatorCapability.FullProbability);
+
+		safety.Scenario.Should().BeSameAs(scenario);
+		safety.RulesValidity.IsValid.Should().BeTrue();
+		safety.AppSupport!.IsSupported.Should().BeTrue();
+		safety.SimulatorSupport!.IsSupported.Should().BeTrue();
+		safety.AlreadyDecided.Should().Be(
+			new AlreadyDecidedRoleCompositionResult(
+				new SingleFactionGameResult(Faction.Werewolf),
+				AlreadyDecidedReason.WerewolfControlShortcut));
+		safety.Cacheability.Should().BeNull();
+
+		probability.Scenario.Should().BeSameAs(scenario);
+		probability.RulesValidity.IsValid.Should().BeTrue();
+		probability.AppSupport!.IsSupported.Should().BeTrue();
+		probability.SimulatorSupport!.IsSupported.Should().BeFalse();
+		probability.SimulatorSupport.UnsupportedRoles.Should().Equal(
+			MainRoleType.Angel,
+			MainRoleType.BigBadWolf,
+			MainRoleType.Cupid,
+			MainRoleType.Thief);
+		probability.AlreadyDecided.Should().BeNull();
+		probability.Cacheability.Should().BeNull();
+		MarkTestCompleted();
+	}
+
+	[Theory]
+	[InlineData(ProductionCapabilityKind.SafetyScreening)]
+	[InlineData(ProductionCapabilityKind.FullProbability)]
+	public void Classify_WithRulesInvalidComposition_ReturnsStructuredErrorsWithoutEvaluatingLaterGates(
+		ProductionCapabilityKind capabilityKind)
 	{
 		var scenario = new SimulationScenario(
 			5,
@@ -84,7 +136,7 @@ public class SimulationScenarioClassificationTests : DiagnosticTestBase
 
 		var classification = SimulationScenarioClassifier.Classify(
 			scenario,
-			SimulatorCapability.FullProbability);
+			ResolveCapability(capabilityKind));
 
 		classification.RulesValidity.IsValid.Should().BeFalse();
 		classification.RulesValidity.Scenario.Should().BeSameAs(scenario);
@@ -145,8 +197,11 @@ public class SimulationScenarioClassificationTests : DiagnosticTestBase
 		MarkTestCompleted();
 	}
 
-	[Fact]
-	public void Classify_WithAppUnsupportedRole_StopsAfterAppGateAndPreservesInput()
+	[Theory]
+	[InlineData(ProductionCapabilityKind.SafetyScreening)]
+	[InlineData(ProductionCapabilityKind.FullProbability)]
+	public void Classify_WithAppUnsupportedRole_StopsAfterAppGateAndPreservesInput(
+		ProductionCapabilityKind capabilityKind)
 	{
 		var scenario = new SimulationScenario(
 			5,
@@ -160,7 +215,7 @@ public class SimulationScenarioClassificationTests : DiagnosticTestBase
 
 		var classification = SimulationScenarioClassifier.Classify(
 			scenario,
-			SimulatorCapability.FullProbability);
+			ResolveCapability(capabilityKind));
 
 		classification.RulesValidity.IsValid.Should().BeTrue();
 		classification.AppSupport.Should().NotBeNull();
@@ -413,6 +468,20 @@ public class SimulationScenarioClassificationTests : DiagnosticTestBase
 			],
 			offer1Role,
 			offer2Role);
+
+	private static SimulatorCapability ResolveCapability(ProductionCapabilityKind capabilityKind) =>
+		capabilityKind switch
+		{
+			ProductionCapabilityKind.SafetyScreening => SimulatorCapability.SafetyScreening,
+			ProductionCapabilityKind.FullProbability => SimulatorCapability.FullProbability,
+			_ => throw new ArgumentOutOfRangeException(nameof(capabilityKind), capabilityKind, null)
+		};
+
+	public enum ProductionCapabilityKind
+	{
+		SafetyScreening,
+		FullProbability
+	}
 
 	public enum PrejudicedManipulatorLocation
 	{

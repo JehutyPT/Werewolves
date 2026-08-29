@@ -11,10 +11,19 @@ namespace Werewolves.Client.Tests.Services;
 public class NativeLobbyEvaluationCompositionTests
 {
 	[Fact]
-	public void Settings_RejectSafetyCapabilityWithFullProbabilityDepth()
+	public void Settings_RejectDepthNotDeclaredByCapability()
 	{
+		var capability = new SimulatorCapability(
+			SimulatorCapability.FullProbability.Identity,
+			[
+				(MainRoleType.SimpleVillager, Faction.Villager, [])
+			],
+			supportedEvaluationDepths:
+			[
+				LobbyEvaluationDepth.DegenerateScreeningOnly
+			]);
 		var act = () => new LobbyEvaluationSettings(
-			SimulatorCapability.SafetyScreening,
+			capability,
 			LobbyEvaluationDepth.FullProbability);
 
 		act.Should().Throw<ArgumentException>()
@@ -34,6 +43,8 @@ public class NativeLobbyEvaluationCompositionTests
 			.Should().BeOfType<FileTerminalLobbyCacheStore>();
 		var settings = provider.GetRequiredService<LobbyEvaluationSettings>();
 		settings.Capability.Should().Be(SimulatorCapability.SafetyScreening);
+		settings.Capability.HeadlessResponsePolicy.StrategyIdentity.Should().Be(
+			BaselineRandomDecisionStrategy.SafetyScreeningIdentity);
 		settings.Depth.Should().Be(LobbyEvaluationDepth.DegenerateScreeningOnly);
 		provider.GetRequiredService<ILobbyTerminalEvaluator>()
 			.Should().BeOfType<AsyncTerminalLobbyEvaluator>();

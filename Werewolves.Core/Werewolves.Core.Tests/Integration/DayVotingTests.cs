@@ -47,7 +47,10 @@ public class DayVotingTests : DiagnosticTestBase
             seerTargetId: villager2);
 
         // Complete dawn phase
-        builder.CompleteDawnPhase();
+        builder.CompleteDawnPhase(new()
+        {
+            [villager1] = MainRoleType.SimpleVillager
+        });
 
         // Assert: We're in Day phase, and should have a confirmation instruction for debate
         var gameState = builder.GetGameState()!;
@@ -83,7 +86,7 @@ public class DayVotingTests : DiagnosticTestBase
 
     /// <summary>
     /// DV-002: Vote outcome publicly reveals the target before announcing elimination.
-    /// A sole remaining role type is not inferred.
+    /// A sole remaining role type is confirmed without a picker.
     /// </summary>
     [Fact]
     public void VoteOutcome_SinglePlayer_WithSinglePossibleRole_AnnouncesElimination()
@@ -106,7 +109,10 @@ public class DayVotingTests : DiagnosticTestBase
             victimId: villager1Id,
             seerId: seerId,
             seerTargetId: villager2.Id);
-        builder.CompleteDawnPhase();
+        builder.CompleteDawnPhase(new()
+        {
+            [villager1Id] = MainRoleType.SimpleVillager
+        });
 
         // Confirm debate
         var debateInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
@@ -126,11 +132,13 @@ public class DayVotingTests : DiagnosticTestBase
         var reveal = InstructionAssert.ExpectSuccessWithType<AssignRolesInstruction>(
             afterVote,
             CoreTestReferences.InstructionContexts.RoleAssignmentAfterLynch);
-        reveal.PlayersForAssignment.Should().Equal(villager2.Id);
+        reveal.PlayersForAssignment.Should().BeEmpty();
+        reveal.SelectableRolesForPlayers[villager2.Id].Should()
+            .OnlyContain(role => role == MainRoleType.SimpleVillager);
         builder.GetGameState()!.GetPlayer(villager2.Id).State.MainRole.Should().BeNull();
         builder.GetGameState()!.GetPlayer(villager2.Id).State.Health.Should().Be(PlayerHealth.Alive);
 
-        var afterReveal = builder.Process(reveal.CreateResponse(new()
+        var afterReveal = builder.Process(reveal.CreateObservedRoleResponse(new()
         {
             [villager2.Id] = MainRoleType.SimpleVillager
         }));
@@ -148,10 +156,10 @@ public class DayVotingTests : DiagnosticTestBase
     }
 
     /// <summary>
-    /// DV-005: Vote outcome with a sole remaining role type still requires public reveal mapping.
+    /// DV-005: Vote outcome with a sole remaining role type uses an entailed confirmation.
     /// </summary>
     [Fact]
-    public void VoteOutcome_SinglePossibleRole_RequiresRevealMappingAndAnnouncesElimination()
+    public void VoteOutcome_SinglePossibleRole_ConfirmsEntailedRoleAndAnnouncesElimination()
     {
         // Arrange: 1 Werewolf and 4 Villagers leaves only Villager roles unknown after night.
         var builder = CreateBuilder()
@@ -167,7 +175,10 @@ public class DayVotingTests : DiagnosticTestBase
         builder.CompleteNightPhase(
             werewolfIds: [werewolf.Id],
             victimId: dawnVictim.Id);
-        builder.CompleteDawnPhase();
+        builder.CompleteDawnPhase(new()
+        {
+            [dawnVictim.Id] = MainRoleType.SimpleVillager
+        });
 
         var debateInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
             builder.GetCurrentInstruction(),
@@ -181,15 +192,17 @@ public class DayVotingTests : DiagnosticTestBase
         // Act: Vote to lynch a player whose only possible role type is SimpleVillager.
         var afterVote = builder.Process(votingInstruction.CreateResponse([lynchedPlayer.Id]));
 
-        // Assert: The engine does not infer the sole remaining role type.
+        // Assert: the repeated-copy singleton is confirmed without a picker.
         var reveal = InstructionAssert.ExpectSuccessWithType<AssignRolesInstruction>(
             afterVote,
             CoreTestReferences.InstructionContexts.RoleAssignmentAfterLynch);
-        reveal.PlayersForAssignment.Should().Equal(lynchedPlayer.Id);
+        reveal.PlayersForAssignment.Should().BeEmpty();
+        reveal.SelectableRolesForPlayers[lynchedPlayer.Id].Should()
+            .OnlyContain(role => role == MainRoleType.SimpleVillager);
         lynchedPlayer.State.MainRole.Should().BeNull();
         lynchedPlayer.State.Health.Should().Be(PlayerHealth.Alive);
 
-        var afterReveal = builder.Process(reveal.CreateResponse(new()
+        var afterReveal = builder.Process(reveal.CreateObservedRoleResponse(new()
         {
             [lynchedPlayer.Id] = MainRoleType.SimpleVillager
         }));
@@ -223,35 +236,37 @@ public class DayVotingTests : DiagnosticTestBase
     {
         var scenario = DayVoteScenario.Start();
         var builder = scenario.Builder
+            .ArrangeKnownPhysicalRole(
+                scenario.LivingTargetId,
+                MainRoleType.SimpleVillager)
             .ArrangeCurrentRole(
                 scenario.LivingTargetId,
-                MainRoleType.SimpleVillager);
+                MainRoleType.Seer);
         var afterVote = builder.Process(
             scenario.Instruction.CreateResponse([scenario.LivingTargetId]));
-        var assignment = afterVote.ModeratorInstruction.Should()
-            .BeOfType<AssignRolesInstruction>().Subject;
+        var reveal = afterVote.ModeratorInstruction.Should()
+            .BeOfType<ConfirmationInstruction>().Subject;
 
-        assignment.PlayersForAssignment.Should().Equal(
+        reveal.AffectedPlayerIds.Should().Equal(
             scenario.LivingTargetId);
-        assignment.RolesForAssignment.Should().Contain(
-			MainRoleType.Seer);
         var playerState = builder.GetGameState()!.GetPlayerState(
             scenario.LivingTargetId);
-        playerState.CurrentRole.Should().Be(MainRoleType.SimpleVillager);
-        playerState.ModeratorKnownRole.Should().BeNull();
+        playerState.CurrentRole.Should().Be(MainRoleType.Seer);
+        playerState.ModeratorKnownRole.Should().Be(
+            MainRoleType.SimpleVillager);
+        playerState.PhysicalCharacterCardRole.Should().Be(
+            MainRoleType.SimpleVillager);
         playerState.Health.Should().Be(PlayerHealth.Alive);
 
-        var afterReveal = builder.Process(assignment.CreateResponse(new()
-        {
-			[scenario.LivingTargetId] = MainRoleType.Seer
-        }));
+        var afterReveal = builder.Process(reveal.CreateResponse());
 
         afterReveal.ModeratorInstruction.Should()
             .BeOfType<ConfirmationInstruction>();
-        playerState.CurrentRole.Should().Be(MainRoleType.SimpleVillager);
-		playerState.ModeratorKnownRole.Should().BeNull();
+        playerState.CurrentRole.Should().Be(MainRoleType.Seer);
+		playerState.ModeratorKnownRole.Should().Be(
+			MainRoleType.SimpleVillager);
         playerState.PubliclyRevealedRole.Should().Be(
-			MainRoleType.Seer);
+			MainRoleType.SimpleVillager);
         playerState.Health.Should().Be(PlayerHealth.Dead);
         builder.GetGameState()!.GameHistoryLog
             .OfType<RoleRevealLogEntry>()
@@ -259,7 +274,8 @@ public class DayVotingTests : DiagnosticTestBase
             .ContainSingle(entry =>
                 entry.RevealedRoles.Count == 1 &&
                 entry.RevealedRoles.GetValueOrDefault(
-					scenario.LivingTargetId) == MainRoleType.Seer);
+					scenario.LivingTargetId) ==
+					MainRoleType.SimpleVillager);
         builder.GetGameState()!.GameHistoryLog
             .OfType<PlayerEliminatedLogEntry>()
             .Should().ContainSingle(entry =>
@@ -326,7 +342,7 @@ public class DayVotingTests : DiagnosticTestBase
             .ModeratorInstruction.Should()
             .BeOfType<AssignRolesInstruction>().Subject;
         var afterModelReveal = builder.Process(
-            roleModelReveal.CreateResponse(new()
+            roleModelReveal.CreateObservedRoleResponse(new()
             {
                 [roleModelId] = MainRoleType.SimpleVillager
             }));
@@ -359,9 +375,8 @@ public class DayVotingTests : DiagnosticTestBase
 		var reveal = builder.Process(
 				vote.CreateResponse([wildChildId]))
 			.ModeratorInstruction.Should()
-			.BeOfType<AssignRolesInstruction>().Subject;
-		reveal.PlayersForAssignment.Should().Equal(wildChildId);
-		reveal.RolesForAssignment.Should().Contain(MainRoleType.WildChild);
+			.BeOfType<ConfirmationInstruction>().Subject;
+		reveal.AffectedPlayerIds.Should().Equal(wildChildId);
         wildChildState.Health.Should().Be(PlayerHealth.Alive);
 
         session.GameHistoryLog
@@ -376,10 +391,7 @@ public class DayVotingTests : DiagnosticTestBase
                 entry.PlayerIds.SetEquals(new[] { wildChildId }) &&
                 entry.AssignedMainRole == MainRoleType.SimpleWerewolf);
 
-		var afterReveal = builder.Process(reveal.CreateResponse(new()
-		{
-			[wildChildId] = MainRoleType.WildChild
-		}));
+		var afterReveal = builder.Process(reveal.CreateResponse());
 
         afterReveal.ModeratorInstruction.Should()
             .BeOfType<ConfirmationInstruction>();
@@ -430,7 +442,10 @@ public class DayVotingTests : DiagnosticTestBase
             victimId: villager1Id,
             seerId: seerId,
             seerTargetId: villager2Id);
-        builder.CompleteDawnPhase();
+        builder.CompleteDawnPhase(new()
+        {
+            [villager1Id] = MainRoleType.SimpleVillager
+        });
 
         // Confirm debate
         var debateInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
@@ -483,10 +498,16 @@ public class DayVotingTests : DiagnosticTestBase
             victimId: villager1Id,
             seerId: seerId,
             seerTargetId: villager2Id);
-        builder.CompleteDawnPhase();
+        builder.CompleteDawnPhase(new()
+        {
+            [villager1Id] = MainRoleType.SimpleVillager
+        });
 
         // Act: Complete day phase with lynch
-        builder.CompleteDayPhaseWithLynch(villager2Id);
+        builder.CompleteDayPhaseWithLynch(villager2Id, new()
+        {
+            [villager2Id] = MainRoleType.SimpleVillager
+        });
 
         // Assert: Lynched player should be dead
         var gameState = builder.GetGameState()!;
@@ -532,7 +553,10 @@ public class DayVotingTests : DiagnosticTestBase
             victimId: villager1Id,
             seerId: seerId,
             seerTargetId: villager2Id);
-        builder.CompleteDawnPhase();
+        builder.CompleteDawnPhase(new()
+        {
+            [villager1Id] = MainRoleType.SimpleVillager
+        });
 
         // Get the count of living players before voting
         var livingPlayersBefore = builder.GetGameState()!.GetPlayers()
@@ -597,7 +621,10 @@ public class DayVotingTests : DiagnosticTestBase
             victimId: villager1Id,
             seerId: seerId,
             seerTargetId: villager2Id);
-        builder.CompleteDawnPhase();
+        builder.CompleteDawnPhase(new()
+        {
+            [villager1Id] = MainRoleType.SimpleVillager
+        });
 
         // Confirm debate
         var debateInstruction = InstructionAssert.ExpectType<ConfirmationInstruction>(
@@ -659,7 +686,10 @@ public class DayVotingTests : DiagnosticTestBase
             seerTargetId: villager2Id);
 
         // Complete Dawn 1: victim eliminated
-        builder.CompleteDawnPhase();
+        builder.CompleteDawnPhase(new()
+        {
+            [villager1Id] = MainRoleType.SimpleVillager
+        });
 
         // Verify villager1 is now dead
         var deadPlayer = builder.GetGameState()!.GetPlayers().First(p => p.Id == villager1Id);

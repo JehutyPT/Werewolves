@@ -1327,17 +1327,108 @@ internal class GameSession : IGameSession
         };
 
         _gameSessionKernel.AddEntryAndUpdateState(entry);
+
+		var entailedWerewolfFactionAgentKnowledge =
+			GetRoleIdentificationWerewolfFactionAgentKnowledge(role);
+		if (entailedWerewolfFactionAgentKnowledge is null)
+		{
+			return;
+		}
+
+		var boundary = new FactionFactEffectiveBoundary(
+			TurnNumber,
+			GetCurrentPhase(),
+			GameHistoryLog.Count());
+		var facts = GetPlayers()
+			.Where(player => playerIds.Contains(player.Id))
+			.Where(player => GetFactionAgentKnowledge(
+				player.Id,
+				Faction.Werewolf) == FactionAgentKnowledge.Unknown)
+			.Select(player => FactionFact.Agent(
+				player.Id,
+				Faction.Werewolf,
+				entailedWerewolfFactionAgentKnowledge.Value,
+				boundary))
+			.ToImmutableArray();
+		if (facts.IsEmpty)
+		{
+			return;
+		}
+
+		CommitFactionFactBatch(context => new FactionFactsCommittedLogEntry
+		{
+			Timestamp = context.Timestamp,
+			TurnNumber = context.TurnNumber,
+			CurrentPhase = context.CurrentPhase,
+			Source = new FactionFactSource(
+				FactionFactSourceKind.ScheduledObservation,
+				FactionFactSource
+					.RoleIdentificationWerewolfFactionAgencyEntailmentIdentifier),
+			Facts = facts
+		});
     }
+
+	private static FactionAgentKnowledge?
+		GetRoleIdentificationWerewolfFactionAgentKnowledge(
+			MainRoleType role) => role switch
+		{
+			MainRoleType.SimpleWerewolf or
+			MainRoleType.BigBadWolf or
+			MainRoleType.AccursedWolfFather or
+			MainRoleType.WhiteWerewolf => FactionAgentKnowledge.KnownAgent,
+			MainRoleType.SimpleVillager or
+			MainRoleType.VillagerVillager or
+			MainRoleType.Seer or
+			MainRoleType.Cupid or
+			MainRoleType.Witch or
+			MainRoleType.Hunter or
+			MainRoleType.LittleGirl or
+			MainRoleType.Defender or
+			MainRoleType.Elder or
+			MainRoleType.Scapegoat or
+			MainRoleType.VillageIdiot or
+			MainRoleType.TwoSisters or
+			MainRoleType.ThreeBrothers or
+			MainRoleType.Fox or
+			MainRoleType.BearTamer or
+			MainRoleType.StutteringJudge or
+			MainRoleType.KnightWithRustySword or
+			MainRoleType.Actor or
+			MainRoleType.Piper or
+			MainRoleType.Angel or
+			MainRoleType.PrejudicedManipulator or
+			MainRoleType.Gypsy or
+			MainRoleType.WildChild => FactionAgentKnowledge.KnownNonAgent,
+			MainRoleType.WolfHound or
+			MainRoleType.Thief or
+			MainRoleType.DevotedServant => null,
+			_ => throw new ArgumentOutOfRangeException(nameof(role), role, null)
+		};
 
     internal void ObserveVillagerVillagerFromDeal(Guid playerId)
     {
-		var card = GetModeratorPhysicalCharacterCards()
-			.SingleOrDefault(state =>
+		var player = GetPlayer(playerId);
+		var cards = GetModeratorPhysicalCharacterCards();
+		var ownedCardId = player.State.PhysicalCharacterCardId;
+		var bindsCardOwnership = ownedCardId is null;
+		var card = bindsCardOwnership
+			? cards.SingleOrDefault(state =>
 				state.Card.PrintedRole == MainRoleType.VillagerVillager &&
 				state.Zone == PhysicalCharacterCardZone.DealPool &&
 				state.OwnerPlayerId is null)
-			?.Card ?? throw new InvalidOperationException(
-				"No unowned Villager-Villager Physical Character Card is available.");
+			: cards.SingleOrDefault(state =>
+				state.Card.Id == ownedCardId &&
+				state.Card.PrintedRole == MainRoleType.VillagerVillager &&
+				state.Zone == PhysicalCharacterCardZone.PlayerOwned &&
+				state.OwnerPlayerId == playerId);
+		if (card is null)
+		{
+			throw new InvalidOperationException(
+				bindsCardOwnership
+					? "No unowned Villager-Villager Physical Character Card is available."
+					: "The Villager-Villager Physical Character Card ownership is invalid.");
+		}
+
         var entry = new VillagerVillagerPublicFromDealLogEntry
         {
             Timestamp = DateTimeOffset.UtcNow,
@@ -1345,7 +1436,8 @@ internal class GameSession : IGameSession
             CurrentPhase = _gameSessionKernel.CurrentPhase,
 			PlayerId = playerId,
 			RoleLockInVersion = RoleLockIn.Version,
-			CardId = card.Id
+			CardId = card.Card.Id,
+			BindsCardOwnership = bindsCardOwnership
         };
 
         _gameSessionKernel.AddEntryAndUpdateState(entry);

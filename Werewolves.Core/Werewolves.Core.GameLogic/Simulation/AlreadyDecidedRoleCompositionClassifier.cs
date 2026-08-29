@@ -10,20 +10,12 @@ public static class SimulatorFactionBeneficiaryBridge
 		CanonicalRoleComposition composition,
 		SimulatorCapability capability)
 	{
-		ArgumentNullException.ThrowIfNull(capability);
-		return Map(composition, (SimulatorProfile)capability);
-	}
-
-	internal static FactionBeneficiaryComposition Map(
-		CanonicalRoleComposition composition,
-		SimulatorProfile profile)
-	{
 		ArgumentNullException.ThrowIfNull(composition);
-		ArgumentNullException.ThrowIfNull(profile);
+		ArgumentNullException.ThrowIfNull(capability);
 		var counts = new Dictionary<Faction, int>();
 		foreach (var entry in composition.Entries)
 		{
-			if (!profile.TryGetBeneficiaryFaction(entry.Role, out var faction))
+			if (!capability.TryGetBeneficiaryFaction(entry.Role, out var faction))
 			{
 				throw new ArgumentException(
 					$"Role {entry.Role} is not supported by the selected simulator producer.",
@@ -44,16 +36,12 @@ public static class AlreadyDecidedRoleCompositionClassifier
 		SimulatorCapability capability)
 	{
 		ArgumentNullException.ThrowIfNull(capability);
-		return Classify(composition, (SimulatorProfile)capability);
+		return Classify(SimulatorFactionBeneficiaryBridge.Map(composition, capability));
 	}
 
-	internal static AlreadyDecidedRoleCompositionResult Classify(
-		CanonicalRoleComposition composition,
-		SimulatorProfile profile)
+	private static AlreadyDecidedRoleCompositionResult Classify(
+		FactionBeneficiaryComposition evidence)
 	{
-		ArgumentNullException.ThrowIfNull(composition);
-		ArgumentNullException.ThrowIfNull(profile);
-		var evidence = SimulatorFactionBeneficiaryBridge.Map(composition, profile);
 		var satisfiedFactions = FactionVictoryPredicates
 			.Evaluate(evidence)
 			.ToHashSet();

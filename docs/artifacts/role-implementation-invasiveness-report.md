@@ -3,7 +3,7 @@
 > - Original evidence anchor: `3cb40a64e3d7`
 > - Code-status refresh: `506ed86feaa4`
 > - Assessment completed: 17 July 2026; planning status audited: 19 July 2026
-> - Thief card-model settlement incorporated: [#148](https://github.com/bicheichane/Werewolves/issues/148), 20 July 2026
+> - Thief card-model settlement incorporated: [#148](https://github.com/JehutyPT/Werewolves/issues/148), 20 July 2026
 > - Categories describe architectural reach against the refreshed code baseline, not hours, points, or lines of code.
 > - Status: historical, non-authoritative planning snapshot through 20 July 2026. Use the [canonical game rules](../domain/game-rules.md) and [ADRs](../adr/) for current decisions.
 
@@ -29,7 +29,7 @@ Candidate distribution:
 
 The smallest next implementation is **Villager-Villager**. The best tracer for improving shared engine behavior is **Stuttering Judge**.
 
-This report is completed investigation evidence for [PRD #93](https://github.com/bicheichane/Werewolves/issues/93). Its role counts and invasiveness findings remain current at the refreshed baseline. PRD #93's published Role-owned foundation sequence supersedes the original work-order recommendations preserved below; those recommendations are not the implementation queue.
+This report is completed investigation evidence for [PRD #93](https://github.com/JehutyPT/Werewolves/issues/93). Its role counts and invasiveness findings remain current at the refreshed baseline. PRD #93's published Role-owned foundation sequence supersedes the original work-order recommendations preserved below; those recommendations are not the implementation queue.
 
 ## Scope rule for New Moon
 
@@ -194,8 +194,8 @@ This sequence records the investigation's dependency analysis. PRD #93's publish
 - [Simulator reuse ADR](../adr/0005-simulator-reuses-engine-via-headless-driver.md)
 - [Production screening-depth ADR](../adr/0013-production-lobby-evaluation-stops-after-safety-screening.md)
 - [QA strategy](../agents/qa-strategy.md)
-- [PRD #93](https://github.com/bicheichane/Werewolves/issues/93)
-- [Thief physical-deal and Permanent Role Swap decision #148](https://github.com/bicheichane/Werewolves/issues/148)
+- [PRD #93](https://github.com/JehutyPT/Werewolves/issues/93)
+- [Thief physical-deal and Permanent Role Swap decision #148](https://github.com/JehutyPT/Werewolves/issues/148)
 - `Werewolves.Core/Werewolves.Core.StateModels/Enums/MainRoleType.cs`
 - `Werewolves.Core/Werewolves.Core.GameLogic/Roles/SupportedRoleCatalog.cs`
 - `Werewolves.Core/Werewolves.Core.GameLogic/Services/GameFlowManager.cs`

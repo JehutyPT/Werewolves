@@ -38,29 +38,6 @@ internal static class GameFlowManager
 
 	private static readonly GameFlowManagerKey Key = new();
 
-	private enum AcceptedObservationInstructionShape
-    {
-        PlayerSelection,
-        Confirmation
-    }
-
-    private readonly record struct AcceptedObservationContinuation(
-        string ActiveSubPhaseStage,
-        ListenerIdentifier Listener,
-        string ListenerState,
-        AcceptedObservationInstructionShape InstructionShape)
-    {
-        internal bool Matches(ModeratorInstruction? instruction)
-            => InstructionShape switch
-            {
-                AcceptedObservationInstructionShape.PlayerSelection =>
-                    instruction?.GetType() == typeof(SelectPlayersInstruction),
-                AcceptedObservationInstructionShape.Confirmation =>
-                    instruction?.GetType() == typeof(ConfirmationInstruction),
-                _ => false
-            };
-    }
-
     #region Static Flow Definitions
     internal static readonly Dictionary<GameHook, List<ListenerIdentifier>> HookListeners = new()
     {
@@ -640,6 +617,14 @@ internal static class GameFlowManager
             return true;
         }
 
+		var execution = session.Execution;
+		if (startingInstruction != null &&
+		    execution.DomainRecoveryCursor?.NextInstructionId ==
+		    startingInstruction.InstructionId)
+		{
+			return true;
+		}
+
 	        if (IsAcceptedObservation(startingInstruction))
 	        {
 	            return true;
@@ -1118,13 +1103,14 @@ internal static class GameFlowManager
 				Semantic:
 					ModeratorInstructionSemantic.AssignDayVoteTargetRole,
 				PlayersForAssignment: var playersForAssignment,
-				RolesForAssignment: var rolesForAssignment,
+				SelectableRolesForPlayers: var selectableRolesForPlayers,
 				AffectedPlayerIds: [var affectedPlayerId]
 			} =>
 				affectedPlayerId == actingPlayerId &&
 				playersForAssignment.Count == 1 &&
 				playersForAssignment.Contains(actingPlayerId) &&
-				rolesForAssignment.Contains(MainRoleType.Actor) &&
+				selectableRolesForPlayers[actingPlayerId]
+					.Contains(MainRoleType.Actor) &&
 				IsExactActorRoleAssignmentResponse(input, actingPlayerId),
 			ConfirmationInstruction
 			{
@@ -1194,13 +1180,23 @@ internal static class GameFlowManager
 			input.Type == ExpectedInputType.PlayerSelection &&
 			input.SelectedPlayerIds is { Count: 1 } selectedPlayerIds &&
 			selectedPlayerIds.Single() == commit.TargetPlayerId &&
-			nextInstruction is AssignRolesInstruction
+			(nextInstruction switch
 			{
-				Semantic:
-					ModeratorInstructionSemantic.AssignEliminationCascadeRoles
-			} assignment &&
-			assignment.PlayersForAssignment.SetEquals(
-				[commit.TargetPlayerId]) &&
+				AssignRolesInstruction
+				{
+					Semantic:
+						ModeratorInstructionSemantic.AssignEliminationCascadeRoles
+				} assignment =>
+					assignment.SelectableRolesForPlayers.Keys.ToHashSet().SetEquals(
+						[commit.TargetPlayerId]),
+				ConfirmationInstruction
+				{
+					Semantic:
+						ModeratorInstructionSemantic.AssignEliminationCascadeRoles,
+					AffectedPlayerIds: [var revealedPlayerId]
+				} => revealedPlayerId == commit.TargetPlayerId,
+				_ => false
+			}) &&
 			commit.TriggeringPlayerIds.Contains(actingPlayerId) &&
 			session.GameHistoryLog
 				.OfType<EliminationCascadeBatchResolvedLogEntry>()
@@ -1372,6 +1368,7 @@ internal static class GameFlowManager
 			vote.TurnNumber != commit.TurnNumber ||
 			reportedOutcomePlayerId != Guid.Empty ||
 			!ScapegoatRole.MatchesBorrowedTieReveal(
+				session,
 				startingInstruction,
 				actorPlayerId) ||
 			input.InstructionId != startingInstruction?.InstructionId ||
@@ -1613,18 +1610,25 @@ internal static class GameFlowManager
 
 		if (newActorSetupCardSpendEntries.Length > 0)
 		{
-			if (newActorSetupCardSpendEntries is not [_])
+			if (newActorSetupCardSpendEntries is not [var spendEntry])
 			{
 				throw new InvalidOperationException(
 					"One accepted response must produce exactly one correlated Actor setup-card spend.");
 			}
 
-			if (!ActorRole.TryValidateCommittedRecoveryBoundary(
-				    session,
-				    startingInstruction,
-				    input,
-				    nextInstruction,
-				    out var activation) ||
+			var activation =
+				session.GetModeratorActiveActorBorrowedRolePowerActivation();
+			if (!RoleListenerDispatch
+				    .TryValidateActorSetupCardSpendCommittedRecoveryBoundary(
+					    Listener(MainRoleType.Actor),
+					    admissions,
+					    (id, factory) =>
+						    session.GetOrCreateListener(id, factory),
+					    session,
+					    startingInstruction,
+					    input,
+					    spendEntry,
+					    nextInstruction) ||
 			    activation is null)
 			{
 				throw new InvalidOperationException(
@@ -1653,7 +1657,12 @@ internal static class GameFlowManager
         if (newLoversPairEntries.Count > 0)
         {
             if (newLoversPairEntries is not [var pair] ||
-                !CupidRole.TryValidateCommittedRecoveryBoundary(
+                !RoleListenerDispatch
+                    .TryValidateLoversPairCommittedRecoveryBoundary(
+                    Listener(MainRoleType.Cupid),
+                    admissions,
+                    (id, factory) =>
+                        session.GetOrCreateListener(id, factory),
                     session,
                     startingInstruction,
                     input,
@@ -2123,7 +2132,12 @@ internal static class GameFlowManager
 							session,
 							marker,
 							cupidCommit) ||
-						!CupidRole.TryValidateCommittedRecoveryBoundary(
+						!RoleListenerDispatch
+							.TryValidateActorBorrowedLoversCommittedRecoveryBoundary(
+							Listener(cupidCommit.PowerIdentity.SourceRole),
+							admissions,
+							(id, factory) =>
+								session.GetOrCreateListener(id, factory),
 							session,
 							startingInstruction,
 							input,
@@ -2209,29 +2223,48 @@ internal static class GameFlowManager
                 recurringEntry.SourceRole switch
                 {
                     MainRoleType.BigBadWolf =>
-                        BigBadWolfRole.TryValidateCommittedRecoveryBoundary(
-                            session,
-                            startingInstruction,
-                            input,
-                            recurringEntry,
-                            nextInstruction,
-                            out _),
+                        RoleListenerDispatch
+                            .TryValidateRecurringCommittedRecoveryBoundary(
+                                Listener(MainRoleType.BigBadWolf),
+                                admissions,
+                                (id, factory) =>
+                                    session.GetOrCreateListener(id, factory),
+                                session,
+                                startingInstruction,
+                                input,
+                                recurringEntry,
+                                nextInstruction),
                     MainRoleType.Defender =>
-                        DefenderRole.TryValidateCommittedRecoveryBoundary(
-                            session,
-                            startingInstruction,
-                            input,
-                            recurringEntry,
-                            nextInstruction),
+                        RoleListenerDispatch
+                            .TryValidateRecurringCommittedRecoveryBoundary(
+                                Listener(MainRoleType.Defender),
+                                admissions,
+                                (id, factory) =>
+                                    session.GetOrCreateListener(id, factory),
+                                session,
+                                startingInstruction,
+                                input,
+                                recurringEntry,
+                                nextInstruction),
                     MainRoleType.WhiteWerewolf =>
-                        WhiteWerewolfRole.TryValidateCommittedRecoveryBoundary(
-                            session,
-                            startingInstruction,
-                            input,
-                            recurringEntry,
-                            nextInstruction),
+                        RoleListenerDispatch
+                            .TryValidateRecurringCommittedRecoveryBoundary(
+                                Listener(MainRoleType.WhiteWerewolf),
+                                admissions,
+                                (id, factory) =>
+                                    session.GetOrCreateListener(id, factory),
+                                session,
+                                startingInstruction,
+                                input,
+                                recurringEntry,
+                                nextInstruction),
                     MainRoleType.Piper =>
-                        PiperRole.TryValidateCommittedRecoveryBoundary(
+                        RoleListenerDispatch
+							.TryValidateRecurringCommittedRecoveryBoundary(
+								Listener(MainRoleType.Piper),
+								admissions,
+								(id, factory) =>
+									session.GetOrCreateListener(id, factory),
                             session,
                             startingInstruction,
                             input,
@@ -2275,11 +2308,18 @@ internal static class GameFlowManager
 
         var committedTargetId = committedEntry.TargetIds[0];
         var roleOwnedCommitCorrelated =
-            AccursedWolfFatherRole.TryValidateCommittedRecoveryBoundary(
+            committedEntry.SourceRole is
+                MainRoleType.AccursedWolfFather or MainRoleType.Witch &&
+            RoleListenerDispatch.TryValidateOneUseCommittedRecoveryBoundary(
+                Listener(committedEntry.SourceRole),
+                admissions,
+                (id, factory) =>
+                    session.GetOrCreateListener(id, factory),
                 session,
                 startingInstruction,
                 input,
-                committedEntry);
+                committedEntry,
+                nextInstruction);
         if (!roleOwnedCommitCorrelated &&
             (startingInstruction is not SelectPlayersInstruction ||
              input.SelectedPlayerIds is not
@@ -2319,6 +2359,7 @@ internal static class GameFlowManager
             ModeratorInstructionSemantic.AnnounceScapegoatPermittedVoters or
             ModeratorInstructionSemantic.EstablishStutteringJudgeSignal or
             ModeratorInstructionSemantic.ObserveStutteringJudgeSignal or
+            ModeratorInstructionSemantic.SelectWildChildModel or
             ModeratorInstructionSemantic.ChooseWolfHoundAlignment or
             ModeratorInstructionSemantic.ChooseThiefOffer or
 			ModeratorInstructionSemantic.ChooseActorSetupCard or
@@ -2388,17 +2429,19 @@ internal static class GameFlowManager
                 werewolfListener.LittleGirlGuidanceDecision;
         }
 
-        ValidateAcceptedObservationRecoverySemantics(
-            session,
-            execution,
-            cursor,
-            nextInstruction);
+		ValidateAcceptedObservationRecoverySemantics(
+			session,
+			execution,
+			cursor,
+			nextInstruction,
+			admissions);
 		var continuation = ResolvePendingInstructionContinuation(
 			Listener(continuationRole),
 			NightMainActionLoop,
 			session,
 			nextInstruction,
-			admissions);
+			admissions,
+			cursor);
         if (continuation == null)
         {
             throw new InvalidOperationException(
@@ -2455,7 +2498,8 @@ internal static class GameFlowManager
         GameSession session,
         ExecutionView execution,
         AcceptedObservationRecoveryCursor cursor,
-        ModeratorInstruction pendingInstruction)
+        ModeratorInstruction pendingInstruction,
+        IRoleAdmissionSource admissions)
     {
         var continuationRole = cursor.ContinuationRole ?? cursor.ObservedRole;
         if (execution.CurrentPhase != GamePhase.Night ||
@@ -2472,7 +2516,15 @@ internal static class GameFlowManager
                 "The Pending Instruction does not match the accepted observation continuation.");
         }
 
-        var matchesCommittedObservation =
+		var hasCentralObservationContract =
+			cursor.AcceptedObservationSemantic is
+				ModeratorInstructionSemantic.IdentifyRoleHolders or
+				ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup ||
+			(cursor.AcceptedObservationSemantic ==
+				 ModeratorInstructionSemantic
+					 .EstablishStutteringJudgeSignal &&
+			 continuationRole != StutteringJudge);
+		var matchesCommittedObservation =
             cursor.AcceptedObservationSemantic switch
             {
                 ModeratorInstructionSemantic.IdentifyRoleHolders =>
@@ -2495,43 +2547,29 @@ internal static class GameFlowManager
                         .HasConsistentInitialBeneficiaryClosure(session),
 				ModeratorInstructionSemantic
 					.EstablishStutteringJudgeSignal
-					when cursor.ObservedRole == StutteringJudge =>
-					StutteringJudgeRole.HasValidEstablishedSignal(
-						session,
-						pendingInstruction),
-                ModeratorInstructionSemantic.ChooseWolfHoundAlignment
-                    when cursor.ObservedRole == WolfHound =>
-                    HasCommittedWolfHoundAlignment(session),
-				ModeratorInstructionSemantic.ChooseThiefOffer
-					when cursor.ObservedRole == MainRoleType.Thief &&
-						 continuationRole == MainRoleType.Thief &&
-						 pendingInstruction is ConfirmationInstruction
-						 {
-							 Semantic:
-								 ModeratorInstructionSemantic.PutRoleToSleep,
-							 AffectedPlayerIds: [var thiefPlayerId]
-						 } =>
-					ThiefOfferRules.HasValidCommittedChoice(
-						session,
-						thiefPlayerId),
-				ModeratorInstructionSemantic.ChooseActorSetupCard
-					when cursor.ObservedRole == MainRoleType.Actor &&
-						 continuationRole == MainRoleType.Actor =>
-					ActorRole.HasExpectedDeclinedChoiceSleep(
-						session,
-						pendingInstruction),
-                ModeratorInstructionSemantic.RecognizeLovers
-                    when cursor.ObservedRole == Cupid &&
-                         continuationRole == Cupid =>
-                    CupidRole.HasExpectedCommittedPairSleep(
-                        session,
-                        pendingInstruction),
+					when cursor.ObservedRole == StutteringJudge &&
+					     continuationRole != StutteringJudge =>
+					StutteringJudgeRole.HasValidEstablishedSignal(session),
                 _ => false
             };
-        if (!matchesCommittedObservation)
-        {
-            throw new InvalidOperationException(
-                "The accepted observation recovery cursor does not match its committed observation.");
+		if (!matchesCommittedObservation)
+		{
+			if (!hasCentralObservationContract &&
+			    RoleListenerDispatch.ValidateDeclaredWorkflowRecovery(
+				    Listener(continuationRole),
+				    NightMainActionLoop,
+				    admissions,
+				    (id, factory) =>
+					    session.GetOrCreateListener(id, factory),
+				    session,
+				    pendingInstruction,
+				    cursor))
+			{
+				return;
+			}
+
+			throw new InvalidOperationException(
+				"The accepted observation recovery cursor does not match its committed observation.");
         }
 
 		if (!LittleGirlRole.HasValidRetainedGuidanceDecision(
@@ -2542,6 +2580,15 @@ internal static class GameFlowManager
 			throw new InvalidOperationException(
 				"The accepted observation recovery cursor has an invalid retained Little Girl guidance decision.");
 		}
+
+		_ = RoleListenerDispatch.ValidateDeclaredWorkflowRecovery(
+			Listener(continuationRole),
+			NightMainActionLoop,
+			admissions,
+			(id, factory) => session.GetOrCreateListener(id, factory),
+			session,
+			pendingInstruction,
+			cursor);
 	}
 
 	private static bool HasCommittedRoleIdentification(
@@ -2608,19 +2655,6 @@ internal static class GameFlowManager
                     .SetEquals(observedPlayerIds));
     }
 
-    private static bool HasCommittedWolfHoundAlignment(GameSession session)
-    {
-        var holders = session.GetPlayers()
-            .Where(player =>
-                player.State.Health == PlayerHealth.Alive &&
-                player.State.CurrentRole == WolfHound)
-            .ToArray();
-        return holders is [var holder] &&
-               WolfHoundRole.HasValidCommittedAlignment(
-                   session,
-                   holder.Id);
-    }
-
     private static bool RetainsLittleGirlGuidanceDecision(
         AcceptedObservationRecoveryCursor cursor)
     {
@@ -2668,8 +2702,6 @@ internal static class GameFlowManager
 			        session);
 		        VillageIdiotRole
 			        .ValidateBorrowedPendingPardonRecoveryInstruction(session);
-		        BearTamerRole.ValidateBorrowedPendingGrowlRecoveryInstruction(
-			        session);
 		        RestorePendingHookListenerContinuation(session, admissions);
 	            return;
 	        }
@@ -2682,13 +2714,15 @@ internal static class GameFlowManager
             session,
             execution,
             cursor,
-            pendingInstruction);
+            pendingInstruction,
+            admissions);
 		var continuation = ResolvePendingInstructionContinuation(
 			Listener(continuationRole),
 			NightMainActionLoop,
 			session,
 			pendingInstruction,
-			admissions);
+			admissions,
+			cursor);
         if (continuation == null)
         {
             throw new InvalidOperationException(
@@ -2845,7 +2879,8 @@ internal static class GameFlowManager
 				NightMainActionLoop,
 				session,
 				actorPendingInstruction,
-				admissions);
+				admissions,
+				domainRecoveryCursor: cursor);
 			if (actorContinuation == null ||
 			    actorContinuation.Value.Listener != Listener(MainRoleType.Actor))
 			{
@@ -2892,9 +2927,11 @@ internal static class GameFlowManager
                 .TryValidateTargetPrivateRecoveryCursorIdentity(
 				session,
                 Listener(sourceRole),
+                NightMainActionLoop,
                 admissions,
                 (id, factory) =>
                     session.GetOrCreateListener(id, factory),
+				pendingInstruction,
                 cursor))
         {
             throw new InvalidOperationException(
@@ -2907,30 +2944,25 @@ internal static class GameFlowManager
             switch (sourceRole)
             {
                 case MainRoleType.BigBadWolf:
-                    BigBadWolfRole.ValidateRecurringRecoveryCursorIdentity(
-						session,
-                        cursor);
-                    break;
-                case MainRoleType.Defender:
-                    DefenderRole.ValidateRecurringRecoveryCursorIdentity(
-						session,
-                        cursor);
-                    break;
-                case MainRoleType.WhiteWerewolf:
-                    WhiteWerewolfRole.ValidateRecurringRecoveryCursorIdentity(
-						session,
-                        cursor);
-                    break;
-                case MainRoleType.Piper:
-					PiperRole.ValidateRecurringRecoveryCursorIdentity(
-						session,
-						cursor);
-                    break;
                 case MainRoleType.Cupid:
-					CupidRole.ValidateRecurringRecoveryCursorIdentity(
-						session,
-						cursor);
-                    break;
+                case MainRoleType.Defender:
+                case MainRoleType.Piper:
+                case MainRoleType.WhiteWerewolf:
+					if (!RoleListenerDispatch
+					    .TryValidateDeclaredDomainRecoveryCursorIdentity(
+						    session,
+						    Listener(sourceRole),
+						    NightMainActionLoop,
+						    admissions,
+						    (id, factory) =>
+							    session.GetOrCreateListener(id, factory),
+						    pendingInstruction,
+						    cursor))
+					{
+						throw new InvalidOperationException(
+							$"Unsupported {sourceRole} recurring Role Power continuation.");
+					}
+					break;
                 default:
                     throw new InvalidOperationException(
                         $"Unsupported recurring Role Power continuation '{sourceRole}'.");
@@ -2983,22 +3015,13 @@ internal static class GameFlowManager
             }
         }
 
-        var configuredContinuation = ResolveDomainContinuation(
-            sourceRole,
-            cursor.CommittedActionType,
-            cursor.NextInstructionSemantic);
-        if (sourceRole == Witch && configuredContinuation == null)
-        {
-            throw new InvalidOperationException(
-                $"Unsupported domain continuation '{sourceRole}:{cursor.CommittedActionType}:{cursor.NextInstructionSemantic}'.");
-        }
-
         var listenerContinuation = ResolvePendingInstructionContinuation(
             Listener(sourceRole),
             NightMainActionLoop,
             session,
             pendingInstruction,
-            admissions);
+			admissions,
+			domainRecoveryCursor: cursor);
         if (listenerContinuation != null)
         {
             if (listenerContinuation.Value.Listener !=
@@ -3017,32 +3040,8 @@ internal static class GameFlowManager
             return;
         }
 
-        if (cursor.Kind ==
-            DomainRecoveryCursorKind.RecurringNativeRolePowerCommit)
-        {
-            throw new InvalidOperationException(
-                $"Unsupported domain continuation '{sourceRole}:{cursor.CommittedActionType}:{cursor.NextInstructionSemantic}'.");
-        }
-
-        var continuation = configuredContinuation;
-        if (continuation == null)
-        {
-            throw new InvalidOperationException(
-                $"Unsupported domain continuation '{sourceRole}:{cursor.CommittedActionType}:{cursor.NextInstructionSemantic}'.");
-        }
-
-        if (!continuation.Value.Matches(execution.PendingInstruction))
-        {
-            throw new InvalidOperationException(
-                "The Pending Instruction does not match the committed domain continuation.");
-        }
-
-		session.RestoreTransientContinuation(
-			Key,
-			execution,
-			continuation.Value.ActiveSubPhaseStage,
-			continuation.Value.Listener,
-			continuation.Value.ListenerState);
+        throw new InvalidOperationException(
+            $"Unsupported domain continuation '{sourceRole}:{cursor.CommittedActionType}:{cursor.NextInstructionSemantic}'.");
     }
 
     private static bool IsNightStartSubPhase(ExecutionView execution)
@@ -3053,34 +3052,6 @@ internal static class GameFlowManager
         return (subPhaseId == null || nightSubPhase != null) &&
             (nightSubPhase ?? NightSubPhases.Start) == NightSubPhases.Start;
     }
-
-    private static AcceptedObservationContinuation?
-        ResolveDomainContinuation(
-            MainRoleType sourceRole,
-            NightActionType committedActionType,
-            ModeratorInstructionSemantic nextInstructionSemantic)
-        => (sourceRole, committedActionType, nextInstructionSemantic) switch
-        {
-            (Witch, NightActionType.WitchSave, ModeratorInstructionSemantic.SelectWitchPoisonTarget) =>
-                new(
-                    NightMainActionLoop.ToString(),
-                    Listener(Witch),
-                    WitchRoleState.AwaitingPoisonSelection.ToString(),
-                    AcceptedObservationInstructionShape.PlayerSelection),
-            (Witch, NightActionType.WitchSave, ModeratorInstructionSemantic.PutRoleToSleep) =>
-                new(
-                    NightMainActionLoop.ToString(),
-                    Listener(Witch),
-                    WitchRoleState.ReadyToSleep.ToString(),
-                    AcceptedObservationInstructionShape.Confirmation),
-            (Witch, NightActionType.WitchKill, ModeratorInstructionSemantic.PutRoleToSleep) =>
-                new(
-                    NightMainActionLoop.ToString(),
-                    Listener(Witch),
-                    WitchRoleState.ReadyToSleep.ToString(),
-                    AcceptedObservationInstructionShape.Confirmation),
-            _ => null
-        };
 
     private static bool TryGetVictoryInstructions(GameSession session, GamePhase oldPhase, GamePhase newPhase,
 		out ModeratorInstruction? nextInstructionToSend)

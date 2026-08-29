@@ -5,6 +5,7 @@ using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
+using Werewolves.Core.StateModels.Serialization;
 using static Werewolves.Core.GameLogic.Models.InternalMessages.StayInSubPhaseHandlerResult;
 
 namespace Werewolves.Core.GameLogic.Models.StateMachine;
@@ -170,29 +171,23 @@ internal sealed class HookSubPhaseStage : SubPhaseStage
         ResolvePendingInstructionContinuation(
             GameSession session,
             ModeratorInstruction pendingInstruction,
-            IRoleAdmissionSource admissions)
+            IRoleAdmissionSource admissions,
+			AcceptedObservationRecoveryCursor? acceptedObservationRecoveryCursor = null,
+			DomainRecoveryCursor? domainRecoveryCursor = null)
     {
-        if (pendingInstruction is ConfirmationInstruction
-            {
-                Semantic: ModeratorInstructionSemantic.WakeRole
-            })
-        {
-            // Wake instructions deliberately carry no Role identity in the generic
-            // cadence, so only a durable cursor may resolve them to one listener.
-            return null;
-        }
-
         PendingHookListenerContinuation? resolved = null;
         foreach (var (hook, listeners) in GameFlowManager.HookListeners)
         {
             foreach (var listenerId in listeners)
             {
-                var continuation = ResolvePendingInstructionContinuation(
-                    listenerId,
-                    hook,
-                    session,
-                    pendingInstruction,
-                    admissions);
+				var continuation = ResolvePendingInstructionContinuation(
+					listenerId,
+					hook,
+					session,
+					pendingInstruction,
+					admissions,
+					acceptedObservationRecoveryCursor,
+					domainRecoveryCursor);
                 if (continuation == null)
                 {
                     continue;
@@ -211,13 +206,15 @@ internal sealed class HookSubPhaseStage : SubPhaseStage
         return resolved;
     }
 
-    internal static PendingHookListenerContinuation?
-        ResolvePendingInstructionContinuation(
+	internal static PendingHookListenerContinuation?
+		ResolvePendingInstructionContinuation(
             ListenerIdentifier listenerId,
             GameHook hook,
             GameSession session,
             ModeratorInstruction pendingInstruction,
-            IRoleAdmissionSource admissions)
+            IRoleAdmissionSource admissions,
+			AcceptedObservationRecoveryCursor? acceptedObservationRecoveryCursor = null,
+			DomainRecoveryCursor? domainRecoveryCursor = null)
     {
         var listenerState =
             RoleListenerDispatch.ResolvePendingInstructionContinuation(
@@ -227,14 +224,16 @@ internal sealed class HookSubPhaseStage : SubPhaseStage
                 (id, factory) =>
                     session.GetOrCreateListener(id, factory),
                 session,
-                pendingInstruction);
+                pendingInstruction,
+				acceptedObservationRecoveryCursor,
+				domainRecoveryCursor);
         return listenerState == null
             ? null
-            : new PendingHookListenerContinuation(
-                hook.ToString(),
-                listenerId,
-                listenerState);
-    }
+			: new PendingHookListenerContinuation(
+					hook.ToString(),
+					listenerId,
+					listenerState);
+	}
 
     private HookSubPhaseStage(GameHook hook) : base(hook)
     {

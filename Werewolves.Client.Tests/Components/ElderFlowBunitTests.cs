@@ -149,14 +149,11 @@ public sealed class ElderFlowBunitTests
 		vote.Semantic.Should().Be(ModeratorInstructionSemantic.RecordDayVote);
 		var reveal = manager.ProcessInput(vote.CreateResponse([elderId]))
 			.ModeratorInstruction.Should()
-			.BeOfType<AssignRolesInstruction>().Subject;
+			.BeOfType<ConfirmationInstruction>().Subject;
 		reveal.Semantic.Should().Be(
 			ModeratorInstructionSemantic.AssignDayVoteTargetRole);
-		reveal.PlayersForAssignment.Should().Equal(elderId);
-		var elimination = manager.ProcessInput(reveal.CreateResponse(new()
-			{
-				[elderId] = MainRoleType.Elder
-			}))
+		reveal.AffectedPlayerIds.Should().Equal(elderId);
+		var elimination = manager.ProcessInput(reveal.CreateResponse())
 			.ModeratorInstruction.Should()
 			.BeOfType<ConfirmationInstruction>().Subject;
 		elimination.Semantic.Should().Be(

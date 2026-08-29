@@ -30,29 +30,83 @@ internal static class RoleListenerDispatch
 		IRoleAdmissionSource admissions,
 		Func<ListenerIdentifier, Func<IGameHookListener>, IGameHookListener> getOrCreateListener,
 		GameSession session,
-		ModeratorInstruction pendingInstruction)
+		ModeratorInstruction pendingInstruction,
+		AcceptedObservationRecoveryCursor? acceptedObservationRecoveryCursor = null,
+		DomainRecoveryCursor? domainRecoveryCursor = null)
 	{
 		var listener = GetActiveListener(
 			listenerId,
 			admissions,
 			getOrCreateListener);
-		if (listener == null ||
-		    !listener.TryResolvePendingInstructionContinuation(
-			    hook,
-			    session,
-			    pendingInstruction,
-			    out var listenerState))
+		if (listener is not IDeclaredRoleWorkflow declaredWorkflow)
 		{
 			return null;
 		}
 
-		if (string.IsNullOrWhiteSpace(listenerState))
+		var runtime = declaredWorkflow.GetWorkflowRuntime(hook);
+		if (runtime == null)
 		{
-			throw new InvalidOperationException(
-				$"Listener '{listenerId}' resolved a pending instruction without a continuation state.");
+			return null;
 		}
 
-		return listenerState;
+		var candidate = runtime.ClassifyRecoveryCandidate(
+					session,
+					pendingInstruction,
+					acceptedObservationRecoveryCursor,
+					domainRecoveryCursor);
+		return candidate.Kind switch
+		{
+			RoleWorkflowRecoveryCandidateKind.Unrelated => null,
+			RoleWorkflowRecoveryCandidateKind.Authenticated
+				when !string.IsNullOrWhiteSpace(candidate.ContinuationState) =>
+				candidate.ContinuationState,
+			RoleWorkflowRecoveryCandidateKind.Authenticated =>
+				throw new InvalidOperationException(
+					$"Declared workflow '{listenerId}' authenticated no continuation state."),
+			RoleWorkflowRecoveryCandidateKind.ClaimedButInvalid =>
+				throw new InvalidOperationException(candidate.Failure),
+			_ => throw new InvalidOperationException(
+				$"Unknown declared workflow recovery result for '{listenerId}'.")
+		};
+	}
+
+	internal static bool ValidateDeclaredWorkflowRecovery(
+		ListenerIdentifier listenerId,
+		GameHook hook,
+		IRoleAdmissionSource admissions,
+		Func<ListenerIdentifier, Func<IGameHookListener>, IGameHookListener>
+			getOrCreateListener,
+		GameSession session,
+		ModeratorInstruction pendingInstruction,
+		AcceptedObservationRecoveryCursor cursor)
+	{
+		var listener = GetActiveListener(
+			listenerId,
+			admissions,
+			getOrCreateListener);
+		if (listener is not IDeclaredRoleWorkflow declaredWorkflow)
+		{
+			return false;
+		}
+
+		var runtime = declaredWorkflow.GetWorkflowRuntime(hook);
+		if (runtime == null)
+		{
+			return false;
+		}
+
+		var candidate = runtime.ClassifyRecoveryCandidate(
+				session,
+				pendingInstruction,
+				acceptedObservationCursor: cursor);
+		if (candidate.Kind == RoleWorkflowRecoveryCandidateKind.Authenticated)
+		{
+			return true;
+		}
+
+		throw new InvalidOperationException(
+			candidate.Failure ??
+			$"Pending instruction '{pendingInstruction.Semantic}' does not authenticate declared workflow '{listenerId}:{hook}'.");
 	}
 
 	internal static bool TryValidateTargetPrivateCommittedRecoveryBoundary(
@@ -70,35 +124,255 @@ internal static class RoleListenerDispatch
 			listenerId,
 			admissions,
 			getOrCreateListener);
-		return listener is ITargetPrivateRolePowerRecoveryCapability capability &&
-		       capability.TryValidateCommittedRecoveryBoundary(
-			       session,
-			       startingInstruction,
-			       input,
-			       committedBoundary,
-			       nextInstruction);
+		if (listener is not IDeclaredRoleWorkflow declaredWorkflow)
+		{
+			return false;
+		}
+
+		if (!session.Execution.TryGetActiveGameHook(out var hook))
+		{
+			throw new InvalidOperationException(
+				$"Declared workflow '{listenerId}' has no active hook for committed recovery validation.");
+		}
+
+		var runtime = declaredWorkflow.GetWorkflowRuntime(hook);
+		return runtime?.TryValidateCommittedRecoveryBoundary(
+				session,
+				startingInstruction,
+				input,
+				committedBoundary,
+				nextInstruction) ?? false;
 	}
 
-	internal static bool TryValidateTargetPrivateRecoveryCursorIdentity(
-		GameSession session,
+	internal static bool TryValidateRecurringCommittedRecoveryBoundary(
 		ListenerIdentifier listenerId,
 		IRoleAdmissionSource admissions,
 		Func<ListenerIdentifier, Func<IGameHookListener>, IGameHookListener>
 			getOrCreateListener,
+		GameSession session,
+		ModeratorInstruction? startingInstruction,
+		ModeratorResponse input,
+		RecurringRolePowerCommittedLogEntry committedBoundary,
+		ModeratorInstruction nextInstruction)
+	{
+		var listener = GetActiveListener(
+			listenerId,
+			admissions,
+			getOrCreateListener);
+		if (listener is not IDeclaredRoleWorkflow declaredWorkflow ||
+		    !session.Execution.TryGetActiveGameHook(out var hook))
+		{
+			return false;
+		}
+
+		var runtime = declaredWorkflow.GetWorkflowRuntime(hook);
+		return runtime?.TryValidateCommittedRecoveryBoundary(
+			session,
+			startingInstruction,
+			input,
+			committedBoundary,
+			nextInstruction) ?? false;
+	}
+
+	internal static bool TryValidateOneUseCommittedRecoveryBoundary(
+		ListenerIdentifier listenerId,
+		IRoleAdmissionSource admissions,
+		Func<ListenerIdentifier, Func<IGameHookListener>, IGameHookListener>
+			getOrCreateListener,
+		GameSession session,
+		ModeratorInstruction? startingInstruction,
+		ModeratorResponse input,
+		OneUseRolePowerCommittedLogEntry committedBoundary,
+		ModeratorInstruction nextInstruction)
+	{
+		var listener = GetActiveListener(
+			listenerId,
+			admissions,
+			getOrCreateListener);
+		if (listener is not IDeclaredRoleWorkflow declaredWorkflow ||
+		    !session.Execution.TryGetActiveGameHook(out var hook))
+		{
+			return false;
+		}
+
+		var runtime = declaredWorkflow.GetWorkflowRuntime(hook);
+		return runtime?.TryValidateCommittedRecoveryBoundary(
+			session,
+			startingInstruction,
+			input,
+			committedBoundary,
+			nextInstruction) ?? false;
+	}
+
+	internal static bool
+		TryValidateActorSetupCardSpendCommittedRecoveryBoundary(
+			ListenerIdentifier listenerId,
+			IRoleAdmissionSource admissions,
+			Func<ListenerIdentifier, Func<IGameHookListener>, IGameHookListener>
+				getOrCreateListener,
+			GameSession session,
+			ModeratorInstruction? startingInstruction,
+			ModeratorResponse input,
+			ActorSetupCardSpendCommittedLogEntry committedBoundary,
+			ModeratorInstruction nextInstruction)
+	{
+		var listener = GetActiveListener(
+			listenerId,
+			admissions,
+			getOrCreateListener);
+		if (listener is not IDeclaredRoleWorkflow declaredWorkflow ||
+		    !session.Execution.TryGetActiveGameHook(out var hook))
+		{
+			return false;
+		}
+
+		var runtime = declaredWorkflow.GetWorkflowRuntime(hook);
+		return runtime?.TryValidateCommittedRecoveryBoundary(
+			session,
+			startingInstruction,
+			input,
+			committedBoundary,
+			nextInstruction) ?? false;
+	}
+
+	internal static bool TryValidateLoversPairCommittedRecoveryBoundary(
+		ListenerIdentifier listenerId,
+		IRoleAdmissionSource admissions,
+		Func<ListenerIdentifier, Func<IGameHookListener>, IGameHookListener>
+			getOrCreateListener,
+		GameSession session,
+		ModeratorInstruction? startingInstruction,
+		ModeratorResponse input,
+		LoversPairCommittedLogEntry committedBoundary,
+		ModeratorInstruction nextInstruction)
+	{
+		var listener = GetActiveListener(
+			listenerId,
+			admissions,
+			getOrCreateListener);
+		if (listener is not IDeclaredRoleWorkflow declaredWorkflow ||
+		    !session.Execution.TryGetActiveGameHook(out var hook))
+		{
+			return false;
+		}
+
+		var runtime = declaredWorkflow.GetWorkflowRuntime(hook);
+		return runtime?.TryValidateCommittedRecoveryBoundary(
+			session,
+			startingInstruction,
+			input,
+			committedBoundary,
+			nextInstruction) ?? false;
+	}
+
+	internal static bool
+		TryValidateActorBorrowedLoversCommittedRecoveryBoundary(
+			ListenerIdentifier listenerId,
+			IRoleAdmissionSource admissions,
+			Func<ListenerIdentifier, Func<IGameHookListener>, IGameHookListener>
+				getOrCreateListener,
+			GameSession session,
+			ModeratorInstruction? startingInstruction,
+			ModeratorResponse input,
+			ActorBorrowedCupidLoversCommit committedBoundary,
+			ModeratorInstruction nextInstruction)
+	{
+		var listener = GetActiveListener(
+			listenerId,
+			admissions,
+			getOrCreateListener);
+		if (listener is not IDeclaredRoleWorkflow declaredWorkflow ||
+		    !session.Execution.TryGetActiveGameHook(out var hook))
+		{
+			return false;
+		}
+
+		var runtime = declaredWorkflow.GetWorkflowRuntime(hook);
+		return runtime?.TryValidateCommittedRecoveryBoundary(
+			session,
+			startingInstruction,
+			input,
+			committedBoundary,
+			nextInstruction) ?? false;
+	}
+
+	internal static bool TryValidateDeclaredDomainRecoveryCursorIdentity(
+		GameSession session,
+		ListenerIdentifier listenerId,
+		GameHook hook,
+		IRoleAdmissionSource admissions,
+		Func<ListenerIdentifier, Func<IGameHookListener>, IGameHookListener>
+			getOrCreateListener,
+		ModeratorInstruction pendingInstruction,
 		DomainRecoveryCursor cursor)
 	{
 		var listener = GetActiveListener(
 			listenerId,
 			admissions,
 			getOrCreateListener);
-		if (listener is not
-		    ITargetPrivateRolePowerRecoveryCapability capability)
+		if (listener is not IDeclaredRoleWorkflow declaredWorkflow)
 		{
 			return false;
 		}
 
-		capability.ValidateRecoveryCursorIdentity(session, cursor);
-		return true;
+		var runtime = declaredWorkflow.GetWorkflowRuntime(hook);
+		if (runtime == null)
+		{
+			return false;
+		}
+
+		var candidate = runtime.ClassifyRecoveryCandidate(
+			session,
+			pendingInstruction,
+			domainCursor: cursor);
+		if (candidate.Kind == RoleWorkflowRecoveryCandidateKind.Authenticated)
+		{
+			return true;
+		}
+
+		throw new InvalidOperationException(
+			candidate.Failure ??
+			$"Pending instruction '{pendingInstruction.Semantic}' does not authenticate declared workflow '{listenerId}:{hook}'.");
+	}
+
+	internal static bool TryValidateTargetPrivateRecoveryCursorIdentity(
+		GameSession session,
+		ListenerIdentifier listenerId,
+		GameHook hook,
+		IRoleAdmissionSource admissions,
+		Func<ListenerIdentifier, Func<IGameHookListener>, IGameHookListener>
+			getOrCreateListener,
+		ModeratorInstruction pendingInstruction,
+		DomainRecoveryCursor cursor)
+	{
+		var listener = GetActiveListener(
+			listenerId,
+			admissions,
+			getOrCreateListener);
+		if (listener is not IDeclaredRoleWorkflow declaredWorkflow)
+		{
+			return false;
+		}
+
+		var runtime = declaredWorkflow.GetWorkflowRuntime(hook);
+		if (runtime == null)
+		{
+			return false;
+		}
+
+		var candidate = runtime.ClassifyRecoveryCandidate(
+				session,
+				pendingInstruction,
+				domainCursor: cursor);
+		if (candidate.Kind ==
+		    RoleWorkflowRecoveryCandidateKind.Authenticated)
+		{
+			return true;
+		}
+
+		throw new InvalidOperationException(
+			candidate.Failure ??
+			$"Pending instruction '{pendingInstruction.Semantic}' does not authenticate declared workflow '{listenerId}'.");
 	}
 
 	private static IGameHookListener? GetActiveListener(

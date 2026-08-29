@@ -62,19 +62,7 @@ public sealed class BaselineRandomDecisionStrategy : IModeratorDecisionStrategy
 		ArgumentNullException.ThrowIfNull(startState);
 		ArgumentNullException.ThrowIfNull(policy);
 		ArgumentNullException.ThrowIfNull(random);
-		var usesScapegoatPolicy = policy.AdmittedSemantics.Any(semantic =>
-			semantic is ModeratorInstructionSemantic.ObserveScapegoatHolderForTie
-				or ModeratorInstructionSemantic.RevealScapegoatForTie
-				or ModeratorInstructionSemantic.SelectScapegoatPermittedVoters
-				or ModeratorInstructionSemantic.AnnounceScapegoatPermittedVoters);
-		var supportedIdentity =
-			material.DecisionStrategyIdentity.Equals(Identity) ||
-			material.DecisionStrategyIdentity.Equals(SafetyScreeningIdentity);
-		if (!supportedIdentity
-			|| !policy.StrategyIdentity.Equals(material.DecisionStrategyIdentity)
-			|| (usesScapegoatPolicy &&
-			    !material.DecisionStrategyIdentity.Equals(
-				    SafetyScreeningIdentity))
+		if (!policy.StrategyIdentity.Equals(material.DecisionStrategyIdentity)
 			|| !material.CompatibilityIdentity.Equals(startState.CompatibilityIdentity)
 			|| !random.Material.Equals(material))
 		{
@@ -254,11 +242,20 @@ public sealed class BaselineRandomDecisionStrategy : IModeratorDecisionStrategy
 	{
 		var players = GetPlayersMatchingStartState(session);
 		var effectiveRolesByPlayerId = CreateEffectiveRolesByPlayerId(players);
-		if (instruction.PlayersForAssignment.Any(playerId =>
+		if (instruction.SelectableRolesForPlayers.Keys.Any(playerId =>
 			!effectiveRolesByPlayerId.ContainsKey(playerId)))
 		{
 			throw new InvalidOperationException(
 				"Role assignment instruction refers to a Player outside the Game Session.");
+		}
+		foreach (var (playerId, offeredRoles) in
+			instruction.SelectableRolesForPlayers)
+		{
+			if (!offeredRoles.Contains(effectiveRolesByPlayerId[playerId]))
+			{
+				throw new InvalidOperationException(
+					"The seeded Role truth is absent from a Player's offered possible Roles.");
+			}
 		}
 
 		var assignments = instruction.PlayersForAssignment.ToDictionary(

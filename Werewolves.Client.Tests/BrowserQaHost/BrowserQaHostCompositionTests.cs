@@ -57,17 +57,24 @@ public class BrowserQaHostCompositionTests
 	{
 		using var context = CreateBrowserQaHostContext(BrowserQaScenario.Degenerate);
 		var lobby = context.Services.GetRequiredService<LobbySetupState>();
+		var expectedScenario = lobby.CreateSimulationScenario();
 		var expectedIdentity = new SimulationCompatibilityIdentity(
-			lobby.CreateSimulationScenario().ToCanonical(),
+			expectedScenario.ToCanonical(),
 			SimulatorCapability.SafetyScreening.Identity);
 		var local = context.Services.GetRequiredService<ILocalTerminalLobbyCacheStore>();
 		var localBytes = await local.ReadAsync();
 
 		local.Should().BeOfType<BrowserQaScenarioTerminalLobbyCacheStore>();
 		localBytes.Should().NotBeNull();
-		var read = TerminalLobbyCache.ReadDocument(localBytes!.Value.Span);
+		var read = TerminalLobbyCache.ReadDocument(
+			localBytes!.Value.Span,
+			SimulatorCapabilityRegistry.Production);
 		read.IsUsable.Should().BeTrue();
-		TerminalLobbyCache.TryGet(read.Document!, expectedIdentity, out var record).Should().BeTrue();
+		TerminalLobbyCache.TryGet(
+			read.Document!,
+			expectedScenario,
+			SimulatorCapability.SafetyScreening,
+			out var record).Should().BeTrue();
 		record.Should().BeOfType<DegenerateTerminalCacheRecord>();
 		record!.CompatibilityIdentity.Should().Be(expectedIdentity);
 
@@ -88,6 +95,8 @@ public class BrowserQaHostCompositionTests
 		context.Services.GetRequiredService<IScreenWakeLock>().KeepScreenOn.Should().BeTrue();
 		context.Services.GetRequiredService<IHapticFeedbackService>().Invoking(haptic => haptic.Click()).Should().NotThrow();
 		context.Services.GetRequiredService<IGameSessionSaveStore>().Load().Should().BeNull();
+		context.Services.GetRequiredService<IRecentSetupStore>()
+			.Should().BeOfType<InMemoryRecentSetupStore>();
 		context.Services.GetRequiredService<LobbyEvaluationCoordinator>().Depth
 			.Should().Be(LobbyEvaluationDepth.DegenerateScreeningOnly);
 		context.Services.GetRequiredService<LobbyEvaluationCoordinator>().Capability
@@ -107,6 +116,7 @@ public class BrowserQaHostCompositionTests
 
 		var rendered = context.Render<Routes>();
 
+		rendered.Find($"[data-testid='{ModeratorUiTestIds.LandingNewGameButton}']").Click();
 		RenderedText(rendered).Should().Contain(ClientStrings.LobbyRoster_Title);
 		FindButtonByText(rendered, ClientStrings.LobbyRoster_ContinueToRolesButton)
 			.HasAttribute(Html.Attributes.Disabled)
@@ -120,6 +130,7 @@ public class BrowserQaHostCompositionTests
 		using var context = CreateBrowserQaHostContext(BrowserQaScenario.Probability);
 		var rendered = context.Render<BrowserQaRoot>();
 
+		rendered.Find($"[data-testid='{ModeratorUiTestIds.LandingNewGameButton}']").Click();
 		FindButtonByText(rendered, ClientStrings.LobbyRoster_ContinueToRolesButton).Click();
 
 		rendered.WaitForAssertion(() =>
@@ -154,6 +165,11 @@ public class BrowserQaHostCompositionTests
 		using var context = CreateBrowserQaHostContext(BrowserQaScenario.Degenerate);
 		var rendered = context.Render<BrowserQaRoot>();
 
+		// Synchronize the fixture's background evaluation before driving rendered navigation.
+		rendered.WaitForAssertion(() =>
+			context.Services.GetRequiredService<LobbyEvaluationCoordinator>()
+				.State.Kind.Should().Be(LobbyEvaluationStateKind.Degenerate));
+		rendered.Find($"[data-testid='{ModeratorUiTestIds.LandingNewGameButton}']").Click();
 		FindButtonByText(rendered, ClientStrings.LobbyRoster_ContinueToRolesButton).Click();
 
 		rendered.WaitForAssertion(() =>
@@ -184,6 +200,10 @@ public class BrowserQaHostCompositionTests
 		var game = context.Services.GetRequiredService<GameClientManager>();
 		game.HasActiveSession.Should().BeTrue();
 		game.CurrentInstruction.Should().NotBeNull();
+		context.Services.GetRequiredService<IScreenWakeLock>().KeepScreenOn.Should().BeFalse();
+
+		rendered.Find($"[data-testid='{ModeratorUiTestIds.LandingContinueButton}']").Click();
+
 		context.Services.GetRequiredService<IScreenWakeLock>().KeepScreenOn.Should().BeTrue();
 
 		FindButtonByText(rendered, ClientStrings.Dashboard_TabRoster).Should().NotBeNull();
@@ -218,6 +238,7 @@ public class BrowserQaHostCompositionTests
 		context.Services.AddBrowserQaHostModeratorServices();
 		context.Services.AddSingleton(recoveredGame);
 		var rendered = context.Render<Routes>();
+		rendered.Find($"[data-testid='{ModeratorUiTestIds.LandingContinueButton}']").Click();
 
 		var victoryPage = rendered.FindComponent<VictoryPage>();
 		victoryPage.Instance.GameResult.Should().Be(seededFinished.GameResult);

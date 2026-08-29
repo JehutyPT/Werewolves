@@ -5,22 +5,21 @@ using Werewolves.Core.StateModels.Models.Simulation;
 
 namespace Werewolves.Core.GameLogic.Simulation;
 
+internal enum SimulationScenarioAdmission
+{
+	Admitted,
+	Unsupported,
+	CompatibilityIdentityMismatch
+}
+
 public static class SimulationScenarioClassifier
 {
 	public static SimulationScenarioClassification Classify(
 		SimulationScenario scenario,
 		SimulatorCapability capability)
 	{
-		ArgumentNullException.ThrowIfNull(capability);
-		return Classify(scenario, (SimulatorProfile)capability);
-	}
-
-	internal static SimulationScenarioClassification Classify(
-		SimulationScenario scenario,
-		SimulatorProfile profile)
-	{
 		ArgumentNullException.ThrowIfNull(scenario);
-		ArgumentNullException.ThrowIfNull(profile);
+		ArgumentNullException.ThrowIfNull(capability);
 
 		List<GameConfigValidationError> errors;
 		if (scenario.ThiefOfferBranchPolicy is not null &&
@@ -85,20 +84,7 @@ public static class SimulationScenarioClassifier
 				cacheability: null);
 		}
 
-		var simulatorUnsupportedRoles = scenario.RoleCompositionCards
-			.Distinct()
-			.Where(role => !profile.SupportsRole(role))
-			.OrderBy(role => role.ToString(), StringComparer.Ordinal)
-			.ToArray();
-		var simulatorSupport = new SimulatorSupportResult(
-			scenario,
-			appSupport,
-			profile,
-			simulatorUnsupportedRoles,
-			hasUnsupportedActorSetupCards:
-				scenario.ActorSetupCards.Cards.Count > 0
-				&& !profile.SupportsActorSetupCards,
-			hasUnsupportedRuleState: !profile.SupportsRuleState(scenario.RuleState));
+		var simulatorSupport = capability.ClassifySupport(scenario, appSupport);
 		if (!simulatorSupport.IsSupported)
 		{
 			return new SimulationScenarioClassification(
@@ -112,7 +98,7 @@ public static class SimulationScenarioClassifier
 
 		var alreadyDecided = AlreadyDecidedRoleCompositionClassifier.Classify(
 			scenario.ToCanonical().RoleComposition,
-			profile);
+			capability);
 		if (alreadyDecided.IsAlreadyDecided)
 		{
 			return new SimulationScenarioClassification(
@@ -127,9 +113,7 @@ public static class SimulationScenarioClassifier
 		var cacheability = new CacheabilityResult(
 			scenario,
 			simulatorSupport,
-			new SimulationCompatibilityIdentity(
-				scenario.ToCanonical(),
-				profile.Identity));
+			capability.CreateCompatibilityIdentity(scenario));
 
 		return new SimulationScenarioClassification(
 			scenario,
@@ -138,6 +122,26 @@ public static class SimulationScenarioClassifier
 			simulatorSupport,
 			alreadyDecided,
 			cacheability);
+	}
+
+	internal static SimulationScenarioAdmission ClassifyAdmission(
+		SimulationScenario scenario,
+		SimulatorCapability capability,
+		SimulationCompatibilityIdentity compatibilityIdentity)
+	{
+		ArgumentNullException.ThrowIfNull(scenario);
+		ArgumentNullException.ThrowIfNull(capability);
+		ArgumentNullException.ThrowIfNull(compatibilityIdentity);
+		var classification = Classify(scenario, capability);
+		if (classification.SimulatorSupport is not { IsSupported: true })
+		{
+			return SimulationScenarioAdmission.Unsupported;
+		}
+
+		return compatibilityIdentity.Equals(
+			capability.CreateCompatibilityIdentity(scenario))
+				? SimulationScenarioAdmission.Admitted
+				: SimulationScenarioAdmission.CompatibilityIdentityMismatch;
 	}
 
 	private static bool IsAppSupportError(GameConfigValidationError error) =>
@@ -224,12 +228,7 @@ public sealed class SimulatorSupportResult
 
 	public AppSupportResult AppSupport { get; }
 
-	public SimulatorProfile Profile { get; }
-
-	public SimulatorCapability Capability =>
-		Profile as SimulatorCapability
-		?? throw new InvalidOperationException(
-			"Legacy simulator-profile classifications do not select a current Simulator Capability.");
+	public SimulatorCapability Capability { get; }
 
 	public IReadOnlyList<MainRoleType> UnsupportedRoles { get; }
 
@@ -245,14 +244,14 @@ public sealed class SimulatorSupportResult
 	internal SimulatorSupportResult(
 		SimulationScenario scenario,
 		AppSupportResult appSupport,
-		SimulatorProfile profile,
+		SimulatorCapability capability,
 		IEnumerable<MainRoleType> unsupportedRoles,
 		bool hasUnsupportedActorSetupCards,
 		bool hasUnsupportedRuleState)
 	{
 		Scenario = scenario;
 		AppSupport = appSupport;
-		Profile = profile;
+		Capability = capability;
 		UnsupportedRoles = Array.AsReadOnly(unsupportedRoles.ToArray());
 		HasUnsupportedActorSetupCards = hasUnsupportedActorSetupCards;
 		HasUnsupportedRuleState = hasUnsupportedRuleState;

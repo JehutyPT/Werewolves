@@ -8,7 +8,7 @@ using Werewolves.Core.StateModels.Resources;
 
 namespace Werewolves.Core.GameLogic.Roles.MainRoles;
 
-internal sealed class LittleGirlRole : NightRoleIdOnlyHookListener
+internal sealed class LittleGirlRole : DeclaredRoleIdentificationOnlyHookListener
 {
 	internal static readonly RolePowerDefinition SpyingPower = new(
 		new RolePowerIdentifier("little-girl-spying"),
@@ -81,11 +81,4 @@ internal sealed class LittleGirlRole : NightRoleIdOnlyHookListener
 
 	public override ListenerIdentifier Id =>
 		ListenerIdentifier.Listener(MainRoleType.LittleGirl);
-
-	public override HookListenerActionResult Execute(
-		GameSession session,
-		ModeratorResponse input) =>
-		session.TurnNumber == 1
-			? base.Execute(session, input)
-			: HookListenerActionResult.Skip();
 }

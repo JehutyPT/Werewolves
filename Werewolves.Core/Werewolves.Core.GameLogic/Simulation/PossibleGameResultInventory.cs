@@ -9,15 +9,15 @@ internal sealed record PossibleGameResultInventory(
 {
 	public static bool TryCreate(
 		SimulationScenario scenario,
-		SimulatorProfile profile,
+		SimulatorCapability capability,
 		out PossibleGameResultInventory inventory)
 	{
 		ArgumentNullException.ThrowIfNull(scenario);
-		ArgumentNullException.ThrowIfNull(profile);
+		ArgumentNullException.ThrowIfNull(capability);
 		var factions = new HashSet<Faction>();
 		foreach (var role in scenario.RoleCompositionCards.Distinct())
 		{
-			if (!profile.TryGetBeneficiaryFaction(role, out var faction)
+			if (!capability.TryGetBeneficiaryFaction(role, out var faction)
 				|| !Enum.IsDefined(faction))
 			{
 				inventory = null!;
@@ -38,7 +38,7 @@ internal sealed record PossibleGameResultInventory(
 		var orderedFactions = factions.Order().ToArray();
 		inventory = new PossibleGameResultInventory(
 			orderedFactions,
-			profile.CreatePossibleGameResults(orderedFactions));
+			capability.CreatePossibleGameResults(orderedFactions));
 		return true;
 	}
 }

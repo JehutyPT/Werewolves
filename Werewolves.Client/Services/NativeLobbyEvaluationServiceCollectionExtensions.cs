@@ -12,7 +12,7 @@ public static class NativeLobbyEvaluationServiceCollectionExtensions
 		ArgumentNullException.ThrowIfNull(services);
 		services.TryAddSingleton(
 			new LobbyEvaluationSettings(
-				SimulatorCapability.SafetyScreening,
+				SimulatorCapabilityRegistry.Production.SafetyScreening,
 				LobbyEvaluationDepth.DegenerateScreeningOnly));
 		services.TryAddSingleton<TimeProvider>(_ => TimeProvider.System);
 		services.TryAddSingleton<ILocalTerminalLobbyCacheStore>(

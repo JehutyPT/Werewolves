@@ -164,7 +164,8 @@ public class ModeratorResponsePayloadValidationTests
 
 		playerInstruction.SelectablePlayerIds.Should().BeEquivalentTo([selectablePlayerId]);
 		playerResponse.SelectedPlayerIds.Should().BeEquivalentTo([selectablePlayerId]);
-		roleInstruction.RolesForAssignment.Should().Equal(MainRoleType.SimpleVillager);
+		roleInstruction.SelectableRolesForPlayers[selectablePlayerId]
+			.Should().Equal(MainRoleType.SimpleVillager);
 		roleResponse.AssignedPlayerRoles.Should().Contain(
 			selectablePlayerId,
 			MainRoleType.SimpleVillager);

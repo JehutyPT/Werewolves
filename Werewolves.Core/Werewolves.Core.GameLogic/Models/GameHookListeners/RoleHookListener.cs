@@ -21,16 +21,6 @@ internal abstract class RoleHookListener : IGameHookListener
 	
 	public abstract ListenerIdentifier Id { get; }
 
-	public virtual bool TryResolvePendingInstructionContinuation(
-		GameHook hook,
-		GameSession session,
-		ModeratorInstruction pendingInstruction,
-		out string listenerState)
-	{
-		listenerState = string.Empty;
-		return false;
-	}
-
 	public virtual HookListenerActionResult Execute(GameSession session, ModeratorResponse input)
 	{
 		if (GetExpectedLivingRoleHolderCount(session) == 0)
@@ -66,7 +56,22 @@ internal abstract class RoleHookListener : IGameHookListener
 				"Role Identification cannot replace a committed Living Role Holder.");
 		}
 
-		session.IdentifyRole(selectedPlayerIds, (MainRoleType)Id);
+		var identifiedRole = (MainRoleType)Id;
+		if (selectedPlayerIds.Any(playerId =>
+			{
+				var player = session.GetPlayer(playerId);
+				return player.State.CurrentRole != identifiedRole &&
+				       player.State.ModeratorKnownRole != identifiedRole &&
+				       player.State.PhysicalCharacterCardRole != identifiedRole &&
+				       !GameSessionQueries.GetPossibleRoles(session, playerId)
+					       .Contains(identifiedRole);
+			}))
+		{
+			throw new InvalidOperationException(
+				"Role Identification contradicts committed Role knowledge.");
+		}
+
+		session.IdentifyRole(selectedPlayerIds, identifiedRole);
 	}
 
 	protected int GetExpectedLivingRoleHolderCount(GameSession session)

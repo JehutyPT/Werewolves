@@ -1,5 +1,7 @@
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Models;
+using Werewolves.Core.StateModels.Models.Instructions;
 
 namespace Werewolves.Core.Tests.Helpers;
 
@@ -8,6 +10,20 @@ namespace Werewolves.Core.Tests.Helpers;
 /// </summary>
 public static class ResponseFactory
 {
+	/// <summary>
+	/// Creates the response for the Roles physically observed by a test while
+	/// omitting Players whose offered multiset already entails one printed Role.
+	/// </summary>
+	public static ModeratorResponse CreateObservedRoleResponse(
+		this AssignRolesInstruction instruction,
+		Dictionary<Guid, MainRoleType> observedRoles)
+	{
+		var explicitAssignments = instruction.PlayersForAssignment.ToDictionary(
+			playerId => playerId,
+			playerId => observedRoles[playerId]);
+		return instruction.CreateResponse(explicitAssignments);
+	}
+
     /// <summary>
     /// Helper to get a player by index from the session.
     /// </summary>

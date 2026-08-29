@@ -56,9 +56,11 @@ public sealed class ActorBorrowedHunterElderTests
 			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
 		werewolfObservation.RoleIdentification.Should().BeNull();
 		werewolfObservation.CountConstraint.Should().Be(
-			NumberRangeConstraint.AtLeast(1));
+			NumberRangeConstraint.Exact(1));
 		werewolfObservation.SelectablePlayerIds.Should().BeEquivalentTo(
-			fixture.Session.GetPlayers().Select(player => player.Id));
+			fixture.Session.GetPlayers()
+				.Select(player => player.Id)
+				.Where(playerId => playerId != fixture.ActorId));
 		var victimSelection = service.ProcessInstruction(
 				gameId,
 				werewolfObservation.CreateResponse([fixture.WerewolfId]))
@@ -1323,19 +1325,16 @@ public sealed class ActorBorrowedHunterElderTests
 				gameId,
 				actorEliminationAnnouncement.CreateResponse())
 			.ModeratorInstruction.Should()
-			.BeOfType<AssignRolesInstruction>().Subject;
+			.BeOfType<ConfirmationInstruction>().Subject;
 
 		forcedReveal.Semantic.Should().Be(
 			ModeratorInstructionSemantic.AssignEliminationCascadeRoles);
-		forcedReveal.PlayersForAssignment.Should().Equal(
+		forcedReveal.AffectedPlayerIds.Should().Equal(
 			fixture.ForcedVictimId);
 
 		var finalShot = service.ProcessInstruction(
 				gameId,
-				forcedReveal.CreateResponse(new Dictionary<Guid, MainRoleType>
-				{
-					[fixture.ForcedVictimId] = MainRoleType.SimpleVillager
-				}))
+				forcedReveal.CreateResponse())
 			.ModeratorInstruction.Should()
 			.BeOfType<SelectPlayersInstruction>().Subject;
 
@@ -1386,15 +1385,13 @@ public sealed class ActorBorrowedHunterElderTests
 				gameId,
 				actorEliminationAnnouncement.CreateResponse())
 			.ModeratorInstruction.Should()
-			.BeOfType<AssignRolesInstruction>().Subject;
-		var publicSession = service.GetGameStateView(gameId)!;
-		var forcedAssignments = forcedReveal.PlayersForAssignment.ToDictionary(
-			playerId => playerId,
-			playerId => publicSession.GetPlayerState(playerId).CurrentRole!.Value);
+			.BeOfType<ConfirmationInstruction>().Subject;
+		forcedReveal.Semantic.Should().Be(
+			ModeratorInstructionSemantic.AssignEliminationCascadeRoles);
 
 		var independentBoundary = service.ProcessInstruction(
 			gameId,
-			forcedReveal.CreateResponse(forcedAssignments));
+			forcedReveal.CreateResponse());
 
 		independentBoundary.ModeratorInstruction.Should()
 			.BeOfType<FinishedGameConfirmationInstruction>();
@@ -1499,8 +1496,10 @@ public sealed class ActorBorrowedHunterElderTests
 				recoveredGameId,
 				acceptedTargetResponse)
 			.ModeratorInstruction.Should()
-			.BeOfType<AssignRolesInstruction>().Subject;
-		targetReveal.PlayersForAssignment.Should().Equal(
+			.BeOfType<ConfirmationInstruction>().Subject;
+		targetReveal.Semantic.Should().Be(
+			ModeratorInstructionSemantic.AssignEliminationCascadeRoles);
+		targetReveal.AffectedPlayerIds.Should().Equal(
 			pending.Fixture.ShotTargetId);
 		var beforeStaleReplay = recoveredService
 			.GetGameStateView(recoveredGameId)!;
@@ -1524,15 +1523,9 @@ public sealed class ActorBorrowedHunterElderTests
 		recoveredService.GetCurrentInstruction(recoveredGameId)!.InstructionId
 			.Should().Be(targetReveal.InstructionId);
 
-		var targetRole = beforeStaleReplay
-			.GetPlayerState(pending.Fixture.ShotTargetId)
-			.CurrentRole!.Value;
 		var afterShot = recoveredService.ProcessInstruction(
 			recoveredGameId,
-			targetReveal.CreateResponse(new Dictionary<Guid, MainRoleType>
-			{
-				[pending.Fixture.ShotTargetId] = targetRole
-			}));
+			targetReveal.CreateResponse());
 
 		afterShot.IsSuccess.Should().BeTrue();
 		var completed = recoveredService.GetGameStateView(recoveredGameId)!;
@@ -1560,7 +1553,7 @@ public sealed class ActorBorrowedHunterElderTests
 				pending.Selector.CreateResponse(
 					[pending.Fixture.ShotTargetId]))
 			.ModeratorInstruction.Should()
-			.BeOfType<AssignRolesInstruction>().Subject;
+			.BeOfType<ConfirmationInstruction>().Subject;
 		var committed = pending.Service.GetGameStateView(pending.GameId)!;
 		committed.GetPlayerState(pending.Fixture.ShotTargetId).Health.Should()
 			.Be(PlayerHealth.Alive);
@@ -1581,19 +1574,12 @@ public sealed class ActorBorrowedHunterElderTests
 			committed.Serialize());
 		var recoveredTargetReveal = recoveredService
 			.GetCurrentInstruction(recoveredGameId)
-			.Should().BeOfType<AssignRolesInstruction>().Subject;
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
 
 		recoveredTargetReveal.Should().BeEquivalentTo(targetReveal);
-		var targetRole = committed
-			.GetPlayerState(pending.Fixture.ShotTargetId)
-			.CurrentRole!.Value;
 		var continued = recoveredService.ProcessInstruction(
 			recoveredGameId,
-			recoveredTargetReveal.CreateResponse(
-				new Dictionary<Guid, MainRoleType>
-				{
-					[pending.Fixture.ShotTargetId] = targetRole
-				}));
+			recoveredTargetReveal.CreateResponse());
 
 		continued.IsSuccess.Should().BeTrue();
 		continued.ModeratorInstruction?.Semantic.Should().NotBe(
@@ -1624,16 +1610,10 @@ public sealed class ActorBorrowedHunterElderTests
 				pending.Selector.CreateResponse(
 					[pending.Fixture.ShotTargetId]))
 			.ModeratorInstruction.Should()
-			.BeOfType<AssignRolesInstruction>().Subject;
-		var targetRole = pending.Service.GetGameStateView(pending.GameId)!
-			.GetPlayerState(pending.Fixture.ShotTargetId)
-			.CurrentRole!.Value;
+			.BeOfType<ConfirmationInstruction>().Subject;
 		var nightStart = pending.Service.ProcessInstruction(
 				pending.GameId,
-				targetReveal.CreateResponse(new Dictionary<Guid, MainRoleType>
-				{
-					[pending.Fixture.ShotTargetId] = targetRole
-				}))
+				targetReveal.CreateResponse())
 			.ModeratorInstruction.Should()
 			.BeOfType<ConfirmationInstruction>().Subject;
 
@@ -1947,13 +1927,10 @@ public sealed class ActorBorrowedHunterElderTests
 				gameId,
 				actorEliminationAnnouncement.CreateResponse())
 			.ModeratorInstruction.Should()
-			.BeOfType<AssignRolesInstruction>().Subject;
+			.BeOfType<ConfirmationInstruction>().Subject;
 		var selector = service.ProcessInstruction(
 				gameId,
-				forcedReveal.CreateResponse(new Dictionary<Guid, MainRoleType>
-				{
-					[fixture.ForcedVictimId] = MainRoleType.SimpleVillager
-				}))
+				forcedReveal.CreateResponse())
 			.ModeratorInstruction.Should()
 			.BeOfType<SelectPlayersInstruction>().Subject;
 		return new PendingHunterShot(service, gameId, fixture, selector);

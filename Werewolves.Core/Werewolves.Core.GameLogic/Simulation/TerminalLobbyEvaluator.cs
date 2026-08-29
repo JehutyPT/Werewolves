@@ -87,11 +87,11 @@ public sealed class TerminalLobbyEvaluator
 		CancellationToken cancellationToken = default)
 	{
 		ArgumentNullException.ThrowIfNull(capability);
-		if (depth == LobbyEvaluationDepth.FullProbability
-			&& !capability.Identity.Equals(SimulatorCapability.FullProbability.Identity))
+		if (Enum.IsDefined(depth)
+			&& !capability.SupportsEvaluationDepth(depth))
 		{
 			throw new ArgumentException(
-				"Full-Probability evaluation requires the Full-Probability Simulator Capability.",
+				"The Simulator Capability does not support the requested evaluation depth.",
 				nameof(depth));
 		}
 
@@ -122,7 +122,7 @@ public sealed class TerminalLobbyEvaluator
 				? new CouldNotEvaluateLobbyEvaluation()
 				: new AppUnsupportedLobbyEvaluation(classification.AppSupport);
 		}
-		if (classification.SimulatorSupport is not { IsSupported: true } simulatorSupport)
+		if (classification.SimulatorSupport is not { IsSupported: true })
 		{
 			return classification.SimulatorSupport is null
 				? new CouldNotEvaluateLobbyEvaluation()
@@ -145,7 +145,7 @@ public sealed class TerminalLobbyEvaluator
 		}
 		if (!PossibleGameResultInventory.TryCreate(
 			scenario,
-			simulatorSupport.Profile,
+			capability,
 			out var inventory))
 		{
 			return new CouldNotEvaluateLobbyEvaluation();
@@ -162,7 +162,7 @@ public sealed class TerminalLobbyEvaluator
 		if (!IsConsistentBatch(
 			screening,
 			identity,
-			simulatorSupport.Profile.HeadlessResponsePolicy.StrategyIdentity,
+			capability.HeadlessResponsePolicy.StrategyIdentity,
 			screeningAttemptCount))
 		{
 			return new CouldNotEvaluateLobbyEvaluation();
@@ -215,7 +215,7 @@ public sealed class TerminalLobbyEvaluator
 		if (!IsConsistentCompleteBatch(
 			probability,
 			identity,
-			simulatorSupport.Profile.HeadlessResponsePolicy.StrategyIdentity,
+			capability.HeadlessResponsePolicy.StrategyIdentity,
 			ProbabilityAttemptCount))
 		{
 			return new CouldNotEvaluateLobbyEvaluation();

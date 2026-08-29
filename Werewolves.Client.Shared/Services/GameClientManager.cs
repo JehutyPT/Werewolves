@@ -13,9 +13,11 @@ public sealed class GameClientManager
 	private readonly GameService _gameService;
 	private readonly IInstructionAudioPlayback _audioPlayback;
 	private readonly IGameSessionSaveStore _saveStore;
+	private readonly IRecentSetupStore _recentSetupStore;
 	private readonly TimeProvider _timeProvider;
 	private readonly LobbySetupState? _lobbySetupState;
 	private StagedLobbyRecoveryPayload? _stagedLobby;
+	private StagedLobbyRecoveryPayload? _activeSessionLobbyPayload;
 	private DateTimeOffset? _debateStartedAt;
 
 	public GameClientManager()
@@ -28,11 +30,13 @@ public sealed class GameClientManager
 		IInstructionAudioPlayback? audioPlayback = null,
 		IGameSessionSaveStore? saveStore = null,
 		TimeProvider? timeProvider = null,
-		LobbySetupState? lobbySetupState = null)
+		LobbySetupState? lobbySetupState = null,
+		IRecentSetupStore? recentSetupStore = null)
 	{
 		_gameService = gameService;
 		_audioPlayback = audioPlayback ?? DisabledInstructionAudioPlayback.Instance;
 		_saveStore = saveStore ?? DisabledGameSessionSaveStore.Instance;
+		_recentSetupStore = recentSetupStore ?? DisabledRecentSetupStore.Instance;
 		_timeProvider = timeProvider ?? TimeProvider.System;
 		_lobbySetupState = lobbySetupState;
 		TryResumeSavedGame();
@@ -94,36 +98,91 @@ public sealed class GameClientManager
 	{
 		ArgumentNullException.ThrowIfNull(lobby);
 		ArgumentNullException.ThrowIfNull(replacement);
-		if (HasActiveSession ||
-			!lobby.CanReplaceRoleLockIn(expectedCurrentVersion, replacement))
+		return TryAcceptLobbyChange(
+			lobby,
+			new LobbyChange.ReplaceRoleLockIn(
+				expectedCurrentVersion,
+				replacement));
+	}
+
+	private bool TryAcceptLobbyChange(
+		LobbySetupState lobby,
+		LobbyChange change) =>
+		TryAcceptLobbyChange(lobby, change, out _);
+
+	private bool TryAcceptLobbyChange(
+		LobbySetupState lobby,
+		LobbyChange change,
+		out bool persistenceAttempted,
+		Action? afterPersistenceAccepted = null)
+	{
+		persistenceAttempted = false;
+		if (HasActiveSession && afterPersistenceAccepted is null)
+		{
+			return false;
+		}
+
+		var decision = lobby.Decide(change);
+		if (decision is null)
 		{
 			return false;
 		}
 
 		try
 		{
-			var proposedActorSetupCards =
-				lobby.GetRetainedActorSetupCardsForRoleLockIn(replacement);
-			var actorSetupIsPending = replacement.RoleComposition.Any(
-					card => card.PrintedRole == MainRoleType.Actor) &&
-				proposedActorSetupCards.Cards.Count == 0;
-			var proposedPartition = !actorSetupIsPending &&
-				replacement.RoleComposition.Any(
-					card => card.PrintedRole == MainRoleType.PrejudicedManipulator)
-				? lobby.AcceptedPublicGroupPartition
-				: null;
-			PersistStagedLobbyBeforeApply(
-				lobby.PlayerRoster,
-				replacement,
-				proposedActorSetupCards,
-				proposedPartition,
-				() => lobby.ApplyAcceptedRoleLockIn(replacement));
+			persistenceAttempted = true;
+			LobbyPersistenceExecutor.Execute(_saveStore, decision.Persistence);
 		}
 		catch (Exception)
 		{
 			return false;
 		}
+
+		afterPersistenceAccepted?.Invoke();
+		lobby.Publish(decision.Commit);
+		ReconcilePublishedLobbyDecision(lobby, decision);
 		return true;
+	}
+
+	private void ReconcilePublishedLobbyDecision(
+		LobbySetupState lobby,
+		LobbyDecision decision)
+	{
+		switch (decision.Persistence)
+		{
+			case LobbyPersistenceInstruction.Keep
+				when !decision.PublishesStateChange:
+				return;
+			case LobbyPersistenceInstruction.Keep:
+				break;
+			case LobbyPersistenceInstruction.Clear:
+				_stagedLobby = null;
+				break;
+			case LobbyPersistenceInstruction.Replace replace:
+				var aggregate = replace.Aggregate;
+				_stagedLobby = new StagedLobbyRecoveryPayload(
+					aggregate.PlayerRoster,
+					aggregate.AcceptedRoleLockIn!,
+					aggregate.AcceptedActorSetupCards,
+					aggregate.AcceptedPublicGroupPartition);
+				break;
+		}
+
+		try
+		{
+			lobby.NotifySimulationScenarioChanged();
+		}
+		catch (Exception)
+		{
+		}
+
+		try
+		{
+			OnStateChanged();
+		}
+		catch (Exception)
+		{
+		}
 	}
 
 	public bool TryReplaceStagedActorSetupCards(
@@ -163,30 +222,11 @@ public sealed class GameClientManager
 	{
 		ArgumentNullException.ThrowIfNull(lobby);
 		ArgumentNullException.ThrowIfNull(replacement);
-		if (HasActiveSession ||
-			!lobby.CanReplaceActorSetupCards(
+		return TryAcceptLobbyChange(
+			lobby,
+			new LobbyChange.ReplaceActorSetupCards(
 				expectedCurrentVersion,
-				replacement))
-		{
-			return false;
-		}
-
-		var roleLockIn = lobby.AcceptedRoleLockIn!;
-		try
-		{
-			PersistStagedLobbyBeforeApply(
-				lobby.PlayerRoster,
-				roleLockIn,
-				replacement,
-				lobby.AcceptedPublicGroupPartition,
-				() => lobby.ApplyAcceptedActorSetupCards(replacement));
-		}
-		catch (Exception)
-		{
-			return false;
-		}
-
-		return true;
+				replacement));
 	}
 
 	public bool TryReplaceStagedPublicGroupPartition(
@@ -195,109 +235,25 @@ public sealed class GameClientManager
 	{
 		ArgumentNullException.ThrowIfNull(lobby);
 		ArgumentNullException.ThrowIfNull(replacement);
-		if (HasActiveSession ||
-			!lobby.CanReplacePublicGroupPartition(replacement))
-		{
-			return false;
-		}
-		if (lobby.AcceptedPublicGroupPartition?.Equals(replacement) == true)
-		{
-			return true;
-		}
-
-		var roleLockIn = lobby.AcceptedRoleLockIn!;
-		try
-		{
-			PersistStagedLobbyBeforeApply(
-				lobby.PlayerRoster,
-				roleLockIn,
-				lobby.AcceptedActorSetupCards,
-				replacement,
-				() => lobby.ApplyAcceptedPublicGroupPartition(replacement));
-		}
-		catch (Exception)
-		{
-			return false;
-		}
-		return true;
+		return TryAcceptLobbyChange(
+			lobby,
+			new LobbyChange.ReplacePublicGroupPartition(replacement));
 	}
 
 	public bool TryMoveStagedPlayerDown(LobbySetupState lobby, int index)
 	{
 		ArgumentNullException.ThrowIfNull(lobby);
-		if (HasActiveSession || !lobby.CanMovePlayerDown(index))
-		{
-			return false;
-		}
-		if (lobby.AcceptedRoleLockIn is not { } roleLockIn ||
-			lobby.AcceptedRoleLockInRequiresReplacement)
-		{
-			return lobby.MovePlayerDown(index);
-		}
-
-		var proposedRoster = lobby.PlayerRoster.ToArray();
-		(proposedRoster[index], proposedRoster[index + 1]) =
-			(proposedRoster[index + 1], proposedRoster[index]);
-		try
-		{
-			PersistStagedLobbyBeforeApply(
-				proposedRoster,
-				roleLockIn,
-				lobby.AcceptedActorSetupCards,
-				lobby.AcceptedPublicGroupPartition,
-				() =>
-				{
-					if (!lobby.MovePlayerDown(index))
-					{
-						throw new InvalidOperationException(
-							"The staged Seating Order changed before it could be applied.");
-					}
-				});
-		}
-		catch (Exception)
-		{
-			return false;
-		}
-		return true;
+		return TryAcceptLobbyChange(
+			lobby,
+			new LobbyChange.MovePlayer(index, index + 1));
 	}
 
 	public bool TryMoveStagedPlayerUp(LobbySetupState lobby, int index)
 	{
 		ArgumentNullException.ThrowIfNull(lobby);
-		if (HasActiveSession || !lobby.CanMovePlayerUp(index))
-		{
-			return false;
-		}
-		if (lobby.AcceptedRoleLockIn is not { } roleLockIn ||
-			lobby.AcceptedRoleLockInRequiresReplacement)
-		{
-			return lobby.MovePlayerUp(index);
-		}
-
-		var proposedRoster = lobby.PlayerRoster.ToArray();
-		(proposedRoster[index - 1], proposedRoster[index]) =
-			(proposedRoster[index], proposedRoster[index - 1]);
-		try
-		{
-			PersistStagedLobbyBeforeApply(
-				proposedRoster,
-				roleLockIn,
-				lobby.AcceptedActorSetupCards,
-				lobby.AcceptedPublicGroupPartition,
-				() =>
-				{
-					if (!lobby.MovePlayerUp(index))
-					{
-						throw new InvalidOperationException(
-							"The staged Seating Order changed before it could be applied.");
-					}
-				});
-		}
-		catch (Exception)
-		{
-			return false;
-		}
-		return true;
+		return TryAcceptLobbyChange(
+			lobby,
+			new LobbyChange.MovePlayer(index, index - 1));
 	}
 
 	public bool TryAddStagedPlayer(
@@ -320,59 +276,75 @@ public sealed class GameClientManager
 			result = AddPlayerResult.DuplicateName;
 			return false;
 		}
+		if (lobby.PlayerRoster.Count >= GameSessionConfig.MaximumPlayerCount)
+		{
+			result = AddPlayerResult.PlayerLimitReached;
+			return false;
+		}
 
 		result = AddPlayerResult.Success;
-		if (HasActiveSession || !TryClearStagedRecoveryBeforeMembershipEdit(lobby))
-		{
-			return false;
-		}
-		if (lobby.AddPlayer(normalizedName) != AddPlayerResult.Success)
+		if (HasActiveSession)
 		{
 			return false;
 		}
 
-		OnStateChanged();
-		return true;
+		var player = lobby.CreatePlayerRosterEntry(normalizedName);
+		return TryAcceptLobbyChange(
+			lobby,
+			new LobbyChange.AddPlayer(player));
 	}
 
 	public bool TryRemoveStagedPlayer(LobbySetupState lobby, int index)
 	{
 		ArgumentNullException.ThrowIfNull(lobby);
-		if (HasActiveSession || index < 0 || index >= lobby.PlayerRoster.Count)
-		{
-			return false;
-		}
-		if (!TryClearStagedRecoveryBeforeMembershipEdit(lobby))
-		{
-			return false;
-		}
-		if (!lobby.RemovePlayerAt(index))
-		{
-			return false;
-		}
-
-		OnStateChanged();
-		return true;
+		return TryAcceptLobbyChange(
+			lobby,
+			new LobbyChange.RemovePlayer(index));
 	}
 
-	private bool TryClearStagedRecoveryBeforeMembershipEdit(
-		LobbySetupState lobby)
+	public bool TryResetStagedPlayerRoster(LobbySetupState lobby)
 	{
-		if (_stagedLobby is null && lobby.AcceptedRoleLockIn is null)
+		ArgumentNullException.ThrowIfNull(lobby);
+		return TryAcceptLobbyChange(lobby, new LobbyChange.ResetPlayerRoster());
+	}
+
+	public bool TryResetStagedRoleCounts(LobbySetupState lobby)
+	{
+		ArgumentNullException.ThrowIfNull(lobby);
+		return TryAcceptLobbyChange(lobby, new LobbyChange.ResetRoleCounts());
+	}
+
+	public bool TryApplyRecentSetup(
+		LobbySetupState lobby,
+		RecentSetup setup)
+	{
+		ArgumentNullException.ThrowIfNull(lobby);
+		ArgumentNullException.ThrowIfNull(setup);
+		return TryAcceptLobbyChange(
+			lobby,
+			new LobbyChange.ApplyRecentSetup(setup));
+	}
+
+	public bool TryAbandonSessionAndApplyRecentSetup(
+		LobbySetupState lobby,
+		RecentSetup setup)
+	{
+		ArgumentNullException.ThrowIfNull(lobby);
+		ArgumentNullException.ThrowIfNull(setup);
+		if (!HasActiveSession)
 		{
-			return true;
+			return TryApplyRecentSetup(lobby, setup);
 		}
 
-		try
-		{
-			_saveStore.Clear();
-		}
-		catch (Exception)
-		{
-			return false;
-		}
-		_stagedLobby = null;
-		return true;
+		return TryAcceptLobbyChange(
+			lobby,
+			new LobbyChange.ApplyRecentSetup(setup, ClearsRecovery: true),
+			out _,
+			() =>
+			{
+				DiscardCurrentSession();
+				_activeSessionLobbyPayload = null;
+			});
 	}
 
 	public StartGameConfirmationInstruction StartGame(
@@ -420,10 +392,11 @@ public sealed class GameClientManager
 			return false;
 		}
 
-		return TryReplaceStagedRoleLockIn(
+		return TryAcceptLobbyChange(
 			lobby,
-			expectedCurrentVersion,
-			replacement);
+			new LobbyChange.AcceptImplicitRoleLockIn(
+				expectedCurrentVersion,
+				replacement));
 	}
 
 	public StartGameConfirmationInstruction StartGame(LobbySetupState lobby)
@@ -446,29 +419,6 @@ public sealed class GameClientManager
 			lobby.AcceptedActorSetupCards,
 			lobby.AcceptedPublicGroupPartition);
 		return StartGame(config, lobby);
-	}
-
-	private void PersistStagedLobbyBeforeApply(
-		IReadOnlyList<GameSessionPlayerConfig> proposedPlayerRoster,
-		RoleLockIn roleLockIn,
-		ActorSetupCards actorSetupCards,
-		PublicGroupPartition? publicGroupPartition,
-		Action apply)
-	{
-		var playerRoster = proposedPlayerRoster.ToArray();
-		var payload = LocalRecoveryPayloadCodec.SerializeStagedLobby(
-			playerRoster,
-			roleLockIn,
-			actorSetupCards,
-			publicGroupPartition);
-		_saveStore.Save(payload);
-		apply();
-		_stagedLobby = new StagedLobbyRecoveryPayload(
-			playerRoster,
-			roleLockIn,
-			actorSetupCards,
-			publicGroupPartition);
-		OnStateChanged();
 	}
 
 	public StartGameConfirmationInstruction StartGame(GameSessionConfig config)
@@ -504,14 +454,46 @@ public sealed class GameClientManager
 		{
 			SaveCurrentSession();
 		}
+		_activeSessionLobbyPayload = new StagedLobbyRecoveryPayload(
+			config.PlayerRoster,
+			config.RoleLockIn,
+			config.ActorSetupCards,
+			config.PublicGroupPartition);
 		_stagedLobby = null;
 		UpdateDebateTimer();
 		QueueAudioReconciliation();
 		OnStateChanged();
+		if (lobby is not null)
+		{
+			try
+			{
+				_recentSetupStore.Capture(
+					config.PlayerRoster.Select(player => player.Name).ToArray(),
+					config.RoleLockIn.RoleComposition
+						.GroupBy(card => card.PrintedRole)
+						.ToDictionary(group => group.Key, group => group.Count()));
+			}
+			catch
+			{
+			}
+		}
 		return instruction;
 	}
 
 	public void ClearSession()
+	{
+		DiscardCurrentSession();
+		if (!PrefillLobbyAfterSession(out var persistenceAttempted))
+		{
+			if (!persistenceAttempted)
+			{
+				ClearSavedGame();
+			}
+			OnStateChanged();
+		}
+	}
+
+	private void DiscardCurrentSession()
 	{
 		if (ActiveGameId is { } gameId)
 		{
@@ -521,8 +503,34 @@ public sealed class GameClientManager
 		ActiveGameId = null;
 		CurrentSession = null;
 		CurrentInstruction = null;
-		ClearSavedGame();
-		OnStateChanged();
+	}
+
+	private bool PrefillLobbyAfterSession(out bool persistenceAttempted)
+	{
+		persistenceAttempted = false;
+		var lobby = _lobbySetupState;
+		var payload = _activeSessionLobbyPayload;
+		_activeSessionLobbyPayload = null;
+		if (lobby is null || payload is null)
+		{
+			return false;
+		}
+
+		if (TryAcceptLobbyChange(
+			lobby,
+			new LobbyChange.RecoverPostGameLobby(
+				payload.PlayerRoster,
+				payload.RoleLockIn,
+				payload.ActorSetupCards,
+				payload.PublicGroupPartition),
+			out persistenceAttempted))
+		{
+			return true;
+		}
+
+		return TryAcceptLobbyChange(
+			lobby,
+			new LobbyChange.WipePostGameLobby());
 	}
 
 	public ProcessResult ProcessInput(ModeratorResponse response)
@@ -620,16 +628,37 @@ public sealed class GameClientManager
 			switch (LocalRecoveryPayloadCodec.Deserialize(serializedPayload))
 			{
 				case StagedLobbyRecoveryPayload stagedLobby:
-					_lobbySetupState?.RestoreAcceptedRoleLockIn(
+					var lobbySetupState = _lobbySetupState ??
+						throw new InvalidOperationException(
+							"Staged Lobby recovery requires a Lobby setup target.");
+					var commit = lobbySetupState.CreateRecoveryCommit(
 						stagedLobby.PlayerRoster,
 						stagedLobby.RoleLockIn,
 						stagedLobby.ActorSetupCards,
 						stagedLobby.PublicGroupPartition);
+					lobbySetupState.Publish(commit);
 					_stagedLobby = stagedLobby;
+					try
+					{
+						lobbySetupState.NotifySimulationScenarioChanged();
+					}
+					catch (Exception)
+					{
+					}
 					break;
 				case ActiveGameRecoveryPayload activeGame:
 					ActiveGameId = _gameService.RehydrateSession(activeGame.SerializedSession);
 					RefreshCurrentState();
+					var resumedSession = CurrentSession ??
+						throw new InvalidOperationException(
+							"Core did not publish the rehydrated Game Session.");
+					_activeSessionLobbyPayload = new StagedLobbyRecoveryPayload(
+						resumedSession.GetPlayers()
+							.Select(player => new GameSessionPlayerConfig(player.Id, player.Name))
+							.ToArray(),
+						resumedSession.RoleLockIn,
+						resumedSession.GetModeratorActorSetupCards(),
+						resumedSession.PublicGroupPartition);
 					UpdateDebateTimer();
 					break;
 			}

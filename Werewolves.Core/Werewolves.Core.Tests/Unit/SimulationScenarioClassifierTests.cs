@@ -24,15 +24,15 @@ public class SimulationScenarioClassifierTests
 		var safety = new SimulatorCapability(
 			new SimulatorProfileIdentity("test-safety", "1"),
 			[
-				new(MainRoleType.SimpleWerewolf, Faction.Werewolf),
-				new(MainRoleType.WildChild, Faction.Villager),
-				new(MainRoleType.SimpleVillager, Faction.Villager)
+				(MainRoleType.SimpleWerewolf, Faction.Werewolf, []),
+				(MainRoleType.WildChild, Faction.Villager, []),
+				(MainRoleType.SimpleVillager, Faction.Villager, [])
 			]);
 		var probability = new SimulatorCapability(
 			new SimulatorProfileIdentity("test-probability", "1"),
 			[
-				new(MainRoleType.SimpleWerewolf, Faction.Werewolf),
-				new(MainRoleType.SimpleVillager, Faction.Villager)
+				(MainRoleType.SimpleWerewolf, Faction.Werewolf, []),
+				(MainRoleType.SimpleVillager, Faction.Villager, [])
 			]);
 		_ = new SimulatorCapabilityRegistry(safety, probability);
 
@@ -78,7 +78,7 @@ public class SimulationScenarioClassifierTests
 	}
 
 	[Fact]
-	public void Classify_WithAppSupportedButProfileUnsupportedRole_StopsBeforeAlreadyDecidedAndPreservesInput()
+	public void Classify_WithAppSupportedButCapabilityUnsupportedRole_StopsBeforeAlreadyDecidedAndPreservesInput()
 	{
 		var scenario = new SimulationScenario(
 			5,
@@ -89,15 +89,15 @@ public class SimulationScenarioClassifierTests
 				MainRoleType.SimpleVillager,
 				MainRoleType.SimpleVillager
 			]);
-		var profile = new SimulatorProfile(
+		var capability = new SimulatorCapability(
 			new SimulatorProfileIdentity("restricted-simulator", "1"),
 			[
-				new(MainRoleType.SimpleWerewolf, Faction.Werewolf),
-				new(MainRoleType.Seer, Faction.Villager),
-				new(MainRoleType.SimpleVillager, Faction.Villager)
+				(MainRoleType.SimpleWerewolf, Faction.Werewolf, []),
+				(MainRoleType.Seer, Faction.Villager, []),
+				(MainRoleType.SimpleVillager, Faction.Villager, [])
 			]);
 
-		var classification = SimulationScenarioClassifier.Classify(scenario, profile);
+		var classification = SimulationScenarioClassifier.Classify(scenario, capability);
 
 		classification.AppSupport!.IsSupported.Should().BeTrue();
 		classification.SimulatorSupport!.IsSupported.Should().BeFalse();

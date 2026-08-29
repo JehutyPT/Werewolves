@@ -48,7 +48,10 @@ public class TerminalLobbyCacheTests
 				LobbyEvaluationDepth.DegenerateScreeningOnly)
 			.Should().BeOfType<AlreadyDecidedTerminalEvaluation>().Subject;
 
-		var record = TerminalLobbyCache.Capture(identity, evaluation);
+		var record = TerminalLobbyCache.Capture(
+			scenario,
+			SimulatorCapability.SafetyScreening,
+			evaluation);
 
 		var decided = record.Should().BeOfType<AlreadyDecidedTerminalCacheRecord>().Subject;
 		decided.CompatibilityIdentity.Should().Be(identity);
@@ -56,7 +59,9 @@ public class TerminalLobbyCacheTests
 		decided.Reason.Should().Be(evaluation.Reason);
 		classification.Cacheability.Should().BeNull(
 			"already-decided classification deliberately has no Cacheability result");
-		Action mismatched = () => TerminalLobbyCache.Capture(identity,
+		Action mismatched = () => TerminalLobbyCache.Capture(
+			scenario,
+			SimulatorCapability.SafetyScreening,
 			new AlreadyDecidedTerminalEvaluation(
 				new SingleFactionGameResult(Faction.Villager),
 				AlreadyDecidedReason.NoWerewolfFactionBeneficiariesAtLobbyExit));
@@ -73,26 +78,31 @@ public class TerminalLobbyCacheTests
 		Action obsoleteProducer = () => new AlreadyDecidedTerminalCacheRecord(
 			obsolete,
 			new SingleFactionGameResult(Faction.Werewolf),
-			AlreadyDecidedReason.WerewolfControlShortcut);
+			AlreadyDecidedReason.WerewolfControlShortcut,
+			SimulatorCapability.SafetyScreening);
 		Action noWinner = () => new AlreadyDecidedTerminalCacheRecord(
 			AlreadyDecidedIdentity(),
 			new NoWinnerGameResult(),
-			AlreadyDecidedReason.MultipleLobbyExitVictoryPredicatesSatisfied);
+			AlreadyDecidedReason.MultipleLobbyExitVictoryPredicatesSatisfied,
+			SimulatorCapability.SafetyScreening);
 		Action impossibleShared = () => new AlreadyDecidedTerminalCacheRecord(
 			AlreadyDecidedIdentity(),
 			new SharedVictoryGameResult([Faction.Villager, Faction.Werewolf]),
-			AlreadyDecidedReason.MultipleLobbyExitVictoryPredicatesSatisfied);
+			AlreadyDecidedReason.MultipleLobbyExitVictoryPredicatesSatisfied,
+			SimulatorCapability.SafetyScreening);
 		Action notAlreadyDecided = () => new AlreadyDecidedTerminalCacheRecord(
 			AggregateIdentity(),
 			new SingleFactionGameResult(Faction.Werewolf),
-			AlreadyDecidedReason.WerewolfControlShortcut);
+			AlreadyDecidedReason.WerewolfControlShortcut,
+			SimulatorCapability.SafetyScreening);
 		var staleAggregateIdentity = new SimulationCompatibilityIdentity(
 			AggregateIdentity().Scenario,
 			new SimulatorProfileIdentity("other-simulator", "1"));
 		Action staleAggregate = () => new DegenerateTerminalCacheRecord(
 			staleAggregateIdentity,
 			DegenerateRows(),
-			DegenerateCells());
+			DegenerateCells(),
+			SimulatorCapability.SafetyScreening);
 
 		obsoleteProducer.Should().Throw<ArgumentException>();
 		noWinner.Should().Throw<ArgumentException>();
@@ -104,7 +114,7 @@ public class TerminalLobbyCacheTests
 	[Theory]
 	[InlineData("{\"kind\":1,\"factions\":[0,1]}", 3)]
 	[InlineData("{\"kind\":2,\"factions\":[]}", 3)]
-	public void Read_RejectsCurrentProfileSharedAndNoWinnerAlreadyDecidedPayloads(
+	public void Read_RejectsCurrentCapabilitySharedAndNoWinnerAlreadyDecidedPayloads(
 		string resultJson,
 		int reason)
 	{
@@ -115,7 +125,10 @@ public class TerminalLobbyCacheTests
 				StringComparison.Ordinal)
 			.Replace("\"reason\":2", $"\"reason\":{reason}", StringComparison.Ordinal);
 
-		TerminalLobbyCache.Read(Utf8(impossibleRecord), AlreadyDecidedIdentity()).IsUsable.Should().BeFalse();
+		TerminalLobbyCache.Read(
+			Utf8(impossibleRecord),
+			Scenario(AlreadyDecidedIdentity()),
+			SimulatorCapability.SafetyScreening).IsUsable.Should().BeFalse();
 	}
 
 	[Theory]
@@ -130,7 +143,10 @@ public class TerminalLobbyCacheTests
 			AggregateIdentity().Scenario.ToString(),
 			canonicalScenario,
 			StringComparison.Ordinal);
-		var action = () => TerminalLobbyCache.Read(Utf8(payload), AggregateIdentity());
+		var action = () => TerminalLobbyCache.Read(
+			Utf8(payload),
+			Scenario(AggregateIdentity()),
+			SimulatorCapability.SafetyScreening);
 
 		action.Should().NotThrow();
 		action().IsUsable.Should().BeFalse();
@@ -148,7 +164,10 @@ public class TerminalLobbyCacheTests
 			canonicalScenario,
 			StringComparison.Ordinal);
 
-		TerminalLobbyCache.Read(Utf8(payload), AggregateIdentity())
+		TerminalLobbyCache.Read(
+			Utf8(payload),
+			Scenario(AggregateIdentity()),
+			SimulatorCapability.SafetyScreening)
 			.IsUsable.Should().BeFalse();
 	}
 
@@ -158,10 +177,14 @@ public class TerminalLobbyCacheTests
 		var record = new AlreadyDecidedTerminalCacheRecord(
 			AlreadyDecidedIdentity(),
 			new SingleFactionGameResult(Faction.Werewolf),
-			AlreadyDecidedReason.WerewolfControlShortcut);
+			AlreadyDecidedReason.WerewolfControlShortcut,
+			SimulatorCapability.SafetyScreening);
 
 		TerminalLobbyCache.Write(record).Should().Equal(Utf8(AlreadyGolden));
-		var read = TerminalLobbyCache.Read(Utf8(AlreadyGolden), AlreadyDecidedIdentity());
+		var read = TerminalLobbyCache.Read(
+			Utf8(AlreadyGolden),
+			Scenario(AlreadyDecidedIdentity()),
+			SimulatorCapability.SafetyScreening);
 		read.IsUsable.Should().BeTrue();
 		read.Record.Should().BeEquivalentTo(record);
 	}
@@ -172,7 +195,10 @@ public class TerminalLobbyCacheTests
 		var record = DegenerateRecord();
 
 		TerminalLobbyCache.Write(record).Should().Equal(Utf8(DegenerateGolden));
-		var read = TerminalLobbyCache.Read(Utf8(DegenerateGolden), AggregateIdentity());
+		var read = TerminalLobbyCache.Read(
+			Utf8(DegenerateGolden),
+			Scenario(AggregateIdentity()),
+			SimulatorCapability.SafetyScreening);
 
 		read.IsUsable.Should().BeTrue();
 		var aggregate = read.Record.Should().BeOfType<DegenerateTerminalCacheRecord>().Subject;
@@ -221,10 +247,14 @@ public class TerminalLobbyCacheTests
 					VictoryCheckWindow.Dawn,
 					1_000,
 					1_000)
-			]);
+			],
+			SimulatorCapability.SafetyScreening);
 
 		var bytes = TerminalLobbyCache.Write(record);
-		var read = TerminalLobbyCache.Read(bytes, identity);
+		var read = TerminalLobbyCache.Read(
+			bytes,
+			scenario,
+			SimulatorCapability.SafetyScreening);
 
 		TerminalLobbyCache.SchemaVersion.Should().Be(1);
 		read.IsUsable.Should().BeTrue();
@@ -240,7 +270,10 @@ public class TerminalLobbyCacheTests
 		var record = ProbabilityRecord();
 
 		TerminalLobbyCache.Write(record).Should().Equal(Utf8(ProbabilityGolden));
-		var read = TerminalLobbyCache.Read(Utf8(ProbabilityGolden), ProbabilityIdentity());
+		var read = TerminalLobbyCache.Read(
+			Utf8(ProbabilityGolden),
+			Scenario(ProbabilityIdentity()),
+			SimulatorCapability.FullProbability);
 
 		read.IsUsable.Should().BeTrue();
 		var aggregate = read.Record.Should().BeOfType<ProbabilityTerminalCacheRecord>().Subject;
@@ -260,12 +293,21 @@ public class TerminalLobbyCacheTests
 
 		var documentBytes = TerminalLobbyCache.Write(document);
 		documentBytes.Should().Equal(Utf8(expected));
-		var parsed = TerminalLobbyCache.ReadDocument(documentBytes);
-		var local = TerminalLobbyCache.Read(TerminalLobbyCache.Write(degenerate), AggregateIdentity());
+		var parsed = TerminalLobbyCache.ReadDocument(
+			documentBytes,
+			SimulatorCapabilityRegistry.Production);
+		var local = TerminalLobbyCache.Read(
+			TerminalLobbyCache.Write(degenerate),
+			Scenario(AggregateIdentity()),
+			SimulatorCapability.SafetyScreening);
 
 		parsed.IsUsable.Should().BeTrue();
 		local.IsUsable.Should().BeTrue();
-		TerminalLobbyCache.TryGet(parsed.Document!, AggregateIdentity(), out var selectedRecord).Should().BeTrue();
+		TerminalLobbyCache.TryGet(
+			parsed.Document!,
+			SimulationScenario.FromCanonical(AggregateIdentity().Scenario),
+			SimulatorCapability.SafetyScreening,
+			out var selectedRecord).Should().BeTrue();
 		selectedRecord.Should().BeEquivalentTo(local.Record);
 	}
 
@@ -277,7 +319,7 @@ public class TerminalLobbyCacheTests
 	[InlineData("wrong-cell-sum")]
 	[InlineData("duplicate-cell")]
 	[InlineData("late-degenerate-ending")]
-	public void AggregateConstructors_RejectIncompleteOrInconsistentCurrentProfileMeaning(string mutation)
+	public void AggregateConstructors_RejectIncompleteOrInconsistentCurrentCapabilityMeaning(string mutation)
 	{
 		var rows = DegenerateRows().ToList();
 		var cells = DegenerateCells().ToList();
@@ -292,7 +334,11 @@ public class TerminalLobbyCacheTests
 			case "late-degenerate-ending": cells[0] = new(cells[0].GameResult, 2, VictoryCheckWindow.Dawn, 750, 1000); break;
 		}
 
-		Action construct = () => new DegenerateTerminalCacheRecord(AggregateIdentity(), rows, cells);
+		Action construct = () => new DegenerateTerminalCacheRecord(
+			AggregateIdentity(),
+			rows,
+			cells,
+			SimulatorCapability.SafetyScreening);
 
 		construct.Should().Throw<ArgumentException>();
 	}
@@ -319,7 +365,10 @@ public class TerminalLobbyCacheTests
 	[MemberData(nameof(InvalidSinglePayloads))]
 	public void Read_RejectsMalformedAmbiguousOrNonCanonicalSinglePayloadAtomically(string payload)
 	{
-		var action = () => TerminalLobbyCache.Read(Utf8(payload), AlreadyDecidedIdentity());
+		var action = () => TerminalLobbyCache.Read(
+			Utf8(payload),
+			Scenario(AlreadyDecidedIdentity()),
+			SimulatorCapability.SafetyScreening);
 
 		action.Should().NotThrow();
 		action().IsUsable.Should().BeFalse();
@@ -353,7 +402,10 @@ public class TerminalLobbyCacheTests
 	[MemberData(nameof(InvalidAggregatePayloads))]
 	public void Read_RejectsInvalidAggregateInventoryPartitionEnumsAndOrdering(string payload)
 	{
-		TerminalLobbyCache.Read(Utf8(payload), AggregateIdentity()).IsUsable.Should().BeFalse();
+		TerminalLobbyCache.Read(
+			Utf8(payload),
+			Scenario(AggregateIdentity()),
+			SimulatorCapability.SafetyScreening).IsUsable.Should().BeFalse();
 	}
 
 	public static IEnumerable<object[]> InvalidAggregatePayloads()
@@ -395,7 +447,10 @@ public class TerminalLobbyCacheTests
 	[MemberData(nameof(InvalidProbabilityPayloads))]
 	public void Read_RejectsProbabilityMissingRowsAndPartitionViolations(string payload)
 	{
-		TerminalLobbyCache.Read(Utf8(payload), ProbabilityIdentity()).IsUsable.Should().BeFalse();
+		TerminalLobbyCache.Read(
+			Utf8(payload),
+			Scenario(ProbabilityIdentity()),
+			SimulatorCapability.FullProbability).IsUsable.Should().BeFalse();
 	}
 
 	public static IEnumerable<object[]> InvalidProbabilityPayloads()
@@ -427,11 +482,16 @@ public class TerminalLobbyCacheTests
 			.EnumerateArray()
 			.ToArray();
 		var denominator = degenerate ? 1_000 : 10_000;
+		var identity = degenerate ? AggregateIdentity() : ProbabilityIdentity();
+		var capability = degenerate
+			? SimulatorCapability.SafetyScreening
+			: SimulatorCapability.FullProbability;
 
 		rows.Sum(row => row.GetProperty("numerator").GetInt32()).Should().Be(denominator);
 		TerminalLobbyCache.Read(
 			Utf8(payload),
-			degenerate ? AggregateIdentity() : ProbabilityIdentity())
+			Scenario(identity),
+			capability)
 			.IsUsable.Should().BeFalse();
 	}
 
@@ -439,7 +499,9 @@ public class TerminalLobbyCacheTests
 	[MemberData(nameof(InvalidDocumentEnvelopes))]
 	public void ReadDocument_RejectsMalformedOrAmbiguousEnvelopeAtomically(string payload)
 	{
-		var action = () => TerminalLobbyCache.ReadDocument(Utf8(payload));
+		var action = () => TerminalLobbyCache.ReadDocument(
+			Utf8(payload),
+			SimulatorCapabilityRegistry.Production);
 
 		action.Should().NotThrow();
 		action().IsUsable.Should().BeFalse();
@@ -476,7 +538,9 @@ public class TerminalLobbyCacheTests
 		duplicateConstructor.Should().Throw<ArgumentException>();
 		foreach (var payload in new[] { "{\"schema\":\"terminal-lobby-cache\",\"version\":1,\"records\":[{}]}", malformed, duplicate, reversed, stale })
 		{
-			var action = () => TerminalLobbyCache.ReadDocument(Utf8(payload));
+			var action = () => TerminalLobbyCache.ReadDocument(
+				Utf8(payload),
+				SimulatorCapabilityRegistry.Production);
 			action.Should().NotThrow();
 			action().IsUsable.Should().BeFalse();
 		}
@@ -490,11 +554,48 @@ public class TerminalLobbyCacheTests
 			+ RecordJson(AlreadyGolden) + ","
 			+ RecordJson(DegenerateGolden) + "]}";
 
-		var read = TerminalLobbyCache.ReadDocument(Utf8(payload));
+		var read = TerminalLobbyCache.ReadDocument(
+			Utf8(payload),
+			SimulatorCapabilityRegistry.Production);
 
 		read.Rejection.Should().BeNull();
 		read.Document!.Records.Select(record => record.CompatibilityIdentity.Profile.ToString())
 			.Should().Equal("full-probability@4", "safety-screening@30", "safety-screening@30");
+	}
+
+	[Fact]
+	public void TryGet_MixedCurrentCapabilitiesSelectOnlyExactCapabilityForSameScenario()
+	{
+		var scenario = SimulationScenario.FromCanonical(
+			FullProbabilityDegenerateIdentity().Scenario);
+		var safetyIdentity = SimulatorCapability.SafetyScreening
+			.CreateCompatibilityIdentity(scenario);
+		var fullIdentity = SimulatorCapability.FullProbability
+			.CreateCompatibilityIdentity(scenario);
+		var safety = new DegenerateTerminalCacheRecord(
+			safetyIdentity,
+			DegenerateRows(),
+			DegenerateCells(),
+			SimulatorCapability.SafetyScreening);
+		var full = new DegenerateTerminalCacheRecord(
+			fullIdentity,
+			DegenerateRows(),
+			DegenerateCells(),
+			SimulatorCapability.FullProbability);
+		var document = TerminalLobbyCache.CreateDocument([full, safety]);
+
+		TerminalLobbyCache.TryGet(
+			document,
+			scenario,
+			SimulatorCapability.SafetyScreening,
+			out var selectedSafety).Should().BeTrue();
+		selectedSafety.Should().BeSameAs(safety);
+		TerminalLobbyCache.TryGet(
+			document,
+			scenario,
+			SimulatorCapability.FullProbability,
+			out var selectedFull).Should().BeTrue();
+		selectedFull.Should().BeSameAs(full);
 	}
 
 	[Fact]
@@ -507,7 +608,9 @@ public class TerminalLobbyCacheTests
 		var payload = "{\"schema\":\"terminal-lobby-cache\",\"version\":1,\"records\":["
 			+ record + "]}";
 
-		TerminalLobbyCache.ReadDocument(Utf8(payload)).IsUsable.Should().BeFalse();
+		TerminalLobbyCache.ReadDocument(
+			Utf8(payload),
+			SimulatorCapabilityRegistry.Production).IsUsable.Should().BeFalse();
 	}
 
 	[Theory]
@@ -528,7 +631,9 @@ public class TerminalLobbyCacheTests
 		var payload = "{\"schema\":\"terminal-lobby-cache\",\"version\":1,\"records\":["
 			+ record + "]}";
 
-		var read = TerminalLobbyCache.ReadDocument(Utf8(payload));
+		var read = TerminalLobbyCache.ReadDocument(
+			Utf8(payload),
+			SimulatorCapabilityRegistry.Production);
 
 		read.IsUsable.Should().BeFalse();
 		read.Document.Should().BeNull();
@@ -544,9 +649,14 @@ public class TerminalLobbyCacheTests
 		var document = "{\"schema\":\"terminal-lobby-cache\",\"version\":1,\"records\":["
 			+ RecordJson(obsolete) + "]}";
 
-		TerminalLobbyCache.Read(Utf8(obsolete), AlreadyDecidedIdentity())
+		TerminalLobbyCache.Read(
+			Utf8(obsolete),
+			Scenario(AlreadyDecidedIdentity()),
+			SimulatorCapability.SafetyScreening)
 			.IsUsable.Should().BeFalse();
-		TerminalLobbyCache.ReadDocument(Utf8(document))
+		TerminalLobbyCache.ReadDocument(
+			Utf8(document),
+			SimulatorCapabilityRegistry.Production)
 			.IsUsable.Should().BeFalse();
 	}
 
@@ -602,34 +712,30 @@ public class TerminalLobbyCacheTests
 				],
 				replacementSetup).ToCanonical(),
 			SimulatorCapability.SafetyScreening.Identity);
-		var priorSafety = new SimulationCompatibilityIdentity(
-			original.Scenario,
-			new SimulatorProfileIdentity("safety-screening", "28"));
-		var foreign = new SimulationCompatibilityIdentity(
-			original.Scenario,
-			new SimulatorProfileIdentity("foreign-simulator", "1"));
-		var obsoleteCore = new SimulationCompatibilityIdentity(
-			original.Scenario,
-			new SimulatorProfileIdentity("core-simulator", "1"));
-
 		original.Should().Be(AggregateIdentity());
 		equivalentReplacement.Should().Be(original);
 		originalSetup.Version.Should().Be(7);
 		replacementSetup.Version.Should().Be(8);
 		replacementSetup.Cards.Select(card => card.Id).Should().NotIntersectWith(
 			originalSetup.Cards.Select(card => card.Id));
-		TerminalLobbyCache.TryGet(document, equivalentReplacement, out _)
+		TerminalLobbyCache.TryGet(
+			document,
+			Scenario(equivalentReplacement),
+			SimulatorCapability.SafetyScreening,
+			out _)
 			.Should().BeTrue();
-		TerminalLobbyCache.TryGet(document, differentMembership, out _)
+		TerminalLobbyCache.TryGet(
+			document,
+			Scenario(differentMembership),
+			SimulatorCapability.SafetyScreening,
+			out _)
 			.Should().BeFalse();
-		TerminalLobbyCache.TryGet(document, differentScenario, out _)
+		TerminalLobbyCache.TryGet(
+			document,
+			Scenario(differentScenario),
+			SimulatorCapability.SafetyScreening,
+			out _)
 			.Should().BeFalse();
-		TerminalLobbyCache.TryGet(document, priorSafety, out _).Should().BeFalse();
-		TerminalLobbyCache.TryGet(document, foreign, out _).Should().BeFalse();
-		TerminalLobbyCache.TryGet(document, obsoleteCore, out _).Should().BeFalse();
-		TerminalLobbyCache.Read(
-			TerminalLobbyCache.Write(DegenerateRecord()),
-			priorSafety).IsUsable.Should().BeFalse();
 	}
 
 	[Fact]
@@ -660,22 +766,32 @@ public class TerminalLobbyCacheTests
 	{
 		var identity = degenerate ? AggregateIdentity() : ProbabilityIdentity();
 		var evidence = Evidence(identity, count, degenerate);
+		var capability = degenerate
+			? SimulatorCapability.SafetyScreening
+			: SimulatorCapability.FullProbability;
 
-		var record = TerminalLobbyCache.Capture(identity, degenerate
-			? new DegenerateTerminalEvaluation(evidence)
-			: new ProbabilityTerminalEvaluation(evidence));
+		var record = TerminalLobbyCache.Capture(
+			Scenario(identity),
+			capability,
+			degenerate
+				? new DegenerateTerminalEvaluation(evidence)
+				: new ProbabilityTerminalEvaluation(evidence));
 
 		var aggregate = record.Should().BeAssignableTo<AggregateTerminalCacheRecord>().Subject;
 		aggregate.AttemptedRunCount.Should().Be(count);
 		aggregate.GameResultFrequencies.Sum(x => x.Numerator).Should().Be(count);
 		aggregate.GameResultFrequencyByTurn.Sum(x => x.Numerator).Should().Be(count);
-		TerminalLobbyCache.Read(TerminalLobbyCache.Write(record), identity).IsUsable.Should().BeTrue();
+		TerminalLobbyCache.Read(
+			TerminalLobbyCache.Write(record),
+			Scenario(identity),
+			capability).IsUsable.Should().BeTrue();
 	}
 
 	[Fact]
 	public void Capture_SafetyDegenerateEvidenceWithCurrentStrategy_RoundTripsSchemaOneCompactMeaning()
 	{
 		var identity = AggregateIdentity();
+		var scenario = SimulationScenario.FromCanonical(identity.Scenario);
 		var evidence = Evidence(
 			identity,
 			TerminalLobbyEvaluator.ScreeningAttemptCount,
@@ -683,10 +799,14 @@ public class TerminalLobbyCacheTests
 			BaselineRandomDecisionStrategy.SafetyScreeningIdentity);
 
 		var record = TerminalLobbyCache.Capture(
-			identity,
+			scenario,
+			SimulatorCapability.SafetyScreening,
 			new DegenerateTerminalEvaluation(evidence));
 		var encoded = TerminalLobbyCache.Write(record);
-		var read = TerminalLobbyCache.Read(encoded, identity);
+		var read = TerminalLobbyCache.Read(
+			encoded,
+			scenario,
+			SimulatorCapability.SafetyScreening);
 
 		var captured = record.Should().BeOfType<DegenerateTerminalCacheRecord>().Subject;
 		captured.CompatibilityIdentity.Should().Be(identity);
@@ -710,6 +830,7 @@ public class TerminalLobbyCacheTests
 		int expectedAttemptCount)
 	{
 		var identity = ActorThiefIdentity(offer1, offer2);
+		var scenario = Scenario(identity);
 		var evidence = Evidence(
 			identity,
 			expectedAttemptCount,
@@ -717,10 +838,13 @@ public class TerminalLobbyCacheTests
 			BaselineRandomDecisionStrategy.SafetyScreeningIdentity);
 
 		var record = TerminalLobbyCache.Capture(
-			identity,
+			scenario,
+			SimulatorCapability.SafetyScreening,
 			new DegenerateTerminalEvaluation(evidence));
 		var encoded = TerminalLobbyCache.Write(TerminalLobbyCache.CreateDocument([record]));
-		var read = TerminalLobbyCache.ReadDocument(encoded);
+		var read = TerminalLobbyCache.ReadDocument(
+			encoded,
+			SimulatorCapabilityRegistry.Production);
 
 		identity.Scenario.ActorSetupCards.Should().NotBeEmpty();
 		identity.Scenario.ThiefOfferBranchPolicy!.Branches.Should().HaveCount(
@@ -729,7 +853,11 @@ public class TerminalLobbyCacheTests
 		using var json = JsonDocument.Parse(encoded);
 		json.RootElement.GetProperty("version").GetInt32().Should().Be(1);
 		read.IsUsable.Should().BeTrue();
-		TerminalLobbyCache.TryGet(read.Document!, identity, out var roundTripped).Should().BeTrue();
+		TerminalLobbyCache.TryGet(
+			read.Document!,
+			scenario,
+			SimulatorCapability.SafetyScreening,
+			out var roundTripped).Should().BeTrue();
 		var aggregate = roundTripped.Should().BeOfType<DegenerateTerminalCacheRecord>().Subject;
 		aggregate.AttemptedRunCount.Should().Be(TerminalLobbyEvaluator.ScreeningAttemptCount);
 		aggregate.CompletedRunCount.Should().Be(TerminalLobbyEvaluator.ScreeningAttemptCount);
@@ -750,18 +878,26 @@ public class TerminalLobbyCacheTests
 		bool incompleteSibling)
 	{
 		var identity = ActorThiefIdentity(offer1, offer2);
+		var scenario = Scenario(identity);
 		var evidence = MixedThiefDegenerateEvidence(identity, incompleteSibling);
 
 		var record = TerminalLobbyCache.Capture(
-			identity,
+			scenario,
+			SimulatorCapability.SafetyScreening,
 			new DegenerateTerminalEvaluation(evidence));
 		var encoded = TerminalLobbyCache.Write(TerminalLobbyCache.CreateDocument([record]));
-		var read = TerminalLobbyCache.ReadDocument(encoded);
+		var read = TerminalLobbyCache.ReadDocument(
+			encoded,
+			SimulatorCapabilityRegistry.Production);
 
 		evidence.AttemptedRunCount.Should().Be(expectedAttemptCount);
 		evidence.IncompleteRunCount.Should().Be(incompleteSibling ? 1 : 0);
 		read.IsUsable.Should().BeTrue();
-		TerminalLobbyCache.TryGet(read.Document!, identity, out var roundTripped).Should().BeTrue();
+		TerminalLobbyCache.TryGet(
+			read.Document!,
+			scenario,
+			SimulatorCapability.SafetyScreening,
+			out var roundTripped).Should().BeTrue();
 		var aggregate = roundTripped.Should().BeOfType<DegenerateTerminalCacheRecord>().Subject;
 		aggregate.AttemptedRunCount.Should().Be(TerminalLobbyEvaluator.ScreeningAttemptCount);
 		aggregate.CompletedRunCount.Should().Be(TerminalLobbyEvaluator.ScreeningAttemptCount);
@@ -784,20 +920,28 @@ public class TerminalLobbyCacheTests
 		bool incompleteSibling)
 	{
 		var identity = NonActorThiefIdentity();
+		var scenario = SimulationScenario.FromCanonical(identity.Scenario);
 		var evidence = MixedThiefDegenerateEvidence(identity, incompleteSibling);
 
 		var record = TerminalLobbyCache.Capture(
-			identity,
+			scenario,
+			SimulatorCapability.SafetyScreening,
 			new DegenerateTerminalEvaluation(evidence));
 		var encoded = TerminalLobbyCache.Write(TerminalLobbyCache.CreateDocument([record]));
-		var read = TerminalLobbyCache.ReadDocument(encoded);
+		var read = TerminalLobbyCache.ReadDocument(
+			encoded,
+			SimulatorCapabilityRegistry.Production);
 
 		identity.Scenario.ActorSetupCards.Should().BeEmpty();
 		identity.Scenario.ThiefOfferBranchPolicy.Should().NotBeNull();
 		evidence.AttemptedRunCount.Should().Be(3_000);
 		evidence.IncompleteRunCount.Should().Be(incompleteSibling ? 1 : 0);
 		read.IsUsable.Should().BeTrue();
-		TerminalLobbyCache.TryGet(read.Document!, identity, out var roundTripped).Should().BeTrue();
+		TerminalLobbyCache.TryGet(
+			read.Document!,
+			scenario,
+			SimulatorCapability.SafetyScreening,
+			out var roundTripped).Should().BeTrue();
 		var aggregate = roundTripped.Should().BeOfType<DegenerateTerminalCacheRecord>().Subject;
 		aggregate.AttemptedRunCount.Should().Be(TerminalLobbyEvaluator.ScreeningAttemptCount);
 		aggregate.CompletedRunCount.Should().Be(TerminalLobbyEvaluator.ScreeningAttemptCount);
@@ -818,17 +962,22 @@ public class TerminalLobbyCacheTests
 		var identity = degenerate
 			? FullProbabilityDegenerateIdentity()
 			: ProbabilityIdentity();
+		var scenario = SimulationScenario.FromCanonical(identity.Scenario);
 		var evidence = Evidence(identity, count, degenerate);
 
 		var record = TerminalLobbyCache.Capture(
-			identity,
+			scenario,
+			SimulatorCapability.FullProbability,
 			degenerate
 				? new DegenerateTerminalEvaluation(evidence)
 				: new ProbabilityTerminalEvaluation(evidence));
 
 		record.Should().BeAssignableTo<AggregateTerminalCacheRecord>()
 			.Which.CompatibilityIdentity.Should().Be(identity);
-		TerminalLobbyCache.Read(TerminalLobbyCache.Write(record), identity)
+		TerminalLobbyCache.Read(
+			TerminalLobbyCache.Write(record),
+			scenario,
+			SimulatorCapability.FullProbability)
 			.IsUsable.Should().BeTrue();
 	}
 
@@ -850,9 +999,13 @@ public class TerminalLobbyCacheTests
 			TerminalLobbyEvaluator.ScreeningAttemptCount,
 			degenerate: true,
 			wrongStrategy);
+		SimulatorCapabilityRegistry.Production.TryGet(
+			producerProfile,
+			out var capability).Should().BeTrue();
 
 		Action capture = () => TerminalLobbyCache.Capture(
-			identity,
+			Scenario(identity),
+			capability,
 			new DegenerateTerminalEvaluation(evidence));
 
 		capture.Should().Throw<ArgumentException>()
@@ -891,7 +1044,9 @@ public class TerminalLobbyCacheTests
 			AggregateEvidenceMismatch.Scenario => new SimulationCompatibilityIdentity(
 				ProbabilityIdentity().Scenario,
 				identity.Profile),
-			AggregateEvidenceMismatch.Profile => CurrentIdentity(identity, "full-probability"),
+			AggregateEvidenceMismatch.Profile => new SimulationCompatibilityIdentity(
+				identity.Scenario,
+				SimulatorCapability.FullProbability.Identity),
 			AggregateEvidenceMismatch.Incomplete => identity,
 			_ => throw new ArgumentOutOfRangeException(nameof(mismatch))
 		};
@@ -901,9 +1056,13 @@ public class TerminalLobbyCacheTests
 				identity,
 				TerminalLobbyEvaluator.ScreeningAttemptCount,
 				degenerate: true);
+		SimulatorCapabilityRegistry.Production.TryGet(
+			expectedIdentity.Profile,
+			out var capability).Should().BeTrue();
 
 		Action capture = () => TerminalLobbyCache.Capture(
-			expectedIdentity,
+			Scenario(expectedIdentity),
+			capability,
 			new DegenerateTerminalEvaluation(evidence));
 
 		capture.Should().Throw<ArgumentException>()
@@ -915,15 +1074,18 @@ public class TerminalLobbyCacheTests
 	{
 		var probabilityEvidence = Evidence(ProbabilityIdentity(), 10_000, degenerate: false);
 		Action identityMismatch = () => TerminalLobbyCache.Capture(
-			AggregateIdentity(),
+			Scenario(AggregateIdentity()),
+			SimulatorCapability.SafetyScreening,
 			new ProbabilityTerminalEvaluation(probabilityEvidence));
 		var incomplete = IncompleteEvidence(AggregateIdentity());
 		Action incompleteCapture = () => TerminalLobbyCache.Capture(
-			AggregateIdentity(),
+			Scenario(AggregateIdentity()),
+			SimulatorCapability.SafetyScreening,
 			new DegenerateTerminalEvaluation(incomplete));
 		var wrongCount = Evidence(AggregateIdentity(), 999, degenerate: true);
 		Action wrongPolicy = () => TerminalLobbyCache.Capture(
-			AggregateIdentity(),
+			Scenario(AggregateIdentity()),
+			SimulatorCapability.SafetyScreening,
 			new DegenerateTerminalEvaluation(wrongCount));
 
 		identityMismatch.Should().Throw<ArgumentException>();
@@ -934,7 +1096,8 @@ public class TerminalLobbyCacheTests
 	private static DegenerateTerminalCacheRecord DegenerateRecord() => new(
 		AggregateIdentity(),
 		DegenerateRows(),
-		DegenerateCells());
+		DegenerateCells(),
+		SimulatorCapability.SafetyScreening);
 
 	private static ProbabilityTerminalCacheRecord ProbabilityRecord() => new(
 		ProbabilityIdentity(),
@@ -946,7 +1109,8 @@ public class TerminalLobbyCacheTests
 		[
 			new(new SingleFactionGameResult(Faction.Villager), 1, VictoryCheckWindow.Dawn, 7_000, 10_000),
 			new(new SingleFactionGameResult(Faction.Werewolf), 2, VictoryCheckWindow.PreNight, 3_000, 10_000)
-		]);
+		],
+		SimulatorCapability.FullProbability);
 
 	private static TerminalCacheGameResultFrequency[] DegenerateRows() =>
 	[
@@ -1138,17 +1302,6 @@ public class TerminalLobbyCacheTests
 			$"players=5|roles=[Actor=1,SimpleVillager={villagers},SimpleWerewolf={werewolves}]|actor=[Cupid,Defender,Elder]|rules=[]"),
 		SimulatorCapability.SafetyScreening.Identity);
 
-	private static SimulationCompatibilityIdentity CurrentIdentity(
-		SimulationCompatibilityIdentity sourceIdentity,
-		string profileId) => new(
-			sourceIdentity.Scenario,
-			profileId switch
-			{
-				"safety-screening" => SimulatorCapability.SafetyScreening.Identity,
-				"full-probability" => SimulatorCapability.FullProbability.Identity,
-				_ => throw new ArgumentOutOfRangeException(nameof(profileId))
-			});
-
 	private static SimulationCompatibilityIdentity Identity(
 		int players,
 		int villagers,
@@ -1157,6 +1310,10 @@ public class TerminalLobbyCacheTests
 		CanonicalSimulationScenario.Parse(
 			$"players={players}|roles=[SimpleVillager={villagers},SimpleWerewolf={werewolves}]|actor=[]|rules=[]"),
 		profile);
+
+	private static SimulationScenario Scenario(
+		SimulationCompatibilityIdentity identity) =>
+		SimulationScenario.FromCanonical(identity.Scenario);
 
 	private static byte[] Utf8(string value) => Encoding.UTF8.GetBytes(value);
 

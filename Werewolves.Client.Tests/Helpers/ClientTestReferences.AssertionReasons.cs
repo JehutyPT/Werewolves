@@ -4,10 +4,6 @@ public static partial class ClientTestReferences
 {
 	public static class AssertionReasons
 	{
-		public static string TransitionKeyChangesBetweenInstructions => nameof(TransitionKeyChangesBetweenInstructions);
-		public static string TransitionKeyChangesOnPublicReveal => nameof(TransitionKeyChangesOnPublicReveal);
-		public static string TransitionKeyStableWithoutStateChange => nameof(TransitionKeyStableWithoutStateChange);
-		public static string TransitionKeyNullWithoutInstruction => nameof(TransitionKeyNullWithoutInstruction);
 		public static string ReturnedSelectionMutationDoesNotAffectState => nameof(ReturnedSelectionMutationDoesNotAffectState);
 		public static string RosterContainsEntriesForRoleAssignmentPlayers => nameof(RosterContainsEntriesForRoleAssignmentPlayers);
 		public static string NativeChecklistExists => nameof(NativeChecklistExists);

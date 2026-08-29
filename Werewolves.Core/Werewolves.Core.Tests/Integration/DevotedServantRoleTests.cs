@@ -184,7 +184,7 @@ public sealed class DevotedServantRoleTests
 
 		target.State.PhysicalCharacterCardId.Should().BeNull();
 		acquiredCard.PlayersForAssignment.Should().Equal(target.Id);
-		acquiredCard.RolesForAssignment.Should().ContainSingle()
+		acquiredCard.SelectableRolesForPlayers[target.Id].Should().ContainSingle()
 			.Which.Should().Be(MainRoleType.Seer);
 	}
 
@@ -1092,7 +1092,8 @@ public sealed class DevotedServantRoleTests
 				window.CreatePublicSelfRevealResponse(servant.Id))
 			.ModeratorInstruction.Should()
 			.BeOfType<AssignRolesInstruction>().Subject;
-		acquired.RolesForAssignment.Should().ContainSingle()
+		acquired.SelectableRolesForPlayers[expiredAngelHolder.Id]
+			.Should().ContainSingle()
 			.Which.Should().Be(MainRoleType.Angel);
 		var announcement = builder.Process(acquired.CreateResponse(new()
 		{

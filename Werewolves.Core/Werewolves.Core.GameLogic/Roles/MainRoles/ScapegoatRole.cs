@@ -29,7 +29,7 @@ internal enum ScapegoatCascadeStageId
 }
 
 internal sealed class ScapegoatRole
-	: RoleHookListener<ScapegoatRoleState>
+	: RoleHookListener, IDeclaredRoleWorkflow
 {
 	private static readonly RolePowerDefinition TieReplacementPower = new(
 		new RolePowerIdentifier("scapegoat-tie-replacement"),
@@ -37,6 +37,7 @@ internal sealed class ScapegoatRole
 
 	private readonly RolePowerAvailabilityGateway _availabilityGateway;
 	private readonly SubPhaseStage _sacrificeCascade;
+	private readonly RoleWorkflowRuntime _voteWorkflowRuntime;
 
 	internal ScapegoatRole(RolePowerAvailabilityGateway availabilityGateway)
 	{
@@ -56,6 +57,104 @@ internal sealed class ScapegoatRole
 						.SelectScapegoatPermittedVoters or
 					ModeratorInstructionSemantic
 						.AnnounceScapegoatPermittedVoters);
+
+		var holderObservationWait =
+			RecoverableWait<ScapegoatRoleState, SelectPlayersInstruction>
+				.Replayable(
+					Id,
+					GameHook.OnVoteConcluded,
+					startState: null,
+					ScapegoatRoleState.AwaitingHolderObservation,
+					ModeratorInstructionSemantic
+						.ObserveScapegoatHolderForTie,
+					ExpectedInputType.PlayerSelection,
+					static _ => false,
+					static (_, _) => { },
+					CreateHolderObservation,
+					ClaimsHolderObservation,
+					ValidateHolderObservationInstruction);
+		var revealConfirmationWait =
+			RecoverableWait<ScapegoatRoleState, ConfirmationInstruction>
+				.Replayable(
+					Id,
+					GameHook.OnVoteConcluded,
+					startState: null,
+					ScapegoatRoleState.AwaitingPublicReveal,
+					ModeratorInstructionSemantic.RevealScapegoatForTie,
+					ExpectedInputType.Continue,
+					static _ => false,
+					static (_, _) => { },
+					session => CreateTieRevealInstruction(session)
+						as ConfirmationInstruction
+						?? throw new InvalidOperationException(
+							"The Scapegoat tie reveal is not a Confirmation."),
+					ClaimsTieReveal,
+					ValidateTieRevealInstruction);
+		var revealAssignmentWait =
+			RecoverableWait<ScapegoatRoleState, AssignRolesInstruction>
+				.Replayable(
+					Id,
+					GameHook.OnVoteConcluded,
+					startState: null,
+					ScapegoatRoleState.AwaitingPublicReveal,
+					ModeratorInstructionSemantic.RevealScapegoatForTie,
+					ExpectedInputType.AssignPlayerRoles,
+					static _ => false,
+					static (_, _) => { },
+					session => CreateTieRevealInstruction(session)
+						as AssignRolesInstruction
+						?? throw new InvalidOperationException(
+							"The Scapegoat tie reveal is not a Role assignment."),
+					ClaimsTieReveal,
+					ValidateTieRevealInstruction);
+		// The sacrifice Elimination Cascade owns every instruction it issues,
+		// so this wait authenticates from the tie-replacement scope and its
+		// cascade-completion facts rather than from one bound semantic.
+		var sacrificeCascadeWait =
+			new DelegatedRecoverableWait<ScapegoatRoleState>(
+				Id,
+				GameHook.OnVoteConcluded,
+				ScapegoatRoleState.AwaitingSacrificeCascade,
+				AuthenticatesIncompleteSacrificeCascade,
+				AdvanceSacrificeCascade);
+		_voteWorkflowRuntime = new RoleWorkflowRuntime(
+			Id,
+			GameHook.OnVoteConcluded,
+			[
+				holderObservationWait,
+				revealConfirmationWait,
+				revealAssignmentWait,
+				sacrificeCascadeWait,
+				new RoleWorkflowDecisionStep<ScapegoatRoleState>(
+					Id,
+					GameHook.OnVoteConcluded,
+					startState: null,
+					static _ => true,
+					(session, input) => RequestTieReplacement(
+						session,
+						input,
+						holderObservationWait,
+						revealConfirmationWait,
+						revealAssignmentWait)),
+				new RoleWorkflowDecisionStep<ScapegoatRoleState>(
+					Id,
+					GameHook.OnVoteConcluded,
+					ScapegoatRoleState.AwaitingHolderObservation,
+					static _ => true,
+					RecordHolderObservationAndBeginSacrifice),
+				new RoleWorkflowDecisionStep<ScapegoatRoleState>(
+					Id,
+					GameHook.OnVoteConcluded,
+					ScapegoatRoleState.AwaitingPublicReveal,
+					static _ => true,
+					RecordRevealAndBeginSacrifice),
+				new RoleWorkflowCompletionStep<ScapegoatRoleState>(
+					Id,
+					GameHook.OnVoteConcluded,
+					ScapegoatRoleState.Complete,
+					ScapegoatRoleState.Complete,
+					static _ => true)
+			]);
 	}
 
 	internal override string PublicName => GameStrings.ScapegoatRoleName;
@@ -63,114 +162,8 @@ internal sealed class ScapegoatRole
 	public override ListenerIdentifier Id =>
 		ListenerIdentifier.Listener(MainRoleType.Scapegoat);
 
-	public override bool TryResolvePendingInstructionContinuation(
-		GameHook hook,
-		GameSession session,
-		ModeratorInstruction pendingInstruction,
-		out string listenerState)
-	{
-		listenerState = string.Empty;
-		if (hook != GameHook.OnVoteConcluded)
-		{
-			return false;
-		}
-
-		if (pendingInstruction.Semantic ==
-				ModeratorInstructionSemantic.RevealScapegoatForTie &&
-			TryGetActiveBorrowedActorId(session, out var borrowedActorId))
-		{
-			if (!MatchesBorrowedTieReveal(
-					pendingInstruction,
-					borrowedActorId))
-			{
-				return false;
-			}
-
-			listenerState =
-				ScapegoatRoleState.AwaitingPublicReveal.ToString();
-			return true;
-		}
-
-		var replacement = GetCurrentTieReplacement(session);
-		if (replacement is { IsBorrowed: true })
-		{
-			if (pendingInstruction.Semantic == ModeratorInstructionSemantic
-					.SelectScapegoatPermittedVoters)
-			{
-				if (!MatchesPermittedVoterSelection(
-						pendingInstruction,
-						GetPermittedVoterCandidates(session)))
-				{
-					return false;
-				}
-
-				listenerState = ScapegoatRoleState
-					.AwaitingSacrificeCascade.ToString();
-				return true;
-			}
-
-			if (pendingInstruction.Semantic == ModeratorInstructionSemantic
-					.AnnounceScapegoatPermittedVoters)
-			{
-				var restriction =
-					DayVoteRules.GetVoterEligibilityRestriction(
-						session,
-						replacement.ScopeId);
-				if (restriction == null ||
-					!MatchesPermittedVoterAnnouncement(
-						session,
-						pendingInstruction,
-						restriction.PermittedVoterIds,
-						restriction.AnnouncementInstructionId))
-				{
-					return false;
-				}
-
-				listenerState = ScapegoatRoleState
-					.AwaitingSacrificeCascade.ToString();
-				return true;
-			}
-		}
-
-		switch (pendingInstruction.Semantic)
-		{
-			case ModeratorInstructionSemantic.ObserveScapegoatHolderForTie
-				when pendingInstruction is SelectPlayersInstruction
-				{
-					CountConstraint: var countConstraint
-				} && countConstraint ==
-				NumberRangeConstraint.SingleOptional:
-				listenerState =
-					ScapegoatRoleState.AwaitingHolderObservation.ToString();
-				return true;
-			case ModeratorInstructionSemantic.RevealScapegoatForTie
-				when pendingInstruction is ConfirmationInstruction or
-					AssignRolesInstruction:
-				listenerState =
-					ScapegoatRoleState.AwaitingPublicReveal.ToString();
-				return true;
-			case ModeratorInstructionSemantic.SelectScapegoatPermittedVoters
-				when pendingInstruction is SelectPlayersInstruction:
-			case ModeratorInstructionSemantic
-				.AnnounceScapegoatPermittedVoters
-				when pendingInstruction is ConfirmationInstruction:
-				listenerState =
-					ScapegoatRoleState.AwaitingSacrificeCascade.ToString();
-				return true;
-		}
-
-		if (replacement != null &&
-		    !GameSessionQueries.IsEliminationCascadeComplete(
-			    session,
-			    replacement.ScopeId))
-		{
-			listenerState =
-				ScapegoatRoleState.AwaitingSacrificeCascade.ToString();
-			return true;
-		}
-
-		return false;
-	}
+	RoleWorkflowRuntime IDeclaredRoleWorkflow.WorkflowRuntime =>
+		_voteWorkflowRuntime;
 
 	internal static void ValidateBorrowedPendingRecoveryInstruction(
 		GameSession session)
@@ -204,6 +197,7 @@ internal sealed class ScapegoatRole
 					votedPlayerId == Guid.Empty &&
 					GetCurrentTieReplacement(session) == null &&
 					MatchesBorrowedTieReveal(
+						session,
 						pendingInstruction,
 						borrowedActorId);
 				break;
@@ -294,7 +288,8 @@ internal sealed class ScapegoatRole
 			return HookListenerActionResult.Skip();
 		}
 
-		var currentState = GetCurrentListenerState(session);
+		var currentState =
+			session.Execution.GetCurrentListenerState<ScapegoatRoleState>(Id);
 		if (currentState == null && GetCurrentTieReplacement(session) != null)
 		{
 			return HookListenerActionResult.Skip();
@@ -307,63 +302,34 @@ internal sealed class ScapegoatRole
 			: ExecuteCore(session, input);
 	}
 
-	protected override List<RoleStateMachineStage> DefineStateMachineStages() =>
-	[
-		CreateStage(
-			GameHook.OnVoteConcluded,
-			null,
-			[
-				ScapegoatRoleState.AwaitingHolderObservation,
-				ScapegoatRoleState.AwaitingPublicReveal,
-				ScapegoatRoleState.AwaitingSacrificeCascade,
-				ScapegoatRoleState.Complete
-			],
-			RequestTieReplacement),
-		CreateStage(
-			GameHook.OnVoteConcluded,
-			ScapegoatRoleState.AwaitingHolderObservation,
-			[
-				ScapegoatRoleState.AwaitingSacrificeCascade,
-				ScapegoatRoleState.Complete
-			],
-			RecordHolderObservationAndBeginSacrifice),
-		CreateStage(
-			GameHook.OnVoteConcluded,
-			ScapegoatRoleState.AwaitingPublicReveal,
-			[
-				ScapegoatRoleState.AwaitingSacrificeCascade,
-				ScapegoatRoleState.Complete
-			],
-			RecordRevealAndBeginSacrifice),
-		CreateLoopStage(
-			GameHook.OnVoteConcluded,
-			ScapegoatRoleState.AwaitingSacrificeCascade,
-			AdvanceSacrificeCascade),
-		CreateEndStage(
-			GameHook.OnVoteConcluded,
-			ScapegoatRoleState.Complete,
-			(_, _) => HookListenerActionResult.Complete(
-				ScapegoatRoleState.Complete))
-	];
+	protected override HookListenerActionResult ExecuteCore(
+		GameSession session,
+		ModeratorResponse input) =>
+		_voteWorkflowRuntime.Execute(
+			session,
+			input,
+			session.Execution.GetCurrentListenerState<ScapegoatRoleState>(Id));
 
 	private HookListenerActionResult RequestTieReplacement(
 		GameSession session,
-		ModeratorResponse input)
+		ModeratorResponse input,
+		RecoverableWait<ScapegoatRoleState, SelectPlayersInstruction>
+			holderObservationWait,
+		RecoverableWait<ScapegoatRoleState, ConfirmationInstruction>
+			revealConfirmationWait,
+		RecoverableWait<ScapegoatRoleState, AssignRolesInstruction>
+			revealAssignmentWait)
 	{
 		if (TryGetBorrowedActorTieReplacement(
 				session,
 				out var borrowedExecution))
 		{
-			var borrowedReveal = RoleKnowledgeHandlers.RequestPublicRoleReveal(
-				session,
-				[borrowedExecution.Actor],
-				ModeratorInstructionSemantic.RevealScapegoatForTie,
-				GameStrings.ActorRoleName);
+			var borrowedReveal = CreateTieRevealInstruction(session);
 			if (borrowedReveal != null)
 			{
-				return HookListenerActionResult.NeedInput(
-					borrowedReveal,
-					ScapegoatRoleState.AwaitingPublicReveal);
+				return borrowedReveal is AssignRolesInstruction
+					? revealAssignmentWait.Execute(session, input)
+					: revealConfirmationWait.Execute(session, input);
 			}
 
 			RecordBorrowedTieReplacement(
@@ -388,31 +354,10 @@ internal sealed class ScapegoatRole
 		var scapegoat = aliveScapegoats?.SingleOrDefault();
 		if (scapegoat == null)
 		{
-			var candidates = session.GetPlayers()
-				.WithHealth(PlayerHealth.Alive)
-				.Where(IsNonContradictoryScapegoatCandidate)
-				.Select(player => player.Id)
-				.ToHashSet();
-			if (candidates.Count == 0)
-			{
-				return HookListenerActionResult.Complete(
-					ScapegoatRoleState.Complete);
-			}
-
-			var observation = new SelectPlayersInstruction(
-				ModeratorInstructionSemantic.ObserveScapegoatHolderForTie,
-				candidates,
-				NumberRangeConstraint.SingleOptional,
-				privateInstruction:
-					GameStrings.ScapegoatHolderObservationInstruction,
-				affectedPlayerIds: candidates.ToArray())
-			{
-				EmptySelectionOptionLabel =
-					GameStrings.ScapegoatNoRevealOption
-			};
-			return HookListenerActionResult.NeedInput(
-				observation,
-				ScapegoatRoleState.AwaitingHolderObservation);
+			return GetScapegoatHolderCandidates(session).Count == 0
+				? HookListenerActionResult.Complete(
+					ScapegoatRoleState.Complete)
+				: holderObservationWait.Execute(session, input);
 		}
 
 		if (!IsTieReplacementAvailable(session, scapegoat))
@@ -421,20 +366,170 @@ internal sealed class ScapegoatRole
 				ScapegoatRoleState.Complete);
 		}
 
-		var reveal = RoleKnowledgeHandlers.RequestPublicRoleReveal(
-			session,
-			[scapegoat],
-			ModeratorInstructionSemantic.RevealScapegoatForTie,
-			GameStrings.ScapegoatTieRevealAnnouncement);
+		var reveal = CreateTieRevealInstruction(session);
 		if (reveal != null)
 		{
-			return HookListenerActionResult.NeedInput(
-				reveal,
-				ScapegoatRoleState.AwaitingPublicReveal);
+			return reveal is AssignRolesInstruction
+				? revealAssignmentWait.Execute(session, input)
+				: revealConfirmationWait.Execute(session, input);
 		}
 
 		RecordTieReplacement(session, scapegoat.Id);
 		return AdvanceSacrificeCascade(session, input);
+	}
+
+	private ModeratorInstruction? CreateTieRevealInstruction(
+		GameSession session)
+	{
+		if (TryGetBorrowedActorTieReplacement(
+				session,
+				out var borrowedExecution))
+		{
+			return RoleKnowledgeHandlers.RequestPublicRoleReveal(
+				session,
+				[borrowedExecution.Actor],
+				ModeratorInstructionSemantic.RevealScapegoatForTie,
+				GameStrings.ActorRoleName);
+		}
+
+		var scapegoat = GetAliveRolePlayers(session)?.SingleOrDefault()
+			?? throw new InvalidOperationException(
+				"No living Scapegoat is available to replace the tied Vote.");
+		return RoleKnowledgeHandlers.RequestPublicRoleReveal(
+			session,
+			[scapegoat],
+			ModeratorInstructionSemantic.RevealScapegoatForTie,
+			GameStrings.ScapegoatTieRevealAnnouncement);
+	}
+
+	private bool ClaimsTieReveal(
+		GameSession session,
+		ModeratorInstruction pendingInstruction) =>
+		pendingInstruction.Semantic ==
+			ModeratorInstructionSemantic.RevealScapegoatForTie &&
+		GetCurrentTieReplacement(session) == null;
+
+	private void ValidateTieRevealInstruction(
+		GameSession session,
+		ModeratorInstruction instruction)
+	{
+		if (GetCurrentTieReplacement(session) != null)
+		{
+			throw new RoleWorkflowInputRejectionException(
+				"The Scapegoat tie reveal cannot follow a committed tie replacement.");
+		}
+
+		if (TryGetActiveBorrowedActorId(session, out var borrowedActorId))
+		{
+			if (!MatchesBorrowedTieReveal(
+					session,
+					instruction,
+					borrowedActorId))
+			{
+				throw new RoleWorkflowInputRejectionException(
+					"The Scapegoat tie reveal does not match its borrowed Actor context.");
+			}
+
+			return;
+		}
+
+		var scapegoat = GetAliveRolePlayers(session)?.SingleOrDefault();
+		if (scapegoat == null ||
+		    instruction.AffectedPlayerIds is not [var affectedPlayerId] ||
+		    affectedPlayerId != scapegoat.Id)
+		{
+			throw new RoleWorkflowInputRejectionException(
+				"The Scapegoat tie reveal does not match its committed living holder.");
+		}
+	}
+
+	private bool ClaimsHolderObservation(
+		GameSession session,
+		ModeratorInstruction pendingInstruction) =>
+		pendingInstruction.Semantic ==
+			ModeratorInstructionSemantic.ObserveScapegoatHolderForTie &&
+		GetCurrentTieReplacement(session) == null;
+
+	private void ValidateHolderObservationInstruction(
+		GameSession session,
+		SelectPlayersInstruction instruction)
+	{
+		if (GetCurrentTieReplacement(session) != null)
+		{
+			throw new RoleWorkflowInputRejectionException(
+				"The Scapegoat holder observation cannot follow a committed tie replacement.");
+		}
+
+		var candidates = GetScapegoatHolderCandidates(session);
+		if (candidates.Count == 0 ||
+		    !MatchesHolderObservation(instruction, candidates))
+		{
+			throw new RoleWorkflowInputRejectionException(
+				"The Scapegoat holder observation does not match its living candidate snapshot.");
+		}
+	}
+
+	private bool AuthenticatesIncompleteSacrificeCascade(GameSession session) =>
+		GetCurrentTieReplacement(session) is { ScopeId: var scopeId } &&
+		!GameSessionQueries.IsEliminationCascadeComplete(session, scopeId);
+
+	private static HashSet<Guid> GetScapegoatHolderCandidates(
+		GameSession session) =>
+		session.GetPlayers()
+			.WithHealth(PlayerHealth.Alive)
+			.Where(player =>
+				IsNonContradictoryScapegoatCandidate(player) &&
+				(player.State.CurrentRole == MainRoleType.Scapegoat ||
+				 player.State.ModeratorKnownRole == MainRoleType.Scapegoat ||
+				 GameSessionQueries.GetPossibleRoles(session, player.Id)
+					 .Contains(MainRoleType.Scapegoat)))
+			.Select(player => player.Id)
+			.ToHashSet();
+
+	private static SelectPlayersInstruction CreateHolderObservation(
+		GameSession session) =>
+		CreateHolderObservation(GetScapegoatHolderCandidates(session));
+
+	private static SelectPlayersInstruction CreateHolderObservation(
+		IReadOnlySet<Guid> candidates,
+		Guid instructionId = default) =>
+		new SelectPlayersInstruction(
+			ModeratorInstructionSemantic.ObserveScapegoatHolderForTie,
+			new HashSet<Guid>(candidates),
+			NumberRangeConstraint.SingleOptional,
+			privateInstruction:
+				GameStrings.ScapegoatHolderObservationInstruction,
+			affectedPlayerIds: candidates.ToArray(),
+			instructionId: instructionId)
+		{
+			EmptySelectionOptionLabel = GameStrings.ScapegoatNoRevealOption
+		};
+
+	private static bool MatchesHolderObservation(
+		SelectPlayersInstruction instruction,
+		IReadOnlySet<Guid> candidates)
+	{
+		var expected = CreateHolderObservation(
+			candidates,
+			instruction.InstructionId);
+		return instruction.Semantic == expected.Semantic &&
+			instruction.CountConstraint == expected.CountConstraint &&
+			instruction.SelectablePlayerIds.SetEquals(
+				expected.SelectablePlayerIds) &&
+			instruction.AffectedPlayerIds is { } affectedPlayerIds &&
+			affectedPlayerIds.Count == candidates.Count &&
+			affectedPlayerIds.ToHashSet().SetEquals(candidates) &&
+			instruction.RoleIdentification == expected.RoleIdentification &&
+			StringComparer.Ordinal.Equals(
+				instruction.PublicAnnouncement,
+				expected.PublicAnnouncement) &&
+			StringComparer.Ordinal.Equals(
+				instruction.PrivateInstruction,
+				expected.PrivateInstruction) &&
+			StringComparer.Ordinal.Equals(
+				instruction.EmptySelectionOptionLabel,
+				expected.EmptySelectionOptionLabel) &&
+			instruction.SoundEffects.SequenceEqual(expected.SoundEffects);
 	}
 
 	private HookListenerActionResult RecordHolderObservationAndBeginSacrifice(
@@ -460,6 +555,18 @@ internal sealed class ScapegoatRole
 		{
 			throw new InvalidOperationException(
 				"The observed Scapegoat holder contradicts committed Role or health facts.");
+		}
+
+		var isEstablishedHolder =
+			player.State.CurrentRole == MainRoleType.Scapegoat ||
+			player.State.ModeratorKnownRole == MainRoleType.Scapegoat ||
+			player.State.PhysicalCharacterCardRole == MainRoleType.Scapegoat;
+		if (!isEstablishedHolder &&
+		    !GameSessionQueries.GetPossibleRoles(session, player.Id)
+			    .Contains(MainRoleType.Scapegoat))
+		{
+			throw new InvalidOperationException(
+				"Role Identification contradicts committed Role knowledge.");
 		}
 
 		if (!IsTieReplacementAvailable(session, player))
@@ -853,9 +960,11 @@ internal sealed class ScapegoatRole
 	}
 
 	internal static bool MatchesBorrowedTieReveal(
+		GameSession session,
 		ModeratorInstruction? instruction,
 		Guid actorId)
 	{
+		ArgumentNullException.ThrowIfNull(session);
 		if (instruction is not (ConfirmationInstruction or
 		    AssignRolesInstruction) ||
 		    instruction.Semantic !=
@@ -867,7 +976,8 @@ internal sealed class ScapegoatRole
 			    GameStrings.ActorRoleName) ||
 		    !StringComparer.Ordinal.Equals(
 			    instruction.PrivateInstruction,
-			    GameStrings.PublicRoleRevealInstruction) ||
+			    RoleKnowledgeHandlers.CreatePublicRoleRevealPrivateInstruction(
+				    [session.GetPlayer(actorId)])) ||
 		    instruction.SoundEffects.Count != 0)
 		{
 			return false;
@@ -877,7 +987,8 @@ internal sealed class ScapegoatRole
 			instruction is AssignRolesInstruction assignment &&
 			assignment.PlayersForAssignment.Count == 1 &&
 			assignment.PlayersForAssignment.Contains(actorId) &&
-			assignment.RolesForAssignment.Contains(MainRoleType.Actor);
+			assignment.SelectableRolesForPlayers[actorId]
+				.Contains(MainRoleType.Actor);
 	}
 
 	internal static bool MatchesPermittedVoterSelection(

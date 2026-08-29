@@ -220,6 +220,7 @@ public sealed class WitchRoleTests : DiagnosticTestBase
 		var (builder, players) = CreateStartedWitchGame(policy);
 		builder
 			.ArrangeKnownRole(players[1].Id, MainRoleType.Witch)
+			.ArrangeKnownWerewolfFactionAgentGroup(players[0].Id)
 			.ArrangeEliminatedPlayer(players[1].Id);
 		builder.ConfirmGameStart();
 		builder.ConfirmNightStart();
@@ -822,7 +823,7 @@ public sealed class WitchRoleTests : DiagnosticTestBase
 			service.RehydrateSession(recoveryPayload);
 
 		rehydrate.Should().Throw<InvalidOperationException>()
-			.WithMessage("*Unsupported domain continuation*");
+			.WithMessage("*invalid One-Use Role Power identity*");
 		MarkTestCompleted();
 	}
 
@@ -841,7 +842,7 @@ public sealed class WitchRoleTests : DiagnosticTestBase
 			service.RehydrateSession(recoveryPayload);
 
 		rehydrate.Should().Throw<InvalidOperationException>()
-			.WithMessage("*does not match the committed domain continuation*");
+			.WithMessage("*invalid type 'ConfirmationInstruction'*");
 		MarkTestCompleted();
 	}
 

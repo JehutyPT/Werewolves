@@ -21,6 +21,8 @@ namespace Werewolves.Core.Tests.Integration;
 
 public sealed class ActorBorrowedDefenderFoxTests
 {
+	private sealed class TestExecutionCommitKey : IGameFlowManagerKey;
+	private static readonly TestExecutionCommitKey ExecutionCommitKey = new();
 	private static readonly PhysicalCharacterCard DefenderCard = new(
 		Guid.Parse("00000000-0000-0000-0000-000000000142"),
 		MainRoleType.Defender);
@@ -477,8 +479,6 @@ public sealed class ActorBorrowedDefenderFoxTests
 			PowerInstanceOrigin = RolePowerInstanceOrigin.Native
 		};
 		var logCountBeforeCheck = session.GameHistoryLog.Count();
-		session = RestorePendingInstruction(session, listener, centerSelection);
-
 		var feedback = GameFlowManager.HandleInput(
 				session,
 				centerSelection.CreateResponse([actorId]),
@@ -636,8 +636,6 @@ public sealed class ActorBorrowedDefenderFoxTests
 		var borrowedResource = CreateResourceIdentity(
 			policy.ObservedAttempts.Should().ContainSingle().Subject);
 		var logCountBeforeCheck = session.GameHistoryLog.Count();
-		session = RestorePendingInstruction(session, listener, centerSelection);
-
 		var feedback = GameFlowManager.HandleInput(
 				session,
 				centerSelection.CreateResponse([littleGirlId]),
@@ -899,9 +897,41 @@ public sealed class ActorBorrowedDefenderFoxTests
 		GameSession session,
 		ModeratorResponse response)
 	{
+		var startingExecution = session.Execution;
+		var consumedInstruction = startingExecution.PendingInstruction
+			?? throw new InvalidOperationException(
+				"The Actor borrowed test workflow requires one Pending Instruction.");
 		session.GetOrCreateListener(listener.Id, () => listener);
-		return NightActionLoop.Execute(session, response).ModeratorInstruction;
+		var nextInstruction = NightActionLoop.Execute(
+			session,
+			response).ModeratorInstruction;
+		if (nextInstruction != null)
+		{
+			session.CommitExecution(
+				ExecutionCommitKey,
+				ExecutionCommit.RetainRecoveryBoundary(
+					session.Execution,
+					consumedInstruction,
+					CorrelateToConsumedInstruction(response, consumedInstruction),
+					nextInstruction));
+		}
+
+		return nextInstruction;
 	}
+
+	private static ModeratorResponse CorrelateToConsumedInstruction(
+		ModeratorResponse response,
+		ModeratorInstruction consumedInstruction) =>
+		response.InstructionId == consumedInstruction.InstructionId
+			? response
+			: new ModeratorResponse
+			{
+				InstructionId = consumedInstruction.InstructionId,
+				Type = response.Type,
+				SelectedPlayerIds = response.SelectedPlayerIds,
+				AssignedPlayerRoles = response.AssignedPlayerRoles,
+				SelectedOptionIds = response.SelectedOptionIds
+			};
 
 	private static GameSession RestorePendingInstruction(
 		GameSession session,

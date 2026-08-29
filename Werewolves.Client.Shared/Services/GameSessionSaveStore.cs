@@ -52,6 +52,20 @@ internal static class LocalRecoveryPayloadCodec
 	};
 
 	public static string SerializeStagedLobby(
+		LobbySetupAggregate aggregate)
+	{
+		ArgumentNullException.ThrowIfNull(aggregate);
+		var roleLockIn = aggregate.AcceptedRoleLockIn ??
+			throw new InvalidOperationException(
+				"A staged Lobby aggregate requires an accepted Role Lock-In.");
+		return SerializeStagedLobby(
+			aggregate.PlayerRoster,
+			roleLockIn,
+			aggregate.AcceptedActorSetupCards,
+			aggregate.AcceptedPublicGroupPartition);
+	}
+
+	public static string SerializeStagedLobby(
 		IReadOnlyList<GameSessionPlayerConfig> playerRoster,
 		RoleLockIn roleLockIn,
 		ActorSetupCards actorSetupCards,

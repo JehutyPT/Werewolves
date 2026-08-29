@@ -20,6 +20,9 @@ namespace Werewolves.Core.Tests.Integration;
 
 public sealed class ActorBorrowedPrivacyTests
 {
+	private sealed class TestExecutionCommitKey : IGameFlowManagerKey;
+	private static readonly TestExecutionCommitKey ExecutionCommitKey = new();
+
 	private static readonly PhysicalCharacterCard[] SourceCards =
 	[
 		Card("00000000-0000-0000-0000-000000000251", MainRoleType.Seer),
@@ -68,7 +71,7 @@ public sealed class ActorBorrowedPrivacyTests
 	[Theory]
 	[InlineData(BorrowedValidationBranch.SeerMissingSelection)]
 	[InlineData(BorrowedValidationBranch.SeerMultipleSelection)]
-	[InlineData(BorrowedValidationBranch.CupidMissingPendingSelection)]
+	[InlineData(BorrowedValidationBranch.CupidTamperedPendingSelection)]
 	[InlineData(BorrowedValidationBranch.CupidMalformedSelection)]
 	[InlineData(BorrowedValidationBranch.CupidAlreadyCommitted)]
 	[InlineData(BorrowedValidationBranch.WitchHealingMissingSelection)]
@@ -742,7 +745,7 @@ public sealed class ActorBorrowedPrivacyTests
 		{
 			BorrowedValidationBranch.SeerMissingSelection or
 				BorrowedValidationBranch.SeerMultipleSelection => MainRoleType.Seer,
-			BorrowedValidationBranch.CupidMissingPendingSelection or
+			BorrowedValidationBranch.CupidTamperedPendingSelection or
 				BorrowedValidationBranch.CupidMalformedSelection or
 				BorrowedValidationBranch.CupidAlreadyCommitted => MainRoleType.Cupid,
 			BorrowedValidationBranch.WitchHealingMissingSelection or
@@ -782,10 +785,17 @@ public sealed class ActorBorrowedPrivacyTests
 					selection,
 					selectedPlayerIds.Take(1).ToHashSet())
 				: CreateUncheckedResponse(selection, selectedPlayerIds);
-			if (branch !=
-			    BorrowedValidationBranch.CupidMissingPendingSelection)
+			fixture.RestoreAt(selection);
+			if (branch ==
+			    BorrowedValidationBranch.CupidTamperedPendingSelection)
 			{
-				fixture.RestoreAt(selection);
+				var tamperedSession = fixture.Session;
+				return new ValidationSubmission(
+					tamperedSession,
+					() => RecoveryPayloadTestDriver.Capture(tamperedSession)
+						.RewritePendingPlayerSelectionCountConstraint(
+							NumberRangeConstraint.Single)
+						.RehydrateGameSession());
 			}
 
 			if (branch == BorrowedValidationBranch.CupidAlreadyCommitted)
@@ -875,13 +885,20 @@ public sealed class ActorBorrowedPrivacyTests
 		StartGameConfirmationInstruction start,
 		Guid selectedCardId)
 	{
-		var wake = Advance(session, start.CreateResponse()).Instruction
+		var wake = Advance(
+			session,
+			start.CreateResponse(),
+			publishInstruction: true).Instruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
-		var choice = Advance(session, wake.CreateResponse()).Instruction
+		var choice = Advance(
+			session,
+			wake.CreateResponse(),
+			publishInstruction: true).Instruction
 			.Should().BeOfType<SelectOptionsInstruction>().Subject;
 		var sleep = Advance(
 			session,
-			choice.CreateResponse(selectedCardId.ToString("D"))).Instruction
+			choice.CreateResponse(selectedCardId.ToString("D")),
+			publishInstruction: true).Instruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		var activation = session
 			.GetModeratorActiveActorBorrowedRolePowerActivation();
@@ -896,8 +913,24 @@ public sealed class ActorBorrowedPrivacyTests
 	{
 		var wake = Advance(fixture, fixture.OpeningResponse).Instruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
-		var instruction = Advance(fixture, wake.CreateResponse()).Instruction
-			.Should().BeOfType<TInstruction>().Subject;
+		TInstruction instruction;
+		if (fixture.SourceRole is MainRoleType.Fox or MainRoleType.Defender
+			or MainRoleType.Seer)
+		{
+			fixture.RestoreAt(wake);
+			instruction = GameFlowManager.HandleInput(
+					fixture.Session,
+					wake.CreateResponse(),
+					SupportedRoleCatalog.Admissions)
+				.ModeratorInstruction.Should()
+				.BeOfType<TInstruction>().Subject;
+		}
+		else
+		{
+			instruction = Advance(fixture, wake.CreateResponse()).Instruction
+				.Should().BeOfType<TInstruction>().Subject;
+		}
+
 		if (fixture.SourceRole is MainRoleType.Seer or MainRoleType.Fox)
 		{
 			SeedKnownWerewolfAgentFacts(
@@ -1039,12 +1072,23 @@ public sealed class ActorBorrowedPrivacyTests
 
 	private static HookListenerActionResult Advance(
 		PrivacyFixture fixture,
-		ModeratorResponse response) => Advance(fixture.Session, response);
+		ModeratorResponse response) => Advance(
+		fixture.Session,
+		response,
+		publishInstruction: fixture.SourceRole is
+			MainRoleType.LittleGirl or MainRoleType.Witch
+			or MainRoleType.StutteringJudge or MainRoleType.Cupid);
 
 	private static HookListenerActionResult Advance(
 		GameSession session,
-		ModeratorResponse response)
+		ModeratorResponse response,
+		bool publishInstruction = false)
 	{
+		var consumedInstruction = publishInstruction
+			? session.Execution.PendingInstruction ??
+			  throw new InvalidOperationException(
+				  "The Actor borrowed privacy harness requires one Pending Instruction.")
+			: null;
 		var manager = new SubPhaseManager<HookHarnessSubPhase>(
 			HookHarnessSubPhase.Active,
 			[
@@ -1056,8 +1100,30 @@ public sealed class ActorBorrowedPrivacyTests
 		if (!result.StageComplete)
 		{
 			result.ModeratorInstruction.Should().NotBeNull();
+			var nextInstruction = result.ModeratorInstruction!;
+			if (consumedInstruction != null)
+			{
+				var publicationResponse =
+					response.InstructionId == consumedInstruction.InstructionId
+						? response
+						: new ModeratorResponse
+						{
+							InstructionId = consumedInstruction.InstructionId,
+							Type = response.Type,
+							SelectedPlayerIds = response.SelectedPlayerIds,
+							AssignedPlayerRoles = response.AssignedPlayerRoles,
+							SelectedOptionIds = response.SelectedOptionIds
+						};
+				session.CommitExecution(
+					ExecutionCommitKey,
+					ExecutionCommit.RetainRecoveryBoundary(
+						session.Execution,
+						consumedInstruction,
+						publicationResponse,
+						nextInstruction));
+			}
 			return HookListenerActionResult.NeedInput(
-				result.ModeratorInstruction!,
+				nextInstruction,
 				HookHarnessListenerState.AwaitingInput);
 		}
 
@@ -1140,7 +1206,7 @@ public sealed class ActorBorrowedPrivacyTests
 	{
 		SeerMissingSelection,
 		SeerMultipleSelection,
-		CupidMissingPendingSelection,
+		CupidTamperedPendingSelection,
 		CupidMalformedSelection,
 		CupidAlreadyCommitted,
 		WitchHealingMissingSelection,
