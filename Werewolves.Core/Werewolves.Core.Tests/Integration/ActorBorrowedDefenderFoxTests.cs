@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Werewolves.Core.GameLogic;
 using Werewolves.Core.GameLogic.Interfaces;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
 using Werewolves.Core.GameLogic.Models.StateMachine;
@@ -887,8 +888,14 @@ public sealed class ActorBorrowedDefenderFoxTests
 		var littleGirlId = players[1].Id;
 		session.AssignRole(actorId, MainRoleType.Actor);
 		session.AssignRole(littleGirlId, MainRoleType.LittleGirl);
-		session.IdentifyRole([actorId], MainRoleType.Actor);
-		session.IdentifyRole([littleGirlId], MainRoleType.LittleGirl);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { actorId },
+			MainRoleType.Actor);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { littleGirlId },
+			MainRoleType.LittleGirl);
 		return (session, start, actorId, littleGirlId);
 	}
 

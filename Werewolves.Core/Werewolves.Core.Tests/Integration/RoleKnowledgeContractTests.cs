@@ -405,7 +405,8 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
 		entailedFact.EffectiveBoundary.Order.Should().BeGreaterThan(
 			history.IndexOf(identificationEntry));
 		builder.GameService.GetPossibleRoles(builder.GameId, holder.Id).Should()
-			.NotContain(role => role.EstablishesInitialWerewolfAgency());
+			.NotContain(role => RoleKnowledgeExpectedValues
+				.EstablishesInitialWerewolfAgency(role));
 
 		var serialized = session.Serialize();
 		var payload = JsonNode.Parse(serialized)!.AsObject();
@@ -991,7 +992,8 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
 		reveal.SelectableRolesForPlayers[ordinaryUnknown.Id].Should()
 			.Contain(MainRoleType.Hunter)
 			.And.Contain(MainRoleType.SimpleVillager)
-			.And.NotContain(role => role.EstablishesInitialWerewolfAgency());
+			.And.NotContain(role => RoleKnowledgeExpectedValues
+				.EstablishesInitialWerewolfAgency(role));
 		reveal.PlayersForAssignment.Should().Equal(ordinaryUnknown.Id);
 
 		MarkTestCompleted();
@@ -1611,7 +1613,8 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
 			material,
 			capability);
 		var initialAgentSeat = startState.RoleAssignments.Single(assignment =>
-			assignment.Role.EstablishesInitialWerewolfAgency()).SeatNumber;
+			RoleKnowledgeExpectedValues.EstablishesInitialWerewolfAgency(
+				assignment.Role)).SeatNumber;
 		var config = startState.CreateGameSessionConfig();
 		var service = new GameService();
 		var start = service.StartNewSimulationGame(
@@ -1659,7 +1662,7 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
 			knownNonAgent.Id);
 		possibleRoles.Should().Contain(MainRoleType.SimpleVillager);
 		possibleRoles.Should().NotContain(role =>
-			role.EstablishesInitialWerewolfAgency());
+			RoleKnowledgeExpectedValues.EstablishesInitialWerewolfAgency(role));
 		var debate = builder.GetCurrentInstruction()
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		var vote = builder.Process(debate.CreateResponse())

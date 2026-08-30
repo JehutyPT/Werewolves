@@ -338,7 +338,10 @@ internal sealed class ElderRole : RoleHookListener, IDeclaredRoleWorkflow
 				"Role Identification contradicts committed Role knowledge.");
 		}
 
-		session.IdentifyRole(selectedPlayerIds.ToHashSet(), MainRoleType.Elder);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			selectedPlayerIds.ToHashSet(),
+			MainRoleType.Elder);
 	}
 
 	internal static void

@@ -1,7 +1,6 @@
 using Werewolves.Core.GameLogic.Roles.MainRoles;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
-using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Simulation;
@@ -819,11 +818,12 @@ internal static class GameSessionQueries
 			.Where(cardState =>
 				(cardState.Zone is PhysicalCharacterCardZone.DealPool or
 					PhysicalCharacterCardZone.PlayerOwned) &&
-				cardState.Card.PrintedRole.EstablishesInitialWerewolfAgency())
+				RoleFactionKnowledge.EstablishesInitialWerewolfAgency(
+					cardState.Card.PrintedRole))
 			.GroupBy(cardState => cardState.Card.PrintedRole)
 			.ToDictionary(group => group.Key, group => group.Count());
 		var establishedAgencyAgentCounts = establishedAgentRoleValues
-			.Where(role => role.EstablishesInitialWerewolfAgency())
+			.Where(RoleFactionKnowledge.EstablishesInitialWerewolfAgency)
 			.GroupBy(role => role)
 			.ToDictionary(group => group.Key, group => group.Count());
 		if (establishedAgencyAgentCounts.Any(pair =>
@@ -835,7 +835,8 @@ internal static class GameSessionQueries
 
 		var agencyRoleCapacity = activeAgencyCardCounts.Values.Sum();
 		var establishedNonCardAgentCount = establishedAgentRoleValues
-			.Count(role => !role.EstablishesInitialWerewolfAgency());
+			.Count(role => !RoleFactionKnowledge
+				.EstablishesInitialWerewolfAgency(role));
 		capacity = agencyRoleCapacity + establishedNonCardAgentCount;
 		var candidateCount = players.Count(player =>
 			session.GetFactionAgentKnowledge(
@@ -1175,7 +1176,8 @@ internal static class GameSessionQueries
 		if (agencyKnowledge == FactionAgentKnowledge.KnownNonAgent)
 		{
 			return Array.AsReadOnly(possibleRoles
-				.Where(role => !role.EstablishesInitialWerewolfAgency())
+				.Where(role => !RoleFactionKnowledge
+					.EstablishesInitialWerewolfAgency(role))
 				.ToArray());
 		}
 
@@ -1187,7 +1189,7 @@ internal static class GameSessionQueries
 			IsInitialWerewolfAgencyProvenance(earliest.Source))
 		{
 			return Array.AsReadOnly(possibleRoles
-				.Where(role => role.EstablishesInitialWerewolfAgency())
+				.Where(RoleFactionKnowledge.EstablishesInitialWerewolfAgency)
 				.ToArray());
 		}
 

@@ -575,7 +575,10 @@ internal sealed class ScapegoatRole
 				"The observed Scapegoat holder's Role Power is unavailable.");
 		}
 
-		session.IdentifyRole([player.Id], MainRoleType.Scapegoat);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { player.Id },
+			MainRoleType.Scapegoat);
 		session.RevealRoles(new Dictionary<Guid, MainRoleType>
 		{
 			[player.Id] = MainRoleType.Scapegoat

@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Werewolves.Core.GameLogic;
 using Werewolves.Core.GameLogic.Interfaces;
 using Werewolves.Core.GameLogic.Models.EliminationCascades;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
@@ -1134,7 +1135,10 @@ public sealed class ActorBorrowedSemanticTraceTests
 				actorId,
 				actorCard.Card.Id).Should().BeTrue();
 		}
-		session.IdentifyRole([actorId], MainRoleType.Actor);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { actorId },
+			MainRoleType.Actor);
 		SeedKnownActorBeneficiary(session, actorId);
 		if (sourceRole is MainRoleType.Seer or MainRoleType.Fox or
 			MainRoleType.Witch)

@@ -2485,7 +2485,7 @@ public class SimulationExecutionTests : DiagnosticTestBase
 	{
 		foreach (var player in session.GetPlayers().Where(player =>
 			player.State.CurrentRole is { } role &&
-			!role.EstablishesInitialWerewolfAgency() &&
+			!RoleKnowledgeExpectedValues.EstablishesInitialWerewolfAgency(role) &&
 				session.GetFactionAgentKnowledge(player.Id, Faction.Werewolf) ==
 					FactionAgentKnowledge.KnownAgent))
 		{

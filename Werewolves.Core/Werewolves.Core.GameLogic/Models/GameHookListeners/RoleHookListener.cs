@@ -71,7 +71,10 @@ internal abstract class RoleHookListener : IGameHookListener
 				"Role Identification contradicts committed Role knowledge.");
 		}
 
-		session.IdentifyRole(selectedPlayerIds, identifiedRole);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			selectedPlayerIds,
+			identifiedRole);
 	}
 
 	protected int GetExpectedLivingRoleHolderCount(GameSession session)

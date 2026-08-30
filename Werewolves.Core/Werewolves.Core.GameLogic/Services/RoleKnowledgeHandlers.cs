@@ -246,7 +246,10 @@ internal static class RoleKnowledgeHandlers
 
 		foreach (var (role, playerIds) in initialRoleIdentifications)
 		{
-			session.IdentifyRole(playerIds, role);
+			RoleFactionKnowledge.CommitRoleIdentification(
+				session,
+				playerIds,
+				role);
 		}
 
         session.RevealRoles(revealedRoles);
