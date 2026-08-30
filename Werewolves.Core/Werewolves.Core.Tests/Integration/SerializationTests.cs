@@ -283,7 +283,7 @@ public class SerializationTests : DiagnosticTestBase
 	[InlineData(RoleIdentificationEntailmentMalformation.ExtraNonIdentifiedFact)]
 	[InlineData(RoleIdentificationEntailmentMalformation.DuplicatePlayerFacts)]
 	[InlineData(RoleIdentificationEntailmentMalformation.NonCoordinateBoundary)]
-	public void RoleIdentificationEntailment_WithMalformedCorrelation_IsRejected(
+	public void RehydrateSession_RoleIdentificationEntailmentWithMalformedCorrelation_IsRejected(
 		RoleIdentificationEntailmentMalformation malformation)
 	{
 		var builder = CreateBuilder()
@@ -432,7 +432,7 @@ public class SerializationTests : DiagnosticTestBase
 	[InlineData(InitialWerewolfAgentGroupMalformation.ForeignPlayer)]
 	[InlineData(InitialWerewolfAgentGroupMalformation.DuplicatePlayerFacts)]
 	[InlineData(InitialWerewolfAgentGroupMalformation.NonCoordinateBoundary)]
-	public void InitialWerewolfAgentGroup_WithMalformedPartition_IsRejected(
+	public void RehydrateSession_InitialWerewolfAgentGroupWithMalformedPartition_IsRejected(
 		InitialWerewolfAgentGroupMalformation malformation)
 	{
 		var builder = CreateBuilder()

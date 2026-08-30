@@ -423,7 +423,7 @@ public sealed class WerewolfCollectiveTests
 	}
 
 	[Fact]
-	public void MixedLivingAgentKnowledge_ObservationFiltersCandidatesAndRejectsInvalidResponsesAtomically()
+	public void ProcessInstruction_MixedLivingAgentKnowledge_FiltersObservationCandidatesAndRejectsInvalidResponsesAtomically()
 	{
 		var builder = GameTestBuilder.Create()
 			.WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);
