@@ -694,7 +694,7 @@ internal sealed class ActorRole : RoleHookListener, IDeclaredRoleWorkflow
 				(player.State.CurrentRole == null &&
 				 (player.State.ModeratorKnownRole == MainRoleType.Actor ||
 				  player.State.ModeratorKnownRole == null &&
-				  GameSessionQueries.GetPossibleRoles(session, player.Id)
+				  RoleFactionKnowledge.GetPossibleRoles(session, player.Id)
 					  .Contains(MainRoleType.Actor))))
 			.ToIdSet();
 

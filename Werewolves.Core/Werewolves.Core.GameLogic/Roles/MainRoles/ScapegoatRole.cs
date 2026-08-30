@@ -481,7 +481,7 @@ internal sealed class ScapegoatRole
 				IsNonContradictoryScapegoatCandidate(player) &&
 				(player.State.CurrentRole == MainRoleType.Scapegoat ||
 				 player.State.ModeratorKnownRole == MainRoleType.Scapegoat ||
-				 GameSessionQueries.GetPossibleRoles(session, player.Id)
+				 RoleFactionKnowledge.GetPossibleRoles(session, player.Id)
 					 .Contains(MainRoleType.Scapegoat)))
 			.Select(player => player.Id)
 			.ToHashSet();
@@ -562,7 +562,7 @@ internal sealed class ScapegoatRole
 			player.State.ModeratorKnownRole == MainRoleType.Scapegoat ||
 			player.State.PhysicalCharacterCardRole == MainRoleType.Scapegoat;
 		if (!isEstablishedHolder &&
-		    !GameSessionQueries.GetPossibleRoles(session, player.Id)
+		    !RoleFactionKnowledge.GetPossibleRoles(session, player.Id)
 			    .Contains(MainRoleType.Scapegoat))
 		{
 			throw new InvalidOperationException(

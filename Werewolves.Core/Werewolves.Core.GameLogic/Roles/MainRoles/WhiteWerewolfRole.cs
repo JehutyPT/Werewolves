@@ -641,7 +641,7 @@ internal sealed class WhiteWerewolfRole
 				(player.State.CurrentRole == null &&
 				 (player.State.ModeratorKnownRole == MainRoleType.WhiteWerewolf ||
 				  player.State.ModeratorKnownRole == null &&
-				  GameSessionQueries.GetPossibleRoles(session, player.Id)
+				  RoleFactionKnowledge.GetPossibleRoles(session, player.Id)
 					  .Contains(MainRoleType.WhiteWerewolf))))
 			.ToIdSet();
 

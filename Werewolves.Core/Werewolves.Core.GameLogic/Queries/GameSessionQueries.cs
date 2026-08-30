@@ -27,11 +27,6 @@ internal readonly record struct IndexedAngelVictory(
 
 internal static class GameSessionQueries
 {
-	private readonly record struct IndexedFactionAgentFact(
-		FactionFact Fact,
-		FactionFactSource Source,
-		int BatchIndex);
-
     internal static IEnumerable<TLogEntry> FindLogEntries<TLogEntry>(
         IGameSession session,
         NumberRangeConstraint? turnRange = null,
@@ -803,7 +798,7 @@ internal static class GameSessionQueries
 					Faction.Werewolf) == FactionAgentKnowledge.KnownAgent)
 			.ToArray();
 		var establishedAgentRoles = knownAgents
-			.Select(GetEstablishedRole)
+			.Select(RoleFactionKnowledge.GetEstablishedRole)
 			.ToArray();
 		if (establishedAgentRoles.Any(role => role is null))
 		{
@@ -1141,104 +1136,6 @@ internal static class GameSessionQueries
 				cardState.Zone == PhysicalCharacterCardZone.DealPool)
 				.Select(cardState => cardState.Card.PrintedRole)
 				.ToList();
-
-	internal static MainRoleType? GetEstablishedRole(IPlayer player) =>
-		player.State.PhysicalCharacterCardRole ??
-		player.State.ModeratorKnownRole ??
-		player.State.CurrentRole;
-
-	internal static List<MainRoleType> GetUnclaimedRoles(IGameSession session)
-	{
-		ArgumentNullException.ThrowIfNull(session);
-		var unclaimedRoles = GetUnassignedRoles(session);
-		foreach (var player in session.GetPlayers())
-		{
-			if (player.State.PhysicalCharacterCardId is null &&
-				GetEstablishedRole(player) is { } establishedRole)
-			{
-				unclaimedRoles.Remove(establishedRole);
-			}
-		}
-
-		return unclaimedRoles;
-	}
-
-	internal static IReadOnlyList<MainRoleType> GetPossibleRoles(
-		IGameSession session,
-		Guid playerId)
-	{
-		ArgumentNullException.ThrowIfNull(session);
-		session.GetPlayer(playerId);
-		var possibleRoles = GetUnclaimedRoles(session);
-		var agencyKnowledge = session.GetFactionAgentKnowledge(
-			playerId,
-			Faction.Werewolf);
-		if (agencyKnowledge == FactionAgentKnowledge.KnownNonAgent)
-		{
-			return Array.AsReadOnly(possibleRoles
-				.Where(role => !RoleFactionKnowledge
-					.EstablishesInitialWerewolfAgency(role))
-				.ToArray());
-		}
-
-		var earliestAgencyFact = FindEarliestWerewolfAgencyFact(
-			session,
-			playerId);
-		if (agencyKnowledge == FactionAgentKnowledge.KnownAgent &&
-			earliestAgencyFact is { } earliest &&
-			IsInitialWerewolfAgencyProvenance(earliest.Source))
-		{
-			return Array.AsReadOnly(possibleRoles
-				.Where(RoleFactionKnowledge.EstablishesInitialWerewolfAgency)
-				.ToArray());
-		}
-
-		return Array.AsReadOnly(possibleRoles.ToArray());
-	}
-
-	internal static FactionAgentFactProvenance?
-		GetEarliestWerewolfAgencyFact(
-			IGameSession session,
-			Guid playerId)
-	{
-		ArgumentNullException.ThrowIfNull(session);
-		session.GetPlayer(playerId);
-		return FindEarliestWerewolfAgencyFact(session, playerId) is { } earliest
-			? new FactionAgentFactProvenance(earliest.Fact, earliest.Source)
-			: null;
-	}
-
-	private static IndexedFactionAgentFact? FindEarliestWerewolfAgencyFact(
-		IGameSession session,
-		Guid playerId) =>
-		session.GameHistoryLog
-			.OfType<IFactionFactBatchLogEntry>()
-			.SelectMany((entry, batchIndex) => entry.Facts
-				.Where(fact =>
-					fact.PlayerId == playerId &&
-					fact.Type == FactionFactType.Agent &&
-					fact.Faction == Faction.Werewolf &&
-					fact.AgentKnowledge == FactionAgentKnowledge.KnownAgent)
-				.Select(fact => new IndexedFactionAgentFact(
-					fact,
-					entry.Source,
-					batchIndex)))
-			.OrderBy(
-				item => item.Fact.EffectiveBoundary,
-				Comparer<FactionFactEffectiveBoundary>.Create(
-					FactionFactProjection.CompareBoundaries))
-			.ThenBy(item => item.BatchIndex)
-			.Cast<IndexedFactionAgentFact?>()
-			.FirstOrDefault();
-
-	private static bool IsInitialWerewolfAgencyProvenance(
-		FactionFactSource source) =>
-		source.Kind == FactionFactSourceKind.SimulationStartState ||
-		source.Kind == FactionFactSourceKind.ScheduledObservation &&
-		StringComparer.Ordinal.Equals(
-			source.Identifier,
-			FactionFactSource
-				.WerewolfFactionAgentGroupObservationIdentifier);
 
     internal static bool TryGetOnlyPossibleUnassignedRole(
         IGameSession session,

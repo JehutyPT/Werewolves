@@ -132,6 +132,7 @@ internal static class PermanentRoleSwapRules
 			observedPrintedRole,
 			newCurrentRole,
 			target.State.CurrentRole,
+			RoleFactionKnowledge.GetEstablishedRole(target),
 			new PermanentRoleSwapCardMovement(
 				outgoing.Card.Id,
 				acquired.Card.Id,

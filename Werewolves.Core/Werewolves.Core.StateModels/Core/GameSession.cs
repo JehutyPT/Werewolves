@@ -815,6 +815,8 @@ internal class GameSession : IGameSession
 			!Enum.IsDefined(request.NewCurrentRole) ||
 			(request.ExpectedTargetCurrentRole is { } expectedTargetRole &&
 				!Enum.IsDefined(expectedTargetRole)) ||
+			(request.ExpectedTargetEstablishedRole is { } expectedEstablishedRole &&
+				!Enum.IsDefined(expectedEstablishedRole)) ||
 			(request.ObservedPrintedRole != request.NewCurrentRole &&
 				(request.ObservedPrintedRole != MainRoleType.Angel ||
 				 request.NewCurrentRole != MainRoleType.SimpleVillager)) ||
@@ -838,9 +840,6 @@ internal class GameSession : IGameSession
 			player.Id == request.ActingPlayerId);
 		var target = GetPlayers().SingleOrDefault(player =>
 			player.Id == request.VoteTargetId);
-		var knownTargetPrintedRole = target?.State.PhysicalCharacterCardRole ??
-			target?.State.ModeratorKnownRole ??
-			target?.State.CurrentRole;
 		if (actor?.State is not
 			{
 				Health: PlayerHealth.Alive,
@@ -852,8 +851,11 @@ internal class GameSession : IGameSession
 			target.State.Health != PlayerHealth.Alive ||
 			target.State.CurrentRole != request.ExpectedTargetCurrentRole ||
 			target.State.PubliclyRevealedRole is not null ||
-			(knownTargetPrintedRole is { } knownRole &&
-				knownRole != request.ObservedPrintedRole) ||
+			(request.PhysicalCards.ExpectedAcquiredCardOwnerPlayerId is null &&
+				target.State.ModeratorKnownRole is { } moderatorKnownRole &&
+				moderatorKnownRole != request.ObservedPrintedRole) ||
+			(request.ExpectedTargetEstablishedRole is { } establishedRole &&
+				establishedRole != request.ObservedPrintedRole) ||
 			actor.State.PhysicalCharacterCardId !=
 				request.PhysicalCards.OutgoingOwnedCardId ||
 			!GameHistoryLog.OfType<DevotedServantPublicSelfRevealCommittedLogEntry>()

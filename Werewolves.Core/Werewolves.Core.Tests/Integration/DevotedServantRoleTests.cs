@@ -219,6 +219,84 @@ public sealed class DevotedServantRoleTests
 	}
 
 	[Fact]
+	public void ModeratorKnownRoleRefinesToObservedRoleAfterRequest_IsAccepted()
+	{
+		var (builder, players) = CreateDayOneScenario(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.DevotedServant,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager);
+		var target = players[2];
+		var servant = players[3];
+		builder.ArrangeCurrentRole(target.Id, MainRoleType.SimpleVillager);
+		var window = OpenWindow(builder, target.Id);
+		builder.Process(window.CreatePublicSelfRevealResponse(servant.Id))
+			.ModeratorInstruction.Should()
+			.BeOfType<AssignRolesInstruction>();
+		var session = (GameSession)builder.GetGameState()!;
+		target.State.ModeratorKnownRole.Should().BeNull();
+		var request = PermanentRoleSwapRules.CreateDevotedServantRoleTakeRequest(
+			session,
+			servant.Id,
+			target.Id,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager);
+
+		builder.ArrangeKnownRole(target.Id, MainRoleType.SimpleVillager);
+		target.State.ModeratorKnownRole.Should().Be(MainRoleType.SimpleVillager);
+		session.TryCommitDevotedServantRoleTake(request).Should().BeTrue();
+		session.GameHistoryLog
+			.OfType<DevotedServantRoleTakenCommittedLogEntry>()
+			.Should().ContainSingle();
+	}
+
+	[Fact]
+	public void ModeratorKnownRoleContradictsObservedRoleAfterRequest_IsRejectedWithoutMutation()
+	{
+		var (builder, players) = CreateDayOneScenario(
+			MainRoleType.SimpleWerewolf,
+			MainRoleType.DevotedServant,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager);
+		var target = players[2];
+		var servant = players[3];
+		builder.ArrangeCurrentRole(target.Id, MainRoleType.SimpleVillager);
+		var window = OpenWindow(builder, target.Id);
+		builder.Process(window.CreatePublicSelfRevealResponse(servant.Id))
+			.ModeratorInstruction.Should()
+			.BeOfType<AssignRolesInstruction>();
+		var session = (GameSession)builder.GetGameState()!;
+		target.State.ModeratorKnownRole.Should().BeNull();
+		var request = PermanentRoleSwapRules.CreateDevotedServantRoleTakeRequest(
+			session,
+			servant.Id,
+			target.Id,
+			MainRoleType.SimpleVillager,
+			MainRoleType.SimpleVillager);
+
+		builder.ArrangeKnownRole(target.Id, MainRoleType.Seer);
+		target.State.ModeratorKnownRole.Should().Be(MainRoleType.Seer);
+		var servantBefore = CapturePlayerState(servant);
+		var targetBefore = CapturePlayerState(target);
+		var historyBefore = session.GameHistoryLog.ToArray();
+		var cardsBefore = session.GetModeratorPhysicalCharacterCards().ToArray();
+
+		session.TryCommitDevotedServantRoleTake(request).Should().BeFalse();
+
+		CapturePlayerState(servant).Should().BeEquivalentTo(servantBefore);
+		CapturePlayerState(target).Should().BeEquivalentTo(targetBefore);
+		session.GameHistoryLog.Should().Equal(historyBefore);
+		session.GetModeratorPhysicalCharacterCards().Should().Equal(cardsBefore);
+		session.GameHistoryLog
+			.OfType<DevotedServantRoleTakenCommittedLogEntry>()
+			.Should().BeEmpty();
+	}
+
+	[Fact]
 	public void AcquiredCardRecord_TransfersPrivatelyAndEliminatesTargetWithoutItsRoleBehavior()
 	{
 		var builder = GameTestBuilder.Create()

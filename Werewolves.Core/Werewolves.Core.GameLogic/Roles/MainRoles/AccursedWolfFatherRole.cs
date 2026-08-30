@@ -664,7 +664,7 @@ internal sealed class AccursedWolfFatherRole
 				 (player.State.ModeratorKnownRole ==
 					  MainRoleType.AccursedWolfFather ||
 				  player.State.ModeratorKnownRole == null &&
-				  GameSessionQueries.GetPossibleRoles(session, player.Id)
+				  RoleFactionKnowledge.GetPossibleRoles(session, player.Id)
 					  .Contains(MainRoleType.AccursedWolfFather))))
 			.ToIdSet();
 

@@ -870,7 +870,7 @@ internal sealed class StutteringJudgeRole
 				 (player.State.ModeratorKnownRole ==
 					  MainRoleType.StutteringJudge ||
 				  player.State.ModeratorKnownRole == null &&
-				  GameSessionQueries.GetPossibleRoles(session, player.Id)
+				  RoleFactionKnowledge.GetPossibleRoles(session, player.Id)
 					  .Contains(MainRoleType.StutteringJudge))))
 			.ToIdSet();
 

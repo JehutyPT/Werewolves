@@ -84,6 +84,40 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
         MarkTestCompleted();
     }
 
+	[Fact]
+	public void GetPossibleRoles_EstablishedUnboundClaimConsumesOneCopyAndPreservesRemainingDuplicates()
+	{
+		var builder = CreateBuilder()
+			.WithPlayers(5)
+			.WithRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		var gameId = builder.GameId;
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		builder.ArrangeKnownRole(
+			players[0].Id,
+			MainRoleType.SimpleWerewolf);
+		players[0].State.ModeratorKnownRole.Should().Be(
+			MainRoleType.SimpleWerewolf);
+		players[0].State.PhysicalCharacterCardId.Should().BeNull();
+
+		builder.GameService.GetPossibleRoles(gameId, players[1].Id).Should()
+			.BeEquivalentTo(
+				new[]
+				{
+					MainRoleType.SimpleWerewolf,
+					MainRoleType.SimpleVillager,
+					MainRoleType.SimpleVillager,
+					MainRoleType.SimpleVillager
+				});
+
+		MarkTestCompleted();
+	}
+
     [Fact]
     public void RoleIdentification_RecordsPrivateCurrentRoleWithoutAssigningOrRevealingCard()
     {

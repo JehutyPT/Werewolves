@@ -398,7 +398,7 @@ internal sealed class WolfHoundRole : RoleHookListener, IDeclaredRoleWorkflow
 				(player.State.CurrentRole == null &&
 				 (player.State.ModeratorKnownRole == MainRoleType.WolfHound ||
 				  player.State.ModeratorKnownRole == null &&
-				  GameSessionQueries.GetPossibleRoles(session, player.Id)
+				  RoleFactionKnowledge.GetPossibleRoles(session, player.Id)
 					  .Contains(MainRoleType.WolfHound))))
 			.ToIdSet();
 

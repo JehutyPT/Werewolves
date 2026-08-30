@@ -63,7 +63,7 @@ internal abstract class RoleHookListener : IGameHookListener
 				return player.State.CurrentRole != identifiedRole &&
 				       player.State.ModeratorKnownRole != identifiedRole &&
 				       player.State.PhysicalCharacterCardRole != identifiedRole &&
-				       !GameSessionQueries.GetPossibleRoles(session, playerId)
+				       !RoleFactionKnowledge.GetPossibleRoles(session, playerId)
 					       .Contains(identifiedRole);
 			}))
 		{

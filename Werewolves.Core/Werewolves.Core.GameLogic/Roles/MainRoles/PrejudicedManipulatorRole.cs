@@ -36,7 +36,7 @@ internal sealed class PrejudicedManipulatorRole
 		    holder.State.ModeratorKnownRole != MainRoleType.PrejudicedManipulator &&
 		    holder.State.PhysicalCharacterCardRole !=
 			    MainRoleType.PrejudicedManipulator &&
-		    !GameSessionQueries.GetPossibleRoles(session, holderId)
+		    !RoleFactionKnowledge.GetPossibleRoles(session, holderId)
 			    .Contains(MainRoleType.PrejudicedManipulator))
 		{
 			throw new InvalidOperationException(
