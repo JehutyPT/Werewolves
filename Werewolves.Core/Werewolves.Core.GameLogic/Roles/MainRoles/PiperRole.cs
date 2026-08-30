@@ -556,11 +556,9 @@ internal sealed class PiperRole
 			.Select(player => player.Id)
 			.ToHashSet();
 		if (livingHolderIds is not { Count: 1 } ||
-		    !session.GameHistoryLog.OfType<RoleIdentificationLogEntry>().Any(entry =>
-			    entry.TurnNumber == session.TurnNumber &&
-			    entry.CurrentPhase == GamePhase.Night &&
-			    entry.Role == MainRoleType.Piper &&
-			    entry.PlayerIds.SetEquals(livingHolderIds)) ||
+		    !RoleFactionKnowledge.HasAcceptedRoleIdentification(
+			    session,
+			    MainRoleType.Piper) ||
 		    !InitialBeneficiaryClosureRules
 			    .HasConsistentInitialBeneficiaryClosure(session) ||
 		    session.RequireKnownFactionBeneficiary(livingHolderIds.Single()) !=

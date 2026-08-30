@@ -100,12 +100,13 @@ public class GameService
         var session = new GameSession(serializedSession);
         PermanentRoleSwapRules.EnforceValidHistory(session);
         ThiefOfferRules.EnforceValidHistory(session);
-        DayVoteRules.EnforceValidHistory(session);
+		DayVoteRules.EnforceValidHistory(session);
 		AngelLifecycleRules.EnforceValidHistory(session);
 		ElderRole.ValidateBorrowedResistanceRecovery(session);
+		RoleFactionKnowledge.EnforceValidHistory(session);
+		GameFlowManager.RestoreDurableContinuation(session, _roleAdmissions);
         SeedActiveRoleListeners(session);
         ConfigureEliminationCascadeReactions(session);
-        GameFlowManager.RestoreDurableContinuation(session, _roleAdmissions);
         _sessions.TryAdd(session.Id, session);
         return session.Id;
 	}

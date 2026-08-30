@@ -940,12 +940,9 @@ internal sealed class WitchRole
 
 		var livingHolderIds = GetLivingHolderIds(session);
 		if (livingHolderIds.Count == 0 ||
-		    !session.GameHistoryLog.OfType<RoleIdentificationLogEntry>()
-			    .Any(entry =>
-				    entry.TurnNumber == session.TurnNumber &&
-				    entry.CurrentPhase == GamePhase.Night &&
-				    entry.Role == MainRoleType.Witch &&
-				    entry.PlayerIds.SetEquals(livingHolderIds)))
+		    !RoleFactionKnowledge.HasAcceptedRoleIdentification(
+			    session,
+			    MainRoleType.Witch))
 		{
 			throw new InvalidOperationException(
 				"The Witch identification continuation has invalid durable context.");

@@ -521,12 +521,9 @@ internal sealed class WhiteWerewolfRole
 			.Select(player => player.Id)
 			.ToHashSet();
 		if (livingHolderIds.Count == 0 ||
-		    !session.GameHistoryLog.OfType<RoleIdentificationLogEntry>()
-			    .Any(entry =>
-				    entry.TurnNumber == session.TurnNumber &&
-				    entry.CurrentPhase == GamePhase.Night &&
-				    entry.Role == MainRoleType.WhiteWerewolf &&
-				    entry.PlayerIds.SetEquals(livingHolderIds)) ||
+		    !RoleFactionKnowledge.HasAcceptedRoleIdentification(
+			    session,
+			    MainRoleType.WhiteWerewolf) ||
 		    !InitialBeneficiaryClosureRules
 			    .HasConsistentInitialBeneficiaryClosure(session))
 		{

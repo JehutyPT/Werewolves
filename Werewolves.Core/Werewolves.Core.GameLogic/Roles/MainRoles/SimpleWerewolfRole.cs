@@ -592,43 +592,23 @@ internal class SimpleWerewolfRole
 		GameSession session,
 		bool expected)
 	{
-		var observations = session.GameHistoryLog
-			.OfType<FactionFactsCommittedLogEntry>()
-			.Where(entry =>
-				entry.TurnNumber == session.TurnNumber &&
-				entry.CurrentPhase == GamePhase.Night &&
-				entry.Source.Kind ==
-					FactionFactSourceKind.ScheduledObservation &&
-				entry.Source.Identifier == FactionFactSource
-					.WerewolfFactionAgentGroupObservationIdentifier)
-			.ToArray();
+		var hasAcceptedGroup = RoleFactionKnowledge
+			.TryGetAcceptedInitialWerewolfAgentGroup(
+				session,
+				out var acceptedAgentIds);
 		if (!expected)
 		{
-			return observations.Length == 0;
+			return !hasAcceptedGroup;
 		}
 
-		var livingPlayers = GetLivingPlayers(session);
-		var livingIds = livingPlayers.Select(player => player.Id).ToHashSet();
-		var knownAgentIds = livingPlayers
+		var knownAgentIds = GetLivingPlayers(session)
 			.Where(player =>
 				session.GetFactionAgentKnowledge(
 					player.Id,
 					Faction.Werewolf) == FactionAgentKnowledge.KnownAgent)
 			.Select(player => player.Id)
 			.ToHashSet();
-		return observations is [var observation] &&
-		       observation.Facts.Length == livingIds.Count &&
-		       observation.Facts.All(fact =>
-			       fact.Type == FactionFactType.Agent &&
-			       fact.Faction == Faction.Werewolf &&
-			       livingIds.Contains(fact.PlayerId)) &&
-		       observation.Facts
-			       .Where(fact =>
-				       fact.AgentKnowledge ==
-				       FactionAgentKnowledge.KnownAgent)
-			       .Select(fact => fact.PlayerId)
-			       .ToHashSet()
-			       .SetEquals(knownAgentIds);
+		return hasAcceptedGroup && acceptedAgentIds.SetEquals(knownAgentIds);
 	}
 
 	private static bool HasExpectedVictimBoundary(

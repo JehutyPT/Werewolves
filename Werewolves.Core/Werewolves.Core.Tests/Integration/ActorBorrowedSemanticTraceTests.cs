@@ -1605,9 +1605,8 @@ public sealed class ActorBorrowedSemanticTraceTests
 				TurnNumber = context.TurnNumber,
 				CurrentPhase = context.CurrentPhase,
 				Source = new FactionFactSource(
-					FactionFactSourceKind.ScheduledObservation,
-					FactionFactSource
-						.WerewolfFactionAgentGroupObservationIdentifier),
+					FactionFactSourceKind.ExplicitTransition,
+					"test-actor-semantic-trace-faction-update"),
 				Facts =
 				[
 					.. session.GetPlayers().Select(player => FactionFact.Agent(

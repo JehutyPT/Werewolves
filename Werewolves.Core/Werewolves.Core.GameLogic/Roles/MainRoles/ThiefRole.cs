@@ -391,12 +391,9 @@ internal sealed class ThiefRole : RoleHookListener, IDeclaredRoleWorkflow
 			ModeratorInstructionSemantic.IdentifyRoleHolders);
 		var livingHolderIds = GetLivingHolderIds(session);
 		if (livingHolderIds.Count == 0 ||
-		    !session.GameHistoryLog.OfType<RoleIdentificationLogEntry>().Any(
-			    entry =>
-				    entry.TurnNumber == session.TurnNumber &&
-				    entry.CurrentPhase == GamePhase.Night &&
-				    entry.Role == MainRoleType.Thief &&
-				    entry.PlayerIds.SetEquals(livingHolderIds)))
+		    !RoleFactionKnowledge.HasAcceptedRoleIdentification(
+			    session,
+			    MainRoleType.Thief))
 		{
 			throw new InvalidOperationException(
 				"The Thief offer wait has no committed identification.");

@@ -758,11 +758,9 @@ internal sealed class FoxRole
 
 		var livingHolderIds = GetLivingHolderIds(session);
 		if (livingHolderIds.Count == 0 ||
-		    !session.GameHistoryLog.OfType<RoleIdentificationLogEntry>().Any(entry =>
-			    entry.TurnNumber == session.TurnNumber &&
-			    entry.CurrentPhase == GamePhase.Night &&
-			    entry.Role == MainRoleType.Fox &&
-			    entry.PlayerIds.SetEquals(livingHolderIds)))
+		    !RoleFactionKnowledge.HasAcceptedRoleIdentification(
+			    session,
+			    MainRoleType.Fox))
 		{
 			throw new InvalidOperationException(
 				"The Fox wake wait has no committed identification.");

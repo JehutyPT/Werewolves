@@ -560,12 +560,9 @@ internal sealed class ActorRole : RoleHookListener, IDeclaredRoleWorkflow
 	{
 		var livingHolderIds = GetLivingHolderIds(session);
 		if (livingHolderIds.Count == 0 ||
-		    !session.GameHistoryLog.OfType<RoleIdentificationLogEntry>().Any(
-			    entry =>
-				    entry.TurnNumber == session.TurnNumber &&
-				    entry.CurrentPhase == GamePhase.Night &&
-				    entry.Role == MainRoleType.Actor &&
-				    entry.PlayerIds.SetEquals(livingHolderIds)))
+		    !RoleFactionKnowledge.HasAcceptedRoleIdentification(
+			    session,
+			    MainRoleType.Actor))
 		{
 			throw new InvalidOperationException(
 				"The Actor continuation has no committed identification.");

@@ -523,12 +523,9 @@ internal sealed class BigBadWolfRole
             .Select(player => player.Id)
             .ToHashSet();
         if (livingHolderIds.Count == 0 ||
-            !session.GameHistoryLog.OfType<RoleIdentificationLogEntry>()
-                .Any(entry =>
-                    entry.TurnNumber == session.TurnNumber &&
-                    entry.CurrentPhase == GamePhase.Night &&
-                    entry.Role == MainRoleType.BigBadWolf &&
-                    entry.PlayerIds.SetEquals(livingHolderIds)))
+            !RoleFactionKnowledge.HasAcceptedRoleIdentification(
+                session,
+                MainRoleType.BigBadWolf))
         {
             throw new InvalidOperationException(
                 "The Big Bad Wolf identification continuation has invalid durable context.");

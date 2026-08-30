@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using FluentAssertions;
 using FluentAssertions.Execution;
 using Werewolves.Core.GameLogic.Services;
@@ -7,6 +8,7 @@ using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Resources;
+using Werewolves.Core.StateModels.Serialization;
 using Werewolves.Core.Tests.Helpers;
 using Xunit;
 

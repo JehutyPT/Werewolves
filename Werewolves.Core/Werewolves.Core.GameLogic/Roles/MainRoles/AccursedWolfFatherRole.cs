@@ -637,12 +637,9 @@ internal sealed class AccursedWolfFatherRole
 
 		var livingHolderIds = GetLivingHolderIds(session);
 		if (livingHolderIds.Count == 0 ||
-		    !session.GameHistoryLog.OfType<RoleIdentificationLogEntry>()
-			    .Any(entry =>
-				    entry.TurnNumber == session.TurnNumber &&
-				    entry.CurrentPhase == GamePhase.Night &&
-				    entry.Role == MainRoleType.AccursedWolfFather &&
-				    entry.PlayerIds.SetEquals(livingHolderIds)))
+		    !RoleFactionKnowledge.HasAcceptedRoleIdentification(
+			    session,
+			    MainRoleType.AccursedWolfFather))
 		{
 			throw new InvalidOperationException(
 				"The Accursed Wolf-Father identification continuation has invalid durable context.");

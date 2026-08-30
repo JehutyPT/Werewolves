@@ -1003,6 +1003,9 @@ public sealed class ActorRoleTests
 		GameSession session,
 		Guid werewolfId)
 	{
+		var hadCompleteAgentKnowledge = session.GetPlayers().All(player =>
+			session.GetFactionAgentKnowledge(player.Id, Faction.Werewolf) !=
+			FactionAgentKnowledge.Unknown);
 		var boundary = new FactionFactEffectiveBoundary(
 			session.TurnNumber,
 			session.GetCurrentPhase(),
@@ -1013,10 +1016,14 @@ public sealed class ActorRoleTests
 				Timestamp = context.Timestamp,
 				TurnNumber = context.TurnNumber,
 				CurrentPhase = context.CurrentPhase,
-				Source = new FactionFactSource(
-					FactionFactSourceKind.ScheduledObservation,
-					FactionFactSource
-						.WerewolfFactionAgentGroupObservationIdentifier),
+				Source = hadCompleteAgentKnowledge
+					? new FactionFactSource(
+						FactionFactSourceKind.ExplicitTransition,
+						"test-actor-role-werewolf-agent-group-update")
+					: new FactionFactSource(
+						FactionFactSourceKind.ScheduledObservation,
+						FactionFactSource
+							.WerewolfFactionAgentGroupObservationIdentifier),
 				Facts =
 				[
 					.. session.GetPlayers().Select(player => FactionFact.Agent(

@@ -16,10 +16,79 @@ internal static class RoleFactionKnowledge
 		FactionFact Fact,
 		FactionFactSource Source,
 		int BatchIndex);
+	private readonly record struct IndexedFactionBatch(
+		GameLogEntryBase Entry,
+		IFactionFactBatchLogEntry Batch,
+		int LogIndex);
 
 	internal static bool EstablishesInitialWerewolfAgency(MainRoleType role) =>
 		GetRoleIdentificationWerewolfFactionAgentKnowledge(role) ==
 		FactionAgentKnowledge.KnownAgent;
+
+	internal static bool HasAcceptedRoleIdentification(
+		IGameSession session,
+		MainRoleType role)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		if (session.GetCurrentPhase() != GamePhase.Night)
+		{
+			return false;
+		}
+
+		var livingHolderIds = session.GetPlayers()
+			.Where(player =>
+				player.State.Health == PlayerHealth.Alive &&
+				player.State.CurrentRole == role &&
+				player.State.ModeratorKnownRole == role)
+			.Select(player => player.Id)
+			.ToHashSet();
+		return livingHolderIds.Count > 0 &&
+		       session.GameHistoryLog
+			       .OfType<RoleIdentificationLogEntry>()
+			       .Any(entry =>
+				       entry.TurnNumber == session.TurnNumber &&
+				       entry.CurrentPhase == GamePhase.Night &&
+				       entry.Role == role &&
+				       entry.PlayerIds.SetEquals(livingHolderIds));
+	}
+
+	internal static bool TryGetAcceptedInitialWerewolfAgentGroup(
+		IGameSession session,
+		out ImmutableHashSet<Guid> agentPlayerIds)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		agentPlayerIds = ImmutableHashSet<Guid>.Empty;
+		if (session.TurnNumber != 1 ||
+		    session.GetCurrentPhase() != GamePhase.Night)
+		{
+			return false;
+		}
+
+		var history = session.GameHistoryLog.ToArray();
+		var rosterIds = session.GetPlayers()
+			.Select(player => player.Id)
+			.ToImmutableHashSet();
+		var records = GetReservedFactionBatches(
+			history,
+			FactionFactSource
+				.WerewolfFactionAgentGroupObservationIdentifier);
+		return records is [var record] &&
+		       TryValidateInitialWerewolfAgentGroup(
+			       record,
+			       rosterIds,
+			       out agentPlayerIds);
+	}
+
+	internal static void EnforceValidHistory(IGameSession session)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		var history = session.GameHistoryLog.ToArray();
+		var rosterIds = session.GetPlayers()
+			.Select(player => player.Id)
+			.ToImmutableHashSet();
+		EnforceRoleIdentificationEntailmentHistory(history, rosterIds);
+		EnforceInitialWerewolfAgentGroupHistory(history, rosterIds);
+	}
 
 	internal static InitialWerewolfAgentGroupOpportunity
 		RequireInitialWerewolfAgentGroupOpportunity(IGameSession session)
@@ -286,6 +355,138 @@ internal static class RoleFactionKnowledge
 			? new FactionAgentFactProvenance(earliest.Fact, earliest.Source)
 			: null;
 	}
+
+	private static void EnforceRoleIdentificationEntailmentHistory(
+		IReadOnlyList<GameLogEntryBase> history,
+		ImmutableHashSet<Guid> rosterIds)
+	{
+		foreach (var record in GetReservedFactionBatches(
+			history,
+			FactionFactSource
+				.RoleIdentificationWerewolfFactionAgencyEntailmentIdentifier))
+		{
+			if (record.Batch.Source.Kind !=
+				    FactionFactSourceKind.ScheduledObservation ||
+			    record.LogIndex == 0 ||
+			    history[record.LogIndex - 1] is not
+				    RoleIdentificationLogEntry identification ||
+			    identification.TurnNumber != record.Entry.TurnNumber ||
+			    identification.CurrentPhase != record.Entry.CurrentPhase ||
+			    !identification.PlayerIds.IsSubsetOf(rosterIds))
+			{
+				throw new InvalidOperationException(
+					"A Role Identification agency-entailment batch has invalid history context.");
+			}
+
+			var entailedKnowledge =
+				GetRoleIdentificationWerewolfFactionAgentKnowledge(
+					identification.Role);
+			var priorProjection = FactionFactProjection.Create(
+				history.Take(record.LogIndex)
+					.OfType<IFactionFactBatchLogEntry>(),
+				rosterIds);
+			var expectedFacts = entailedKnowledge is null
+				? new Dictionary<Guid, FactionAgentKnowledge>()
+				: identification.PlayerIds
+					.Where(playerId =>
+						priorProjection.Agents[playerId][Faction.Werewolf] ==
+						FactionAgentKnowledge.Unknown)
+					.ToDictionary(
+						playerId => playerId,
+						_ => entailedKnowledge.Value);
+			var expectedBoundary = new FactionFactEffectiveBoundary(
+				record.Entry.TurnNumber,
+				record.Entry.CurrentPhase,
+				record.LogIndex);
+			if (record.Batch.Facts.Length != expectedFacts.Count ||
+			    record.Batch.Facts.Select(fact => fact.PlayerId)
+				    .Distinct().Count() != record.Batch.Facts.Length ||
+			    record.Batch.Facts.Any(fact =>
+				    fact.Type != FactionFactType.Agent ||
+				    fact.Faction != Faction.Werewolf ||
+				    !expectedFacts.TryGetValue(
+					    fact.PlayerId,
+					    out var expectedKnowledge) ||
+				    fact.AgentKnowledge != expectedKnowledge ||
+				    fact.EffectiveBoundary != expectedBoundary))
+			{
+				throw new InvalidOperationException(
+					"A Role Identification agency-entailment batch does not match its committed observation.");
+			}
+		}
+	}
+
+	private static void EnforceInitialWerewolfAgentGroupHistory(
+		IReadOnlyList<GameLogEntryBase> history,
+		ImmutableHashSet<Guid> rosterIds)
+	{
+		var records = GetReservedFactionBatches(
+			history,
+			FactionFactSource.WerewolfFactionAgentGroupObservationIdentifier);
+		if (records.Length > 1 ||
+		    records is [var record] &&
+		    !TryValidateInitialWerewolfAgentGroup(
+			    record,
+			    rosterIds,
+			    out _))
+		{
+			throw new InvalidOperationException(
+				"The initial Werewolf Agent-group history is invalid.");
+		}
+	}
+
+	private static bool TryValidateInitialWerewolfAgentGroup(
+		IndexedFactionBatch record,
+		ImmutableHashSet<Guid> rosterIds,
+		out ImmutableHashSet<Guid> agentPlayerIds)
+	{
+		agentPlayerIds = ImmutableHashSet<Guid>.Empty;
+		var expectedBoundary = new FactionFactEffectiveBoundary(
+			record.Entry.TurnNumber,
+			record.Entry.CurrentPhase,
+			record.LogIndex);
+		if (record.Batch.Source.Kind !=
+			    FactionFactSourceKind.ScheduledObservation ||
+		    record.Entry.TurnNumber != 1 ||
+		    record.Entry.CurrentPhase != GamePhase.Night ||
+		    record.Batch.Facts.Length != rosterIds.Count ||
+		    record.Batch.Facts.Select(fact => fact.PlayerId)
+			    .Distinct().Count() != rosterIds.Count ||
+		    record.Batch.Facts.Any(fact =>
+			    fact.Type != FactionFactType.Agent ||
+			    fact.Faction != Faction.Werewolf ||
+			    !rosterIds.Contains(fact.PlayerId) ||
+			    fact.AgentKnowledge is not
+				    (FactionAgentKnowledge.KnownAgent or
+				     FactionAgentKnowledge.KnownNonAgent) ||
+			    fact.EffectiveBoundary != expectedBoundary))
+		{
+			return false;
+		}
+
+		agentPlayerIds = record.Batch.Facts
+			.Where(fact =>
+				fact.AgentKnowledge == FactionAgentKnowledge.KnownAgent)
+			.Select(fact => fact.PlayerId)
+			.ToImmutableHashSet();
+		return true;
+	}
+
+	private static IndexedFactionBatch[] GetReservedFactionBatches(
+		IReadOnlyList<GameLogEntryBase> history,
+		string identifier) =>
+		history
+			.Select((entry, index) => (Entry: entry, Index: index))
+			.Where(item =>
+				item.Entry is IFactionFactBatchLogEntry batch &&
+				StringComparer.Ordinal.Equals(
+					batch.Source.Identifier,
+					identifier))
+			.Select(item => new IndexedFactionBatch(
+				item.Entry,
+				(IFactionFactBatchLogEntry)item.Entry,
+				item.Index))
+			.ToArray();
 
 	private static List<MainRoleType> GetUnclaimedRoles(IGameSession session)
 	{
