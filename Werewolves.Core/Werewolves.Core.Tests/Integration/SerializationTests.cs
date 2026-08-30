@@ -901,6 +901,30 @@ public class SerializationTests : DiagnosticTestBase
     }
 
     [Fact]
+    public void SerializeCurrentStateRecoveryCandidate_RehydratesCurrentProjectionWithoutReplacingStableSnapshot()
+    {
+        var builder = CreateBuilder()
+            .WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);
+        builder.StartGame();
+        var session = (GameSession)builder.GetGameState()!;
+        var playerId = session.GetPlayers().First().Id;
+        var stableSnapshot = session.Serialize();
+        builder.ArrangeKnownPhysicalRole(playerId, MainRoleType.SimpleWerewolf);
+
+        var candidate = session.SerializeCurrentStateRecoveryCandidate();
+
+        session.Serialize().Should().Be(stableSnapshot);
+        var recoveryService = new GameService();
+        var recoveredGameId = recoveryService.RehydrateSession(candidate);
+        var recoveredPlayer = recoveryService.GetGameStateView(recoveredGameId)!
+            .GetPlayerState(playerId);
+        recoveredPlayer.MainRole.Should().Be(MainRoleType.SimpleWerewolf);
+        recoveredPlayer.ModeratorKnownRole.Should().Be(MainRoleType.SimpleWerewolf);
+
+        MarkTestCompleted();
+    }
+
+    [Fact]
     public void RehydrateStableBoundary_RestoresCommittedInstructionCursorAndIgnoresActiveExecutionState()
     {
         var alivePlayerId = Guid.NewGuid();

@@ -365,6 +365,9 @@ internal class GameSession : IGameSession
 	    return _gameSessionKernel.Serialize();
     }
 
+    internal string SerializeCurrentStateRecoveryCandidate() =>
+        _gameSessionKernel.SerializeCurrentStateRecoveryCandidate();
+
     #endregion
 
     private static InvalidOperationException FactionFactsNotReady() =>

@@ -863,6 +863,9 @@ namespace Werewolves.Core.StateModels.Core
 			return JsonSerializer.Serialize(_recoveryBoundary ?? CreateDto(), SerializationOptions);
 		}
 
+		internal string SerializeCurrentStateRecoveryCandidate() =>
+			JsonSerializer.Serialize(CreateDto(), SerializationOptions);
+
 		private GameSessionDto CreateValidatedRecoveryBoundary(
 			ModeratorInstruction pendingInstruction,
 			AcceptedObservationRecoveryCursor? acceptedObservationRecoveryCursor,

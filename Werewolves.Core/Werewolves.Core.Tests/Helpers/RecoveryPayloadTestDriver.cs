@@ -57,150 +57,7 @@ internal sealed class RecoveryPayloadTestDriver
 	internal static RecoveryPayloadTestDriver Capture(GameSession session)
 	{
 		ArgumentNullException.ThrowIfNull(session);
-		var driver = Parse(session.Serialize());
-		var payload = driver._payload;
-		var execution = session.Execution;
-		var actorSetupCards = session.GetModeratorActorSetupCards();
-		var actorActivation =
-			session.GetModeratorActiveActorBorrowedRolePowerActivation();
-
-		payload.Id = session.Id;
-		payload.TurnNumber = session.TurnNumber;
-		payload.SeatingOrder = session.GetPlayers()
-			.Select(player => player.Id)
-			.ToList();
-		payload.RolesInPlay = session.RoleLockIn.DealPool
-			.Select(card => card.PrintedRole)
-			.ToList();
-		payload.RoleLockIn = RoleLockInDto.FromValue(session.RoleLockIn);
-		payload.PublicGroupPartition = session.PublicGroupPartition is null
-			? null
-			: PublicGroupPartitionDto.FromValue(session.PublicGroupPartition);
-		payload.ActorSetupCards = ActorSetupCardsDto.FromValue(actorSetupCards);
-		payload.ActiveActorBorrowedRolePowerActivation = actorActivation is null
-			? null
-			: ActorBorrowedRolePowerActivationDto.FromValue(actorActivation);
-		if (actorActivation != null)
-		{
-			driver.RecordActorSetupCardSpend(actorActivation);
-		}
-
-		payload.ActorBorrowedSeerCheckCommits = session
-			.GetActorBorrowedSeerCheckCommits()
-			.Select(ActorBorrowedSeerCheckCommitDto.FromValue)
-			.ToList();
-		payload.ActorBorrowedDefenderProtectionCommits = session
-			.GetActorBorrowedDefenderProtectionCommits()
-			.Select(ActorBorrowedDefenderProtectionCommitDto.FromValue)
-			.ToList();
-		payload.ActorBorrowedFoxCheckCommits = session
-			.GetActorBorrowedFoxCheckCommits()
-			.Select(ActorBorrowedFoxCheckCommitDto.FromValue)
-			.ToList();
-		payload.ActorBorrowedBearTamerGrowlCommits = session
-			.GetActorBorrowedBearTamerGrowlCommits()
-			.Select(ActorBorrowedBearTamerGrowlCommitDto.FromValue)
-			.ToList();
-		payload.ActorBorrowedKnightRustySwordScheduleCommits = session
-			.GetActorBorrowedKnightRustySwordScheduleCommits()
-			.Select(ActorBorrowedKnightRustySwordScheduleCommitDto.FromValue)
-			.ToList();
-		payload.ActorBorrowedHunterFinalShotCommits = session
-			.GetActorBorrowedHunterFinalShotCommits()
-			.Select(ActorBorrowedHunterFinalShotCommitDto.FromValue)
-			.ToList();
-		payload.ActorBorrowedElderResistanceCommits = session
-			.GetActorBorrowedElderResistanceCommits()
-			.Select(ActorBorrowedElderResistanceCommitDto.FromValue)
-			.ToList();
-		payload.ActorBorrowedElderSuppressionCommits = session
-			.GetActorBorrowedElderSuppressionCommits()
-			.Select(ActorBorrowedElderSuppressionCommitDto.FromValue)
-			.ToList();
-		payload.ActorBorrowedScapegoatTieReplacementCommits = session
-			.GetActorBorrowedScapegoatTieReplacementCommits()
-			.Select(ActorBorrowedScapegoatTieReplacementCommitDto.FromValue)
-			.ToList();
-		payload.ActorBorrowedScapegoatVoterRestrictionCommits = session
-			.GetActorBorrowedScapegoatVoterRestrictionCommits()
-			.Select(ActorBorrowedScapegoatVoterRestrictionCommitDto.FromValue)
-			.ToList();
-		payload.ActorBorrowedVillageIdiotPardonCommits = session
-			.GetActorBorrowedVillageIdiotPardonCommits()
-			.Select(ActorBorrowedVillageIdiotPardonCommitDto.FromValue)
-			.ToList();
-		payload.ActorBorrowedWitchPotionUseCommits = session
-			.GetActorBorrowedWitchPotionUseCommits()
-			.Select(ActorBorrowedWitchPotionUseCommitDto.FromValue)
-			.ToList();
-		payload.ActorBorrowedWitchPotionDeclineCommits = session
-			.GetActorBorrowedWitchPotionDeclineCommits()
-			.Select(ActorBorrowedWitchPotionDeclineCommitDto.FromValue)
-			.ToList();
-		payload.ActorBorrowedCupidLoversCommits = session
-			.GetActorBorrowedCupidLoversCommits()
-			.Select(ActorBorrowedCupidLoversCommitDto.FromValue)
-			.ToList();
-		payload.ActorBorrowedStutteringJudgeSignalSetupCommits = session
-			.GetActorBorrowedStutteringJudgeSignalSetupCommits()
-			.Select(ActorBorrowedStutteringJudgeSignalSetupCommitDto.FromValue)
-			.ToList();
-		payload.ActorBorrowedStutteringJudgeSignalObservationCommits = session
-			.GetActorBorrowedStutteringJudgeSignalObservationCommits()
-			.Select(ActorBorrowedStutteringJudgeSignalObservationCommitDto.FromValue)
-			.ToList();
-		payload.PhysicalCharacterCards = session
-			.GetModeratorPhysicalCharacterCards()
-			.Select(state => new PhysicalCharacterCardStateDto
-			{
-				CardId = state.Card.Id,
-				Zone = state.Zone,
-				OwnerPlayerId = state.OwnerPlayerId
-			})
-			.ToList();
-		payload.Players = session.GetPlayers()
-			.Select(player => new PlayerDto
-			{
-				Id = player.Id,
-				Name = player.Name,
-				MainRole = player.State.MainRole,
-				PhysicalCharacterCardId =
-					player.State.PhysicalCharacterCardId,
-				PhysicalCharacterCardRole =
-					player.State.PhysicalCharacterCardRole,
-				ModeratorKnownRole = player.State.ModeratorKnownRole,
-				PubliclyRevealedRole = player.State.PubliclyRevealedRole,
-				ActiveEffects = player.State.GetActiveStatusEffects()
-					.Aggregate(
-						StatusEffectTypes.None,
-						(current, effect) => current | effect),
-				Health = player.State.Health,
-				HasVotingRight = player.State.HasVotingRight,
-				DurableVotingPower = player.State.DurableVotingPower,
-				FactionBeneficiary = player.State.FactionBeneficiary,
-				FactionAgentKnowledge = Enum.GetValues<Faction>()
-					.ToDictionary(
-						faction => faction,
-						faction => player.State
-							.GetFactionAgentKnowledge(faction))
-			})
-			.ToList();
-		payload.GameHistoryLog = session.GameHistoryLog.ToList();
-		payload.PendingInstruction = execution.PendingInstruction;
-		payload.PendingInstructionSemantic =
-			execution.PendingInstruction?.Semantic;
-		payload.AcceptedObservationRecoveryCursor =
-			execution.AcceptedObservationRecoveryCursor;
-		payload.DomainRecoveryCursor = execution.DomainRecoveryCursor;
-		payload.PhaseStateCache = new GamePhaseStateCacheDto
-		{
-			CurrentPhase = execution.CurrentPhase,
-			SubPhase = execution.SubPhaseId,
-			CompletedSubPhaseStages = execution.CompletedSubPhaseStages.ToList()
-		};
-		payload.IsStableRecoveryBoundary = true;
-
-		return driver;
+		return Parse(session.SerializeCurrentStateRecoveryCandidate());
 	}
 
 	internal RecoveryPayloadTestDriver RecordActorSetupCardSpend(
@@ -248,7 +105,10 @@ internal sealed class RecoveryPayloadTestDriver
 	}
 
 	internal ModeratorInstruction? PendingInstruction =>
-		_payload.PendingInstruction;
+		_payload.PendingInstruction is { } instruction &&
+		_payload.PendingInstructionSemantic is { } semantic
+			? instruction.WithSemantic(semantic)
+			: _payload.PendingInstruction;
 
 	internal AcceptedObservationRecoveryCursor?
 		AcceptedObservationRecoveryCursor =>
