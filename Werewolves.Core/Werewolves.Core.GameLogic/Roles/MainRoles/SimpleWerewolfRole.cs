@@ -1,7 +1,5 @@
-using System.Collections.Immutable;
 using Werewolves.Core.GameLogic.Models.GameHookListeners;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
-using Werewolves.Core.GameLogic.Queries;
 using Werewolves.Core.GameLogic.RolePowers;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Core;
@@ -403,9 +401,10 @@ internal class SimpleWerewolfRole
 	private SelectPlayersInstruction CreateObservationInstruction(
 		GameSession session)
 	{
-		var requiredAgentCount = GetRequiredObservedWerewolfAgentCount(session);
+		var opportunity = RoleFactionKnowledge
+			.RequireInitialWerewolfAgentGroupOpportunity(session);
 		var observationPrompt = GameStrings.WerewolfFactionAgentObservationPrompt
-			.Format(requiredAgentCount);
+			.Format(opportunity.RequiredCount);
 		var privateInstruction = _littleGirlGuidanceAllowed == true
 			? string.Join(
 				Environment.NewLine + Environment.NewLine,
@@ -414,8 +413,8 @@ internal class SimpleWerewolfRole
 			: observationPrompt;
 		return new SelectPlayersInstruction(
 			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup,
-			GetWerewolfFactionAgentGroupObservationCandidates(session),
-			NumberRangeConstraint.Exact(requiredAgentCount),
+			opportunity.CandidatePlayerIds.ToHashSet(),
+			NumberRangeConstraint.Exact(opportunity.RequiredCount),
 			publicAnnouncement: GameStrings.RoleHoldersWakeUp.Format(
 				GameStrings.WerewolvesGroupName),
 			privateInstruction: privateInstruction);
@@ -487,16 +486,14 @@ internal class SimpleWerewolfRole
 		GameSession session,
 		SelectPlayersInstruction instruction)
 	{
-		if (!GameSessionQueries.TryGetExactInitialLivingWerewolfAgentCapacity(
-				session,
-				out var requiredAgentCount) ||
-		    instruction.RoleIdentification != null ||
+		var opportunity = RoleFactionKnowledge
+			.RequireInitialWerewolfAgentGroupOpportunity(session);
+		if (instruction.RoleIdentification != null ||
 		    instruction.AffectedPlayerIds != null ||
 		    instruction.CountConstraint !=
-		    NumberRangeConstraint.Exact(requiredAgentCount) ||
+		    NumberRangeConstraint.Exact(opportunity.RequiredCount) ||
 		    !instruction.SelectablePlayerIds.SetEquals(
-			    GetWerewolfFactionAgentGroupObservationCandidates(session)) ||
-		    TryGetKnownLivingWerewolfAgents(session, out _))
+			    opportunity.CandidatePlayerIds))
 		{
 			throw new InvalidOperationException(
 				"The Werewolf Agent-group observation has invalid workflow context.");
@@ -685,17 +682,6 @@ internal class SimpleWerewolfRole
 			.WithHealth(PlayerHealth.Alive)
 			.ToArray();
 
-	private static HashSet<Guid>
-		GetWerewolfFactionAgentGroupObservationCandidates(GameSession session) =>
-		GetLivingPlayers(session)
-			.Where(player =>
-				session.GetFactionAgentKnowledge(
-					player.Id,
-					Faction.Werewolf) !=
-				FactionAgentKnowledge.KnownNonAgent)
-			.Select(player => player.Id)
-			.ToHashSet();
-
 	private static bool TryGetKnownLivingWerewolfAgents(
 		GameSession session,
 		out IReadOnlyList<IPlayer> agents)
@@ -755,97 +741,27 @@ internal class SimpleWerewolfRole
 		GameSession session,
 		ModeratorResponse input)
 	{
-		if (!GameSessionQueries.TryGetExactInitialLivingWerewolfAgentCapacity(
+		if (input.SelectedPlayerIds is not { } observedPlayerIds)
+		{
+			throw new InvalidOperationException(
+				GetInvalidModeratorResponseMessage(
+					session,
+					"Werewolf Agent-group observation requires a complete Player selection."));
+		}
+
+		try
+		{
+			return RoleFactionKnowledge.CommitInitialWerewolfAgentGroupObservation(
 				session,
-				out var requiredAgentCount))
+				observedPlayerIds);
+		}
+		catch (InvalidOperationException exception)
+			when (UsesBorrowedLittleGirlPrivacy(session))
 		{
 			throw new InvalidOperationException(
-				GetInvalidModeratorResponseMessage(
-					session,
-					"Werewolf Agent-group observation requires an exact established capacity."));
+				GetInvalidModeratorResponseMessage(session, exception.Message));
 		}
-
-		if (input.SelectedPlayerIds is not { } selectedPlayerIds ||
-		    selectedPlayerIds.Count != requiredAgentCount)
-		{
-			throw new InvalidOperationException(
-				GetInvalidModeratorResponseMessage(
-					session,
-					"Werewolf Agent-group observation requires the exact established Player count."));
-		}
-
-		var livingPlayers = GetLivingPlayers(session);
-		var livingPlayerIds = livingPlayers
-			.Select(player => player.Id)
-			.ToHashSet();
-		var observedAgentIds = selectedPlayerIds.ToHashSet();
-		if (!observedAgentIds.IsSubsetOf(livingPlayerIds))
-		{
-			throw new InvalidOperationException(
-				GetInvalidModeratorResponseMessage(
-					session,
-					"Werewolf Agent-group observation may select only living Players."));
-		}
-
-		var contradictedKnownFact = livingPlayers.Any(player =>
-		{
-			var knowledge = session.GetFactionAgentKnowledge(
-				player.Id,
-				Faction.Werewolf);
-			return knowledge == FactionAgentKnowledge.KnownAgent &&
-			       !observedAgentIds.Contains(player.Id) ||
-			       knowledge == FactionAgentKnowledge.KnownNonAgent &&
-			       observedAgentIds.Contains(player.Id);
-		});
-		if (contradictedKnownFact)
-		{
-			throw new InvalidOperationException(
-				GetInvalidModeratorResponseMessage(
-					session,
-					"Werewolf Agent-group observation contradicts committed Faction facts."));
-		}
-
-		FactionFactEffectiveBoundary? committedBoundary = null;
-		session.CommitFactionFactBatch(context =>
-		{
-			committedBoundary = new FactionFactEffectiveBoundary(
-				context.TurnNumber,
-				context.CurrentPhase,
-				session.GameHistoryLog.Count());
-			var facts = livingPlayers
-				.Select(player => FactionFact.Agent(
-					player.Id,
-					Faction.Werewolf,
-					observedAgentIds.Contains(player.Id)
-						? FactionAgentKnowledge.KnownAgent
-						: FactionAgentKnowledge.KnownNonAgent,
-					committedBoundary))
-				.ToImmutableArray();
-			return new FactionFactsCommittedLogEntry
-			{
-				Timestamp = context.Timestamp,
-				TurnNumber = context.TurnNumber,
-				CurrentPhase = context.CurrentPhase,
-				Source = new FactionFactSource(
-					FactionFactSourceKind.ScheduledObservation,
-					FactionFactSource
-						.WerewolfFactionAgentGroupObservationIdentifier),
-				Facts = facts
-			};
-		});
-
-		return committedBoundary
-			?? throw new InvalidOperationException(
-				"Werewolf Agent-group observation did not establish a boundary.");
 	}
-
-	private static int GetRequiredObservedWerewolfAgentCount(GameSession session) =>
-		GameSessionQueries.TryGetExactInitialLivingWerewolfAgentCapacity(
-			session,
-			out var requiredAgentCount)
-			? requiredAgentCount
-			: throw new InvalidOperationException(
-				"The Werewolf Agent-group cardinality is not exact at this boundary.");
 
 	private string GetInvalidModeratorResponseMessage(
 		GameSession session,

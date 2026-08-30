@@ -777,69 +777,6 @@ internal static class GameSessionQueries
                unaccountedCompositionHolderCount;
     }
 
-	internal static bool TryGetExactInitialLivingWerewolfAgentCapacity(
-		IGameSession session,
-		out int capacity)
-	{
-		ArgumentNullException.ThrowIfNull(session);
-		capacity = 0;
-		var players = session.GetPlayers().ToArray();
-		if (session.TurnNumber != 1 ||
-		    session.GetCurrentPhase() != GamePhase.Night ||
-		    players.Any(player => player.State.Health != PlayerHealth.Alive))
-		{
-			return false;
-		}
-
-		var knownAgents = players
-			.Where(player =>
-				session.GetFactionAgentKnowledge(
-					player.Id,
-					Faction.Werewolf) == FactionAgentKnowledge.KnownAgent)
-			.ToArray();
-		var establishedAgentRoles = knownAgents
-			.Select(RoleFactionKnowledge.GetEstablishedRole)
-			.ToArray();
-		if (establishedAgentRoles.Any(role => role is null))
-		{
-			return false;
-		}
-		var establishedAgentRoleValues = establishedAgentRoles
-			.Select(role => role!.Value)
-			.ToArray();
-
-		var activeAgencyCardCounts = session
-			.GetModeratorPhysicalCharacterCards()
-			.Where(cardState =>
-				(cardState.Zone is PhysicalCharacterCardZone.DealPool or
-					PhysicalCharacterCardZone.PlayerOwned) &&
-				RoleFactionKnowledge.EstablishesInitialWerewolfAgency(
-					cardState.Card.PrintedRole))
-			.GroupBy(cardState => cardState.Card.PrintedRole)
-			.ToDictionary(group => group.Key, group => group.Count());
-		var establishedAgencyAgentCounts = establishedAgentRoleValues
-			.Where(RoleFactionKnowledge.EstablishesInitialWerewolfAgency)
-			.GroupBy(role => role)
-			.ToDictionary(group => group.Key, group => group.Count());
-		if (establishedAgencyAgentCounts.Any(pair =>
-			!activeAgencyCardCounts.TryGetValue(pair.Key, out var cardCount) ||
-			pair.Value > cardCount))
-		{
-			return false;
-		}
-
-		var agencyRoleCapacity = activeAgencyCardCounts.Values.Sum();
-		var establishedNonCardAgentCount = establishedAgentRoleValues
-			.Count(role => !RoleFactionKnowledge
-				.EstablishesInitialWerewolfAgency(role));
-		capacity = agencyRoleCapacity + establishedNonCardAgentCount;
-		var candidateCount = players.Count(player =>
-			session.GetFactionAgentKnowledge(
-				player.Id,
-				Faction.Werewolf) != FactionAgentKnowledge.KnownNonAgent);
-		return capacity > 0 && capacity <= candidateCount;
-	}
-
     internal static bool IsCompleteLivingRoleHolderSetKnown(
         IGameSession session,
         MainRoleType role)

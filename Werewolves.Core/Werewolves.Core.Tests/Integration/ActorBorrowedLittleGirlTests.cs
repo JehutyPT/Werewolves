@@ -113,12 +113,16 @@ public sealed class ActorBorrowedLittleGirlTests
 	[Fact]
 	public void BorrowedLittleGirl_InvalidObservationResponsesUseGenericErrorWithoutMutation()
 	{
-		var (session, start, actorId, _) = CreateActorSession();
+		var (session, start, actorId, werewolfId) = CreateActorSession();
 		var (activation, actorSleep) = PerformSpendOpening(
 			CreateActorRole(),
 			session,
 			start,
 			LittleGirlCard.Id);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { werewolfId },
+			MainRoleType.SimpleWerewolf);
 		IGameHookListener listener = new SimpleWerewolfRole(
 			new RolePowerAvailabilityGateway(
 				AllowAllRolePowerAvailabilityPolicy.Instance));
@@ -146,6 +150,15 @@ public sealed class ActorBorrowedLittleGirlTests
 				InstructionId = observation.InstructionId,
 				Type = ExpectedInputType.PlayerSelection,
 				SelectedPlayerIds = new HashSet<Guid> { Guid.NewGuid() }
+			},
+			new ModeratorResponse
+			{
+				InstructionId = observation.InstructionId,
+				Type = ExpectedInputType.PlayerSelection,
+				SelectedPlayerIds = new HashSet<Guid>
+				{
+					observation.SelectablePlayerIds.First(id => id != werewolfId)
+				}
 			}
 		};
 

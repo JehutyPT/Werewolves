@@ -135,6 +135,7 @@ public sealed class RoleKnowledgeFlowBunitTests
 			.Format(exactAgentCount);
 		var wakeAnnouncement = GameStrings.RoleHoldersWakeUp.Format(
 			GameStrings.WerewolvesGroupName);
+		var pendingInstructionId = observation.InstructionId;
 		observation.Semantic.Should().Be(
 			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
 		observation.PublicAnnouncement.Should().Be(wakeAnnouncement);
@@ -147,7 +148,8 @@ public sealed class RoleKnowledgeFlowBunitTests
 
 		var dashboard = context.RenderModeratorComponent<DashboardPage>();
 		dashboard.Find(PublicInstructionSelector).TextContent.Should()
-			.Contain(wakeAnnouncement);
+			.Contain(wakeAnnouncement)
+			.And.NotContain(observationPrompt);
 		dashboard.Find(PrivateInstructionSelector).Click();
 		dashboard.Find(PrivateInstructionSelector).TextContent.Should()
 			.Contain(observationPrompt)
@@ -168,6 +170,15 @@ public sealed class RoleKnowledgeFlowBunitTests
 			.Click();
 		observationHold = dashboard.Find(HoldButtonSelector);
 		observationHold.HasAttribute(Html.Attributes.Disabled).Should().BeFalse();
+		var earlyHold = RenderedHoldButtonDriver.StartHoldAsync(observationHold);
+		await RenderedHoldButtonDriver.FlushAsync(dashboard);
+		timing.AdvanceBy(
+			RenderedHoldButtonDriver.HoldDuration - TimeSpan.FromMilliseconds(1));
+		await RenderedHoldButtonDriver.ReleaseHoldAsync(observationHold);
+		await earlyHold;
+
+		manager.CurrentInstruction!.InstructionId.Should().Be(pendingInstructionId);
+		observationHold = dashboard.Find(HoldButtonSelector);
 		await RenderedHoldButtonDriver.CompleteHoldAsync(
 			dashboard,
 			observationHold,

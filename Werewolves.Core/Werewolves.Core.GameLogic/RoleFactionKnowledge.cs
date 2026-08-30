@@ -6,6 +6,10 @@ using Werewolves.Core.StateModels.Models;
 
 namespace Werewolves.Core.GameLogic;
 
+internal readonly record struct InitialWerewolfAgentGroupOpportunity(
+	ImmutableHashSet<Guid> CandidatePlayerIds,
+	int RequiredCount);
+
 internal static class RoleFactionKnowledge
 {
 	private readonly record struct IndexedFactionAgentFact(
@@ -16,6 +20,163 @@ internal static class RoleFactionKnowledge
 	internal static bool EstablishesInitialWerewolfAgency(MainRoleType role) =>
 		GetRoleIdentificationWerewolfFactionAgentKnowledge(role) ==
 		FactionAgentKnowledge.KnownAgent;
+
+	internal static InitialWerewolfAgentGroupOpportunity
+		RequireInitialWerewolfAgentGroupOpportunity(IGameSession session)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		var players = session.GetPlayers().ToArray();
+		if (session.TurnNumber != 1 ||
+		    session.GetCurrentPhase() != GamePhase.Night ||
+		    players.Any(player => player.State.Health != PlayerHealth.Alive))
+		{
+			throw new InvalidOperationException(
+				"The initial Werewolf Agent-group opportunity requires the all-alive first Night boundary.");
+		}
+
+		var playersWithKnowledge = players
+			.Select(player => new
+			{
+				Player = player,
+				Knowledge = session.GetFactionAgentKnowledge(
+					player.Id,
+					Faction.Werewolf)
+			})
+			.ToArray();
+		if (playersWithKnowledge.All(item =>
+			    item.Knowledge != FactionAgentKnowledge.Unknown))
+		{
+			throw new InvalidOperationException(
+				"The living Werewolf Agent partition is already complete.");
+		}
+
+		var establishedAgentRoles = playersWithKnowledge
+			.Where(item =>
+				item.Knowledge == FactionAgentKnowledge.KnownAgent)
+			.Select(item => GetEstablishedRole(item.Player))
+			.ToArray();
+		if (establishedAgentRoles.Any(role => role is null))
+		{
+			throw new InvalidOperationException(
+				"A known Werewolf Agent has no established Role relationship.");
+		}
+
+		var establishedAgentRoleValues = establishedAgentRoles
+			.Select(role => role!.Value)
+			.ToArray();
+		var activeAgencyCardCounts = session
+			.GetModeratorPhysicalCharacterCards()
+			.Where(cardState =>
+				(cardState.Zone is PhysicalCharacterCardZone.DealPool or
+				 PhysicalCharacterCardZone.PlayerOwned) &&
+				EstablishesInitialWerewolfAgency(cardState.Card.PrintedRole))
+			.GroupBy(cardState => cardState.Card.PrintedRole)
+			.ToDictionary(group => group.Key, group => group.Count());
+		var establishedAgencyAgentCounts = establishedAgentRoleValues
+			.Where(EstablishesInitialWerewolfAgency)
+			.GroupBy(role => role)
+			.ToDictionary(group => group.Key, group => group.Count());
+		if (establishedAgencyAgentCounts.Any(pair =>
+			    !activeAgencyCardCounts.TryGetValue(
+				    pair.Key,
+				    out var cardCount) ||
+			    pair.Value > cardCount))
+		{
+			throw new InvalidOperationException(
+				"A known Werewolf Agent cannot be related exactly to an active agency-capable card.");
+		}
+
+		var requiredCount = activeAgencyCardCounts.Values.Sum() +
+			establishedAgentRoleValues.Count(role =>
+				!EstablishesInitialWerewolfAgency(role));
+		var candidatePlayerIds = playersWithKnowledge
+			.Where(item =>
+				item.Knowledge != FactionAgentKnowledge.KnownNonAgent)
+			.Select(item => item.Player.Id)
+			.ToImmutableHashSet();
+		if (requiredCount <= 0 || requiredCount > candidatePlayerIds.Count)
+		{
+			throw new InvalidOperationException(
+				"The initial Werewolf Agent-group cardinality is not exact for the current candidates.");
+		}
+
+		return new InitialWerewolfAgentGroupOpportunity(
+			candidatePlayerIds,
+			requiredCount);
+	}
+
+	internal static FactionFactEffectiveBoundary
+		CommitInitialWerewolfAgentGroupObservation(
+			GameSession session,
+			IReadOnlySet<Guid> observedPlayerIds)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		ArgumentNullException.ThrowIfNull(observedPlayerIds);
+		var opportunity = RequireInitialWerewolfAgentGroupOpportunity(session);
+		var observedAgentIds = observedPlayerIds.ToImmutableHashSet();
+		if (observedAgentIds.Count != opportunity.RequiredCount)
+		{
+			throw new InvalidOperationException(
+				"Werewolf Agent-group observation requires the exact established Player count.");
+		}
+
+		if (!observedAgentIds.IsSubsetOf(opportunity.CandidatePlayerIds))
+		{
+			throw new InvalidOperationException(
+				"Werewolf Agent-group observation contains a Player outside the current candidates.");
+		}
+
+		var livingPlayers = session.GetPlayers()
+			.Where(player => player.State.Health == PlayerHealth.Alive)
+			.ToArray();
+		if (livingPlayers.Any(player =>
+		{
+			var knowledge = session.GetFactionAgentKnowledge(
+				player.Id,
+				Faction.Werewolf);
+			return knowledge == FactionAgentKnowledge.KnownAgent &&
+			       !observedAgentIds.Contains(player.Id) ||
+			       knowledge == FactionAgentKnowledge.KnownNonAgent &&
+			       observedAgentIds.Contains(player.Id);
+		}))
+		{
+			throw new InvalidOperationException(
+				"Werewolf Agent-group observation contradicts committed Faction facts.");
+		}
+
+		FactionFactEffectiveBoundary? committedBoundary = null;
+		session.CommitFactionFactBatch(context =>
+		{
+			committedBoundary = new FactionFactEffectiveBoundary(
+				context.TurnNumber,
+				context.CurrentPhase,
+				session.GameHistoryLog.Count());
+			var facts = livingPlayers
+				.Select(player => FactionFact.Agent(
+					player.Id,
+					Faction.Werewolf,
+					observedAgentIds.Contains(player.Id)
+						? FactionAgentKnowledge.KnownAgent
+						: FactionAgentKnowledge.KnownNonAgent,
+					committedBoundary))
+				.ToImmutableArray();
+			return new FactionFactsCommittedLogEntry
+			{
+				Timestamp = context.Timestamp,
+				TurnNumber = context.TurnNumber,
+				CurrentPhase = context.CurrentPhase,
+				Source = new FactionFactSource(
+					FactionFactSourceKind.ScheduledObservation,
+					FactionFactSource
+						.WerewolfFactionAgentGroupObservationIdentifier),
+				Facts = facts
+			};
+		});
+
+		return committedBoundary
+			?? throw new InvalidOperationException(
+				"Werewolf Agent-group observation did not establish a boundary.");
+	}
 
 	internal static void CommitRoleIdentification(
 		GameSession session,
