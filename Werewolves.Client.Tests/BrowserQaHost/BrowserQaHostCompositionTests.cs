@@ -228,7 +228,7 @@ public class BrowserQaHostCompositionTests
 	}
 
 	[Fact]
-	public void BrowserQaRoot_WhenDashboardScenarioIsRequested_SeedsAndRendersDashboardFlow()
+	public async Task BrowserQaRoot_WhenDashboardScenarioIsRequested_SeedsAndRendersDashboardFlow()
 	{
 		using var context = CreateBrowserQaHostContext(BrowserQaScenario.Dashboard);
 
@@ -239,7 +239,7 @@ public class BrowserQaHostCompositionTests
 		game.CurrentInstruction.Should().NotBeNull();
 		context.Services.GetRequiredService<IScreenWakeLock>().KeepScreenOn.Should().BeFalse();
 
-		rendered.Find($"[data-testid='{ModeratorUiTestIds.LandingContinueButton}']").Click();
+		await rendered.Find($"[data-testid='{ModeratorUiTestIds.LandingContinueButton}']").ClickAsync();
 
 		context.Services.GetRequiredService<IScreenWakeLock>().KeepScreenOn.Should().BeTrue();
 
