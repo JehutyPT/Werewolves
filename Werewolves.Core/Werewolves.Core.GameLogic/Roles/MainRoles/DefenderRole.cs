@@ -28,7 +28,10 @@ internal sealed class DefenderRole
 	private sealed record ExecutionContext(
 		IPlayer ActingPlayer,
 		RolePowerInstance PowerInstance,
-		bool IsBorrowed);
+		ActorBorrowedRolePowers.ActorBorrowedRolePowerUse? BorrowedUse)
+	{
+		internal bool IsBorrowed => BorrowedUse is not null;
+	}
 
 	private readonly RolePowerAvailabilityGateway _availabilityGateway;
 	private readonly RoleWorkflowRuntime _workflowRuntime;
@@ -36,6 +39,9 @@ internal sealed class DefenderRole
 	private static readonly RolePowerDefinition ProtectionPower = new(
 		new RolePowerIdentifier("defender-protection"),
 		RolePowerCategory.Chosen);
+	private static readonly ActorBorrowedRolePowerSpec BorrowedPowerSpec = new(
+		MainRoleType.Defender,
+		ProtectionPower);
 
 	internal static RolePowerIdentifier ProtectionPowerIdentifier =>
 		ProtectionPower.Identifier;
@@ -426,13 +432,14 @@ internal sealed class DefenderRole
 		}
 
 		var execution = ResolveExecution(session);
-		var availability = _availabilityGateway.Evaluate(
+		var attempt = execution.BorrowedUse?.CreateAttempt() ??
 			new RolePowerAttempt(
 				session,
 				execution.ActingPlayer,
 				MainRoleType.Defender,
 				ProtectionPower,
-				execution.PowerInstance));
+				execution.PowerInstance);
+		var availability = _availabilityGateway.Evaluate(attempt);
 		return availability.AvailabilityResult.IsAvailable &&
 		       GetEligibleTargets(
 			       session,
@@ -456,9 +463,11 @@ internal sealed class DefenderRole
 					: "The Defender must select exactly one Player.");
 		}
 
-		var powerIdentity = CreatePowerIdentity(execution);
+		var borrowedUse = execution.BorrowedUse;
+		var powerIdentity = borrowedUse?.PowerIdentity ??
+			CreatePowerIdentity(execution);
 		var hasCommittedProtection = execution.IsBorrowed
-			? GetBorrowedProtectionCommitsThisNight(session, powerIdentity).Any()
+			? GetBorrowedProtectionCommitsThisNight(session, execution).Any()
 			: GetProtectionCommitsThisNight(session).Any();
 		if (hasCommittedProtection)
 		{
@@ -477,10 +486,10 @@ internal sealed class DefenderRole
 					: "The Defender target must be one legal living Player.");
 		}
 
-		if (execution.IsBorrowed)
+		if (borrowedUse is not null)
 		{
 			session.CommitActorBorrowedDefenderProtection(
-				powerIdentity,
+				borrowedUse.PowerIdentity,
 				targetId);
 		}
 		else
@@ -661,7 +670,7 @@ internal sealed class DefenderRole
 		{
 			var borrowedCommits = GetBorrowedProtectionCommitsThisNight(
 					session,
-					CreatePowerIdentity(execution))
+					execution)
 				.ToArray();
 			if (borrowedCommits.Length > 1)
 			{
@@ -815,7 +824,7 @@ internal sealed class DefenderRole
 		TryResolveBorrowedExecution(session, out var borrowedExecution)
 			? GetBorrowedProtectionCommitsThisNight(
 					session,
-					CreatePowerIdentity(borrowedExecution))
+					borrowedExecution)
 				.Take(limit)
 				.Count()
 			: GetProtectionCommitsThisNight(session).Take(limit).Count();
@@ -835,35 +844,31 @@ internal sealed class DefenderRole
 				holder,
 				MainRoleType.Defender,
 				ProtectionPower),
-			IsBorrowed: false);
+			BorrowedUse: null);
 	}
 
 	private static bool TryResolveBorrowedExecution(
 		GameSession session,
 		out ExecutionContext execution)
 	{
-		var activation =
-			session.GetModeratorActiveActorBorrowedRolePowerActivation();
-		if (activation?.SourceRole != MainRoleType.Defender)
+		var borrowedUse = ActorBorrowedRolePowers.ResolveActive(
+			session,
+			BorrowedPowerSpec);
+		if (borrowedUse is null)
 		{
 			execution = null!;
 			return false;
 		}
 
-		var actor = session.GetPlayer(activation.ActingPlayerId);
 		execution = new ExecutionContext(
-			actor,
-			RolePowerInstance.CreateBorrowed(
-				session,
-				actor,
-				MainRoleType.Defender,
-				ProtectionPower),
-			IsBorrowed: true);
+			borrowedUse.Actor,
+			borrowedUse.PowerInstance,
+			borrowedUse);
 		return true;
 	}
 
 	private static RolePowerInstanceIdentity CreatePowerIdentity(
-		ExecutionContext execution) => new(
+		ExecutionContext execution) => execution.BorrowedUse?.PowerIdentity ?? new(
 			execution.ActingPlayer.Id,
 			MainRoleType.Defender,
 			ProtectionPower.Identifier.Value,
@@ -933,12 +938,14 @@ internal sealed class DefenderRole
 	private static IEnumerable<ActorBorrowedDefenderProtectionCommit>
 		GetBorrowedProtectionCommitsThisNight(
 			GameSession session,
-			RolePowerInstanceIdentity powerIdentity) =>
-		session.GetActorBorrowedDefenderProtectionCommits()
-			.Where(commit =>
-				commit.CurrentPhase == GamePhase.Night &&
-				commit.TurnNumber == session.TurnNumber &&
-				commit.PowerIdentity == powerIdentity);
+			ExecutionContext execution)
+	{
+		var borrowedUse = execution.BorrowedUse ??
+			throw new InvalidOperationException(
+				"No active Actor borrowed Defender Role Power is available.");
+		return session.GetActorBorrowedDefenderProtectionCommits()
+			.Where(borrowedUse.Correlates);
+	}
 
 	private static void ValidateBorrowedRecoveryCursorIdentity(
 		GameSession session,
@@ -951,16 +958,15 @@ internal sealed class DefenderRole
 				"The Actor borrowed Defender recovery cursor has no active borrowed execution.");
 		}
 
-		var activation =
-			session.GetModeratorActiveActorBorrowedRolePowerActivation()!;
-		var expectedPowerIdentity = CreatePowerIdentity(execution);
+		var borrowedUse = execution.BorrowedUse!;
+		var expectedPowerIdentity = borrowedUse.PowerIdentity;
 		var commits = GetBorrowedProtectionCommitsThisNight(
 				session,
-				expectedPowerIdentity)
+				execution)
 			.ToArray();
 		if (cursorPowerIdentity != expectedPowerIdentity ||
-		    cursor.ActorSetupCardId != activation.SelectedCardId ||
-		    cursor.ActorBorrowedActivationId != activation.ActivationId ||
+		    cursor.ActorSetupCardId != borrowedUse.ActorSetupCardId ||
+		    cursor.ActorBorrowedActivationId != borrowedUse.PowerInstance.Id ||
 		    cursor.CommittedTargetIds is not [var committedTargetId] ||
 		    cursor.NextInstructionSemantic !=
 		    ModeratorInstructionSemantic.PutRoleToSleep ||
@@ -980,20 +986,16 @@ internal sealed class DefenderRole
 		ExecutionContext execution,
 		ActorBorrowedDefenderProtectionCommit committedProtection)
 	{
-		var activation =
-			session.GetModeratorActiveActorBorrowedRolePowerActivation();
-		var expectedPowerIdentity = CreatePowerIdentity(execution);
+		var borrowedUse = execution.BorrowedUse ??
+			throw new InvalidOperationException(
+				"No active Actor borrowed Defender Role Power is available.");
+		var expectedPowerIdentity = borrowedUse.PowerIdentity;
 		var publicMarker = committedProtection.PublicMarkerLogIndex >= 0
 			? session.GameHistoryLog.ElementAtOrDefault(
 				committedProtection.PublicMarkerLogIndex)
 			: null;
-		if (!execution.IsBorrowed ||
-		    activation?.SourceRole != MainRoleType.Defender ||
-		    committedProtection.PowerIdentity != expectedPowerIdentity ||
-		    committedProtection.ActorSetupCardId != activation.SelectedCardId ||
+		if (!borrowedUse.Correlates(committedProtection) ||
 		    committedProtection.TargetPlayerId == Guid.Empty ||
-		    committedProtection.TurnNumber != session.TurnNumber ||
-		    committedProtection.CurrentPhase != GamePhase.Night ||
 		    publicMarker is not ActorBorrowedRolePowerCommittedLogEntry marker ||
 		    marker.Timestamp != committedProtection.Timestamp ||
 		    marker.TurnNumber != committedProtection.TurnNumber ||
