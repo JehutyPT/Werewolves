@@ -1,4 +1,5 @@
 using Werewolves.Core.GameLogic.Roles.MainRoles;
+using Werewolves.Core.GameLogic.RolePowers;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
@@ -917,79 +918,190 @@ internal static class GameSessionQueries
                 filter: entry => entry.JudgePlayerId == judgePlayerId)
             .Any();
 
-    internal static bool HasStutteringJudgeSignalBeenEstablished(
-        IGameSession session,
-        RolePowerInstanceIdentity powerIdentity)
-    {
-        const string consecutiveVotePowerIdentifier =
-            "stuttering-judge-consecutive-vote";
-        if (!powerIdentity.IsValid ||
+	internal static ActorBorrowedElderResistanceCommit?
+		GetLatestActorBorrowedElderResistanceForActiveUse(
+			GameSession session,
+			ActorBorrowedRolePowers.ActorBorrowedRolePowerUse borrowedUse)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		ArgumentNullException.ThrowIfNull(borrowedUse);
+		var commits = session.GetActorBorrowedElderResistanceCommits();
+		var correlated = commits
+			.Where(borrowedUse.Correlates)
+			.MaxBy(commit => commit.PublicMarkerLogIndex);
+		// Elder's spent/restored state is source-specific and remains durable for
+		// the activation even across test-owned or recovery Phase boundaries.
+		return correlated ?? commits
+			.Where(commit =>
+				commit.PowerIdentity == borrowedUse.PowerIdentity)
+			.MaxBy(commit => commit.PublicMarkerLogIndex);
+	}
+
+	internal static IReadOnlyList<ActorBorrowedCupidLoversCommit>
+		GetCorrelatedActorBorrowedCupidLoversCommits(
+			GameSession session,
+			ActorBorrowedRolePowers.ActorBorrowedRolePowerUse borrowedUse)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		ArgumentNullException.ThrowIfNull(borrowedUse);
+		return session.GetActorBorrowedCupidLoversCommits()
+			.Where(borrowedUse.Correlates)
+			.ToArray();
+	}
+
+	internal static IReadOnlyList<ActorBorrowedWitchPotionUseCommit>
+		GetCorrelatedActorBorrowedWitchPotionUseCommits(
+			GameSession session,
+			ActorBorrowedRolePowers.ActorBorrowedRolePowerUse borrowedUse)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		ArgumentNullException.ThrowIfNull(borrowedUse);
+		return session.GetActorBorrowedWitchPotionUseCommits()
+			.Where(borrowedUse.Correlates)
+			.ToArray();
+	}
+
+	internal static IReadOnlyList<ActorBorrowedWitchPotionDeclineCommit>
+		GetCorrelatedActorBorrowedWitchPotionDeclineCommits(
+			GameSession session,
+			ActorBorrowedRolePowers.ActorBorrowedRolePowerUse borrowedUse)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		ArgumentNullException.ThrowIfNull(borrowedUse);
+		return session.GetActorBorrowedWitchPotionDeclineCommits()
+			.Where(borrowedUse.Correlates)
+			.ToArray();
+	}
+
+	internal static bool IsCorrelatedActorBorrowedVillageIdiotPardonCommitted(
+		GameSession session,
+		ActorBorrowedRolePowers.ActorBorrowedRolePowerUse borrowedUse,
+		OneUseRolePowerResourceIdentity resourceIdentity)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		ArgumentNullException.ThrowIfNull(borrowedUse);
+		return session.GetActorBorrowedVillageIdiotPardonCommits()
+			.Where(borrowedUse.Correlates)
+			.Any(commit => commit.SpentResourceIdentity == resourceIdentity);
+	}
+
+	internal static bool HasActorBorrowedBearTamerGrowlForActivation(
+		GameSession session,
+		ActorBorrowedRolePowers.ActorBorrowedRolePowerUse borrowedUse)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		ArgumentNullException.ThrowIfNull(borrowedUse);
+		return session.GetActorBorrowedBearTamerGrowlCommits()
+			.Any(commit => commit.PowerIdentity == borrowedUse.PowerIdentity);
+	}
+
+	internal static bool HasCorrelatedActorBorrowedBearTamerGrowl(
+		GameSession session,
+		ActorBorrowedRolePowers.ActorBorrowedRolePowerUse borrowedUse)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		ArgumentNullException.ThrowIfNull(borrowedUse);
+		return session.GetActorBorrowedBearTamerGrowlCommits()
+			.Any(borrowedUse.Correlates);
+	}
+
+	internal static bool HasCorrelatedActorBorrowedScapegoatTieReplacement(
+		GameSession session,
+		ActorBorrowedRolePowers.ActorBorrowedRolePowerUse borrowedUse)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		ArgumentNullException.ThrowIfNull(borrowedUse);
+		return session.GetActorBorrowedScapegoatTieReplacementCommits()
+			.Any(borrowedUse.Correlates);
+	}
+
+	internal static bool HasCorrelatedActorBorrowedStutteringJudgeSignalSetup(
+		GameSession session,
+		ActorBorrowedRolePowers.ActorBorrowedRolePowerUse borrowedUse)
+		=> GetCorrelatedActorBorrowedStutteringJudgeSignalSetupCommits(
+			session,
+			borrowedUse).Count > 0;
+
+	internal static IReadOnlyList<
+		ActorBorrowedStutteringJudgeSignalSetupCommit>
+		GetCorrelatedActorBorrowedStutteringJudgeSignalSetupCommits(
+			GameSession session,
+			ActorBorrowedRolePowers.ActorBorrowedRolePowerUse borrowedUse)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		ArgumentNullException.ThrowIfNull(borrowedUse);
+		return session.GetActorBorrowedStutteringJudgeSignalSetupCommits()
+			.Where(borrowedUse.Correlates)
+			.ToArray();
+	}
+
+	internal static bool
+		HasCorrelatedActorBorrowedStutteringJudgeSignalObservation(
+			GameSession session,
+			ActorBorrowedRolePowers.ActorBorrowedRolePowerUse borrowedUse)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		ArgumentNullException.ThrowIfNull(borrowedUse);
+		return session.GetActorBorrowedStutteringJudgeSignalObservationCommits()
+			.Any(borrowedUse.Correlates);
+	}
+
+	internal static bool HasStutteringJudgeSignalBeenEstablished(
+		IGameSession session,
+		RolePowerInstanceIdentity powerIdentity)
+	{
+		if (!powerIdentity.IsValid ||
+			powerIdentity.SourceRole != MainRoleType.StutteringJudge ||
+			powerIdentity.PowerInstanceOrigin !=
+				RolePowerInstanceOrigin.Borrowed ||
+			!StringComparer.Ordinal.Equals(
+				powerIdentity.SourcePowerIdentifier,
+				StutteringJudgeRole.ConsecutiveVotePowerIdentifier.Value) ||
+			session is not GameSession concreteSession)
+		{
+			return false;
+		}
+
+		return concreteSession
+			.GetActorBorrowedStutteringJudgeSignalSetupCommits()
+			.Any(commit =>
+				commit.PowerIdentity == powerIdentity &&
+				commit.TurnNumber == session.TurnNumber &&
+				commit.CurrentPhase == GamePhase.Night);
+	}
+
+	internal static bool HasStutteringJudgeSignalBeenEstablished(
+		GameSession session,
+		ActorBorrowedRolePowers.ActorBorrowedRolePowerUse borrowedUse)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		ArgumentNullException.ThrowIfNull(borrowedUse);
+		var powerIdentity = borrowedUse.PowerIdentity;
+		if (!powerIdentity.IsValid ||
             powerIdentity.SourceRole != MainRoleType.StutteringJudge ||
-            powerIdentity.PowerInstanceOrigin !=
-                RolePowerInstanceOrigin.Borrowed ||
-            !StringComparer.Ordinal.Equals(
-                powerIdentity.SourcePowerIdentifier,
-                consecutiveVotePowerIdentifier) ||
-            session is not GameSession concreteSession)
-        {
-            return false;
-        }
+			powerIdentity.PowerInstanceOrigin !=
+				RolePowerInstanceOrigin.Borrowed ||
+			!StringComparer.Ordinal.Equals(
+				powerIdentity.SourcePowerIdentifier,
+				StutteringJudgeRole.ConsecutiveVotePowerIdentifier.Value))
+		{
+			return false;
+		}
 
-        var activation =
-            concreteSession.GetModeratorActiveActorBorrowedRolePowerActivation();
-        if (activation is null ||
-            activation.ActingPlayerId != powerIdentity.ActingPlayerId ||
-            activation.SourceRole != powerIdentity.SourceRole ||
-            activation.ActivationId != powerIdentity.PowerInstanceId ||
-            activation.Origin != powerIdentity.PowerInstanceOrigin)
-        {
-            return false;
-        }
+		return session.GetActorBorrowedStutteringJudgeSignalSetupCommits()
+			.Any(commit =>
+				commit.PowerIdentity == powerIdentity &&
+				commit.ActorSetupCardId == borrowedUse.ActorSetupCardId &&
+				commit.TurnNumber == session.TurnNumber &&
+				commit.CurrentPhase == GamePhase.Night);
+	}
 
-        return concreteSession
-            .GetActorBorrowedStutteringJudgeSignalSetupCommits()
-            .Any(commit =>
-                commit.PowerIdentity == powerIdentity &&
-                commit.TurnNumber == session.TurnNumber &&
-                commit.CurrentPhase == GamePhase.Night);
-    }
-
-    internal static bool HasStutteringJudgeSignalBeenObserved(
-        IGameSession session,
-        RolePowerInstanceIdentity powerIdentity)
-    {
-        const string consecutiveVotePowerIdentifier =
-            "stuttering-judge-consecutive-vote";
-        if (!powerIdentity.IsValid ||
-            powerIdentity.SourceRole != MainRoleType.StutteringJudge ||
-            powerIdentity.PowerInstanceOrigin !=
-                RolePowerInstanceOrigin.Borrowed ||
-            !StringComparer.Ordinal.Equals(
-                powerIdentity.SourcePowerIdentifier,
-                consecutiveVotePowerIdentifier) ||
-            session is not GameSession concreteSession)
-        {
-            return false;
-        }
-
-        var activation =
-            concreteSession.GetModeratorActiveActorBorrowedRolePowerActivation();
-        if (activation is null ||
-            activation.ActingPlayerId != powerIdentity.ActingPlayerId ||
-            activation.SourceRole != powerIdentity.SourceRole ||
-            activation.ActivationId != powerIdentity.PowerInstanceId ||
-            activation.Origin != powerIdentity.PowerInstanceOrigin)
-        {
-            return false;
-        }
-
-        return concreteSession
-            .GetActorBorrowedStutteringJudgeSignalObservationCommits()
-            .Any(commit =>
-                commit.PowerIdentity == powerIdentity &&
-                commit.TurnNumber == session.TurnNumber &&
-                commit.CurrentPhase == GamePhase.Day);
-    }
+	internal static bool HasStutteringJudgeSignalBeenObserved(
+		GameSession session,
+		ActorBorrowedRolePowers.ActorBorrowedRolePowerUse borrowedUse) =>
+		HasCorrelatedActorBorrowedStutteringJudgeSignalObservation(
+			session,
+			borrowedUse);
 
     internal static bool HasUnreportedStutteringJudgeSignalObservation(
         IGameSession session)

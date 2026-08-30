@@ -33,7 +33,10 @@ internal sealed class CupidRole
 	private sealed record ExecutionContext(
 		IPlayer ActingPlayer,
 		RolePowerInstance PowerInstance,
-		bool IsBorrowed);
+		ActorBorrowedRolePowers.ActorBorrowedRolePowerUse? BorrowedUse)
+	{
+		internal bool IsBorrowed => BorrowedUse is not null;
+	}
 
 	private readonly RolePowerAvailabilityGateway _availabilityGateway;
 	private readonly RoleWorkflowRuntime _workflowRuntime;
@@ -41,6 +44,9 @@ internal sealed class CupidRole
 	private static readonly RolePowerDefinition LinkLoversPower = new(
 		new RolePowerIdentifier("cupid-link-lovers"),
 		RolePowerCategory.Chosen);
+	private static readonly ActorBorrowedRolePowerSpec BorrowedPowerSpec = new(
+		MainRoleType.Cupid,
+		LinkLoversPower);
 
 	internal static RolePowerIdentifier LinkLoversPowerIdentifier =>
 		LinkLoversPower.Identifier;
@@ -373,13 +379,14 @@ internal sealed class CupidRole
 		RecoverableWait<CupidRoleState, ConfirmationInstruction> sleepWait)
 	{
 		var execution = ResolveExecution(session);
+		var attempt = execution.BorrowedUse?.CreateAttempt() ?? new RolePowerAttempt(
+			session,
+			execution.ActingPlayer,
+			MainRoleType.Cupid,
+			LinkLoversPower,
+			execution.PowerInstance);
 		var availability = _availabilityGateway.Evaluate(
-			new RolePowerAttempt(
-				session,
-				execution.ActingPlayer,
-				MainRoleType.Cupid,
-				LinkLoversPower,
-				execution.PowerInstance));
+			attempt);
 		if (!availability.AvailabilityResult.IsAvailable)
 		{
 			return sleepWait.Execute(session, input);
@@ -507,9 +514,13 @@ internal sealed class CupidRole
 				GameStrings.ActorBorrowedRolePowerInvalidResponse);
 		}
 
-		var powerIdentity = CreatePowerIdentity(execution);
-		if (session.GetActorBorrowedCupidLoversCommits().Any(commit =>
-			    commit.PowerIdentity == powerIdentity))
+		var borrowedUse = execution.BorrowedUse
+			?? throw new InvalidOperationException(
+				GameStrings.ActorBorrowedRolePowerInvalidResponse);
+		var powerIdentity = borrowedUse.PowerIdentity;
+		if (GameSessionQueries.GetCorrelatedActorBorrowedCupidLoversCommits(
+				session,
+				borrowedUse).Count > 0)
 		{
 			throw new InvalidOperationException(
 				GameStrings.ActorBorrowedRolePowerInvalidResponse);
@@ -1056,13 +1067,14 @@ internal sealed class CupidRole
 				"The Actor borrowed Cupid recovery cursor has no active borrowed execution.");
 		}
 
-		var activation =
-			session.GetModeratorActiveActorBorrowedRolePowerActivation()!;
-		var expectedPowerIdentity = CreatePowerIdentity(execution);
+		var borrowedUse = execution.BorrowedUse
+			?? throw new InvalidOperationException(
+				"The Actor borrowed Cupid recovery cursor has no active borrowed execution.");
 		var commits = GetBorrowedCommits(session, execution).ToArray();
-		if (cursorPowerIdentity != expectedPowerIdentity ||
-		    cursor.ActorSetupCardId != activation.SelectedCardId ||
-		    cursor.ActorBorrowedActivationId != activation.ActivationId ||
+		if (cursorPowerIdentity != borrowedUse.PowerIdentity ||
+		    cursor.ActorSetupCardId != borrowedUse.ActorSetupCardId ||
+		    cursor.ActorBorrowedActivationId !=
+		    borrowedUse.PowerIdentity.PowerInstanceId ||
 		    cursor.NextInstructionSemantic !=
 		    ModeratorInstructionSemantic.RecognizeLovers ||
 		    cursor.NextInstructionId == Guid.Empty ||
@@ -1197,48 +1209,41 @@ internal sealed class CupidRole
 				holder,
 				MainRoleType.Cupid,
 				LinkLoversPower),
-			IsBorrowed: false);
+			BorrowedUse: null);
 	}
 
 	private static bool TryResolveBorrowedExecution(
 		GameSession session,
 		out ExecutionContext execution)
 	{
-		var activation =
-			session.GetModeratorActiveActorBorrowedRolePowerActivation();
-		if (activation?.SourceRole != MainRoleType.Cupid)
+		var borrowedUse = ActorBorrowedRolePowers.ResolveActive(
+			session,
+			BorrowedPowerSpec);
+		if (borrowedUse is null)
 		{
 			execution = null!;
 			return false;
 		}
 
-		var actor = session.GetPlayer(activation.ActingPlayerId);
 		execution = new ExecutionContext(
-			actor,
-			RolePowerInstance.CreateBorrowed(
-				session,
-				actor,
-				MainRoleType.Cupid,
-				LinkLoversPower),
-			IsBorrowed: true);
+			borrowedUse.Actor,
+			borrowedUse.PowerInstance,
+			borrowedUse);
 		return true;
 	}
-
-	private static RolePowerInstanceIdentity CreatePowerIdentity(
-		ExecutionContext execution) => new(
-			execution.ActingPlayer.Id,
-			MainRoleType.Cupid,
-			LinkLoversPower.Identifier.Value,
-			execution.PowerInstance.Id,
-			execution.PowerInstance.Origin);
 
 	private static IEnumerable<ActorBorrowedCupidLoversCommit>
 		GetBorrowedCommits(
 			GameSession session,
-			ExecutionContext execution) =>
-		session.GetActorBorrowedCupidLoversCommits()
-			.Where(commit =>
-				commit.PowerIdentity == CreatePowerIdentity(execution));
+			ExecutionContext execution)
+	{
+		var borrowedUse = execution.BorrowedUse
+			?? throw new InvalidOperationException(
+				GameStrings.ActorBorrowedRolePowerInvalidResponse);
+		return GameSessionQueries.GetCorrelatedActorBorrowedCupidLoversCommits(
+			session,
+			borrowedUse);
+	}
 
 	private static ActorBorrowedCupidLoversCommit GetBorrowedCommit(
 		GameSession session,
@@ -1259,16 +1264,8 @@ internal sealed class CupidRole
 		ExecutionContext execution,
 		ActorBorrowedCupidLoversCommit committedPair)
 	{
-		committedPair.EnforceValidity();
-		var activation =
-			session.GetModeratorActiveActorBorrowedRolePowerActivation();
-		var expectedPowerIdentity = CreatePowerIdentity(execution);
-		if (!execution.IsBorrowed ||
-		    activation?.SourceRole != MainRoleType.Cupid ||
-		    committedPair.PowerIdentity != expectedPowerIdentity ||
-		    committedPair.ActorSetupCardId != activation.SelectedCardId ||
-		    committedPair.TurnNumber != session.TurnNumber ||
-		    committedPair.CurrentPhase != GamePhase.Night ||
+		if (execution.BorrowedUse is not { } borrowedUse ||
+		    !borrowedUse.Correlates(committedPair) ||
 		    committedPair.PlayerIds.Any(playerId =>
 			    !session.GetPlayerState(playerId)
 				    .HasStatusEffect(StatusEffectTypes.Lovers)))

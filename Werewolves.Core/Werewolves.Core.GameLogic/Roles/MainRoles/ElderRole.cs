@@ -33,6 +33,9 @@ internal sealed class ElderRole : RoleHookListener, IDeclaredRoleWorkflow
 	private static readonly RolePowerDefinition ResistancePower = new(
 		new RolePowerIdentifier("elder-werewolf-attack-resistance"),
 		RolePowerCategory.Reactive);
+	private static readonly ActorBorrowedRolePowerSpec BorrowedResistanceSpec = new(
+		MainRoleType.Elder,
+		ResistancePower);
 
 	private static readonly RolePowerDefinition SuppressionPower = new(
 		new RolePowerIdentifier("elder-village-vote-suppression"),
@@ -135,8 +138,13 @@ internal sealed class ElderRole : RoleHookListener, IDeclaredRoleWorkflow
 			return false;
 		}
 
+		var borrowedUse = allowBorrowedActor &&
+			attackedPlayer.State.CurrentRole == MainRoleType.Actor
+				? ActorBorrowedRolePowers.ResolveActive(
+					session,
+					BorrowedResistanceSpec)
+				: null;
 		RolePowerInstance powerInstance;
-		var isBorrowed = false;
 		if (attackedPlayer.State.MainRole == MainRoleType.Elder &&
 			!attackedPlayer.State.HasStatusEffect(
 				StatusEffectTypes.ElderProtectionLost))
@@ -149,19 +157,10 @@ internal sealed class ElderRole : RoleHookListener, IDeclaredRoleWorkflow
 		}
 		else if (allowBorrowedActor &&
 			attackedPlayer.State.CurrentRole == MainRoleType.Actor &&
-			session.GetModeratorActiveActorBorrowedRolePowerActivation() is
-			{
-				ActingPlayerId: var actingPlayerId,
-				SourceRole: MainRoleType.Elder
-			} &&
-			actingPlayerId == attackedPlayer.Id)
+			borrowedUse is not null &&
+			borrowedUse.Actor.Id == attackedPlayer.Id)
 		{
-			powerInstance = RolePowerInstance.CreateBorrowed(
-				session,
-				attackedPlayer,
-				MainRoleType.Elder,
-				ResistancePower);
-			isBorrowed = true;
+			powerInstance = borrowedUse.PowerInstance;
 		}
 		else
 		{
@@ -169,16 +168,18 @@ internal sealed class ElderRole : RoleHookListener, IDeclaredRoleWorkflow
 			return false;
 		}
 
-		var identity = new RolePowerInstanceIdentity(
-			attackedPlayer.Id,
-			MainRoleType.Elder,
-			ResistancePower.Identifier.Value,
-			powerInstance.Id,
-			powerInstance.Origin);
-		var latestBorrowedResistance = isBorrowed
-			? session.GetActorBorrowedElderResistanceCommits()
-				.Where(commit => commit.PowerIdentity == identity)
-				.MaxBy(commit => commit.PublicMarkerLogIndex)
+		var identity = borrowedUse?.PowerIdentity ??
+			new RolePowerInstanceIdentity(
+				attackedPlayer.Id,
+				MainRoleType.Elder,
+				ResistancePower.Identifier.Value,
+				powerInstance.Id,
+				powerInstance.Origin);
+		var latestBorrowedResistance = borrowedUse is not null
+			? GameSessionQueries
+				.GetLatestActorBorrowedElderResistanceForActiveUse(
+					session,
+					borrowedUse)
 			: null;
 		if (latestBorrowedResistance is
 			{ RestoringWitchSaveLogIndex: null })
@@ -187,17 +188,23 @@ internal sealed class ElderRole : RoleHookListener, IDeclaredRoleWorkflow
 			return false;
 		}
 
-		if (!EvaluatePower(
+		var isAvailable = borrowedUse is not null
+			? _availabilityGateway.Evaluate(borrowedUse.CreateAttempt())
+				.AvailabilityResult.IsAvailable
+			: EvaluatePower(
 				session,
 				attackedPlayer,
 				ResistancePower,
-				powerInstance))
+				powerInstance);
+		if (!isAvailable)
 		{
 			execution = default;
 			return false;
 		}
 
-		execution = new ElderResistanceExecution(identity, isBorrowed);
+		execution = new ElderResistanceExecution(
+			identity,
+			borrowedUse is not null);
 		return true;
 	}
 
@@ -209,7 +216,21 @@ internal sealed class ElderRole : RoleHookListener, IDeclaredRoleWorkflow
 		int? restoringWitchSaveLogIndex)
 	{
 		var exclusiveUpperLogIndex = session.GameHistoryLog.Count();
+		var borrowedUse = ActorBorrowedRolePowers.ResolveActive(
+			session,
+			BorrowedResistanceSpec);
+		var latestBorrowedResistance = borrowedUse is null
+			? null
+			: GameSessionQueries
+				.GetLatestActorBorrowedElderResistanceForActiveUse(
+					session,
+					borrowedUse);
 		if (!execution.IsBorrowed ||
+			borrowedUse is null ||
+			borrowedUse.PowerIdentity != execution.PowerIdentity ||
+			borrowedUse.Actor.Id != targetPlayerId ||
+			latestBorrowedResistance is
+				{ RestoringWitchSaveLogIndex: null } ||
 			!GameSessionQueries.IsQualifyingActorBorrowedElderResistanceTrigger(
 				session,
 				triggeringNightActionLogIndex,
@@ -229,7 +250,7 @@ internal sealed class ElderRole : RoleHookListener, IDeclaredRoleWorkflow
 		}
 
 		session.CommitActorBorrowedElderResistance(
-			execution.PowerIdentity,
+			borrowedUse.PowerIdentity,
 			targetPlayerId,
 			triggeringNightActionLogIndex,
 			restoringWitchSaveLogIndex);
