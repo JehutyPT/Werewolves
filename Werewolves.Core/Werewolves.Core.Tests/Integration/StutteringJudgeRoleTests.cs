@@ -131,7 +131,7 @@ public sealed class StutteringJudgeRoleTests : DiagnosticTestBase
 					identification.CreateResponse([judge.Id])));
 		var firstService = new GameService();
 		var gameId = firstService.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 		var recoveredSetup = InstructionAssert.ExpectType<ConfirmationInstruction>(
 			firstService.GetCurrentInstruction(gameId));
 		recoveredSetup.InstructionId.Should().Be(setup.InstructionId);
@@ -148,7 +148,8 @@ public sealed class StutteringJudgeRoleTests : DiagnosticTestBase
 			.Should().ContainSingle(entry => entry.JudgePlayerId == judge.Id);
 
 		var secondService = new GameService();
-		var secondId = secondService.RehydrateSession(firstRecovered.Serialize());
+		var secondId = secondService.RehydrateSession(
+			firstService.SerializeSession(gameId));
 		var recoveredWerewolfObservation =
 			InstructionAssert.ExpectType<SelectPlayersInstruction>(
 				secondService.GetCurrentInstruction(secondId));
@@ -418,7 +419,7 @@ public sealed class StutteringJudgeRoleTests : DiagnosticTestBase
 		var signal = ReachSignalObservation(builder);
 		var service = new GameService();
 		var gameId = service.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 		var recovered = InstructionAssert.ExpectType<SelectOptionsInstruction>(
 			service.GetCurrentInstruction(gameId));
 
@@ -451,7 +452,7 @@ public sealed class StutteringJudgeRoleTests : DiagnosticTestBase
 					StutteringJudgeSignalOptionIds.DidNotOccur)));
 		var service = new GameService();
 		var gameId = service.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 		var recovered = InstructionAssert.ExpectType<SelectPlayersInstruction>(
 			service.GetCurrentInstruction(gameId));
 
@@ -484,7 +485,7 @@ public sealed class StutteringJudgeRoleTests : DiagnosticTestBase
 					StutteringJudgeSignalOptionIds.Occurred)));
 		var service = new GameService();
 		var gameId = service.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 		var recovered = InstructionAssert.ExpectType<SelectPlayersInstruction>(
 			service.GetCurrentInstruction(gameId));
 
@@ -554,7 +555,7 @@ public sealed class StutteringJudgeRoleTests : DiagnosticTestBase
 
 		foreach (var invalidCase in cases)
 		{
-			var before = builder.GetGameState()!.Serialize();
+			var before = builder.SerializeSession();
 			var beforeLogs = builder.GetGameState()!.GameHistoryLog.ToArray();
 
 			var act = () => builder.Process(invalidCase.Response);
@@ -563,7 +564,7 @@ public sealed class StutteringJudgeRoleTests : DiagnosticTestBase
 			builder.GetCurrentInstruction()!.InstructionId.Should().Be(
 				signal.InstructionId,
 				invalidCase.Name);
-			builder.GetGameState()!.Serialize().Should().Be(
+			builder.SerializeSession().Should().Be(
 				before,
 				invalidCase.Name);
 			builder.GetGameState()!.GameHistoryLog.Should().Equal(
@@ -583,7 +584,7 @@ public sealed class StutteringJudgeRoleTests : DiagnosticTestBase
 		var result =
 			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
 				builder.Process(staleResponse));
-		var before = builder.GetGameState()!.Serialize();
+		var before = builder.SerializeSession();
 		var beforeLogs = builder.GetGameState()!.GameHistoryLog.ToArray();
 
 		var act = () => builder.Process(staleResponse);
@@ -591,7 +592,7 @@ public sealed class StutteringJudgeRoleTests : DiagnosticTestBase
 		act.Should().Throw<InvalidOperationException>();
 		builder.GetCurrentInstruction()!.InstructionId.Should().Be(
 			result.InstructionId);
-		builder.GetGameState()!.Serialize().Should().Be(before);
+		builder.SerializeSession().Should().Be(before);
 		builder.GetGameState()!.GameHistoryLog.Should().Equal(beforeLogs);
 		builder.GetGameState()!.GameHistoryLog
 			.OfType<OneUseRolePowerDayActionCommittedLogEntry>()
@@ -607,7 +608,7 @@ public sealed class StutteringJudgeRoleTests : DiagnosticTestBase
 		var signal = ReachSignalObservation(builder);
 		var response = signal.CreateResponse(
 			StutteringJudgeSignalOptionIds.Occurred);
-		var before = builder.GetGameState()!.Serialize();
+		var before = builder.SerializeSession();
 		var beforeLogs = builder.GetGameState()!.GameHistoryLog.ToArray();
 
 		var act = () => builder.Process(response);
@@ -615,7 +616,7 @@ public sealed class StutteringJudgeRoleTests : DiagnosticTestBase
 		act.Should().Throw<InvalidOperationException>();
 		builder.GetCurrentInstruction()!.InstructionId.Should().Be(
 			signal.InstructionId);
-		builder.GetGameState()!.Serialize().Should().Be(before);
+		builder.SerializeSession().Should().Be(before);
 		builder.GetGameState()!.GameHistoryLog.Should().Equal(beforeLogs);
 		MarkTestCompleted();
 	}
@@ -977,7 +978,7 @@ public sealed class StutteringJudgeRoleTests : DiagnosticTestBase
 
 		var recoveredService = new GameService();
 		var recoveredGameId = recoveredService.RehydrateSession(
-			settledSession.Serialize());
+			builder.SerializeSession());
 		var recoveredAnnouncement =
 			InstructionAssert.ExpectType<ConfirmationInstruction>(
 				recoveredService.GetCurrentInstruction(recoveredGameId));
@@ -1022,7 +1023,7 @@ public sealed class StutteringJudgeRoleTests : DiagnosticTestBase
 		var (builder, _, _, _) = CreateGameAtFirstDay();
 		CommitConsecutiveVoteBeforeResult(builder);
 		var payload = RecoveryPayloadTestDriver
-			.Parse(builder.GetGameState()!.Serialize())
+			.Parse(builder.SerializeSession())
 			.RewriteLatestStutteringJudgeAction(DayPowerType.Unknown)
 			.Serialize();
 		var service = new GameService();
@@ -1040,7 +1041,7 @@ public sealed class StutteringJudgeRoleTests : DiagnosticTestBase
 		var (builder, _, _, _) = CreateGameAtFirstDay();
 		CommitConsecutiveVoteBeforeResult(builder);
 		var payload = RecoveryPayloadTestDriver
-			.Parse(builder.GetGameState()!.Serialize())
+			.Parse(builder.SerializeSession())
 			.TargetLatestStutteringJudgeAction()
 			.Serialize();
 		var service = new GameService();
@@ -1058,7 +1059,7 @@ public sealed class StutteringJudgeRoleTests : DiagnosticTestBase
 		var (builder, _, _, _) = CreateGameAtFirstDay();
 		CommitConsecutiveVoteBeforeResult(builder);
 		var payload = RecoveryPayloadTestDriver
-			.Parse(builder.GetGameState()!.Serialize())
+			.Parse(builder.SerializeSession())
 			.AddCrossTypeDuplicateOfStutteringJudgeResource()
 			.Serialize();
 		var service = new GameService();

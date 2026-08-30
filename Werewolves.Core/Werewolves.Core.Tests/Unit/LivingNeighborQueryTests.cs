@@ -119,7 +119,7 @@ public sealed class LivingNeighborQueryTests
 		var freshService = new GameService();
 
 		var recoveredGameId =
-			freshService.RehydrateSession(session.Serialize());
+			freshService.RehydrateSession(builder.SerializeSession());
 		var recovered = freshService.GetGameStateView(recoveredGameId)!;
 		var actual = GameSessionQueries.GetDirectionalLivingNeighbors(
 			recovered,

@@ -71,7 +71,7 @@ public sealed class DevotedServantRoleTests
 
 		var recoveredService = new GameService();
 		var recoveredId = recoveredService.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 		var recoveredWindow = recoveredService
 			.GetCurrentInstruction(recoveredId)
 			.Should().BeOfType<DevotedServantVoteWindowInstruction>().Subject;
@@ -163,7 +163,7 @@ public sealed class DevotedServantRoleTests
 
 		var recoveredService = new GameService();
 		var recoveredId = recoveredService.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 		var recoveredInstruction = recoveredService
 			.GetCurrentInstruction(recoveredId)
 			.Should().BeOfType<AssignRolesInstruction>().Subject;
@@ -700,7 +700,7 @@ public sealed class DevotedServantRoleTests
 
 		var recoveredService = new GameService();
 		var recoveredId = recoveredService.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 		var recovered = recoveredService.GetGameStateView(recoveredId)!;
 		var recoveredServant = recovered.GetPlayer(servant.Id);
 		var recoveredTarget = recovered.GetPlayer(voteTarget.Id);

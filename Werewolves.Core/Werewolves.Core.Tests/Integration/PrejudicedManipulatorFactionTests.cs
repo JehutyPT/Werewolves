@@ -265,7 +265,7 @@ public sealed class PrejudicedManipulatorFactionTests
 				MainRoleType.SimpleVillager
 			]));
 		var payload = JsonNode.Parse(
-			service.GetGameStateView(start.GameGuid)!.Serialize())!.AsObject();
+			service.SerializeSession(start.GameGuid))!.AsObject();
 		payload[nameof(GameSessionDto.FactionFactSchemaVersion)] = 1;
 
 		Action rehydrate = () =>

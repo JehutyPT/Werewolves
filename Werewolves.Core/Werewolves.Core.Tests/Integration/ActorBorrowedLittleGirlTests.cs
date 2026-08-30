@@ -323,7 +323,7 @@ public sealed class ActorBorrowedLittleGirlTests
 
 		victimSelection.Semantic.Should().Be(
 			ModeratorInstructionSemantic.SelectWerewolfVictim);
-		var recovered = new GameSession(session.Serialize());
+		var recovered = new GameSession(session.SerializeRecoverySnapshot());
 		recovered.GetOrCreateListener(
 			ListenerIdentifier.Listener(MainRoleType.SimpleWerewolf),
 			() => new SimpleWerewolfRole(
@@ -347,7 +347,8 @@ public sealed class ActorBorrowedLittleGirlTests
 		sleep.Semantic.Should().Be(ModeratorInstructionSemantic.PutRoleToSleep);
 		sleep.PrivateInstruction.Should().Be(GameStrings.LittleGirlClosingGuidance);
 		policy.ObservedAttempts.Should().ContainSingle();
-		var replayRecovered = new GameSession(recovered.Serialize());
+		var replayRecovered = new GameSession(
+			recovered.SerializeRecoverySnapshot());
 		replayRecovered.GetOrCreateListener(
 			ListenerIdentifier.Listener(MainRoleType.SimpleWerewolf),
 			() => new SimpleWerewolfRole(
@@ -435,7 +436,7 @@ public sealed class ActorBorrowedLittleGirlTests
 				SupportedRoleCatalog.Admissions).ModeratorInstruction
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
 
-		var recovered = new GameSession(session.Serialize());
+		var recovered = new GameSession(session.SerializeRecoverySnapshot());
 		recovered.GetOrCreateListener(
 			ListenerIdentifier.Listener(MainRoleType.SimpleWerewolf),
 			() => new SimpleWerewolfRole(

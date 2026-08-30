@@ -292,7 +292,8 @@ public sealed class ActorRoleTests
 			.Should().NotContain(entry => entry.Role == MainRoleType.Seer);
 		session.GetPlayerState(actorId).CurrentRole.Should().Be(MainRoleType.Actor);
 
-		var recovered = RecoveryPayloadTestDriver.Parse(session.Serialize())
+		var recovered = RecoveryPayloadTestDriver.Parse(
+				session.SerializeRecoverySnapshot())
 			.RehydrateGameSession();
 		var recoveredFeedback = RecoveryPayloadTestDriver.Capture(recovered)
 			.PendingInstruction
@@ -403,7 +404,8 @@ public sealed class ActorRoleTests
 		sleep.Semantic.Should().Be(ModeratorInstructionSemantic.PutRoleToSleep);
 		sleep.InstructionId.Should().NotBe(feedback.InstructionId);
 		var historyCountAtSleep = session.GameHistoryLog.Count();
-		var recovered = RecoveryPayloadTestDriver.Parse(session.Serialize())
+		var recovered = RecoveryPayloadTestDriver.Parse(
+				session.SerializeRecoverySnapshot())
 			.RehydrateGameSession();
 		var recoveredSleep = RecoveryPayloadTestDriver.Capture(recovered)
 			.PendingInstruction

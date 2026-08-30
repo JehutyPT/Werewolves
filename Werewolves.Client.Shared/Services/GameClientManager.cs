@@ -436,7 +436,7 @@ public sealed class GameClientManager
 			try
 			{
 				_saveStore.Save(LocalRecoveryPayloadCodec.SerializeActiveGame(
-					startedSession.Serialize()));
+					_gameService.SerializeSession(instruction.GameGuid)));
 			}
 			catch
 			{
@@ -452,7 +452,7 @@ public sealed class GameClientManager
 			?? instruction;
 		if (lobby is null)
 		{
-			SaveCurrentSession();
+			SaveCurrentSession(instruction.GameGuid);
 		}
 		_activeSessionLobbyPayload = new StagedLobbyRecoveryPayload(
 			config.PlayerRoster,
@@ -556,7 +556,7 @@ public sealed class GameClientManager
 			}
 			else
 			{
-				SaveCurrentSession();
+				SaveCurrentSession(gameId);
 			}
 
 			QueueAudioReconciliation();
@@ -598,7 +598,7 @@ public sealed class GameClientManager
 		instruction is ConfirmationInstruction &&
 		instruction.PublicAnnouncement == GameStrings.DebateStartsPrompt;
 
-	private void SaveCurrentSession()
+	private void SaveCurrentSession(Guid gameId)
 	{
 		if (CurrentSession is null)
 		{
@@ -608,7 +608,7 @@ public sealed class GameClientManager
 		try
 		{
 			_saveStore.Save(LocalRecoveryPayloadCodec.SerializeActiveGame(
-				CurrentSession.Serialize()));
+				_gameService.SerializeSession(gameId)));
 		}
 		catch (Exception)
 		{

@@ -41,10 +41,6 @@ public interface IGameSession
 	public ActorBorrowedRolePowerActivation?
 		GetModeratorActiveActorBorrowedRolePowerActivation() => null;
 
-    /// <summary>
-    /// Serializes the latest stable main-phase recovery snapshot for Rehydration.
-    /// </summary>
-	public string Serialize();
 }
 
 /// <summary>
@@ -356,14 +352,10 @@ internal class GameSession : IGameSession
 		GetModeratorActiveActorBorrowedRolePowerActivation() =>
 		_gameSessionKernel.GetActiveActorBorrowedRolePowerActivation();
     
-    /// <summary>
-    /// To support GameSession rehydration
-    /// </summary>
-    /// <returns></returns>
-    public string Serialize()
-    {
-	    return _gameSessionKernel.Serialize();
-    }
+	internal string SerializeRecoverySnapshot()
+	{
+		return _gameSessionKernel.Serialize();
+	}
 
     internal string SerializeCurrentStateRecoveryCandidate() =>
         _gameSessionKernel.SerializeCurrentStateRecoveryCandidate();

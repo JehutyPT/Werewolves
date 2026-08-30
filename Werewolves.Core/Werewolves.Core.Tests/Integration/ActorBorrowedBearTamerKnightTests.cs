@@ -92,7 +92,8 @@ public sealed class ActorBorrowedBearTamerKnightTests
 			fixture.VictimId,
 			fixture.Admissions);
 		var service = new GameService();
-		var gameId = service.RehydrateSession(fixture.Session.Serialize());
+		var gameId = service.RehydrateSession(
+			fixture.Session.SerializeRecoverySnapshot());
 		var recoveredGrowl = service.GetCurrentInstruction(gameId)
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 
@@ -106,14 +107,14 @@ public sealed class ActorBorrowedBearTamerKnightTests
 		recoveredGrowl.AffectedPlayerIds.Should().BeNull();
 		recoveredGrowl.SoundEffects.Should().Equal(
 			SoundEffectsEnum.BearGrowl);
-		var beforeStaleResponse = service.GetGameStateView(gameId)!.Serialize();
+		var beforeStaleResponse = service.SerializeSession(gameId);
 		Action stale = () => service.ProcessInstruction(
 			gameId,
 			fixture.Start.CreateResponse());
 
 		stale.Should().Throw<InvalidOperationException>()
 			.WithMessage("*pending Moderator Instruction*");
-		service.GetGameStateView(gameId)!.Serialize()
+		service.SerializeSession(gameId)
 			.Should().Be(beforeStaleResponse);
 
 		var terminal = service.ProcessInstruction(
@@ -172,7 +173,7 @@ public sealed class ActorBorrowedBearTamerKnightTests
 
 		var recoveryService = new GameService();
 		var recoveredGameId = recoveryService.RehydrateSession(
-			committed.Serialize());
+			service.SerializeSession(gameId));
 		var recoveredTerminal = recoveryService
 			.GetCurrentInstruction(recoveredGameId)
 			.Should().BeOfType<FinishedGameConfirmationInstruction>().Subject;
@@ -186,7 +187,7 @@ public sealed class ActorBorrowedBearTamerKnightTests
 			.Should().ContainSingle();
 		recovered.GameHistoryLog.OfType<BearTamerGrowlOccurredLogEntry>()
 			.Should().ContainSingle();
-		var beforeReplay = recovered.Serialize();
+		var beforeReplay = recoveryService.SerializeSession(recoveredGameId);
 		var replay = recoveryService.ProcessInstruction(
 			recoveredGameId,
 			recoveredGrowl.CreateResponse());
@@ -194,7 +195,7 @@ public sealed class ActorBorrowedBearTamerKnightTests
 		replay.IsSuccess.Should().BeFalse();
 		replay.ModeratorInstruction.Should().BeEquivalentTo(
 			recoveredTerminal);
-		recovered.Serialize().Should().Be(beforeReplay);
+		recoveryService.SerializeSession(recoveredGameId).Should().Be(beforeReplay);
 	}
 
 	[Fact]
@@ -603,7 +604,7 @@ public sealed class ActorBorrowedBearTamerKnightTests
 
 		var recoveryService = new GameService();
 		var recoveredGameId = recoveryService.RehydrateSession(
-			fixture.Session.Serialize());
+			fixture.Session.SerializeRecoverySnapshot());
 		var recovered = (GameSession)recoveryService
 			.GetGameStateView(recoveredGameId)!;
 		recovered.GetActorBorrowedKnightRustySwordScheduleCommits()
@@ -728,7 +729,8 @@ public sealed class ActorBorrowedBearTamerKnightTests
 				entry.EffectType == StatusEffectTypes.RustySwordDisease);
 
 		var finalService = new GameService();
-		var finalGameId = finalService.RehydrateSession(recovered.Serialize());
+		var finalGameId = finalService.RehydrateSession(
+			recovered.SerializeRecoverySnapshot());
 		var final = (GameSession)finalService.GetGameStateView(finalGameId)!;
 		final.GameHistoryLog.OfType<NightActionLogEntry>()
 			.Should().NotContain(entry =>
@@ -890,7 +892,7 @@ public sealed class ActorBorrowedBearTamerKnightTests
 
 		var recoveryService = new GameService();
 		var recoveredGameId = recoveryService.RehydrateSession(
-			fixture.Session.Serialize());
+			fixture.Session.SerializeRecoverySnapshot());
 		var recovered = (GameSession)recoveryService
 			.GetGameStateView(recoveredGameId)!;
 		recovered.EliminatePlayer(

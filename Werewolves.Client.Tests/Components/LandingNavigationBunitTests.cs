@@ -8,6 +8,7 @@ using Werewolves.Client.Services;
 using Werewolves.Client.Testing;
 using Werewolves.Client.Tests.Helpers;
 using Werewolves.Core.GameLogic.Models;
+using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Models.Instructions;
@@ -542,9 +543,10 @@ public sealed class LandingNavigationBunitTests
 		context.Services.AddSingleton<IRecentSetupStore>(recentStore);
 		StartRecoverableSession(context);
 		var manager = context.Services.GetRequiredService<GameClientManager>();
+		var gameService = context.Services.GetRequiredService<GameService>();
 		var lobby = context.Services.GetRequiredService<LobbySetupState>();
-		var activeGameIdBefore = manager.ActiveGameId;
-		var serializedSessionBefore = manager.CurrentSession!.Serialize();
+		var activeGameIdBefore = manager.ActiveGameId!.Value;
+		var serializedSessionBefore = gameService.SerializeSession(activeGameIdBefore);
 		var rosterBefore = lobby.PlayerRoster.ToArray();
 		var recoveryPayloadBefore = recoveryStore.Load();
 		recoveryStore.ThrowOnClear = true;
@@ -564,7 +566,7 @@ public sealed class LandingNavigationBunitTests
 			.Count(row => row.TextContent.Contains("🔮", StringComparison.Ordinal))
 			.Should().Be(1);
 		manager.ActiveGameId.Should().Be(activeGameIdBefore);
-		manager.CurrentSession!.Serialize().Should().Be(serializedSessionBefore);
+		gameService.SerializeSession(activeGameIdBefore).Should().Be(serializedSessionBefore);
 		lobby.PlayerRoster.Should().Equal(rosterBefore);
 		recoveryStore.Load().Should().Be(recoveryPayloadBefore);
 	}

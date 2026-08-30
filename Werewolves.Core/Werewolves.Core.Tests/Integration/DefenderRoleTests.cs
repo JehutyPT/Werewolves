@@ -273,7 +273,7 @@ public sealed class DefenderRoleTests : DiagnosticTestBase
 		var freshService = new GameService();
 
 		var recoveredGameId = freshService.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 		var recoveredTarget =
 			InstructionAssert.ExpectType<SelectPlayersInstruction>(
 				freshService.GetCurrentInstruction(recoveredGameId));
@@ -359,7 +359,7 @@ public sealed class DefenderRoleTests : DiagnosticTestBase
 
 		var firstRecoveredService = new GameService();
 		var firstRecoveredId = firstRecoveredService.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 		var firstRecoveredSleep =
 			InstructionAssert.ExpectType<ConfirmationInstruction>(
 				firstRecoveredService.GetCurrentInstruction(firstRecoveredId));
@@ -371,7 +371,7 @@ public sealed class DefenderRoleTests : DiagnosticTestBase
 
 		var secondRecoveredService = new GameService();
 		var secondRecoveredId = secondRecoveredService.RehydrateSession(
-			firstRecoveredService.GetGameStateView(firstRecoveredId)!.Serialize());
+			firstRecoveredService.SerializeSession(firstRecoveredId));
 		var secondRecoveredSleep =
 			InstructionAssert.ExpectType<ConfirmationInstruction>(
 				secondRecoveredService.GetCurrentInstruction(secondRecoveredId));

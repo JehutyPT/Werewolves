@@ -50,7 +50,7 @@ public sealed class PendingInstructionRecoveryTests
             .Should().BeOfType<ConfirmationInstruction>().Subject;
         var recoveredService = new GameService();
         var recoveredGameId = recoveredService.RehydrateSession(
-            builder.GetGameState()!.Serialize());
+            builder.SerializeSession());
         var recoveredSession = recoveredService.GetGameStateView(recoveredGameId)!;
         var playersByName = recoveredSession.GetPlayers()
             .ToDictionary(player => player.Name);
@@ -205,10 +205,10 @@ public sealed class PendingInstructionRecoveryTests
 
         var firstService = new GameService();
         var firstGameId = firstService.RehydrateSession(
-            builder.GetGameState()!.Serialize());
-        var firstRecovered = firstService.GetGameStateView(firstGameId)!;
+            builder.SerializeSession());
         var secondService = new GameService();
-        var secondGameId = secondService.RehydrateSession(firstRecovered.Serialize());
+        var secondGameId = secondService.RehydrateSession(
+            firstService.SerializeSession(firstGameId));
         var secondRecovered = secondService.GetGameStateView(secondGameId)!;
         var secondNext = secondService.GetCurrentInstruction(secondGameId)
             .Should().BeOfType<SelectPlayersInstruction>().Subject;
@@ -309,10 +309,10 @@ public sealed class PendingInstructionRecoveryTests
 
         var firstService = new GameService();
         var firstGameId = firstService.RehydrateSession(
-            builder.GetGameState()!.Serialize());
-        var firstRecovered = firstService.GetGameStateView(firstGameId)!;
+            builder.SerializeSession());
         var secondService = new GameService();
-        var secondGameId = secondService.RehydrateSession(firstRecovered.Serialize());
+        var secondGameId = secondService.RehydrateSession(
+            firstService.SerializeSession(firstGameId));
         var secondRecovered = secondService.GetGameStateView(secondGameId)!;
         var secondNext = secondService.GetCurrentInstruction(secondGameId)
             .Should().BeOfType<SelectPlayersInstruction>().Subject;
@@ -561,10 +561,10 @@ public sealed class PendingInstructionRecoveryTests
 
         var firstService = new GameService();
         var firstGameId = firstService.RehydrateSession(
-            builder.GetGameState()!.Serialize());
-        var firstRecovered = firstService.GetGameStateView(firstGameId)!;
+            builder.SerializeSession());
         var secondService = new GameService();
-        var secondGameId = secondService.RehydrateSession(firstRecovered.Serialize());
+        var secondGameId = secondService.RehydrateSession(
+            firstService.SerializeSession(firstGameId));
         var secondRecovered = secondService.GetGameStateView(secondGameId)!;
         var recoveredSleep = secondService.GetCurrentInstruction(secondGameId)
             .Should().BeOfType<ConfirmationInstruction>().Subject;
@@ -695,10 +695,10 @@ public sealed class PendingInstructionRecoveryTests
 
         var firstService = new GameService();
         var firstGameId = firstService.RehydrateSession(
-            builder.GetGameState()!.Serialize());
-        var firstRecovered = firstService.GetGameStateView(firstGameId)!;
+            builder.SerializeSession());
         var secondService = new GameService();
-        var secondGameId = secondService.RehydrateSession(firstRecovered.Serialize());
+        var secondGameId = secondService.RehydrateSession(
+            firstService.SerializeSession(firstGameId));
         var secondRecovered = secondService.GetGameStateView(secondGameId)!;
         var secondNext = secondService.GetCurrentInstruction(secondGameId)
             .Should().BeOfType<SelectPlayersInstruction>().Subject;
@@ -748,7 +748,7 @@ public sealed class PendingInstructionRecoveryTests
 
         var recoveredService = new GameService();
         var recoveredGameId = recoveredService.RehydrateSession(
-            fixture.Service.GetGameStateView(fixture.GameId)!.Serialize());
+            fixture.Service.SerializeSession(fixture.GameId));
         var recovered = recoveredService.GetGameStateView(recoveredGameId)!;
         var recoveredSleep = recoveredService.GetCurrentInstruction(recoveredGameId)
             .Should().BeOfType<ConfirmationInstruction>().Subject;
@@ -867,7 +867,7 @@ public sealed class PendingInstructionRecoveryTests
 
         var recoveredService = new GameService();
         var recoveredGameId = recoveredService.RehydrateSession(
-            service.GetGameStateView(gameId)!.Serialize());
+            service.SerializeSession(gameId));
         var recovered = recoveredService.GetGameStateView(recoveredGameId)!;
         var recoveredNightStart = recoveredService
             .GetCurrentInstruction(recoveredGameId)
@@ -930,7 +930,7 @@ public sealed class PendingInstructionRecoveryTests
         builder.Process(identification.CreateResponse([werewolf.Id]));
         var gameId = builder.GetGameState()!.Id;
         var payload = RecoveryPayloadTestDriver
-            .Parse(builder.GetGameState()!.Serialize())
+            .Parse(builder.SerializeSession())
             .RewriteAcceptedObservationCursorVersion(int.MaxValue)
             .Serialize();
         var service = new GameService();
@@ -956,7 +956,7 @@ public sealed class PendingInstructionRecoveryTests
             .Should().BeOfType<SelectPlayersInstruction>().Subject;
         builder.Process(identification.CreateResponse([werewolf.Id]));
         var payload = RecoveryPayloadTestDriver
-            .Parse(builder.GetGameState()!.Serialize())
+            .Parse(builder.SerializeSession())
             .RewritePendingInstructionSemanticCheckpoint(
                 ModeratorInstructionSemantic.SelectSeerTarget)
             .Serialize();
@@ -982,7 +982,7 @@ public sealed class PendingInstructionRecoveryTests
             .Should().BeOfType<SelectPlayersInstruction>().Subject;
         builder.Process(observation.CreateResponse([observedAgent.Id]));
         var payload = RecoveryPayloadTestDriver
-            .Parse(builder.GetGameState()!.Serialize())
+            .Parse(builder.SerializeSession())
             .RewriteLatestScheduledObservationSourceIdentifier(
                 "foreign-scheduled-observation")
             .Serialize();
@@ -1009,7 +1009,7 @@ public sealed class PendingInstructionRecoveryTests
             .Should().BeOfType<SelectPlayersInstruction>().Subject;
         builder.Process(identification.CreateResponse([werewolf.Id]));
         var payload = RecoveryPayloadTestDriver
-            .Parse(builder.GetGameState()!.Serialize())
+            .Parse(builder.SerializeSession())
             .RewriteSubPhase(DawnSubPhases.CalculateVictims)
             .Serialize();
         var service = new GameService();
@@ -1034,7 +1034,7 @@ public sealed class PendingInstructionRecoveryTests
             .Should().BeOfType<SelectPlayersInstruction>().Subject;
         builder.Process(identification.CreateResponse([werewolf.Id]));
         var payload = RecoveryPayloadTestDriver
-            .Parse(builder.GetGameState()!.Serialize())
+            .Parse(builder.SerializeSession())
             .RewriteCurrentPhase(GamePhase.Day)
             .Serialize();
         var service = new GameService();
@@ -1057,7 +1057,7 @@ public sealed class PendingInstructionRecoveryTests
 
         var originalSession = scenario.Builder.GetGameState()!;
         var originalNextInstruction = scenario.Builder.GetCurrentInstruction()!;
-        var serializedSession = originalSession.Serialize();
+        var serializedSession = scenario.Builder.SerializeSession();
         var freshService = new GameService();
 
         var rehydratedGameId = freshService.RehydrateSession(serializedSession);
@@ -1112,7 +1112,16 @@ public sealed class PendingInstructionRecoveryTests
             .OfType<VoteOutcomeReportedLogEntry>()
             .Should().ContainSingle();
 
-        var interruptedPayload = scenario.Builder.GetGameState()!.Serialize();
+        var liveInstructionId = scenario.Builder.GetCurrentInstruction()!.InstructionId;
+        var interruptedPayload = scenario.Builder.SerializeSession();
+        using (new AssertionScope())
+        {
+            scenario.Builder.GetCurrentInstruction()!.InstructionId.Should()
+                .Be(liveInstructionId);
+            scenario.Builder.GetGameState()!.GameHistoryLog
+                .OfType<VoteOutcomeReportedLogEntry>()
+                .Should().ContainSingle();
+        }
         var replayService = new GameService();
         var replayGameId = replayService.RehydrateSession(interruptedPayload);
         var replaySession = replayService.GetGameStateView(replayGameId)!;
@@ -1223,7 +1232,7 @@ public sealed class PendingInstructionRecoveryTests
         var sleep = builder.Process(modelSelection.CreateResponse([players[3].Id]))
             .ModeratorInstruction.Should().BeOfType<ConfirmationInstruction>().Subject;
 
-        return (session.Serialize(), session.Id, players[3].Id, sleep);
+        return (builder.SerializeSession(), session.Id, players[3].Id, sleep);
     }
 
     private static void AssertResponseReplayIsRejectedWithoutPublicMutation(

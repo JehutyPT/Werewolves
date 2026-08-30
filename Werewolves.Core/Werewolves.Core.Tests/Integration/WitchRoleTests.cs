@@ -538,7 +538,7 @@ public sealed class WitchRoleTests : DiagnosticTestBase
 		var service = new GameService();
 
 		var gameId = service.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 
 		var reconstructed = service.GetGameStateView(gameId)!.GameHistoryLog
 			.OfType<OneUseRolePowerCommittedLogEntry>()
@@ -600,7 +600,7 @@ public sealed class WitchRoleTests : DiagnosticTestBase
 			ModeratorInstructionSemantic.SelectWitchPoisonTarget);
 		var service = new GameService();
 		var gameId = service.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 		var committedHealingIdentities = service.GetGameStateView(gameId)!
 			.GameHistoryLog
 			.OfType<OneUseRolePowerCommittedLogEntry>()
@@ -628,7 +628,7 @@ public sealed class WitchRoleTests : DiagnosticTestBase
 		var service = new GameService();
 
 		var gameId = service.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 
 		var recoveredHealing = InstructionAssert.ExpectType<SelectPlayersInstruction>(
 			service.GetCurrentInstruction(gameId));
@@ -677,7 +677,7 @@ public sealed class WitchRoleTests : DiagnosticTestBase
 		var service = new GameService();
 
 		var gameId = service.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 
 		var recoveredPoison = InstructionAssert.ExpectType<SelectPlayersInstruction>(
 			service.GetCurrentInstruction(gameId));
@@ -727,7 +727,7 @@ public sealed class WitchRoleTests : DiagnosticTestBase
 		var service = new GameService();
 
 		var gameId = service.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 
 		var recoveredSleep = InstructionAssert.ExpectType<ConfirmationInstruction>(
 			service.GetCurrentInstruction(gameId));
@@ -761,7 +761,7 @@ public sealed class WitchRoleTests : DiagnosticTestBase
 		var (builder, players, healing) = StartWitchCall();
 		builder.Process(healing.CreateResponse([players[4].Id]));
 		var recoveryPayload = RecoveryPayloadTestDriver
-			.Parse(builder.GetGameState()!.Serialize())
+			.Parse(builder.SerializeSession())
 			.MismatchOneUseResource(Guid.NewGuid())
 			.Serialize();
 		var service = new GameService();
@@ -783,7 +783,7 @@ public sealed class WitchRoleTests : DiagnosticTestBase
 		var (builder, players, healing) = StartWitchCall();
 		builder.Process(healing.CreateResponse([players[4].Id]));
 		var payloadDriver = RecoveryPayloadTestDriver
-			.Parse(builder.GetGameState()!.Serialize());
+			.Parse(builder.SerializeSession());
 		switch (omittedDimension)
 		{
 			case OmittedPotionIdentityDimension.SourceRole:
@@ -814,7 +814,7 @@ public sealed class WitchRoleTests : DiagnosticTestBase
 		var (builder, players, healing) = StartWitchCall();
 		builder.Process(healing.CreateResponse([players[4].Id]));
 		var recoveryPayload = RecoveryPayloadTestDriver
-			.Parse(builder.GetGameState()!.Serialize())
+			.Parse(builder.SerializeSession())
 			.RewriteLatestOneUseAction(NightActionType.WitchKill)
 			.Serialize();
 		var service = new GameService();
@@ -833,7 +833,7 @@ public sealed class WitchRoleTests : DiagnosticTestBase
 		var (builder, players, healing) = StartWitchCall();
 		builder.Process(healing.CreateResponse([players[4].Id]));
 		var recoveryPayload = RecoveryPayloadTestDriver
-			.Parse(builder.GetGameState()!.Serialize())
+			.Parse(builder.SerializeSession())
 			.ReplacePendingInstructionWithConfirmation()
 			.Serialize();
 		var service = new GameService();

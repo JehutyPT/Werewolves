@@ -257,7 +257,7 @@ public sealed class ElderRoleTests : DiagnosticTestBase
 
 		var recoveredService = new GameService();
 		var recoveredGameId = recoveredService.RehydrateSession(
-			session.Serialize());
+			builder.SerializeSession());
 		var recoveredContinuation = recoveredService.GetCurrentInstruction(
 			recoveredGameId);
 		recoveredContinuation.Should().NotBeNull();

@@ -22,7 +22,7 @@ public sealed class BigBadWolfRecoveryTests
         var expectedTargetSelection = builder.Process(acceptedIdentification)
             .ModeratorInstruction.Should()
             .BeOfType<SelectPlayersInstruction>().Subject;
-        var serializedSession = builder.GetGameState()!.Serialize();
+        var serializedSession = builder.SerializeSession();
         var freshService = new GameService();
 
         var recoveredGameId =
@@ -95,7 +95,7 @@ public sealed class BigBadWolfRecoveryTests
         var expectedSleep = builder.Process(acceptedTarget)
             .ModeratorInstruction.Should()
             .BeOfType<ConfirmationInstruction>().Subject;
-        var serializedSession = builder.GetGameState()!.Serialize();
+        var serializedSession = builder.SerializeSession();
         var freshService = new GameService();
 
         var recoveredGameId =
@@ -160,7 +160,7 @@ public sealed class BigBadWolfRecoveryTests
             .ModeratorInstruction.Should()
             .BeOfType<ConfirmationInstruction>().Subject;
         var legacyPayload = RecoveryPayloadTestDriver
-            .Parse(builder.GetGameState()!.Serialize())
+            .Parse(builder.SerializeSession())
             .DowngradeLatestRecurringCommitToLegacyNightAction()
             .Serialize();
         var freshService = new GameService();
@@ -192,7 +192,7 @@ public sealed class BigBadWolfRecoveryTests
         var freshService = new GameService();
 
         var recoveredGameId = freshService.RehydrateSession(
-            builder.GetGameState()!.Serialize());
+            builder.SerializeSession());
         var recoveredSleep = freshService
             .GetCurrentInstruction(recoveredGameId)
             .Should().BeOfType<ConfirmationInstruction>().Subject;
@@ -229,7 +229,7 @@ public sealed class BigBadWolfRecoveryTests
                 targetSelection.CreateResponse([additionalVictimId]))
             .IsSuccess.Should().BeTrue();
         var tampered = RecoveryPayloadTestDriver
-            .Parse(builder.GetGameState()!.Serialize())
+            .Parse(builder.SerializeSession())
             .RetargetLatestRecurringNightActionAndCursor(
                 collectiveVictimId)
             .Serialize();
@@ -258,7 +258,7 @@ public sealed class BigBadWolfRecoveryTests
                 targetSelection.CreateResponse([additionalVictimId]))
             .IsSuccess.Should().BeTrue();
         var tampered = RecoveryPayloadTestDriver
-            .Parse(builder.GetGameState()!.Serialize())
+            .Parse(builder.SerializeSession())
             .RewriteRecurringCursorSourceRole(MainRoleType.Seer)
             .Serialize();
 
@@ -285,7 +285,7 @@ public sealed class BigBadWolfRecoveryTests
                 targetSelection.CreateResponse([additionalVictimId]))
             .IsSuccess.Should().BeTrue();
         var tampered = RecoveryPayloadTestDriver
-            .Parse(builder.GetGameState()!.Serialize())
+            .Parse(builder.SerializeSession())
             .RemoveDomainRecoveryCursor()
             .Serialize();
         var freshService = new GameService();
@@ -306,7 +306,7 @@ public sealed class BigBadWolfRecoveryTests
             .ModeratorInstruction.Should()
             .BeOfType<SelectPlayersInstruction>().Subject;
         var tampered = RecoveryPayloadTestDriver
-            .Parse(builder.GetGameState()!.Serialize())
+            .Parse(builder.SerializeSession())
             .RewritePendingPlayerSelectionSelectablePlayerIds(
                 targetSelection.SelectablePlayerIds.Skip(1))
             .Serialize();
@@ -382,7 +382,7 @@ public sealed class BigBadWolfRecoveryTests
         builder.CompleteDayPhaseWithTie().IsSuccess.Should().BeTrue();
         var freshService = new GameService();
         var recoveredGameId = freshService.RehydrateSession(
-            builder.GetGameState()!.Serialize());
+            builder.SerializeSession());
 
         var recoveredNightStart = freshService
             .GetCurrentInstruction(recoveredGameId)

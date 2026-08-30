@@ -211,7 +211,7 @@ public sealed class ActorBorrowedDefenderFoxTests
 		privateCommit.TargetPlayerId.Should().Be(actorId);
 		privateCommit.PublicMarkerLogIndex.Should().Be(logCountBeforeProtection);
 
-		var recovered = new GameSession(session.Serialize());
+		var recovered = new GameSession(session.SerializeRecoverySnapshot());
 		GameFlowManager.RestoreDurableContinuation(
 			recovered,
 			SupportedRoleCatalog.Admissions);
@@ -520,7 +520,7 @@ public sealed class ActorBorrowedDefenderFoxTests
 				nativeActorResource)
 			.Should().BeFalse();
 
-		var recovered = new GameSession(session.Serialize());
+		var recovered = new GameSession(session.SerializeRecoverySnapshot());
 		var recoveredPolicy = new RecordingPolicy();
 		var recoveredAdmissions = SupportedRoleCatalog.CreateAdmissions(
 			new RolePowerAvailabilityGateway(recoveredPolicy));
@@ -675,7 +675,7 @@ public sealed class ActorBorrowedDefenderFoxTests
 		session.GameHistoryLog.OfType<RoleIdentificationLogEntry>().Should()
 			.NotContain(entry => entry.Role == MainRoleType.Fox);
 
-		var recovered = new GameSession(session.Serialize());
+		var recovered = new GameSession(session.SerializeRecoverySnapshot());
 		var recoveredPolicy = new RecordingPolicy();
 		var recoveredAdmissions = SupportedRoleCatalog.CreateAdmissions(
 			new RolePowerAvailabilityGateway(recoveredPolicy));

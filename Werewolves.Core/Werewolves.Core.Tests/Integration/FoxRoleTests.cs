@@ -652,11 +652,11 @@ public sealed class FoxRoleTests : DiagnosticTestBase
         }
 
         var session = builder.GetGameState()!;
-        var before = session.Serialize();
+        var before = builder.SerializeSession();
         var process = () => builder.Process(response);
 
         process.Should().Throw<InvalidOperationException>();
-        session.Serialize().Should().Be(before);
+        builder.SerializeSession().Should().Be(before);
         var pending = builder.GetCurrentInstruction()
             .Should().BeOfType<SelectPlayersInstruction>().Subject;
         pending.InstructionId.Should().Be(selection.InstructionId);
@@ -763,7 +763,7 @@ public sealed class FoxRoleTests : DiagnosticTestBase
             new RecordingFoxAvailabilityPolicy(isAvailable: false);
         var recoveredService = new GameService(recoveredPolicy);
         var recoveredId = recoveredService.RehydrateSession(
-            builder.GetGameState()!.Serialize());
+            builder.SerializeSession());
         var recoveredWake =
             InstructionAssert.ExpectType<ConfirmationInstruction>(
                 recoveredService.GetCurrentInstruction(recoveredId));
@@ -826,7 +826,7 @@ public sealed class FoxRoleTests : DiagnosticTestBase
             new RecordingFoxAvailabilityPolicy(isAvailable: false);
         var recoveredService = new GameService(recoveredPolicy);
         var recoveredId = recoveredService.RehydrateSession(
-            builder.GetGameState()!.Serialize());
+            builder.SerializeSession());
         var recoveredSelection = ReplayFoxWakeToCenterSelection(
             recoveredService,
             recoveredId,
@@ -897,7 +897,7 @@ public sealed class FoxRoleTests : DiagnosticTestBase
             new RecordingFoxAvailabilityPolicy(isAvailable: false);
         var recoveredService = new GameService(recoveredPolicy);
         var recoveredId = recoveredService.RehydrateSession(
-            builder.GetGameState()!.Serialize());
+            builder.SerializeSession());
         var recoveredSelection = ReplayFoxWakeToCenterSelection(
             recoveredService,
             recoveredId,
@@ -986,7 +986,7 @@ public sealed class FoxRoleTests : DiagnosticTestBase
             new RecordingFoxAvailabilityPolicy(isAvailable: true);
         var recoveredService = new GameService(recoveredPolicy);
         var recoveredId = recoveredService.RehydrateSession(
-            builder.GetGameState()!.Serialize());
+            builder.SerializeSession());
         var recoveredFeedback =
             InstructionAssert.ExpectType<ConfirmationInstruction>(
                 recoveredService.GetCurrentInstruction(recoveredId));
@@ -1040,7 +1040,7 @@ public sealed class FoxRoleTests : DiagnosticTestBase
         var sleepTailService = new GameService(
             new RecordingFoxAvailabilityPolicy(isAvailable: true));
         var sleepTailId = sleepTailService.RehydrateSession(
-            recoveredSession.Serialize());
+            recoveredService.SerializeSession(recoveredId));
         var recoveredSleep =
             InstructionAssert.ExpectType<ConfirmationInstruction>(
                 sleepTailService.GetCurrentInstruction(sleepTailId));
@@ -1086,7 +1086,7 @@ public sealed class FoxRoleTests : DiagnosticTestBase
                 builder.Process(selection.CreateResponse([werewolf.Id])));
         var alternatePresentation = feedback.PrivateInstruction + " ";
         var payload = RecoveryPayloadTestDriver
-            .Parse(builder.GetGameState()!.Serialize())
+            .Parse(builder.SerializeSession())
             .RewritePendingConfirmationLocalizedText(
                 feedback.PublicAnnouncement,
                 alternatePresentation)
@@ -1159,7 +1159,7 @@ public sealed class FoxRoleTests : DiagnosticTestBase
 
 		var alternatePresentation = feedback.PrivateInstruction + " ";
 		var payload = RecoveryPayloadTestDriver
-			.Parse(builder.GetGameState()!.Serialize())
+			.Parse(builder.SerializeSession())
 			.RewritePendingConfirmationLocalizedText(
 				feedback.PublicAnnouncement,
 				alternatePresentation)
@@ -1188,7 +1188,7 @@ public sealed class FoxRoleTests : DiagnosticTestBase
 
 		var sleepTailService = new GameService();
 		var sleepTailId = sleepTailService.RehydrateSession(
-			recoveredService.GetGameStateView(recoveredId)!.Serialize());
+			recoveredService.SerializeSession(recoveredId));
 		var recoveredSleep = InstructionAssert
 			.ExpectType<ConfirmationInstruction>(
 				sleepTailService.GetCurrentInstruction(sleepTailId));
@@ -1242,7 +1242,7 @@ public sealed class FoxRoleTests : DiagnosticTestBase
 		InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
 			builder.Process(center.CreateResponse([werewolf.Id])));
 		var payload = RecoveryPayloadTestDriver
-			.Parse(builder.GetGameState()!.Serialize())
+			.Parse(builder.SerializeSession())
 			.MismatchOneUseResource(Guid.NewGuid())
 			.Serialize();
 
@@ -1378,7 +1378,7 @@ public sealed class FoxRoleTests : DiagnosticTestBase
 		InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
 			builder.Process(selection.CreateResponse([werewolf.Id])));
 		var payload = RecoveryPayloadTestDriver
-			.Parse(builder.GetGameState()!.Serialize())
+			.Parse(builder.SerializeSession())
 			.RemoveDomainRecoveryCursor()
 			.Serialize();
 

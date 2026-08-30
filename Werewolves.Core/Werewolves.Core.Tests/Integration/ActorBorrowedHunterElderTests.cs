@@ -36,7 +36,8 @@ public sealed class ActorBorrowedHunterElderTests
 	{
 		var fixture = CreateElderActorSession(preActivate: false);
 		var service = new GameService();
-		var gameId = service.RehydrateSession(fixture.Session.Serialize());
+		var gameId = service.RehydrateSession(
+			fixture.Session.SerializeRecoverySnapshot());
 		var gameStart = service.GetCurrentInstruction(gameId)
 			.Should().BeOfType<StartGameConfirmationInstruction>().Subject;
 		var nightStart = service.ProcessInstruction(
@@ -140,7 +141,8 @@ public sealed class ActorBorrowedHunterElderTests
 	{
 		var fixture = CreateElderActorInfectionSession();
 		var service = new GameService();
-		var gameId = service.RehydrateSession(fixture.Session.Serialize());
+		var gameId = service.RehydrateSession(
+			fixture.Session.SerializeRecoverySnapshot());
 		var gameStart = service.GetCurrentInstruction(gameId)
 			.Should().BeOfType<StartGameConfirmationInstruction>().Subject;
 		var nightStart = service.ProcessInstruction(
@@ -287,7 +289,8 @@ public sealed class ActorBorrowedHunterElderTests
 	{
 		var fixture = CreateElderActorWitchRestorationSession();
 		var service = new GameService();
-		var gameId = service.RehydrateSession(fixture.Session.Serialize());
+		var gameId = service.RehydrateSession(
+			fixture.Session.SerializeRecoverySnapshot());
 		var gameStart = service.GetCurrentInstruction(gameId)
 			.Should().BeOfType<StartGameConfirmationInstruction>().Subject;
 		var nightStart = service.ProcessInstruction(
@@ -434,7 +437,7 @@ public sealed class ActorBorrowedHunterElderTests
 
 		var recoveredService = new GameService();
 		var recoveredGameId = recoveredService.RehydrateSession(
-			resolved.Serialize());
+			service.SerializeSession(gameId));
 		IGameSession recovered = recoveredService.GetGameStateView(
 			recoveredGameId)!;
 		recovered.GetModeratorActiveActorBorrowedRolePowerActivation()
@@ -656,7 +659,8 @@ public sealed class ActorBorrowedHunterElderTests
 	{
 		var fixture = CreateElderActorAdditionalAttackSession(attackerRole);
 		var service = new GameService();
-		var gameId = service.RehydrateSession(fixture.Session.Serialize());
+		var gameId = service.RehydrateSession(
+			fixture.Session.SerializeRecoverySnapshot());
 		var gameStart = service.GetCurrentInstruction(gameId)
 			.Should().BeOfType<StartGameConfirmationInstruction>().Subject;
 		var nightStart = service.ProcessInstruction(
@@ -766,7 +770,7 @@ public sealed class ActorBorrowedHunterElderTests
 			.Should().NotContain(entry => entry.PlayerId == fixture.ActorId);
 		var recoveredService = new GameService();
 		var recoveredGameId = recoveredService.RehydrateSession(
-			resolved.Serialize());
+			service.SerializeSession(gameId));
 		IGameSession recovered = recoveredService.GetGameStateView(
 			recoveredGameId)!;
 		recovered.GetPlayerState(fixture.ActorId).Health.Should().Be(
@@ -980,7 +984,7 @@ public sealed class ActorBorrowedHunterElderTests
 		var pendingState = pending.Service.GetGameStateView(pending.GameId)!;
 		var recoveredService = new GameService();
 		var recoveredGameId = recoveredService.RehydrateSession(
-			pendingState.Serialize());
+			pending.Service.SerializeSession(pending.GameId));
 		var recoveredAnnouncement = recoveredService
 			.GetCurrentInstruction(recoveredGameId)
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
@@ -1021,8 +1025,7 @@ public sealed class ActorBorrowedHunterElderTests
 		};
 		foreach (var invalidResponse in invalidResponses)
 		{
-			var before = recoveredService.GetGameStateView(recoveredGameId)!
-				.Serialize();
+			var before = recoveredService.SerializeSession(recoveredGameId);
 			var pendingInstructionId = recoveredService
 				.GetCurrentInstruction(recoveredGameId)!.InstructionId;
 			Action process = () => recoveredService.ProcessInstruction(
@@ -1030,8 +1033,7 @@ public sealed class ActorBorrowedHunterElderTests
 				invalidResponse);
 
 			process.Should().Throw<InvalidOperationException>();
-			recoveredService.GetGameStateView(recoveredGameId)!
-				.Serialize().Should().Be(before);
+			recoveredService.SerializeSession(recoveredGameId).Should().Be(before);
 			recoveredService.GetCurrentInstruction(recoveredGameId)!
 				.InstructionId.Should().Be(pendingInstructionId);
 		}
@@ -1059,7 +1061,7 @@ public sealed class ActorBorrowedHunterElderTests
 
 		var afterAckService = new GameService();
 		var afterAckGameId = afterAckService.RehydrateSession(
-			acknowledged.Serialize());
+			recoveredService.SerializeSession(recoveredGameId));
 		var restoredConsecutiveVote = afterAckService
 			.GetCurrentInstruction(afterAckGameId)
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
@@ -1082,14 +1084,15 @@ public sealed class ActorBorrowedHunterElderTests
 			.OfType<
 				VillagerRolePowerSuppressionAnnouncementAcknowledgedLogEntry>()
 			.Should().ContainSingle();
-		var beforeStaleAcknowledgment = restored.Serialize();
+		var beforeStaleAcknowledgment = afterAckService.SerializeSession(
+			afterAckGameId);
 		Action replayAcknowledgment = () => afterAckService.ProcessInstruction(
 			afterAckGameId,
 			recoveredAnnouncement.CreateResponse());
 
 		replayAcknowledgment.Should().Throw<InvalidOperationException>();
-		afterAckService.GetGameStateView(afterAckGameId)!
-			.Serialize().Should().Be(beforeStaleAcknowledgment);
+		afterAckService.SerializeSession(afterAckGameId).Should().Be(
+			beforeStaleAcknowledgment);
 	}
 
 	[Fact]
@@ -1097,7 +1100,8 @@ public sealed class ActorBorrowedHunterElderTests
 	{
 		var fixture = CreateElderActorDefenderSession();
 		var service = new GameService();
-		var gameId = service.RehydrateSession(fixture.Session.Serialize());
+		var gameId = service.RehydrateSession(
+			fixture.Session.SerializeRecoverySnapshot());
 		var gameStart = service.GetCurrentInstruction(gameId)
 			.Should().BeOfType<StartGameConfirmationInstruction>().Subject;
 		var nightStart = service.ProcessInstruction(
@@ -1227,7 +1231,8 @@ public sealed class ActorBorrowedHunterElderTests
 	{
 		var fixture = CreateActiveHunterActorSession();
 		var service = new GameService();
-		var gameId = service.RehydrateSession(fixture.Session.Serialize());
+		var gameId = service.RehydrateSession(
+			fixture.Session.SerializeRecoverySnapshot());
 		var nonActorEliminationAnnouncement =
 			AdvanceToDayEliminationAnnouncement(
 				service,
@@ -1276,7 +1281,8 @@ public sealed class ActorBorrowedHunterElderTests
 					forcedReaction,
 					EliminationCascadeReactionBoundary.Forced)
 			]);
-		var gameId = service.RehydrateSession(fixture.Session.Serialize());
+		var gameId = service.RehydrateSession(
+			fixture.Session.SerializeRecoverySnapshot());
 		var start = service.GetCurrentInstruction(gameId)
 			.Should().BeOfType<StartGameConfirmationInstruction>().Subject;
 		var debate = service.ProcessInstruction(gameId, start.CreateResponse())
@@ -1375,7 +1381,8 @@ public sealed class ActorBorrowedHunterElderTests
 		var eliminateAll = new EliminateAllOtherLivingPlayersReaction(
 			fixture.ActorId);
 		var service = CreateServiceWithForcedReaction(eliminateAll);
-		var gameId = service.RehydrateSession(fixture.Session.Serialize());
+		var gameId = service.RehydrateSession(
+			fixture.Session.SerializeRecoverySnapshot());
 		var actorEliminationAnnouncement =
 			AdvanceToDayEliminationAnnouncement(
 				service,
@@ -1438,7 +1445,7 @@ public sealed class ActorBorrowedHunterElderTests
 			SelectedPlayerIds = selectedPlayerIds
 		};
 		var before = pending.Service.GetGameStateView(pending.GameId)!;
-		var serializedBefore = before.Serialize();
+		var serializedBefore = pending.Service.SerializeSession(pending.GameId);
 		var historyBefore = before.GameHistoryLog.ToArray();
 
 		Action process = () => pending.Service.ProcessInstruction(
@@ -1447,7 +1454,8 @@ public sealed class ActorBorrowedHunterElderTests
 
 		process.Should().Throw<InvalidOperationException>();
 		var after = pending.Service.GetGameStateView(pending.GameId)!;
-		after.Serialize().Should().Be(serializedBefore);
+		pending.Service.SerializeSession(pending.GameId).Should().Be(
+			serializedBefore);
 		after.GameHistoryLog.Should().Equal(historyBefore);
 		pending.Service.GetCurrentInstruction(pending.GameId)!.InstructionId
 			.Should().Be(pending.Selector.InstructionId);
@@ -1464,7 +1472,7 @@ public sealed class ActorBorrowedHunterElderTests
 		var recoveredService = CreateServiceWithForcedReaction(
 			recoveredReaction);
 		var recoveredGameId = recoveredService.RehydrateSession(
-			pendingState.Serialize());
+			pending.Service.SerializeSession(pending.GameId));
 		var recoveredSelector = recoveredService
 			.GetCurrentInstruction(recoveredGameId)
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
@@ -1503,7 +1511,8 @@ public sealed class ActorBorrowedHunterElderTests
 			pending.Fixture.ShotTargetId);
 		var beforeStaleReplay = recoveredService
 			.GetGameStateView(recoveredGameId)!;
-		var serializedBeforeStaleReplay = beforeStaleReplay.Serialize();
+		var serializedBeforeStaleReplay = recoveredService.SerializeSession(
+			recoveredGameId);
 		var historyBeforeStaleReplay = beforeStaleReplay.GameHistoryLog.ToArray();
 
 		Action replayAcceptedTarget = () =>
@@ -1516,7 +1525,7 @@ public sealed class ActorBorrowedHunterElderTests
 		AssertActorSafeText(staleException.Message, pending.Fixture);
 		var afterStaleReplay = recoveredService
 			.GetGameStateView(recoveredGameId)!;
-		afterStaleReplay.Serialize().Should().Be(
+		recoveredService.SerializeSession(recoveredGameId).Should().Be(
 			serializedBeforeStaleReplay);
 		afterStaleReplay.GameHistoryLog.Should().Equal(
 			historyBeforeStaleReplay);
@@ -1571,7 +1580,7 @@ public sealed class ActorBorrowedHunterElderTests
 				pending.Fixture.ActorId,
 				pending.Fixture.ForcedVictimId));
 		var recoveredGameId = recoveredService.RehydrateSession(
-			committed.Serialize());
+			pending.Service.SerializeSession(pending.GameId));
 		var recoveredTargetReveal = recoveredService
 			.GetCurrentInstruction(recoveredGameId)
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
@@ -1702,7 +1711,8 @@ public sealed class ActorBorrowedHunterElderTests
 	{
 		var fixture = CreateActiveElderActorVoteSuppressionSession();
 		var service = new GameService();
-		var gameId = service.RehydrateSession(fixture.Session.Serialize());
+		var gameId = service.RehydrateSession(
+			fixture.Session.SerializeRecoverySnapshot());
 		var start = service.GetCurrentInstruction(gameId)
 			.Should().BeOfType<StartGameConfirmationInstruction>().Subject;
 		var debate = service.ProcessInstruction(gameId, start.CreateResponse())
@@ -1917,7 +1927,8 @@ public sealed class ActorBorrowedHunterElderTests
 			fixture.ActorId,
 			fixture.ForcedVictimId);
 		var service = CreateServiceWithForcedReaction(forcedReaction);
-		var gameId = service.RehydrateSession(fixture.Session.Serialize());
+		var gameId = service.RehydrateSession(
+			fixture.Session.SerializeRecoverySnapshot());
 		var actorEliminationAnnouncement =
 			AdvanceToDayEliminationAnnouncement(
 				service,

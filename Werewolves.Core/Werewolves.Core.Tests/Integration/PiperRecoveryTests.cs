@@ -43,7 +43,7 @@ public sealed class PiperRecoveryTests
 		var freshService = new GameService();
 
 		var recoveredGameId = freshService.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 		var recoveredWake = freshService.GetCurrentInstruction(recoveredGameId)
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		var recoveredSession = freshService.GetGameStateView(recoveredGameId)!;
@@ -116,7 +116,7 @@ public sealed class PiperRecoveryTests
 		var recovery = CreateCommittedCharm();
 		var freshService = new GameService();
 		var recoveredGameId = freshService.RehydrateSession(
-			recovery.Builder.GetGameState()!.Serialize());
+			recovery.Builder.SerializeSession());
 		var recoveredSleep = freshService.GetCurrentInstruction(recoveredGameId)
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		var recoveredSession = freshService.GetGameStateView(recoveredGameId)!;
@@ -154,7 +154,7 @@ public sealed class PiperRecoveryTests
 		recognition.AffectedPlayerIds.Should().BeEquivalentTo(recovery.TargetIds);
 		var recognitionRecoveryService = new GameService();
 		var recognitionRecoveryGameId = recognitionRecoveryService
-			.RehydrateSession(recoveredSession.Serialize());
+			.RehydrateSession(freshService.SerializeSession(recoveredGameId));
 		var recoveredRecognition = recognitionRecoveryService
 			.GetCurrentInstruction(recognitionRecoveryGameId)
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
@@ -222,7 +222,7 @@ public sealed class PiperRecoveryTests
 		recoveredSession.GetPlayerState(targetIdToRemove)
 			.HasStatusEffect(StatusEffectTypes.Charmed)
 			.Should().BeFalse();
-		var serializedAfterRemoval = recoveredSession.Serialize();
+		var serializedAfterRemoval = freshService.SerializeSession(recoveredGameId);
 		RecoveryPayloadTestDriver.Parse(serializedAfterRemoval)
 			.GetActiveEffects(targetIdToRemove)
 			.HasFlag(StatusEffectTypes.Charmed)
@@ -269,7 +269,7 @@ public sealed class PiperRecoveryTests
 	{
 		var recovery = CreateCommittedCharm();
 		var tampered = RecoveryPayloadTestDriver
-			.Parse(recovery.Builder.GetGameState()!.Serialize())
+			.Parse(recovery.Builder.SerializeSession())
 			.RewriteRecurringCursorTargets(
 				recovery.TargetIds[0],
 				recovery.NonCharmedPlayerId)

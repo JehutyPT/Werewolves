@@ -325,7 +325,7 @@ public sealed class ActorBorrowedWitchTests
 			poisonResourceIdentity).Should().BeFalse();
 
 		var recoveredAtPoison = RecoveryPayloadTestDriver.Parse(
-				session.Serialize())
+				session.SerializeRecoverySnapshot())
 			.RehydrateGameSession();
 		var recoveredPoison = RecoveryPayloadTestDriver.Capture(
 				recoveredAtPoison)
@@ -371,7 +371,7 @@ public sealed class ActorBorrowedWitchTests
 			poisonResourceIdentity).Should().BeTrue();
 
 		var recoveredAtSleep = RecoveryPayloadTestDriver.Parse(
-				recoveredAtPoison.Serialize())
+				recoveredAtPoison.SerializeRecoverySnapshot())
 			.RehydrateGameSession();
 		var recoveredSleep = RecoveryPayloadTestDriver.Capture(
 				recoveredAtSleep)
@@ -532,7 +532,7 @@ public sealed class ActorBorrowedWitchTests
 		healingDeclineCursor.CommittedTargetIds.Should().BeEmpty();
 
 		var recoveredAtPoison = RecoveryPayloadTestDriver.Parse(
-				session.Serialize())
+				session.SerializeRecoverySnapshot())
 			.RehydrateGameSession();
 		var recoveredPoison = RecoveryPayloadTestDriver.Capture(
 				recoveredAtPoison)
@@ -575,7 +575,7 @@ public sealed class ActorBorrowedWitchTests
 		poisonDeclineCursor.CommittedTargetIds.Should().BeEmpty();
 
 		var recoveredAtSleep = RecoveryPayloadTestDriver.Parse(
-				recoveredAtPoison.Serialize())
+				recoveredAtPoison.SerializeRecoverySnapshot())
 			.RehydrateGameSession();
 		var recoveredSleep = RecoveryPayloadTestDriver.Capture(
 				recoveredAtSleep)

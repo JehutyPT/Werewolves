@@ -127,7 +127,8 @@ public sealed class ThiefRoleTests
 
 		AssertThiefExchangeCardConservation(session, lockIn, holder.Id);
 		var recoveredService = new GameService();
-		var recoveredId = recoveredService.RehydrateSession(session.Serialize());
+		var recoveredId = recoveredService.RehydrateSession(
+			service.SerializeSession(gameId));
 		var recovered = recoveredService.GetGameStateView(recoveredId)!;
 		var recoveredSwap = recovered.GameHistoryLog
 			.OfType<PermanentRoleSwapCommittedLogEntry>()
@@ -253,7 +254,8 @@ public sealed class ThiefRoleTests
 		var committed = service.GetGameStateView(gameId)!;
 
 		var recoveredService = new GameService();
-		var recoveredId = recoveredService.RehydrateSession(committed.Serialize());
+		var recoveredId = recoveredService.RehydrateSession(
+			service.SerializeSession(gameId));
 		var recoveredChoice = recoveredService.GetCurrentInstruction(recoveredId)
 			.Should().BeOfType<SelectOptionsInstruction>().Subject;
 
@@ -285,7 +287,8 @@ public sealed class ThiefRoleTests
 		var committed = service.GetGameStateView(gameId)!;
 
 		var recoveredService = new GameService();
-		var recoveredId = recoveredService.RehydrateSession(committed.Serialize());
+		var recoveredId = recoveredService.RehydrateSession(
+			service.SerializeSession(gameId));
 		var recoveredSleep = recoveredService.GetCurrentInstruction(recoveredId)
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 
@@ -321,7 +324,7 @@ public sealed class ThiefRoleTests
 				gameId,
 				choice.CreateResponse(ThiefOfferOptionIds.Offer1)));
 		var tampered = RecoveryPayloadTestDriver
-			.Parse(service.GetGameStateView(gameId)!.Serialize())
+			.Parse(service.SerializeSession(gameId))
 			.RewriteLatestPermanentRoleSwapPolicy(policy => policy with
 			{
 				Relationships = PermanentRoleSwapDisposition.Clear
@@ -347,7 +350,7 @@ public sealed class ThiefRoleTests
 		var unusedVillagerCardId = lockIn.DealPool
 			.First(card => card.PrintedRole == MainRoleType.SimpleVillager).Id;
 		var tampered = RecoveryPayloadTestDriver
-			.Parse(service.GetGameStateView(gameId)!.Serialize())
+			.Parse(service.SerializeSession(gameId))
 			.RewriteLatestThiefSwapAcquiredCard(unusedVillagerCardId)
 			.Serialize();
 
@@ -370,7 +373,7 @@ public sealed class ThiefRoleTests
 		var unusedVillagerCardId = lockIn.DealPool
 			.First(card => card.PrintedRole == MainRoleType.SimpleVillager).Id;
 		var tampered = RecoveryPayloadTestDriver
-			.Parse(service.GetGameStateView(gameId)!.Serialize())
+			.Parse(service.SerializeSession(gameId))
 			.RewriteLatestThiefSwapUnchosenCard(unusedVillagerCardId)
 			.Serialize();
 
@@ -408,7 +411,8 @@ public sealed class ThiefRoleTests
 			.Should().ContainSingle();
 
 		var recoveredService = new GameService();
-		var recoveredId = recoveredService.RehydrateSession(committed.Serialize());
+		var recoveredId = recoveredService.RehydrateSession(
+			service.SerializeSession(gameId));
 		var recoveredSleep = recoveredService.GetCurrentInstruction(recoveredId)
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		recoveredSleep.InstructionId.Should().Be(sleep.InstructionId);
@@ -436,7 +440,7 @@ public sealed class ThiefRoleTests
 			MainRoleType.SimpleWerewolf,
 			MainRoleType.BigBadWolf);
 		var choice = ReachChoice(service, gameId, start, holder.Id);
-		var before = service.GetGameStateView(gameId)!.Serialize();
+		var before = service.SerializeSession(gameId);
 
 		choice.Options.Select(option => option.Id).Should().Equal(
 			ThiefOfferOptionIds.Offer1,
@@ -450,7 +454,7 @@ public sealed class ThiefRoleTests
 		var act = () => service.ProcessInstruction(gameId, unavailableDecline);
 
 		act.Should().Throw<InvalidOperationException>();
-		service.GetGameStateView(gameId)!.Serialize().Should().Be(before);
+		service.SerializeSession(gameId).Should().Be(before);
 		service.GetCurrentInstruction(gameId)!.InstructionId
 			.Should().Be(choice.InstructionId);
 		service.GetGameStateView(gameId)!.GameHistoryLog
@@ -498,7 +502,7 @@ public sealed class ThiefRoleTests
 
 		foreach (var (name, response) in cases)
 		{
-			var before = service.GetGameStateView(gameId)!.Serialize();
+			var before = service.SerializeSession(gameId);
 			var act = () => service.ProcessInstruction(gameId, response);
 
 			if (response is null)
@@ -509,7 +513,7 @@ public sealed class ThiefRoleTests
 			{
 				act.Should().Throw<InvalidOperationException>(name);
 			}
-			service.GetGameStateView(gameId)!.Serialize().Should().Be(before, name);
+			service.SerializeSession(gameId).Should().Be(before, name);
 			service.GetCurrentInstruction(gameId)!.InstructionId
 				.Should().Be(choice.InstructionId, name);
 		}
@@ -517,11 +521,11 @@ public sealed class ThiefRoleTests
 		var accepted = choice.CreateResponse(ThiefOfferOptionIds.Offer1);
 		var sleep = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
 			service.ProcessInstruction(gameId, accepted));
-		var afterAccepted = service.GetGameStateView(gameId)!.Serialize();
+		var afterAccepted = service.SerializeSession(gameId);
 		var stale = () => service.ProcessInstruction(gameId, accepted);
 
 		stale.Should().Throw<InvalidOperationException>();
-		service.GetGameStateView(gameId)!.Serialize().Should().Be(afterAccepted);
+		service.SerializeSession(gameId).Should().Be(afterAccepted);
 		service.GetCurrentInstruction(gameId)!.InstructionId
 			.Should().Be(sleep.InstructionId);
 		service.GetGameStateView(gameId)!.GameHistoryLog
@@ -540,7 +544,7 @@ public sealed class ThiefRoleTests
 				gameId,
 				choice.CreateResponse(ThiefOfferOptionIds.Decline)));
 		var tampered = RecoveryPayloadTestDriver
-			.Parse(service.GetGameStateView(gameId)!.Serialize())
+			.Parse(service.SerializeSession(gameId))
 			.RewriteThiefOfferPrintedRoles(
 				MainRoleType.SimpleWerewolf,
 				MainRoleType.BigBadWolf)

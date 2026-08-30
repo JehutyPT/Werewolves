@@ -44,7 +44,7 @@ public sealed class RoleIdentificationKnowledgeConsistencyTests
 			initialWerewolfAgent.Id);
 		identification.SelectablePlayerIds.Should().Contain(seer.Id);
 
-		var stateBeforeRejection = session.Serialize();
+		var stateBeforeRejection = builder.SerializeSession();
 		var forgedContradiction = new ModeratorResponse
 		{
 			InstructionId = identification.InstructionId,
@@ -58,7 +58,7 @@ public sealed class RoleIdentificationKnowledgeConsistencyTests
 		Action reject = () => builder.Process(forgedContradiction);
 
 		reject.Should().Throw<InvalidOperationException>();
-		session.Serialize().Should().Be(stateBeforeRejection);
+		builder.SerializeSession().Should().Be(stateBeforeRejection);
 		builder.GetCurrentInstruction()!.InstructionId.Should().Be(
 			identification.InstructionId);
 
@@ -115,7 +115,7 @@ public sealed class RoleIdentificationKnowledgeConsistencyTests
 		identification.RoleIdentification.Should().Be(MainRoleType.Thief);
 		identification.SelectablePlayerIds.Should().NotContain(
 			initialWerewolfAgent.Id);
-		var stateBeforeRejection = session.Serialize();
+		var stateBeforeRejection = service.SerializeSession(start.GameGuid);
 		var forgedContradiction = new ModeratorResponse
 		{
 			InstructionId = identification.InstructionId,
@@ -133,7 +133,7 @@ public sealed class RoleIdentificationKnowledgeConsistencyTests
 
 		reject.Should().Throw<InvalidOperationException>()
 			.WithMessage("Role Identification contradicts committed Role knowledge.");
-		session.Serialize().Should().Be(stateBeforeRejection);
+		service.SerializeSession(start.GameGuid).Should().Be(stateBeforeRejection);
 		service.GetCurrentInstruction(start.GameGuid)!.InstructionId.Should().Be(
 			identification.InstructionId);
 		initialWerewolfAgent.State.PhysicalCharacterCardId.Should().BeNull();

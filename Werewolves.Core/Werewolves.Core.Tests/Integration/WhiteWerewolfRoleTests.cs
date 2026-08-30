@@ -566,7 +566,7 @@ public sealed class WhiteWerewolfRoleTests : DiagnosticTestBase
 			"white-werewolf-solo-attack");
 		committedAttack.TargetIds.Should().Equal(target.Id);
 
-		var serializedSession = builder.GetGameState()!.Serialize();
+		var serializedSession = builder.SerializeSession();
 		var freshService = new GameService();
 		var recoveredGameId =
 			freshService.RehydrateSession(serializedSession);

@@ -92,12 +92,13 @@ public sealed class ActorBorrowedPrivacyTests
 				nameof(GameStrings.ActorBorrowedRolePowerInvalidResponse),
 				CultureInfo.GetCultureInfo("en-US"));
 			var submission = PrepareValidationSubmission(branch);
-			var serializedBefore = submission.Session.Serialize();
+			var serializedBefore = submission.Session.SerializeRecoverySnapshot();
 
 			expected.Should().NotBeNullOrWhiteSpace().And.NotBe(english);
 			submission.Submit.Should().Throw<InvalidOperationException>()
 				.WithMessage(expected);
-			submission.Session.Serialize().Should().Be(serializedBefore);
+			submission.Session.SerializeRecoverySnapshot().Should().Be(
+				serializedBefore);
 		}
 		finally
 		{

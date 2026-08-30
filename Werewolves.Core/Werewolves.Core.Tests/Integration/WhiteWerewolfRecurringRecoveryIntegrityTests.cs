@@ -177,6 +177,6 @@ public sealed class WhiteWerewolfRecurringRecoveryIntegrityTests
 					targetSelection.CreateResponse([players[0].Id])));
 		sleep.Semantic.Should().Be(
 			ModeratorInstructionSemantic.PutRoleToSleep);
-		return builder.GetGameState()!.Serialize();
+		return builder.SerializeSession();
 	}
 }

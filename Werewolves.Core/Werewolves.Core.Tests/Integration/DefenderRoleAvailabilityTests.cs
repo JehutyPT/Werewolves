@@ -163,13 +163,13 @@ public sealed class DefenderRoleAvailabilityTests : DiagnosticTestBase
 		var targetSelection =
 			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
 				builder.Process(wake.CreateResponse()));
-		var beforeInvalid = builder.GetGameState()!.Serialize();
+		var beforeInvalid = builder.SerializeSession();
 
 		Action selectLittleGirl = () =>
 			builder.Process(targetSelection.CreateResponse([littleGirl.Id]));
 
 		selectLittleGirl.Should().Throw<ArgumentException>();
-		builder.GetGameState()!.Serialize().Should().Be(beforeInvalid);
+		builder.SerializeSession().Should().Be(beforeInvalid);
 
 		var acceptedResponse = targetSelection.CreateResponse([target.Id]);
 		var sleep =

@@ -61,7 +61,7 @@ public sealed class ElderSuppressionIntegrationTests(ITestOutputHelper output)
 
 		var recoveredService = new GameService();
 		var recoveredId = recoveredService.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 		var recoveredAnnouncement = recoveredService
 			.GetCurrentInstruction(recoveredId)
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
@@ -128,7 +128,7 @@ public sealed class ElderSuppressionIntegrationTests(ITestOutputHelper output)
 
 		var afterAckService = new GameService();
 		var afterAckId = afterAckService.RehydrateSession(
-			acknowledged.Serialize());
+			recoveredService.SerializeSession(recoveredId));
 		var restoredNext = afterAckService.GetCurrentInstruction(afterAckId)!;
 		restoredNext.InstructionId.Should().Be(
 			nextInstruction.InstructionId);
@@ -445,7 +445,7 @@ public sealed class ElderSuppressionIntegrationTests(ITestOutputHelper output)
 		var builder = ArrangePendingSuppressionAnnouncement(out _);
 
 		var forged = RecoveryPayloadTestDriver
-			.Parse(builder.GetGameState()!.Serialize())
+			.Parse(builder.SerializeSession())
 			.RewritePendingConfirmationInstructionId(Guid.NewGuid())
 			.Serialize();
 		var recoveredService = new GameService();
@@ -463,7 +463,7 @@ public sealed class ElderSuppressionIntegrationTests(ITestOutputHelper output)
 			.First(player => player.State.Health == PlayerHealth.Alive);
 
 		var forged = RecoveryPayloadTestDriver
-			.Parse(builder.GetGameState()!.Serialize())
+			.Parse(builder.SerializeSession())
 			.RewritePendingConfirmationAffectedPlayer(bystander.Id)
 			.Serialize();
 		var recoveredService = new GameService();

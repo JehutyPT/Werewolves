@@ -95,7 +95,8 @@ public sealed class ActorBorrowedCupidTests
 		session.GameHistoryLog.OfType<LoversPairCommittedLogEntry>().Should()
 			.BeEmpty();
 
-		var recovered = RecoveryPayloadTestDriver.Parse(session.Serialize())
+		var recovered = RecoveryPayloadTestDriver
+			.Parse(session.SerializeRecoverySnapshot())
 			.RehydrateGameSession();
 		var recoveredRecognition = RecoveryPayloadTestDriver.Capture(recovered)
 			.PendingInstruction
@@ -632,7 +633,8 @@ public sealed class ActorBorrowedCupidTests
 		session.GameHistoryLog.OfType<RoleIdentificationLogEntry>().Should()
 			.NotContain(entry => entry.Role == MainRoleType.Cupid);
 
-		var recovered = RecoveryPayloadTestDriver.Parse(session.Serialize())
+		var recovered = RecoveryPayloadTestDriver
+			.Parse(session.SerializeRecoverySnapshot())
 			.RehydrateGameSession();
 		var recoveredRecognition = RecoveryPayloadTestDriver.Capture(recovered)
 			.PendingInstruction

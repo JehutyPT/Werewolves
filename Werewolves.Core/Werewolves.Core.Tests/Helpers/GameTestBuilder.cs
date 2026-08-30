@@ -510,6 +510,9 @@ public class GameTestBuilder
     /// </summary>
     public IGameSession? GetGameState() => _gameService.GetGameStateView(_gameId);
 
+    public string SerializeSession() =>
+        _gameService.SerializeSession(_gameId);
+
     /// <summary>
     /// Gets the current pending instruction.
     /// </summary>

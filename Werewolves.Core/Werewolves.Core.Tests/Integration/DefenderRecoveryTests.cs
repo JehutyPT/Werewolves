@@ -184,7 +184,7 @@ public sealed class DefenderRecoveryTests
 		var freshService = new GameService();
 
 		var recoveredGameId = freshService.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 		var recoveredSession = freshService.GetGameStateView(recoveredGameId)!;
 
 		freshService.GetCurrentInstruction(recoveredGameId)
@@ -233,7 +233,7 @@ public sealed class DefenderRecoveryTests
 		sleep.Semantic.Should().Be(
 			ModeratorInstructionSemantic.PutRoleToSleep);
 		return new CommittedProtectionRecovery(
-			builder.GetGameState()!.Serialize(),
+			builder.SerializeSession(),
 			littleGirl.Id,
 			players[4].Id);
 	}

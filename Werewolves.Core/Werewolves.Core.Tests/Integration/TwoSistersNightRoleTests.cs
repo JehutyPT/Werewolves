@@ -120,7 +120,7 @@ public sealed class TwoSistersNightRoleTests : DiagnosticTestBase
 		var identification =
 			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
 				builder.ConfirmNightStart());
-		var stateBeforeInvalidResponse = session.Serialize();
+		var stateBeforeInvalidResponse = builder.SerializeSession();
 		var logBeforeInvalidResponse = session.GameHistoryLog.ToArray();
 		var invalidSelection = players
 			.Skip(1)
@@ -136,7 +136,7 @@ public sealed class TwoSistersNightRoleTests : DiagnosticTestBase
 		builder.GetCurrentInstruction()!.InstructionId.Should()
 			.Be(identification.InstructionId);
 		session.GameHistoryLog.Should().Equal(logBeforeInvalidResponse);
-		session.Serialize().Should().Be(stateBeforeInvalidResponse);
+		builder.SerializeSession().Should().Be(stateBeforeInvalidResponse);
 
 		var completeSelection = new HashSet<Guid>
 		{
@@ -210,8 +210,7 @@ public sealed class TwoSistersNightRoleTests : DiagnosticTestBase
 		var rehydratedPolicy = new RecordingPolicy();
 		var service = new GameService(rehydratedPolicy);
 
-		var gameId = service.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+		var gameId = service.RehydrateSession(builder.SerializeSession());
 		var recoveredSleep =
 			InstructionAssert.ExpectType<ConfirmationInstruction>(
 				service.GetCurrentInstruction(gameId));
@@ -245,8 +244,7 @@ public sealed class TwoSistersNightRoleTests : DiagnosticTestBase
 			RolePowerAvailabilityResult.Denied);
 		var service = new GameService(rehydratedPolicy);
 
-		var gameId = service.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+		var gameId = service.RehydrateSession(builder.SerializeSession());
 		var recoveredRecognition =
 			InstructionAssert.ExpectType<ConfirmationInstruction>(
 				service.GetCurrentInstruction(gameId));
@@ -683,7 +681,7 @@ public sealed class TwoSistersNightRoleTests : DiagnosticTestBase
 		ModeratorResponse mismatchedResponse)
 	{
 		var session = builder.GetGameState()!;
-		var serializedBefore = session.Serialize();
+		var serializedBefore = builder.SerializeSession();
 		var logBefore = session.GameHistoryLog.ToArray();
 
 		var act = () => builder.Process(mismatchedResponse);
@@ -693,7 +691,7 @@ public sealed class TwoSistersNightRoleTests : DiagnosticTestBase
 		builder.GetCurrentInstruction()!.InstructionId.Should()
 			.Be(pendingInstruction.InstructionId);
 		session.GameHistoryLog.Should().Equal(logBefore);
-		session.Serialize().Should().Be(serializedBefore);
+		builder.SerializeSession().Should().Be(serializedBefore);
 	}
 
 	private sealed record TwoSistersFixture(

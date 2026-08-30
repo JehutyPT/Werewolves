@@ -253,11 +253,11 @@ internal sealed class RecoveryPayloadTestDriver
 				"The Hunter recovery fixture did not reach the correlated final-shot selector.");
 		}
 
-		var pendingState = service.GetGameStateView(gameId)
+		_ = service.GetGameStateView(gameId)
 			?? throw new InvalidOperationException(
 				"The Hunter recovery fixture lost its pending Game Session.");
 		return new ActorBorrowedHunterPendingRecoverySnapshot(
-			pendingState.Serialize(),
+			service.SerializeSession(gameId),
 			gameId,
 			selector,
 			hunterCard.Id,
@@ -431,11 +431,11 @@ internal sealed class RecoveryPayloadTestDriver
 				"The Elder recovery fixture did not reach the canonical suppression announcement.");
 		}
 
-		var pendingState = service.GetGameStateView(gameId)
+		_ = service.GetGameStateView(gameId)
 			?? throw new InvalidOperationException(
 				"The Elder recovery fixture lost its pending Game Session.");
 		return new ActorBorrowedElderPendingRecoverySnapshot(
-			pendingState.Serialize(),
+			service.SerializeSession(gameId),
 			gameId,
 			announcement,
 			elderCard.Id,
@@ -579,7 +579,7 @@ internal sealed class RecoveryPayloadTestDriver
 				? RecoveryPayloadTestDriver.Capture(pendingState)
 					.WithPendingInstruction(instruction)
 					.Serialize()
-				: pendingState.Serialize();
+				: service.SerializeSession(gameId);
 
 			return new ActorBorrowedScapegoatPendingRecoverySnapshot(
 				capturedStep,
@@ -786,7 +786,7 @@ internal sealed class RecoveryPayloadTestDriver
 				"The Village Idiot recovery fixture did not reach the canonical borrowed pardon announcement.");
 		}
 
-		var pendingState = service.GetGameStateView(gameId) as GameSession
+		_ = service.GetGameStateView(gameId) as GameSession
 			?? throw new InvalidOperationException(
 				"The Village Idiot recovery fixture lost its pending Game Session.");
 		var liveInstruction = service.GetCurrentInstruction(gameId);
@@ -798,7 +798,7 @@ internal sealed class RecoveryPayloadTestDriver
 				"The Village Idiot recovery fixture did not reach the live pending pardon announcement.");
 		}
 
-		var serializedSession = pendingState.Serialize();
+		var serializedSession = service.SerializeSession(gameId);
 		var persisted = Parse(serializedSession)._payload;
 		if (persisted.DomainRecoveryCursor is not null ||
 			persisted.PendingInstructionSemantic !=
@@ -985,7 +985,7 @@ internal sealed class RecoveryPayloadTestDriver
 				"The Bear Tamer recovery fixture did not reach the active borrowed pending growl.");
 		}
 
-		var serializedSession = pendingState.Serialize();
+		var serializedSession = service.SerializeSession(gameId);
 		var persisted = Parse(serializedSession)._payload;
 		if (persisted.DomainRecoveryCursor is not null ||
 			persisted.PendingInstructionSemantic !=
@@ -1324,7 +1324,7 @@ internal sealed class RecoveryPayloadTestDriver
 				"The Knight recovery fixture did not retain the live due announcement.");
 		}
 
-		var serializedSession = pendingState.Serialize();
+		var serializedSession = service.SerializeSession(gameId);
 		var persisted = Parse(serializedSession)._payload;
 		if (persisted.DomainRecoveryCursor is not null ||
 			persisted.PendingInstructionSemantic !=

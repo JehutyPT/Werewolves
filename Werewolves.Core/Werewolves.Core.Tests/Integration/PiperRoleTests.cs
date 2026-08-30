@@ -92,7 +92,7 @@ public sealed class PiperRoleTests(ITestOutputHelper output)
 					players[4].Id));
 		builder.Process(identification.CreateResponse([piper.Id]));
 		var tampered = RecoveryPayloadTestDriver
-			.Parse(builder.GetGameState()!.Serialize())
+			.Parse(builder.SerializeSession())
 			.RemoveInitialBeneficiaryClosureFact(piper.Id)
 			.Serialize();
 
@@ -676,7 +676,7 @@ public sealed class PiperRoleTests(ITestOutputHelper output)
 
 		var freshService = new GameService();
 		var recoveredGameId = freshService.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 		var recoveredFinished = freshService
 			.GetCurrentInstruction(recoveredGameId)
 			.Should().BeOfType<FinishedGameConfirmationInstruction>().Subject;
@@ -828,7 +828,7 @@ public sealed class PiperRoleTests(ITestOutputHelper output)
 		ModeratorResponse response)
 	{
 		var session = builder.GetGameState()!;
-		var serializedBefore = session.Serialize();
+		var serializedBefore = builder.SerializeSession();
 		var logBefore = session.GameHistoryLog.ToArray();
 
 		Action process = () => builder.Process(response);
@@ -837,6 +837,6 @@ public sealed class PiperRoleTests(ITestOutputHelper output)
 		builder.GetCurrentInstruction()!.InstructionId.Should().Be(
 			pendingInstruction.InstructionId);
 		session.GameHistoryLog.Should().Equal(logBefore);
-		session.Serialize().Should().Be(serializedBefore);
+		builder.SerializeSession().Should().Be(serializedBefore);
 	}
 }

@@ -280,7 +280,7 @@ public sealed class WolfHoundContractTests : DiagnosticTestBase
 
 		foreach (var invalidCase in invalidCases)
 		{
-			var before = scenario.Builder.GetGameState()!.Serialize();
+		var before = scenario.Builder.SerializeSession();
 			var beforeHistory =
 				scenario.Builder.GetGameState()!.GameHistoryLog.ToArray();
 
@@ -290,7 +290,7 @@ public sealed class WolfHoundContractTests : DiagnosticTestBase
 			scenario.Builder.GetCurrentInstruction()!.InstructionId.Should().Be(
 				alignment.InstructionId,
 				invalidCase.Name);
-			scenario.Builder.GetGameState()!.Serialize().Should().Be(
+			scenario.Builder.SerializeSession().Should().Be(
 				before,
 				invalidCase.Name);
 			scenario.Builder.GetGameState()!.GameHistoryLog.Should().Equal(

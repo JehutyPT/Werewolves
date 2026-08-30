@@ -2234,12 +2234,13 @@ public class GameClientManagerTests
 	{
 		var recoveryStore = new ToggleThrowSaveStore();
 		var lobby = CreateActorAndPrejudicedManipulatorLobby();
-		var manager = new GameClientManager(new GameService(), saveStore: recoveryStore);
+		var gameService = new GameService();
+		var manager = new GameClientManager(gameService, saveStore: recoveryStore);
 		ConfigureAcceptedActorAndPrejudicedManipulatorLobby(lobby, manager);
 		manager.StartGame(lobby);
-		var activeGameIdBefore = manager.ActiveGameId;
+		var activeGameIdBefore = manager.ActiveGameId!.Value;
 		var sessionBefore = manager.CurrentSession;
-		var serializedSessionBefore = sessionBefore!.Serialize();
+		var serializedSessionBefore = gameService.SerializeSession(activeGameIdBefore);
 		var instructionBefore = manager.CurrentInstruction;
 		var rosterBefore = lobby.PlayerRoster.ToArray();
 		var roleCountsBefore = lobby.AvailableRoles.ToDictionary(role => role, lobby.GetRoleCount);
@@ -2265,7 +2266,7 @@ public class GameClientManagerTests
 		manager.ActiveGameId.Should().Be(activeGameIdBefore);
 		manager.HasActiveSession.Should().BeTrue();
 		manager.CurrentSession.Should().BeSameAs(sessionBefore);
-		manager.CurrentSession!.Serialize().Should().Be(serializedSessionBefore);
+		gameService.SerializeSession(activeGameIdBefore).Should().Be(serializedSessionBefore);
 		manager.CurrentInstruction.Should().BeSameAs(instructionBefore);
 		lobby.PlayerRoster.Should().Equal(rosterBefore);
 		lobby.AvailableRoles.ToDictionary(role => role, lobby.GetRoleCount)
@@ -2284,12 +2285,13 @@ public class GameClientManagerTests
 	{
 		var recoveryStore = new ToggleThrowSaveStore();
 		var lobby = CreateActorAndPrejudicedManipulatorLobby();
-		var manager = new GameClientManager(new GameService(), saveStore: recoveryStore);
+		var gameService = new GameService();
+		var manager = new GameClientManager(gameService, saveStore: recoveryStore);
 		ConfigureAcceptedActorAndPrejudicedManipulatorLobby(lobby, manager);
 		manager.StartGame(lobby);
-		var activeGameIdBefore = manager.ActiveGameId;
+		var activeGameIdBefore = manager.ActiveGameId!.Value;
 		var sessionBefore = manager.CurrentSession;
-		var serializedSessionBefore = sessionBefore!.Serialize();
+		var serializedSessionBefore = gameService.SerializeSession(activeGameIdBefore);
 		var instructionBefore = manager.CurrentInstruction;
 		var rosterBefore = lobby.PlayerRoster.ToArray();
 		var roleCountsBefore = lobby.AvailableRoles.ToDictionary(role => role, lobby.GetRoleCount);
@@ -2313,7 +2315,7 @@ public class GameClientManagerTests
 
 		manager.ActiveGameId.Should().Be(activeGameIdBefore);
 		manager.CurrentSession.Should().BeSameAs(sessionBefore);
-		manager.CurrentSession!.Serialize().Should().Be(serializedSessionBefore);
+		gameService.SerializeSession(activeGameIdBefore).Should().Be(serializedSessionBefore);
 		manager.CurrentInstruction.Should().BeSameAs(instructionBefore);
 		lobby.PlayerRoster.Should().Equal(rosterBefore);
 		lobby.AvailableRoles.ToDictionary(role => role, lobby.GetRoleCount)
@@ -2420,7 +2422,7 @@ public class GameClientManagerTests
 		finishNight.Semantic.Should().Be(
 			ModeratorInstructionSemantic.FinishNightActions);
 		var gameId = manager.ActiveGameId!.Value;
-		var stableBefore = publishedSession.Serialize();
+		var stableBefore = service.SerializeSession(gameId);
 		var phaseBefore = publishedSession.GetCurrentPhase();
 		var historyCountBefore = publishedSession.GameHistoryLog.Count();
 		var transitionCountBefore = publishedSession.GameHistoryLog
@@ -2443,7 +2445,7 @@ public class GameClientManagerTests
 			manager.CurrentSession.Should().BeSameAs(publishedSession);
 			service.GetGameStateView(gameId).Should().BeSameAs(publishedSession);
 			manager.CurrentPhase.Should().Be(phaseBefore);
-			publishedSession.Serialize().Should().Be(stableBefore);
+			service.SerializeSession(gameId).Should().Be(stableBefore);
 			publishedSession.GameHistoryLog.Should().HaveCount(historyCountBefore);
 			publishedSession.GameHistoryLog.OfType<PhaseTransitionLogEntry>()
 				.Should().HaveCount(transitionCountBefore);
@@ -2458,7 +2460,8 @@ public class GameClientManagerTests
 	{
 		using var saveDirectory = TemporaryDirectory.Create();
 		var saveStore = new FileGameSessionSaveStore(saveDirectory.Path);
-		var manager = new GameClientManager(new GameService(), saveStore: saveStore);
+		var gameService = new GameService();
+		var manager = new GameClientManager(gameService, saveStore: saveStore);
 		var startInstruction = StartSimpleGame(manager);
 
 		manager.ProcessInput(startInstruction.CreateResponse());
@@ -2468,7 +2471,7 @@ public class GameClientManagerTests
 		var payload = File.ReadAllText(saveFiles.Single());
 		ReadRecoveryKind(payload).Should().Be("ActiveGame");
 		ReadActiveGameSerializedSession(payload).Should().Be(
-			manager.CurrentSession!.Serialize());
+			gameService.SerializeSession(manager.ActiveGameId!.Value));
 	}
 
 	[Fact]
@@ -2476,7 +2479,8 @@ public class GameClientManagerTests
 	{
 		using var saveDirectory = TemporaryDirectory.Create();
 		var saveStore = new FileGameSessionSaveStore(saveDirectory.Path);
-		var manager = new GameClientManager(new GameService(), saveStore: saveStore);
+		var gameService = new GameService();
+		var manager = new GameClientManager(gameService, saveStore: saveStore);
 		var startInstruction = StartSimpleGame(manager);
 		var saveFilePath = Path.Combine(saveDirectory.Path, FileGameSessionSaveStore.SaveFileName);
 		File.WriteAllText(saveFilePath, "stale save data");
@@ -2487,7 +2491,7 @@ public class GameClientManagerTests
 		var payload = File.ReadAllText(saveFilePath);
 		ReadRecoveryKind(payload).Should().Be("ActiveGame");
 		ReadActiveGameSerializedSession(payload).Should().Be(
-			manager.CurrentSession!.Serialize());
+			gameService.SerializeSession(manager.ActiveGameId!.Value));
 	}
 
 	[Fact]
@@ -2737,11 +2741,14 @@ public class GameClientManagerTests
 		var saveFilePath = Path.Combine(
 			saveDirectory.Path,
 			FileGameSessionSaveStore.SaveFileName);
+		var gameService = new GameService();
 		var manager = new GameClientManager(
-			new GameService(),
+			gameService,
 			saveStore: new FileGameSessionSaveStore(saveDirectory.Path));
 		StartSimpleGame(manager);
-		File.WriteAllText(saveFilePath, manager.CurrentSession!.Serialize());
+		File.WriteAllText(
+			saveFilePath,
+			gameService.SerializeSession(manager.ActiveGameId!.Value));
 
 		var act = () => new GameClientManager(
 			new GameService(),
@@ -2933,13 +2940,11 @@ public class GameClientManagerTests
 		resumed.ActiveGameId.Should().HaveValue();
 		var resumedGameId = resumed.ActiveGameId!.Value;
 		var terminalSession = resumed.CurrentSession!;
-		var terminalSnapshot = terminalSession.Serialize();
 		resumedService.GetGameStateView(resumedGameId).Should().BeSameAs(terminalSession);
 
 		resumed.ClearSession();
 
 		resumedService.GetGameStateView(resumedGameId).Should().BeNull();
-		terminalSession.Serialize().Should().Be(terminalSnapshot);
 		File.Exists(saveFilePath).Should().BeFalse();
 	}
 
@@ -2979,14 +2984,22 @@ public class GameClientManagerTests
 	[Fact]
 	public void ProcessInput_WhenSaveFails_DoesNotThrowAndKeepsGameProgress()
 	{
-		var manager = new GameClientManager(new GameService(), saveStore: new ThrowingSaveStore());
+		var store = new ToggleThrowSaveStore();
+		var manager = new GameClientManager(new GameService(), saveStore: store);
 		var startInstruction = StartSimpleGame(manager);
+		var persistedBefore = store.Load();
+		persistedBefore.Should().NotBeNullOrWhiteSpace();
+		ReadRecoveryKind(persistedBefore).Should().Be("ActiveGame");
+		var saveCountBefore = store.SaveCount;
+		store.ThrowOnSave = true;
 
 		var act = () => manager.ProcessInput(startInstruction.CreateResponse());
 
 		act.Should().NotThrow();
 		manager.HasActiveSession.Should().BeTrue();
 		manager.CurrentInstruction.Should().NotBe(startInstruction);
+		store.Load().Should().Be(persistedBefore);
+		store.SaveCount.Should().Be(saveCountBefore + 1);
 	}
 
 	[Fact]
@@ -3955,7 +3968,7 @@ public class GameClientManagerTests
 				MainRoleType.SimpleVillager,
 				MainRoleType.SimpleVillager
 			]));
-		return gameService.GetGameStateView(instruction.GameGuid)!.Serialize();
+		return gameService.SerializeSession(instruction.GameGuid);
 	}
 
 	private static string ReadRecoveryKind(string? payload)

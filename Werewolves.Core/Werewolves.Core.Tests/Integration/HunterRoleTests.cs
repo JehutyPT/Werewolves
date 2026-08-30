@@ -173,7 +173,7 @@ public sealed class HunterRoleTests(ITestOutputHelper output)
 		var shotTargetId = players[2].Id;
 		var recoveredService = new GameService(new DenyAllPolicy());
 		var recoveredGameId = recoveredService.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 		var recoveredShot = recoveredService
 			.GetCurrentInstruction(recoveredGameId)
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
@@ -193,14 +193,13 @@ public sealed class HunterRoleTests(ITestOutputHelper output)
 			.BeOfType<AssignRolesInstruction>().Subject;
 		targetReveal.SelectableRolesForPlayers.Keys.Should().Equal(shotTargetId);
 
-		var beforeStaleReplay = recoveredService
-			.GetGameStateView(recoveredGameId)!
-			.Serialize();
+		var beforeStaleReplay =
+			recoveredService.SerializeSession(recoveredGameId);
 		var replay = () => recoveredService.ProcessInstruction(
 			recoveredGameId,
 			recoveredShot.CreateResponse([shotTargetId]));
 		replay.Should().Throw<InvalidOperationException>();
-		recoveredService.GetGameStateView(recoveredGameId)!.Serialize()
+		recoveredService.SerializeSession(recoveredGameId)
 			.Should().Be(beforeStaleReplay);
 
 		var afterCascade = recoveredService.ProcessInstruction(
@@ -233,7 +232,7 @@ public sealed class HunterRoleTests(ITestOutputHelper output)
 			.BeOfType<AssignRolesInstruction>().Subject;
 		var recoveredService = new GameService(new DenyAllPolicy());
 		var recoveredGameId = recoveredService.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 		var recoveredReveal = recoveredService
 			.GetCurrentInstruction(recoveredGameId)
 			.Should().BeOfType<AssignRolesInstruction>().Subject;
@@ -295,14 +294,14 @@ public sealed class HunterRoleTests(ITestOutputHelper output)
 		var (builder, players, finalShot) = StartDawnHunterFinalShot();
 		var selectedTargetId = players[2].Id;
 		builder.ArrangeEliminatedPlayer(players[4].Id);
-		var before = builder.GetGameState()!.Serialize();
+		var before = builder.SerializeSession();
 
 		var process = () => builder.Process(
 			finalShot.CreateResponse([selectedTargetId]));
 
 		process.Should().Throw<InvalidOperationException>()
 			.WithMessage("*no longer matches*");
-		builder.GetGameState()!.Serialize().Should().Be(before);
+		builder.SerializeSession().Should().Be(before);
 		builder.GetCurrentInstruction()!.InstructionId.Should().Be(
 			finalShot.InstructionId);
 
@@ -505,7 +504,7 @@ public sealed class HunterRoleTests(ITestOutputHelper output)
 		var recoveredService = new GameService(throwingPolicy);
 
 		var recoveredGameId = recoveredService.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 
 		var recoveredShot = recoveredService
 			.GetCurrentInstruction(recoveredGameId)
@@ -684,7 +683,7 @@ public sealed class HunterRoleTests(ITestOutputHelper output)
 					EliminationCascadeReactionBoundary.Forced)
 			]);
 		var recoveredGameId = recoveredService.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 		var recoveredReveal = recoveredService
 			.GetCurrentInstruction(recoveredGameId)
 			.Should().BeOfType<AssignRolesInstruction>().Subject;

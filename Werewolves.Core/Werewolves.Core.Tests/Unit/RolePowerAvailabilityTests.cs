@@ -622,7 +622,6 @@ public sealed class RolePowerAvailabilityTests
 		public IReadOnlyList<IPlayer> RequireKnownFactionAgents(Faction faction) =>
 			throw new NotSupportedException();
 		public int RoleInPlayCount(MainRoleType type) => 0;
-		public string Serialize() => throw new NotSupportedException();
 	}
 
 	private static BorrowedPostEliminationFactoryFixture

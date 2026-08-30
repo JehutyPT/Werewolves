@@ -64,7 +64,7 @@ public sealed class ExecutionPublicationTests
 			.BeOfType<AssignRolesInstruction>().Subject;
 		var recoveryBeforeFailure = new GameService();
 		var recoveryBeforeFailureGameId = recoveryBeforeFailure.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 		var instructionBeforeFailure = recoveryBeforeFailure
 			.GetCurrentInstruction(recoveryBeforeFailureGameId)!;
 		var stablePlayerStatesBeforeFailure = recoveryBeforeFailure
@@ -102,7 +102,7 @@ public sealed class ExecutionPublicationTests
 
 		var recoveryAfterFailure = new GameService();
 		var recoveryAfterFailureGameId = recoveryAfterFailure.RehydrateSession(
-			failedState.Serialize());
+			builder.SerializeSession());
 		var instructionAfterFailure = recoveryAfterFailure.GetCurrentInstruction(
 			recoveryAfterFailureGameId);
 		instructionAfterFailure.Should().NotBeNull();

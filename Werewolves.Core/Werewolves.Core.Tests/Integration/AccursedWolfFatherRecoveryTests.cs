@@ -22,7 +22,7 @@ public sealed class AccursedWolfFatherRecoveryTests
 		var expectedChoice = builder.Process(acceptedIdentification)
 			.ModeratorInstruction.Should()
 			.BeOfType<SelectOptionsInstruction>().Subject;
-		var serializedSession = builder.GetGameState()!.Serialize();
+		var serializedSession = builder.SerializeSession();
 		var freshService = new GameService();
 
 		var recoveredGameId =
@@ -92,7 +92,7 @@ public sealed class AccursedWolfFatherRecoveryTests
 		var expectedSleep = builder.Process(acceptedInfection)
 			.ModeratorInstruction.Should()
 			.BeOfType<ConfirmationInstruction>().Subject;
-		var serializedSession = builder.GetGameState()!.Serialize();
+		var serializedSession = builder.SerializeSession();
 		var freshService = new GameService();
 
 		var recoveredGameId =
@@ -182,7 +182,7 @@ public sealed class AccursedWolfFatherRecoveryTests
 		var freshService = new GameService();
 
 		var recoveredGameId = freshService.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 		var recoveredSleep = freshService
 			.GetCurrentInstruction(recoveredGameId)
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
@@ -220,7 +220,7 @@ public sealed class AccursedWolfFatherRecoveryTests
 				playerId != holderId &&
 				playerId != victimId);
 		var tampered = RecoveryPayloadTestDriver
-			.Parse(builder.GetGameState()!.Serialize())
+			.Parse(builder.SerializeSession())
 			.RetargetLatestOneUseActionAndCursor(differentTargetId)
 			.Serialize();
 		var freshService = new GameService();
@@ -250,7 +250,7 @@ public sealed class AccursedWolfFatherRecoveryTests
 		var freshService = new GameService();
 
 		var recoveredGameId = freshService.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 		var recoveredSession =
 			freshService.GetGameStateView(recoveredGameId)!;
 		var recoveredChoice = freshService
