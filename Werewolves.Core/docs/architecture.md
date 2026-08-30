@@ -183,6 +183,30 @@ The authoritative interaction semantics remain in the [game-rule clarifications]
 *   Suppression is decided from `RolePowerAttempt.SourceRole.GetRoleGroup()`, so it follows the Role supplying the power rather than the acting Player's Faction or the power category. The policy denies a new Villager Role Power attempt and otherwise delegates unchanged.
 *   The policy remains derived from the append-only session log; Roles do not own independent suppression flags. Detailed scope and already-committed-effect semantics live in the [Role Powers and New Moon Assignments clarification](../../docs/domain/game-rules-clarifications.md#role-powers-and-new-moon-assignments).
 
+## Actor-Borrowed Role Power Resolution
+
+`ActorBorrowedRolePowers` is the Game Logic boundary for resolving an Actor's
+borrowed power. Source Role implementations depend on this module instead of
+reading the active Actor activation or spent Actor Setup Card, constructing a
+borrowed `RolePowerInstance` or owner-qualified identity, or correlating common
+commit coordinates themselves.
+
+*   `ResolveActive(GameSession, ActorBorrowedRolePowerSpec)` handles a living Actor use.
+*   `ResolveAfterElimination(GameSession, ActorBorrowedRolePowerSpec, BorrowedPostEliminationRolePowerContext)` handles only the closed Hunter final-shot, Elder village-vote-suppression, Knight Rusty Sword schedule, and Scapegoat voter-restriction contexts. It derives the eliminated Actor and authenticates the source-specific trigger against the active borrowed lineage.
+*   The post-elimination resolver dispatches those four closed contexts to narrowly named `GameSessionQueries` methods for rule-specific history and commitment authentication; the resolver does not scan `GameHistoryLog` or commitment projections itself.
+*   Both resolvers return the same immutable `ActorBorrowedRolePowerUse`, which exposes the authenticated Actor, concrete power instance, owner-qualified identity, Actor Setup Card identity, and ordinary `RolePowerAttempt` construction.
+
+This resolution boundary does not own adjacent lifecycle work.
+`RolePowerAvailabilityGateway` still evaluates each new Hunter, Elder, or
+Knight attempt from `ActorBorrowedRolePowerUse.CreateAttempt()`; the Scapegoat
+voter restriction continues an already available and committed tie replacement
+and does not re-evaluate availability. `ActorRole` alone creates and expires
+Actor activations. The existing typed `GameSession.CommitActorBorrowed*`
+methods own mutation, while `GameSessionKernel` owns serialization, private
+commitment integrity, and Rehydration validation without invoking the resolver
+or replaying a commitment. No generic Role Power ledger or adapter layer sits
+between these owners.
+
 The chosen architecture utilizes a dedicated `PlayerState` wrapper class. This class contains individual properties (e.g., `HasVotingRight`, `DurableVotingPower`) for all dynamic boolean and data-carrying states, typically using `internal set` for controlled modification. The `Player` class then holds a single instance of `PlayerState`. This approach provides a balance of organization (grouping all volatile states together), strong typing, clear separation of concerns (keeping `Player` focused on identity/role), and strict encapsulation.
 
 ## `IPlayer` Interface & `Player` Class

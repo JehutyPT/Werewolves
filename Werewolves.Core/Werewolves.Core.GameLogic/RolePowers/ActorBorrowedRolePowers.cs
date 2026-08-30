@@ -1,3 +1,4 @@
+using Werewolves.Core.GameLogic.Queries;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
@@ -27,12 +28,43 @@ internal sealed record ActorBorrowedRolePowerSpec
 	internal RolePowerDefinition SourcePower { get; }
 }
 
+internal abstract record BorrowedPostEliminationRolePowerContext
+{
+	private BorrowedPostEliminationRolePowerContext() { }
+
+	internal sealed record HunterFinalShot(
+		string CascadeScopeId,
+		IReadOnlyList<Guid> TriggeringPlayerIds)
+		: BorrowedPostEliminationRolePowerContext;
+
+	internal sealed record ElderVillageVoteSuppression(
+		int VoteOutcomeLogIndex,
+		string CascadeScopeId)
+		: BorrowedPostEliminationRolePowerContext;
+
+	internal sealed record KnightRustySwordSchedule(
+		int WerewolfAttackEliminationLogIndex,
+		string CascadeScopeId)
+		: BorrowedPostEliminationRolePowerContext;
+
+	internal sealed record ScapegoatVoterRestriction(
+		int TieReplacementPublicMarkerLogIndex,
+		string SacrificeCascadeScopeId)
+		: BorrowedPostEliminationRolePowerContext;
+}
+
 internal static class ActorBorrowedRolePowers
 {
 	internal static ActorBorrowedRolePowerUse? ResolveActive(
 		GameSession session,
 		ActorBorrowedRolePowerSpec spec) =>
 		ActorBorrowedRolePowerUse.ResolveActive(session, spec);
+
+	internal static ActorBorrowedRolePowerUse? ResolveAfterElimination(
+		GameSession session,
+		ActorBorrowedRolePowerSpec spec,
+		BorrowedPostEliminationRolePowerContext context) =>
+		ActorBorrowedRolePowerUse.ResolveAfterElimination(session, spec, context);
 
 	internal sealed class ActorBorrowedRolePowerUse
 	{
@@ -54,21 +86,100 @@ internal static class ActorBorrowedRolePowers
 				return null;
 			}
 
+			return ResolveUse(
+				session,
+				spec,
+				activation,
+				PlayerHealth.Alive);
+		}
+
+		internal static ActorBorrowedRolePowerUse? ResolveAfterElimination(
+			GameSession session,
+			ActorBorrowedRolePowerSpec spec,
+			BorrowedPostEliminationRolePowerContext context)
+		{
+			ArgumentNullException.ThrowIfNull(session);
+			ArgumentNullException.ThrowIfNull(spec);
+			ArgumentNullException.ThrowIfNull(context);
+
+			var activation =
+				session.GetModeratorActiveActorBorrowedRolePowerActivation();
+			if (activation is null || activation.SourceRole != spec.SourceRole)
+			{
+				return null;
+			}
+
+			var use = ResolveUse(
+				session,
+				spec,
+				activation,
+				PlayerHealth.Dead);
+			var validContext = context switch
+			{
+				BorrowedPostEliminationRolePowerContext.HunterFinalShot hunter =>
+					GameSessionQueries.IsValidActorBorrowedHunterFinalShotContext(
+						session,
+						use,
+						hunter),
+				BorrowedPostEliminationRolePowerContext
+					.ElderVillageVoteSuppression elder =>
+					GameSessionQueries
+						.IsValidActorBorrowedElderVillageVoteSuppressionContext(
+						session,
+						use,
+						elder),
+				BorrowedPostEliminationRolePowerContext
+					.KnightRustySwordSchedule knight =>
+					GameSessionQueries
+						.IsValidActorBorrowedKnightRustySwordScheduleContext(
+						session,
+						use,
+						knight),
+				BorrowedPostEliminationRolePowerContext
+					.ScapegoatVoterRestriction scapegoat =>
+					GameSessionQueries
+						.IsValidActorBorrowedScapegoatVoterRestrictionContext(
+						session,
+						use,
+						scapegoat),
+				_ => false
+			};
+			if (!validContext)
+			{
+				throw new InvalidOperationException(
+					"The Actor borrowed post-elimination Role Power context is stale or invalid.");
+			}
+
+			return use;
+		}
+
+		private static ActorBorrowedRolePowerUse ResolveUse(
+			GameSession session,
+			ActorBorrowedRolePowerSpec spec,
+			ActorBorrowedRolePowerActivation activation,
+			PlayerHealth expectedActorHealth)
+		{
 			var actor = session.GetPlayers().SingleOrDefault(player =>
 				player.Id == activation.ActingPlayerId);
 			var setupCard = session.GetModeratorSpentActorSetupCards()
 				.SingleOrDefault(card => card.Id == activation.SelectedCardId);
-			if (actor is null || setupCard is null)
+			if (actor is null ||
+				setupCard is null ||
+				actor.State.CurrentRole != MainRoleType.Actor ||
+				actor.State.Health != expectedActorHealth ||
+				activation.ActingRole != MainRoleType.Actor ||
+				activation.SourceRole != spec.SourceRole ||
+				setupCard.PrintedRole != spec.SourceRole)
 			{
 				throw new InvalidOperationException(
-					"The active Actor borrowed Role Power lineage is incomplete.");
+					"The active Actor borrowed Role Power lineage is incomplete or stale.");
 			}
 
-			var powerInstance = RolePowerInstance.CreateBorrowed(
-				session,
-				actor,
+			var powerInstance = new RolePowerInstance(
+				activation.ActivationId,
 				spec.SourceRole,
-				spec.SourcePower);
+				spec.SourcePower,
+				RolePowerInstanceOrigin.Borrowed);
 			var powerIdentity = new RolePowerInstanceIdentity(
 				actor.Id,
 				spec.SourceRole,
@@ -84,6 +195,7 @@ internal static class ActorBorrowedRolePowers
 				powerIdentity,
 				setupCard.Id);
 		}
+
 
 		private ActorBorrowedRolePowerUse(
 			GameSession session,

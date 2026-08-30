@@ -40,6 +40,9 @@ internal sealed class ElderRole : RoleHookListener, IDeclaredRoleWorkflow
 	private static readonly RolePowerDefinition SuppressionPower = new(
 		new RolePowerIdentifier("elder-village-vote-suppression"),
 		RolePowerCategory.Reactive);
+	private static readonly ActorBorrowedRolePowerSpec BorrowedSuppressionSpec = new(
+		MainRoleType.Elder,
+		SuppressionPower);
 
 	private readonly RolePowerAvailabilityGateway _availabilityGateway;
 	private readonly RoleWorkflowRuntime _voteWorkflowRuntime;
@@ -572,57 +575,62 @@ internal sealed class ElderRole : RoleHookListener, IDeclaredRoleWorkflow
 			return false;
 		}
 
-		RolePowerInstance powerInstance;
-		var isBorrowed = false;
 		if (actingPlayer.State.CurrentRole == MainRoleType.Elder)
 		{
-			powerInstance = RolePowerInstance.CreateCurrent(
+			var powerInstance = RolePowerInstance.CreateCurrent(
 				session,
 				actingPlayer,
 				MainRoleType.Elder,
 				SuppressionPower);
-		}
-		else if (actingPlayer.State.CurrentRole == MainRoleType.Actor &&
-			session.GetModeratorActiveActorBorrowedRolePowerActivation() is
+			if (!EvaluatePower(
+					session,
+					actingPlayer,
+					SuppressionPower,
+					powerInstance))
 			{
-				ActingPlayerId: var actorId,
-				SourceRole: MainRoleType.Elder
-			} &&
-			actorId == actingPlayer.Id)
-		{
-			powerInstance = RolePowerInstance.CreateBorrowedAfterElimination(
-				session,
-				actingPlayer,
-				MainRoleType.Elder,
-				SuppressionPower,
-				new BorrowedPostEliminationRolePowerContext
-					.ElderVillageVoteSuppression(
-						vote.Value.LogIndex,
-						scopeId));
-			isBorrowed = true;
+				return false;
+			}
+
+			execution = new ElderSuppressionExecution(
+				new RolePowerInstanceIdentity(
+					actingPlayer.Id,
+					MainRoleType.Elder,
+					SuppressionPower.Identifier.Value,
+					powerInstance.Id,
+					powerInstance.Origin),
+				IsBorrowed: false,
+				vote.Value.LogIndex,
+				scopeId);
+			return true;
 		}
-		else
+
+		if (actingPlayer.State.CurrentRole != MainRoleType.Actor ||
+			actingPlayer.State.Health != PlayerHealth.Dead)
 		{
 			return false;
 		}
 
-		if (!EvaluatePower(
-				session,
-				actingPlayer,
-				SuppressionPower,
-				powerInstance))
+		var borrowedUse = ActorBorrowedRolePowers.ResolveAfterElimination(
+			session,
+			BorrowedSuppressionSpec,
+			new BorrowedPostEliminationRolePowerContext
+				.ElderVillageVoteSuppression(
+					vote.Value.LogIndex,
+					scopeId));
+		if (borrowedUse is null)
+		{
+			return false;
+		}
+
+		if (!_availabilityGateway.Evaluate(borrowedUse.CreateAttempt())
+			.AvailabilityResult.IsAvailable)
 		{
 			return false;
 		}
 
 		execution = new ElderSuppressionExecution(
-			new RolePowerInstanceIdentity(
-				actingPlayer.Id,
-				MainRoleType.Elder,
-				SuppressionPower.Identifier.Value,
-				powerInstance.Id,
-				powerInstance.Origin),
-			isBorrowed,
+			borrowedUse.PowerIdentity,
+			IsBorrowed: true,
 			vote.Value.LogIndex,
 			scopeId);
 		return true;

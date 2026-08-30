@@ -830,6 +830,21 @@ internal sealed class ScapegoatRole
 			return EliminationCascadePostCommitInteractionResult.Complete();
 		}
 
+		var borrowedUse = replacement.IsBorrowed
+			? ActorBorrowedRolePowers.ResolveAfterElimination(
+				session,
+				BorrowedPowerSpec,
+				new BorrowedPostEliminationRolePowerContext
+					.ScapegoatVoterRestriction(
+						replacement.PublicMarkerLogIndex,
+						replacement.ScopeId))
+			: null;
+		if (replacement.IsBorrowed && borrowedUse is null)
+		{
+			throw new InvalidOperationException(
+				"The borrowed Scapegoat voter restriction has no matching Actor Role Power use.");
+		}
+
 		var restriction = DayVoteRules.GetVoterEligibilityRestriction(
 			session,
 			replacement.ScopeId);
@@ -857,10 +872,10 @@ internal sealed class ScapegoatRole
 			}
 
 			var announcementInstructionId = Guid.NewGuid();
-			if (replacement.BorrowedPowerIdentity is { } powerIdentity)
+			if (borrowedUse is not null)
 			{
 				session.CommitActorBorrowedScapegoatVoterRestriction(
-					powerIdentity,
+					borrowedUse.PowerIdentity,
 					replacement.PublicMarkerLogIndex,
 					replacement.ScopeId,
 					selection.SelectablePlayerIds,
@@ -1098,7 +1113,6 @@ internal sealed class ScapegoatRole
 				native.VoteLogIndex,
 				native.ScopeId,
 				false,
-				null,
 				-1);
 		}
 
@@ -1122,7 +1136,6 @@ internal sealed class ScapegoatRole
 				borrowed.TriggeringVoteOutcomeLogIndex,
 				borrowed.CascadeScopeId,
 				true,
-				borrowed.PowerIdentity,
 				borrowed.PublicMarkerLogIndex);
 	}
 
@@ -1131,6 +1144,5 @@ internal sealed class ScapegoatRole
 		int VoteLogIndex,
 		string ScopeId,
 		bool IsBorrowed,
-		RolePowerInstanceIdentity? BorrowedPowerIdentity,
 		int PublicMarkerLogIndex);
 }
