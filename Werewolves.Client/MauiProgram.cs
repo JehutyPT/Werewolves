@@ -4,7 +4,6 @@ using Microsoft.Maui.Devices;
 using Plugin.Maui.Audio;
 using Werewolves.Client.Resources;
 using Werewolves.Core.GameLogic.Models;
-using Werewolves.Core.GameLogic.Services;
 using Werewolves.Client.Services;
 
 #if WINDOWS
@@ -37,30 +36,20 @@ namespace Werewolves.Client
                 {
                     fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
                 });
-            builder.AddAudio();
+			builder.AddAudio();
 
-            builder.Services.AddMauiBlazorWebView();
+			builder.Services.AddMauiBlazorWebView();
 			builder.Services.AddNativeLobbyEvaluationServices();
-            builder.Services.AddSingleton<GameService>();
-            builder.Services.AddSingleton<LobbySetupMetadata>(sp =>
-                sp.GetRequiredService<GameService>().GetLobbySetupMetadata());
-            builder.Services.AddSingleton<LobbySetupState>(sp =>
-            {
-                var state = new LobbySetupState(sp.GetRequiredService<LobbySetupMetadata>());
-#if DEBUG
-                foreach (var name in new[] { "Ana", "Beatriz", "Rui", "Bernardo", "Roberto" })
-                    state.AddPlayer(name);
-#endif
-                return state;
-            });
-            builder.Services.AddSingleton<IAudioMap, AudioMap>();
+			builder.Services.AddSingleton<IAudioMap, AudioMap>();
             builder.Services.AddSingleton<IAudioAssetLoader, MauiAudioAssetLoader>();
             builder.Services.AddSingleton<IAudioPlayerFactory, PluginAudioPlayerFactory>();
             builder.Services.AddSingleton<IInstructionAudioPlayback, InstructionAudioPlayback>();
             builder.Services.AddSingleton<IGameSessionSaveStore>(FileGameSessionSaveStore.CreateDefault());
 			builder.Services.AddSingleton<IRecentSetupStore>(sp =>
 				FileRecentSetupStore.CreateDefault(sp.GetRequiredService<TimeProvider>()));
-            builder.Services.AddSingleton<GameClientManager>();
+			builder.Services.AddModeratorSessionAndLobbyServices(
+				ServiceLifetime.Singleton,
+				CreateMauiLobbySetupState);
             builder.Services.AddSingleton<IDeviceDisplay>(DeviceDisplay.Current);
             builder.Services.AddSingleton<IScreenWakeLock, DeviceDisplayScreenWakeLock>();
             builder.Services.AddSingleton<GameplayWakeLockController>();
@@ -121,6 +110,19 @@ namespace Werewolves.Client
 #endif
 
 			return builder.Build();
-        }
-    }
+		}
+
+		private static LobbySetupState CreateMauiLobbySetupState(
+			LobbySetupMetadata metadata)
+		{
+			var state = new LobbySetupState(metadata);
+#if DEBUG
+			foreach (var name in new[] { "Ana", "Beatriz", "Rui", "Bernardo", "Roberto" })
+			{
+				state.AddPlayer(name);
+			}
+#endif
+			return state;
+		}
+	}
 }

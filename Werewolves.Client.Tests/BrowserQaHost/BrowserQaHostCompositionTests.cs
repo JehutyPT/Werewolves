@@ -15,6 +15,7 @@ using Werewolves.Client.Resources;
 using Werewolves.Client.Services;
 using Werewolves.Client.Testing;
 using Werewolves.Client.Tests.Helpers;
+using Werewolves.Core.GameLogic.Models;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.GameLogic.Simulation;
 using Werewolves.Core.StateModels.Enums;
@@ -122,6 +123,42 @@ public class BrowserQaHostCompositionTests
 			.HasAttribute(Html.Attributes.Disabled)
 			.Should()
 			.BeFalse();
+	}
+
+	[Fact]
+	public void BrowserComposition_CommonGraphIsScopedAndSeededPerScope()
+	{
+		var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+		{
+			ApplicationName = typeof(Program).Assembly.GetName().Name,
+			ContentRootPath = ClientTestReferences.Paths.RepositoryPath("Werewolves.Client.BrowserQaHost"),
+			EnvironmentName = Environments.Development
+		});
+		builder.Services.AddDataProtection()
+			.UseEphemeralDataProtectionProvider();
+		builder.Services.AddRazorComponents()
+			.AddInteractiveServerComponents();
+		builder.Services.AddBrowserQaHostModeratorServices();
+		using var app = builder.Build();
+		using var firstScope = app.Services.CreateScope();
+		using var secondScope = app.Services.CreateScope();
+
+		var first = ResolveCommonGraph(firstScope.ServiceProvider);
+		var firstAgain = ResolveCommonGraph(firstScope.ServiceProvider);
+		var second = ResolveCommonGraph(secondScope.ServiceProvider);
+
+		first.GameService.Should().BeSameAs(firstAgain.GameService);
+		first.Metadata.Should().BeSameAs(firstAgain.Metadata);
+		first.State.Should().BeSameAs(firstAgain.State);
+		first.Coordinator.Should().BeSameAs(firstAgain.Coordinator);
+		first.Manager.Should().BeSameAs(firstAgain.Manager);
+		first.GameService.Should().NotBeSameAs(second.GameService);
+		first.Metadata.Should().NotBeSameAs(second.Metadata);
+		first.State.Should().NotBeSameAs(second.State);
+		first.Coordinator.Should().NotBeSameAs(second.Coordinator);
+		first.Manager.Should().NotBeSameAs(second.Manager);
+		first.State.PlayerNames.Should().Equal(BrowserQaFixtures.DefaultPlayerNames);
+		second.State.PlayerNames.Should().Equal(BrowserQaFixtures.DefaultPlayerNames);
 	}
 
 	[Fact]
@@ -344,5 +381,19 @@ public class BrowserQaHostCompositionTests
 		coordinator.StateChanged += changed;
 		return completion.Task.WaitAsync(TimeSpan.FromSeconds(5));
 	}
+
+	private static CommonGraph ResolveCommonGraph(IServiceProvider provider) => new(
+		provider.GetRequiredService<GameService>(),
+		provider.GetRequiredService<LobbySetupMetadata>(),
+		provider.GetRequiredService<LobbySetupState>(),
+		provider.GetRequiredService<LobbyEvaluationCoordinator>(),
+		provider.GetRequiredService<GameClientManager>());
+
+	private sealed record CommonGraph(
+		GameService GameService,
+		LobbySetupMetadata Metadata,
+		LobbySetupState State,
+		LobbyEvaluationCoordinator Coordinator,
+		GameClientManager Manager);
 
 }

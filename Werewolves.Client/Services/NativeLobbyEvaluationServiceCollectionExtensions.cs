@@ -19,13 +19,6 @@ public static class NativeLobbyEvaluationServiceCollectionExtensions
 			FileTerminalLobbyCacheStore.CreateDefault());
 		services.TryAddSingleton<ILobbyTerminalEvaluator>(provider =>
 			new AsyncTerminalLobbyEvaluator(provider.GetRequiredService<TimeProvider>()));
-		services.TryAddSingleton(provider =>
-			new LobbyEvaluationCoordinator(
-				provider.GetRequiredService<LobbySetupState>(),
-				provider.GetRequiredService<ILocalTerminalLobbyCacheStore>(),
-				provider.GetRequiredService<ILobbyTerminalEvaluator>(),
-				provider.GetRequiredService<LobbyEvaluationSettings>(),
-				provider.GetRequiredService<TimeProvider>()));
 		return services;
 	}
 }
