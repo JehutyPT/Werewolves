@@ -54,9 +54,8 @@ public sealed class RecentSetup
 public sealed class InMemoryRecentSetupStore(
 	TimeProvider? timeProvider = null) : IRecentSetupStore
 {
-	private const int MaximumSetupCount = 10;
 	private readonly TimeProvider _timeProvider = timeProvider ?? TimeProvider.System;
-	private readonly List<RecentSetup> _setups = [];
+	private IReadOnlyList<RecentSetup> _setups = [];
 
 	public IReadOnlyList<RecentSetup> Load() => _setups.ToArray();
 
@@ -67,54 +66,16 @@ public sealed class InMemoryRecentSetupStore(
 		ArgumentNullException.ThrowIfNull(playerNames);
 		ArgumentNullException.ThrowIfNull(roleCounts);
 
-		var normalizedRoleCounts = roleCounts
-			.Where(entry => entry.Value > 0)
-			.OrderBy(entry => entry.Key)
-			.ToDictionary(entry => entry.Key, entry => entry.Value);
-		var existingIndex = _setups.FindIndex(setup =>
-			HasSameContent(setup, playerNames, normalizedRoleCounts));
-		if (existingIndex >= 0)
-		{
-			_setups.RemoveAt(existingIndex);
-		}
-
-		_setups.Insert(
-			0,
-			new RecentSetup(
-				playerNames,
-				normalizedRoleCounts,
-				_timeProvider.GetUtcNow()));
-		if (_setups.Count > MaximumSetupCount)
-		{
-			_setups.RemoveAt(MaximumSetupCount);
-		}
+		_setups = RecentSetupCollectionPolicy.Capture(
+			_setups,
+			playerNames,
+			roleCounts,
+			_timeProvider.GetUtcNow());
 	}
 
 	public void Delete(RecentSetup setup)
 	{
 		ArgumentNullException.ThrowIfNull(setup);
-		var index = _setups.FindIndex(candidate =>
-			candidate.CapturedAtUtc == setup.CapturedAtUtc &&
-			HasSameContent(candidate, setup.PlayerNames, setup.RoleCounts));
-		if (index >= 0)
-		{
-			_setups.RemoveAt(index);
-		}
+		_setups = RecentSetupCollectionPolicy.Delete(_setups, setup);
 	}
-
-	private static bool HasSameContent(
-		RecentSetup setup,
-		IReadOnlyList<string> playerNames,
-		IReadOnlyDictionary<MainRoleType, int> roleCounts) =>
-		setup.PlayerNames.Count == playerNames.Count &&
-		setup.PlayerNames
-			.Zip(playerNames)
-			.All(pair => string.Equals(
-				pair.First,
-				pair.Second,
-				StringComparison.Ordinal)) &&
-		setup.RoleCounts.Count == roleCounts.Count &&
-		setup.RoleCounts.All(entry =>
-			roleCounts.TryGetValue(entry.Key, out var count) &&
-			count == entry.Value);
 }
