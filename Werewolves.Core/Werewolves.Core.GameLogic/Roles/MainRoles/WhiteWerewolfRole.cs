@@ -514,14 +514,7 @@ internal sealed class WhiteWerewolfRole
 				"The White Werewolf continuation has invalid accepted-observation handoff context.");
 		}
 
-		var livingHolderIds = session.GetPlayers()
-			.WithHealth(PlayerHealth.Alive)
-			.Where(player =>
-				player.State.CurrentRole == MainRoleType.WhiteWerewolf)
-			.Select(player => player.Id)
-			.ToHashSet();
-		if (livingHolderIds.Count == 0 ||
-		    !RoleFactionKnowledge.HasAcceptedRoleIdentification(
+		if (!RoleFactionKnowledge.HasAcceptedRoleIdentification(
 			    session,
 			    MainRoleType.WhiteWerewolf) ||
 		    !InitialBeneficiaryClosureRules

@@ -289,9 +289,7 @@ internal class WildChildRole :
         ValidateWildChildCursor(
             cursor,
             ModeratorInstructionSemantic.IdentifyRoleHolders);
-        var livingHolderIds = GetLivingHolderIds(session);
-        if (livingHolderIds.Count == 0 ||
-            !RoleFactionKnowledge.HasAcceptedRoleIdentification(
+        if (!RoleFactionKnowledge.HasAcceptedRoleIdentification(
                 session,
                 MainRoleType.WildChild))
         {

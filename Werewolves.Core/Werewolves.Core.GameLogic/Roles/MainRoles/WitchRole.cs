@@ -938,9 +938,7 @@ internal sealed class WitchRole
 				"The Witch continuation has invalid accepted-observation handoff context.");
 		}
 
-		var livingHolderIds = GetLivingHolderIds(session);
-		if (livingHolderIds.Count == 0 ||
-		    !RoleFactionKnowledge.HasAcceptedRoleIdentification(
+		if (!RoleFactionKnowledge.HasAcceptedRoleIdentification(
 			    session,
 			    MainRoleType.Witch))
 		{

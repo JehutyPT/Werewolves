@@ -389,9 +389,7 @@ internal sealed class ThiefRole : RoleHookListener, IDeclaredRoleWorkflow
 		ValidateThiefCursor(
 			cursor,
 			ModeratorInstructionSemantic.IdentifyRoleHolders);
-		var livingHolderIds = GetLivingHolderIds(session);
-		if (livingHolderIds.Count == 0 ||
-		    !RoleFactionKnowledge.HasAcceptedRoleIdentification(
+		if (!RoleFactionKnowledge.HasAcceptedRoleIdentification(
 			    session,
 			    MainRoleType.Thief))
 		{

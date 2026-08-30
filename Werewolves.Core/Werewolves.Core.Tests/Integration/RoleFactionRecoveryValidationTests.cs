@@ -33,7 +33,7 @@ public sealed class RoleFactionRecoveryValidationTests(ITestOutputHelper output)
 	[InlineData(AcceptedRoleIdentificationHolderRecordTamper.Empty)]
 	[InlineData(AcceptedRoleIdentificationHolderRecordTamper.Subset)]
 	[InlineData(AcceptedRoleIdentificationHolderRecordTamper.Superset)]
-	public void AcceptedRoleIdentificationMismatch_FailsBeforeReactionConfiguration(
+	public void RehydrateSession_AcceptedRoleIdentificationHistoryIsMalformed_ThrowsBeforeReactionConfiguration(
 		AcceptedRoleIdentificationHolderRecordTamper tamper)
 	{
 		var builder = CreateBuilder()
@@ -129,7 +129,7 @@ public sealed class RoleFactionRecoveryValidationTests(ITestOutputHelper output)
 	}
 
 	[Fact]
-	public void AcceptedWerewolfAgentGroupMismatch_FailsBeforeReactionConfiguration()
+	public void RehydrateSession_PendingAffectedPlayersDoNotMatchAcceptedWerewolfAgentGroup_ThrowsBeforeReactionConfiguration()
 	{
 		var builder = CreateBuilder()
 			.WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);

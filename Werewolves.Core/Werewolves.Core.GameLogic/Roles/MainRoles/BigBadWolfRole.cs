@@ -516,14 +516,7 @@ internal sealed class BigBadWolfRole
                 "The Big Bad Wolf continuation has invalid accepted-observation handoff context.");
         }
 
-        var livingHolderIds = session.GetPlayers()
-            .WithHealth(PlayerHealth.Alive)
-            .Where(player =>
-                player.State.CurrentRole == MainRoleType.BigBadWolf)
-            .Select(player => player.Id)
-            .ToHashSet();
-        if (livingHolderIds.Count == 0 ||
-            !RoleFactionKnowledge.HasAcceptedRoleIdentification(
+        if (!RoleFactionKnowledge.HasAcceptedRoleIdentification(
                 session,
                 MainRoleType.BigBadWolf))
         {

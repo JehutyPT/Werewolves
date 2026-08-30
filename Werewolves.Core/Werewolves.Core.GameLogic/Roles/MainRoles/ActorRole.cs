@@ -558,9 +558,7 @@ internal sealed class ActorRole : RoleHookListener, IDeclaredRoleWorkflow
 
 	private void RequireCommittedIdentification(GameSession session)
 	{
-		var livingHolderIds = GetLivingHolderIds(session);
-		if (livingHolderIds.Count == 0 ||
-		    !RoleFactionKnowledge.HasAcceptedRoleIdentification(
+		if (!RoleFactionKnowledge.HasAcceptedRoleIdentification(
 			    session,
 			    MainRoleType.Actor))
 		{

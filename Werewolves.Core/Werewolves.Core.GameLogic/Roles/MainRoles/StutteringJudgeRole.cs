@@ -614,9 +614,7 @@ internal sealed class StutteringJudgeRole
 		ValidateJudgeCursor(
 			cursor,
 			ModeratorInstructionSemantic.IdentifyRoleHolders);
-		var livingHolderIds = GetLivingHolderIds(session);
-		if (livingHolderIds.Count == 0 ||
-		    !RoleFactionKnowledge.HasAcceptedRoleIdentification(
+		if (!RoleFactionKnowledge.HasAcceptedRoleIdentification(
 			    session,
 			    MainRoleType.StutteringJudge))
 		{

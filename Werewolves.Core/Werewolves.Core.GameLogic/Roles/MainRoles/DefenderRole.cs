@@ -754,9 +754,7 @@ internal sealed class DefenderRole
 				"The Defender continuation has invalid accepted-observation handoff context.");
 		}
 
-		var livingHolderIds = GetLivingHolderIds(session);
-		if (livingHolderIds.Count == 0 ||
-		    !RoleFactionKnowledge.HasAcceptedRoleIdentification(
+		if (!RoleFactionKnowledge.HasAcceptedRoleIdentification(
 			    session,
 			    MainRoleType.Defender))
 		{

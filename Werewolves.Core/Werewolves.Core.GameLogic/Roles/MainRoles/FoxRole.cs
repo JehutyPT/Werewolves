@@ -756,9 +756,7 @@ internal sealed class FoxRole
 				"The Fox identification cursor has invalid workflow context.");
 		}
 
-		var livingHolderIds = GetLivingHolderIds(session);
-		if (livingHolderIds.Count == 0 ||
-		    !RoleFactionKnowledge.HasAcceptedRoleIdentification(
+		if (!RoleFactionKnowledge.HasAcceptedRoleIdentification(
 			    session,
 			    MainRoleType.Fox))
 		{

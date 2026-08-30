@@ -86,7 +86,7 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
     }
 
 	[Fact]
-	public void GetPossibleRoles_EstablishedUnboundClaimConsumesOneCopyAndPreservesRemainingDuplicates()
+	public void GetPossibleRoles_ModeratorKnownRoleWithoutPhysicalCharacterCardOwnership_ExcludesExactlyOneMatchingRoleCopy()
 	{
 		var builder = CreateBuilder()
 			.WithPlayers(5)
