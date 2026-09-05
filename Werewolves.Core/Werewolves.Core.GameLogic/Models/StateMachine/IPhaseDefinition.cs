@@ -1,4 +1,3 @@
-using Werewolves.Core.GameLogic.Models.InternalMessages;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Models;
 
@@ -15,6 +14,6 @@ internal interface IPhaseDefinition
     /// </summary>
     /// <param name="session">The current game session.</param>
     /// <param name="input">The moderator response to process.</param>
-    /// <returns>A PhaseHandlerResult indicating the outcome of the processing.</returns>
-    PhaseHandlerResult ProcessInputAndUpdatePhase(GameSession session, ModeratorResponse input);
+    /// <returns>A PhaseExecutionResult indicating the outcome of the processing.</returns>
+    PhaseExecutionResult ProcessInputAndUpdatePhase(GameSession session, ModeratorResponse input);
 }

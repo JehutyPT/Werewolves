@@ -80,13 +80,18 @@ internal static class ActorBorrowedInstructionFixture
 			MainRoleType.KnightWithRustySword)
 	];
 
-	private static readonly SubPhaseManager<ListenerTestSubPhase>
-		NightActionLoop = new(
-			ListenerTestSubPhase.ActionLoop,
-			[
-				HookSubPhaseStage.HookStage(GameHook.NightMainActionLoop),
-				NavigationSubPhaseStage.NavigationEndStageSilent(GamePhase.Dawn)
-			]);
+	private static readonly PhaseManager<ListenerTestSubPhase> NightActionLoop = new(
+		GamePhase.Night,
+		ListenerTestSubPhase.ActionLoop,
+		[
+			new(
+				ListenerTestSubPhase.ActionLoop,
+				[
+					HookSubPhaseStage.HookStage(GameHook.NightMainActionLoop),
+					NavigationSubPhaseStage.NavigationEndStageSilent(GamePhase.Dawn)
+				],
+				possibleNextMainPhaseTransitions: [new(GamePhase.Dawn)])
+		]);
 
 	internal static ActorBorrowedInstructionScenario Create(
 		ActorBorrowedPowerFamily family)
@@ -682,7 +687,6 @@ internal static class ActorBorrowedInstructionFixture
 		UpdateKnownWerewolfAgentFacts(
 			fixture.Session,
 			new HashSet<Guid> { fixture.WerewolfId });
-		fixture.Session.TransitionMainPhase(GamePhase.Dawn);
 		var announcement = AdvanceDawnToConfirmation(
 			fixture,
 			debate.CreateResponse(),
@@ -1193,8 +1197,9 @@ internal static class ActorBorrowedInstructionFixture
 					"The Actor borrowed Fox UI fixture requires one Pending Instruction.")
 			: null;
 		_ = session.GetOrCreateListener(listener.Id, () => listener);
-		var result = NightActionLoop.Execute(session, response);
-		if (retainExecution && result.ModeratorInstruction is { } nextInstruction)
+		var result = NightActionLoop.ProcessInputAndUpdatePhase(session, response);
+		if (retainExecution &&
+			result is PhaseExecutionResult.InstructionReady { Instruction: var nextInstruction })
 		{
 			var publicationResponse =
 				response.InstructionId == consumedInstruction!.InstructionId
@@ -1217,10 +1222,15 @@ internal static class ActorBorrowedInstructionFixture
 		}
 
 		return new ListenerAdvanceResult(
-			result is StayInSubPhaseHandlerResult { StageComplete: false }
+			result is PhaseExecutionResult.InstructionReady
 				? HookListenerOutcome.NeedInput
 				: HookListenerOutcome.Complete,
-			result.ModeratorInstruction);
+			result switch
+			{
+				PhaseExecutionResult.InstructionReady ready => ready.Instruction,
+				PhaseExecutionResult.PhaseExited exited => exited.TransitionInstruction,
+				_ => throw new InvalidOperationException("Unexpected phase execution outcome.")
+			});
 	}
 
 	private static void SeedKnownActorBeneficiary(

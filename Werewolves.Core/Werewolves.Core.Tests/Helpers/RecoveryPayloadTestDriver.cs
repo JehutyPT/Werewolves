@@ -1216,26 +1216,32 @@ internal sealed class RecoveryPayloadTestDriver
 			new RolePowerAvailabilityGateway(
 				AllowAllRolePowerAvailabilityPolicy.Instance));
 		pendingState.GetOrCreateListener(knight.Id, () => knight);
-		var nightHook = new SubPhaseManager<RecoveryHookDriverSubPhase>(
+		var nightHook = new PhaseManager<RecoveryHookDriverSubPhase>(
+			GamePhase.Night,
 			RecoveryHookDriverSubPhase.Active,
 			[
-				HookSubPhaseStage.HookStage(GameHook.NightMainActionLoop),
-				NavigationSubPhaseStage.NavigationEndStageSilent(
-					RecoveryHookDriverSubPhase.Complete)
-			],
-			possibleNextSubPhases: [RecoveryHookDriverSubPhase.Complete]);
+				new(
+					RecoveryHookDriverSubPhase.Active,
+					[
+						HookSubPhaseStage.HookStage(GameHook.NightMainActionLoop),
+						NavigationSubPhaseStage.NavigationEndStageSilent(GamePhase.Dawn)
+					],
+					possibleNextMainPhaseTransitions: [new(GamePhase.Dawn)])
+			]);
 		var nightResponse = start.CreateResponse();
 		var nightCompleted = false;
 		for (var step = 0; step < 20; step++)
 		{
-			var instruction = nightHook.Execute(pendingState, nightResponse)
-				.ModeratorInstruction;
-			if (instruction == null)
+			var result = nightHook.ProcessInputAndUpdatePhase(pendingState, nightResponse);
+			if (result is PhaseExecutionResult.PhaseExited)
 			{
 				nightCompleted = true;
 				break;
 			}
 
+			var instruction = result is PhaseExecutionResult.InstructionReady ready
+				? ready.Instruction
+				: throw new InvalidOperationException("Unexpected phase execution outcome.");
 			nightResponse = instruction switch
 			{
 				ConfirmationInstruction confirmation =>
@@ -1263,7 +1269,6 @@ internal sealed class RecoveryPayloadTestDriver
 		CommitActorBorrowedKnightCurrentWerewolfAgentFacts(
 			pendingState,
 			new HashSet<Guid> { otherWerewolfId });
-		pendingState.TransitionMainPhase(GamePhase.Dawn);
 		var serializedDueState = Capture(pendingState)
 			.RecordActorSetupCardSpend(activation!)
 			.WithPendingInstruction(start)
@@ -3677,8 +3682,7 @@ internal sealed class RecoveryPayloadTestDriver
 
 	private enum RecoveryHookDriverSubPhase
 	{
-		Active,
-		Complete
+		Active
 	}
 }
 

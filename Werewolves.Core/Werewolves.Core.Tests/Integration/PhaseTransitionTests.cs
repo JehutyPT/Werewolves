@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.Tests.Helpers;
 using Xunit;
@@ -66,6 +67,56 @@ public class PhaseTransitionTests : DiagnosticTestBase
         // Assert: Should now be in Dawn phase
         var gameState = builder.GetGameState();
         gameState!.GetCurrentPhase().Should().Be(GamePhase.Dawn);
+
+        MarkTestCompleted();
+    }
+
+    [Fact]
+    public void NightToDawn_PreservesFinishInstructionAndDefersVictimWorkWithoutCheckingVictory()
+    {
+        // Werewolves already control the vote, so an early victory check would be observable.
+        var builder = CreateBuilder()
+            .WithSimpleGame(playerCount: 5, werewolfCount: 3, includeSeer: false);
+        builder.StartGame();
+        builder.ConfirmGameStart();
+        var session = builder.GetGameState()!;
+        var players = session.GetPlayers().ToArray();
+        var victim = players[3];
+        var turn = session.TurnNumber;
+        var observation = builder.ConfirmNightStart()
+            .ModeratorInstruction.Should().BeOfType<SelectPlayersInstruction>().Subject;
+        var targetSelection = builder.Process(observation.CreateResponse(
+                players.Take(3).Select(player => player.Id).ToHashSet()))
+            .ModeratorInstruction.Should().BeOfType<SelectPlayersInstruction>().Subject;
+        var sleep = builder.Process(targetSelection.CreateResponse([victim.Id]))
+            .ModeratorInstruction.Should().BeOfType<ConfirmationInstruction>().Subject;
+        session.GetCurrentPhase().Should().Be(GamePhase.Night);
+
+        var finishNight = builder.Process(sleep.CreateResponse())
+            .ModeratorInstruction.Should().BeOfType<ConfirmationInstruction>().Subject;
+
+        finishNight.Semantic.Should().Be(ModeratorInstructionSemantic.FinishNightActions);
+        builder.GetCurrentInstruction()!.InstructionId.Should().Be(finishNight.InstructionId);
+        session.GetCurrentPhase().Should().Be(GamePhase.Dawn);
+        session.TurnNumber.Should().Be(turn);
+        session.GameHistoryLog.OfType<PhaseTransitionLogEntry>()
+            .Should().ContainSingle(entry => entry.CurrentPhase == GamePhase.Dawn);
+        session.GameHistoryLog.OfType<VictoryConditionMetLogEntry>().Should().BeEmpty();
+        session.GameHistoryLog.OfType<DawnVictimDeterminedLogEntry>().Should().BeEmpty();
+        session.GameHistoryLog.OfType<RoleRevealLogEntry>().Should().BeEmpty();
+        session.GameHistoryLog.OfType<PlayerEliminatedLogEntry>().Should().BeEmpty();
+        session.GetPlayerState(victim.Id).Health.Should().Be(PlayerHealth.Alive);
+
+        var reveal = builder.Process(finishNight.CreateResponse())
+            .ModeratorInstruction.Should().BeOfType<AssignRolesInstruction>().Subject;
+
+        reveal.SelectableRolesForPlayers.Keys.Should().Equal(victim.Id);
+        session.GetCurrentPhase().Should().Be(GamePhase.Dawn);
+        session.TurnNumber.Should().Be(turn);
+        session.GameHistoryLog.OfType<DawnVictimDeterminedLogEntry>()
+            .Should().ContainSingle(entry => entry.PlayerId == victim.Id);
+        session.GameHistoryLog.OfType<VictoryConditionMetLogEntry>().Should().BeEmpty();
+        session.GetPlayerState(victim.Id).Health.Should().Be(PlayerHealth.Alive);
 
         MarkTestCompleted();
     }

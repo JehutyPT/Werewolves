@@ -14,11 +14,10 @@ namespace Werewolves.Core.GameLogic.Models.StateMachine;
 /// A SubPhaseStage represents a single stage within a game's phase state machine,
 /// that can either represent a GameHook or a custom handler function (that cannot fire game hooks internally).
 ///
-/// EACH STAGE CAN ONLY BE EXECUTED ONCE PER SUB-PHASE ENTRY. They cannot be interrupted to ask for input.
-/// In case of a workflow of input requirement and input processing, multiple stages should be defined in sequence.
-/// One for requesting input, and another for processing that input.
-///
-/// This is to avoid idempotency being an issue.
+/// Completed stages execute once per sub-phase entry. Logic stages complete after
+/// one call; hook and Elimination Cascade stages may pause with an instruction
+/// and resume their active work on the next legal response. PhaseManager owns
+/// interpretation of these results and requests cursor changes from the kernel.
 /// </summary>
 internal abstract class SubPhaseStage
 {

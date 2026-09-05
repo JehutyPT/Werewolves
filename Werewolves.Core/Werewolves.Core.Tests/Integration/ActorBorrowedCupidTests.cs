@@ -34,11 +34,17 @@ public sealed class ActorBorrowedCupidTests
 		Guid.Parse("00000000-0000-0000-0000-000000000147"),
 		MainRoleType.Defender);
 
-	private static readonly SubPhaseManager<NightSubPhases> NightActionLoop = new(
+	private static readonly PhaseManager<NightSubPhases> NightActionLoop = new(
+		GamePhase.Night,
 		NightSubPhases.Start,
 		[
-			HookSubPhaseStage.HookStage(GameHook.NightMainActionLoop),
-			NavigationSubPhaseStage.NavigationEndStageSilent(NightSubPhases.Start)
+			new(
+				NightSubPhases.Start,
+				[
+					HookSubPhaseStage.HookStage(GameHook.NightMainActionLoop),
+					NavigationSubPhaseStage.NavigationEndStageSilent(GamePhase.Dawn)
+				],
+				possibleNextMainPhaseTransitions: [new(GamePhase.Dawn)])
 		]);
 
 	[Fact]
@@ -60,8 +66,7 @@ public sealed class ActorBorrowedCupidTests
 		var villagerTargetId = players.Single(player =>
 			player.Name == "Villager 1").Id;
 		var lovers = new[] { villagerTargetId, werewolfTargetId };
-		var selection = Advance(listener, session, wake.CreateResponse())
-			.ModeratorInstruction.Should()
+		var selection = Advance(listener, session, wake.CreateResponse()).Should()
 			.BeOfType<SelectPlayersInstruction>().Subject;
 		var logCountBeforeCommit = session.GameHistoryLog.Count();
 		session = RehydrateAtPendingInstruction(session, selection);
@@ -227,7 +232,7 @@ public sealed class ActorBorrowedCupidTests
 		var selection = Advance(
 			listener,
 			borrowedSession,
-			wake.CreateResponse()).ModeratorInstruction
+			wake.CreateResponse())
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
 		borrowedSession = RehydrateAtPendingInstruction(
 			borrowedSession,
@@ -333,8 +338,7 @@ public sealed class ActorBorrowedCupidTests
 		wake.PrivateInstruction.Should().BeNull();
 		wake.AffectedPlayerIds.Should().Equal(actorId);
 
-		var selection = Advance(listener, session, wake.CreateResponse())
-			.ModeratorInstruction.Should()
+		var selection = Advance(listener, session, wake.CreateResponse()).Should()
 			.BeOfType<SelectPlayersInstruction>().Subject;
 		var livingPlayerIds = session.GetPlayers()
 			.WithHealth(PlayerHealth.Alive)
@@ -393,7 +397,6 @@ public sealed class ActorBorrowedCupidTests
 			GameStrings.RoleWakesUp.Format(GameStrings.ActorRoleName));
 		wake.AffectedPlayerIds.Should().Equal(actorId);
 		var sleep = Advance(listener, session, wake.CreateResponse())
-			.ModeratorInstruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 
 		sleep.Semantic.Should().Be(ModeratorInstructionSemantic.PutRoleToSleep);
@@ -438,8 +441,7 @@ public sealed class ActorBorrowedCupidTests
 		ArrangeKnownBeneficiaries(
 			session,
 			lovers.Select(playerId => (playerId, Faction.Villager)).ToArray());
-		var selection = Advance(listener, session, wake.CreateResponse())
-			.ModeratorInstruction.Should()
+		var selection = Advance(listener, session, wake.CreateResponse()).Should()
 			.BeOfType<SelectPlayersInstruction>().Subject;
 		var historyCountBeforeCommit = session.GameHistoryLog.Count();
 		session = RehydrateAtPendingInstruction(session, selection);
@@ -493,8 +495,7 @@ public sealed class ActorBorrowedCupidTests
 		session.GetFactionBeneficiaryKnowledge(unknownTargetId).Should().Be(
 			FactionBeneficiaryKnowledge.Unknown);
 
-		var selection = Advance(listener, session, wake.CreateResponse())
-			.ModeratorInstruction.Should()
+		var selection = Advance(listener, session, wake.CreateResponse()).Should()
 			.BeOfType<SelectPlayersInstruction>().Subject;
 		session = RehydrateAtPendingInstruction(session, selection);
 		var response = selection.CreateResponse(lovers.ToHashSet());
@@ -567,8 +568,7 @@ public sealed class ActorBorrowedCupidTests
 		session.RequireKnownFactionBeneficiary(villagerTargetId).Should().Be(
 			Faction.Villager);
 
-		var selection = Advance(listener, session, wake.CreateResponse())
-			.ModeratorInstruction.Should()
+		var selection = Advance(listener, session, wake.CreateResponse()).Should()
 			.BeOfType<SelectPlayersInstruction>().Subject;
 		var logCountBeforeCommit = session.GameHistoryLog.Count();
 		session = RehydrateAtPendingInstruction(session, selection);
@@ -683,7 +683,6 @@ public sealed class ActorBorrowedCupidTests
 		recovered.GameHistoryLog.OfType<RoleIdentificationLogEntry>().Should()
 			.NotContain(entry => entry.Role == MainRoleType.Cupid);
 		CompleteCadence(listener, recovered, sleep.CreateResponse());
-		recovered.TransitionMainPhase(GamePhase.Dawn);
 		recovered.TransitionMainPhase(GamePhase.Day);
 		recovered.TransitionMainPhase(GamePhase.Night);
 
@@ -691,19 +690,19 @@ public sealed class ActorBorrowedCupidTests
 		var nextActorWake = Advance(
 			nextActor,
 			recovered,
-			start.CreateResponse()).ModeratorInstruction
+			start.CreateResponse())
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		recovered.GetModeratorActiveActorBorrowedRolePowerActivation().Should()
 			.BeNull();
 		var nextActorChoice = Advance(
 			nextActor,
 			recovered,
-			nextActorWake.CreateResponse()).ModeratorInstruction
+			nextActorWake.CreateResponse())
 			.Should().BeOfType<SelectOptionsInstruction>().Subject;
 		var nextActorSleep = Advance(
 			nextActor,
 			recovered,
-			nextActorChoice.CreateResponse()).ModeratorInstruction
+			nextActorChoice.CreateResponse())
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		CompleteCadence(
 			nextActor,
@@ -740,16 +739,13 @@ public sealed class ActorBorrowedCupidTests
 		Guid selectedCardId)
 	{
 		var wake = Advance(actorListener, session, start.CreateResponse())
-			.ModeratorInstruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		var choice = Advance(actorListener, session, wake.CreateResponse())
-			.ModeratorInstruction
 			.Should().BeOfType<SelectOptionsInstruction>().Subject;
 		var sleep = Advance(
 			actorListener,
 			session,
 			choice.CreateResponse(selectedCardId.ToString("D")))
-			.ModeratorInstruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		var activation = session
 			.GetModeratorActiveActorBorrowedRolePowerActivation()!;
@@ -768,8 +764,7 @@ public sealed class ActorBorrowedCupidTests
 		ModeratorResponse response,
 		Guid actorId)
 	{
-		var instruction = Advance(listener, session, response)
-			.ModeratorInstruction;
+		var instruction = Advance(listener, session, response);
 		for (var step = 0; step < 20; step++)
 		{
 			if (instruction is ConfirmationInstruction
@@ -784,8 +779,7 @@ public sealed class ActorBorrowedCupidTests
 			instruction = Advance(
 				listener,
 				session,
-				CreateCadenceResponse(session, instruction))
-					.ModeratorInstruction;
+				CreateCadenceResponse(session, instruction));
 		}
 
 		throw new InvalidOperationException(
@@ -839,8 +833,7 @@ public sealed class ActorBorrowedCupidTests
 		GameSession session,
 		ModeratorResponse response)
 	{
-		var instruction = Advance(listener, session, response)
-			.ModeratorInstruction;
+		var instruction = Advance(listener, session, response);
 		for (var step = 0; step < 20; step++)
 		{
 			if (instruction == null)
@@ -851,8 +844,7 @@ public sealed class ActorBorrowedCupidTests
 			instruction = Advance(
 				listener,
 				session,
-				CreateCadenceResponse(session, instruction))
-				.ModeratorInstruction;
+				CreateCadenceResponse(session, instruction));
 		}
 
 		throw new InvalidOperationException(
@@ -1049,7 +1041,7 @@ public sealed class ActorBorrowedCupidTests
 			});
 	}
 
-	private static PhaseHandlerResult Advance(
+	private static ModeratorInstruction? Advance(
 		IGameHookListener listener,
 		GameSession session,
 		ModeratorResponse response)
@@ -1058,8 +1050,8 @@ public sealed class ActorBorrowedCupidTests
 			?? throw new InvalidOperationException(
 				"The Actor borrowed Cupid test workflow requires one Pending Instruction.");
 		session.GetOrCreateListener(listener.Id, () => listener);
-		var result = NightActionLoop.Execute(session, response);
-		if (result.ModeratorInstruction is { } nextInstruction)
+		var result = NightActionLoop.ProcessInputAndUpdatePhase(session, response);
+		if (result is PhaseExecutionResult.InstructionReady { Instruction: var nextInstruction })
 		{
 			var publicationResponse =
 				response.InstructionId == consumedInstruction.InstructionId
@@ -1081,7 +1073,12 @@ public sealed class ActorBorrowedCupidTests
 					nextInstruction));
 		}
 
-		return result;
+		return result switch
+		{
+			PhaseExecutionResult.InstructionReady ready => ready.Instruction,
+			PhaseExecutionResult.PhaseExited exited => exited.TransitionInstruction,
+			_ => throw new InvalidOperationException("Unexpected phase execution outcome.")
+		};
 	}
 
 	private static GameSession RehydrateAtPendingInstruction(

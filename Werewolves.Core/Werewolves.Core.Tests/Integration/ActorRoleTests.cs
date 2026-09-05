@@ -35,13 +35,18 @@ public sealed class ActorRoleTests
 		Guid.Parse("00000000-0000-0000-0000-000000000143"),
 		MainRoleType.Witch);
 
-	private static readonly SubPhaseManager<ListenerTestSubPhase>
-		NightActionLoop = new(
-			ListenerTestSubPhase.ActionLoop,
-			[
-				HookSubPhaseStage.HookStage(GameHook.NightMainActionLoop),
-				NavigationSubPhaseStage.NavigationEndStageSilent(GamePhase.Dawn)
-			]);
+	private static readonly PhaseManager<ListenerTestSubPhase> NightActionLoop = new(
+		GamePhase.Night,
+		ListenerTestSubPhase.ActionLoop,
+		[
+			new(
+				ListenerTestSubPhase.ActionLoop,
+				[
+					HookSubPhaseStage.HookStage(GameHook.NightMainActionLoop),
+					NavigationSubPhaseStage.NavigationEndStageSilent(GamePhase.Dawn)
+				],
+				possibleNextMainPhaseTransitions: [new(GamePhase.Dawn)])
+		]);
 
 	[Fact]
 	public void KnownHolder_FirstOpening_WakesThenOffersRemainingSetupCardsPrivatelyAsSingleOptional()
@@ -319,7 +324,6 @@ public sealed class ActorRoleTests
 		Advance(listener, recovered, sleep.CreateResponse()).Outcome.Should()
 			.Be(HookListenerOutcome.Complete);
 		ArrangeKnownWerewolfAgentGroup(recovered, Guid.Empty);
-		recovered.TransitionMainPhase(GamePhase.Dawn);
 		recovered.TransitionMainPhase(GamePhase.Day);
 		recovered.TransitionMainPhase(GamePhase.Night);
 
@@ -352,8 +356,9 @@ public sealed class ActorRoleTests
 
 		expiredSource.Outcome.Should().Be(HookListenerOutcome.Complete);
 		expiredSource.Instruction.Should().BeNull();
-		recovered.GameHistoryLog.Should().HaveCount(
-			historyCountBeforeExpiredSource);
+		recovered.GameHistoryLog.Skip(historyCountBeforeExpiredSource).Should()
+			.ContainSingle().Which.Should().BeOfType<PhaseTransitionLogEntry>();
+		recovered.GetCurrentPhase().Should().Be(GamePhase.Dawn);
 		recovered.GetActorBorrowedSeerCheckCommits().Should()
 			.Equal(learnedCheck);
 		recovered.GameHistoryLog
@@ -878,9 +883,8 @@ public sealed class ActorRoleTests
 	{
 		_ = session.GetOrCreateListener(listener.Id, () => listener);
 		var consumedInstruction = session.Execution.PendingInstruction;
-		var result = NightActionLoop.Execute(session, response);
-		if (result is StayInSubPhaseHandlerResult { StageComplete: false }
-			&& result.ModeratorInstruction is { } nextInstruction)
+		var result = NightActionLoop.ProcessInputAndUpdatePhase(session, response);
+		if (result is PhaseExecutionResult.InstructionReady { Instruction: var nextInstruction })
 		{
 			if (consumedInstruction != null)
 			{
@@ -893,7 +897,9 @@ public sealed class ActorRoleTests
 
 		return new ListenerAdvanceResult(
 			HookListenerOutcome.Complete,
-			result.ModeratorInstruction);
+			result is PhaseExecutionResult.PhaseExited exited
+				? exited.TransitionInstruction
+				: throw new InvalidOperationException("Unexpected phase execution outcome."));
 	}
 
 	private static void PublishPendingInstruction(
