@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using FluentAssertions;
+using Werewolves.Core.GameLogic;
 using Werewolves.Core.GameLogic.Models.EliminationCascades;
 using Werewolves.Core.GameLogic.RolePowers;
 using Werewolves.Core.GameLogic.Roles.MainRoles;
@@ -2021,9 +2022,18 @@ public sealed class ActorBorrowedHunterElderTests
 			session.RoleLockIn.Version,
 			hunterId,
 			hunterCard.Card.Id).Should().BeTrue();
-		session.IdentifyRole([actorId], MainRoleType.Actor);
-		session.IdentifyRole([cupidId], MainRoleType.Cupid);
-		session.IdentifyRole([hunterId], MainRoleType.Hunter);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { actorId },
+			MainRoleType.Actor);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { cupidId },
+			MainRoleType.Cupid);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { hunterId },
+			MainRoleType.Hunter);
 		session.CommitLoversPair(
 			[actorId, hunterId],
 			new RolePowerInstanceIdentity(
@@ -2097,7 +2107,10 @@ public sealed class ActorBorrowedHunterElderTests
 			session.RoleLockIn.Version,
 			actorId,
 			actorCard.Card.Id).Should().BeTrue();
-		session.IdentifyRole([actorId], MainRoleType.Actor);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { actorId },
+			MainRoleType.Actor);
 		if (preActivate)
 		{
 			session.TrySpendActorSetupCard(
@@ -2160,9 +2173,13 @@ public sealed class ActorBorrowedHunterElderTests
 			session.RoleLockIn.Version,
 			actorId,
 			actorCard.Card.Id).Should().BeTrue();
-		session.IdentifyRole([actorId], MainRoleType.Actor);
-		session.IdentifyRole(
-			[wolfFatherId],
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { actorId },
+			MainRoleType.Actor);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { wolfFatherId },
 			MainRoleType.AccursedWolfFather);
 		session.PerformNightAction(NightActionType.DefenderProtect, actorId);
 		session = RecoveryPayloadTestDriver.Capture(session)
@@ -2230,11 +2247,18 @@ public sealed class ActorBorrowedHunterElderTests
 			session.RoleLockIn.Version,
 			actorId,
 			actorCard.Card.Id).Should().BeTrue();
-		session.IdentifyRole([actorId], MainRoleType.Actor);
-		session.IdentifyRole(
-			[wolfFatherId],
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { actorId },
+			MainRoleType.Actor);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { wolfFatherId },
 			MainRoleType.AccursedWolfFather);
-		session.IdentifyRole([witchId], MainRoleType.Witch);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { witchId },
+			MainRoleType.Witch);
 		session = RecoveryPayloadTestDriver.Capture(session)
 			.WithPendingInstruction(start)
 			.RehydrateGameSession();
@@ -2307,8 +2331,14 @@ public sealed class ActorBorrowedHunterElderTests
 			session.RoleLockIn.Version,
 			actorId,
 			actorCard.Card.Id).Should().BeTrue();
-		session.IdentifyRole([actorId], MainRoleType.Actor);
-		session.IdentifyRole([attackerId], attackerRole);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { actorId },
+			MainRoleType.Actor);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { attackerId },
+			attackerRole);
 		var werewolfAgentIds = new HashSet<Guid>
 		{
 			werewolfId,
@@ -2387,8 +2417,14 @@ public sealed class ActorBorrowedHunterElderTests
 			session.RoleLockIn.Version,
 			actorId,
 			actorCard.Card.Id).Should().BeTrue();
-		session.IdentifyRole([actorId], MainRoleType.Actor);
-		session.IdentifyRole([defenderId], MainRoleType.Defender);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { actorId },
+			MainRoleType.Actor);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { defenderId },
+			MainRoleType.Defender);
 		session = RecoveryPayloadTestDriver.Capture(session)
 			.WithPendingInstruction(start)
 			.RehydrateGameSession();
@@ -2444,7 +2480,10 @@ public sealed class ActorBorrowedHunterElderTests
 			session.RoleLockIn.Version,
 			actorId,
 			actorCard.Card.Id).Should().BeTrue();
-		session.IdentifyRole([actorId], MainRoleType.Actor);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { actorId },
+			MainRoleType.Actor);
 		session.TrySpendActorSetupCard(
 			actorId,
 			HunterCard.Id,

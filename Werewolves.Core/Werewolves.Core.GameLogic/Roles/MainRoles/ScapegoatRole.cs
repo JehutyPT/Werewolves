@@ -507,7 +507,7 @@ internal sealed class ScapegoatRole
 				IsNonContradictoryScapegoatCandidate(player) &&
 				(player.State.CurrentRole == MainRoleType.Scapegoat ||
 				 player.State.ModeratorKnownRole == MainRoleType.Scapegoat ||
-				 GameSessionQueries.GetPossibleRoles(session, player.Id)
+				 RoleFactionKnowledge.GetPossibleRoles(session, player.Id)
 					 .Contains(MainRoleType.Scapegoat)))
 			.Select(player => player.Id)
 			.ToHashSet();
@@ -588,7 +588,7 @@ internal sealed class ScapegoatRole
 			player.State.ModeratorKnownRole == MainRoleType.Scapegoat ||
 			player.State.PhysicalCharacterCardRole == MainRoleType.Scapegoat;
 		if (!isEstablishedHolder &&
-		    !GameSessionQueries.GetPossibleRoles(session, player.Id)
+		    !RoleFactionKnowledge.GetPossibleRoles(session, player.Id)
 			    .Contains(MainRoleType.Scapegoat))
 		{
 			throw new InvalidOperationException(
@@ -601,7 +601,10 @@ internal sealed class ScapegoatRole
 				"The observed Scapegoat holder's Role Power is unavailable.");
 		}
 
-		session.IdentifyRole([player.Id], MainRoleType.Scapegoat);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { player.Id },
+			MainRoleType.Scapegoat);
 		session.RevealRoles(new Dictionary<Guid, MainRoleType>
 		{
 			[player.Id] = MainRoleType.Scapegoat

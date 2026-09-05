@@ -514,19 +514,9 @@ internal sealed class WhiteWerewolfRole
 				"The White Werewolf continuation has invalid accepted-observation handoff context.");
 		}
 
-		var livingHolderIds = session.GetPlayers()
-			.WithHealth(PlayerHealth.Alive)
-			.Where(player =>
-				player.State.CurrentRole == MainRoleType.WhiteWerewolf)
-			.Select(player => player.Id)
-			.ToHashSet();
-		if (livingHolderIds.Count == 0 ||
-		    !session.GameHistoryLog.OfType<RoleIdentificationLogEntry>()
-			    .Any(entry =>
-				    entry.TurnNumber == session.TurnNumber &&
-				    entry.CurrentPhase == GamePhase.Night &&
-				    entry.Role == MainRoleType.WhiteWerewolf &&
-				    entry.PlayerIds.SetEquals(livingHolderIds)) ||
+		if (!RoleFactionKnowledge.HasAcceptedRoleIdentification(
+			    session,
+			    MainRoleType.WhiteWerewolf) ||
 		    !InitialBeneficiaryClosureRules
 			    .HasConsistentInitialBeneficiaryClosure(session))
 		{
@@ -641,7 +631,7 @@ internal sealed class WhiteWerewolfRole
 				(player.State.CurrentRole == null &&
 				 (player.State.ModeratorKnownRole == MainRoleType.WhiteWerewolf ||
 				  player.State.ModeratorKnownRole == null &&
-				  GameSessionQueries.GetPossibleRoles(session, player.Id)
+				  RoleFactionKnowledge.GetPossibleRoles(session, player.Id)
 					  .Contains(MainRoleType.WhiteWerewolf))))
 			.ToIdSet();
 

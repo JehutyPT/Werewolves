@@ -635,14 +635,9 @@ internal sealed class AccursedWolfFatherRole
 				"The Accursed Wolf-Father continuation has invalid accepted-observation handoff context.");
 		}
 
-		var livingHolderIds = GetLivingHolderIds(session);
-		if (livingHolderIds.Count == 0 ||
-		    !session.GameHistoryLog.OfType<RoleIdentificationLogEntry>()
-			    .Any(entry =>
-				    entry.TurnNumber == session.TurnNumber &&
-				    entry.CurrentPhase == GamePhase.Night &&
-				    entry.Role == MainRoleType.AccursedWolfFather &&
-				    entry.PlayerIds.SetEquals(livingHolderIds)))
+		if (!RoleFactionKnowledge.HasAcceptedRoleIdentification(
+			    session,
+			    MainRoleType.AccursedWolfFather))
 		{
 			throw new InvalidOperationException(
 				"The Accursed Wolf-Father identification continuation has invalid durable context.");
@@ -664,7 +659,7 @@ internal sealed class AccursedWolfFatherRole
 				 (player.State.ModeratorKnownRole ==
 					  MainRoleType.AccursedWolfFather ||
 				  player.State.ModeratorKnownRole == null &&
-				  GameSessionQueries.GetPossibleRoles(session, player.Id)
+				  RoleFactionKnowledge.GetPossibleRoles(session, player.Id)
 					  .Contains(MainRoleType.AccursedWolfFather))))
 			.ToIdSet();
 

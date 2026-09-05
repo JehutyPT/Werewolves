@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using FluentAssertions;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
 using Werewolves.Core.GameLogic.Services;
+using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
@@ -36,29 +37,7 @@ public sealed class WerewolfCollectiveTests
 		observation.CountConstraint.Should().Be(NumberRangeConstraint.Exact(1));
 		observation.SelectablePlayerIds.Should().BeEquivalentTo(
 			players.Select(player => player.Id));
-		var historyCount = session.GameHistoryLog.Count();
-
-		var oversizedResponse = new ModeratorResponse
-		{
-			InstructionId = observation.InstructionId,
-			Type = ExpectedInputType.PlayerSelection,
-			SelectedPlayerIds = new HashSet<Guid>
-			{
-				observedAgent.Id,
-				players[1].Id
-			}
-		};
-		var oversizedAct = () => builder.Process(oversizedResponse);
-
-		oversizedAct.Should().Throw<InvalidOperationException>();
-		session.GameHistoryLog.Should().HaveCount(historyCount);
-		players.Should().AllSatisfy(player =>
-			session.GetFactionAgentKnowledge(
-					player.Id,
-					Faction.Werewolf)
-				.Should().Be(FactionAgentKnowledge.Unknown));
-		builder.GetCurrentInstruction()!.InstructionId.Should().Be(
-			observation.InstructionId);
+		var historyCountBeforeObservation = session.GameHistoryLog.Count();
 
 		var afterObservation = builder.Process(
 			observation.CreateResponse([observedAgent.Id]));
@@ -82,14 +61,48 @@ public sealed class WerewolfCollectiveTests
 		{
 			player.State.CurrentRole.Should().BeNull();
 			player.State.ModeratorKnownRole.Should().BeNull();
+			player.State.PubliclyRevealedRole.Should().BeNull();
 		});
-		var observationEntry = session.GameHistoryLog
+		session.GetModeratorPhysicalCharacterCards().Should().AllSatisfy(card =>
+		{
+			card.Zone.Should().Be(PhysicalCharacterCardZone.DealPool);
+			card.OwnerPlayerId.Should().BeNull();
+		});
+		var observationHistory = session.GameHistoryLog
+			.Skip(historyCountBeforeObservation)
+			.ToArray();
+		observationHistory.Should().HaveCount(2);
+		observationHistory.Should().OnlyContain(
+			entry => entry is FactionFactsCommittedLogEntry);
+		observationHistory.OfType<RoleIdentificationLogEntry>()
+			.Should().BeEmpty();
+		observationHistory.OfType<PhysicalCharacterCardOwnershipObservedLogEntry>()
+			.Should().BeEmpty();
+		observationHistory.OfType<RoleRevealLogEntry>()
+			.Should().BeEmpty();
+		var observationEntry = observationHistory
 			.OfType<FactionFactsCommittedLogEntry>()
 			.Single(entry =>
 				entry.Source.Kind ==
 				FactionFactSourceKind.ScheduledObservation);
-		observationEntry.Facts.Should().OnlyContain(
-			fact => fact.Type == FactionFactType.Agent);
+		observationEntry.Facts.Should().HaveCount(players.Length);
+		observationEntry.Facts.Select(fact => fact.PlayerId)
+			.Should().BeEquivalentTo(players.Select(player => player.Id));
+		observationEntry.Facts.Should().AllSatisfy(fact =>
+		{
+			fact.Type.Should().Be(FactionFactType.Agent);
+			fact.Faction.Should().Be(Faction.Werewolf);
+			fact.BeneficiaryPrecedence.Should().BeNull();
+		});
+		observationEntry.Facts.Should().ContainSingle(fact =>
+			fact.PlayerId == observedAgent.Id &&
+			fact.AgentKnowledge == FactionAgentKnowledge.KnownAgent);
+		observationEntry.Facts
+			.Where(fact =>
+				fact.AgentKnowledge == FactionAgentKnowledge.KnownNonAgent)
+			.Select(fact => fact.PlayerId)
+			.Should().BeEquivalentTo(
+				players.Skip(1).Select(player => player.Id));
 		session.GetFactionBeneficiaryKnowledge(observedAgent.Id)
 			.Should().Be(FactionBeneficiaryKnowledge.Known(Faction.Werewolf));
 		foreach (var nonAgent in players.Skip(1))
@@ -98,11 +111,14 @@ public sealed class WerewolfCollectiveTests
 				.Should().Be(FactionBeneficiaryKnowledge.Known(Faction.Villager));
 		}
 
-		session.GameHistoryLog
+		var closureEntry = observationHistory
 			.OfType<FactionFactsCommittedLogEntry>()
-			.Should().ContainSingle(entry =>
+			.Single(entry =>
 				entry.Source.Kind ==
 				FactionFactSourceKind.InitialBeneficiaryClosure);
+		closureEntry.Facts.Should().HaveCount(players.Length);
+		closureEntry.Facts.Should().OnlyContain(
+			fact => fact.Type == FactionFactType.Beneficiary);
 	}
 
 	[Fact]
@@ -407,35 +423,117 @@ public sealed class WerewolfCollectiveTests
 	}
 
 	[Fact]
-	public void UnknownLivingGroup_InvalidEmptyObservation_IsSideEffectFree()
+	public void ProcessInstruction_MixedLivingAgentKnowledge_FiltersObservationCandidatesAndRejectsInvalidResponsesAtomically()
 	{
 		var builder = GameTestBuilder.Create()
 			.WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);
 		builder.StartGame();
+		var session = builder.GetGameState()!;
+		var players = session.GetPlayers().ToArray();
+		var knownAgent = players[0];
+		var knownNonAgent = players[1];
+		var unknownPlayers = players.Skip(2).ToArray();
+		builder.ArrangeKnownPhysicalRole(
+			knownAgent.Id,
+			MainRoleType.SimpleWerewolf);
+		ArrangeWerewolfAgentKnowledge(
+			builder,
+			knownNonAgent.Id,
+			FactionAgentKnowledge.KnownNonAgent);
+		var afterGameStart = builder.ConfirmGameStart();
+		var nightStart =
+			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
+				afterGameStart);
 		var observation =
 			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
-				StartNight(builder));
-		var session = builder.GetGameState()!;
-		var historyCount = session.GameHistoryLog.Count();
+				builder.Process(nightStart.CreateResponse()));
 
-		var invalidResponse = new ModeratorResponse
+		observation.SelectablePlayerIds.Should().Contain(knownAgent.Id);
+		observation.SelectablePlayerIds.Should().NotContain(knownNonAgent.Id);
+		observation.SelectablePlayerIds.Should().Contain(
+			unknownPlayers.Select(player => player.Id));
+		observation.SelectablePlayerIds.Should().HaveCount(4);
+		observation.CountConstraint.Should().Be(NumberRangeConstraint.Exact(1));
+		var cases = new (string Name, ModeratorResponse? Response)[]
 		{
-			InstructionId = observation.InstructionId,
-			Type = ExpectedInputType.PlayerSelection,
-			SelectedPlayerIds = ImmutableHashSet<Guid>.Empty
+			("empty", new ModeratorResponse
+			{
+				InstructionId = observation.InstructionId,
+				Type = ExpectedInputType.PlayerSelection,
+				SelectedPlayerIds = ImmutableHashSet<Guid>.Empty
+			}),
+			("stale-instruction", nightStart.CreateResponse()),
+			("out-of-set", new ModeratorResponse
+			{
+				InstructionId = observation.InstructionId,
+				Type = ExpectedInputType.PlayerSelection,
+				SelectedPlayerIds = new HashSet<Guid> { knownNonAgent.Id }
+			}),
+			("contradicts-known-agent", new ModeratorResponse
+			{
+				InstructionId = observation.InstructionId,
+				Type = ExpectedInputType.PlayerSelection,
+				SelectedPlayerIds = new HashSet<Guid>
+				{
+					unknownPlayers[0].Id
+				}
+			}),
+			("canceled", null)
 		};
-		var act = () => builder.Process(invalidResponse);
 
-		act.Should().Throw<InvalidOperationException>();
-		session.GameHistoryLog.Should().HaveCount(historyCount);
-		session.GetPlayers().Should().AllSatisfy(player =>
-			session.GetFactionAgentKnowledge(
-					player.Id,
-					Faction.Werewolf)
-				.Should().Be(FactionAgentKnowledge.Unknown));
-		builder.GetCurrentInstruction()!.InstructionId.Should().Be(
-			observation.InstructionId);
+		foreach (var (name, response) in cases)
+		{
+			var historyBefore = session.GameHistoryLog.ToArray();
+			var playerKnowledgeBefore = CapturePlayerObservationState(
+				session,
+				players);
+			var physicalCardsBefore = session
+				.GetModeratorPhysicalCharacterCards()
+				.ToArray();
+			Action act = response is null
+				? () => builder.Process(null!)
+				: () => builder.Process(response);
+
+			if (response is null)
+			{
+				act.Should().Throw<ArgumentNullException>(name);
+			}
+			else
+			{
+				act.Should().Throw<InvalidOperationException>(name);
+			}
+			session.GameHistoryLog.Should().Equal(historyBefore, name);
+			CapturePlayerObservationState(session, players)
+				.Should().Equal(playerKnowledgeBefore, name);
+			session.GetModeratorPhysicalCharacterCards().Should()
+				.Equal(physicalCardsBefore, name);
+			builder.GetCurrentInstruction()!.InstructionId.Should().Be(
+				observation.InstructionId,
+				name);
+		}
 	}
+
+	private sealed record PlayerObservationState(
+		FactionAgentKnowledge Agent,
+		FactionBeneficiaryKnowledge Beneficiary,
+		MainRoleType? CurrentRole,
+		MainRoleType? ModeratorKnownRole,
+		MainRoleType? PubliclyRevealedRole);
+
+	private static Dictionary<Guid, PlayerObservationState>
+		CapturePlayerObservationState(
+			IGameSession session,
+			IEnumerable<IPlayer> players) =>
+		players.ToDictionary(
+			player => player.Id,
+			player => new PlayerObservationState(
+				session.GetFactionAgentKnowledge(
+					player.Id,
+					Faction.Werewolf),
+				session.GetFactionBeneficiaryKnowledge(player.Id),
+				player.State.CurrentRole,
+				player.State.ModeratorKnownRole,
+				player.State.PubliclyRevealedRole));
 
 	private static ProcessResult StartNight(GameTestBuilder builder)
 	{

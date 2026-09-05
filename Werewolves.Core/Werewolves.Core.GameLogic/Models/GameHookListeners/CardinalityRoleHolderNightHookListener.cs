@@ -377,7 +377,7 @@ internal abstract class CardinalityRoleHolderNightHookListener
 				(player.State.CurrentRole == null &&
 				 (player.State.ModeratorKnownRole == (MainRoleType)Id ||
 				  player.State.ModeratorKnownRole == null &&
-				  GameSessionQueries.GetPossibleRoles(session, player.Id)
+				  RoleFactionKnowledge.GetPossibleRoles(session, player.Id)
 					  .Contains((MainRoleType)Id))))
 			.ToIdSet();
 
@@ -440,13 +440,9 @@ internal abstract class CardinalityRoleHolderNightHookListener
 			.Select(player => player.Id)
 			.ToHashSet();
 		return livingHolderIds.Count == InitialRoleHolderCardinality &&
-		       session.GameHistoryLog
-			       .OfType<RoleIdentificationLogEntry>()
-			       .Any(entry =>
-				       entry.TurnNumber == session.TurnNumber &&
-				       entry.CurrentPhase == GamePhase.Night &&
-				       entry.Role == role &&
-				       entry.PlayerIds.SetEquals(livingHolderIds));
+		       RoleFactionKnowledge.HasAcceptedRoleIdentification(
+			       session,
+			       role);
 	}
 
 	private bool AreAllPowersAvailable(

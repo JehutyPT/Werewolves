@@ -2528,7 +2528,7 @@ internal static class GameFlowManager
             cursor.AcceptedObservationSemantic switch
             {
                 ModeratorInstructionSemantic.IdentifyRoleHolders =>
-					 HasCommittedRoleIdentification(
+					 RoleFactionKnowledge.HasAcceptedRoleIdentification(
 						 session,
 						 cursor.ObservedRole) &&
 					 (cursor.ObservedRole is not
@@ -2540,9 +2540,13 @@ internal static class GameFlowManager
                     .ObserveWerewolfFactionAgentGroup
                     when cursor.ObservedRole == SimpleWerewolf &&
                          continuationRole == SimpleWerewolf =>
-                    HasCommittedWerewolfAgentGroupObservation(
-                        session,
-                        pendingInstruction) &&
+					RoleFactionKnowledge
+						.TryGetAcceptedInitialWerewolfAgentGroup(
+							session,
+							out var agentPlayerIds) &&
+					pendingInstruction.AffectedPlayerIds is
+						{ } affectedPlayerIds &&
+					agentPlayerIds.SetEquals(affectedPlayerIds) &&
                     InitialBeneficiaryClosureRules
                         .HasConsistentInitialBeneficiaryClosure(session),
 				ModeratorInstructionSemantic
@@ -2590,70 +2594,6 @@ internal static class GameFlowManager
 			pendingInstruction,
 			cursor);
 	}
-
-	private static bool HasCommittedRoleIdentification(
-        GameSession session,
-        MainRoleType observedRole)
-    {
-        var livingHolderIds = session.GetPlayers()
-            .Where(player =>
-                player.State.Health == PlayerHealth.Alive &&
-                player.State.CurrentRole == observedRole &&
-                player.State.ModeratorKnownRole == observedRole)
-            .Select(player => player.Id)
-            .ToHashSet();
-        return livingHolderIds.Count > 0 &&
-               session.GameHistoryLog
-                   .OfType<RoleIdentificationLogEntry>()
-                   .Any(entry =>
-                       entry.TurnNumber == session.TurnNumber &&
-                       entry.CurrentPhase == GamePhase.Night &&
-                       entry.Role == observedRole &&
-                       entry.PlayerIds.SetEquals(livingHolderIds));
-    }
-
-    private static bool HasCommittedWerewolfAgentGroupObservation(
-        GameSession session,
-        ModeratorInstruction pendingInstruction)
-    {
-        var observedPlayerIds =
-            pendingInstruction.AffectedPlayerIds?.ToHashSet();
-        if (observedPlayerIds == null)
-        {
-            return false;
-        }
-
-        var livingPlayerIds = session.GetPlayers()
-            .Where(player => player.State.Health == PlayerHealth.Alive)
-            .Select(player => player.Id)
-            .ToHashSet();
-        return session.GameHistoryLog
-            .OfType<FactionFactsCommittedLogEntry>()
-            .Any(entry =>
-                entry.TurnNumber == session.TurnNumber &&
-                entry.CurrentPhase == GamePhase.Night &&
-                entry.Source.Kind ==
-                    FactionFactSourceKind.ScheduledObservation &&
-                entry.Source.Identifier ==
-                    FactionFactSource
-                        .WerewolfFactionAgentGroupObservationIdentifier &&
-                entry.Facts.Length == livingPlayerIds.Count &&
-                entry.Facts.All(fact =>
-                    fact.Type == FactionFactType.Agent &&
-                    fact.Faction == Faction.Werewolf &&
-                    livingPlayerIds.Contains(fact.PlayerId)) &&
-                entry.Facts
-                    .Select(fact => fact.PlayerId)
-                    .ToHashSet()
-                    .SetEquals(livingPlayerIds) &&
-                entry.Facts
-                    .Where(fact =>
-                        fact.AgentKnowledge ==
-                        FactionAgentKnowledge.KnownAgent)
-                    .Select(fact => fact.PlayerId)
-                    .ToHashSet()
-                    .SetEquals(observedPlayerIds));
-    }
 
     private static bool RetainsLittleGirlGuidanceDecision(
         AcceptedObservationRecoveryCursor cursor)

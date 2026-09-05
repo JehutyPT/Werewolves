@@ -621,14 +621,9 @@ internal sealed class StutteringJudgeRole
 		ValidateJudgeCursor(
 			cursor,
 			ModeratorInstructionSemantic.IdentifyRoleHolders);
-		var livingHolderIds = GetLivingHolderIds(session);
-		if (livingHolderIds.Count == 0 ||
-		    !session.GameHistoryLog.OfType<RoleIdentificationLogEntry>().Any(
-			    entry =>
-				    entry.TurnNumber == session.TurnNumber &&
-				    entry.CurrentPhase == GamePhase.Night &&
-				    entry.Role == MainRoleType.StutteringJudge &&
-				    entry.PlayerIds.SetEquals(livingHolderIds)))
+		if (!RoleFactionKnowledge.HasAcceptedRoleIdentification(
+			    session,
+			    MainRoleType.StutteringJudge))
 		{
 			throw new InvalidOperationException(
 				"The Stuttering Judge signal setup has no committed identification.");
@@ -879,7 +874,7 @@ internal sealed class StutteringJudgeRole
 				 (player.State.ModeratorKnownRole ==
 					  MainRoleType.StutteringJudge ||
 				  player.State.ModeratorKnownRole == null &&
-				  GameSessionQueries.GetPossibleRoles(session, player.Id)
+				  RoleFactionKnowledge.GetPossibleRoles(session, player.Id)
 					  .Contains(MainRoleType.StutteringJudge))))
 			.ToIdSet();
 

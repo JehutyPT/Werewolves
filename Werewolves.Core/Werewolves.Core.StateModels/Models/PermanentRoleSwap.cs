@@ -350,6 +350,7 @@ internal sealed record DevotedServantRoleTakeRequest(
 	MainRoleType ObservedPrintedRole,
 	MainRoleType NewCurrentRole,
 	MainRoleType? ExpectedTargetCurrentRole,
+	MainRoleType? ExpectedTargetEstablishedRole,
 	PermanentRoleSwapCardMovement PhysicalCards,
 	PermanentRoleSwapPolicy Policy,
 	PermanentRoleSwapFactionReplacement Factions,

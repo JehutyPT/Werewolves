@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using FluentAssertions;
+using Werewolves.Core.GameLogic;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
@@ -141,7 +142,10 @@ public sealed class PrejudicedManipulatorRoleTests
 			roster[0].Id,
 			cards[0].Id).Should().BeTrue();
 		session.AssignRole(roster[0].Id, MainRoleType.Thief);
-		session.IdentifyRole([roster[0].Id], MainRoleType.Thief);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { roster[0].Id },
+			MainRoleType.Thief);
 		var nightStart =
 			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
 				service.ProcessInstruction(
@@ -226,7 +230,10 @@ public sealed class PrejudicedManipulatorRoleTests
 			roster[0].Id,
 			cards[0].Id).Should().BeTrue();
 		session.AssignRole(roster[0].Id, MainRoleType.Thief);
-		session.IdentifyRole([roster[0].Id], MainRoleType.Thief);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { roster[0].Id },
+			MainRoleType.Thief);
 		var nightStart =
 			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
 				service.ProcessInstruction(
@@ -325,8 +332,9 @@ public sealed class PrejudicedManipulatorRoleTests
 			roster[0].Id,
 			card.Id).Should().BeTrue();
 		session.AssignRole(roster[0].Id, MainRoleType.PrejudicedManipulator);
-		session.IdentifyRole(
-			[roster[0].Id],
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { roster[0].Id },
 			MainRoleType.PrejudicedManipulator);
 		service.ProcessInstruction(start.GameGuid, start.CreateResponse())
 			.IsSuccess.Should().BeTrue();

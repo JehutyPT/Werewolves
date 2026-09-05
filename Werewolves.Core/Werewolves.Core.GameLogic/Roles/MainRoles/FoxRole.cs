@@ -765,13 +765,9 @@ internal sealed class FoxRole
 				"The Fox identification cursor has invalid workflow context.");
 		}
 
-		var livingHolderIds = GetLivingHolderIds(session);
-		if (livingHolderIds.Count == 0 ||
-		    !session.GameHistoryLog.OfType<RoleIdentificationLogEntry>().Any(entry =>
-			    entry.TurnNumber == session.TurnNumber &&
-			    entry.CurrentPhase == GamePhase.Night &&
-			    entry.Role == MainRoleType.Fox &&
-			    entry.PlayerIds.SetEquals(livingHolderIds)))
+		if (!RoleFactionKnowledge.HasAcceptedRoleIdentification(
+			    session,
+			    MainRoleType.Fox))
 		{
 			throw new InvalidOperationException(
 				"The Fox wake wait has no committed identification.");
@@ -915,7 +911,7 @@ internal sealed class FoxRole
 				(player.State.CurrentRole == null &&
 				 (player.State.ModeratorKnownRole == MainRoleType.Fox ||
 				  player.State.ModeratorKnownRole == null &&
-				  GameSessionQueries.GetPossibleRoles(session, player.Id)
+				  RoleFactionKnowledge.GetPossibleRoles(session, player.Id)
 					  .Contains(MainRoleType.Fox))))
 			.ToIdSet();
 
