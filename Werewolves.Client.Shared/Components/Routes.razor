@@ -30,7 +30,7 @@ else if (_currentStep == LobbyStep.RoleSelection)
 						   OnConfigureRoleLockIn="ShowRoleLockIn"
 						   OnConfigureActorSetupCards="ShowActorSetupCards"
 						   OnConfigurePublicGroupPartition="ShowPublicGroupPartition"
-						   OnStartGame="HandleStartGame" />
+						   OnLobbyExitAttempted="HandleLobbyExitOutcome" />
 }
 else if (_currentStep == LobbyStep.RoleLockIn)
 {
@@ -174,27 +174,23 @@ else
 		MoveTo(LobbyStep.Labs);
 	}
 
-	private void HandleStartGame()
+	private void HandleLobbyExitOutcome(LobbyExitOutcome outcome)
 	{
-		if (!Game.TryEnsureStagedRoleLockIn(Lobby))
+		switch (outcome)
 		{
-			return;
+			case LobbyExitOutcome.ConfigurationRequired configuration:
+				MoveTo(configuration.Step switch
+				{
+					LobbyConfigurationStep.RoleLockIn => LobbyStep.RoleLockIn,
+					LobbyConfigurationStep.ActorSetupCards => LobbyStep.ActorSetupCards,
+					LobbyConfigurationStep.PublicGroupPartition => LobbyStep.PublicGroupPartition,
+					_ => throw new ArgumentOutOfRangeException(nameof(outcome))
+				});
+				break;
+			case LobbyExitOutcome.Started:
+				MoveTo(LobbyStep.Dashboard);
+				break;
 		}
-
-		if (Lobby.RequiresActorSetupCards)
-		{
-			MoveTo(LobbyStep.ActorSetupCards);
-			return;
-		}
-
-		if (Lobby.RequiresPublicGroupPartition)
-		{
-			MoveTo(LobbyStep.PublicGroupPartition);
-			return;
-		}
-
-		Game.StartGame(Lobby);
-		MoveTo(LobbyStep.Dashboard);
 	}
 
 	private void HandleReturnToLobby()

@@ -1,6 +1,5 @@
 using Bunit;
 using FluentAssertions;
-using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 using Werewolves.Client.Components;
@@ -49,15 +48,14 @@ public class RoleSelectionEvaluationTests
 			depth: LobbyEvaluationDepth.DegenerateScreeningOnly,
 			capability: SimulatorCapability.SafetyScreening);
 		SeedValidLobby(context.Services.GetRequiredService<LobbySetupState>());
-		var starts = 0;
-		var cut = context.RenderModeratorComponent<RoleSelectionPage>(parameters => parameters
-			.Add(component => component.OnStartGame, EventCallback.Factory.Create(this, () => starts++)));
+		var cut = OpenRoleSelection(context);
 		cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationPanel)).Should().BeEmpty();
 
 		cut.Find(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Click();
 		await evaluator.Started.WaitAsync(TimeSpan.FromSeconds(5));
 
-		starts.Should().Be(0);
+		cut.FindAll(TestId(ModeratorUiTestIds.DashboardShell)).Should().BeEmpty();
+		cut.FindAll(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Should().ContainSingle();
 		context.Services.GetRequiredService<LobbyEvaluationCoordinator>()
 			.State.Kind.Should().Be(LobbyEvaluationStateKind.Pending);
 		var status = cut.Find(TestId(ModeratorUiTestIds.LobbyEvaluationStatus));
@@ -78,9 +76,7 @@ public class RoleSelectionEvaluationTests
 			depth: LobbyEvaluationDepth.DegenerateScreeningOnly,
 			capability: SimulatorCapability.SafetyScreening);
 		SeedValidLobby(context.Services.GetRequiredService<LobbySetupState>());
-		var starts = 0;
-		var cut = context.RenderModeratorComponent<RoleSelectionPage>(parameters => parameters
-			.Add(component => component.OnStartGame, EventCallback.Factory.Create(this, () => starts++)));
+		var cut = OpenRoleSelection(context);
 
 		cut.Find(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Click();
 		await evaluator.Started.WaitAsync(TimeSpan.FromSeconds(5));
@@ -98,13 +94,14 @@ public class RoleSelectionEvaluationTests
 			status.GetAttribute("role").Should().Be("status");
 			status.GetAttribute("aria-live").Should().Be("polite");
 		});
-		starts.Should().Be(0);
+		cut.FindAll(TestId(ModeratorUiTestIds.DashboardShell)).Should().BeEmpty();
+		cut.FindAll(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Should().ContainSingle();
 
 		cut.Find(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Click();
 
 		cut.WaitForAssertion(() =>
 		{
-			starts.Should().Be(1);
+			cut.FindAll(TestId(ModeratorUiTestIds.DashboardShell)).Should().ContainSingle();
 			cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationStatus)).Should().BeEmpty();
 		});
 	}
@@ -118,9 +115,7 @@ public class RoleSelectionEvaluationTests
 			depth: LobbyEvaluationDepth.DegenerateScreeningOnly,
 			capability: SimulatorCapability.SafetyScreening);
 		SeedValidLobby(context.Services.GetRequiredService<LobbySetupState>());
-		var starts = 0;
-		var cut = context.RenderModeratorComponent<RoleSelectionPage>(parameters => parameters
-			.Add(component => component.OnStartGame, EventCallback.Factory.Create(this, () => starts++)));
+		var cut = OpenRoleSelection(context);
 
 		cut.Find(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Click();
 		await evaluator.Started.WaitAsync(TimeSpan.FromSeconds(5));
@@ -139,26 +134,25 @@ public class RoleSelectionEvaluationTests
 			status.GetAttribute("role").Should().Be("status");
 			status.GetAttribute("aria-live").Should().Be("polite");
 		});
-		starts.Should().Be(0);
+		cut.FindAll(TestId(ModeratorUiTestIds.DashboardShell)).Should().BeEmpty();
+		cut.FindAll(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Should().ContainSingle();
 
 		cut.Find(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Click();
 
 		cut.WaitForAssertion(() =>
 		{
-			starts.Should().Be(1);
+			cut.FindAll(TestId(ModeratorUiTestIds.DashboardShell)).Should().ContainSingle();
 			cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationStatus)).Should().BeEmpty();
 		});
 	}
 
 	[Fact]
-	public async Task StartHandler_RechecksOrdinaryValidationBeforeConsultingTheLiveGate()
+	public async Task InvalidRoleComposition_DisablesStartAndRendersValidationWithoutNavigation()
 	{
 		using var context = CreateContext(evaluator: new ControlledEvaluator());
 		var lobby = context.Services.GetRequiredService<LobbySetupState>();
 		SeedValidLobby(lobby);
-		var starts = 0;
-		var cut = context.RenderModeratorComponent<RoleSelectionPage>(parameters => parameters
-			.Add(component => component.OnStartGame, EventCallback.Factory.Create(this, () => starts++)));
+		var cut = OpenRoleSelection(context);
 		lobby.DecrementRole(MainRoleType.SimpleVillager);
 		cut.WaitForAssertion(() => cut.Find(TestId(ModeratorUiTestIds.RoleSelectionStartGame))
 			.HasAttribute("disabled").Should().BeTrue());
@@ -168,7 +162,8 @@ public class RoleSelectionEvaluationTests
 			ClientTestReferences.Html.Events.Click,
 			new MouseEventArgs());
 
-		starts.Should().Be(0);
+		cut.FindAll(TestId(ModeratorUiTestIds.DashboardShell)).Should().BeEmpty();
+		cut.FindAll(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Should().ContainSingle();
 		cut.Find("[role='alert']").TextContent.Should().NotBeNullOrWhiteSpace();
 	}
 
@@ -188,9 +183,7 @@ public class RoleSelectionEvaluationTests
 			depth: LobbyEvaluationDepth.DegenerateScreeningOnly,
 			capability: SimulatorCapability.SafetyScreening);
 		SeedValidLobby(context.Services.GetRequiredService<LobbySetupState>(), villagers: 2, werewolves: 3);
-		var starts = 0;
-		var cut = context.RenderModeratorComponent<RoleSelectionPage>(parameters => parameters
-			.Add(component => component.OnStartGame, EventCallback.Factory.Create(this, () => starts++)));
+		var cut = OpenRoleSelection(context);
 		cut.WaitForAssertion(() =>
 			context.Services.GetRequiredService<LobbyEvaluationCoordinator>()
 				.State.Kind.Should().Be(LobbyEvaluationStateKind.AlreadyDecided));
@@ -199,7 +192,8 @@ public class RoleSelectionEvaluationTests
 
 		cut.Find(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Click();
 
-		starts.Should().Be(0);
+		cut.FindAll(TestId(ModeratorUiTestIds.DashboardShell)).Should().BeEmpty();
+		cut.FindAll(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Should().ContainSingle();
 		cut.Find(TestId(ModeratorUiTestIds.LobbyEvaluationStatus))
 			.TextContent.Should().Contain(ClientStrings.LobbyEvaluation_AlreadyDecidedBlock);
 	}
@@ -227,9 +221,7 @@ public class RoleSelectionEvaluationTests
 			depth: LobbyEvaluationDepth.DegenerateScreeningOnly,
 			capability: SimulatorCapability.SafetyScreening);
 		SeedValidLobby(context.Services.GetRequiredService<LobbySetupState>());
-		var starts = 0;
-		var cut = context.RenderModeratorComponent<RoleSelectionPage>(parameters => parameters
-			.Add(component => component.OnStartGame, EventCallback.Factory.Create(this, () => starts++)));
+		var cut = OpenRoleSelection(context);
 		cut.WaitForAssertion(() =>
 			context.Services.GetRequiredService<LobbyEvaluationCoordinator>()
 				.State.Kind.Should().Be(LobbyEvaluationStateKind.Degenerate));
@@ -238,7 +230,8 @@ public class RoleSelectionEvaluationTests
 
 		cut.Find(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Click();
 
-		starts.Should().Be(0);
+		cut.FindAll(TestId(ModeratorUiTestIds.DashboardShell)).Should().BeEmpty();
+		cut.FindAll(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Should().ContainSingle();
 		cut.Find(TestId(ModeratorUiTestIds.LobbyEvaluationStatus))
 			.TextContent.Should().Contain(ClientStrings.LobbyEvaluation_DegenerateBlock);
 	}
@@ -266,11 +259,7 @@ public class RoleSelectionEvaluationTests
 			depth: LobbyEvaluationDepth.FullProbability,
 			capability: SimulatorCapability.FullProbability);
 		SeedValidLobby(context.Services.GetRequiredService<LobbySetupState>());
-		var cut = context.RenderModeratorComponent<Routes>();
-		cut.Find(TestId(ModeratorUiTestIds.LandingNewGameButton)).Click();
-		cut.FindAll("button")
-			.Single(button => button.TextContent.Contains(ClientStrings.LobbyRoster_ContinueToRolesButton))
-			.Click();
+		var cut = OpenRoleSelection(context);
 		cut.WaitForAssertion(() => cut.Find(TestId(ModeratorUiTestIds.LobbyEvaluationSummary))
 			.TextContent.Should().Contain(ClientStrings.LobbyEvaluation_Probability));
 
@@ -301,15 +290,13 @@ public class RoleSelectionEvaluationTests
 				SimulatorSupported: false);
 		using var context = CreateContext(classify: classify);
 		SeedValidLobby(context.Services.GetRequiredService<LobbySetupState>());
-		var starts = 0;
-		var cut = context.RenderModeratorComponent<RoleSelectionPage>(parameters => parameters
-			.Add(component => component.OnStartGame, EventCallback.Factory.Create(this, () => starts++)));
+		var cut = OpenRoleSelection(context);
 
 		context.Services.GetRequiredService<LobbyEvaluationCoordinator>()
 			.State.Kind.Should().Be(expectedState);
 		cut.Find(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Click();
 
-		starts.Should().Be(1);
+		cut.FindAll(TestId(ModeratorUiTestIds.DashboardShell)).Should().ContainSingle();
 		cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationPanel)).Should().BeEmpty();
 	}
 
@@ -324,9 +311,7 @@ public class RoleSelectionEvaluationTests
 			depth: LobbyEvaluationDepth.DegenerateScreeningOnly,
 			capability: SimulatorCapability.SafetyScreening);
 		SeedValidLobby(context.Services.GetRequiredService<LobbySetupState>());
-		var starts = 0;
-		var cut = context.RenderModeratorComponent<RoleSelectionPage>(parameters => parameters
-			.Add(component => component.OnStartGame, EventCallback.Factory.Create(this, () => starts++)));
+		var cut = OpenRoleSelection(context);
 
 		context.Services.GetRequiredService<LobbyEvaluationCoordinator>()
 			.State.Kind.Should().Be(LobbyEvaluationStateKind.SimulatorUnavailable);
@@ -334,7 +319,7 @@ public class RoleSelectionEvaluationTests
 
 		cut.Find(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Click();
 
-		starts.Should().Be(1);
+		cut.FindAll(TestId(ModeratorUiTestIds.DashboardShell)).Should().ContainSingle();
 	}
 
 	[Fact]
@@ -344,25 +329,24 @@ public class RoleSelectionEvaluationTests
 			depth: LobbyEvaluationDepth.DegenerateScreeningOnly,
 			capability: SimulatorCapability.SafetyScreening);
 		SeedValidLobby(context.Services.GetRequiredService<LobbySetupState>());
-		var starts = 0;
-		var cut = context.RenderModeratorComponent<RoleSelectionPage>(parameters => parameters
-			.Add(component => component.OnStartGame, EventCallback.Factory.Create(this, () => starts++)));
+		var cut = OpenRoleSelection(context);
 
 		cut.Find(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Click();
 		cut.WaitForAssertion(() => context.Services.GetRequiredService<LobbyEvaluationCoordinator>()
 			.State.Kind.Should().Be(LobbyEvaluationStateKind.CouldNotEvaluate));
 
-		starts.Should().Be(0);
+		cut.FindAll(TestId(ModeratorUiTestIds.DashboardShell)).Should().BeEmpty();
+		cut.FindAll(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Should().ContainSingle();
 		cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationPanel)).Should().BeEmpty();
 		cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationRetry)).Should().BeEmpty();
 
 		cut.Find(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Click();
 
-		starts.Should().Be(1);
+		cut.FindAll(TestId(ModeratorUiTestIds.DashboardShell)).Should().ContainSingle();
 	}
 
 	[Fact]
-	public async Task CouldNotEvaluate_AllowsStartAndCurrentRetrySynchronouslyReturnsToPendingGate()
+	public async Task FullProbability_RetryReturnsToPendingAndBlocksOrdinaryStart()
 	{
 		var evaluator = new RetrySequenceEvaluator();
 		using var context = CreateContext(
@@ -370,18 +354,15 @@ public class RoleSelectionEvaluationTests
 			depth: LobbyEvaluationDepth.FullProbability,
 			capability: SimulatorCapability.FullProbability);
 		SeedValidLobby(context.Services.GetRequiredService<LobbySetupState>());
-		var starts = 0;
-		var cut = context.RenderModeratorComponent<RoleSelectionPage>(parameters => parameters
-			.Add(component => component.OnStartGame, EventCallback.Factory.Create(this, () => starts++)));
+		var cut = OpenRoleSelection(context);
 
 		cut.Find(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Click();
 		cut.WaitForAssertion(() =>
 			context.Services.GetRequiredService<LobbyEvaluationCoordinator>()
 				.State.Kind.Should().Be(LobbyEvaluationStateKind.CouldNotEvaluate));
-		starts.Should().Be(0);
+		cut.FindAll(TestId(ModeratorUiTestIds.DashboardShell)).Should().BeEmpty();
+		cut.FindAll(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Should().ContainSingle();
 
-		cut.Find(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Click();
-		starts.Should().Be(1);
 		cut.Find(TestId(ModeratorUiTestIds.LobbyEvaluationRetry)).Click();
 		await evaluator.RetryStarted.WaitAsync(TimeSpan.FromSeconds(5));
 		cut.WaitForAssertion(() =>
@@ -395,7 +376,7 @@ public class RoleSelectionEvaluationTests
 
 		cut.Find(TestId(ModeratorUiTestIds.RoleSelectionStartGame)).Click();
 
-		starts.Should().Be(1);
+		cut.FindAll(TestId(ModeratorUiTestIds.DashboardShell)).Should().BeEmpty();
 		cut.Find(TestId(ModeratorUiTestIds.LobbyEvaluationStatus))
 			.TextContent.Should().Contain(ClientStrings.LobbyEvaluation_PendingBlock);
 		evaluator.CallCount.Should().Be(2);
@@ -425,9 +406,8 @@ public class RoleSelectionEvaluationTests
 		cut.WaitForAssertion(() =>
 		{
 			context.Services.GetRequiredService<LobbyEvaluationCoordinator>()
-				.State.Kind.Should().Be(LobbyEvaluationStateKind.Pending);
-			cut.Find(TestId(ModeratorUiTestIds.LobbyEvaluationSummary))
-				.TextContent.Should().Contain(ClientStrings.LobbyEvaluation_Pending);
+				.State.Kind.Should().Be(LobbyEvaluationStateKind.NotApplicable);
+			cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationPanel)).Should().BeEmpty();
 			cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationRetry)).Should().BeEmpty();
 			cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationStatus)).Should().BeEmpty();
 			cut.Markup.Should().NotContain(ClientStrings.LobbyEvaluation_CouldNotEvaluate);
@@ -460,9 +440,8 @@ public class RoleSelectionEvaluationTests
 		cut.WaitForAssertion(() =>
 		{
 			context.Services.GetRequiredService<LobbyEvaluationCoordinator>()
-				.State.Kind.Should().Be(LobbyEvaluationStateKind.Pending);
-			cut.Find(TestId(ModeratorUiTestIds.LobbyEvaluationSummary))
-				.TextContent.Should().Contain(ClientStrings.LobbyEvaluation_Pending);
+				.State.Kind.Should().Be(LobbyEvaluationStateKind.NotApplicable);
+			cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationPanel)).Should().BeEmpty();
 			cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationStatus)).Should().BeEmpty();
 			cut.Markup.Should().NotContain(ClientStrings.LobbyEvaluation_AlreadyDecided);
 		});
@@ -491,9 +470,8 @@ public class RoleSelectionEvaluationTests
 		cut.WaitForAssertion(() =>
 		{
 			context.Services.GetRequiredService<LobbyEvaluationCoordinator>()
-				.State.Kind.Should().Be(LobbyEvaluationStateKind.Pending);
-			cut.Find(TestId(ModeratorUiTestIds.LobbyEvaluationSummary))
-				.TextContent.Should().Contain(ClientStrings.LobbyEvaluation_Pending);
+				.State.Kind.Should().Be(LobbyEvaluationStateKind.NotApplicable);
+			cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationPanel)).Should().BeEmpty();
 			cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationRetry)).Should().BeEmpty();
 			cut.FindAll(TestId(ModeratorUiTestIds.LobbyEvaluationStatus)).Should().BeEmpty();
 			cut.Markup.Should().NotContain(ClientStrings.LobbyEvaluation_CouldNotEvaluate);
@@ -517,6 +495,17 @@ public class RoleSelectionEvaluationTests
 		coordinator.State.Kind.Should().Be(LobbyEvaluationStateKind.Pending);
 		coordinator.TryRequestLobbyExit().Should().BeFalse();
 		cut.RenderCount.Should().Be(renderCountAfterDisposal);
+	}
+
+	private static IRenderedComponent<Routes> OpenRoleSelection(ModeratorComponentTestContext context)
+	{
+		var cut = context.RenderModeratorComponent<Routes>();
+		cut.Find(TestId(ModeratorUiTestIds.LandingNewGameButton)).Click();
+		cut.WaitForElement("#player-name");
+		cut.FindAll("button").Single(button => button.TextContent.Contains(
+			ClientStrings.LobbyRoster_ContinueToRolesButton)).Click();
+		cut.WaitForElement(TestId(ModeratorUiTestIds.RoleSelectionStartGame));
+		return cut;
 	}
 
 	private static ModeratorComponentTestContext CreateContext(

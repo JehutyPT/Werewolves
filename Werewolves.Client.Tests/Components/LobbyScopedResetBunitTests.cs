@@ -110,8 +110,8 @@ public sealed class LobbyScopedResetBunitTests
 		var cut = context.RenderModeratorComponent<RoleSelectionPage>(parameters => parameters
 			.Add(component => component.OnBack,
 				EventCallback.Factory.Create(this, () => backCalls++))
-			.Add(component => component.OnStartGame,
-				EventCallback.Factory.Create(this, () => startCalls++)));
+			.Add(component => component.OnLobbyExitAttempted,
+				EventCallback.Factory.Create<LobbyExitOutcome>(this, _ => startCalls++)));
 
 		var resetSurface = cut.Find(TestId(ModeratorUiTestIds.RoleSelectionReset));
 		resetSurface.TextContent.Should().Contain(ClientStrings.RoleSelection_ResetButton);

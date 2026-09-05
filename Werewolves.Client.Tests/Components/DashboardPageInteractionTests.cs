@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Components.RenderTree;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Werewolves.Client.Fixtures;
 using Werewolves.Client.Components.Game.Views;
 using Werewolves.Client.Components.Pages;
 using Werewolves.Client.Resources;
@@ -190,7 +191,7 @@ public class DashboardPageInteractionTests
 				new GameService(),
 				new NoOpAudioPlayback(),
 				new InMemoryStore());
-			Game.StartGame(
+			Game.StartPreparedGame(
 				PlayerNames.DefaultFive,
 				[
 					MainRoleType.SimpleWerewolf,

@@ -2,9 +2,11 @@ using System.Collections.Immutable;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using FluentAssertions;
+using Werewolves.Client.Fixtures;
 using Werewolves.Client.Services;
 using Werewolves.Client.Tests.Helpers;
 using Werewolves.Core.GameLogic.Services;
+using Werewolves.Core.GameLogic.Simulation;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
@@ -53,10 +55,12 @@ public class GameClientManagerTests
 		scenarioChanges.Should().Be(2);
 
 		var recoveredLobby = CreateThiefLobby(withPlayers: false);
+		using var recoveredEvaluation = CreatePersistenceEvaluation(recoveredLobby);
 		var recovered = new GameClientManager(
 			new GameService(),
 			saveStore: new FileGameSessionSaveStore(saveDirectory.Path),
-			lobbySetupState: recoveredLobby);
+			lobbySetupState: recoveredLobby,
+			lobbyEvaluation: recoveredEvaluation);
 		recovered.HasActiveSession.Should().BeFalse();
 		recoveredLobby.PlayerNames.Should().Equal(PlayerNames.DefaultFive);
 		recoveredLobby.AcceptedRoleLockIn.Should().NotBeNull();
@@ -69,7 +73,7 @@ public class GameClientManagerTests
 			expectedCurrentVersion: 2,
 			finalSupportedLockIn).Should().BeTrue();
 
-		recovered.StartGame(recoveredLobby);
+		recovered.AttemptLobbyExit().Should().BeOfType<LobbyExitOutcome.Started>();
 
 		recovered.HasActiveSession.Should().BeTrue();
 		ReadRecoveryKind(saveStore.Load()).Should().Be("ActiveGame");
@@ -626,16 +630,18 @@ public class GameClientManagerTests
 		staged.Offer1.Id.Should().NotBe(staged.Offer2.Id);
 
 		var recoveredLobby = CreateThiefLobby(withPlayers: false);
+		using var recoveredEvaluation = CreatePersistenceEvaluation(recoveredLobby);
 		var recovered = new GameClientManager(
 			new GameService(),
 			saveStore: new FileGameSessionSaveStore(saveDirectory.Path),
-			lobbySetupState: recoveredLobby);
+			lobbySetupState: recoveredLobby,
+			lobbyEvaluation: recoveredEvaluation);
 		recoveredLobby.AcceptedRoleLockIn.Should().NotBeNull();
 		var recoveredLockIn = recoveredLobby.AcceptedRoleLockIn!;
 		recoveredLockIn.RoleComposition.Select(card => card.Id)
 			.Should().Equal(staged.RoleComposition.Select(card => card.Id));
 
-		recovered.StartGame(recoveredLobby);
+		recovered.AttemptLobbyExit().Should().BeOfType<LobbyExitOutcome.Started>();
 
 		var published = recovered.CurrentSession!.RoleLockIn;
 		published.RoleComposition.Select(card => card.Id)
@@ -886,7 +892,7 @@ public class GameClientManagerTests
 	}
 
 	[Fact]
-	public void StartGame_AfterAcceptedThiefCompositionBecomesNonThief_ReplacesImplicitlyAtNextVersion()
+	public void AttemptLobbyExit_AfterAcceptedThiefCompositionBecomesNonThief_ReplacesImplicitlyAtNextVersion()
 	{
 		var store = new RecordingSaveStore();
 		var lobby = CreateThiefLobby();
@@ -896,7 +902,12 @@ public class GameClientManagerTests
 		{
 			lobby.IncrementRole(MainRoleType.SimpleVillager);
 		}
-		var manager = new GameClientManager(new GameService(), saveStore: store);
+		using var managerEvaluation = CreatePersistenceEvaluation(lobby);
+		var manager = new GameClientManager(
+			new GameService(),
+			saveStore: store,
+			lobbySetupState: lobby,
+			lobbyEvaluation: managerEvaluation);
 		manager.TryReplaceStagedRoleLockIn(
 			lobby,
 			expectedCurrentVersion: 0,
@@ -908,7 +919,7 @@ public class GameClientManagerTests
 		lobby.DecrementRole(MainRoleType.SimpleVillager);
 		lobby.RequiresRoleLockIn.Should().BeTrue();
 
-		manager.StartGame(lobby);
+		manager.AttemptLobbyExit().Should().BeOfType<LobbyExitOutcome.Started>();
 
 		manager.HasActiveSession.Should().BeTrue();
 		store.SavedPayloads.Select(ReadRecoveryKind).Should().Equal(
@@ -1545,11 +1556,16 @@ public class GameClientManagerTests
 	{
 		var store = new ToggleThrowSaveStore();
 		var lobby = CreateActorAndPrejudicedManipulatorLobby();
-		var manager = new GameClientManager(new GameService(), saveStore: store);
+		using var managerEvaluation = CreatePersistenceEvaluation(lobby);
+		var manager = new GameClientManager(
+			new GameService(),
+			saveStore: store,
+			lobbySetupState: lobby,
+			lobbyEvaluation: managerEvaluation);
 		var partition = ConfigureAcceptedActorAndPrejudicedManipulatorLobby(
 			lobby,
 			manager);
-		manager.StartGame(lobby);
+		manager.AttemptLobbyExit().Should().BeOfType<LobbyExitOutcome.Started>();
 		var playerRoster = lobby.PlayerRoster
 			.Select(player => (player.Id, player.Name))
 			.ToArray();
@@ -1928,12 +1944,14 @@ public class GameClientManagerTests
 		manager.TryEnsureStagedRoleLockIn(lobby).Should().BeTrue();
 
 		var recoveredLobby = CreateSupportedLobby(withPlayers: false);
+		using var recoveredEvaluation = CreatePersistenceEvaluation(recoveredLobby);
 		var recovered = new GameClientManager(
 			new GameService(),
 			saveStore: new FileGameSessionSaveStore(saveDirectory.Path),
-			lobbySetupState: recoveredLobby);
+			lobbySetupState: recoveredLobby,
+			lobbyEvaluation: recoveredEvaluation);
 
-		recovered.StartGame(recoveredLobby);
+		recovered.AttemptLobbyExit().Should().BeOfType<LobbyExitOutcome.Started>();
 
 		recovered.CurrentSession!.GetPlayers()
 			.Select(player => (player.Id, player.Name))
@@ -1949,7 +1967,12 @@ public class GameClientManagerTests
 		var staged = CreateThiefRoleLockIn(
 			version: 1,
 			rotateOffer1IntoDealPool: false);
-		var manager = new GameClientManager(new GameService(), saveStore: saveStore);
+		using var managerEvaluation = CreatePersistenceEvaluation(lobby);
+		var manager = new GameClientManager(
+			new GameService(),
+			saveStore: saveStore,
+			lobbySetupState: lobby,
+			lobbyEvaluation: managerEvaluation);
 		manager.TryReplaceStagedRoleLockIn(
 			lobby,
 			expectedCurrentVersion: 0,
@@ -1960,28 +1983,29 @@ public class GameClientManagerTests
 
 		lobby.AcceptedRoleLockIn.Should().BeSameAs(staged);
 		saveStore.Load().Should().Be(stagedPayload);
-		var exit = () => manager.StartGame(lobby);
-		exit.Should().Throw<InvalidOperationException>()
-			.WithMessage("*fresh accepted Role Lock-In*");
+		manager.AttemptLobbyExit().Should().BeOfType<LobbyExitOutcome.InvalidSetup>();
 		manager.HasActiveSession.Should().BeFalse();
 		saveStore.Load().Should().Be(stagedPayload);
 	}
 
 	[Fact]
-	public void StartGame_WhenActiveGameOverwriteFails_RetainsStagedLobbyAndPublishesNoSession()
+	public void AttemptLobbyExit_WhenActiveGameOverwriteFails_RetainsStagedLobbyAndPublishesNoSession()
 	{
 		var store = new ToggleThrowSaveStore();
 		var lobby = CreateThiefLobby();
-		var manager = new GameClientManager(new GameService(), saveStore: store);
+		using var managerEvaluation = CreatePersistenceEvaluation(lobby);
+		var manager = new GameClientManager(
+			new GameService(),
+			saveStore: store,
+			lobbySetupState: lobby,
+			lobbyEvaluation: managerEvaluation);
 		var staged = CreateSupportedRoleLockIn(version: 1);
 		manager.TryReplaceStagedRoleLockIn(lobby, expectedCurrentVersion: 0, staged)
 			.Should().BeTrue();
 		var stagedPayload = store.Load();
 		store.ThrowOnSave = true;
 
-		var act = () => manager.StartGame(lobby);
-
-		act.Should().Throw<IOException>();
+		manager.AttemptLobbyExit().Should().BeOfType<LobbyExitOutcome.ActiveRecoveryWriteFailed>();
 		manager.HasActiveSession.Should().BeFalse();
 		manager.ActiveGameId.Should().BeNull();
 		manager.CurrentSession.Should().BeNull();
@@ -1996,13 +2020,18 @@ public class GameClientManagerTests
 	}
 
 	[Fact]
-	public void StartGame_FromUnstagedLobby_PersistsFinalRoleLockInBeforeActiveGame()
+	public void AttemptLobbyExit_FromUnstagedLobby_PersistsFinalRoleLockInBeforeActiveGame()
 	{
 		var store = new RecordingSaveStore();
 		var lobby = CreateSupportedLobby();
-		var manager = new GameClientManager(new GameService(), saveStore: store);
+		using var managerEvaluation = CreatePersistenceEvaluation(lobby);
+		var manager = new GameClientManager(
+			new GameService(),
+			saveStore: store,
+			lobbySetupState: lobby,
+			lobbyEvaluation: managerEvaluation);
 
-		manager.StartGame(lobby);
+		manager.AttemptLobbyExit().Should().BeOfType<LobbyExitOutcome.Started>();
 
 		store.SavedPayloads.Select(ReadRecoveryKind).Should().Equal(
 			"StagedLobby",
@@ -2015,15 +2044,18 @@ public class GameClientManagerTests
 	}
 
 	[Fact]
-	public void StartGame_FromLobbyCapturesRecentSetupAfterPublishingTheActiveSession()
+	public void AttemptLobbyExit_FromLobbyCapturesRecentSetupAfterPublishingTheActiveSession()
 	{
 		var recoveryStore = new RecordingSaveStore();
 		var recentStore = new RecordingRecentSetupStore();
 		var lobby = CreateSupportedLobby();
+		using var managerEvaluation = CreatePersistenceEvaluation(lobby);
 		var manager = new GameClientManager(
 			new GameService(),
 			saveStore: recoveryStore,
-			recentSetupStore: recentStore);
+			recentSetupStore: recentStore,
+			lobbySetupState: lobby,
+			lobbyEvaluation: managerEvaluation);
 		var stateChanged = false;
 		manager.StateChanged += (_, _) => stateChanged = true;
 		recentStore.OnCapture = () =>
@@ -2033,7 +2065,7 @@ public class GameClientManagerTests
 			ReadRecoveryKind(recoveryStore.Load()).Should().Be("ActiveGame");
 		};
 
-		manager.StartGame(lobby);
+		manager.AttemptLobbyExit().Should().BeOfType<LobbyExitOutcome.Started>();
 
 		recentStore.Captures.Should().ContainSingle();
 		var capture = recentStore.Captures.Single();
@@ -2045,19 +2077,20 @@ public class GameClientManagerTests
 	}
 
 	[Fact]
-	public void StartGame_WhenRecentCaptureFailsKeepsThePublishedActiveSession()
+	public void AttemptLobbyExit_WhenRecentCaptureFailsKeepsThePublishedActiveSession()
 	{
 		var recoveryStore = new RecordingSaveStore();
 		var recentStore = new RecordingRecentSetupStore { ThrowOnCapture = true };
 		var lobby = CreateSupportedLobby();
+		using var managerEvaluation = CreatePersistenceEvaluation(lobby);
 		var manager = new GameClientManager(
 			new GameService(),
 			saveStore: recoveryStore,
-			recentSetupStore: recentStore);
+			recentSetupStore: recentStore,
+			lobbySetupState: lobby,
+			lobbyEvaluation: managerEvaluation);
 
-		var act = () => manager.StartGame(lobby);
-
-		act.Should().NotThrow();
+		manager.AttemptLobbyExit().Should().BeOfType<LobbyExitOutcome.Started>();
 		manager.HasActiveSession.Should().BeTrue();
 		ReadRecoveryKind(recoveryStore.Load()).Should().Be("ActiveGame");
 		lobby.AcceptedRoleLockIn.Should().NotBeNull();
@@ -2066,27 +2099,28 @@ public class GameClientManagerTests
 	}
 
 	[Fact]
-	public void StartGame_WhenBlockingRecoveryWriteFailsCapturesNoRecentSetup()
+	public void AttemptLobbyExit_WhenBlockingRecoveryWriteFailsCapturesNoRecentSetup()
 	{
 		var recoveryStore = new ToggleThrowSaveStore();
 		var recentStore = new RecordingRecentSetupStore();
 		var lobby = CreateSupportedLobby();
+		using var managerEvaluation = CreatePersistenceEvaluation(lobby);
 		var manager = new GameClientManager(
 			new GameService(),
 			saveStore: recoveryStore,
-			recentSetupStore: recentStore);
+			recentSetupStore: recentStore,
+			lobbySetupState: lobby,
+			lobbyEvaluation: managerEvaluation);
 		manager.TryEnsureStagedRoleLockIn(lobby).Should().BeTrue();
 		recoveryStore.ThrowOnSave = true;
 
-		var act = () => manager.StartGame(lobby);
-
-		act.Should().Throw<IOException>();
+		manager.AttemptLobbyExit().Should().BeOfType<LobbyExitOutcome.ActiveRecoveryWriteFailed>();
 		manager.HasActiveSession.Should().BeFalse();
 		recentStore.CaptureAttemptCount.Should().Be(0);
 	}
 
 	[Fact]
-	public void StartGame_WithoutLobbyDoesNotCaptureRecentSetup()
+	public void StartPreparedGame_DoesNotCaptureRecentSetup()
 	{
 		var recentStore = new RecordingRecentSetupStore();
 		var manager = new GameClientManager(
@@ -2099,19 +2133,22 @@ public class GameClientManagerTests
 	}
 
 	[Fact]
-	public void StartGame_CapturesTheFullThiefRoleCompositionIncludingOfferCards()
+	public void AttemptLobbyExit_CapturesTheFullThiefRoleCompositionIncludingOfferCards()
 	{
 		var recentStore = new RecordingRecentSetupStore();
 		var lobby = CreateThiefLobby();
 		var roleLockIn = CreateThiefRoleLockIn(
 			version: 1,
 			rotateOffer1IntoDealPool: false);
+		using var managerEvaluation = CreatePersistenceEvaluation(lobby);
 		var manager = new GameClientManager(
 			new GameService(),
-			recentSetupStore: recentStore);
+			recentSetupStore: recentStore,
+			lobbySetupState: lobby,
+			lobbyEvaluation: managerEvaluation);
 		manager.TryReplaceStagedRoleLockIn(lobby, 0, roleLockIn).Should().BeTrue();
 
-		manager.StartGame(lobby);
+		manager.AttemptLobbyExit().Should().BeOfType<LobbyExitOutcome.Started>();
 
 		var capture = recentStore.Captures.Should().ContainSingle().Subject;
 		capture.RoleCounts.Values.Sum().Should().Be(roleLockIn.RoleComposition.Count);
@@ -2235,9 +2272,14 @@ public class GameClientManagerTests
 		var recoveryStore = new ToggleThrowSaveStore();
 		var lobby = CreateActorAndPrejudicedManipulatorLobby();
 		var gameService = new GameService();
-		var manager = new GameClientManager(gameService, saveStore: recoveryStore);
+		using var managerEvaluation = CreatePersistenceEvaluation(lobby);
+		var manager = new GameClientManager(
+			gameService,
+			saveStore: recoveryStore,
+			lobbySetupState: lobby,
+			lobbyEvaluation: managerEvaluation);
 		ConfigureAcceptedActorAndPrejudicedManipulatorLobby(lobby, manager);
-		manager.StartGame(lobby);
+		manager.AttemptLobbyExit().Should().BeOfType<LobbyExitOutcome.Started>();
 		var activeGameIdBefore = manager.ActiveGameId!.Value;
 		var sessionBefore = manager.CurrentSession;
 		var serializedSessionBefore = gameService.SerializeSession(activeGameIdBefore);
@@ -2286,9 +2328,14 @@ public class GameClientManagerTests
 		var recoveryStore = new ToggleThrowSaveStore();
 		var lobby = CreateActorAndPrejudicedManipulatorLobby();
 		var gameService = new GameService();
-		var manager = new GameClientManager(gameService, saveStore: recoveryStore);
+		using var managerEvaluation = CreatePersistenceEvaluation(lobby);
+		var manager = new GameClientManager(
+			gameService,
+			saveStore: recoveryStore,
+			lobbySetupState: lobby,
+			lobbyEvaluation: managerEvaluation);
 		ConfigureAcceptedActorAndPrejudicedManipulatorLobby(lobby, manager);
-		manager.StartGame(lobby);
+		manager.AttemptLobbyExit().Should().BeOfType<LobbyExitOutcome.Started>();
 		var activeGameIdBefore = manager.ActiveGameId!.Value;
 		var sessionBefore = manager.CurrentSession;
 		var serializedSessionBefore = gameService.SerializeSession(activeGameIdBefore);
@@ -2329,7 +2376,7 @@ public class GameClientManagerTests
 	}
 
 	[Fact]
-	public void StartGame_FromLobbyConfiguration_CreatesCoreSessionAndExposesInstruction()
+	public void StartPreparedGame_FromConfiguration_CreatesCoreSessionAndExposesInstruction()
 	{
 		var manager = new GameClientManager();
 		var players = PlayerNames.DefaultFive;
@@ -2342,7 +2389,7 @@ public class GameClientManagerTests
 			MainRoleType.SimpleVillager
 		};
 
-		var instruction = manager.StartGame(players, roles);
+		var instruction = manager.StartPreparedGame(players, roles);
 
 		instruction.Should().BeOfType<StartGameConfirmationInstruction>();
 		manager.HasActiveSession.Should().BeTrue();
@@ -2376,7 +2423,7 @@ public class GameClientManagerTests
 	{
 		var service = new GameService();
 		var manager = new GameClientManager(service);
-		var startInstruction = manager.StartGame(
+		var startInstruction = manager.StartPreparedGame(
 			PlayerNames.DefaultFive,
 			[
 				MainRoleType.SimpleWerewolf,
@@ -2605,7 +2652,12 @@ public class GameClientManagerTests
 	{
 		var store = new RecordingSaveStore();
 		var sourceLobby = CreateActorAndPrejudicedManipulatorLobby();
-		var manager = new GameClientManager(new GameService(), saveStore: store);
+		using var managerEvaluation = CreatePersistenceEvaluation(sourceLobby);
+		var manager = new GameClientManager(
+			new GameService(),
+			saveStore: store,
+			lobbySetupState: sourceLobby,
+			lobbyEvaluation: managerEvaluation);
 		manager.TryEnsureStagedRoleLockIn(sourceLobby).Should().BeTrue();
 		manager.TryReplaceStagedActorSetupCards(
 			sourceLobby,
@@ -2624,7 +2676,7 @@ public class GameClientManagerTests
 			sourceLobby.GetRoleCount);
 		var expectedRoleLockIn = sourceLobby.AcceptedRoleLockIn!;
 		var expectedActorSetupCards = sourceLobby.AcceptedActorSetupCards;
-		manager.StartGame(sourceLobby);
+		manager.AttemptLobbyExit().Should().BeOfType<LobbyExitOutcome.Started>();
 		var targetLobby = CreateActorAndPrejudicedManipulatorLobby(
 			withPlayers: false);
 		var resumed = new GameClientManager(
@@ -2901,7 +2953,7 @@ public class GameClientManagerTests
 	}
 
 	[Fact]
-	public void StartGame_WhenSaveFileExists_ReplacesItWithActiveGamePayload()
+	public void StartPreparedGame_WhenSaveFileExists_ReplacesItWithActiveGamePayload()
 	{
 		using var saveDirectory = TemporaryDirectory.Create();
 		var saveFilePath = Path.Combine(saveDirectory.Path, FileGameSessionSaveStore.SaveFileName);
@@ -2952,7 +3004,7 @@ public class GameClientManagerTests
 	public void PlayToDawn_DeterministicRoleReveal_ProjectsVictimAsPublic()
 	{
 		var manager = new GameClientManager();
-		var startInstruction = manager.StartGame(
+		var startInstruction = manager.StartPreparedGame(
 			PlayerNames.DefaultFive,
 			[
 				MainRoleType.SimpleWerewolf,
@@ -3059,7 +3111,7 @@ public class GameClientManagerTests
 	{
 		using var saveDirectory = TemporaryDirectory.Create();
 		var manager = new GameClientManager(new GameService(), saveStore: new FileGameSessionSaveStore(saveDirectory.Path));
-		var startInstruction = manager.StartGame(
+		var startInstruction = manager.StartPreparedGame(
 			PlayerNames.DefaultFive,
 			[
 				MainRoleType.SimpleWerewolf,
@@ -3207,7 +3259,7 @@ public class GameClientManagerTests
 	}
 
 	[Fact]
-	public void StartGame_RaisesStateChangedOnceAfterSessionCreation()
+	public void StartPreparedGame_RaisesStateChangedOnceAfterSessionCreation()
 	{
 		var manager = new GameClientManager();
 		var eventCount = 0;
@@ -3272,7 +3324,7 @@ public class GameClientManagerTests
 	}
 
 	[Fact]
-	public async Task StartGame_ReconcilesAudioForDisplayedInstruction()
+	public async Task StartPreparedGame_ReconcilesAudioForDisplayedInstruction()
 	{
 		var audioPlayback = new FakeInstructionAudioPlayback();
 		var manager = new GameClientManager(new GameService(), audioPlayback);
@@ -3425,6 +3477,19 @@ public class GameClientManagerTests
 		manager.DebateElapsed!.Value.Should().BeLessThan(TimeSpan.FromSeconds(1));
 	}
 
+	// These tests isolate durable staging, publication, and post-game recovery.
+	// Evaluator identity and blocking behavior are covered through LobbyExitAttemptTests.
+	private static LobbyEvaluationCoordinator CreatePersistenceEvaluation(LobbySetupState lobby) =>
+		new(
+			lobby,
+			new InMemoryTerminalLobbyCacheStore(),
+			DisabledLobbyTerminalEvaluator.Instance,
+			new LobbyEvaluationSettings(
+				SimulatorCapability.SafetyScreening,
+				LobbyEvaluationDepth.DegenerateScreeningOnly),
+			timeProvider: null,
+			(_, _) => new LobbyScenarioSupport(true, true, false));
+
 	private static StartGameConfirmationInstruction StartSimpleGame(GameClientManager manager)
 	{
 		var players = PlayerNames.DefaultFive;
@@ -3437,7 +3502,7 @@ public class GameClientManagerTests
 			MainRoleType.SimpleVillager
 		};
 
-		return manager.StartGame(players, roles);
+		return manager.StartPreparedGame(players, roles);
 	}
 
 	private static StartGameConfirmationInstruction StartTwoWerewolfGame(GameClientManager manager)
@@ -3452,7 +3517,7 @@ public class GameClientManagerTests
 			MainRoleType.SimpleVillager
 		};
 
-		return manager.StartGame(players, roles);
+		return manager.StartPreparedGame(players, roles);
 	}
 
 	private static GameClientManager ResumeFromSave(string saveDirectoryPath) =>
@@ -3483,7 +3548,7 @@ public class GameClientManagerTests
 
 	private static void PlayToWerewolfVictoryAtDawn(GameClientManager manager)
 	{
-		var startInstruction = manager.StartGame(
+		var startInstruction = manager.StartPreparedGame(
 			PlayerNames.DefaultFive,
 			[
 				MainRoleType.SimpleWerewolf,
@@ -4090,15 +4155,17 @@ public class GameClientManagerTests
 	{
 		var store = new RecordingSaveStore();
 		var sourceLobby = CreateSupportedLobby();
-		var recoveryTarget = CreateSupportedLobby(withPlayers: false);
+		var recoveryTarget = sourceLobby;
+		using var managerEvaluation = CreatePersistenceEvaluation(sourceLobby);
 		var manager = new GameClientManager(
 			new GameService(),
 			saveStore: store,
-			lobbySetupState: recoveryTarget);
+			lobbySetupState: recoveryTarget,
+			lobbyEvaluation: managerEvaluation);
 		manager.TryEnsureStagedRoleLockIn(sourceLobby).Should().BeTrue();
 		var expectedRoster = sourceLobby.PlayerRoster.ToArray();
 		var expectedRoleLockIn = sourceLobby.AcceptedRoleLockIn;
-		manager.StartGame(sourceLobby);
+		manager.AttemptLobbyExit().Should().BeOfType<LobbyExitOutcome.Started>();
 		var saveCountBeforeClear = store.SavedPayloads.Count;
 
 		manager.ClearSession();
@@ -4115,9 +4182,7 @@ public class GameClientManagerTests
 		store.SavedPayloads.Should().HaveCount(saveCountBeforeClear);
 		store.ClearCount.Should().Be(1);
 
-		var rematch = () => manager.StartGame(recoveryTarget);
-
-		rematch.Should().NotThrow();
+		manager.AttemptLobbyExit().Should().BeOfType<LobbyExitOutcome.Started>();
 		manager.HasActiveSession.Should().BeTrue();
 
 		manager.ClearSession();
@@ -4135,11 +4200,13 @@ public class GameClientManagerTests
 	public void ClearSession_RestoresCommittedThiefOffersForAnUnchangedRematch()
 	{
 		var sourceLobby = CreateThiefLobby();
-		var recoveryTarget = CreateThiefLobby(withPlayers: false);
+		var recoveryTarget = sourceLobby;
+		using var managerEvaluation = CreatePersistenceEvaluation(sourceLobby);
 		var manager = new GameClientManager(
 			new GameService(),
 			saveStore: new RecordingSaveStore(),
-			lobbySetupState: recoveryTarget);
+			lobbySetupState: recoveryTarget,
+			lobbyEvaluation: managerEvaluation);
 		var roleLockIn = CreateThiefRoleLockIn(
 			version: 1,
 			rotateOffer1IntoDealPool: false);
@@ -4148,15 +4215,14 @@ public class GameClientManagerTests
 			expectedCurrentVersion: 0,
 			roleLockIn).Should().BeTrue();
 		var expectedRoster = sourceLobby.PlayerRoster.ToArray();
-		manager.StartGame(sourceLobby);
+		manager.AttemptLobbyExit().Should().BeOfType<LobbyExitOutcome.Started>();
 
 		manager.ClearSession();
 
 		recoveryTarget.AcceptedRoleLockIn.Should().BeSameAs(roleLockIn);
 		recoveryTarget.AcceptedRoleLockIn!.Offer1!.Id.Should().Be(roleLockIn.Offer1!.Id);
 		recoveryTarget.AcceptedRoleLockIn.Offer2!.Id.Should().Be(roleLockIn.Offer2!.Id);
-		var rematch = () => manager.StartGame(recoveryTarget);
-		rematch.Should().NotThrow();
+		manager.AttemptLobbyExit().Should().BeOfType<LobbyExitOutcome.Started>();
 		var rematchSession = manager.CurrentSession!;
 		rematchSession.GetPlayers().Select(player => player.Id).Should().Equal(
 			expectedRoster.Select(player => player.Id));
@@ -4171,12 +4237,13 @@ public class GameClientManagerTests
 	public void ClearSession_RestoresActorCardsPartitionAndOriginalPlayerIdentities()
 	{
 		var sourceLobby = CreateActorAndPrejudicedManipulatorLobby();
-		var recoveryTarget = CreateActorAndPrejudicedManipulatorLobby(
-			withPlayers: false);
+		var recoveryTarget = sourceLobby;
+		using var managerEvaluation = CreatePersistenceEvaluation(sourceLobby);
 		var manager = new GameClientManager(
 			new GameService(),
 			saveStore: new RecordingSaveStore(),
-			lobbySetupState: recoveryTarget);
+			lobbySetupState: recoveryTarget,
+			lobbyEvaluation: managerEvaluation);
 		manager.TryEnsureStagedRoleLockIn(sourceLobby).Should().BeTrue();
 		manager.TryReplaceStagedActorSetupCards(
 			sourceLobby,
@@ -4195,7 +4262,7 @@ public class GameClientManagerTests
 			sourceLobby.GetRoleCount);
 		var expectedRoleLockIn = sourceLobby.AcceptedRoleLockIn;
 		var expectedActorSetupCards = sourceLobby.AcceptedActorSetupCards;
-		manager.StartGame(sourceLobby);
+		manager.AttemptLobbyExit().Should().BeOfType<LobbyExitOutcome.Started>();
 		var lobbyNotifications = 0;
 		Guid[]? notifiedPlayerIds = null;
 		string[]? notifiedPlayerNames = null;
@@ -4239,8 +4306,7 @@ public class GameClientManagerTests
 		recoveryTarget.AcceptedPublicGroupPartition!.FirstGroupPlayerIds
 			.Concat(recoveryTarget.AcceptedPublicGroupPartition.SecondGroupPlayerIds)
 			.Should().BeEquivalentTo(expectedRoster.Select(player => player.Id));
-		var rematch = () => manager.StartGame(recoveryTarget);
-		rematch.Should().NotThrow();
+		manager.AttemptLobbyExit().Should().BeOfType<LobbyExitOutcome.Started>();
 		var rematchSession = manager.CurrentSession!;
 		rematchSession.GetPlayers().Select(player => player.Id).Should().Equal(
 			expectedRoster.Select(player => player.Id));
@@ -4256,11 +4322,13 @@ public class GameClientManagerTests
 	public void ClearSession_PrefilledLobbyKeepsExistingEditInvalidationRules()
 	{
 		var sourceLobby = CreatePrejudicedManipulatorLobby();
-		var recoveryTarget = CreatePrejudicedManipulatorLobby(withPlayers: false);
+		var recoveryTarget = sourceLobby;
+		using var managerEvaluation = CreatePersistenceEvaluation(sourceLobby);
 		var manager = new GameClientManager(
 			new GameService(),
 			saveStore: new RecordingSaveStore(),
-			lobbySetupState: recoveryTarget);
+			lobbySetupState: recoveryTarget,
+			lobbyEvaluation: managerEvaluation);
 		manager.TryEnsureStagedRoleLockIn(sourceLobby).Should().BeTrue();
 		var partition = PublicGroupPartition.Create(
 			sourceLobby.PlayerRoster.Select(player => player.Id),
@@ -4269,7 +4337,7 @@ public class GameClientManagerTests
 		manager.TryReplaceStagedPublicGroupPartition(sourceLobby, partition)
 			.Should().BeTrue();
 		var roleLockIn = sourceLobby.AcceptedRoleLockIn;
-		manager.StartGame(sourceLobby);
+		manager.AttemptLobbyExit().Should().BeOfType<LobbyExitOutcome.Started>();
 		manager.ClearSession();
 
 		manager.TryMoveStagedPlayerDown(recoveryTarget, index: 0).Should().BeTrue();
@@ -4282,12 +4350,14 @@ public class GameClientManagerTests
 		recoveryTarget.AcceptedPublicGroupPartition.Should().BeNull();
 
 		var roleCountSource = CreateSupportedLobby();
-		var roleCountTarget = CreateSupportedLobby(withPlayers: false);
+		var roleCountTarget = roleCountSource;
+		using var roleCountManagerEvaluation = CreatePersistenceEvaluation(roleCountSource);
 		var roleCountManager = new GameClientManager(
 			new GameService(),
 			saveStore: new RecordingSaveStore(),
-			lobbySetupState: roleCountTarget);
-		roleCountManager.StartGame(roleCountSource);
+			lobbySetupState: roleCountTarget,
+			lobbyEvaluation: roleCountManagerEvaluation);
+		roleCountManager.AttemptLobbyExit().Should().BeOfType<LobbyExitOutcome.Started>();
 		roleCountManager.ClearSession();
 		roleCountTarget.IncrementRole(MainRoleType.SimpleVillager);
 		roleCountTarget.AcceptedRoleLockInRequiresReplacement.Should().BeTrue();
@@ -4315,7 +4385,12 @@ public class GameClientManagerTests
 			incompatibleTarget.PlayerRoster.Skip(2).Select(player => player.Id));
 		manager.TryReplaceStagedPublicGroupPartition(incompatibleTarget, partition)
 			.Should().BeTrue();
-		manager.StartGame(sourceLobby);
+		manager.StartPreparedGame(new GameSessionConfig(
+			sourceLobby.PlayerRoster,
+			sourceLobby.AcceptedRoleLockIn ?? RoleLockIn.CreateFromPrintedRoles(
+				1, sourceLobby.PlayerRoster.Count, sourceLobby.GetSelectedRoles()),
+			sourceLobby.AcceptedActorSetupCards,
+			sourceLobby.AcceptedPublicGroupPartition));
 		var saveCountBeforeClear = store.SavedPayloads.Count;
 		var expectedWipedRoleCounts = incompatibleTarget.AvailableRoles.ToDictionary(
 			role => role,
@@ -4403,7 +4478,12 @@ public class GameClientManagerTests
 			sourceLobby.PlayerRoster.Skip(2).Select(player => player.Id));
 		manager.TryReplaceStagedPublicGroupPartition(sourceLobby, sourcePartition)
 			.Should().BeTrue();
-		manager.StartGame(sourceLobby);
+		manager.StartPreparedGame(new GameSessionConfig(
+			sourceLobby.PlayerRoster,
+			sourceLobby.AcceptedRoleLockIn ?? RoleLockIn.CreateFromPrintedRoles(
+				1, sourceLobby.PlayerRoster.Count, sourceLobby.GetSelectedRoles()),
+			sourceLobby.AcceptedActorSetupCards,
+			sourceLobby.AcceptedPublicGroupPartition));
 		var saveCountBeforeClear = store.SaveCount;
 		var expectedWipedRoleCounts = recoveryTarget.AvailableRoles.ToDictionary(
 			role => role,

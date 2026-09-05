@@ -2,12 +2,14 @@ using Bunit;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using System.Globalization;
+using Werewolves.Client.Fixtures;
 using Werewolves.Client.Components;
 using Werewolves.Client.Resources;
 using Werewolves.Client.Services;
 using Werewolves.Client.Testing;
 using Werewolves.Client.Tests.Helpers;
 using Werewolves.Core.StateModels.Enums;
+using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Resources;
 using Xunit;
@@ -21,7 +23,8 @@ public sealed class PostGameLobbyPrefillBunitTests
 	{
 		using var context = new ModeratorComponentTestContext();
 		var lobby = SeedLobby(context, DashboardRoleCounts);
-		context.Services.GetRequiredService<GameClientManager>().StartGame(lobby);
+		context.Services.GetRequiredService<GameClientManager>().StartPreparedGame(new GameSessionConfig(
+			lobby.PlayerRoster, lobby.GetSelectedRoles().ToList()));
 		var cut = context.RenderModeratorComponent<Routes>();
 
 		cut.Find(TestId(ModeratorUiTestIds.LandingContinueButton)).Click();
@@ -37,7 +40,8 @@ public sealed class PostGameLobbyPrefillBunitTests
 		using var context = new ModeratorComponentTestContext();
 		var lobby = SeedLobby(context, VictoryRoleCounts);
 		var manager = context.Services.GetRequiredService<GameClientManager>();
-		var startInstruction = manager.StartGame(lobby);
+		var startInstruction = manager.StartPreparedGame(new GameSessionConfig(
+			lobby.PlayerRoster, lobby.GetSelectedRoles().ToList()));
 		PlayToWerewolfVictoryAtDawn(manager, startInstruction);
 		var cut = context.RenderModeratorComponent<Routes>();
 

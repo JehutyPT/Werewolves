@@ -3,6 +3,7 @@ using Bunit;
 using FluentAssertions;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
+using Werewolves.Client.Fixtures;
 using Werewolves.Client.BrowserQaHost;
 using Werewolves.Client.Components.Pages;
 using Werewolves.Client.Services;
@@ -189,7 +190,7 @@ public class DarkThemeTokenTests
 	{
 		var game = context.Services.GetRequiredService<GameClientManager>();
 
-		game.StartGame(
+		game.StartPreparedGame(
 			BrowserQaFixtures.DefaultPlayerNames,
 			BrowserQaFixtures.DefaultRoles);
 	}

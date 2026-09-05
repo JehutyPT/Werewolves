@@ -4,6 +4,7 @@ using AngleSharp.Dom;
 using Bunit;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Werewolves.Client.Fixtures;
 using Werewolves.Client.Components.Game.Views;
 using Werewolves.Client.Services;
 using Werewolves.Client.Tests.Helpers;
@@ -47,7 +48,7 @@ public class InstructionRendererHapticTests
 
 	private static AssignRolesInstruction CreateAssignRolesInstruction(GameClientManager game)
 	{
-		game.StartGame(
+		game.StartPreparedGame(
 			PlayerNames.DefaultFive,
 			[
 				MainRoleType.SimpleWerewolf,

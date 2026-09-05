@@ -3,6 +3,7 @@ using AngleSharp.Dom;
 using FluentAssertions;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
+using Werewolves.Client.Fixtures;
 using Werewolves.Client.Components.Game.Views;
 using Werewolves.Client.Components.Pages;
 using Werewolves.Client.Resources;
@@ -104,7 +105,7 @@ public sealed class RoleKnowledgeFlowBunitTests
 		using var context = new ModeratorComponentTestContext();
 		context.Services.AddSingleton<IHoldButtonTiming>(timing);
 		var manager = context.Services.GetRequiredService<GameClientManager>();
-		var start = manager.StartGame(
+		var start = manager.StartPreparedGame(
 			PlayerNames.DefaultFive,
 			[
 				MainRoleType.LittleGirl,
@@ -265,7 +266,7 @@ public sealed class RoleKnowledgeFlowBunitTests
 		using var context = new ModeratorComponentTestContext();
 		context.Services.AddSingleton<IHoldButtonTiming>(timing);
 		var manager = context.Services.GetRequiredService<GameClientManager>();
-		var start = manager.StartGame(
+		var start = manager.StartPreparedGame(
 			PlayerNames.DefaultFive,
 			[
 				MainRoleType.SimpleWerewolf,
@@ -324,7 +325,7 @@ public sealed class RoleKnowledgeFlowBunitTests
 	{
 		using var context = new ModeratorComponentTestContext();
 		var manager = context.Services.GetRequiredService<GameClientManager>();
-		var start = manager.StartGame(
+		var start = manager.StartPreparedGame(
 			PlayerNames.DefaultFive,
 			[
 				MainRoleType.SimpleWerewolf,
@@ -368,7 +369,7 @@ public sealed class RoleKnowledgeFlowBunitTests
 		using var context = new ModeratorComponentTestContext();
 		context.Services.AddSingleton<IHoldButtonTiming>(timing);
 		var manager = context.Services.GetRequiredService<GameClientManager>();
-		var start = manager.StartGame(
+		var start = manager.StartPreparedGame(
 			PlayerNames.DefaultFive,
 			[
 				MainRoleType.StutteringJudge,
@@ -487,7 +488,7 @@ public sealed class RoleKnowledgeFlowBunitTests
 		using var context = new ModeratorComponentTestContext();
 		context.Services.AddSingleton<IHoldButtonTiming>(timing);
 		var manager = context.Services.GetRequiredService<GameClientManager>();
-		var start = manager.StartGame(
+		var start = manager.StartPreparedGame(
 			PlayerNames.DefaultFive,
 			[
 				MainRoleType.SimpleWerewolf,
@@ -609,7 +610,7 @@ public sealed class RoleKnowledgeFlowBunitTests
 		using var context = new ModeratorComponentTestContext();
 		context.Services.AddSingleton<IHoldButtonTiming>(timing);
 		var manager = context.Services.GetRequiredService<GameClientManager>();
-		var start = manager.StartGame(
+		var start = manager.StartPreparedGame(
 			PlayerNames.DefaultFive,
 			[
 				MainRoleType.WolfHound,
@@ -750,7 +751,7 @@ public sealed class RoleKnowledgeFlowBunitTests
 		using var context = new ModeratorComponentTestContext();
 		context.Services.AddSingleton<IHoldButtonTiming>(timing);
 		var manager = context.Services.GetRequiredService<GameClientManager>();
-		var start = manager.StartGame(
+		var start = manager.StartPreparedGame(
 			PlayerNames.DefaultFive,
 			[
 				MainRoleType.Defender,
@@ -1010,7 +1011,7 @@ public sealed class RoleKnowledgeFlowBunitTests
 		using var context = new ModeratorComponentTestContext();
 		context.Services.AddSingleton<IHoldButtonTiming>(timing);
 		var manager = context.Services.GetRequiredService<GameClientManager>();
-		var start = manager.StartGame(
+		var start = manager.StartPreparedGame(
 			PlayerNames.DefaultFive,
 			[
 				MainRoleType.SimpleWerewolf,
@@ -1166,7 +1167,7 @@ public sealed class RoleKnowledgeFlowBunitTests
 	{
 		using var context = new ModeratorComponentTestContext();
 		var manager = context.Services.GetRequiredService<GameClientManager>();
-		var start = manager.StartGame(
+		var start = manager.StartPreparedGame(
 			PlayerNames.DefaultFive,
 			[
 				MainRoleType.SimpleWerewolf,
@@ -1229,7 +1230,7 @@ public sealed class RoleKnowledgeFlowBunitTests
 		using var context = new ModeratorComponentTestContext();
 		context.Services.AddSingleton<IHoldButtonTiming>(timing);
 		var manager = context.Services.GetRequiredService<GameClientManager>();
-		var start = manager.StartGame(
+		var start = manager.StartPreparedGame(
 			PlayerNames.DefaultFive,
 			[
 				MainRoleType.SimpleWerewolf,
@@ -1407,7 +1408,7 @@ public sealed class RoleKnowledgeFlowBunitTests
 		using var context = new ModeratorComponentTestContext();
 		context.Services.AddSingleton<IHoldButtonTiming>(timing);
 		var manager = context.Services.GetRequiredService<GameClientManager>();
-		var start = manager.StartGame(
+		var start = manager.StartPreparedGame(
 			Enumerable.Range(1, 6).Select(PlayerNames.GeneratedPlayer).ToArray(),
 			[
 				MainRoleType.Piper,
@@ -1518,7 +1519,7 @@ public sealed class RoleKnowledgeFlowBunitTests
 	private static IPlayer[] StartWhiteWerewolfGameAtFirstIdentification(
 		GameClientManager manager)
 	{
-		var start = manager.StartGame(
+		var start = manager.StartPreparedGame(
 			Enumerable.Range(1, 7).Select(PlayerNames.GeneratedPlayer).ToArray(),
 			[
 				MainRoleType.SimpleWerewolf,

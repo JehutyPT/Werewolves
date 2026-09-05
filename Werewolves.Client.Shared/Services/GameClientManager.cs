@@ -16,6 +16,7 @@ public sealed class GameClientManager
 	private readonly IRecentSetupStore _recentSetupStore;
 	private readonly TimeProvider _timeProvider;
 	private readonly LobbySetupState? _lobbySetupState;
+	private readonly LobbyEvaluationCoordinator? _lobbyEvaluation;
 	private StagedLobbyRecoveryPayload? _stagedLobby;
 	private StagedLobbyRecoveryPayload? _activeSessionLobbyPayload;
 	private DateTimeOffset? _debateStartedAt;
@@ -31,7 +32,8 @@ public sealed class GameClientManager
 		IGameSessionSaveStore? saveStore = null,
 		TimeProvider? timeProvider = null,
 		LobbySetupState? lobbySetupState = null,
-		IRecentSetupStore? recentSetupStore = null)
+		IRecentSetupStore? recentSetupStore = null,
+		LobbyEvaluationCoordinator? lobbyEvaluation = null)
 	{
 		_gameService = gameService;
 		_audioPlayback = audioPlayback ?? DisabledInstructionAudioPlayback.Instance;
@@ -39,6 +41,7 @@ public sealed class GameClientManager
 		_recentSetupStore = recentSetupStore ?? DisabledRecentSetupStore.Instance;
 		_timeProvider = timeProvider ?? TimeProvider.System;
 		_lobbySetupState = lobbySetupState;
+		_lobbyEvaluation = lobbyEvaluation;
 		TryResumeSavedGame();
 	}
 
@@ -347,12 +350,50 @@ public sealed class GameClientManager
 			});
 	}
 
-	public StartGameConfirmationInstruction StartGame(
-		IReadOnlyList<string> playerNamesInOrder,
-		IReadOnlyList<MainRoleType> rolesInPlay)
+	public LobbyExitOutcome AttemptLobbyExit()
 	{
-		var config = new GameSessionConfig(playerNamesInOrder.ToList(), rolesInPlay.ToList());
-		return StartGame(config);
+		if (HasActiveSession)
+		{
+			return new LobbyExitOutcome.AlreadyActive(ActiveGameId!.Value);
+		}
+		var lobby = _lobbySetupState ?? throw new InvalidOperationException(
+			"Production Lobby Exit requires the composed Lobby setup.");
+		lobby.HasPlayerConfigIssues(out var playerIssues);
+		lobby.HasRoleConfigIssues(out var roleIssues);
+		if (playerIssues.Count > 0 || roleIssues.Count > 0)
+		{
+			return new LobbyExitOutcome.InvalidSetup(
+				playerIssues.Concat(roleIssues).Select(issue => issue.Type).Distinct().ToArray());
+		}
+		if (lobby.RequiresRoleLockIn && lobby.GetRoleCount(MainRoleType.Thief) > 0)
+		{
+			return new LobbyExitOutcome.ConfigurationRequired(LobbyConfigurationStep.RoleLockIn);
+		}
+		if (!TryEnsureStagedRoleLockIn(lobby))
+		{
+			return new LobbyExitOutcome.SetupAcceptanceFailed();
+		}
+		if (lobby.RequiresActorSetupCards)
+		{
+			return new LobbyExitOutcome.ConfigurationRequired(LobbyConfigurationStep.ActorSetupCards);
+		}
+		if (lobby.RequiresPublicGroupPartition)
+		{
+			return new LobbyExitOutcome.ConfigurationRequired(LobbyConfigurationStep.PublicGroupPartition);
+		}
+		var evaluation = _lobbyEvaluation ?? throw new InvalidOperationException(
+			"Production Lobby Exit requires the composed Lobby evaluation.");
+		if (!evaluation.TryRequestLobbyExit(out var state))
+		{
+			return new LobbyExitOutcome.EvaluationBlocked(state);
+		}
+		var config = new GameSessionConfig(
+			lobby.PlayerRoster, lobby.AcceptedRoleLockIn!,
+			lobby.AcceptedActorSetupCards, lobby.AcceptedPublicGroupPartition);
+		var instruction = StartGame(config, lobby);
+		return instruction is null
+			? new LobbyExitOutcome.ActiveRecoveryWriteFailed()
+			: new LobbyExitOutcome.Started(instruction.GameGuid);
 	}
 
 	public bool TryEnsureStagedRoleLockIn(LobbySetupState lobby)
@@ -399,32 +440,10 @@ public sealed class GameClientManager
 				replacement));
 	}
 
-	public StartGameConfirmationInstruction StartGame(LobbySetupState lobby)
-	{
-		ArgumentNullException.ThrowIfNull(lobby);
-		if (!TryEnsureStagedRoleLockIn(lobby))
-		{
-			throw new InvalidOperationException(
-				"Lobby Exit requires a fresh accepted Role Lock-In after Lobby edits.");
-		}
-		if (!lobby.TryCreateSimulationScenario(out _))
-		{
-			throw new InvalidOperationException(
-				"Lobby Exit requires a complete accepted Simulation Scenario.");
-		}
-		var acceptedRoleLockIn = lobby.AcceptedRoleLockIn!;
-		var config = new GameSessionConfig(
-			lobby.PlayerRoster,
-			acceptedRoleLockIn,
-			lobby.AcceptedActorSetupCards,
-			lobby.AcceptedPublicGroupPartition);
-		return StartGame(config, lobby);
-	}
+	internal StartGameConfirmationInstruction StartFixtureGame(GameSessionConfig config)
+		=> StartGame(config, lobby: null)!;
 
-	public StartGameConfirmationInstruction StartGame(GameSessionConfig config)
-		=> StartGame(config, lobby: null);
-
-	private StartGameConfirmationInstruction StartGame(
+	private StartGameConfirmationInstruction? StartGame(
 		GameSessionConfig config,
 		LobbySetupState? lobby)
 	{
@@ -433,10 +452,25 @@ public sealed class GameClientManager
 			?? throw new InvalidOperationException("Core did not publish the stable initial Game Session.");
 		if (lobby is not null)
 		{
+			string payload;
 			try
 			{
-				_saveStore.Save(LocalRecoveryPayloadCodec.SerializeActiveGame(
-					_gameService.SerializeSession(instruction.GameGuid)));
+				payload = LocalRecoveryPayloadCodec.SerializeActiveGame(
+					_gameService.SerializeSession(instruction.GameGuid));
+			}
+			catch
+			{
+				_gameService.DiscardSession(instruction.GameGuid);
+				throw;
+			}
+			try
+			{
+				_saveStore.Save(payload);
+			}
+			catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+			{
+				_gameService.DiscardSession(instruction.GameGuid);
+				return null;
 			}
 			catch
 			{

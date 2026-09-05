@@ -4,6 +4,7 @@ using Bunit;
 using FluentAssertions;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
+using Werewolves.Client.Fixtures;
 using Werewolves.Client.Components.Game.Views;
 using Werewolves.Client.Resources;
 using Werewolves.Client.Services;
@@ -418,7 +419,7 @@ public class InstructionRendererBunitTests
 		using var context = new ModeratorComponentTestContext();
 		context.Services.AddSingleton<IHoldButtonTiming>(timing);
 		var manager = context.Services.GetRequiredService<GameClientManager>();
-		var start = manager.StartGame(
+		var start = manager.StartPreparedGame(
 			PlayerNames.DefaultFive,
 			[
 				MainRoleType.SimpleWerewolf,
@@ -767,7 +768,7 @@ public class InstructionRendererBunitTests
 			dealPoolCardIds: cards.Take(5).Select(card => card.Id),
 			offer1CardId: cards[5].Id,
 			offer2CardId: cards[6].Id);
-		var start = manager.StartGame(new GameSessionConfig(
+		var start = manager.StartPreparedGame(new GameSessionConfig(
 			PlayerNames.DefaultFive.ToList(),
 			lockIn));
 		manager.ProcessInput(start.CreateResponse()).IsSuccess.Should().BeTrue();
@@ -1007,7 +1008,7 @@ public class InstructionRendererBunitTests
 	}
 
 	private static StartGameConfirmationInstruction StartSimpleGame(GameClientManager manager) =>
-		manager.StartGame(
+		manager.StartPreparedGame(
 			PlayerNames.DefaultFive,
 			[
 				MainRoleType.SimpleWerewolf,
