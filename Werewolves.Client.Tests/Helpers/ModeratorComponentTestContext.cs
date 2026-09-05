@@ -4,8 +4,6 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using Werewolves.Client.Resources;
 using Werewolves.Client.Services;
-using Werewolves.Core.GameLogic.Models;
-using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.GameLogic.Simulation;
 using Werewolves.Core.StateModels.Models;
 
@@ -27,22 +25,15 @@ public sealed class ModeratorComponentTestContext : BunitContext
 		Services.AddSingleton<IRecentSetupStore, InMemoryRecentSetupStore>();
 		Services.AddSingleton<IScreenWakeLock, NoOpScreenWakeLock>();
 		Services.AddSingleton<GameplayWakeLockController>();
-		Services.AddSingleton<GameService>();
-		Services.AddSingleton<LobbySetupMetadata>(sp =>
-			sp.GetRequiredService<GameService>().GetLobbySetupMetadata());
-		Services.AddSingleton<LobbySetupState>();
 		Services.AddSingleton<ILocalTerminalLobbyCacheStore, InMemoryTerminalLobbyCacheStore>();
 		Services.AddSingleton<ILobbyTerminalEvaluator>(_ => DisabledLobbyTerminalEvaluator.Instance);
 		Services.AddSingleton(TimeProvider.System);
-		Services.AddSingleton(sp => new LobbyEvaluationCoordinator(
-			sp.GetRequiredService<LobbySetupState>(),
-			sp.GetRequiredService<ILocalTerminalLobbyCacheStore>(),
-			sp.GetRequiredService<ILobbyTerminalEvaluator>(),
-			new LobbyEvaluationSettings(
-				SimulatorCapability.FullProbability,
-				LobbyEvaluationDepth.FullProbability),
-			sp.GetRequiredService<TimeProvider>()));
-		Services.AddSingleton<GameClientManager>();
+		Services.AddSingleton(new LobbyEvaluationSettings(
+			SimulatorCapability.FullProbability,
+			LobbyEvaluationDepth.FullProbability));
+		Services.AddModeratorSessionAndLobbyServices(
+			ServiceLifetime.Singleton,
+			metadata => new LobbySetupState(metadata));
 	}
 
 	public IRenderedComponent<TComponent> RenderModeratorComponent<TComponent>(

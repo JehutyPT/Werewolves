@@ -43,7 +43,8 @@
     *   Panels remain alive when hidden; components must subscribe to `GameClientManager.StateChanged` to refresh when the active session updates.
 
 ### 3.3. The Adapter (GameClientManager)
-*   Singleton in each host. Proxies moderator input to Core, holds the active session, coordinates audio playback, and handles persistence through host-safe interfaces.
+*   Part of the shared session-and-Lobby composition graph. It is singleton for the MAUI app lifetime, scoped to one Browser QA interactive scope, and singleton within each bUnit `ModeratorComponentTestContext`. It proxies moderator input to Core, holds the active session, coordinates audio playback, and handles persistence through host-safe interfaces.
+*   `ModeratorSessionAndLobbyServiceCollectionExtensions` in the shared RCL is the sole registration owner for `GameService`, `LobbySetupMetadata`, `LobbySetupState`, `LobbyEvaluationCoordinator`, and `GameClientManager`. Each host supplies the graph lifetime, its own `LobbySetupState` factory, and explicit audio, persistence, Lobby Evaluation, and clock dependencies. MAUI DEBUG seeding, Browser QA fixture seeding, and the blank bUnit Lobby remain host-owned factory choices.
 *   Monolithic for v1 — audio, persistence, and session management live in one class. The seams for future decomposition are clear (audio, persistence, session) but splitting is deferred until complexity warrants it.
 *   **Audio:** Coordinates `IInstructionAudioPlayback`. The shared implementation maps Core sound effects and delegates stream loading/player creation to host adapters. The mobile host uses app-package audio files and `Plugin.Maui.Audio`; tests use no-op or fake services.
 *   **Persistence:** Writes through `IGameSessionSaveStore` after successful `ProcessInput()`, but the Core payload represents only the latest stable Main Phase recovery boundary. The mobile host injects `FileGameSessionSaveStore` rooted at `FileSystem.AppDataDirectory`; shared UI tests and the browser QA host can inject in-memory or disabled storage.
@@ -178,11 +179,11 @@
 ## 11. Project Structure
 
 *   `Werewolves.Client.Shared/Components/` contains shared pages, routes, and game input views.
-*   `Werewolves.Client.Shared/Services/` contains host-safe services and contracts such as `GameClientManager`, `AudioMap`, wake-lock/haptics abstractions, persistence contracts, and lobby/dashboard projections.
+*   `Werewolves.Client.Shared/Services/` contains the canonical session-and-Lobby composition module plus host-safe services and contracts such as `GameClientManager`, `AudioMap`, wake-lock/haptics abstractions, persistence contracts, and lobby/dashboard projections.
 *   `Werewolves.Client.Shared/Resources/` contains client UI localization strings.
 *   `Werewolves.Client.Shared/wwwroot/css/` contains shared design tokens and app CSS served as RCL static web assets.
 *   `Werewolves.Client/` remains the MAUI shell, native service composition root, platform metadata owner, and `BlazorWebView` host for the shared `Routes` component.
 *   `Werewolves.Client.BrowserQaHost/` is the local browser QA composition root for the shared `Routes` component and browser-safe service adapters.
 *   `Werewolves.Client/Resources/Raw/Audio/` contains native audio assets loaded by the mobile host.
 *   `Werewolves.Client/Services/` contains native adapters such as file persistence and `Plugin.Maui.Audio` player creation.
-*   `Werewolves.Client.Tests/Helpers/ModeratorComponentTestContext.cs` is the bUnit fixture pattern: set `pt-PT` culture, use `ClientStrings`, register fake/no-op host services, and render shared components through the RCL reference.
+*   `Werewolves.Client.Tests/Helpers/ModeratorComponentTestContext.cs` is the bUnit fixture pattern: set `pt-PT` culture, use `ClientStrings`, register fake/no-op host services, compose one singleton session-and-Lobby graph per context with a blank Lobby factory, and render shared components through the RCL reference.
