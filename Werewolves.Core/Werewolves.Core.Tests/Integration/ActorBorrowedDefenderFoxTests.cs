@@ -33,13 +33,18 @@ public sealed class ActorBorrowedDefenderFoxTests
 	private static readonly PhysicalCharacterCard FoxCard = new(
 		Guid.Parse("00000000-0000-0000-0000-000000000144"),
 		MainRoleType.Fox);
-	private static readonly SubPhaseManager<NightSubPhases> NightActionLoop =
-		new(
-			NightSubPhases.Start,
-			[
-				HookSubPhaseStage.HookStage(GameHook.NightMainActionLoop),
-				NavigationSubPhaseStage.NavigationEndStageSilent(GamePhase.Dawn)
-			]);
+	private static readonly PhaseManager<NightSubPhases> NightActionLoop = new(
+		GamePhase.Night,
+		NightSubPhases.Start,
+		[
+			new(
+				NightSubPhases.Start,
+				[
+					HookSubPhaseStage.HookStage(GameHook.NightMainActionLoop),
+					NavigationSubPhaseStage.NavigationEndStageSilent(GamePhase.Dawn)
+				],
+				possibleNextMainPhaseTransitions: [new(GamePhase.Dawn)])
+		]);
 
 	[Fact]
 	public void BorrowedDefender_SourceSlotUsesActorIdentityAndOffersActorSelfAsLegalTarget()
@@ -950,9 +955,13 @@ public sealed class ActorBorrowedDefenderFoxTests
 			?? throw new InvalidOperationException(
 				"The Actor borrowed test workflow requires one Pending Instruction.");
 		session.GetOrCreateListener(listener.Id, () => listener);
-		var nextInstruction = NightActionLoop.Execute(
-			session,
-			response).ModeratorInstruction;
+		var result = NightActionLoop.ProcessInputAndUpdatePhase(session, response);
+		var nextInstruction = result switch
+		{
+			PhaseExecutionResult.InstructionReady ready => ready.Instruction,
+			PhaseExecutionResult.PhaseExited exited => exited.TransitionInstruction,
+			_ => throw new InvalidOperationException("Unexpected phase execution outcome.")
+		};
 		if (nextInstruction != null)
 		{
 			session.CommitExecution(

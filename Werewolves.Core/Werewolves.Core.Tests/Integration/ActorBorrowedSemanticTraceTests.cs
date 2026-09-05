@@ -538,8 +538,6 @@ public sealed class ActorBorrowedSemanticTraceTests
 			.Select(player => player.Id)
 			.First();
 		AdvanceNightHookToCompletion(fixture, followingNightVictimId);
-
-		fixture.Session.TransitionMainPhase(GamePhase.Dawn);
 		fixture.RestoreAtDefaultPolicy(fixture.Start);
 		var trace = AdvanceKnightDawnToDay(
 			fixture,
@@ -1655,18 +1653,21 @@ public sealed class ActorBorrowedSemanticTraceTests
 			_ => throw new InvalidOperationException(
 				$"No hook harness transition is defined for {currentPhase}.")
 		};
-		var manager = new SubPhaseManager<HookHarnessSubPhase>(
+		var manager = new PhaseManager<HookHarnessSubPhase>(
+			currentPhase,
 			HookHarnessSubPhase.Active,
 			[
-				HookSubPhaseStage.HookStage(hook),
-				NavigationSubPhaseStage.NavigationEndStageSilent(nextPhase)
+				new(
+					HookHarnessSubPhase.Active,
+					[
+						HookSubPhaseStage.HookStage(hook),
+						NavigationSubPhaseStage.NavigationEndStageSilent(nextPhase)
+					],
+					possibleNextMainPhaseTransitions: [new(nextPhase)])
 			]);
-		var result = manager.Execute(session, response).Should()
-			.BeOfType<StayInSubPhaseHandlerResult>().Subject;
-		if (!result.StageComplete)
+		var result = manager.ProcessInputAndUpdatePhase(session, response);
+		if (result is PhaseExecutionResult.InstructionReady { Instruction: var nextInstruction })
 		{
-			result.ModeratorInstruction.Should().NotBeNull();
-			var nextInstruction = result.ModeratorInstruction!;
 			var publicationResponse =
 				response.InstructionId == consumedInstruction.InstructionId
 					? response
@@ -1690,7 +1691,6 @@ public sealed class ActorBorrowedSemanticTraceTests
 				HookHarnessListenerState.AwaitingInput);
 		}
 
-		result.ModeratorInstruction.Should().BeNull();
 		return HookListenerActionResult.Complete(
 			HookHarnessListenerState.Complete);
 	}

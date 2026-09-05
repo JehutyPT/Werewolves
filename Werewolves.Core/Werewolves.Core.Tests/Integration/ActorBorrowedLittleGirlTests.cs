@@ -33,13 +33,18 @@ public sealed class ActorBorrowedLittleGirlTests
 	private static readonly PhysicalCharacterCard CupidCard = new(
 		Guid.Parse("00000000-0000-0000-0000-000000000144"),
 		MainRoleType.Cupid);
-	private static readonly SubPhaseManager<NightSubPhases> NightActionLoop =
-		new(
-			NightSubPhases.Start,
-			[
-				HookSubPhaseStage.HookStage(GameHook.NightMainActionLoop),
-				NavigationSubPhaseStage.NavigationEndStageSilent(GamePhase.Dawn)
-			]);
+	private static readonly PhaseManager<NightSubPhases> NightActionLoop = new(
+		GamePhase.Night,
+		NightSubPhases.Start,
+		[
+			new(
+				NightSubPhases.Start,
+				[
+					HookSubPhaseStage.HookStage(GameHook.NightMainActionLoop),
+					NavigationSubPhaseStage.NavigationEndStageSilent(GamePhase.Dawn)
+				],
+				possibleNextMainPhaseTransitions: [new(GamePhase.Dawn)])
+		]);
 
 	[Fact]
 	public void BorrowedLittleGirl_UnknownWerewolfMembership_DecoratesExistingCollectiveIntervalOnceWithoutIdentityLeak()
@@ -580,9 +585,13 @@ public sealed class ActorBorrowedLittleGirlTests
 			?? throw new InvalidOperationException(
 				"The Actor borrowed test workflow requires one Pending Instruction.");
 		session.GetOrCreateListener(listener.Id, () => listener);
-		var nextInstruction = NightActionLoop.Execute(
-			session,
-			response).ModeratorInstruction;
+		var result = NightActionLoop.ProcessInputAndUpdatePhase(session, response);
+		var nextInstruction = result switch
+		{
+			PhaseExecutionResult.InstructionReady ready => ready.Instruction,
+			PhaseExecutionResult.PhaseExited exited => exited.TransitionInstruction,
+			_ => throw new InvalidOperationException("Unexpected phase execution outcome.")
+		};
 		if (nextInstruction != null)
 		{
 			session.CommitExecution(

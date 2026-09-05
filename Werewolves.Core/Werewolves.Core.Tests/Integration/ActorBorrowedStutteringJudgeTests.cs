@@ -38,13 +38,18 @@ public sealed class ActorBorrowedStutteringJudgeTests
 
 	private static readonly TestExecutionCommitKey ExecutionCommitKey = new();
 
-	private static readonly SubPhaseManager<NightSubPhases>
-		NightMainActionLoop = new(
-			NightSubPhases.Start,
-			[
-				HookSubPhaseStage.HookStage(GameHook.NightMainActionLoop),
-				NavigationSubPhaseStage.NavigationEndStageSilent(GamePhase.Dawn)
-			]);
+	private static readonly PhaseManager<NightSubPhases> NightMainActionLoop = new(
+		GamePhase.Night,
+		NightSubPhases.Start,
+		[
+			new(
+				NightSubPhases.Start,
+				[
+					HookSubPhaseStage.HookStage(GameHook.NightMainActionLoop),
+					NavigationSubPhaseStage.NavigationEndStageSilent(GamePhase.Dawn)
+				],
+				possibleNextMainPhaseTransitions: [new(GamePhase.Dawn)])
+		]);
 
 	[Fact]
 	public void BorrowedStutteringJudge_LaterNightSetupUsesActorAudienceAndActivationQualifiedCompletion()
@@ -1041,13 +1046,9 @@ public sealed class ActorBorrowedStutteringJudgeTests
 			  throw new InvalidOperationException(
 				  "The Actor borrowed Stuttering Judge fixture requires one Pending Instruction.")
 			: null;
-		var result = NightMainActionLoop.Execute(session, response);
+		var result = NightMainActionLoop.ProcessInputAndUpdatePhase(session, response);
 		if (consumedInstruction != null &&
-			result is StayInSubPhaseHandlerResult
-			{
-				StageComplete: false,
-				ModeratorInstruction: { } publishedInstruction
-			})
+			result is PhaseExecutionResult.InstructionReady { Instruction: var publishedInstruction })
 		{
 			var publicationResponse =
 				response.InstructionId == consumedInstruction.InstructionId
@@ -1071,13 +1072,9 @@ public sealed class ActorBorrowedStutteringJudgeTests
 
 		return result switch
 		{
-			StayInSubPhaseHandlerResult
-			{
-				StageComplete: false,
-				ModeratorInstruction: { } instruction
-			} => new HookAdvanceResult(instruction),
-			StayInSubPhaseHandlerResult { StageComplete: true } =>
-				new HookAdvanceResult(result.ModeratorInstruction),
+			PhaseExecutionResult.InstructionReady ready => new HookAdvanceResult(ready.Instruction),
+			PhaseExecutionResult.PhaseExited exited =>
+				new HookAdvanceResult(exited.TransitionInstruction),
 			_ => throw new InvalidOperationException(
 				"The Night Main Action Loop fixture produced an unexpected result.")
 		};

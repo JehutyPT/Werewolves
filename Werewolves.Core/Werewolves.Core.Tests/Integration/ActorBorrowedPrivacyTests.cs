@@ -117,7 +117,7 @@ public sealed class ActorBorrowedPrivacyTests
 			CreatePowerIdentity(
 				fixture,
 				"stuttering-judge-consecutive-vote"));
-		var historyCount = fixture.Session.GameHistoryLog.Count();
+		var historyBeforeReplay = fixture.Session.GameHistoryLog.ToArray();
 		var markerCount = fixture.Session.GameHistoryLog
 			.OfType<ActorBorrowedRolePowerCommittedLogEntry>().Count();
 		var commitCount = fixture.Session
@@ -132,7 +132,10 @@ public sealed class ActorBorrowedPrivacyTests
 		replay.Should().NotBeNull();
 		replay!.Outcome.Should().Be(HookListenerOutcome.Complete);
 		replay.Instruction.Should().BeNull();
-		fixture.Session.GameHistoryLog.Should().HaveCount(historyCount);
+		fixture.Session.GameHistoryLog.Take(historyBeforeReplay.Length).Should().Equal(historyBeforeReplay);
+		fixture.Session.GameHistoryLog.Skip(historyBeforeReplay.Length).Should()
+			.ContainSingle(entry => entry is PhaseTransitionLogEntry);
+		fixture.Session.GetCurrentPhase().Should().Be(GamePhase.Dawn);
 		fixture.Session.GameHistoryLog
 			.OfType<ActorBorrowedRolePowerCommittedLogEntry>().Should()
 			.HaveCount(markerCount);
@@ -1094,18 +1097,21 @@ public sealed class ActorBorrowedPrivacyTests
 			  throw new InvalidOperationException(
 				  "The Actor borrowed privacy harness requires one Pending Instruction.")
 			: null;
-		var manager = new SubPhaseManager<HookHarnessSubPhase>(
+		var manager = new PhaseManager<HookHarnessSubPhase>(
+			GamePhase.Night,
 			HookHarnessSubPhase.Active,
 			[
-				HookSubPhaseStage.HookStage(GameHook.NightMainActionLoop),
-				NavigationSubPhaseStage.NavigationEndStageSilent(GamePhase.Dawn)
+				new(
+					HookHarnessSubPhase.Active,
+					[
+						HookSubPhaseStage.HookStage(GameHook.NightMainActionLoop),
+						NavigationSubPhaseStage.NavigationEndStageSilent(GamePhase.Dawn)
+					],
+					possibleNextMainPhaseTransitions: [new(GamePhase.Dawn)])
 			]);
-		var result = manager.Execute(session, response).Should()
-			.BeOfType<StayInSubPhaseHandlerResult>().Subject;
-		if (!result.StageComplete)
+		var result = manager.ProcessInputAndUpdatePhase(session, response);
+		if (result is PhaseExecutionResult.InstructionReady { Instruction: var nextInstruction })
 		{
-			result.ModeratorInstruction.Should().NotBeNull();
-			var nextInstruction = result.ModeratorInstruction!;
 			if (consumedInstruction != null)
 			{
 				var publicationResponse =
@@ -1132,7 +1138,6 @@ public sealed class ActorBorrowedPrivacyTests
 				HookHarnessListenerState.AwaitingInput);
 		}
 
-		result.ModeratorInstruction.Should().BeNull();
 		return HookListenerActionResult.Complete(
 			HookHarnessListenerState.Complete);
 	}

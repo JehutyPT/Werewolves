@@ -42,7 +42,7 @@ Most transient execution updates do not go through `GameLogEntryBase`, because r
 *   **`IStateMutatorKey`:** Remains the separate capability used by the private `SessionMutator` to reach persistent mutable state while applying log entries.
 *   **`IGameFlowManagerKey`:** Authorizes correlated Pending Instruction publication, optional stable-recovery-boundary advancement, and authenticated transient-continuation restoration. Its only production owner is `GameFlowManager`.
 *   **`IPhaseManagerKey`:** Authorizes Sub-Phase movement and stage completion. Its only production owner is `PhaseManager<TSubPhaseEnum>`.
-*   **`ISubPhaseManagerKey`:** Authorizes atomic stage entry. Its only production owner is `SubPhaseManager<TSubPhase>`.
+*   **`ISubPhaseManagerKey`:** Authorizes atomic stage entry. Its only production owner is `PhaseManager<TSubPhaseEnum>`, which retains the stage-entry capability separately from its Sub-Phase movement/completion capability.
 *   **`IHookSubPhaseKey`:** Authorizes listener-state movement and clearing. Its only production owner is `HookSubPhaseStage`.
 *   **`IRoleStageExecutionKey`:** Remains a separate capability for the existing Role-stage workflow; it is not an alternative execution-state mutation path.
 
@@ -323,11 +323,11 @@ Stores runtime state for an active event in `GameSession.ActiveEvents`.
 `GameSessionKernel` is the sole owner of the mutable execution point. Its private `GamePhaseStateCache` value is an implementation detail for cursor storage and stable DTO conversion; there is no exposed phase-cache interface or Kernel cache accessor.
 
 *   **Coherent Read:** `GameSession.Execution` returns one immutable `ExecutionView` containing the current Main Phase, Sub-Phase, active and completed stages, active listener and listener state, Pending Instruction, and semantic recovery cursors. GameLogic takes one view for a decision instead of assembling state from field-at-a-time getters.
-*   **Authorized Requests:** The keyed facade preserves one production owner per request family: `GameFlowManager` publishes Pending Instructions/recovery boundaries and restores authenticated continuations; `PhaseManager<TSubPhaseEnum>` moves Sub-Phases and completes stages; `SubPhaseManager<TSubPhase>` enters stages; and `HookSubPhaseStage` moves or clears listener state.
+*   **Authorized Requests:** The keyed facade preserves one production owner per request family: `GameFlowManager` publishes Pending Instructions/recovery boundaries and restores authenticated continuations; `PhaseManager<TSubPhaseEnum>` enters stages, moves Sub-Phases, and completes stages through the existing separate keys; and `HookSubPhaseStage` moves or clears listener state.
 *   **Reducer Validation:** The closed `ExecutionTransition` family carries an expected view and one complete candidate. The Kernel rejects stale expectations, invalid cursor structure, illegal cleanup, mismatched instruction correlation, and invalid recovery publication before mutating any execution field.
 *   **Automatic Cleanup:** A Main Phase change clears Sub-Phase, stage, and listener state; a Sub-Phase change clears stage and listener state; stage completion clears the active stage and listener; and listener transitions cannot escape the active stage.
 *   **Persistent Main Phase Path:** `GameFlowManager` chooses every Main Phase and Sub-Phase destination under ADR-0004. A Main Phase destination is persisted only through `PhaseTransitionLogEntry`; applying that entry asks the reducer to install the corresponding transient cursor. There is no direct transient Main Phase setter.
-*   **Notifications:** The Kernel emits execution notifications only after the complete transition has passed validation and live state has been updated. Applying `PhaseTransitionLogEntry` emits the Main Phase callback after its cursor consequence; `PhaseManager<TSubPhaseEnum>` requests emit the corresponding Sub-Phase or stage callback; `SubPhaseManager<TSubPhase>` stage entry emits the stage callback; `HookSubPhaseStage` requests emit the listener callback; and a `GameFlowManager` commit emits the Pending Instruction callback after any requested stable-boundary validation and publication. Authenticated continuation restoration installs the stage and listener atomically before emitting those two callbacks in that order.
+*   **Notifications:** The Kernel emits execution notifications only after the complete transition has passed validation and live state has been updated. Applying `PhaseTransitionLogEntry` emits the Main Phase callback after its cursor consequence; `PhaseManager<TSubPhaseEnum>` requests emit the corresponding Sub-Phase or stage callback; `PhaseManager<TSubPhaseEnum>` stage entry emits the stage callback; `HookSubPhaseStage` requests emit the listener callback; and a `GameFlowManager` commit emits the Pending Instruction callback after any requested stable-boundary validation and publication. Authenticated continuation restoration installs the stage and listener atomically before emitting those two callbacks in that order.
 
 ## `GameFlowManager` Class
 
@@ -340,27 +340,27 @@ Acts as a high-level phase controller and reactive hook dispatcher. It contains 
     *   `PhaseDefinitions` (static Dictionary<GamePhase, IPhaseDefinition>): Declarative mapping of each main `GamePhase` to its corresponding `PhaseManager`.
 *   **Primary Methods:**
     *   `GetInitialInstruction(List<MainRoleType> rolesInPlay, Guid gameId)` (StartGameConfirmationInstruction): **Static factory method for bootstrapping.** Returns the initial instruction required to construct a valid `GameSession`. This pure function performs input validation and generates the startup instruction without creating any game state.
-    *   `HandleInput(GameSession session, ModeratorResponse input)` (ProcessResult): **The central state machine orchestrator and silent-transition owner.**
+    *   `HandleInput(GameSession session, ModeratorResponse input)` (ProcessResult): **The central Main Phase exit router and instruction-commit owner.**
         *   Delegates one phase at a time to `RouteInputToPhaseHandler`.
-        *   **Silent Transition Loop:** When a phase returns no instruction after entering another main phase, re-routes through the newly entered phase until an instruction is produced.
-        *   Checks for victory at each **phase transition boundary** before any work owned by the newly entered phase runs (see Victory Check Timing below).
-        *   Returns a `ProcessResult` with the next instruction.
+        *   **Phase Exit Routing:** On every `PhaseExited` stop, evaluates any existing applicable Victory Check Window before selecting the optional transition instruction. Victory takes precedence; otherwise the supplied instruction is retained, or routing continues in the entered phase when it is absent. Night-to-Dawn opens no victory window.
+        *   Evaluates only the resolved Dawn and PreNight windows before any entered-phase work, preserving Shared Victory Outcomes and outcome lifecycle consequences (see Victory Check Timing below).
+        *   Commits the exact next instruction and any applicable recovery boundary through the existing keyed path, then returns a `ProcessResult`.
     *   `RouteInputToPhaseHandler(GameSession session, ModeratorResponse input)` (`private static`): **Routes one processing step to the appropriate phase handler.**
         *   Retrieves the current phase and delegates to the appropriate `IPhaseDefinition` (`PhaseManager`).
-        *   **Defensive Null Check:** An invariant check ensures no null instructions escape from non-`MainPhaseHandlerResult` results, as this would indicate a bug in sub-phase or hook stage logic.
+        *   Consumes only `InstructionReady` (a non-null instruction with unchanged Main Phase) or `PhaseExited` (previous/current Main Phases and an optional transition instruction). Stage completion and stage-result nullability stay inside the interpreter.
     *   `TryGetVictoryInstructions(GameSession session, GamePhase oldPhase, GamePhase newPhase, out ModeratorInstruction?)` (`private static`): Checks for victory conditions **only when transitioning between main phases** (entering Day or Night). This ensures victory is detected at natural game boundaries, preventing scenarios like sending the village to sleep only to immediately announce the game is over.
-    *   `CheckVictoryConditions(GameSession session)` (`private static`, returns `(Team WinningTeam, string Description)?`): Evaluates win conditions based on the current game state. Returns `null` if no victory condition is met, or a tuple containing the winning team and description.
+    *   `CheckVictoryConditions(GameSession session, VictoryCheckWindow window, out bool angelVictoryEligible)` (`private static`, returns `GameResult?`): Evaluates all Faction predicates against the same resolved state at an existing window, selecting a Shared Victory Outcome when applicable. Returns `null` when no outcome applies.
 *   **Declarative State Machine Architecture:** The game flow is defined by a hierarchy of declarative components:
-    *   **`PhaseManager<TSubPhaseEnum>`**: Manages the flow between sub-phases for a single main `GamePhase`. It contains a dictionary of `SubPhaseManager`s. Each `PhaseManager` is **phase-aware**: it determines which `GamePhase` it manages by finding itself in the `PhaseDefinitions` dictionary (cached after first lookup). This enables clean exit when a silent main phase transition occurs—if the session's current phase no longer matches the owned phase, the manager returns immediately with a `MainPhaseHandlerResult(null, currentPhase)`, allowing `HandleInput` to check the transition boundary before processing the new phase.
-    *   **`SubPhaseManager<TSubPhase>`**: Defines a single sub-phase. It contains a linear sequence of `SubPhaseStage`s that are executed in order. It also declares all valid transitions to other sub-phases or main phases.
-    *   **`SubPhaseStage`**: An abstract class representing a single, **atomic, non-re-entrant** unit of work. `SubPhaseManager<TSubPhase>` requests stage entry through its keyed facade operation, and the Kernel reducer ensures each stage is executed at most once per Sub-Phase entry.
+    *   **`PhaseManager<TSubPhaseEnum>`**: Interprets one explicitly declared owning `GamePhase`; it never discovers ownership by reverse registration lookup. It selects ordered stages, requests entry and completion through the existing keyed facade, validates stage outcomes against the declaration, and traverses silent work within the Main Phase. Every Main Phase exit yields before entered-phase work, including exits carrying an instruction. The Kernel remains the sole execution-state mutation and validation authority; the interpreter has no cursor or candidate-state reducer.
+    *   **`SubPhaseManager<TSubPhase>`**: Passive ordered stage and allowed-destination data for one sub-phase. It performs no execution or kernel mutation.
+    *   **`SubPhaseStage`**: A stage adapter invoked by `PhaseManager`. Completed stages are skipped on later responses; paused hook and cascade stages resume while active. The Kernel decides atomic entry, and the interpreter interprets completion or pause without publishing instructions itself.
         *   `LogicSubPhaseStage`: Executes a custom logic handler.
         *   `HookSubPhaseStage`: Fires a `GameHook` and dispatches to all registered listeners.
         *   `EliminationCascadeStage`: Drains one scoped Dawn or Day elimination cascade. Registered pre-reveal reactions run in deterministic order before generic Role Reveal or another target-dependent consequence; the stage then commits every Player in the current distinct batch before forced and interactive reactions run, admits chained batches until empty, and may pause for Moderator input. A newly Eliminated Hunter is evaluated through the shared Role Power availability boundary after forced reactions drain; a non-empty legal roster produces one mandatory exact-one target instruction, while an empty roster completes silently. The shot creates a child batch in the same cascade. The stage never navigates.
         *   `NavigationSubPhaseStage`: A stage that results in a transition to a new sub-phase or main phase. Created via factory methods (`NavigationEndStage`, `NavigationEndStageSilent`) as the required final stage for any sub-phase.
 *   **State Machine Validation:** The architecture provides strong runtime guarantees:
-    *   **Transition Validation:** All transitions are validated against the `PossibleNextSubPhases` and `PossibleNextMainPhaseTransitions` sets defined in the `SubPhaseManager`. An illegal transition throws an `InvalidOperationException`.
-    *   **Stage Atomicity:** The `GameSession.TryEnterSubPhaseStage` method prevents any stage from being executed more than once within a single Sub-Phase activation, eliminating the need for idempotent handlers.
+    *   **Transition Validation:** The interpreter validates ownership, selected declarations, and destinations against `PossibleNextSubPhases` and `PossibleNextMainPhaseTransitions`. Pauses require instructions; unsupported outcomes and exhausted traversal fail explicitly. These declaration checks precede requests to the Kernel, whose execution-transition validation remains authoritative.
+    *   **Stage Atomicity:** The keyed `GameSession.TryEnterSubPhaseStage` operation skips completed stages and permits an active stage to resume. `PhaseManager` holds its private production stage-entry key; listener-state and instruction/recovery keys retain their existing owners.
 *   **Navigation and Key Ownership:** `GameFlowManager` remains the single visible owner of every Main Phase and Sub-Phase destination under ADR-0004. Its `IGameFlowManagerKey` authorizes correlated Pending Instruction/stable-boundary commits and authenticated continuation restoration; it does not provide a second Main Phase path.
 
 ## `GameService` Class
@@ -473,7 +473,7 @@ Represents the outcome of a processing operation.
 
 ## `PhaseHandlerResult` Hierarchy
 
-A hierarchy of records represents the outcome of a `SubPhaseStage`'s execution, signaling the intended next step to the `PhaseManager`.
+These internal stage-adapter records describe work for `PhaseManager` to interpret. They do not cross the phase-execution interface into `GameFlowManager` routing; the interface returns `PhaseExecutionResult.InstructionReady` or `PhaseExecutionResult.PhaseExited` instead.
 
 *   `PhaseHandlerResult(ModeratorInstruction? ModeratorInstruction)`: Abstract base record.
 *   `MajorNavigationPhaseHandlerResult`: Abstract record for results that cause a transition.
@@ -623,12 +623,12 @@ Located in `Werewolves.Core.StateModels/Extensions/MainRoleTypeExtensions.cs`. P
 
 2.  **Night Phase (`GamePhase.Night`):**
     *   The `PhaseManager` for `Night` is activated. It begins executing the `NightSubPhases.Start` sub-phase.
-    *   The `SubPhaseManager` for `Start` runs its sequence of atomic stages:
+    *   The `PhaseManager` interprets the ordered stages declared for `Start`:
         1.  A `LogicSubPhaseStage` issues the "Village goes to sleep" instruction and increments the turn number.
         2.  A `HookSubPhaseStage` fires the `GameHook.NightMainActionLoop`. It iterates through all registered role listeners (`SimpleWerewolfRole`, `SeerRole`, etc.), calling `Execute` on each.
         3.  If a listener needs input, it returns `HookListenerActionResult.NeedInput`, which becomes a `StayInSubPhaseHandlerResult` via `PauseSubPhaseStage(instruction)`. The stage remains active for re-entry, and the `PhaseManager` pauses.
         4.  Once all listeners complete, the `HookSubPhaseStage`'s `onComplete` delegate runs, returning `CompleteSubPhaseStage(null)` to mark the stage complete.
-        5.  The final `EndNavigationSubPhaseStage` executes, returning a `MainPhaseHandlerResult` to transition to `GamePhase.Dawn`.
+        5.  The final `NavigationSubPhaseStage` returns a `MainPhaseHandlerResult`. The interpreter validates Dawn against the declaration, requests the log-backed transition, and returns `PhaseExited` with the Night-completion instruction before Dawn work runs.
 
 3.  **Dawn Phase (`GamePhase.Dawn`):**
     *   The `PhaseManager` for `Dawn` is activated, starting at `DawnSubPhases.CalculateVictims`.

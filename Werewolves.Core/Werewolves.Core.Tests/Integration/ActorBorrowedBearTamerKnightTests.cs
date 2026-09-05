@@ -665,7 +665,6 @@ public sealed class ActorBorrowedBearTamerKnightTests
 				entry.PlayerId == fixture.TargetId &&
 				entry.EffectType == StatusEffectTypes.RustySwordDisease);
 
-		recovered.TransitionMainPhase(GamePhase.Dawn);
 		recovered = RecoveryPayloadTestDriver.Capture(recovered)
 			.WithPendingInstruction(fixture.Start)
 			.RehydrateGameSession();
@@ -832,7 +831,6 @@ public sealed class ActorBorrowedBearTamerKnightTests
 			.Should().NotContain(entry =>
 				entry.PlayerId == fixture.TargetId &&
 				entry.EffectType == StatusEffectTypes.RustySwordDisease);
-		session.TransitionMainPhase(GamePhase.Dawn);
 		session = RecoveryPayloadTestDriver.Capture(session)
 			.WithPendingInstruction(fixture.Start)
 			.RehydrateGameSession();
@@ -934,7 +932,6 @@ public sealed class ActorBorrowedBearTamerKnightTests
 			.HasStatusEffect(StatusEffectTypes.RustySwordDisease)
 			.Should().BeFalse();
 
-		recovered.TransitionMainPhase(GamePhase.Dawn);
 		recovered = RecoveryPayloadTestDriver.Capture(recovered)
 			.WithPendingInstruction(fixture.Start)
 			.RehydrateGameSession();
@@ -1045,14 +1042,18 @@ public sealed class ActorBorrowedBearTamerKnightTests
 		Guid werewolfVictimId)
 	{
 		session.GetOrCreateListener(listener.Id, () => listener);
-		var hook = new SubPhaseManager<HookDriverSubPhase>(
+		var hook = new PhaseManager<HookDriverSubPhase>(
+			GamePhase.Night,
 			HookDriverSubPhase.Active,
 			[
-				HookSubPhaseStage.HookStage(GameHook.NightMainActionLoop),
-				NavigationSubPhaseStage.NavigationEndStageSilent(
-					HookDriverSubPhase.Complete)
-			],
-			possibleNextSubPhases: [HookDriverSubPhase.Complete]);
+				new(
+					HookDriverSubPhase.Active,
+					[
+						HookSubPhaseStage.HookStage(GameHook.NightMainActionLoop),
+						NavigationSubPhaseStage.NavigationEndStageSilent(GamePhase.Dawn)
+					],
+					possibleNextMainPhaseTransitions: [new(GamePhase.Dawn)])
+			]);
 		var observed = new List<ModeratorInstruction>();
 		var currentResponse = response;
 		for (var step = 0; step < 20; step++)
@@ -1060,13 +1061,15 @@ public sealed class ActorBorrowedBearTamerKnightTests
 			var consumedInstruction = session.Execution.PendingInstruction
 				?? throw new InvalidOperationException(
 					"The Actor borrowed test workflow requires one Pending Instruction.");
-			var instruction = hook.Execute(session, currentResponse)
-				.ModeratorInstruction;
-			if (instruction == null)
+			var result = hook.ProcessInputAndUpdatePhase(session, currentResponse);
+			if (result is PhaseExecutionResult.PhaseExited)
 			{
 				return observed;
 			}
 
+			var instruction = result is PhaseExecutionResult.InstructionReady ready
+				? ready.Instruction
+				: throw new InvalidOperationException("Unexpected phase execution outcome.");
 			observed.Add(instruction);
 			var publicationResponse =
 				currentResponse.InstructionId == consumedInstruction.InstructionId
@@ -1772,8 +1775,7 @@ public sealed class ActorBorrowedBearTamerKnightTests
 
 	private enum HookDriverSubPhase
 	{
-		Active,
-		Complete
+		Active
 	}
 
 	private sealed class DenyBearTamerAvailabilityPolicy

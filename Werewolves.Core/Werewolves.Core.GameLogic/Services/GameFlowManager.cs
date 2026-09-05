@@ -137,6 +137,7 @@ internal static class GameFlowManager
 
     private static IPhaseDefinition CreateNightPhase()
         => new PhaseManager<NightSubPhases>(
+            ownedPhase: GamePhase.Night,
             entrySubPhase: NightSubPhases.Start,
             subPhaseList:
             [
@@ -162,6 +163,7 @@ internal static class GameFlowManager
 
     private static IPhaseDefinition CreateDawnPhase()
         => new PhaseManager<DawnSubPhases>(
+            ownedPhase: GamePhase.Dawn,
             entrySubPhase: DawnSubPhases.CalculateVictims,
             subPhaseList:
             [
@@ -215,6 +217,7 @@ internal static class GameFlowManager
 
     private static IPhaseDefinition CreateDayPhase()
         => new PhaseManager<DaySubPhases>(
+            ownedPhase: GamePhase.Day,
             entrySubPhase: DaySubPhases.Debate,
             subPhaseList:
             [
@@ -536,19 +539,20 @@ internal static class GameFlowManager
 
         while (nextInstructionToSend == null)
         {
-            var oldPhase = session.Execution.CurrentPhase;
-            var handlerResult = RouteInputToPhaseHandler(session, input);
-            var newPhase = session.Execution.CurrentPhase;
-
-            // A silent main-phase transition is a resolution boundary. Check victory
-            // before routing any work owned by the phase that was just entered.
-            if (TryGetVictoryInstructions(session, oldPhase, newPhase, out var victoryInstruction))
+            switch (RouteInputToPhaseHandler(session, input))
             {
-                nextInstructionToSend = victoryInstruction;
-                break;
+                case PhaseExecutionResult.InstructionReady ready:
+                    nextInstructionToSend = ready.Instruction;
+                    break;
+                case PhaseExecutionResult.PhaseExited exited:
+                    nextInstructionToSend = TryGetVictoryInstructions(
+                        session, exited.PreviousPhase, exited.CurrentPhase, out var victoryInstruction)
+                        ? victoryInstruction
+                        : exited.TransitionInstruction;
+                    break;
+                default:
+                    throw new InvalidOperationException("The phase interpreter returned an unsupported outcome.");
             }
-
-            nextInstructionToSend = handlerResult.ModeratorInstruction;
 		}
 
         if (nextInstructionToSend == null)
@@ -3032,7 +3036,7 @@ internal static class GameFlowManager
 		return false;
     }
 
-    private static PhaseHandlerResult RouteInputToPhaseHandler(GameSession session, ModeratorResponse input)
+    private static PhaseExecutionResult RouteInputToPhaseHandler(GameSession session, ModeratorResponse input)
     {
         var currentPhase = session.Execution.CurrentPhase;
 
@@ -3041,19 +3045,7 @@ internal static class GameFlowManager
             throw new InvalidOperationException($"No phase definition found for phase: {currentPhase}");
         }
 
-        var result = phaseDef.ProcessInputAndUpdatePhase(session, input);
-
-        // Defensive check: null instructions should only bubble up from MainPhaseHandlerResult
-        // during silent phase transitions (handled by HandleInput). If we get here with a null
-        // instruction from any other result, something has gone wrong at the sub-phase or hook level.
-        if (result is not MainPhaseHandlerResult && result.ModeratorInstruction == null)
-        {
-            throw new InvalidOperationException(
-                $"Internal State Machine Error: Received null ModeratorInstruction from non-MainPhaseHandlerResult. " +
-                $"Result type: {result.GetType().Name}, Current phase: {session.Execution.CurrentPhase}");
-        }
-
-        return result;
+        return phaseDef.ProcessInputAndUpdatePhase(session, input);
     }
 
     private static void EnsureVictoryFactsReady(

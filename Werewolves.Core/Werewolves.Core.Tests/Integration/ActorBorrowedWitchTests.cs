@@ -35,11 +35,17 @@ public sealed class ActorBorrowedWitchTests
 	private static readonly PhysicalCharacterCard FoxCard = new(
 		Guid.Parse("00000000-0000-0000-0000-000000000159"),
 		MainRoleType.Fox);
-	private static readonly SubPhaseManager<NightSubPhases> NightActionLoop = new(
+	private static readonly PhaseManager<NightSubPhases> NightActionLoop = new(
+		GamePhase.Night,
 		NightSubPhases.Start,
 		[
-			HookSubPhaseStage.HookStage(GameHook.NightMainActionLoop),
-			NavigationSubPhaseStage.NavigationEndStageSilent(NightSubPhases.Start)
+			new(
+				NightSubPhases.Start,
+				[
+					HookSubPhaseStage.HookStage(GameHook.NightMainActionLoop),
+					NavigationSubPhaseStage.NavigationEndStageSilent(GamePhase.Dawn)
+				],
+				possibleNextMainPhaseTransitions: [new(GamePhase.Dawn)])
 		]);
 
 	[Theory]
@@ -71,7 +77,6 @@ public sealed class ActorBorrowedWitchTests
 			start,
 			WitchCard.Id);
 		var pending = Advance(witch, session, wake.CreateResponse())
-			.ModeratorInstruction
 			?? throw new InvalidOperationException(
 				"Expected a borrowed Witch instruction after wake.");
 
@@ -120,12 +125,12 @@ public sealed class ActorBorrowedWitchTests
 			var poison = Advance(
 				witch,
 				session,
-				healing.CreateResponse([])).ModeratorInstruction
+				healing.CreateResponse([]))
 				.Should().BeOfType<SelectPlayersInstruction>().Subject;
 			pending = Advance(
 				witch,
 				session,
-				poison.CreateResponse([])).ModeratorInstruction
+				poison.CreateResponse([]))
 				.Should().BeOfType<ConfirmationInstruction>().Subject;
 			pending.PrivateInstruction.Should().BeNull();
 		}
@@ -190,7 +195,6 @@ public sealed class ActorBorrowedWitchTests
 		wake.AffectedPlayerIds.Should().Equal(actorId);
 
 		var healing = Advance(witch, session, wake.CreateResponse())
-			.ModeratorInstruction
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
 
 		healing.Semantic.Should().Be(
@@ -207,7 +211,7 @@ public sealed class ActorBorrowedWitchTests
 		var poison = Advance(
 			witch,
 			session,
-			healing.CreateResponse([])).ModeratorInstruction
+			healing.CreateResponse([]))
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
 
 		poison.Semantic.Should().Be(
@@ -267,7 +271,6 @@ public sealed class ActorBorrowedWitchTests
 			start,
 			WitchCard.Id);
 		var healing = Advance(witch, session, wake.CreateResponse())
-			.ModeratorInstruction
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
 		var powerIdentity = new RolePowerInstanceIdentity(
 			actorId,
@@ -432,19 +435,19 @@ public sealed class ActorBorrowedWitchTests
 		var nextActorWake = Advance(
 			nextActor,
 			recoveredAtSleep,
-			start.CreateResponse()).ModeratorInstruction
+			start.CreateResponse())
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		recoveredAtSleep.GetModeratorActiveActorBorrowedRolePowerActivation()
 			.Should().BeNull();
 		var nextActorChoice = Advance(
 			nextActor,
 			recoveredAtSleep,
-			nextActorWake.CreateResponse()).ModeratorInstruction
+			nextActorWake.CreateResponse())
 			.Should().BeOfType<SelectOptionsInstruction>().Subject;
 		var nextActorSleep = Advance(
 			nextActor,
 			recoveredAtSleep,
-			nextActorChoice.CreateResponse()).ModeratorInstruction
+			nextActorChoice.CreateResponse())
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		CompleteCadence(
 			nextActor,
@@ -479,7 +482,6 @@ public sealed class ActorBorrowedWitchTests
 			start,
 			WitchCard.Id);
 		var healing = Advance(witch, session, wake.CreateResponse())
-			.ModeratorInstruction
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
 		var powerIdentity = new RolePowerInstanceIdentity(
 			actorId,
@@ -619,7 +621,6 @@ public sealed class ActorBorrowedWitchTests
 			WitchCard.Id);
 
 		var poison = Advance(witch, session, wake.CreateResponse())
-			.ModeratorInstruction
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
 
 		poison.Semantic.Should().Be(
@@ -659,16 +660,13 @@ public sealed class ActorBorrowedWitchTests
 		Guid selectedCardId)
 	{
 		var wake = Advance(actorListener, session, start.CreateResponse())
-			.ModeratorInstruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		var choice = Advance(actorListener, session, wake.CreateResponse())
-			.ModeratorInstruction
 			.Should().BeOfType<SelectOptionsInstruction>().Subject;
 		var sleep = Advance(
 			actorListener,
 			session,
 			choice.CreateResponse(selectedCardId.ToString("D")))
-			.ModeratorInstruction
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		var activation = session
 			.GetModeratorActiveActorBorrowedRolePowerActivation()!;
@@ -687,8 +685,7 @@ public sealed class ActorBorrowedWitchTests
 		ModeratorResponse response,
 		Guid actorId)
 	{
-		var instruction = Advance(listener, session, response)
-			.ModeratorInstruction;
+		var instruction = Advance(listener, session, response);
 		for (var step = 0; step < 20; step++)
 		{
 			if (instruction is ConfirmationInstruction
@@ -703,8 +700,7 @@ public sealed class ActorBorrowedWitchTests
 			instruction = Advance(
 				listener,
 				session,
-				CreateCadenceResponse(session, instruction))
-					.ModeratorInstruction;
+				CreateCadenceResponse(session, instruction));
 		}
 
 		throw new InvalidOperationException(
@@ -758,8 +754,7 @@ public sealed class ActorBorrowedWitchTests
 		GameSession session,
 		ModeratorResponse response)
 	{
-		var instruction = Advance(listener, session, response)
-			.ModeratorInstruction;
+		var instruction = Advance(listener, session, response);
 		for (var step = 0; step < 20; step++)
 		{
 			if (instruction == null)
@@ -770,8 +765,7 @@ public sealed class ActorBorrowedWitchTests
 			instruction = Advance(
 				listener,
 				session,
-				CreateCadenceResponse(session, instruction))
-				.ModeratorInstruction;
+				CreateCadenceResponse(session, instruction));
 		}
 
 		throw new InvalidOperationException(
@@ -836,7 +830,7 @@ public sealed class ActorBorrowedWitchTests
 		return (session, start, actorId, players[4].Id);
 	}
 
-	private static PhaseHandlerResult Advance(
+	private static ModeratorInstruction? Advance(
 		IGameHookListener listener,
 		GameSession session,
 		ModeratorResponse response)
@@ -845,8 +839,8 @@ public sealed class ActorBorrowedWitchTests
 			?? throw new InvalidOperationException(
 				"The Actor borrowed Witch test workflow requires one Pending Instruction.");
 		session.GetOrCreateListener(listener.Id, () => listener);
-		var result = NightActionLoop.Execute(session, response);
-		if (result.ModeratorInstruction is { } nextInstruction)
+		var result = NightActionLoop.ProcessInputAndUpdatePhase(session, response);
+		if (result is PhaseExecutionResult.InstructionReady { Instruction: var nextInstruction })
 		{
 			var publicationResponse =
 				response.InstructionId == consumedInstruction.InstructionId
@@ -868,7 +862,12 @@ public sealed class ActorBorrowedWitchTests
 					nextInstruction));
 		}
 
-		return result;
+		return result switch
+		{
+			PhaseExecutionResult.InstructionReady ready => ready.Instruction,
+			PhaseExecutionResult.PhaseExited exited => exited.TransitionInstruction,
+			_ => throw new InvalidOperationException("Unexpected phase execution outcome.")
+		};
 	}
 
 	private static GameSession RehydrateAtPendingInstruction(
