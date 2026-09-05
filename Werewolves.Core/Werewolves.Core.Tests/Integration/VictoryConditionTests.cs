@@ -592,7 +592,7 @@ public class VictoryConditionTests : DiagnosticTestBase
 
         var recoveryService = new GameService();
         var recoveredId = recoveryService.RehydrateSession(
-            terminalState.Serialize());
+            builder.SerializeSession());
         var recoveredFinished = recoveryService.GetCurrentInstruction(
                 recoveredId)
             .Should().BeOfType<FinishedGameConfirmationInstruction>()
@@ -751,7 +751,7 @@ public class VictoryConditionTests : DiagnosticTestBase
         session.GetFactionBeneficiaryKnowledge(players[1].Id)
             .IsKnown.Should().BeFalse();
         var response = finishNight.CreateResponse();
-        var stableBefore = session.Serialize();
+        var stableBefore = builder.SerializeSession();
         var phaseBefore = session.GetCurrentPhase();
         var historyCountBefore = session.GameHistoryLog.Count();
         var transitionCountBefore = session.GameHistoryLog
@@ -883,7 +883,7 @@ public class VictoryConditionTests : DiagnosticTestBase
             InstructionAssert.ExpectType<ConfirmationInstruction>(
                 builder.GetCurrentInstruction());
         var recoveryPayload = RecoveryPayloadTestDriver
-            .Parse(builder.GetGameState()!.Serialize())
+            .Parse(builder.SerializeSession())
             .RemoveInitialBeneficiaryClosureFact(unknownBeneficiary.Id)
             .Serialize();
         var service = new GameService();
@@ -893,7 +893,7 @@ public class VictoryConditionTests : DiagnosticTestBase
         DayVoteRules.GetActiveVoterEligibilityRestriction(session)
             .Should().NotBeNull();
         var response = followingDayDebate.CreateResponse();
-        var stableBefore = session.Serialize();
+        var stableBefore = service.SerializeSession(gameId);
         var phaseBefore = session.GetCurrentPhase();
         var historyCountBefore = session.GameHistoryLog.Count();
         var transitionCountBefore = session.GameHistoryLog
@@ -991,7 +991,7 @@ public class VictoryConditionTests : DiagnosticTestBase
                 .IsKnown)
             .Should().Be(1);
         var response = finishNight.CreateResponse();
-        var stableBefore = session.Serialize();
+        var stableBefore = builder.SerializeSession();
         var phaseBefore = session.GetCurrentPhase();
         var historyCountBefore = session.GameHistoryLog.Count();
         var transitionCountBefore = session.GameHistoryLog
@@ -1041,7 +1041,7 @@ public class VictoryConditionTests : DiagnosticTestBase
         state.Should().NotBeNull();
         state.Should().BeSameAs(expectedState);
         state!.GetCurrentPhase().Should().Be(expectedPhase);
-        state.Serialize().Should().Be(expectedStableState);
+        service.SerializeSession(gameId).Should().Be(expectedStableState);
         state.GameHistoryLog.Should().HaveCount(expectedHistoryCount);
         state.GameHistoryLog.OfType<PhaseTransitionLogEntry>()
             .Should().HaveCount(expectedTransitionCount);

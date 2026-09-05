@@ -411,7 +411,7 @@ public sealed class KnightWithTheRustySwordRoleTests : DiagnosticTestBase
 
 		var recoveredService = new GameService();
 		var recoveredGameId = recoveredService.RehydrateSession(
-			session.Serialize());
+			builder.SerializeSession());
 		var recoveredNightEnd = recoveredService
 			.GetCurrentInstruction(recoveredGameId)
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
@@ -430,7 +430,7 @@ public sealed class KnightWithTheRustySwordRoleTests : DiagnosticTestBase
 					players[1].Name));
 			var announcementService = new GameService();
 			var announcementGameId = announcementService.RehydrateSession(
-				recoveredService.GetGameStateView(recoveredGameId)!.Serialize());
+				recoveredService.SerializeSession(recoveredGameId));
 			var recoveredAnnouncement = announcementService
 				.GetCurrentInstruction(announcementGameId)
 				.Should().BeOfType<ConfirmationInstruction>().Subject;
@@ -438,15 +438,15 @@ public sealed class KnightWithTheRustySwordRoleTests : DiagnosticTestBase
 				diseaseAnnouncement.InstructionId);
 			recoveredAnnouncement.PublicAnnouncement.Should().Be(
 				diseaseAnnouncement.PublicAnnouncement);
-			var beforeStaleNightEnd = announcementService
-				.GetGameStateView(announcementGameId)!.Serialize();
+			var beforeStaleNightEnd =
+				announcementService.SerializeSession(announcementGameId);
 			Action replayNightEnd = () => announcementService.ProcessInstruction(
 				announcementGameId,
 				recoveredNightEnd.CreateResponse());
 
 			replayNightEnd.Should().Throw<InvalidOperationException>();
-			announcementService.GetGameStateView(announcementGameId)!
-				.Serialize().Should().Be(beforeStaleNightEnd);
+			announcementService.SerializeSession(announcementGameId)
+				.Should().Be(beforeStaleNightEnd);
 			var reveal = announcementService
 				.ProcessInstruction(
 					announcementGameId,
@@ -459,21 +459,20 @@ public sealed class KnightWithTheRustySwordRoleTests : DiagnosticTestBase
 
 			var revealService = new GameService();
 			var revealGameId = revealService.RehydrateSession(
-				announcementService.GetGameStateView(announcementGameId)!
-					.Serialize());
+				announcementService.SerializeSession(announcementGameId));
 			var recoveredReveal = revealService.GetCurrentInstruction(revealGameId)
 				.Should().BeOfType<AssignRolesInstruction>().Subject;
 			recoveredReveal.InstructionId.Should().Be(reveal.InstructionId);
 			recoveredReveal.PublicAnnouncement.Should().BeNull();
-			var beforeStaleAnnouncement = revealService.GetGameStateView(revealGameId)!
-				.Serialize();
+			var beforeStaleAnnouncement =
+				revealService.SerializeSession(revealGameId);
 			Action replayAnnouncement = () => revealService.ProcessInstruction(
 				revealGameId,
 				recoveredAnnouncement.CreateResponse());
 
 			replayAnnouncement.Should().Throw<InvalidOperationException>();
-			revealService.GetGameStateView(revealGameId)!
-				.Serialize().Should().Be(beforeStaleAnnouncement);
+			revealService.SerializeSession(revealGameId)
+				.Should().Be(beforeStaleAnnouncement);
 			CompleteRecoveredDawn(
 				revealService,
 				revealGameId,
@@ -504,13 +503,13 @@ public sealed class KnightWithTheRustySwordRoleTests : DiagnosticTestBase
 					entry.TriggeringEliminations.Any(elimination =>
 						elimination.PlayerId == players[1].Id &&
 						elimination.Reason == EliminationReason.RustySword));
-			var afterCompletion = recoveredState.Serialize();
+			var afterCompletion = revealService.SerializeSession(revealGameId);
 			revealService.ProcessInstruction(
 				revealGameId,
 				recoveredNightEnd.CreateResponse());
 
-			revealService.GetGameStateView(revealGameId)!
-				.Serialize().Should().Be(afterCompletion);
+			revealService.SerializeSession(revealGameId)
+				.Should().Be(afterCompletion);
 		MarkTestCompleted();
 	}
 
@@ -828,7 +827,7 @@ public sealed class KnightWithTheRustySwordRoleTests : DiagnosticTestBase
 
 		var recoveredService = new GameService();
 		var recoveredGameId = recoveredService.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 		var recoveredPlayers = recoveredService
 			.GetGameStateView(recoveredGameId)!
 			.GetPlayers()

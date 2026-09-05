@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Werewolves.Core.GameLogic;
 using Werewolves.Core.GameLogic.Models.EliminationCascades;
 using Werewolves.Core.GameLogic.Models.StateMachine;
 using Werewolves.Core.GameLogic.Queries;
@@ -559,7 +560,10 @@ public sealed class ActorBorrowedRolePowersTests
 			session,
 			new ActorBorrowedRolePowerSpec(MainRoleType.Seer, SeerPower))!;
 		var target = session.GetPlayers().Skip(1).First();
-		session.IdentifyRole([target.Id], MainRoleType.SimpleVillager);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { target.Id },
+			MainRoleType.SimpleVillager);
 		session.CommitActorBorrowedSeerCheck(
 			use.PowerIdentity,
 			target.Id,
@@ -577,7 +581,10 @@ public sealed class ActorBorrowedRolePowersTests
 			session,
 			new ActorBorrowedRolePowerSpec(MainRoleType.Seer, SeerPower))!;
 		var target = session.GetPlayers().Skip(1).First();
-		session.IdentifyRole([target.Id], MainRoleType.SimpleVillager);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { target.Id },
+			MainRoleType.SimpleVillager);
 		session.CommitActorBorrowedSeerCheck(
 			use.PowerIdentity,
 			target.Id,
@@ -600,7 +607,10 @@ public sealed class ActorBorrowedRolePowersTests
 			session,
 			new ActorBorrowedRolePowerSpec(MainRoleType.Seer, SeerPower))!;
 		var target = session.GetPlayers().Skip(1).First();
-		session.IdentifyRole([target.Id], MainRoleType.SimpleVillager);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { target.Id },
+			MainRoleType.SimpleVillager);
 		session.CommitActorBorrowedSeerCheck(
 			use.PowerIdentity,
 			target.Id,
@@ -637,7 +647,10 @@ public sealed class ActorBorrowedRolePowersTests
 			session,
 			new ActorBorrowedRolePowerSpec(MainRoleType.Seer, SeerPower))!;
 		var target = session.GetPlayers().Skip(1).First();
-		session.IdentifyRole([target.Id], MainRoleType.SimpleVillager);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { target.Id },
+			MainRoleType.SimpleVillager);
 		session.CommitActorBorrowedSeerCheck(
 			use.PowerIdentity,
 			target.Id,
@@ -656,7 +669,10 @@ public sealed class ActorBorrowedRolePowersTests
 			session,
 			new ActorBorrowedRolePowerSpec(MainRoleType.Seer, SeerPower))!;
 		var target = session.GetPlayers().Skip(1).First();
-		session.IdentifyRole([target.Id], MainRoleType.SimpleVillager);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { target.Id },
+			MainRoleType.SimpleVillager);
 		session.CommitActorBorrowedSeerCheck(
 			use.PowerIdentity,
 			target.Id,

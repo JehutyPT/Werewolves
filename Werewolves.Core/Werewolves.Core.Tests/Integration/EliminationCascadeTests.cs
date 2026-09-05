@@ -249,7 +249,7 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 					EliminationCascadeReactionBoundary.Forced)
 			]);
 		var recoveredGameId = recoveredService.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 		var recoveredAnnouncement = recoveredService
 			.GetCurrentInstruction(recoveredGameId)
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
@@ -476,7 +476,7 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 					EliminationCascadeReactionBoundary.PreReveal)
 			]);
 		var recoveredGameId = recoveredService.RehydrateSession(
-			interrupted.Serialize());
+			builder.SerializeSession());
 		var recoveredInitialReveal = recoveredService
 			.GetCurrentInstruction(recoveredGameId)
 			.Should().BeOfType<AssignRolesInstruction>().Subject;
@@ -599,7 +599,7 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 				selection.CreateResponse([selectedVictimId]))
 			.ModeratorInstruction.Should()
 			.BeOfType<AssignRolesInstruction>().Subject;
-		var serialized = builder.GetGameState()!.Serialize();
+		var serialized = builder.SerializeSession();
 		var recoveredScheduledReaction = new SingleWaveReaction();
 		recoveredScheduledReaction.Configure(
 			players[2].Id,
@@ -764,7 +764,7 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 			.BeOfType<AssignRolesInstruction>().Subject;
 		forcedSiblingReveal.SelectableRolesForPlayers.Keys.Should().Equal(
 			forcedSiblingId);
-		var serialized = builder.GetGameState()!.Serialize();
+		var serialized = builder.SerializeSession();
 
 		var recoveredParentPreRevealReaction =
 			new SingleWaveReaction("parent-pre-reveal");
@@ -863,7 +863,7 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 		var chainedReveal = builder.Process(acceptedReactionResponse)
 			.ModeratorInstruction.Should()
 			.BeOfType<AssignRolesInstruction>().Subject;
-		var serialized = builder.GetGameState()!.Serialize();
+		var serialized = builder.SerializeSession();
 
 		var recoveredReaction = new PlayerChainReaction();
 		recoveredReaction.Configure(
@@ -888,14 +888,14 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 			ModeratorInstructionSemantic.AssignEliminationCascadeRoles);
 		recoveredReveal.SelectableRolesForPlayers.Keys.Should().Equal(players[5].Id);
 
-		var beforeStaleResponse = recoveredService
-			.GetGameStateView(recoveredGameId)!.Serialize();
+		var beforeStaleResponse =
+			recoveredService.SerializeSession(recoveredGameId);
 		var processStaleResponse = () => recoveredService.ProcessInstruction(
 			recoveredGameId,
 			acceptedReactionResponse);
 
 		processStaleResponse.Should().Throw<InvalidOperationException>();
-		recoveredService.GetGameStateView(recoveredGameId)!.Serialize()
+		recoveredService.SerializeSession(recoveredGameId)
 			.Should().Be(beforeStaleResponse);
 
 		recoveredService.ProcessInstruction(
@@ -1034,7 +1034,7 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 					EliminationCascadeReactionBoundary.Forced)
 			]);
 		var recoveredGameId = recoveredService.RehydrateSession(
-			interrupted.Serialize());
+			builder.SerializeSession());
 		var recoveredReveal = recoveredService
 			.GetCurrentInstruction(recoveredGameId)
 			.Should().BeOfType<AssignRolesInstruction>().Subject;
@@ -1143,7 +1143,7 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 
 		var recoveredService = new GameService();
 		var recoveredGameId = recoveredService.RehydrateSession(
-			interrupted.Serialize());
+			builder.SerializeSession());
 		var recoveredAnnouncement = recoveredService
 			.GetCurrentInstruction(recoveredGameId)
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
@@ -1246,7 +1246,7 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 
 		var recoveredService = new GameService();
 		var recoveredGameId = recoveredService.RehydrateSession(
-			interrupted.Serialize());
+			builder.SerializeSession());
 		var recoveredAnnouncement = recoveredService
 			.GetCurrentInstruction(recoveredGameId)
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
@@ -1321,7 +1321,7 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 					EliminationCascadeReactionBoundary.Interactive)
 			]);
 		var recoveredGameId = recoveredService.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 		var recoveredPrompt = recoveredService
 			.GetCurrentInstruction(recoveredGameId)
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
@@ -1417,7 +1417,7 @@ public class EliminationCascadeTests(ITestOutputHelper output)
 					EliminationCascadeReactionBoundary.Interactive)
 			]);
 		var recoveredGameId = recoveredService.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 		var recoveredReveal = recoveredService
 			.GetCurrentInstruction(recoveredGameId)
 			.Should().BeOfType<AssignRolesInstruction>().Subject;

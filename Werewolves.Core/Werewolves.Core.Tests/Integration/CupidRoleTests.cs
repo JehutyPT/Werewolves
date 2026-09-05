@@ -258,7 +258,7 @@ public sealed class CupidRoleTests(ITestOutputHelper output)
 		var expectedSleep =
 			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
 				builder.Process(recognition.CreateResponse()));
-		var serialized = builder.GetGameState()!.Serialize();
+		var serialized = builder.SerializeSession();
 		var freshService = new GameService();
 
 		var gameId = freshService.RehydrateSession(serialized);
@@ -318,15 +318,15 @@ public sealed class CupidRoleTests(ITestOutputHelper output)
 		var wake =
 			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
 				builder.Process(identification.CreateResponse([cupid.Id])));
-		var durableSerialized = builder.GetGameState()!.Serialize();
+		var durableSerialized = builder.SerializeSession();
 		var selection =
 			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
 				builder.Process(wake.CreateResponse()));
-		builder.GetGameState()!.Serialize().Should().Be(durableSerialized);
+		builder.SerializeSession().Should().Be(durableSerialized);
 		var freshService = new GameService();
 
 		var gameId = freshService.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 
 		var recoveredWake = freshService.GetCurrentInstruction(gameId)
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
@@ -416,7 +416,7 @@ public sealed class CupidRoleTests(ITestOutputHelper output)
 		var freshService = new GameService();
 
 		var gameId = freshService.RehydrateSession(
-			scenario.Builder.GetGameState()!.Serialize());
+			scenario.Builder.SerializeSession());
 
 		var recoveredSleep = freshService.GetCurrentInstruction(gameId)
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
@@ -489,7 +489,7 @@ public sealed class CupidRoleTests(ITestOutputHelper output)
 		var freshService = new GameService();
 
 		var gameId = freshService.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 
 		var recoveredSleep = freshService.GetCurrentInstruction(gameId)
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
@@ -520,7 +520,7 @@ public sealed class CupidRoleTests(ITestOutputHelper output)
 		var preClosureService = new GameService();
 
 		var preClosureGameId = preClosureService.RehydrateSession(
-			scenario.Builder.GetGameState()!.Serialize());
+			scenario.Builder.SerializeSession());
 
 		var recoveredSleep = preClosureService
 			.GetCurrentInstruction(preClosureGameId)
@@ -557,7 +557,7 @@ public sealed class CupidRoleTests(ITestOutputHelper output)
 		var postClosureService = new GameService();
 
 		var postClosureGameId = postClosureService.RehydrateSession(
-			preClosureService.GetGameStateView(preClosureGameId)!.Serialize());
+			preClosureService.SerializeSession(preClosureGameId));
 
 		var recoveredTarget = postClosureService
 			.GetCurrentInstruction(postClosureGameId)
@@ -615,7 +615,7 @@ public sealed class CupidRoleTests(ITestOutputHelper output)
 			() => scenario.Selection.CreateResponse([first, second, third]),
 			() => scenario.Selection.CreateResponse(duplicateShape)
 		};
-		var before = scenario.Builder.GetGameState()!.Serialize();
+		var before = scenario.Builder.SerializeSession();
 
 		foreach (var wrongCountFactory in wrongCountFactories)
 		{
@@ -627,7 +627,7 @@ public sealed class CupidRoleTests(ITestOutputHelper output)
 		Action nullFactory = () => scenario.Selection.CreateResponse(null!);
 		nullFactory.Should().Throw<ArgumentNullException>();
 
-		scenario.Builder.GetGameState()!.Serialize().Should().Be(before);
+		scenario.Builder.SerializeSession().Should().Be(before);
 		scenario.Builder.GetCurrentInstruction()!.InstructionId.Should().Be(
 			scenario.Selection.InstructionId);
 		MarkTestCompleted();
@@ -683,11 +683,11 @@ public sealed class CupidRoleTests(ITestOutputHelper output)
 
 		foreach (var rejectedResponse in rejectedResponses)
 		{
-			var before = scenario.Builder.GetGameState()!.Serialize();
+			var before = scenario.Builder.SerializeSession();
 			Action process = () =>
 				scenario.Builder.Process(rejectedResponse);
 			process.Should().Throw<InvalidOperationException>();
-			scenario.Builder.GetGameState()!.Serialize().Should().Be(before);
+			scenario.Builder.SerializeSession().Should().Be(before);
 			scenario.Builder.GetCurrentInstruction()!.InstructionId.Should()
 				.Be(scenario.Selection.InstructionId);
 		}
@@ -705,14 +705,14 @@ public sealed class CupidRoleTests(ITestOutputHelper output)
 		scenario.Builder.ArrangeCurrentRole(
 			scenario.Cupid.Id,
 			MainRoleType.SimpleVillager);
-		var before = scenario.Builder.GetGameState()!.Serialize();
+		var before = scenario.Builder.SerializeSession();
 
 		Action process = () =>
 			scenario.Builder.Process(acceptedSelection);
 
 		process.Should().Throw<InvalidOperationException>()
 			.WithMessage("*living Cupid*");
-		scenario.Builder.GetGameState()!.Serialize().Should().Be(before);
+		scenario.Builder.SerializeSession().Should().Be(before);
 		scenario.Builder.GetGameState()!.GameHistoryLog
 			.OfType<LoversPairCommittedLogEntry>()
 			.Should().BeEmpty();
@@ -754,11 +754,11 @@ public sealed class CupidRoleTests(ITestOutputHelper output)
 			ModeratorInstructionSemantic.WakeRole);
 		laterNightInstruction.AffectedPlayerIds.Should().Equal(
 			scenario.Werewolf.Id);
-		var beforeReplay = scenario.Builder.GetGameState()!.Serialize();
+		var beforeReplay = scenario.Builder.SerializeSession();
 		Action replaySelection = () =>
 			scenario.Builder.Process(acceptedSelection);
 		replaySelection.Should().Throw<InvalidOperationException>();
-		scenario.Builder.GetGameState()!.Serialize().Should().Be(
+		scenario.Builder.SerializeSession().Should().Be(
 			beforeReplay);
 		scenario.Builder.GetGameState()!.GameHistoryLog
 			.OfType<LoversPairCommittedLogEntry>()
@@ -795,7 +795,7 @@ public sealed class CupidRoleTests(ITestOutputHelper output)
 		var expectedRecognition =
 			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
 				builder.Process(acceptedSelection));
-		var serialized = builder.GetGameState()!.Serialize();
+		var serialized = builder.SerializeSession();
 		var freshService = new GameService();
 
 		var gameId = freshService.RehydrateSession(serialized);
@@ -863,7 +863,7 @@ public sealed class CupidRoleTests(ITestOutputHelper output)
 		builder.Process(selection.CreateResponse(lovers.ToHashSet()))
 			.IsSuccess.Should().BeTrue();
 		var payload = RecoveryPayloadTestDriver.Parse(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 		var tamperedPlayerId = addExtraLover ? players[3].Id : lovers[0];
 		var activeEffects = payload.GetActiveEffects(tamperedPlayerId);
 		payload.RewriteActiveEffects(
@@ -1011,7 +1011,7 @@ public sealed class CupidRoleTests(ITestOutputHelper output)
 		expectedHunterReveal.PlayersForAssignment.Should().Equal(hunterLover.Id);
 		var revealService = new GameService();
 		var revealGameId = revealService.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 		var recoveredHunterReveal = revealService
 			.GetCurrentInstruction(revealGameId)
 			.Should().BeOfType<AssignRolesInstruction>().Subject;
@@ -1049,7 +1049,7 @@ public sealed class CupidRoleTests(ITestOutputHelper output)
 			ModeratorInstructionSemantic.SelectHunterFinalShotTarget);
 		var postHeartbreakService = new GameService();
 		var postHeartbreakGameId = postHeartbreakService.RehydrateSession(
-			revealService.GetGameStateView(revealGameId)!.Serialize());
+			revealService.SerializeSession(revealGameId));
 		var recoveredFinalShot = postHeartbreakService
 			.GetCurrentInstruction(postHeartbreakGameId)
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
@@ -1201,13 +1201,13 @@ public sealed class CupidRoleTests(ITestOutputHelper output)
 		var acceptedPayload = selection.CreateResponse(
 			[players[2].Id, players[3].Id]);
 		builder.ArrangeEliminatedPlayer(players[3].Id);
-		var before = builder.GetGameState()!.Serialize();
+		var before = builder.SerializeSession();
 
 		Action process = () => builder.Process(acceptedPayload);
 
 		process.Should().Throw<InvalidOperationException>()
 			.WithMessage("*living Players*");
-		builder.GetGameState()!.Serialize().Should().Be(before);
+		builder.SerializeSession().Should().Be(before);
 		builder.GetCurrentInstruction()!.InstructionId.Should().Be(
 			selection.InstructionId);
 		MarkTestCompleted();
@@ -1287,7 +1287,7 @@ public sealed class CupidRoleTests(ITestOutputHelper output)
 			GameStrings.VictoryConditionCrossFactionLovers);
 		var terminalService = new GameService();
 		var terminalGameId = terminalService.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 		var recoveredFinished = terminalService
 			.GetCurrentInstruction(terminalGameId)
 			.Should().BeOfType<FinishedGameConfirmationInstruction>().Subject;
@@ -1329,7 +1329,7 @@ public sealed class CupidRoleTests(ITestOutputHelper output)
 
 		var secondTerminalService = new GameService();
 		var secondTerminalGameId = secondTerminalService.RehydrateSession(
-			recoveredSession.Serialize());
+			terminalService.SerializeSession(terminalGameId));
 		secondTerminalService.GetCurrentInstruction(secondTerminalGameId)
 			.Should().BeEquivalentTo(recoveredFinished);
 		secondTerminalService.GetGameStateView(secondTerminalGameId)!

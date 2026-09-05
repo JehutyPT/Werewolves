@@ -309,12 +309,13 @@ public sealed class GameSessionConfigRosterTests
 			],
 			publicGroupPartition: partition);
 		var gameId = Guid.Parse("20000000-0000-0000-0000-000000000002");
-		IGameSession session = new GameSession(
+		GameSession session = new(
 			gameId,
 			new StartGameConfirmationInstruction(gameId),
 			config);
 
-		IGameSession rehydrated = new GameSession(session.Serialize());
+		IGameSession rehydrated = new GameSession(
+			session.SerializeRecoverySnapshot());
 
 		rehydrated.GetPlayers()
 			.Select(player => (player.Id, player.Name))
@@ -343,12 +344,12 @@ public sealed class GameSessionConfigRosterTests
 				MainRoleType.SimpleVillager
 			]);
 		var gameId = Guid.Parse("20000000-0000-0000-0000-000000000003");
-		IGameSession session = new GameSession(
+		GameSession session = new(
 			gameId,
 			new StartGameConfirmationInstruction(gameId),
 			config);
 		var malformed = RecoveryPayloadTestDriver
-			.Parse(session.Serialize())
+			.Parse(session.SerializeRecoverySnapshot())
 			.RewriteSeatingOrder(
 				[PlayerId(1), PlayerId(1), PlayerId(3), PlayerId(4), PlayerId(5)])
 			.Serialize();
@@ -384,12 +385,12 @@ public sealed class GameSessionConfigRosterTests
 			],
 			publicGroupPartition: partition);
 		var gameId = Guid.Parse("20000000-0000-0000-0000-000000000004");
-		IGameSession session = new GameSession(
+		GameSession session = new(
 			gameId,
 			new StartGameConfirmationInstruction(gameId),
 			config);
 		var malformed = RecoveryPayloadTestDriver
-			.Parse(session.Serialize())
+			.Parse(session.SerializeRecoverySnapshot())
 			.RemovePublicGroupPartition()
 			.Serialize();
 
@@ -413,12 +414,12 @@ public sealed class GameSessionConfigRosterTests
 				MainRoleType.SimpleVillager
 			]);
 		var gameId = Guid.Parse("20000000-0000-0000-0000-000000000005");
-		IGameSession session = new GameSession(
+		GameSession session = new(
 			gameId,
 			new StartGameConfirmationInstruction(gameId),
 			config);
 		var malformed = RecoveryPayloadTestDriver
-			.Parse(session.Serialize())
+			.Parse(session.SerializeRecoverySnapshot())
 			.RewritePublicGroupPartition(
 				partition.FirstGroupPlayerIds,
 				partition.SecondGroupPlayerIds)

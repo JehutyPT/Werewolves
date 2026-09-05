@@ -405,7 +405,7 @@ public class StatusEffectsTests : DiagnosticTestBase
 
         var recoveredService = new GameService();
         var recoveredId = recoveredService.RehydrateSession(
-            gameState.Serialize());
+            builder.SerializeSession());
         var recovered = recoveredService.GetGameStateView(recoveredId)!;
         recovered.GetPlayerState(wildChild.Id).MainRole.Should()
             .Be(MainRoleType.WildChild);

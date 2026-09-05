@@ -22,7 +22,7 @@ public sealed class WolfHoundRecoveryTests
 		var expectedAlignment = builder.Process(acceptedIdentification)
 			.ModeratorInstruction.Should()
 			.BeOfType<SelectOptionsInstruction>().Subject;
-		var serializedSession = builder.GetGameState()!.Serialize();
+		var serializedSession = builder.SerializeSession();
 		var freshService = new GameService();
 
 		var recoveredGameId = freshService.RehydrateSession(serializedSession);
@@ -100,7 +100,7 @@ public sealed class WolfHoundRecoveryTests
 		var expectedSleep = builder.Process(acceptedAlignment)
 			.ModeratorInstruction.Should()
 			.BeOfType<ConfirmationInstruction>().Subject;
-		var serializedSession = builder.GetGameState()!.Serialize();
+		var serializedSession = builder.SerializeSession();
 		var freshService = new GameService();
 
 		var recoveredGameId = freshService.RehydrateSession(serializedSession);

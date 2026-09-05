@@ -88,10 +88,10 @@ public sealed class LittleGirlRoleTests : DiagnosticTestBase
 
 		var recoveredService = new GameService();
 		var recoveredGameId = recoveredService.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 		var secondRecoveredService = new GameService();
 		var secondRecoveredGameId = secondRecoveredService.RehydrateSession(
-			recoveredService.GetGameStateView(recoveredGameId)!.Serialize());
+			recoveredService.SerializeSession(recoveredGameId));
 		var recoveredIdentification =
 			InstructionAssert.ExpectType<SelectPlayersInstruction>(
 				secondRecoveredService.GetCurrentInstruction(secondRecoveredGameId));
@@ -162,7 +162,7 @@ public sealed class LittleGirlRoleTests : DiagnosticTestBase
 			new RecordingPolicy(RolePowerAvailabilityResult.Denied);
 		var wakeRecoveryService = new GameService(wakeRecoveryPolicy);
 		var wakeRecoveryGameId = wakeRecoveryService.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 		var recoveredObservation =
 			InstructionAssert.ExpectType<SelectPlayersInstruction>(
 				wakeRecoveryService.GetCurrentInstruction(wakeRecoveryGameId));
@@ -175,7 +175,8 @@ public sealed class LittleGirlRoleTests : DiagnosticTestBase
 		wakeRecoveryPolicy.ObservedAttempts.Should().BeEmpty();
 		var wakeRecoveryState =
 			wakeRecoveryService.GetGameStateView(wakeRecoveryGameId)!;
-		var serializedBeforeStaleIdentification = wakeRecoveryState.Serialize();
+		var serializedBeforeStaleIdentification =
+			wakeRecoveryService.SerializeSession(wakeRecoveryGameId);
 		var logBeforeStaleIdentification =
 			wakeRecoveryState.GameHistoryLog.ToArray();
 
@@ -186,7 +187,7 @@ public sealed class LittleGirlRoleTests : DiagnosticTestBase
 
 		staleIdentification.Should().Throw<InvalidOperationException>()
 			.WithMessage("*pending Moderator Instruction*");
-		wakeRecoveryState.Serialize().Should().Be(
+		wakeRecoveryService.SerializeSession(wakeRecoveryGameId).Should().Be(
 			serializedBeforeStaleIdentification);
 		wakeRecoveryState.GameHistoryLog.Should().Equal(
 			logBeforeStaleIdentification);
@@ -202,7 +203,7 @@ public sealed class LittleGirlRoleTests : DiagnosticTestBase
 		var recoveredPolicy = new RecordingPolicy(RolePowerAvailabilityResult.Denied);
 		var recoveredService = new GameService(recoveredPolicy);
 		var recoveredGameId = recoveredService.RehydrateSession(
-			wakeRecoveryState.Serialize());
+			wakeRecoveryService.SerializeSession(wakeRecoveryGameId));
 		var recoveredVictimSelection =
 			InstructionAssert.ExpectType<SelectPlayersInstruction>(
 				recoveredService.GetCurrentInstruction(recoveredGameId));
@@ -213,7 +214,8 @@ public sealed class LittleGirlRoleTests : DiagnosticTestBase
 			ModeratorInstructionSemantic.SelectWerewolfVictim);
 		recoveredPolicy.ObservedAttempts.Should().BeEmpty();
 		var recoveredState = recoveredService.GetGameStateView(recoveredGameId)!;
-		var serializedBeforeStaleResponse = recoveredState.Serialize();
+		var serializedBeforeStaleResponse =
+			recoveredService.SerializeSession(recoveredGameId);
 		var logBeforeStaleResponse = recoveredState.GameHistoryLog.ToArray();
 
 		Action staleResponse = () => recoveredService.ProcessInstruction(
@@ -222,7 +224,8 @@ public sealed class LittleGirlRoleTests : DiagnosticTestBase
 
 		staleResponse.Should().Throw<InvalidOperationException>()
 			.WithMessage("*pending Moderator Instruction*");
-		recoveredState.Serialize().Should().Be(serializedBeforeStaleResponse);
+		recoveredService.SerializeSession(recoveredGameId).Should().Be(
+			serializedBeforeStaleResponse);
 		recoveredState.GameHistoryLog.Should().Equal(logBeforeStaleResponse);
 		recoveredPolicy.ObservedAttempts.Should().BeEmpty();
 
@@ -272,7 +275,7 @@ public sealed class LittleGirlRoleTests : DiagnosticTestBase
 			new RecordingPolicy(RolePowerAvailabilityResult.Allowed);
 		var wakeRecoveryService = new GameService(wakeRecoveryPolicy);
 		var wakeRecoveryGameId = wakeRecoveryService.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 		var recoveredObservation =
 			InstructionAssert.ExpectType<SelectPlayersInstruction>(
 				wakeRecoveryService.GetCurrentInstruction(wakeRecoveryGameId));
@@ -289,7 +292,7 @@ public sealed class LittleGirlRoleTests : DiagnosticTestBase
 		var recoveredPolicy = new RecordingPolicy(RolePowerAvailabilityResult.Allowed);
 		var recoveredService = new GameService(recoveredPolicy);
 		var recoveredGameId = recoveredService.RehydrateSession(
-			wakeRecoveryService.GetGameStateView(wakeRecoveryGameId)!.Serialize());
+			wakeRecoveryService.SerializeSession(wakeRecoveryGameId));
 		var recoveredVictimSelection =
 			InstructionAssert.ExpectType<SelectPlayersInstruction>(
 				recoveredService.GetCurrentInstruction(recoveredGameId));
@@ -358,7 +361,7 @@ public sealed class LittleGirlRoleTests : DiagnosticTestBase
 				: RolePowerAvailabilityResult.Allowed);
 		var recoveredService = new GameService(recoveredPolicy);
 		var recoveredGameId = recoveredService.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 		var recoveredWake =
 			InstructionAssert.ExpectType<ConfirmationInstruction>(
 				recoveredService.GetCurrentInstruction(recoveredGameId));
@@ -484,7 +487,7 @@ public sealed class LittleGirlRoleTests : DiagnosticTestBase
 				: RolePowerAvailabilityResult.Allowed);
 		var recoveredService = new GameService(recoveredPolicy);
 		var recoveredGameId = recoveredService.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 		var recoveredWerewolfInstruction =
 			recoveredService.GetCurrentInstruction(recoveredGameId)
 			?? throw new InvalidOperationException(
@@ -715,10 +718,10 @@ public sealed class LittleGirlRoleTests : DiagnosticTestBase
 			ModeratorInstructionSemantic.FinishNightActions);
 		var firstService = new GameService();
 		var firstGameId = firstService.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 		var secondService = new GameService();
 		var secondGameId = secondService.RehydrateSession(
-			firstService.GetGameStateView(firstGameId)!.Serialize());
+			firstService.SerializeSession(firstGameId));
 		var recoveredFinishNight =
 			InstructionAssert.ExpectType<ConfirmationInstruction>(
 				secondService.GetCurrentInstruction(secondGameId));
@@ -757,7 +760,7 @@ public sealed class LittleGirlRoleTests : DiagnosticTestBase
 			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
 				builder.ConfirmNightStart());
 		var session = builder.GetGameState()!;
-		var serializedBefore = session.Serialize();
+		var serializedBefore = builder.SerializeSession();
 		var logBefore = session.GameHistoryLog.ToArray();
 
 		identification.SelectablePlayerIds.Should().NotContain(players[4].Id);
@@ -767,7 +770,7 @@ public sealed class LittleGirlRoleTests : DiagnosticTestBase
 		multipleSelection.Should().Throw<InvalidOperationException>();
 		builder.GetCurrentInstruction()!.InstructionId.Should().Be(
 			identification.InstructionId);
-		session.Serialize().Should().Be(serializedBefore);
+		builder.SerializeSession().Should().Be(serializedBefore);
 		session.GameHistoryLog.Should().Equal(logBefore);
 
 		var next = builder.Process(

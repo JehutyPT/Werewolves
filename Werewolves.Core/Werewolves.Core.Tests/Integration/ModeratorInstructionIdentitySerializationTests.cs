@@ -180,7 +180,7 @@ public class ModeratorInstructionIdentitySerializationTests
 		var pendingInstruction = originalService.GetCurrentInstruction(gameId)
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		var pendingResponse = pendingInstruction.CreateResponse();
-		var serialized = originalService.GetGameStateView(gameId)!.Serialize();
+		var serialized = originalService.SerializeSession(gameId);
 
 		var recoveredService = new GameService();
 		recoveredService.RehydrateSession(serialized);

@@ -343,7 +343,7 @@ public sealed class VillageIdiotRoleTests
 
 		var recoveredService = new GameLogic.Services.GameService();
 		var gameId = recoveredService.RehydrateSession(
-			scenario.Builder.GetGameState()!.Serialize());
+			scenario.Builder.SerializeSession());
 		var stableDayBoundary = recoveredService.GetCurrentInstruction(gameId)
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		stableDayBoundary.InstructionId.Should().Be(
@@ -418,7 +418,7 @@ public sealed class VillageIdiotRoleTests
 
 		var recoveredService = new GameLogic.Services.GameService();
 		var gameId = recoveredService.RehydrateSession(
-			scenario.Builder.GetGameState()!.Serialize());
+			scenario.Builder.SerializeSession());
 		var recoveredNext = recoveredService.GetCurrentInstruction(gameId)!;
 
 		recoveredNext.InstructionId.Should().Be(next.InstructionId);

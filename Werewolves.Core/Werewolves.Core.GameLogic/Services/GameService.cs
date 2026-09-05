@@ -109,7 +109,13 @@ public class GameService
         ConfigureEliminationCascadeReactions(session);
         _sessions.TryAdd(session.Id, session);
         return session.Id;
-	}
+    }
+
+    /// <summary>
+    /// Serializes the latest stable recovery snapshot for a registered Game Session.
+    /// </summary>
+    public string SerializeSession(Guid gameId) =>
+        GetRequiredSession(gameId).SerializeRecoverySnapshot();
 
 	internal bool TryRecordPhysicalCharacterCardOwnership(
 		Guid gameId,

@@ -24,7 +24,7 @@ public sealed class WhiteWerewolfRecoveryTests
 		var freshService = new GameService();
 
 		var recoveredGameId = freshService.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 		var recoveredSession =
 			freshService.GetGameStateView(recoveredGameId)!;
 		var recoveredNightStart = freshService
@@ -66,7 +66,7 @@ public sealed class WhiteWerewolfRecoveryTests
 		var freshService = new GameService();
 
 		var recoveredGameId = freshService.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 		var recoveredSession =
 			freshService.GetGameStateView(recoveredGameId)!;
 
@@ -96,7 +96,7 @@ public sealed class WhiteWerewolfRecoveryTests
 		var freshService = new GameService();
 
 		var recoveredGameId = freshService.RehydrateSession(
-			recovery.Builder.GetGameState()!.Serialize());
+			recovery.Builder.SerializeSession());
 
 		freshService.GetCurrentInstruction(recoveredGameId)
 			.Should().BeEquivalentTo(recovery.NextInstruction);
@@ -170,7 +170,8 @@ public sealed class WhiteWerewolfRecoveryTests
 			ModeratorInstructionSemantic.FinishNightActions);
 		var freshService = new GameService();
 
-		var recoveredGameId = freshService.RehydrateSession(session.Serialize());
+		var recoveredGameId = freshService.RehydrateSession(
+			builder.SerializeSession());
 		var recoveredSession = freshService.GetGameStateView(recoveredGameId)!;
 
 		freshService.GetCurrentInstruction(recoveredGameId)
@@ -218,7 +219,7 @@ public sealed class WhiteWerewolfRecoveryTests
 		victimSelection.Semantic.Should().Be(
 			ModeratorInstructionSemantic.SelectWerewolfVictim);
 		var tampered = RecoveryPayloadTestDriver
-			.Parse(builder.GetGameState()!.Serialize())
+			.Parse(builder.SerializeSession())
 			.RemoveInitialBeneficiaryClosureFact(whiteWerewolf.Id)
 			.Serialize();
 		var freshService = new GameService();
@@ -234,7 +235,7 @@ public sealed class WhiteWerewolfRecoveryTests
 		var recovery = CreateAcceptedWhiteIdentificationRecovery(
 			preKnownWhiteBeneficiary: false);
 		var tampered = RecoveryPayloadTestDriver
-			.Parse(recovery.Builder.GetGameState()!.Serialize())
+			.Parse(recovery.Builder.SerializeSession())
 			.SwapInitialBeneficiaryClosureAssignmentsAndCaches(
 				recovery.WerewolfId,
 				recovery.VillagerId)
@@ -252,7 +253,7 @@ public sealed class WhiteWerewolfRecoveryTests
 		var recovery = CreateAcceptedWhiteIdentificationRecovery(
 			preKnownWhiteBeneficiary: false);
 		var tampered = RecoveryPayloadTestDriver
-			.Parse(recovery.Builder.GetGameState()!.Serialize())
+			.Parse(recovery.Builder.SerializeSession())
 			.RemoveInitialBeneficiaryClosureFact(recovery.WhiteWerewolfId)
 			.Serialize();
 		var freshService = new GameService();

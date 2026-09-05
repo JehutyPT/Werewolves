@@ -145,7 +145,7 @@ public sealed class ActorBorrowedScapegoatVillageIdiotTests
 		var selectionService = CreateScapegoatService(
 			recoveredSelectionReaction);
 		var selectionGameId = selectionService.RehydrateSession(
-			pending.Session.Serialize());
+			pending.Session.SerializeRecoverySnapshot());
 		var recoveredSelection = selectionService
 			.GetCurrentInstruction(selectionGameId)
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
@@ -179,7 +179,7 @@ public sealed class ActorBorrowedScapegoatVillageIdiotTests
 		var announcementService = CreateScapegoatService(
 			announcementReaction);
 		var announcementGameId = announcementService.RehydrateSession(
-			committedAnnouncementState.Serialize());
+			selectionService.SerializeSession(selectionGameId));
 		var recoveredAnnouncement = announcementService
 			.GetCurrentInstruction(announcementGameId)
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
@@ -191,8 +191,8 @@ public sealed class ActorBorrowedScapegoatVillageIdiotTests
 		recoveredAnnouncement.PublicAnnouncement.Should().Be(
 			announcement.PublicAnnouncement);
 		recoveredAnnouncement.AffectedPlayerIds.Should().BeEquivalentTo(selected);
-		var beforeInvalidAcknowledgment = announcementService
-			.GetGameStateView(announcementGameId)!.Serialize();
+		var beforeInvalidAcknowledgment = announcementService.SerializeSession(
+			announcementGameId);
 		Action rejectStaleAcknowledgment = () =>
 			announcementService.ProcessInstruction(
 				announcementGameId,
@@ -203,7 +203,7 @@ public sealed class ActorBorrowedScapegoatVillageIdiotTests
 				});
 
 		rejectStaleAcknowledgment.Should().Throw<InvalidOperationException>();
-		announcementService.GetGameStateView(announcementGameId)!.Serialize()
+		announcementService.SerializeSession(announcementGameId)
 			.Should().Be(beforeInvalidAcknowledgment);
 		var reactionReveal = announcementService.ProcessInstruction(
 				announcementGameId,
@@ -230,7 +230,7 @@ public sealed class ActorBorrowedScapegoatVillageIdiotTests
 			afterAcknowledgmentReaction);
 		var afterAcknowledgmentGameId =
 			afterAcknowledgmentService.RehydrateSession(
-				acknowledged.Serialize());
+				announcementService.SerializeSession(announcementGameId));
 		var restoredReactionReveal = afterAcknowledgmentService
 			.GetCurrentInstruction(afterAcknowledgmentGameId)
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
@@ -239,8 +239,8 @@ public sealed class ActorBorrowedScapegoatVillageIdiotTests
 			reactionReveal.InstructionId);
 		restoredReactionReveal.AffectedPlayerIds.Should().Equal(
 			pending.ReactionVictimId);
-		var beforeReplay = afterAcknowledgmentService
-			.GetGameStateView(afterAcknowledgmentGameId)!.Serialize();
+		var beforeReplay = afterAcknowledgmentService.SerializeSession(
+			afterAcknowledgmentGameId);
 		Action replayAnnouncementAcknowledgment = () =>
 			afterAcknowledgmentService.ProcessInstruction(
 				afterAcknowledgmentGameId,
@@ -248,8 +248,8 @@ public sealed class ActorBorrowedScapegoatVillageIdiotTests
 
 		replayAnnouncementAcknowledgment.Should()
 			.Throw<InvalidOperationException>();
-		afterAcknowledgmentService
-			.GetGameStateView(afterAcknowledgmentGameId)!.Serialize().Should()
+		afterAcknowledgmentService.SerializeSession(afterAcknowledgmentGameId)
+			.Should()
 			.Be(beforeReplay);
 	}
 
@@ -258,7 +258,7 @@ public sealed class ActorBorrowedScapegoatVillageIdiotTests
 	{
 		var pending = CreatePendingBorrowedScapegoatVoterSelection();
 		var stripped = StripBorrowedScapegoatTieReplacementLineage(
-			pending.Session.Serialize());
+			pending.Session.SerializeRecoverySnapshot());
 		var service = CreateScapegoatService(
 			new BorrowedScapegoatForcedReaction(
 				pending.ActorId,
@@ -284,7 +284,7 @@ public sealed class ActorBorrowedScapegoatVillageIdiotTests
 		announcement.Semantic.Should().Be(
 			ModeratorInstructionSemantic.AnnounceScapegoatPermittedVoters);
 		var stripped = StripBorrowedScapegoatTieReplacementLineage(
-			pending.Session.Serialize());
+			pending.Session.SerializeRecoverySnapshot());
 		var service = CreateScapegoatService(
 			new BorrowedScapegoatForcedReaction(
 				pending.ActorId,
@@ -308,7 +308,8 @@ public sealed class ActorBorrowedScapegoatVillageIdiotTests
 		var service = CreateScapegoatService(new BorrowedScapegoatForcedReaction(
 			pending.ActorId,
 			pending.ReactionVictimId));
-		var gameId = service.RehydrateSession(pending.Session.Serialize());
+		var gameId = service.RehydrateSession(
+			pending.Session.SerializeRecoverySnapshot());
 		var selection = service.GetCurrentInstruction(gameId)
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
 		var response = new ModeratorResponse
@@ -329,12 +330,12 @@ public sealed class ActorBorrowedScapegoatVillageIdiotTests
 					nameof(invalidResponse))
 			}
 		};
-		var before = service.GetGameStateView(gameId)!.Serialize();
+		var before = service.SerializeSession(gameId);
 
 		Action submit = () => service.ProcessInstruction(gameId, response);
 
 		submit.Should().Throw<InvalidOperationException>();
-		service.GetGameStateView(gameId)!.Serialize().Should().Be(before);
+		service.SerializeSession(gameId).Should().Be(before);
 		service.GetCurrentInstruction(gameId).Should()
 			.BeEquivalentTo(selection);
 	}
@@ -474,7 +475,8 @@ public sealed class ActorBorrowedScapegoatVillageIdiotTests
 			new BorrowedScapegoatForcedReaction(
 				pending.ActorId,
 				pending.ReactionVictimId));
-		var gameId = service.RehydrateSession(pending.Session.Serialize());
+		var gameId = service.RehydrateSession(
+			pending.Session.SerializeRecoverySnapshot());
 		var recoveredAnnouncement = service.GetCurrentInstruction(gameId)
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		recoveredAnnouncement.Should().BeEquivalentTo(announcement);
@@ -584,7 +586,8 @@ public sealed class ActorBorrowedScapegoatVillageIdiotTests
 				"The borrowed Village Idiot fixture lost its active lineage.");
 		var service = new GameService();
 
-		var recoveredGameId = service.RehydrateSession(session.Serialize());
+		var recoveredGameId = service.RehydrateSession(
+			session.SerializeRecoverySnapshot());
 		var recovered = service.GetGameStateView(recoveredGameId)
 			?? throw new InvalidOperationException(
 				"The borrowed Village Idiot fixture was not recovered.");
@@ -761,7 +764,7 @@ public sealed class ActorBorrowedScapegoatVillageIdiotTests
 
 		var recoveredService = new GameService();
 		var recoveredGameId = recoveredService.RehydrateSession(
-			interrupted.Serialize());
+			session.SerializeRecoverySnapshot());
 		var recoveredPardon = recoveredService
 			.GetCurrentInstruction(recoveredGameId)
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
@@ -810,12 +813,13 @@ public sealed class ActorBorrowedScapegoatVillageIdiotTests
 		IGameSession interrupted = session;
 		var recoveredService = new GameService();
 		var recoveredGameId = recoveredService.RehydrateSession(
-			interrupted.Serialize());
+			session.SerializeRecoverySnapshot());
 		var recoveredPardon = recoveredService
 			.GetCurrentInstruction(recoveredGameId)
 			.Should().BeOfType<ConfirmationInstruction>().Subject;
 		var recovered = recoveredService.GetGameStateView(recoveredGameId)!;
-		var serializedBeforeStaleResponse = recovered.Serialize();
+		var serializedBeforeStaleResponse = recoveredService.SerializeSession(
+			recoveredGameId);
 		var historyBeforeStaleResponse = recovered.GameHistoryLog.ToArray();
 
 		Action submitSupersededResponse = () =>
@@ -825,7 +829,8 @@ public sealed class ActorBorrowedScapegoatVillageIdiotTests
 
 		submitSupersededResponse.Should().Throw<InvalidOperationException>()
 			.WithMessage("*pending Moderator Instruction*");
-		recovered.Serialize().Should().Be(serializedBeforeStaleResponse);
+		recoveredService.SerializeSession(recoveredGameId).Should().Be(
+			serializedBeforeStaleResponse);
 		recovered.GameHistoryLog.Should().Equal(historyBeforeStaleResponse);
 		recoveredService.GetCurrentInstruction(recoveredGameId)!.InstructionId
 			.Should().Be(recoveredPardon.InstructionId)

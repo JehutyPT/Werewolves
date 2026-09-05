@@ -79,7 +79,7 @@ The architecture is split into two separate library projects to achieve compiler
 
 ## `GameSession` Class (Facade) & `GameSessionKernel` (Core)
 
-The architecture separates the public API (`GameSession`) from the internal state container (`GameSessionKernel`) to enforce zero-leakage mutation and strict encapsulation.
+The architecture separates the public read-only contract (`IGameSession`), the internal `GameSession` facade, and the internal state container (`GameSessionKernel`) to enforce zero-leakage mutation and strict encapsulation.
 
 ### `GameSessionKernel` (Internal Core):
 The hermetically sealed kernel that owns the game's mutable memory. It is not visible to the public API.
@@ -116,8 +116,8 @@ A lightweight, stateless wrapper that implements `IGameSession` and delegates al
     *   `GetPlayerState(Guid id)` (IPlayerState): Retrieves a player's state by ID.
     *   `GameHistoryLog` (IEnumerable<GameLogEntryBase>): The event log.
     *   `RoleInPlayCount(MainRoleType type)` (int): Returns count of a specific role in play.
-    *   `Serialize()` (string): Serializes the latest stable recovery snapshot to JSON for persistence. The payload advances only when a validated execution commit advances the recovery boundary.
-*   **Internal API (GameLogic):** Mutation gatekeeper for the rules engine.
+*   **Internal API (GameLogic):** Mutation gatekeeper and persistence delegate for the rules engine.
+    *   **Recovery Snapshot Export:** `SerializeRecoverySnapshot()` delegates to `GameSessionKernel.Serialize()` for `GameService`; it is internal and is not part of `IGameSession`.
     *   **State Mutation Methods** (create and dispatch log entries):
         *   `EliminatePlayer(Guid playerId, EliminationReason reason)`: Eliminates a player by creating a `PlayerEliminatedLogEntry`.
         *   `AssignRole(Guid playerId, MainRoleType role)`: Assigns a role to a single player by creating an `AssignRoleLogEntry`.
@@ -377,6 +377,7 @@ Orchestrates the game flow based on moderator input and tracked state. **Delegat
         *   **Session Cleanup:** A `FinishedGameConfirmationInstruction` remains pending until its correlated Continue acknowledgment is accepted; that successful acknowledgment removes the session from the active sessions list.
     *   `GetCurrentInstruction(Guid gameId)` (ModeratorInstruction?): Retrieves the current Pending Instruction through the service boundary.
     *   `GetGameStateView(Guid gameId)` (IGameSession?): Returns the game state via the read-only `IGameSession` interface. This hides the internal mutation methods present on the concrete object, ensuring the UI cannot modify state.
+    *   `SerializeSession(Guid gameId)` (string): Resolves the registered Game Session through the required-session lookup and returns its latest validated stable recovery snapshot through the internal `GameSession` delegate. The operation is read-only and performs no storage I/O; an empty, unknown, or discarded ID fails with the existing unavailable-session `InvalidOperationException` behavior.
     *   `RehydrateSession(string serializedSession)` (Guid): Restores a game session from its stable recovery snapshot and adds it to the active session collection. Returns the session's GUID.
 *   **Internal Logic:** 
     *   `EnsureResponseMatchesPendingInstruction(ModeratorInstruction pendingInstruction, ModeratorResponse response)`: Rejects stale correlation identities, mismatched response types, malformed or incomplete payloads, and non-canonical option order before state can change.
@@ -820,11 +821,11 @@ public class MyTests : DiagnosticTestBase
 
 *Status: **Implemented** — Stable recovery snapshot serialization via `System.Text.Json`.*
 
-The Core persistence boundary is `IGameSession.Serialize()` plus `GameService.RehydrateSession(string)`. Serialization returns the latest validated stable recovery snapshot retained by `GameSessionKernel`. It does not serialize the live in-memory execution tail, and Rehydration does not replay the event log.
+The Core persistence boundary is `GameService.SerializeSession(Guid)` plus `GameService.RehydrateSession(string)`. Export resolves a registered Game Session and returns the latest validated stable recovery snapshot retained by `GameSessionKernel`. It does not serialize the live in-memory execution tail, and Rehydration does not replay the event log.
 
 ## Design
 
-*   **Serialization:** `GameSession.Serialize()` delegates to `GameSessionKernel.Serialize()`, which returns the latest installed stable boundary snapshot.
+*   **Serialization:** `GameService.SerializeSession(Guid)` resolves the registered internal `GameSession` and invokes its internal `SerializeRecoverySnapshot()` delegate. `GameSession` delegates to `GameSessionKernel.Serialize()`, which returns the latest installed stable boundary snapshot. The separate current-state recovery candidate reuses the Kernel's projection only for recovery test fixtures; it does not advance or replace the stored stable recovery snapshot and is not exposed through `IGameSession` or the production `GameService` export path.
 *   **Boundary advancement:** After routing, victory override handling, and next-instruction settlement are complete, `GameFlowManager.HandleInput(...)` submits one keyed `ExecutionCommit`. When that commit advances recovery, the Kernel creates and validates the candidate snapshot before publishing the Pending Instruction or replacing the previous boundary. Accepted observations, committed one-use resources, settled elimination batches, completed elimination reactions, and fully drained elimination cascades are additional semantic boundaries.
 *   **Rehydration:** `GameService.RehydrateSession(string serializedSession)` restores the stable snapshot into a new active session and returns the session's GUID. When a governed semantic boundary requires a live continuation, `GameFlowManager` authenticates the durable instruction/cursor and uses its keyed restoration request against an explicit `ExecutionView`; this reconstruction does not make the live listener state durable.
 

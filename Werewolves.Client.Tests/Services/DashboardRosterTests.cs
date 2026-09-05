@@ -173,7 +173,6 @@ public class DashboardRosterTests
 			throw FactionFactsNotReady();
 		}
 		public int RoleInPlayCount(MainRoleType type) => players.Count(player => player.State.CurrentRole == type);
-		public string Serialize() => string.Empty;
 
 		private static InvalidOperationException FactionFactsNotReady() =>
 			new("Required Faction facts are not ready.");

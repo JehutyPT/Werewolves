@@ -51,7 +51,7 @@ public sealed class ActorBorrowedCommitProjectionTests
 			fixture.PowerIdentity,
 			fixture.TargetPlayerId);
 		var tampered = RecoveryPayloadTestDriver
-			.Parse(fixture.Session.Serialize())
+			.Parse(fixture.Session.SerializeRecoverySnapshot())
 			.AppendPublicRolePowerCommit(forgedEntry)
 			.Serialize();
 
@@ -66,7 +66,7 @@ public sealed class ActorBorrowedCommitProjectionTests
 	{
 		var fixture = CreateCommittedSeerSession();
 		var tampered = RecoveryPayloadTestDriver
-			.Parse(fixture.Session.Serialize())
+			.Parse(fixture.Session.SerializeRecoverySnapshot())
 			.RemoveLatestActorBorrowedRolePowerMarker()
 			.Serialize();
 
@@ -81,7 +81,7 @@ public sealed class ActorBorrowedCommitProjectionTests
 	{
 		var fixture = CreateCommittedDefenderSession();
 		var tampered = RecoveryPayloadTestDriver
-			.Parse(fixture.Session.Serialize())
+			.Parse(fixture.Session.SerializeRecoverySnapshot())
 			.RetargetActorBorrowedDefenderCommit(fixture.AlternateTargetPlayerId)
 			.Serialize();
 
@@ -108,7 +108,7 @@ public sealed class ActorBorrowedCommitProjectionTests
 		ActorBorrowedPrivateCommitMutation mutation)
 	{
 		var session = CreateCommittedActorSession(mutation);
-		var stableSnapshot = session.Serialize();
+		var stableSnapshot = session.SerializeRecoverySnapshot();
 		Action rehydrateUntampered = () => new GameSession(stableSnapshot);
 		rehydrateUntampered.Should().NotThrow();
 		var tampered = RecoveryPayloadTestDriver
@@ -121,7 +121,7 @@ public sealed class ActorBorrowedCommitProjectionTests
 
 		rehydrateTampered.Should().Throw<InvalidOperationException>();
 		recovered.Should().BeNull();
-		session.Serialize().Should().Be(stableSnapshot);
+		session.SerializeRecoverySnapshot().Should().Be(stableSnapshot);
 	}
 
 	[Theory]
@@ -140,7 +140,7 @@ public sealed class ActorBorrowedCommitProjectionTests
 		var sourceSession = CreateCommittedIssue143ActorSession(
 			mutation,
 			sourceObserver);
-		var stableSnapshot = sourceSession.Serialize();
+		var stableSnapshot = sourceSession.SerializeRecoverySnapshot();
 		var sourceNotificationCount = sourceObserver.NotificationCount;
 		var validService = new GameService();
 
@@ -149,7 +149,7 @@ public sealed class ActorBorrowedCommitProjectionTests
 			.Should().BeOfType<GameSession>().Subject;
 
 		validGameId.Should().Be(sourceSession.Id);
-		validState.Serialize().Should().Be(stableSnapshot);
+		validService.SerializeSession(validGameId).Should().Be(stableSnapshot);
 		AssertIssue143PrivateCommitProjection(mutation, validState);
 		var tampered = RecoveryPayloadTestDriver
 			.Parse(stableSnapshot)
@@ -200,7 +200,8 @@ public sealed class ActorBorrowedCommitProjectionTests
 			new RecordingStateChangeObserver());
 		var recoveryService = new GameService();
 
-		var recoveredGameId = recoveryService.RehydrateSession(source.Serialize());
+		var recoveredGameId = recoveryService.RehydrateSession(
+			source.SerializeRecoverySnapshot());
 		var recovered = recoveryService.GetGameStateView(recoveredGameId)
 			.Should().BeOfType<GameSession>().Subject;
 		var resistance = recovered.GetActorBorrowedElderResistanceCommits()

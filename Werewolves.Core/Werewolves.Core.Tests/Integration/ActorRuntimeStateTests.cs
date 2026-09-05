@@ -84,7 +84,7 @@ public sealed class ActorRuntimeStateTests
 		var setup = CreateActorSetupCards();
 		var original = CreateActorSession(setup);
 
-		var recovered = new GameSession(original.Serialize());
+		var recovered = new GameSession(original.SerializeRecoverySnapshot());
 
 		recovered.GetModeratorActorSetupCards().Should().Be(setup);
 		recovered.GetModeratorRemainingActorSetupCards().Should().Equal(

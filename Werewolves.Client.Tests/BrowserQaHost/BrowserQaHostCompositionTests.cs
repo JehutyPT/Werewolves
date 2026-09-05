@@ -267,8 +267,6 @@ public class BrowserQaHostCompositionTests
 			saveStore: saveStore);
 		recoveredGame.ActiveGameId.Should().HaveValue();
 		var recoveredGameId = recoveredGame.ActiveGameId!.Value;
-		var terminalSession = recoveredGame.CurrentSession!;
-		var terminalSnapshot = terminalSession.Serialize();
 
 		using var context = new BunitContext();
 		BrowserQaHostCulture.UsePortuguese();
@@ -290,7 +288,6 @@ public class BrowserQaHostCompositionTests
 			recoveredGame.HasActiveSession.Should().BeFalse();
 			recoveredService.GetGameStateView(recoveredGameId).Should().BeNull();
 			saveStore.Load().Should().BeNull();
-			terminalSession.Serialize().Should().Be(terminalSnapshot);
 			rendered.FindComponent<LobbyRosterPage>().Should().NotBeNull();
 			RenderedText(rendered).Should().Contain(ClientStrings.LobbyRoster_Title);
 		});

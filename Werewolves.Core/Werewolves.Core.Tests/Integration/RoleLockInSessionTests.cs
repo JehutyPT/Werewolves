@@ -66,7 +66,7 @@ public class RoleLockInSessionTests
 			["Ana", "Bruno", "Carla", "Diogo", "Eva"],
 			roles.ToList()));
 		var tampered = RecoveryPayloadTestDriver
-			.Parse(service.GetGameStateView(start.GameGuid)!.Serialize())
+			.Parse(service.SerializeSession(start.GameGuid))
 			.RewriteRolesInPlay(
 				Enumerable.Repeat(MainRoleType.SimpleWerewolf, 5))
 			.Serialize();
@@ -135,7 +135,7 @@ public class RoleLockInSessionTests
 		var start = originalService.StartNewGame(new GameSessionConfig(
 			["Ana", "Bruno", "Carla", "Diogo", "Eva"],
 			lockIn));
-		var serialized = originalService.GetGameStateView(start.GameGuid)!.Serialize();
+		var serialized = originalService.SerializeSession(start.GameGuid);
 		var recoveredService = new GameService();
 
 		var recoveredId = recoveredService.RehydrateSession(serialized);
@@ -224,7 +224,8 @@ public class RoleLockInSessionTests
 			cards[1].Id).Should().BeTrue();
 		service.ProcessInstruction(start.GameGuid, start.CreateResponse())
 			.IsSuccess.Should().BeTrue();
-		var snapshot = JsonNode.Parse(session.Serialize())!.AsObject();
+		var snapshot = JsonNode.Parse(
+			service.SerializeSession(start.GameGuid))!.AsObject();
 		var cardState = snapshot["PhysicalCharacterCards"]!.AsArray()
 			.Select(node => node!.AsObject())
 			.Single(node => node["CardId"]!.GetValue<Guid>() == cards[1].Id);

@@ -60,7 +60,7 @@ public sealed class RoleFactionRecoveryValidationTests(ITestOutputHelper output)
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
 		builder.Process(identificationInstruction.CreateResponse(sisterIds.ToHashSet()));
 		var gameId = builder.GetGameState()!.Id;
-		var payload = JsonNode.Parse(builder.GetGameState()!.Serialize())!.AsObject();
+		var payload = JsonNode.Parse(builder.SerializeSession())!.AsObject();
 		var history = payload[nameof(GameSessionDto.GameHistoryLog)]!.AsArray();
 		var entailment = history
 			.Select(node => node!.AsObject())
@@ -144,7 +144,7 @@ public sealed class RoleFactionRecoveryValidationTests(ITestOutputHelper output)
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
 		builder.Process(observation.CreateResponse([observedAgent.Id]));
 		var gameId = builder.GetGameState()!.Id;
-		var payload = JsonNode.Parse(builder.GetGameState()!.Serialize())!.AsObject();
+		var payload = JsonNode.Parse(builder.SerializeSession())!.AsObject();
 		payload[nameof(GameSessionDto.PendingInstruction)]!
 			.AsObject()[nameof(ModeratorInstruction.AffectedPlayerIds)] =
 			new JsonArray(JsonValue.Create(mismatchedAffectedPlayer.Id));

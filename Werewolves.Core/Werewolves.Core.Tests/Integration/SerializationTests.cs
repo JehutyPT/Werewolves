@@ -76,7 +76,7 @@ public class SerializationTests : DiagnosticTestBase
         var session = builder.GetGameState()!;
 
         // Act
-        var json = session.Serialize();
+        var json = builder.SerializeSession();
 
         // Assert
         json.Should().NotBeNullOrEmpty();
@@ -100,7 +100,7 @@ public class SerializationTests : DiagnosticTestBase
 
         var originalSession = builder.GetGameState()!;
         var originalId = originalSession.Id;
-        var json = originalSession.Serialize();
+        var json = builder.SerializeSession();
 
         // Act - RehydrateSession returns the GUID of the rehydrated session
         var rehydratedId = builder.GameService.RehydrateSession(json);
@@ -130,7 +130,7 @@ public class SerializationTests : DiagnosticTestBase
 
         var originalSession = builder.GetGameState()!;
         var originalPlayers = originalSession.GetPlayers().ToList();
-        var json = originalSession.Serialize();
+        var json = builder.SerializeSession();
 
         // Act
         var rehydratedId = builder.GameService.RehydrateSession(json);
@@ -172,10 +172,11 @@ public class SerializationTests : DiagnosticTestBase
         session.GetPlayerState(seer.Id).ModeratorKnownRole.Should().BeNull();
 
         var firstService = new GameService();
-        var firstId = firstService.RehydrateSession(session.Serialize());
+        var firstId = firstService.RehydrateSession(builder.SerializeSession());
         var firstRecovered = firstService.GetGameStateView(firstId)!;
         var secondService = new GameService();
-        var secondId = secondService.RehydrateSession(firstRecovered.Serialize());
+        var secondId = secondService.RehydrateSession(
+            firstService.SerializeSession(firstId));
         var secondRecovered = secondService.GetGameStateView(secondId)!;
 
         firstRecovered.GetPlayerState(seer.Id).CurrentRole.Should()
@@ -195,7 +196,7 @@ public class SerializationTests : DiagnosticTestBase
             .WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);
         builder.StartGame();
         builder.ConfirmGameStart();
-        var snapshot = JsonNode.Parse(builder.GetGameState()!.Serialize())!.AsObject();
+        var snapshot = JsonNode.Parse(builder.SerializeSession())!.AsObject();
         snapshot.Remove(nameof(GameSessionDto.RoleFactSchemaVersion));
         var player = snapshot[nameof(GameSessionDto.Players)]!
             .AsArray()[0]!
@@ -241,7 +242,7 @@ public class SerializationTests : DiagnosticTestBase
 			.ModeratorInstruction.Should()
 			.BeOfType<ConfirmationInstruction>().Subject;
 		var legacy = JsonSerializer.Deserialize<GameSessionDto>(
-			session.Serialize(),
+			builder.SerializeSession(),
 			RecoverySerializationOptions)!;
 		legacy.GameHistoryLog.RemoveAll(entry =>
 			entry is FactionFactsCommittedLogEntry facts &&
@@ -304,7 +305,7 @@ public class SerializationTests : DiagnosticTestBase
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
 		builder.Process(identificationInstruction.CreateResponse([holder.Id]));
 		var payload = JsonSerializer.Deserialize<GameSessionDto>(
-			builder.GetGameState()!.Serialize(),
+			builder.SerializeSession(),
 			RecoverySerializationOptions)!;
 		var batchIndex = payload.GameHistoryLog.FindIndex(entry =>
 			entry is FactionFactsCommittedLogEntry facts &&
@@ -445,7 +446,7 @@ public class SerializationTests : DiagnosticTestBase
 			[players[0].Id],
 			players[^1].Id);
 		var payload = JsonSerializer.Deserialize<GameSessionDto>(
-			builder.GetGameState()!.Serialize(),
+			builder.SerializeSession(),
 			RecoverySerializationOptions)!;
 		var batchIndex = payload.GameHistoryLog.FindIndex(entry =>
 			entry is FactionFactsCommittedLogEntry facts &&
@@ -562,7 +563,7 @@ public class SerializationTests : DiagnosticTestBase
             .WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);
         builder.StartGame();
         builder.ConfirmGameStart();
-        var snapshot = JsonNode.Parse(builder.GetGameState()!.Serialize())!
+        var snapshot = JsonNode.Parse(builder.SerializeSession())!
             .AsObject();
         foreach (var player in snapshot[nameof(GameSessionDto.Players)]!.AsArray())
         {
@@ -589,7 +590,7 @@ public class SerializationTests : DiagnosticTestBase
         builder.StartGame();
         builder.ConfirmGameStart();
         var snapshot = JsonNode.Parse(
-            builder.GetGameState()!.Serialize())!.AsObject();
+            builder.SerializeSession())!.AsObject();
         foreach (var player in
                  snapshot[nameof(GameSessionDto.Players)]!.AsArray())
         {
@@ -615,7 +616,7 @@ public class SerializationTests : DiagnosticTestBase
         builder.StartGame();
         builder.ConfirmGameStart();
         var snapshot = JsonNode.Parse(
-            builder.GetGameState()!.Serialize())!.AsObject();
+            builder.SerializeSession())!.AsObject();
         snapshot[nameof(GameSessionDto.Players)]!
             .AsArray()[0]!
             .AsObject()[nameof(PlayerDto.DurableVotingPower)] = -1;
@@ -644,7 +645,7 @@ public class SerializationTests : DiagnosticTestBase
         builder.ConfirmGameStart();
 
         var session = builder.GetGameState()!;
-        var json = session.Serialize();
+        var json = builder.SerializeSession();
 
         // Act
         var rehydratedId = builder.GameService.RehydrateSession(json);
@@ -677,7 +678,7 @@ public class SerializationTests : DiagnosticTestBase
 
         var originalSession = builder.GetGameState()!;
         var originalOrder = originalSession.GetPlayers().Select(p => p.Name).ToList();
-        var json = originalSession.Serialize();
+        var json = builder.SerializeSession();
 
         // Act
         var rehydratedId = builder.GameService.RehydrateSession(json);
@@ -728,7 +729,7 @@ public class SerializationTests : DiagnosticTestBase
             .Distinct()
             .ToList();
 
-        var json = originalSession.Serialize();
+        var json = builder.SerializeSession();
 
         // Act
         var rehydratedId = builder.GameService.RehydrateSession(json);
@@ -774,7 +775,7 @@ public class SerializationTests : DiagnosticTestBase
         originalInstruction.Should().NotBeNull();
         var originalType = originalInstruction!.GetType();
 
-        var json = builder.GetGameState()!.Serialize();
+        var json = builder.SerializeSession();
 
         // Act
         var rehydratedId = builder.GameService.RehydrateSession(json);
@@ -819,7 +820,7 @@ public class SerializationTests : DiagnosticTestBase
             afterDebate,
             CoreTestReferences.InstructionContexts.VotingInstruction);
 
-        var json = builder.GetGameState()!.Serialize();
+        var json = builder.SerializeSession();
         var rehydratedId = builder.GameService.RehydrateSession(json);
 
         var rehydratedInstruction = builder.GameService.GetCurrentInstruction(rehydratedId)
@@ -904,7 +905,7 @@ public class SerializationTests : DiagnosticTestBase
             .OfType<NightActionLogEntry>()
             .First();
 
-        var json = originalSession.Serialize();
+        var json = builder.SerializeSession();
 
         // Act
         var rehydratedId = builder.GameService.RehydrateSession(json);
@@ -937,7 +938,7 @@ public class SerializationTests : DiagnosticTestBase
 
         var originalSession = builder.GetGameState()!;
         var originalPhase = originalSession.GetCurrentPhase();
-        var json = originalSession.Serialize();
+        var json = builder.SerializeSession();
 
         // Act
         var rehydratedId = builder.GameService.RehydrateSession(json);
@@ -961,7 +962,7 @@ public class SerializationTests : DiagnosticTestBase
         builder.StartGame();
         builder.ConfirmGameStart();
 
-        var json = builder.GetGameState()!.Serialize();
+        var json = builder.SerializeSession();
 
         // Act
         var rehydratedId = builder.GameService.RehydrateSession(json);
@@ -988,7 +989,7 @@ public class SerializationTests : DiagnosticTestBase
 
         var originalSession = builder.GetGameState()!;
         var originalTurn = originalSession.TurnNumber;
-        var json = originalSession.Serialize();
+        var json = builder.SerializeSession();
 
         // Act
         var rehydratedId = builder.GameService.RehydrateSession(json);
@@ -1019,7 +1020,7 @@ public class SerializationTests : DiagnosticTestBase
         var midGameSession = builder.GetGameState()!;
         midGameSession.GetCurrentPhase().Should().Be(GamePhase.Night);
 
-        var json = midGameSession.Serialize();
+        var json = builder.SerializeSession();
 
         // Act - Rehydrate the session
         var rehydratedId = builder.GameService.RehydrateSession(json);
@@ -1048,7 +1049,7 @@ public class SerializationTests : DiagnosticTestBase
         builder.StartGame();
         builder.ConfirmGameStart();
 
-        var json = builder.GetGameState()!.Serialize();
+        var json = builder.SerializeSession();
         var originalId = builder.GetGameState()!.Id;
 
         // Create a new GameService to simulate app restart
@@ -1090,7 +1091,7 @@ public class SerializationTests : DiagnosticTestBase
 
         var originalSession = builder.GetGameState()!;
         var originalLogCount = originalSession.GameHistoryLog.Count();
-        var json = originalSession.Serialize();
+        var json = builder.SerializeSession();
 
         // Act - Rehydrate
         var rehydratedId = builder.GameService.RehydrateSession(json);
@@ -1187,7 +1188,7 @@ public class SerializationTests : DiagnosticTestBase
 
         var session = builder.GetGameState()!;
         var dto = JsonSerializer.Deserialize<GameSessionDto>(
-            session.Serialize(),
+            builder.SerializeSession(),
             RecoverySerializationOptions)!;
 
         dto.IsStableRecoveryBoundary.Should().BeTrue();
@@ -1200,6 +1201,30 @@ public class SerializationTests : DiagnosticTestBase
             .Subject.PublicAnnouncement.Should().Be(GameStrings.NightStartsPrompt);
         dto.PhaseStateCache.CurrentPhase.Should().Be(GamePhase.Night);
         dto.GameHistoryLog.Should().BeEmpty();
+
+        MarkTestCompleted();
+    }
+
+    [Fact]
+    public void SerializeCurrentStateRecoveryCandidate_RehydratesCurrentProjectionWithoutReplacingStableSnapshot()
+    {
+        var builder = CreateBuilder()
+            .WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);
+        builder.StartGame();
+        var session = (GameSession)builder.GetGameState()!;
+        var playerId = session.GetPlayers().First().Id;
+        var stableSnapshot = builder.SerializeSession();
+        builder.ArrangeKnownPhysicalRole(playerId, MainRoleType.SimpleWerewolf);
+
+        var candidate = session.SerializeCurrentStateRecoveryCandidate();
+
+        builder.SerializeSession().Should().Be(stableSnapshot);
+        var recoveryService = new GameService();
+        var recoveredGameId = recoveryService.RehydrateSession(candidate);
+        var recoveredPlayer = recoveryService.GetGameStateView(recoveredGameId)!
+            .GetPlayerState(playerId);
+        recoveredPlayer.MainRole.Should().Be(MainRoleType.SimpleWerewolf);
+        recoveredPlayer.ModeratorKnownRole.Should().Be(MainRoleType.SimpleWerewolf);
 
         MarkTestCompleted();
     }
@@ -1247,7 +1272,7 @@ public class SerializationTests : DiagnosticTestBase
         var dawnInstruction = (ConfirmationInstruction)firstService.GetCurrentInstruction(firstGameId)!;
 
         firstService.ProcessInstruction(firstGameId, dawnInstruction.CreateResponse());
-        var interruptedPayload = firstService.GetGameStateView(firstGameId)!.Serialize();
+        var interruptedPayload = firstService.SerializeSession(firstGameId);
         var interruptedDto = JsonSerializer.Deserialize<GameSessionDto>(
             interruptedPayload,
             RecoverySerializationOptions)!;
@@ -1270,6 +1295,31 @@ public class SerializationTests : DiagnosticTestBase
         replayedSession.GameHistoryLog.OfType<StatusEffectLogEntry>()
             .Where(entry => entry.PlayerId == elderId && entry.EffectType == StatusEffectTypes.ElderProtectionLost)
             .Should().ContainSingle();
+
+        MarkTestCompleted();
+    }
+
+    [Fact]
+    public void SerializeSession_UnavailableSessionIdsUseEstablishedFailure()
+    {
+        var builder = CreateBuilder()
+            .WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);
+        builder.StartGame();
+        var discardedId = builder.GameId;
+        builder.GameService.DiscardSession(discardedId).Should().BeTrue();
+
+        foreach (var unavailableId in new[]
+                 {
+                     Guid.Empty,
+                     Guid.NewGuid(),
+                     discardedId
+                 })
+        {
+            var export = () => builder.GameService.SerializeSession(unavailableId);
+
+            export.Should().ThrowExactly<InvalidOperationException>()
+                .WithMessage("The Game Session is not available.");
+        }
 
         MarkTestCompleted();
     }

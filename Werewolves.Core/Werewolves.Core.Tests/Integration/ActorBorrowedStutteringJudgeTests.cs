@@ -231,7 +231,7 @@ public sealed class ActorBorrowedStutteringJudgeTests
 
 		var recoveryService = new GameService();
 		var recoveredGameId = recoveryService.RehydrateSession(
-			session.Serialize());
+			session.SerializeRecoverySnapshot());
 		var recovered = (GameSession)recoveryService
 			.GetGameStateView(recoveredGameId)!;
 		var recoveredSleep = recoveryService
@@ -474,13 +474,13 @@ public sealed class ActorBorrowedStutteringJudgeTests
 	public void BorrowedStutteringJudge_CursorlessObservationRejectsSignalAndResourceTamper()
 	{
 		var session = CreateCursorlessCommittedJudgeObservationSession();
-		RecoveryPayloadTestDriver.Parse(session.Serialize())
+		RecoveryPayloadTestDriver.Parse(session.SerializeRecoverySnapshot())
 			.DomainRecoveryCursor.Should().BeNull();
 		Action rehydrateUntampered = () =>
-			new GameSession(session.Serialize());
+			new GameSession(session.SerializeRecoverySnapshot());
 		rehydrateUntampered.Should().NotThrow();
 		var tampered = RecoveryPayloadTestDriver
-			.Parse(session.Serialize())
+			.Parse(session.SerializeRecoverySnapshot())
 			.MutateActorBorrowedPrivateCommit(
 				ActorBorrowedPrivateCommitMutation
 					.JudgeObservationSignalAndResource)
@@ -507,7 +507,7 @@ public sealed class ActorBorrowedStutteringJudgeTests
 		pending.EmptySelectionOptionLabel.Should().Be(
 			GameStrings.DayVoteNoEliminationOption);
 		var tampered = RecoveryPayloadTestDriver
-			.Parse(fixture.Session.Serialize())
+			.Parse(fixture.Session.SerializeRecoverySnapshot())
 			.RewritePendingPlayerSelectionPresentation(
 				tamper == JudgeVoteRecoveryPresentationTamper.PublicAnnouncement
 					? "Tampered public announcement."
@@ -543,7 +543,8 @@ public sealed class ActorBorrowedStutteringJudgeTests
 		pending.PrivateInstruction.Should().Be(expectedPrivateInstruction);
 		var service = new GameService();
 
-		var gameId = service.RehydrateSession(fixture.Session.Serialize());
+		var gameId = service.RehydrateSession(
+			fixture.Session.SerializeRecoverySnapshot());
 
 		var recoveredVote = service.GetCurrentInstruction(gameId).Should()
 			.BeOfType<SelectPlayersInstruction>().Subject;
@@ -556,10 +557,10 @@ public sealed class ActorBorrowedStutteringJudgeTests
 	{
 		var fixture = CreateCommittedJudgeObservationBoundary();
 		Action rehydrateUntampered = () =>
-			new GameSession(fixture.Session.Serialize());
+			new GameSession(fixture.Session.SerializeRecoverySnapshot());
 		rehydrateUntampered.Should().NotThrow();
 		var tampered = RecoveryPayloadTestDriver
-			.Parse(fixture.Session.Serialize())
+			.Parse(fixture.Session.SerializeRecoverySnapshot())
 			.InjectSecondActorSpendAsActiveActivation(
 				SeerCard.Id,
 				Guid.NewGuid())
@@ -658,7 +659,7 @@ public sealed class ActorBorrowedStutteringJudgeTests
 
 		var recoveryService = new GameService();
 		var recoveredGameId = recoveryService.RehydrateSession(
-			session.Serialize());
+			session.SerializeRecoverySnapshot());
 		var recovered = (GameSession)recoveryService
 			.GetGameStateView(recoveredGameId)!;
 		var recoveredFirstVote = recoveryService

@@ -267,7 +267,7 @@ public sealed class AngelRoleTests : DiagnosticTestBase
 
         var recoveredService = new GameService();
         var recoveredId = recoveredService.RehydrateSession(
-            builder.GetGameState()!.Serialize());
+            builder.SerializeSession());
         var recoveredVote = recoveredService.GetCurrentInstruction(recoveredId)
             .Should().BeOfType<SelectPlayersInstruction>().Subject;
         recoveredVote.InstructionId.Should().Be(secondVote.InstructionId);
@@ -425,11 +425,12 @@ public sealed class AngelRoleTests : DiagnosticTestBase
         AssertExpiredKnownHolder(builder.GetGameState()!, players[1].Id);
         var firstService = new GameService();
         var firstId = firstService.RehydrateSession(
-            builder.GetGameState()!.Serialize());
+            builder.SerializeSession());
         var firstRecovered = firstService.GetGameStateView(firstId)!;
         AssertExpiredKnownHolder(firstRecovered, players[1].Id);
         var secondService = new GameService();
-        var secondId = secondService.RehydrateSession(firstRecovered.Serialize());
+        var secondId = secondService.RehydrateSession(
+            firstService.SerializeSession(firstId));
         AssertExpiredKnownHolder(
             secondService.GetGameStateView(secondId)!,
             players[1].Id);
@@ -463,7 +464,7 @@ public sealed class AngelRoleTests : DiagnosticTestBase
 
         var recoveredService = new GameService();
         var recoveredId = recoveredService.RehydrateSession(
-            builder.GetGameState()!.Serialize());
+            builder.SerializeSession());
         var recovered = recoveredService.GetGameStateView(recoveredId)!;
         recovered.TurnNumber.Should().Be(2);
         recovered.GetCurrentPhase().Should().Be(GamePhase.Night);
@@ -532,7 +533,7 @@ public sealed class AngelRoleTests : DiagnosticTestBase
     {
         var (builder, _) = CreateKnownHolderExpiryScenario();
         var tampered = RecoveryPayloadTestDriver
-            .Parse(builder.GetGameState()!.Serialize())
+            .Parse(builder.SerializeSession())
             .RemoveAngelExpiry()
             .Serialize();
 
@@ -547,7 +548,7 @@ public sealed class AngelRoleTests : DiagnosticTestBase
     {
         var (builder, _) = CreateKnownHolderExpiryScenario();
         var tampered = RecoveryPayloadTestDriver
-            .Parse(builder.GetGameState()!.Serialize())
+            .Parse(builder.SerializeSession())
             .DuplicateAngelExpiry()
             .Serialize();
 
@@ -562,7 +563,7 @@ public sealed class AngelRoleTests : DiagnosticTestBase
     {
         var (builder, _) = CreateKnownHolderExpiryScenario();
         var tampered = RecoveryPayloadTestDriver
-            .Parse(builder.GetGameState()!.Serialize())
+            .Parse(builder.SerializeSession())
             .DuplicatePostExpirySimpleVillagerProjection()
             .Serialize();
 
@@ -578,7 +579,7 @@ public sealed class AngelRoleTests : DiagnosticTestBase
         var (builder, _) = CreateKnownHolderExpiryScenario();
         builder.CompleteDayPhaseWithTie();
         var tampered = RecoveryPayloadTestDriver
-            .Parse(builder.GetGameState()!.Serialize())
+            .Parse(builder.SerializeSession())
             .MoveKnownAngelProjectionToHistoryTail()
             .Serialize();
 
@@ -610,7 +611,7 @@ public sealed class AngelRoleTests : DiagnosticTestBase
             MainRoleType.SimpleVillager,
             subsequentNight: false);
         var tampered = RecoveryPayloadTestDriver
-            .Parse(builder.GetGameState()!.Serialize())
+            .Parse(builder.SerializeSession())
             .AppendAngelVictory(
                 turnNumber: 1,
                 phase: GamePhase.Day,
@@ -674,7 +675,8 @@ public sealed class AngelRoleTests : DiagnosticTestBase
             .Should().NotContain(fact => fact.Faction == Faction.Angel);
 
         var recoveredService = new GameService();
-        var recoveredId = recoveredService.RehydrateSession(session.Serialize());
+        var recoveredId = recoveredService.RehydrateSession(
+            service.SerializeSession(start.GameGuid));
         var recovered = recoveredService.GetGameStateView(recoveredId)!;
         recovered.GetPlayerState(holder.Id).CurrentRole.Should()
             .Be(MainRoleType.Angel);
@@ -807,7 +809,7 @@ public sealed class AngelRoleTests : DiagnosticTestBase
 
         var recoveredService = new GameService();
         var recoveredId = recoveredService.RehydrateSession(
-            builder.GetGameState()!.Serialize());
+            builder.SerializeSession());
         var recovered = recoveredService.GetGameStateView(recoveredId)!;
         recovered.GameHistoryLog.OfType<AngelExpiredLogEntry>()
             .Should().ContainSingle();

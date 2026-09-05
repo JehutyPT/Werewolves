@@ -152,7 +152,7 @@ public sealed class BearTamerRoleTests : DiagnosticTestBase
 		const string changedPrivateInstruction =
 			"Changed copy must not become recovery identity.";
 		var changedSnapshot = RecoveryPayloadTestDriver
-			.Parse(builder.GetGameState()!.Serialize())
+			.Parse(builder.SerializeSession())
 			.RewritePendingConfirmationPresentation(
 				changedPrivateInstruction,
 				soundEffects: null)
@@ -182,7 +182,7 @@ public sealed class BearTamerRoleTests : DiagnosticTestBase
 
 		var secondRecoveredService = new GameService();
 		var secondRecoveredGameId = secondRecoveredService.RehydrateSession(
-			committedState.Serialize());
+			recoveredService.SerializeSession(recoveredGameId));
 		var postCommitInstruction =
 			secondRecoveredService.GetCurrentInstruction(secondRecoveredGameId);
 
@@ -194,16 +194,15 @@ public sealed class BearTamerRoleTests : DiagnosticTestBase
 			.Should().ContainSingle();
 
 		var serializedBeforeDuplicate =
-			secondRecoveredService.GetGameStateView(secondRecoveredGameId)!
-				.Serialize();
+			secondRecoveredService.SerializeSession(secondRecoveredGameId);
 		Action duplicate = () => secondRecoveredService.ProcessInstruction(
 			secondRecoveredGameId,
 			growlResponse);
 
 		duplicate.Should().Throw<InvalidOperationException>()
 			.WithMessage("*pending Moderator Instruction*");
-		secondRecoveredService.GetGameStateView(secondRecoveredGameId)!
-			.Serialize().Should().Be(serializedBeforeDuplicate);
+		secondRecoveredService.SerializeSession(secondRecoveredGameId)
+			.Should().Be(serializedBeforeDuplicate);
 		secondRecoveredService.GetGameStateView(secondRecoveredGameId)!
 			.GameHistoryLog
 			.OfType<BearTamerGrowlOccurredLogEntry>()
@@ -240,7 +239,7 @@ public sealed class BearTamerRoleTests : DiagnosticTestBase
 				[players[3].Id] = MainRoleType.SimpleVillager
 			});
 		var tampered = RecoveryPayloadTestDriver
-			.Parse(builder.GetGameState()!.Serialize())
+			.Parse(builder.SerializeSession())
 			.RewritePendingConfirmationAffectedPlayer(players[0].Id)
 			.Serialize();
 
@@ -461,7 +460,7 @@ public sealed class BearTamerRoleTests : DiagnosticTestBase
 			.Should().ContainSingle();
 		var recoveredService = new GameService();
 		var recoveredGameId = recoveredService.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 		var recoveredTerminal = recoveredService
 			.GetCurrentInstruction(recoveredGameId)
 			.Should().BeOfType<FinishedGameConfirmationInstruction>()

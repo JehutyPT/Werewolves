@@ -195,8 +195,6 @@ public class DashboardStatsSnapshotTests
 		public int RoleInPlayCount(MainRoleType type) =>
 			players.Count(player => player.State.CurrentRole == type);
 
-		public string Serialize() => throw new NotSupportedException();
-
 		private static InvalidOperationException FactionFactsNotReady() =>
 			new("Required Faction facts are not ready.");
 	}

@@ -228,7 +228,7 @@ public sealed class ScapegoatRoleTests : DiagnosticTestBase
 		var choice =
 			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
 				builder.Process(reveal.CreateResponse()));
-		var before = builder.GetGameState()!.Serialize();
+		var before = builder.SerializeSession();
 		var invalid = new ModeratorResponse
 		{
 			InstructionId = choice.InstructionId,
@@ -239,7 +239,7 @@ public sealed class ScapegoatRoleTests : DiagnosticTestBase
 		var act = () => builder.Process(invalid);
 
 		act.Should().Throw<InvalidOperationException>();
-		builder.GetGameState()!.Serialize().Should().Be(before);
+		builder.SerializeSession().Should().Be(before);
 		builder.GetCurrentInstruction()!.InstructionId.Should().Be(
 			choice.InstructionId);
 		builder.GetGameState()!.GameHistoryLog
@@ -315,7 +315,7 @@ public sealed class ScapegoatRoleTests : DiagnosticTestBase
 					recoveredReaction,
 					EliminationCascadeReactionBoundary.Forced)
 			]);
-		var gameId = service.RehydrateSession(interrupted.Serialize());
+		var gameId = service.RehydrateSession(builder.SerializeSession());
 		var recoveredReveal = service.GetCurrentInstruction(gameId)
 			.Should().BeOfType<AssignRolesInstruction>().Subject;
 
@@ -480,14 +480,14 @@ public sealed class ScapegoatRoleTests : DiagnosticTestBase
 		var observation =
 			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
 				builder.Process(vote.CreateResponse([])));
-		var before = builder.GetGameState()!.Serialize();
+		var before = builder.SerializeSession();
 
 		var act = () => builder.Process(
 			observation.CreateResponse([scapegoat.Id]));
 
 		act.Should().Throw<InvalidOperationException>()
 			.WithMessage("*unavailable*");
-		builder.GetGameState()!.Serialize().Should().Be(before);
+		builder.SerializeSession().Should().Be(before);
 		builder.GetCurrentInstruction()!.InstructionId.Should().Be(
 			observation.InstructionId);
 		policy.ObservedAttempts.Should().ContainSingle();
@@ -587,7 +587,7 @@ public sealed class ScapegoatRoleTests : DiagnosticTestBase
 		var selected = voterChoice.SelectablePlayerIds.Take(2).ToHashSet();
 		var beforeChoiceService = new GameService();
 		var gameId = beforeChoiceService.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 		var restoredChoice = beforeChoiceService.GetCurrentInstruction(gameId)
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
 		restoredChoice.InstructionId.Should().Be(voterChoice.InstructionId);
@@ -614,7 +614,7 @@ public sealed class ScapegoatRoleTests : DiagnosticTestBase
 
 		var afterChoiceService = new GameService();
 		var restoredGameId = afterChoiceService.RehydrateSession(
-			afterChoiceState.Serialize());
+			beforeChoiceService.SerializeSession(gameId));
 		var restoredAnnouncement =
 			afterChoiceService.GetCurrentInstruction(restoredGameId)
 				.Should().BeOfType<ConfirmationInstruction>().Subject;
@@ -680,7 +680,7 @@ public sealed class ScapegoatRoleTests : DiagnosticTestBase
 		builder.Process(voterChoice.CreateResponse(
 			[voterChoice.SelectablePlayerIds.First()]));
 		var payload = RecoveryPayloadTestDriver.Parse(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 		var malformed = payload
 			.InvalidateLatestVoterEligibilityRestrictionTurn()
 			.Serialize();

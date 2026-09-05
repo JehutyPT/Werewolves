@@ -413,7 +413,7 @@ public sealed class AccursedWolfFatherRoleTests : DiagnosticTestBase
 
 		foreach (var invalidCase in invalidCases)
 		{
-			var before = builder.GetGameState()!.Serialize();
+			var before = builder.SerializeSession();
 			var beforeHistory =
 				builder.GetGameState()!.GameHistoryLog.ToArray();
 
@@ -424,7 +424,7 @@ public sealed class AccursedWolfFatherRoleTests : DiagnosticTestBase
 			builder.GetCurrentInstruction()!.InstructionId.Should().Be(
 				choice.InstructionId,
 				invalidCase.Name);
-			builder.GetGameState()!.Serialize().Should().Be(
+			builder.SerializeSession().Should().Be(
 				before,
 				invalidCase.Name);
 			builder.GetGameState()!.GameHistoryLog.Should().Equal(
@@ -444,7 +444,7 @@ public sealed class AccursedWolfFatherRoleTests : DiagnosticTestBase
 		var sleep =
 			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
 				builder.Process(accepted));
-		var beforeReplay = builder.GetGameState()!.Serialize();
+		var beforeReplay = builder.SerializeSession();
 		var beforeHistory =
 			builder.GetGameState()!.GameHistoryLog.ToArray();
 
@@ -453,7 +453,7 @@ public sealed class AccursedWolfFatherRoleTests : DiagnosticTestBase
 		replay.Should().Throw<InvalidOperationException>();
 		builder.GetCurrentInstruction()!.InstructionId.Should().Be(
 			sleep.InstructionId);
-		builder.GetGameState()!.Serialize().Should().Be(beforeReplay);
+		builder.SerializeSession().Should().Be(beforeReplay);
 		builder.GetGameState()!.GameHistoryLog.Should().Equal(beforeHistory);
 		builder.GetGameState()!.GameHistoryLog
 			.OfType<OneUseRolePowerCommittedLogEntry>()

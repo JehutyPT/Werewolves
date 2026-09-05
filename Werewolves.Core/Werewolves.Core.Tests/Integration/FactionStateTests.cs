@@ -89,9 +89,9 @@ public class FactionStateTests
 	[Fact]
 	public void RequiredFactionGuards_WhenFactsAreUnknown_AreNeutralExactNoOps()
 	{
-		var (session, _) = StartLiveSession();
+		var (session, service) = StartLiveSession();
 		var player = session.GetPlayers().First();
-		var before = session.Serialize();
+		var before = service.SerializeSession(session.Id);
 		var historyCount = session.GameHistoryLog.Count();
 
 		var beneficiaryFailure = () =>
@@ -105,7 +105,7 @@ public class FactionStateTests
 		agentsFailure.Should()
 			.ThrowExactly<InvalidOperationException>()
 			.WithMessage("Required Faction facts are not ready.");
-		session.Serialize().Should().Be(before);
+		service.SerializeSession(session.Id).Should().Be(before);
 		session.GameHistoryLog.Should().HaveCount(historyCount);
 	}
 
@@ -183,7 +183,7 @@ public class FactionStateTests
 		var (session, service) = StartLiveSession();
 		var player = session.GetPlayers().First();
 		var boundary = Boundary(order: 10);
-		var before = session.Serialize();
+		var before = service.SerializeSession(session.Id);
 
 		var commit = () => service.CommitExplicitFactionTransition(
 			session.Id,
@@ -205,7 +205,7 @@ public class FactionStateTests
 		session.GetFactionAgentKnowledge(player.Id, Faction.Werewolf)
 			.Should().Be(FactionAgentKnowledge.Unknown);
 		session.GameHistoryLog.Should().BeEmpty();
-		session.Serialize().Should().Be(before);
+		service.SerializeSession(session.Id).Should().Be(before);
 	}
 
 	[Fact]
@@ -226,7 +226,7 @@ public class FactionStateTests
 			]);
 		var request = ClosureRequest(boundary);
 		var before = CaptureFactionState(session);
-		var serializedBefore = session.Serialize();
+		var serializedBefore = service.SerializeSession(session.Id);
 		var historyCountBefore = session.GameHistoryLog.Count();
 
 		service.GetInitialBeneficiaryClosureReadiness(session.Id, request)
@@ -235,7 +235,7 @@ public class FactionStateTests
 			.Should().Be(InitialBeneficiaryClosureResult.Incomplete);
 
 		CaptureFactionState(session).Should().Equal(before);
-		session.Serialize().Should().Be(serializedBefore);
+		service.SerializeSession(session.Id).Should().Be(serializedBefore);
 		session.GameHistoryLog.Should().HaveCount(historyCountBefore);
 		session.GameHistoryLog.OfType<FactionFactsCommittedLogEntry>()
 			.Should().NotContain(entry =>
@@ -258,7 +258,7 @@ public class FactionStateTests
 			],
 			[]);
 		var before = CaptureFactionState(session);
-		var serializedBefore = session.Serialize();
+		var serializedBefore = service.SerializeSession(session.Id);
 		var historyCountBefore = session.GameHistoryLog.Count();
 
 		service.GetInitialBeneficiaryClosureReadiness(session.Id, request)
@@ -267,7 +267,7 @@ public class FactionStateTests
 			.Should().Be(InitialBeneficiaryClosureResult.Incomplete);
 
 		CaptureFactionState(session).Should().Equal(before);
-		session.Serialize().Should().Be(serializedBefore);
+		service.SerializeSession(session.Id).Should().Be(serializedBefore);
 		session.GameHistoryLog.Should().HaveCount(historyCountBefore);
 	}
 
@@ -285,7 +285,7 @@ public class FactionStateTests
 					"synthetic-deferred-classifier")
 			]);
 		var before = CaptureFactionState(session);
-		var serializedBefore = session.Serialize();
+		var serializedBefore = service.SerializeSession(session.Id);
 		var historyCountBefore = session.GameHistoryLog.Count();
 
 		service.GetInitialBeneficiaryClosureReadiness(session.Id, request)
@@ -294,7 +294,7 @@ public class FactionStateTests
 			.Should().Be(InitialBeneficiaryClosureResult.Incomplete);
 
 		CaptureFactionState(session).Should().Equal(before);
-		session.Serialize().Should().Be(serializedBefore);
+		service.SerializeSession(session.Id).Should().Be(serializedBefore);
 		session.GameHistoryLog.Should().HaveCount(historyCountBefore);
 	}
 
@@ -405,7 +405,7 @@ public class FactionStateTests
 			.BeOfType<SelectPlayersInstruction>().Subject;
 		observeWerewolfAgents.Semantic.Should().Be(
 			ModeratorInstructionSemantic.ObserveWerewolfFactionAgentGroup);
-		var preFactionBoundary = session.Serialize();
+		var preFactionBoundary = service.SerializeSession(session.Id);
 		service.CommitExplicitFactionTransition(
 			session.Id,
 			"post-closure-transition",
@@ -416,7 +416,7 @@ public class FactionStateTests
 					Boundary(order: 20))
 			]);
 
-		session.Serialize().Should().Be(preFactionBoundary);
+		service.SerializeSession(session.Id).Should().Be(preFactionBoundary);
 		var afterOrdinaryBoundary = service.ProcessInstruction(
 			session.Id,
 			observeWerewolfAgents.CreateResponse([players[0].Id]));
@@ -440,11 +440,11 @@ public class FactionStateTests
 			.Distinct()
 			.Should().ContainSingle().Subject;
 		var closureRequest = ClosureRequest(groupBoundary);
-		var serialized = session.Serialize();
+		var serialized = service.SerializeSession(session.Id);
 		var recoveredService = new GameService();
 		var recoveredId = recoveredService.RehydrateSession(serialized);
 		var recovered = recoveredService.GetGameStateView(recoveredId)!;
-		var serializedAgain = recovered.Serialize();
+		var serializedAgain = recoveredService.SerializeSession(recoveredId);
 		var twiceRecoveredService = new GameService();
 		var twiceRecoveredId =
 			twiceRecoveredService.RehydrateSession(serializedAgain);
@@ -518,7 +518,7 @@ public class FactionStateTests
 				identifyWildChild.CreateResponse([players[0].Id]))
 			.ModeratorInstruction.Should()
 			.BeOfType<SelectPlayersInstruction>().Subject;
-		var stableBoundaryBeforeFactionFacts = session.Serialize();
+		var stableBoundaryBeforeFactionFacts = service.SerializeSession(session.Id);
 		var nonFactionStateBefore = CaptureNonFactionState(session);
 		var nonFactionHistoryBefore = session.GameHistoryLog.ToArray();
 		var turnBefore = session.TurnNumber;
@@ -533,7 +533,8 @@ public class FactionStateTests
 		session.GameHistoryLog
 			.OfType<FactionFactsCommittedLogEntry>()
 			.Should().HaveCount(3);
-		session.Serialize().Should().Be(stableBoundaryBeforeFactionFacts);
+		service.SerializeSession(session.Id).Should().Be(
+			stableBoundaryBeforeFactionFacts);
 
 		var recoveredService = new GameService();
 		var recoveredId = recoveredService.RehydrateSession(

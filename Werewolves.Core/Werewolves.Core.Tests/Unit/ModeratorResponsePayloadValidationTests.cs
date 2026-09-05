@@ -27,13 +27,13 @@ public class ModeratorResponsePayloadValidationTests
 				[firstPlayerId] = MainRoleType.SimpleVillager
 			}
 		};
-		var before = service.GetGameStateView(gameId)!.Serialize();
+		var before = service.SerializeSession(gameId);
 
 		var act = () => service.ProcessInstruction(gameId, response);
 
 		act.Should().Throw<InvalidOperationException>()
 			.WithMessage("*payload*");
-		service.GetGameStateView(gameId)!.Serialize().Should().Be(before);
+		service.SerializeSession(gameId).Should().Be(before);
 		service.GetCurrentInstruction(gameId)!.InstructionId
 			.Should().Be(instruction.InstructionId);
 	}
@@ -58,13 +58,13 @@ public class ModeratorResponsePayloadValidationTests
 				[extraPlayerId] = MainRoleType.SimpleVillager
 			}
 		};
-		var before = service.GetGameStateView(gameId)!.Serialize();
+		var before = service.SerializeSession(gameId);
 
 		var act = () => service.ProcessInstruction(gameId, response);
 
 		act.Should().Throw<InvalidOperationException>()
 			.WithMessage("*payload*");
-		service.GetGameStateView(gameId)!.Serialize().Should().Be(before);
+		service.SerializeSession(gameId).Should().Be(before);
 		service.GetCurrentInstruction(gameId)!.InstructionId
 			.Should().Be(instruction.InstructionId);
 	}
@@ -80,7 +80,7 @@ public class ModeratorResponsePayloadValidationTests
 			privateInstruction: nameof(ProcessInstruction_ResponsePayloadMutatedBeforeConsumption_IsSideEffectFree));
 		var session = new GameSession(Guid.NewGuid(), instruction, CreateConfig());
 		var service = new GameService();
-		var gameId = service.RehydrateSession(session.Serialize());
+		var gameId = service.RehydrateSession(session.SerializeRecoverySnapshot());
 		var mutableSelection = new HashSet<Guid> { selectablePlayerId };
 		var response = new ModeratorResponse
 		{
@@ -90,13 +90,13 @@ public class ModeratorResponsePayloadValidationTests
 		};
 		mutableSelection.Clear();
 		mutableSelection.Add(invalidPlayerId);
-		var before = service.GetGameStateView(gameId)!.Serialize();
+		var before = service.SerializeSession(gameId);
 
 		var act = () => service.ProcessInstruction(gameId, response);
 
 		act.Should().Throw<InvalidOperationException>()
 			.WithMessage("*payload*");
-		service.GetGameStateView(gameId)!.Serialize().Should().Be(before);
+		service.SerializeSession(gameId).Should().Be(before);
 		service.GetCurrentInstruction(gameId)!.InstructionId
 			.Should().Be(instruction.InstructionId);
 	}
@@ -113,20 +113,20 @@ public class ModeratorResponsePayloadValidationTests
 			privateInstruction: nameof(ProcessInstruction_OptionIdsOutsideSemanticOrder_IsSideEffectFree));
 		var session = new GameSession(Guid.NewGuid(), instruction, CreateConfig());
 		var service = new GameService();
-		var gameId = service.RehydrateSession(session.Serialize());
+		var gameId = service.RehydrateSession(session.SerializeRecoverySnapshot());
 		var response = new ModeratorResponse
 		{
 			InstructionId = instruction.InstructionId,
 			Type = ExpectedInputType.OptionSelection,
 			SelectedOptionIds = new List<string> { "second", "first" }
 		};
-		var before = service.GetGameStateView(gameId)!.Serialize();
+		var before = service.SerializeSession(gameId);
 
 		var act = () => service.ProcessInstruction(gameId, response);
 
 		act.Should().Throw<InvalidOperationException>()
 			.WithMessage("*payload*");
-		service.GetGameStateView(gameId)!.Serialize().Should().Be(before);
+		service.SerializeSession(gameId).Should().Be(before);
 		service.GetCurrentInstruction(gameId)!.InstructionId
 			.Should().Be(instruction.InstructionId);
 	}
@@ -202,7 +202,7 @@ public class ModeratorResponsePayloadValidationTests
 			instruction,
 			CreateConfig());
 		var service = new GameService();
-		var gameId = service.RehydrateSession(session.Serialize());
+		var gameId = service.RehydrateSession(session.SerializeRecoverySnapshot());
 		return (service, gameId, instruction);
 	}
 

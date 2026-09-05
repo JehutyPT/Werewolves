@@ -121,7 +121,7 @@ public sealed class SeerRolePowerAvailabilityTests : DiagnosticTestBase
 			identifySeer.CreateResponse([players[1].Id]));
 		var originalSleep =
 			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(denied);
-		var serialized = builder.GetGameState()!.Serialize();
+		var serialized = builder.SerializeSession();
 		var rehydratedPolicy = new RecordingPolicy(RolePowerAvailabilityResult.Denied);
 		var rehydratedService = new GameService(rehydratedPolicy);
 
@@ -169,7 +169,7 @@ public sealed class SeerRolePowerAvailabilityTests : DiagnosticTestBase
 		var sleep = InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
 			builder.Process(feedback.CreateResponse()));
 		sleep.Semantic.Should().Be(ModeratorInstructionSemantic.PutRoleToSleep);
-		var serialized = builder.GetGameState()!.Serialize();
+		var serialized = builder.SerializeSession();
 		var rehydratedPolicy = new RecordingPolicy(
 			RolePowerAvailabilityResult.Allowed);
 		var rehydratedService = new GameService(rehydratedPolicy);

@@ -45,7 +45,8 @@ public class PermanentRoleSwapTests
 				Enumerable.Range(1, 5).Select(index => $"Player{index}").ToList(),
 				lockIn));
 		var service = new GameService();
-		var rehydratedGameId = service.RehydrateSession(seedSession.Serialize());
+		var rehydratedGameId = service.RehydrateSession(
+			seedSession.SerializeRecoverySnapshot());
 		var session = service.GetGameStateView(rehydratedGameId)!;
 		var mutableSession = (GameSession)session;
 		var player = session.GetPlayers().First();
@@ -221,8 +222,9 @@ public class PermanentRoleSwapTests
 	public void PermanentRoleSwap_RecoveryRejectsContradictoryPlayerProjection(
 		PlayerProjectionTamper tamper)
 	{
-		var (session, playerId) = CreateStableSimpleSwap();
-		var payload = RecoveryPayloadTestDriver.Parse(session.Serialize());
+		var (builder, _, playerId) = CreateStableSimpleSwap();
+		var payload = RecoveryPayloadTestDriver.Parse(
+			builder.SerializeSession());
 		switch (tamper)
 		{
 			case PlayerProjectionTamper.CurrentRole:
@@ -276,8 +278,9 @@ public class PermanentRoleSwapTests
 	public void PermanentRoleSwap_RecoveryRejectsNonCanonicalFactionSource(
 		FactionSourceTamper tamper)
 	{
-		var (session, _) = CreateStableSimpleSwap();
-		var payload = RecoveryPayloadTestDriver.Parse(session.Serialize());
+		var (builder, _, _) = CreateStableSimpleSwap();
+		var payload = RecoveryPayloadTestDriver.Parse(
+			builder.SerializeSession());
 		if (tamper == FactionSourceTamper.Kind)
 		{
 			payload.RewriteLatestPermanentRoleSwapSource(
@@ -305,9 +308,10 @@ public class PermanentRoleSwapTests
 	public void PermanentRoleSwap_RecoveryRejectsInvalidFactionBatch(
 		FactionBatchTamper tamper)
 	{
-		var (session, _) = CreateStableSimpleSwap();
+		var (builder, _, _) = CreateStableSimpleSwap();
 		var payload = ApplyFactionBatchTamper(
-			RecoveryPayloadTestDriver.Parse(session.Serialize()),
+			RecoveryPayloadTestDriver.Parse(
+				builder.SerializeSession()),
 			tamper);
 		var tampered = payload.Serialize();
 
@@ -319,8 +323,9 @@ public class PermanentRoleSwapTests
 	[Fact]
 	public void PermanentRoleSwap_RecoveryRejectsWrongRoleDerivedAgentDefault()
 	{
-		var (session, _) = CreateStableSimpleSwap();
-		var tampered = RecoveryPayloadTestDriver.Parse(session.Serialize())
+		var (builder, _, _) = CreateStableSimpleSwap();
+		var tampered = RecoveryPayloadTestDriver
+			.Parse(builder.SerializeSession())
 			.RewriteLatestPermanentRoleSwapAgentAndCache(
 				Faction.Piper,
 				FactionAgentKnowledge.KnownAgent)
@@ -335,7 +340,7 @@ public class PermanentRoleSwapTests
 	[Fact]
 	public void PermanentRoleSwap_RecoveryReplaysLaterSemanticPlayerChanges()
 	{
-		var (session, playerId) = CreateStableSimpleSwap((builder, player) =>
+		var (fixtureBuilder, session, playerId) = CreateStableSimpleSwap((builder, player) =>
 		{
 			builder
 				.ArrangeKnownRole(player.Id, MainRoleType.Seer)
@@ -349,7 +354,8 @@ public class PermanentRoleSwapTests
 			.PhysicalCharacterCardId!.Value;
 
 		var recoveredService = new GameService();
-		var recoveredId = recoveredService.RehydrateSession(session.Serialize());
+		var recoveredId = recoveredService.RehydrateSession(
+			fixtureBuilder.SerializeSession());
 		var recovered = recoveredService.GetGameStateView(recoveredId)!;
 		var player = recovered.GetPlayer(playerId);
 
@@ -370,9 +376,9 @@ public class PermanentRoleSwapTests
 	[Fact]
 	public void PermanentRoleSwap_RecoveryRejectsPowerInstanceCollidingWithNativeIdentity()
 	{
-		var (session, playerId) = CreateStableSimpleSwap();
+		var (builder, _, playerId) = CreateStableSimpleSwap();
 		var tampered = RecoveryPayloadTestDriver
-			.Parse(session.Serialize())
+			.Parse(builder.SerializeSession())
 			.RewriteLatestPermanentRoleSwapPowerInstanceId(playerId)
 			.Serialize();
 
@@ -385,9 +391,9 @@ public class PermanentRoleSwapTests
 	[Fact]
 	public void PermanentRoleSwap_RecoveryRejectsReusedEarlierSwapIdentity()
 	{
-		var (session, firstPowerInstanceId) = CreateStableTwoSwapSession();
+		var (builder, _, firstPowerInstanceId) = CreateStableTwoSwapSession();
 		var tampered = RecoveryPayloadTestDriver
-			.Parse(session.Serialize())
+			.Parse(builder.SerializeSession())
 			.RewriteLatestPermanentRoleSwapPowerInstanceId(firstPowerInstanceId)
 			.Serialize();
 
@@ -467,7 +473,8 @@ public class PermanentRoleSwapTests
 		AdvanceToStableWerewolfObservationBoundary(builder, players[2].Id);
 
 		var recoveredService = new GameService();
-		var recoveredGameId = recoveredService.RehydrateSession(session.Serialize());
+		var recoveredGameId = recoveredService.RehydrateSession(
+			builder.SerializeSession());
 		var recoveredSession = recoveredService.GetGameStateView(recoveredGameId)!;
 		var recoveredPriorOwner = recoveredSession.GetPlayer(priorCardOwner.Id);
 		recoveredPriorOwner.State.PhysicalCharacterCardId.Should().BeNull();
@@ -610,7 +617,8 @@ public class PermanentRoleSwapTests
 		lover.State.HasStatusEffect(StatusEffectTypes.Lovers).Should().BeFalse();
 		AdvanceToStableWerewolfObservationBoundary(builder, players[2].Id);
 		var recoveredService = new GameService();
-		var recoveredGameId = recoveredService.RehydrateSession(session.Serialize());
+		var recoveredGameId = recoveredService.RehydrateSession(
+			builder.SerializeSession());
 		var recovered = recoveredService.GetGameStateView(recoveredGameId)!;
 		recovered.GetPlayer(swappedPlayer.Id).State
 			.HasStatusEffect(StatusEffectTypes.Lovers).Should().BeFalse();
@@ -747,7 +755,7 @@ public class PermanentRoleSwapTests
 			.ExpectSuccessWithType<SelectPlayersInstruction>(afterNightStart);
 		builder.Process(observeWerewolves.CreateResponse([werewolf.Id]))
 			.IsSuccess.Should().BeTrue();
-		var serialized = session.Serialize();
+		var serialized = builder.SerializeSession();
 		var recoveredPolicy = new RecordingPolicy(RolePowerAvailabilityResult.Allowed);
 		var recoveredService = new GameService(recoveredPolicy);
 
@@ -868,7 +876,8 @@ public class PermanentRoleSwapTests
 		var recoveredPolicy = new RecordingPolicy(RolePowerAvailabilityResult.Allowed);
 		var recoveredService = new GameService(recoveredPolicy);
 
-		var recoveredGameId = recoveredService.RehydrateSession(session.Serialize());
+		var recoveredGameId = recoveredService.RehydrateSession(
+			builder.SerializeSession());
 
 		var recoveredSession = recoveredService.GetGameStateView(recoveredGameId)!;
 		var recoveredSleep = InstructionAssert.ExpectType<ConfirmationInstruction>(
@@ -1003,7 +1012,8 @@ public class PermanentRoleSwapTests
 				fact.AgentKnowledge!.Value,
 				boundary);
 
-	private static (IGameSession Session, Guid PlayerId) CreateStableSimpleSwap(
+	private static (GameTestBuilder Builder, IGameSession Session, Guid PlayerId)
+		CreateStableSimpleSwap(
 		Action<GameTestBuilder, IPlayer>? afterSwap = null)
 	{
 		var builder = GameTestBuilder.Create()
@@ -1064,10 +1074,11 @@ public class PermanentRoleSwapTests
 					new HashSet<string>()))).Should().BeTrue();
 		afterSwap?.Invoke(builder, player);
 		AdvanceToStableWerewolfObservationBoundary(builder, players[1].Id);
-		return (session, player.Id);
+		return (builder, session, player.Id);
 	}
 
-	private static (IGameSession Session, Guid FirstPowerInstanceId)
+	private static (GameTestBuilder Builder, IGameSession Session,
+		Guid FirstPowerInstanceId)
 		CreateStableTwoSwapSession()
 	{
 		var builder = GameTestBuilder.Create()
@@ -1121,7 +1132,7 @@ public class PermanentRoleSwapTests
 			.OfType<PermanentRoleSwapCommittedLogEntry>()
 			.First().NewPowerInstanceId;
 		AdvanceToStableWerewolfObservationBoundary(builder, players[2].Id);
-		return (session, firstPowerInstanceId);
+		return (builder, session, firstPowerInstanceId);
 
 		PermanentRoleSwapRequest CreateRequest(
 			Guid playerId,

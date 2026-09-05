@@ -159,7 +159,7 @@ public sealed class DayVoteContractTests
 
 		var recoveredService = new GameService();
 		var recoveredGameId = recoveredService.RehydrateSession(
-			builder.GetGameState()!.Serialize());
+			builder.SerializeSession());
 		var recoveredSecondVote = recoveredService
 			.GetCurrentInstruction(recoveredGameId)
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
@@ -342,7 +342,7 @@ internal sealed record PublicGameSessionSnapshot(
             session.Id,
             session.GetCurrentPhase(),
             session.TurnNumber,
-            session.Serialize(),
+			gameService.SerializeSession(gameId),
             PendingInstructionSnapshot.Capture(instruction),
             session.GetPlayers()
                 .Select(PlayerSnapshot.Capture)

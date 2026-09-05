@@ -25,7 +25,7 @@ public sealed class AcceptedObservationRecoveryShapeTests : DiagnosticTestBase
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
 		builder.Process(identification.CreateResponse([werewolf.Id]));
 		var payload = RecoveryPayloadTestDriver
-			.Parse(builder.GetGameState()!.Serialize())
+			.Parse(builder.SerializeSession())
 			.ReplacePendingInstructionWithConfirmation()
 			.Serialize();
 		var service = new GameService();
@@ -51,7 +51,7 @@ public sealed class AcceptedObservationRecoveryShapeTests : DiagnosticTestBase
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
 		builder.Process(seerIdentification.CreateResponse([players[1].Id]));
 		var payload = RecoveryPayloadTestDriver
-			.Parse(builder.GetGameState()!.Serialize())
+			.Parse(builder.SerializeSession())
 			.RewritePendingInstructionSemanticCheckpoint(
 				ModeratorInstructionSemantic.PutRoleToSleep)
 			.RewriteAcceptedObservationCursorNextSemantic(

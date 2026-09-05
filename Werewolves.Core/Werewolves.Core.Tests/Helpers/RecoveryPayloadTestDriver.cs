@@ -58,150 +58,7 @@ internal sealed class RecoveryPayloadTestDriver
 	internal static RecoveryPayloadTestDriver Capture(GameSession session)
 	{
 		ArgumentNullException.ThrowIfNull(session);
-		var driver = Parse(session.Serialize());
-		var payload = driver._payload;
-		var execution = session.Execution;
-		var actorSetupCards = session.GetModeratorActorSetupCards();
-		var actorActivation =
-			session.GetModeratorActiveActorBorrowedRolePowerActivation();
-
-		payload.Id = session.Id;
-		payload.TurnNumber = session.TurnNumber;
-		payload.SeatingOrder = session.GetPlayers()
-			.Select(player => player.Id)
-			.ToList();
-		payload.RolesInPlay = session.RoleLockIn.DealPool
-			.Select(card => card.PrintedRole)
-			.ToList();
-		payload.RoleLockIn = RoleLockInDto.FromValue(session.RoleLockIn);
-		payload.PublicGroupPartition = session.PublicGroupPartition is null
-			? null
-			: PublicGroupPartitionDto.FromValue(session.PublicGroupPartition);
-		payload.ActorSetupCards = ActorSetupCardsDto.FromValue(actorSetupCards);
-		payload.ActiveActorBorrowedRolePowerActivation = actorActivation is null
-			? null
-			: ActorBorrowedRolePowerActivationDto.FromValue(actorActivation);
-		if (actorActivation != null)
-		{
-			driver.RecordActorSetupCardSpend(actorActivation);
-		}
-
-		payload.ActorBorrowedSeerCheckCommits = session
-			.GetActorBorrowedSeerCheckCommits()
-			.Select(ActorBorrowedSeerCheckCommitDto.FromValue)
-			.ToList();
-		payload.ActorBorrowedDefenderProtectionCommits = session
-			.GetActorBorrowedDefenderProtectionCommits()
-			.Select(ActorBorrowedDefenderProtectionCommitDto.FromValue)
-			.ToList();
-		payload.ActorBorrowedFoxCheckCommits = session
-			.GetActorBorrowedFoxCheckCommits()
-			.Select(ActorBorrowedFoxCheckCommitDto.FromValue)
-			.ToList();
-		payload.ActorBorrowedBearTamerGrowlCommits = session
-			.GetActorBorrowedBearTamerGrowlCommits()
-			.Select(ActorBorrowedBearTamerGrowlCommitDto.FromValue)
-			.ToList();
-		payload.ActorBorrowedKnightRustySwordScheduleCommits = session
-			.GetActorBorrowedKnightRustySwordScheduleCommits()
-			.Select(ActorBorrowedKnightRustySwordScheduleCommitDto.FromValue)
-			.ToList();
-		payload.ActorBorrowedHunterFinalShotCommits = session
-			.GetActorBorrowedHunterFinalShotCommits()
-			.Select(ActorBorrowedHunterFinalShotCommitDto.FromValue)
-			.ToList();
-		payload.ActorBorrowedElderResistanceCommits = session
-			.GetActorBorrowedElderResistanceCommits()
-			.Select(ActorBorrowedElderResistanceCommitDto.FromValue)
-			.ToList();
-		payload.ActorBorrowedElderSuppressionCommits = session
-			.GetActorBorrowedElderSuppressionCommits()
-			.Select(ActorBorrowedElderSuppressionCommitDto.FromValue)
-			.ToList();
-		payload.ActorBorrowedScapegoatTieReplacementCommits = session
-			.GetActorBorrowedScapegoatTieReplacementCommits()
-			.Select(ActorBorrowedScapegoatTieReplacementCommitDto.FromValue)
-			.ToList();
-		payload.ActorBorrowedScapegoatVoterRestrictionCommits = session
-			.GetActorBorrowedScapegoatVoterRestrictionCommits()
-			.Select(ActorBorrowedScapegoatVoterRestrictionCommitDto.FromValue)
-			.ToList();
-		payload.ActorBorrowedVillageIdiotPardonCommits = session
-			.GetActorBorrowedVillageIdiotPardonCommits()
-			.Select(ActorBorrowedVillageIdiotPardonCommitDto.FromValue)
-			.ToList();
-		payload.ActorBorrowedWitchPotionUseCommits = session
-			.GetActorBorrowedWitchPotionUseCommits()
-			.Select(ActorBorrowedWitchPotionUseCommitDto.FromValue)
-			.ToList();
-		payload.ActorBorrowedWitchPotionDeclineCommits = session
-			.GetActorBorrowedWitchPotionDeclineCommits()
-			.Select(ActorBorrowedWitchPotionDeclineCommitDto.FromValue)
-			.ToList();
-		payload.ActorBorrowedCupidLoversCommits = session
-			.GetActorBorrowedCupidLoversCommits()
-			.Select(ActorBorrowedCupidLoversCommitDto.FromValue)
-			.ToList();
-		payload.ActorBorrowedStutteringJudgeSignalSetupCommits = session
-			.GetActorBorrowedStutteringJudgeSignalSetupCommits()
-			.Select(ActorBorrowedStutteringJudgeSignalSetupCommitDto.FromValue)
-			.ToList();
-		payload.ActorBorrowedStutteringJudgeSignalObservationCommits = session
-			.GetActorBorrowedStutteringJudgeSignalObservationCommits()
-			.Select(ActorBorrowedStutteringJudgeSignalObservationCommitDto.FromValue)
-			.ToList();
-		payload.PhysicalCharacterCards = session
-			.GetModeratorPhysicalCharacterCards()
-			.Select(state => new PhysicalCharacterCardStateDto
-			{
-				CardId = state.Card.Id,
-				Zone = state.Zone,
-				OwnerPlayerId = state.OwnerPlayerId
-			})
-			.ToList();
-		payload.Players = session.GetPlayers()
-			.Select(player => new PlayerDto
-			{
-				Id = player.Id,
-				Name = player.Name,
-				MainRole = player.State.MainRole,
-				PhysicalCharacterCardId =
-					player.State.PhysicalCharacterCardId,
-				PhysicalCharacterCardRole =
-					player.State.PhysicalCharacterCardRole,
-				ModeratorKnownRole = player.State.ModeratorKnownRole,
-				PubliclyRevealedRole = player.State.PubliclyRevealedRole,
-				ActiveEffects = player.State.GetActiveStatusEffects()
-					.Aggregate(
-						StatusEffectTypes.None,
-						(current, effect) => current | effect),
-				Health = player.State.Health,
-				HasVotingRight = player.State.HasVotingRight,
-				DurableVotingPower = player.State.DurableVotingPower,
-				FactionBeneficiary = player.State.FactionBeneficiary,
-				FactionAgentKnowledge = Enum.GetValues<Faction>()
-					.ToDictionary(
-						faction => faction,
-						faction => player.State
-							.GetFactionAgentKnowledge(faction))
-			})
-			.ToList();
-		payload.GameHistoryLog = session.GameHistoryLog.ToList();
-		payload.PendingInstruction = execution.PendingInstruction;
-		payload.PendingInstructionSemantic =
-			execution.PendingInstruction?.Semantic;
-		payload.AcceptedObservationRecoveryCursor =
-			execution.AcceptedObservationRecoveryCursor;
-		payload.DomainRecoveryCursor = execution.DomainRecoveryCursor;
-		payload.PhaseStateCache = new GamePhaseStateCacheDto
-		{
-			CurrentPhase = execution.CurrentPhase,
-			SubPhase = execution.SubPhaseId,
-			CompletedSubPhaseStages = execution.CompletedSubPhaseStages.ToList()
-		};
-		payload.IsStableRecoveryBoundary = true;
-
-		return driver;
+		return Parse(session.SerializeCurrentStateRecoveryCandidate());
 	}
 
 	internal RecoveryPayloadTestDriver RecordActorSetupCardSpend(
@@ -249,7 +106,10 @@ internal sealed class RecoveryPayloadTestDriver
 	}
 
 	internal ModeratorInstruction? PendingInstruction =>
-		_payload.PendingInstruction;
+		_payload.PendingInstruction is { } instruction &&
+		_payload.PendingInstructionSemantic is { } semantic
+			? instruction.WithSemantic(semantic)
+			: _payload.PendingInstruction;
 
 	internal AcceptedObservationRecoveryCursor?
 		AcceptedObservationRecoveryCursor =>
@@ -397,11 +257,11 @@ internal sealed class RecoveryPayloadTestDriver
 				"The Hunter recovery fixture did not reach the correlated final-shot selector.");
 		}
 
-		var pendingState = service.GetGameStateView(gameId)
+		_ = service.GetGameStateView(gameId)
 			?? throw new InvalidOperationException(
 				"The Hunter recovery fixture lost its pending Game Session.");
 		return new ActorBorrowedHunterPendingRecoverySnapshot(
-			pendingState.Serialize(),
+			service.SerializeSession(gameId),
 			gameId,
 			selector,
 			hunterCard.Id,
@@ -578,11 +438,11 @@ internal sealed class RecoveryPayloadTestDriver
 				"The Elder recovery fixture did not reach the canonical suppression announcement.");
 		}
 
-		var pendingState = service.GetGameStateView(gameId)
+		_ = service.GetGameStateView(gameId)
 			?? throw new InvalidOperationException(
 				"The Elder recovery fixture lost its pending Game Session.");
 		return new ActorBorrowedElderPendingRecoverySnapshot(
-			pendingState.Serialize(),
+			service.SerializeSession(gameId),
 			gameId,
 			announcement,
 			elderCard.Id,
@@ -729,7 +589,7 @@ internal sealed class RecoveryPayloadTestDriver
 				? RecoveryPayloadTestDriver.Capture(pendingState)
 					.WithPendingInstruction(instruction)
 					.Serialize()
-				: pendingState.Serialize();
+				: service.SerializeSession(gameId);
 
 			return new ActorBorrowedScapegoatPendingRecoverySnapshot(
 				capturedStep,
@@ -939,7 +799,7 @@ internal sealed class RecoveryPayloadTestDriver
 				"The Village Idiot recovery fixture did not reach the canonical borrowed pardon announcement.");
 		}
 
-		var pendingState = service.GetGameStateView(gameId) as GameSession
+		_ = service.GetGameStateView(gameId) as GameSession
 			?? throw new InvalidOperationException(
 				"The Village Idiot recovery fixture lost its pending Game Session.");
 		var liveInstruction = service.GetCurrentInstruction(gameId);
@@ -951,7 +811,7 @@ internal sealed class RecoveryPayloadTestDriver
 				"The Village Idiot recovery fixture did not reach the live pending pardon announcement.");
 		}
 
-		var serializedSession = pendingState.Serialize();
+		var serializedSession = service.SerializeSession(gameId);
 		var persisted = Parse(serializedSession)._payload;
 		if (persisted.DomainRecoveryCursor is not null ||
 			persisted.PendingInstructionSemantic !=
@@ -1141,7 +1001,7 @@ internal sealed class RecoveryPayloadTestDriver
 				"The Bear Tamer recovery fixture did not reach the active borrowed pending growl.");
 		}
 
-		var serializedSession = pendingState.Serialize();
+		var serializedSession = service.SerializeSession(gameId);
 		var persisted = Parse(serializedSession)._payload;
 		if (persisted.DomainRecoveryCursor is not null ||
 			persisted.PendingInstructionSemantic !=
@@ -1483,7 +1343,7 @@ internal sealed class RecoveryPayloadTestDriver
 				"The Knight recovery fixture did not retain the live due announcement.");
 		}
 
-		var serializedSession = pendingState.Serialize();
+		var serializedSession = service.SerializeSession(gameId);
 		var persisted = Parse(serializedSession)._payload;
 		if (persisted.DomainRecoveryCursor is not null ||
 			persisted.PendingInstructionSemantic !=

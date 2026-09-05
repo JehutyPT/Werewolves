@@ -394,7 +394,8 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
 			session.RequireKnownFactionBeneficiary(player.Id) == Faction.Villager);
 
 		var recoveredService = new GameService();
-		var recoveredId = recoveredService.RehydrateSession(session.Serialize());
+		var recoveredId = recoveredService.RehydrateSession(
+			service.SerializeSession(start.GameGuid));
 		var recovered = recoveredService.GetGameStateView(recoveredId)!;
 		var recoveredResidualBeneficiaries = players
 			.Skip(1)
@@ -487,7 +488,7 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
 			.NotContain(role => RoleKnowledgeExpectedValues
 				.EstablishesInitialWerewolfAgency(role));
 
-		var serialized = session.Serialize();
+		var serialized = builder.SerializeSession();
 		var payload = JsonNode.Parse(serialized)!.AsObject();
 		payload[nameof(GameSessionDto.RoleFactSchemaVersion)]!.GetValue<int>()
 			.Should().Be(RoleFactSchema.CurrentVersion);
@@ -532,7 +533,7 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
             .Should().BeOfType<SelectPlayersInstruction>().Subject;
 
         var recoveredService = new GameService();
-        var recoveredId = recoveredService.RehydrateSession(builder.GetGameState()!.Serialize());
+        var recoveredId = recoveredService.RehydrateSession(builder.SerializeSession());
         var recovered = recoveredService.GetGameStateView(recoveredId)!;
         var recoveredNext = recoveredService.GetCurrentInstruction(recoveredId)
             .Should().BeOfType<SelectPlayersInstruction>().Subject;
@@ -687,7 +688,7 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
 			.Should().BeOfType<SelectPlayersInstruction>().Subject;
 		stillPending.InstructionId.Should().Be(observation.InstructionId);
 		stillPending.SelectablePlayerIds.Should().Equal(thief.Id);
-		var pendingSnapshot = builder.GetGameState()!.Serialize();
+		var pendingSnapshot = builder.SerializeSession();
 
 		var recoveredService = new GameService();
 		var recoveredId = recoveredService.RehydrateSession(pendingSnapshot);
@@ -820,7 +821,7 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
 			ModeratorInstructionSemantic.ObserveVillagerVillagerFromDeal);
 
 		var mismatchedPayload = JsonNode.Parse(
-			builder.GetGameState()!.Serialize())!.AsObject();
+			builder.SerializeSession())!.AsObject();
 		var mismatchedPendingPayload =
 			mismatchedPayload[nameof(GameSessionDto.PendingInstruction)]!.AsObject();
 		// The live workflow cannot publish this contradictory candidate set.
@@ -929,7 +930,7 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
         var expectedNextInstruction = afterObservation.ModeratorInstruction!;
 
         var recoveredService = new GameService();
-        var recoveredId = recoveredService.RehydrateSession(builder.GetGameState()!.Serialize());
+        var recoveredId = recoveredService.RehydrateSession(builder.SerializeSession());
         var recovered = recoveredService.GetGameStateView(recoveredId)!;
         var recoveredHolder = recovered.GetPlayer(holder.Id);
 
@@ -972,7 +973,7 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
 		var holder = builder.GetGameState()!.GetPlayers().ElementAt(2);
 		builder.Process(observation.CreateResponse([holder.Id])).IsSuccess.Should()
 			.BeTrue();
-		var payload = JsonNode.Parse(builder.GetGameState()!.Serialize())!.AsObject();
+		var payload = JsonNode.Parse(builder.SerializeSession())!.AsObject();
 		var legacyObservation = payload[nameof(GameSessionDto.GameHistoryLog)]!
 			.AsArray()
 			.Select(node => node!.AsObject())
@@ -1360,7 +1361,7 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
 			.Should().NotContain(entry => entry.PlayerIds.Contains(seer.Id));
 
         var recoveredService = new GameService();
-        var recoveredId = recoveredService.RehydrateSession(builder.GetGameState()!.Serialize());
+        var recoveredId = recoveredService.RehydrateSession(builder.SerializeSession());
         var recovered = recoveredService.GetGameStateView(recoveredId)!;
         var recoveredNext = recoveredService.GetCurrentInstruction(recoveredId)!;
 
@@ -2211,7 +2212,7 @@ public sealed class RoleKnowledgeContractTests : DiagnosticTestBase
 			entry.PlayerIds.SetEquals(new[] { unknownVictim.Id }));
 
         var recoveredService = new GameService();
-        var recoveredId = recoveredService.RehydrateSession(builder.GetGameState()!.Serialize());
+        var recoveredId = recoveredService.RehydrateSession(builder.SerializeSession());
         var recovered = recoveredService.GetGameStateView(recoveredId)!;
         var recoveredNext = recoveredService.GetCurrentInstruction(recoveredId)!;
 

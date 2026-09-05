@@ -65,7 +65,7 @@ public sealed class PrejudicedManipulatorRoleTests
 					werewolfObservation.CreateResponse([roster[1].Id])));
 		committedNext.Semantic.Should().Be(
 			ModeratorInstructionSemantic.SelectWerewolfVictim);
-		var serialized = service.GetGameStateView(start.GameGuid)!.Serialize();
+		var serialized = service.SerializeSession(start.GameGuid);
 		var payload = JsonNode.Parse(serialized)!.AsObject();
 		var recoveredService = new GameService();
 

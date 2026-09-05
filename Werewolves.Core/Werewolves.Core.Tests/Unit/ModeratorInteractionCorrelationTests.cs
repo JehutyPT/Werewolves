@@ -37,7 +37,7 @@ public class ModeratorInteractionCorrelationTests
 		var sessionBefore = service.GetGameStateView(gameId)!;
 		var phaseBefore = sessionBefore.GetCurrentPhase();
 		var logBefore = sessionBefore.GameHistoryLog.ToArray();
-		var serializationBefore = sessionBefore.Serialize();
+		var serializationBefore = service.SerializeSession(gameId);
 
 		var act = () => service.ProcessInstruction(gameId, staleResponse);
 
@@ -47,7 +47,7 @@ public class ModeratorInteractionCorrelationTests
 			.Should().Be(pendingBefore!.InstructionId);
 		service.GetGameStateView(gameId)!.GetCurrentPhase().Should().Be(phaseBefore);
 		service.GetGameStateView(gameId)!.GameHistoryLog.Should().Equal(logBefore);
-		service.GetGameStateView(gameId)!.Serialize().Should().Be(serializationBefore);
+		service.SerializeSession(gameId).Should().Be(serializationBefore);
 	}
 
 	[Fact]
@@ -95,12 +95,12 @@ public class ModeratorInteractionCorrelationTests
 		var service = new GameService();
 		var instruction = service.StartNewGame(CreateConfig());
 		var gameId = instruction.GameGuid;
-		var before = service.GetGameStateView(gameId)!.Serialize();
+		var before = service.SerializeSession(gameId);
 
 		var act = () => service.ProcessInstruction(gameId, null);
 
 		act.Should().Throw<ArgumentNullException>();
-		service.GetGameStateView(gameId)!.Serialize().Should().Be(before);
+		service.SerializeSession(gameId).Should().Be(before);
 		service.GetCurrentInstruction(gameId)!.InstructionId
 			.Should().Be(instruction.InstructionId);
 	}
@@ -116,11 +116,11 @@ public class ModeratorInteractionCorrelationTests
 			finishedInstruction,
 			CreateConfig());
 		var service = new GameService();
-		var gameId = service.RehydrateSession(session.Serialize());
+		var gameId = service.RehydrateSession(session.SerializeRecoverySnapshot());
 		var staleResponse = new ConfirmationInstruction(
 			privateInstruction: nameof(ProcessInstruction_StaleFinishedGameResponse_DoesNotRemoveSession))
 			.CreateResponse();
-		var serializedBefore = service.GetGameStateView(gameId)!.Serialize();
+		var serializedBefore = service.SerializeSession(gameId);
 
 		service.ProcessInstruction(gameId, staleResponse).IsSuccess.Should().BeFalse();
 		service.GetGameStateView(gameId).Should().NotBeNull();
@@ -137,7 +137,7 @@ public class ModeratorInteractionCorrelationTests
 
 		malformedAct().IsSuccess.Should().BeFalse();
 		service.GetGameStateView(gameId).Should().NotBeNull();
-		service.GetGameStateView(gameId)!.Serialize().Should().Be(serializedBefore);
+		service.SerializeSession(gameId).Should().Be(serializedBefore);
 	}
 
 	private static GameSessionConfig CreateConfig() => new(
