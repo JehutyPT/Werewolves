@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using FluentAssertions;
+using Werewolves.Core.GameLogic;
 using Werewolves.Core.GameLogic.Interfaces;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
 using Werewolves.Core.GameLogic.Models.StateMachine;
@@ -952,7 +953,10 @@ public sealed class ActorBorrowedStutteringJudgeTests
 					? MainRoleType.SimpleWerewolf
 					: MainRoleType.SimpleVillager);
 		}
-		session.IdentifyRole([actorId], MainRoleType.Actor);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { actorId },
+			MainRoleType.Actor);
 		SeedRequiredFactionBeneficiaryFacts(session);
 		session.TransitionMainPhase(GamePhase.Day);
 		if (withPriorDayScapegoatRestriction)

@@ -34,6 +34,9 @@ internal sealed class ScapegoatRole
 	private static readonly RolePowerDefinition TieReplacementPower = new(
 		new RolePowerIdentifier("scapegoat-tie-replacement"),
 		RolePowerCategory.Automatic);
+	private static readonly ActorBorrowedRolePowerSpec BorrowedPowerSpec = new(
+		MainRoleType.Scapegoat,
+		TieReplacementPower);
 
 	private readonly RolePowerAvailabilityGateway _availabilityGateway;
 	private readonly SubPhaseStage _sacrificeCascade;
@@ -294,12 +297,22 @@ internal sealed class ScapegoatRole
 		{
 			return HookListenerActionResult.Skip();
 		}
+		if (currentState != null)
+		{
+			return ExecuteCore(session, input);
+		}
 
-		var hasBorrowedScapegoat =
-			TryGetBorrowedActorTieReplacement(session, out _);
-		return currentState == null && !hasBorrowedScapegoat
-			? base.Execute(session, input)
-			: ExecuteCore(session, input);
+		var borrowedUse = ActorBorrowedRolePowers.ResolveActive(
+			session,
+			BorrowedPowerSpec);
+		if (borrowedUse is null)
+		{
+			return base.Execute(session, input);
+		}
+
+		return IsBorrowedActorTieReplacementAvailable(borrowedUse)
+			? ExecuteCore(session, input)
+			: HookListenerActionResult.Skip();
 	}
 
 	protected override HookListenerActionResult ExecuteCore(
@@ -320,10 +333,17 @@ internal sealed class ScapegoatRole
 		RecoverableWait<ScapegoatRoleState, AssignRolesInstruction>
 			revealAssignmentWait)
 	{
-		if (TryGetBorrowedActorTieReplacement(
-				session,
-				out var borrowedExecution))
+		var borrowedExecution = ActorBorrowedRolePowers.ResolveActive(
+			session,
+			BorrowedPowerSpec);
+		if (borrowedExecution is not null)
 		{
+			if (!IsBorrowedActorTieReplacementAvailable(borrowedExecution))
+			{
+				return HookListenerActionResult.Complete(
+					ScapegoatRoleState.Complete);
+			}
+
 			var borrowedReveal = CreateTieRevealInstruction(session);
 			if (borrowedReveal != null)
 			{
@@ -334,7 +354,7 @@ internal sealed class ScapegoatRole
 
 			RecordBorrowedTieReplacement(
 				session,
-				borrowedExecution.PowerIdentity);
+				borrowedExecution);
 			return AdvanceSacrificeCascade(session, input);
 		}
 
@@ -381,10 +401,16 @@ internal sealed class ScapegoatRole
 	private ModeratorInstruction? CreateTieRevealInstruction(
 		GameSession session)
 	{
-		if (TryGetBorrowedActorTieReplacement(
-				session,
-				out var borrowedExecution))
+		var borrowedExecution = ActorBorrowedRolePowers.ResolveActive(
+			session,
+			BorrowedPowerSpec);
+		if (borrowedExecution is not null)
 		{
+			if (!IsBorrowedActorTieReplacementAvailable(borrowedExecution))
+			{
+				return null;
+			}
+
 			return RoleKnowledgeHandlers.RequestPublicRoleReveal(
 				session,
 				[borrowedExecution.Actor],
@@ -481,7 +507,7 @@ internal sealed class ScapegoatRole
 				IsNonContradictoryScapegoatCandidate(player) &&
 				(player.State.CurrentRole == MainRoleType.Scapegoat ||
 				 player.State.ModeratorKnownRole == MainRoleType.Scapegoat ||
-				 GameSessionQueries.GetPossibleRoles(session, player.Id)
+				 RoleFactionKnowledge.GetPossibleRoles(session, player.Id)
 					 .Contains(MainRoleType.Scapegoat)))
 			.Select(player => player.Id)
 			.ToHashSet();
@@ -562,7 +588,7 @@ internal sealed class ScapegoatRole
 			player.State.ModeratorKnownRole == MainRoleType.Scapegoat ||
 			player.State.PhysicalCharacterCardRole == MainRoleType.Scapegoat;
 		if (!isEstablishedHolder &&
-		    !GameSessionQueries.GetPossibleRoles(session, player.Id)
+		    !RoleFactionKnowledge.GetPossibleRoles(session, player.Id)
 			    .Contains(MainRoleType.Scapegoat))
 		{
 			throw new InvalidOperationException(
@@ -575,7 +601,10 @@ internal sealed class ScapegoatRole
 				"The observed Scapegoat holder's Role Power is unavailable.");
 		}
 
-		session.IdentifyRole([player.Id], MainRoleType.Scapegoat);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { player.Id },
+			MainRoleType.Scapegoat);
 		session.RevealRoles(new Dictionary<Guid, MainRoleType>
 		{
 			[player.Id] = MainRoleType.Scapegoat
@@ -588,17 +617,36 @@ internal sealed class ScapegoatRole
 		GameSession session,
 		ModeratorResponse input)
 	{
-		if (TryGetBorrowedActorTieReplacement(
-				session,
-				out var borrowedExecution))
+		var borrowedExecution = ActorBorrowedRolePowers.ResolveActive(
+			session,
+			BorrowedPowerSpec);
+		if (borrowedExecution is not null)
 		{
+			if (!IsBorrowedActorTieReplacementAvailable(borrowedExecution))
+			{
+				throw new RoleWorkflowInputRejectionException(
+					"The Actor's borrowed Scapegoat tie replacement is unavailable.");
+			}
+
 			RoleKnowledgeHandlers.RecordPublicRoleReveal(
 				session,
 				[borrowedExecution.Actor],
 				input);
+			var committingBorrowedExecution =
+				ActorBorrowedRolePowers.ResolveActive(
+					session,
+					BorrowedPowerSpec);
+			if (committingBorrowedExecution is null ||
+				!IsBorrowedActorTieReplacementAvailable(
+					committingBorrowedExecution))
+			{
+				throw new RoleWorkflowInputRejectionException(
+					"The Scapegoat tie reveal no longer has an active borrowed Actor context.");
+			}
+
 			RecordBorrowedTieReplacement(
 				session,
-				borrowedExecution.PowerIdentity);
+				committingBorrowedExecution);
 			return AdvanceSacrificeCascade(session, input);
 		}
 
@@ -656,56 +704,10 @@ internal sealed class ScapegoatRole
 			.AvailabilityResult.IsAvailable;
 	}
 
-	private bool TryGetBorrowedActorTieReplacement(
-		GameSession session,
-		out BorrowedScapegoatTieReplacementExecution execution)
-	{
-		execution = default;
-		var activation =
-			session.GetModeratorActiveActorBorrowedRolePowerActivation();
-		if (activation is not
-			{
-				ActingPlayerId: var actorId,
-				SourceRole: MainRoleType.Scapegoat
-			})
-		{
-			return false;
-		}
-
-		var actor = session.GetPlayer(actorId);
-		if (actor.State.Health != PlayerHealth.Alive ||
-			actor.State.CurrentRole != MainRoleType.Actor)
-		{
-			return false;
-		}
-
-		var instance = RolePowerInstance.CreateBorrowed(
-			session,
-			actor,
-			MainRoleType.Scapegoat,
-			TieReplacementPower);
-		if (!_availabilityGateway.Evaluate(
-				new RolePowerAttempt(
-					session,
-					actor,
-					MainRoleType.Scapegoat,
-					TieReplacementPower,
-					instance))
-			.AvailabilityResult.IsAvailable)
-		{
-			return false;
-		}
-
-		execution = new BorrowedScapegoatTieReplacementExecution(
-			actor,
-			new RolePowerInstanceIdentity(
-				actor.Id,
-				MainRoleType.Scapegoat,
-				TieReplacementPower.Identifier.Value,
-				instance.Id,
-				instance.Origin));
-		return true;
-	}
+	private bool IsBorrowedActorTieReplacementAvailable(
+		ActorBorrowedRolePowers.ActorBorrowedRolePowerUse borrowedUse) =>
+		_availabilityGateway.Evaluate(borrowedUse.CreateAttempt())
+			.AvailabilityResult.IsAvailable;
 
 	private static bool IsNonContradictoryScapegoatCandidate(
 		IPlayer player) =>
@@ -742,7 +744,7 @@ internal sealed class ScapegoatRole
 
 	private static void RecordBorrowedTieReplacement(
 		GameSession session,
-		RolePowerInstanceIdentity powerIdentity)
+		ActorBorrowedRolePowers.ActorBorrowedRolePowerUse borrowedUse)
 	{
 		var vote = GameSessionQueries.GetCurrentDayVoteOutcome(session)
 			?? throw new InvalidOperationException(
@@ -752,9 +754,16 @@ internal sealed class ScapegoatRole
 			throw new InvalidOperationException(
 				"The Actor's borrowed Scapegoat can replace only a tied Day Vote.");
 		}
+		if (GameSessionQueries.HasCorrelatedActorBorrowedScapegoatTieReplacement(
+				session,
+				borrowedUse))
+		{
+			throw new InvalidOperationException(
+				"The Actor's borrowed Scapegoat already replaced this tied Day Vote.");
+		}
 
 		session.CommitActorBorrowedScapegoatTieReplacement(
-			powerIdentity,
+			borrowedUse.PowerIdentity,
 			vote.LogIndex,
 			vote.VoteOrdinal,
 			CreateScopeId(session, vote.VoteOrdinal));
@@ -824,6 +833,21 @@ internal sealed class ScapegoatRole
 			return EliminationCascadePostCommitInteractionResult.Complete();
 		}
 
+		var borrowedUse = replacement.IsBorrowed
+			? ActorBorrowedRolePowers.ResolveAfterElimination(
+				session,
+				BorrowedPowerSpec,
+				new BorrowedPostEliminationRolePowerContext
+					.ScapegoatVoterRestriction(
+						replacement.PublicMarkerLogIndex,
+						replacement.ScopeId))
+			: null;
+		if (replacement.IsBorrowed && borrowedUse is null)
+		{
+			throw new InvalidOperationException(
+				"The borrowed Scapegoat voter restriction has no matching Actor Role Power use.");
+		}
+
 		var restriction = DayVoteRules.GetVoterEligibilityRestriction(
 			session,
 			replacement.ScopeId);
@@ -851,10 +875,10 @@ internal sealed class ScapegoatRole
 			}
 
 			var announcementInstructionId = Guid.NewGuid();
-			if (replacement.BorrowedPowerIdentity is { } powerIdentity)
+			if (borrowedUse is not null)
 			{
 				session.CommitActorBorrowedScapegoatVoterRestriction(
-					powerIdentity,
+					borrowedUse.PowerIdentity,
 					replacement.PublicMarkerLogIndex,
 					replacement.ScopeId,
 					selection.SelectablePlayerIds,
@@ -1063,18 +1087,12 @@ internal sealed class ScapegoatRole
 		GameSession session,
 		out Guid actorId)
 	{
-		if (session.GetModeratorActiveActorBorrowedRolePowerActivation() is
-			{
-				ActingPlayerId: var activeActorId,
-				SourceRole: MainRoleType.Scapegoat
-			} &&
-			session.GetPlayer(activeActorId).State is
-			{
-				CurrentRole: MainRoleType.Actor,
-				Health: PlayerHealth.Alive
-			})
+		var borrowedUse = ActorBorrowedRolePowers.ResolveActive(
+			session,
+			BorrowedPowerSpec);
+		if (borrowedUse is not null)
 		{
-			actorId = activeActorId;
+			actorId = borrowedUse.Actor.Id;
 			return true;
 		}
 
@@ -1098,7 +1116,6 @@ internal sealed class ScapegoatRole
 				native.VoteLogIndex,
 				native.ScopeId,
 				false,
-				null,
 				-1);
 		}
 
@@ -1122,19 +1139,13 @@ internal sealed class ScapegoatRole
 				borrowed.TriggeringVoteOutcomeLogIndex,
 				borrowed.CascadeScopeId,
 				true,
-				borrowed.PowerIdentity,
 				borrowed.PublicMarkerLogIndex);
 	}
-
-	private readonly record struct BorrowedScapegoatTieReplacementExecution(
-		IPlayer Actor,
-		RolePowerInstanceIdentity PowerIdentity);
 
 	private sealed record ScapegoatTieReplacementState(
 		Guid PlayerId,
 		int VoteLogIndex,
 		string ScopeId,
 		bool IsBorrowed,
-		RolePowerInstanceIdentity? BorrowedPowerIdentity,
 		int PublicMarkerLogIndex);
 }

@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Werewolves.Core.GameLogic;
 using Werewolves.Core.GameLogic.Interfaces;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
 using Werewolves.Core.GameLogic.Models.StateMachine;
@@ -879,7 +880,10 @@ public sealed class ActorBorrowedCupidTests
 		var session = new GameSession(sessionId, start, config);
 		var actorId = session.GetPlayers().First().Id;
 		session.AssignRole(actorId, MainRoleType.Actor);
-		session.IdentifyRole([actorId], MainRoleType.Actor);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { actorId },
+			MainRoleType.Actor);
 		return (session, start, actorId);
 	}
 
@@ -905,7 +909,10 @@ public sealed class ActorBorrowedCupidTests
 		var players = session.GetPlayers().ToArray();
 		var cupidId = players.Single(player => player.Name == "Cupid").Id;
 		session.AssignRole(cupidId, MainRoleType.Cupid);
-		session.IdentifyRole([cupidId], MainRoleType.Cupid);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { cupidId },
+			MainRoleType.Cupid);
 		return (
 			session,
 			cupidId,
@@ -955,7 +962,10 @@ public sealed class ActorBorrowedCupidTests
 		var session = new GameSession(sessionId, start, config);
 		var actorId = session.GetPlayers().First().Id;
 		session.AssignRole(actorId, MainRoleType.Actor);
-		session.IdentifyRole([actorId], MainRoleType.Actor);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { actorId },
+			MainRoleType.Actor);
 		var werewolfId = session.GetPlayers().Single(player =>
 			player.Name == "Werewolf").Id;
 		CommitCompleteWerewolfAgentPartition(session, werewolfId);

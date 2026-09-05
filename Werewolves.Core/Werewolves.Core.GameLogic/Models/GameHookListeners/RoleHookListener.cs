@@ -63,7 +63,7 @@ internal abstract class RoleHookListener : IGameHookListener
 				return player.State.CurrentRole != identifiedRole &&
 				       player.State.ModeratorKnownRole != identifiedRole &&
 				       player.State.PhysicalCharacterCardRole != identifiedRole &&
-				       !GameSessionQueries.GetPossibleRoles(session, playerId)
+				       !RoleFactionKnowledge.GetPossibleRoles(session, playerId)
 					       .Contains(identifiedRole);
 			}))
 		{
@@ -71,7 +71,10 @@ internal abstract class RoleHookListener : IGameHookListener
 				"Role Identification contradicts committed Role knowledge.");
 		}
 
-		session.IdentifyRole(selectedPlayerIds, identifiedRole);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			selectedPlayerIds,
+			identifiedRole);
 	}
 
 	protected int GetExpectedLivingRoleHolderCount(GameSession session)

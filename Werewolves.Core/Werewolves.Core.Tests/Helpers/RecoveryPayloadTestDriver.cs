@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Werewolves.Core.GameLogic;
 using Werewolves.Core.GameLogic.Interfaces;
 using Werewolves.Core.GameLogic.Models.EliminationCascades;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
@@ -326,7 +327,10 @@ internal sealed class RecoveryPayloadTestDriver
 				"The Hunter recovery fixture could not bind Actor's physical card.");
 		}
 
-		sourceSession.IdentifyRole([actorId], MainRoleType.Actor);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			sourceSession,
+			new HashSet<Guid> { actorId },
+			MainRoleType.Actor);
 		if (!sourceSession.TrySpendActorSetupCard(
 				actorId,
 				hunterCard.Id,
@@ -466,7 +470,10 @@ internal sealed class RecoveryPayloadTestDriver
 				"The Elder recovery fixture could not bind Actor's physical card.");
 		}
 
-		sourceSession.IdentifyRole([actorId], MainRoleType.Actor);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			sourceSession,
+			new HashSet<Guid> { actorId },
+			MainRoleType.Actor);
 		if (!sourceSession.TrySpendActorSetupCard(
 				actorId,
 				elderCard.Id,
@@ -652,7 +659,10 @@ internal sealed class RecoveryPayloadTestDriver
 				"The Scapegoat recovery fixture could not bind Actor's physical card.");
 		}
 
-		sourceSession.IdentifyRole([actorId], MainRoleType.Actor);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			sourceSession,
+			new HashSet<Guid> { actorId },
+			MainRoleType.Actor);
 		if (!sourceSession.TrySpendActorSetupCard(
 				actorId,
 				scapegoatCard.Id,
@@ -865,7 +875,10 @@ internal sealed class RecoveryPayloadTestDriver
 				"The Village Idiot recovery fixture could not bind Actor's physical card.");
 		}
 
-		sourceSession.IdentifyRole([actorId], MainRoleType.Actor);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			sourceSession,
+			new HashSet<Guid> { actorId },
+			MainRoleType.Actor);
 		if (!sourceSession.TrySpendActorSetupCard(
 				actorId,
 				villageIdiotCard.Id,
@@ -1028,7 +1041,10 @@ internal sealed class RecoveryPayloadTestDriver
 				"The Bear Tamer recovery fixture could not bind Actor's physical card.");
 		}
 
-		sourceSession.IdentifyRole([actorId], MainRoleType.Actor);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			sourceSession,
+			new HashSet<Guid> { actorId },
+			MainRoleType.Actor);
 		if (!sourceSession.TrySpendActorSetupCard(
 				actorId,
 				bearTamerCard.Id,
@@ -1204,7 +1220,10 @@ internal sealed class RecoveryPayloadTestDriver
 				"The Knight recovery fixture could not bind Actor's physical card.");
 		}
 
-		sourceSession.IdentifyRole([actorId], MainRoleType.Actor);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			sourceSession,
+			new HashSet<Guid> { actorId },
+			MainRoleType.Actor);
 		if (!sourceSession.TrySpendActorSetupCard(
 				actorId,
 				knightCard.Id,

@@ -26,7 +26,7 @@ internal static class RoleKnowledgeHandlers
         }
 
 			var playersWithUnknownRoles = requestedPlayers
-				.Where(player => GameSessionQueries.GetEstablishedRole(player) is null)
+				.Where(player => RoleFactionKnowledge.GetEstablishedRole(player) is null)
 				.ToArray();
         var affectedPlayerIds = requestedPlayers
             .Select(player => player.Id)
@@ -68,7 +68,7 @@ internal static class RoleKnowledgeHandlers
 	{
 		var roleOptions = players.ToDictionary(
 			player => player.Id,
-			player => GameSessionQueries.GetPossibleRoles(session, player.Id)
+			player => RoleFactionKnowledge.GetPossibleRoles(session, player.Id)
 				.ToList());
 		if (roleOptions.Any(entry => entry.Value.Count == 0))
 		{
@@ -115,7 +115,7 @@ internal static class RoleKnowledgeHandlers
 			return;
 		}
 		var playersWithUnknownRoles = requestedPlayers
-			.Where(player => GameSessionQueries.GetEstablishedRole(player) is null)
+			.Where(player => RoleFactionKnowledge.GetEstablishedRole(player) is null)
 			.ToArray();
 		AssignRolesInstruction? assignmentInstruction = null;
 		IReadOnlyDictionary<Guid, IReadOnlyList<MainRoleType>>?
@@ -151,7 +151,7 @@ internal static class RoleKnowledgeHandlers
 		{
 			if (requestedPlayerIds.Contains(player.Id) ||
 				player.State.PhysicalCharacterCardId is not null ||
-				GameSessionQueries.GetEstablishedRole(player) is not { } establishedRole)
+				RoleFactionKnowledge.GetEstablishedRole(player) is not { } establishedRole)
 			{
 				continue;
 			}
@@ -169,11 +169,11 @@ internal static class RoleKnowledgeHandlers
 			if (player.State.PhysicalCharacterCardId is not null)
 			{
 				revealedRoles[player.Id] =
-					GameSessionQueries.GetEstablishedRole(player)!.Value;
+					RoleFactionKnowledge.GetEstablishedRole(player)!.Value;
 				continue;
 			}
 
-				var assignedRole = GameSessionQueries.GetEstablishedRole(player);
+				var assignedRole = RoleFactionKnowledge.GetEstablishedRole(player);
 				if (assignedRole is null)
 				{
 					var offeredRoles = assignmentInstruction!
@@ -246,7 +246,10 @@ internal static class RoleKnowledgeHandlers
 
 		foreach (var (role, playerIds) in initialRoleIdentifications)
 		{
-			session.IdentifyRole(playerIds, role);
+			RoleFactionKnowledge.CommitRoleIdentification(
+				session,
+				playerIds,
+				role);
 		}
 
         session.RevealRoles(revealedRoles);
@@ -261,7 +264,7 @@ internal static class RoleKnowledgeHandlers
 		var knownRoleDescriptions = requestedPlayers
 			.Select(player => (
 				Player: player,
-				Role: GameSessionQueries.GetEstablishedRole(player)))
+				Role: RoleFactionKnowledge.GetEstablishedRole(player)))
 			.Where(established => established.Role.HasValue)
 			.Select(established =>
 				$"{established.Player.Name}: " +
@@ -317,9 +320,9 @@ internal static class RoleKnowledgeHandlers
 		var candidateIds = session.GetPlayers()
 			.Where(player => player.State.Health == PlayerHealth.Alive)
 			.Where(player =>
-				GameSessionQueries.GetEstablishedRole(player) is { } establishedRole
+				RoleFactionKnowledge.GetEstablishedRole(player) is { } establishedRole
 					? establishedRole == MainRoleType.VillagerVillager
-					: GameSessionQueries.GetPossibleRoles(session, player.Id)
+					: RoleFactionKnowledge.GetPossibleRoles(session, player.Id)
 						.Contains(MainRoleType.VillagerVillager))
 			.Select(player => player.Id)
 			.ToHashSet();

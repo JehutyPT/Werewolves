@@ -558,14 +558,9 @@ internal sealed class ActorRole : RoleHookListener, IDeclaredRoleWorkflow
 
 	private void RequireCommittedIdentification(GameSession session)
 	{
-		var livingHolderIds = GetLivingHolderIds(session);
-		if (livingHolderIds.Count == 0 ||
-		    !session.GameHistoryLog.OfType<RoleIdentificationLogEntry>().Any(
-			    entry =>
-				    entry.TurnNumber == session.TurnNumber &&
-				    entry.CurrentPhase == GamePhase.Night &&
-				    entry.Role == MainRoleType.Actor &&
-				    entry.PlayerIds.SetEquals(livingHolderIds)))
+		if (!RoleFactionKnowledge.HasAcceptedRoleIdentification(
+			    session,
+			    MainRoleType.Actor))
 		{
 			throw new InvalidOperationException(
 				"The Actor continuation has no committed identification.");
@@ -694,7 +689,7 @@ internal sealed class ActorRole : RoleHookListener, IDeclaredRoleWorkflow
 				(player.State.CurrentRole == null &&
 				 (player.State.ModeratorKnownRole == MainRoleType.Actor ||
 				  player.State.ModeratorKnownRole == null &&
-				  GameSessionQueries.GetPossibleRoles(session, player.Id)
+				  RoleFactionKnowledge.GetPossibleRoles(session, player.Id)
 					  .Contains(MainRoleType.Actor))))
 			.ToIdSet();
 
