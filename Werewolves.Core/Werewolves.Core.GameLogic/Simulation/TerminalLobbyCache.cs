@@ -26,17 +26,9 @@ public static partial class TerminalLobbyCache
 					value.Reason,
 					capability),
 			DegenerateTerminalEvaluation value =>
-				CaptureAggregate(
-					expectedIdentity,
-					value.ScreeningEvidence,
-					degenerate: true,
-					capability),
+				CaptureDegenerate(expectedIdentity, value, capability),
 			ProbabilityTerminalEvaluation value =>
-				CaptureAggregate(
-					expectedIdentity,
-					value.Evidence,
-					degenerate: false,
-					capability),
+				CaptureProbability(expectedIdentity, value.Evidence, capability),
 			_ => throw new ArgumentException(
 				"Only complete terminal lobby evaluations are cacheable.",
 				nameof(evaluation))
@@ -100,42 +92,35 @@ public static partial class TerminalLobbyCache
 		return record is not null;
 	}
 
-	private static TerminalLobbyCacheRecord CaptureAggregate(
+	private static DegenerateTerminalCacheRecord CaptureDegenerate(
 		SimulationCompatibilityIdentity identity,
-		SimulationResultEvidence evidence,
-		bool degenerate,
+		DegenerateTerminalEvaluation evaluation,
 		SimulatorCapability capability)
 	{
-		ArgumentNullException.ThrowIfNull(evidence);
-		var depth = degenerate
-			? LobbyEvaluationDepth.DegenerateScreeningOnly
-			: LobbyEvaluationDepth.FullProbability;
-		if (!capability.SupportsEvaluationDepth(depth))
-		{
-			throw new ArgumentException(
-				"The terminal evaluation depth is not supported by its Simulator Capability.",
-				nameof(evidence));
-		}
-		if (!evidence.CanonicalScenario.Equals(identity.Scenario)
-			|| !evidence.SimulatorProfile.Equals(identity.Profile)
-			|| !evidence.DecisionStrategy.Equals(
-				capability.HeadlessResponsePolicy.StrategyIdentity))
-		{
-			throw new ArgumentException(
-				"Terminal evidence is incomplete or compatibility-mismatched.",
-				nameof(evidence));
-		}
+		ValidateEvidenceIdentity(
+			identity,
+			evaluation.ScreeningEvidence,
+			capability,
+			LobbyEvaluationDepth.DegenerateScreeningOnly);
+		var aggregate = evaluation.SupportingAggregate;
+		return new DegenerateTerminalCacheRecord(
+			identity,
+			aggregate.GameResultFrequencies.Select(frequency =>
+				new TerminalCacheGameResultFrequency(
+					frequency.GameResult, frequency.Numerator, frequency.Denominator)),
+			aggregate.GameResultFrequencyByTurn.Select(frequency =>
+				new TerminalCacheTurnWindowFrequency(
+					frequency.GameResult, frequency.EndingTurn, frequency.VictoryCheckWindow,
+					frequency.Numerator, frequency.Denominator)),
+			capability);
+	}
 
-		if (degenerate
-			&& identity.Scenario.ThiefOfferBranchPolicy is { } branchPolicy)
-		{
-			return CaptureDegenerateThiefBranchWitness(
-				identity,
-				evidence,
-				branchPolicy,
-				capability);
-		}
-
+	private static ProbabilityTerminalCacheRecord CaptureProbability(
+		SimulationCompatibilityIdentity identity,
+		SimulationResultEvidence evidence,
+		SimulatorCapability capability)
+	{
+		ValidateEvidenceIdentity(identity, evidence, capability, LobbyEvaluationDepth.FullProbability);
 		if (evidence.IncompleteRunCount != 0)
 		{
 			throw new ArgumentException(
@@ -155,46 +140,30 @@ public static partial class TerminalLobbyCache
 				frequency.VictoryCheckWindow,
 				frequency.Numerator,
 				frequency.Denominator));
-		return degenerate
-			? new DegenerateTerminalCacheRecord(identity, rows, cells, capability)
-			: new ProbabilityTerminalCacheRecord(identity, rows, cells, capability);
+		return new ProbabilityTerminalCacheRecord(identity, rows, cells, capability);
 	}
 
-	private static DegenerateTerminalCacheRecord CaptureDegenerateThiefBranchWitness(
+	private static void ValidateEvidenceIdentity(
 		SimulationCompatibilityIdentity identity,
 		SimulationResultEvidence evidence,
-		ThiefOfferBranchPolicy branchPolicy,
-		SimulatorCapability capability)
+		SimulatorCapability capability,
+		LobbyEvaluationDepth depth)
 	{
-		if (!TerminalLobbyEvaluator.TrySelectDegenerateThiefBranch(
-			evidence.Records,
-			branchPolicy,
-			TerminalLobbyEvaluator.ScreeningAttemptCount,
-			out var completedRuns))
+		ArgumentNullException.ThrowIfNull(evidence);
+		if (!capability.SupportsEvaluationDepth(depth))
 		{
 			throw new ArgumentException(
-				"Terminal evidence does not contain a complete degenerate Thief branch.",
+				"The terminal evaluation depth is not supported by its Simulator Capability.",
 				nameof(evidence));
 		}
-
-		var rows = evidence.PossibleGameResults.Select(result =>
-			new TerminalCacheGameResultFrequency(
-				result,
-				completedRuns.Count(run => run.GameResult.Equals(result)),
-				TerminalLobbyEvaluator.ScreeningAttemptCount));
-		var cells = completedRuns
-			.GroupBy(run => new
-			{
-				run.GameResult,
-				run.EndingTurn,
-				run.VictoryCheckWindow
-			})
-			.Select(group => new TerminalCacheTurnWindowFrequency(
-				group.Key.GameResult,
-				group.Key.EndingTurn,
-				group.Key.VictoryCheckWindow,
-				group.Count(),
-				TerminalLobbyEvaluator.ScreeningAttemptCount));
-		return new DegenerateTerminalCacheRecord(identity, rows, cells, capability);
+		if (!evidence.CanonicalScenario.Equals(identity.Scenario)
+			|| !evidence.SimulatorProfile.Equals(identity.Profile)
+			|| !evidence.DecisionStrategy.Equals(
+				capability.HeadlessResponsePolicy.StrategyIdentity))
+		{
+			throw new ArgumentException(
+				"Terminal evidence is incomplete or compatibility-mismatched.",
+				nameof(evidence));
+		}
 	}
 }

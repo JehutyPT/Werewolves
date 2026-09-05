@@ -206,8 +206,16 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 			SimulatorCapability.SafetyScreening,
 			LobbyEvaluationDepth.DegenerateScreeningOnly);
 
-		result.Should().BeOfType<DegenerateTerminalEvaluation>().Subject
-			.ScreeningEvidence.AttemptedRunCount.Should().Be(1_000);
+		var degenerate = result.Should().BeOfType<DegenerateTerminalEvaluation>().Subject;
+		degenerate.ScreeningEvidence.AttemptedRunCount.Should().Be(1_000);
+		degenerate.SupportingAggregate.GameResultFrequencies
+			.Should().BeEquivalentTo(degenerate.ScreeningEvidence.GameResultFrequencies);
+		degenerate.SupportingAggregate.GameResultFrequencyByTurn
+			.Should().BeEquivalentTo(degenerate.ScreeningEvidence.GameResultFrequencyByTurn);
+		degenerate.SupportingAggregate.GameResultFrequencies
+			.Should().OnlyContain(row => row.Denominator == 1_000);
+		degenerate.SupportingAggregate.GameResultFrequencies
+			.Should().Contain(row => row.GameResult is NoWinnerGameResult && row.Numerator == 0);
 		calls.Should().Equal(1_000);
 		MarkTestCompleted();
 	}
@@ -294,6 +302,156 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 		degenerate.ScreeningEvidence.AttemptedRunCount.Should().Be(3_000);
 		degenerate.ScreeningEvidence.IncompleteRunCount.Should().Be(1);
 		degenerate.ScreeningEvidence.Records.Should().HaveCount(3_000);
+		MarkTestCompleted();
+	}
+
+	[Theory]
+	[InlineData(false, 0, 750)]
+	[InlineData(false, 1, 250)]
+	[InlineData(false, 2, 0)]
+	[InlineData(true, 0, 750)]
+	[InlineData(true, 1, 250)]
+	[InlineData(true, 2, 0)]
+	public void Evaluate_SeveralProvingThiefBranches_RetainsFirstCanonicalAggregateAndAllOriginalEvidence(
+		bool actorReachable,
+		int firstProvingBranch,
+		int expectedVillagerCount)
+	{
+		var scenario = actorReachable
+			? ActorScenario(ActorReachability.DealPoolWithThief)
+			: ThiefScenario();
+		var capability = SimulatorCapability.SafetyScreening;
+		var identity = capability.CreateCompatibilityIdentity(scenario);
+		var policy = scenario.ThiefOfferBranchPolicy!;
+		policy.Branches.Should().Equal(
+			ThiefOfferBranch.Offer1, ThiefOfferBranch.Offer2, ThiefOfferBranch.Decline);
+		var villager = new SingleFactionGameResult(Faction.Villager);
+		var werewolf = new SingleFactionGameResult(Faction.Werewolf);
+		var noWinner = new NoWinnerGameResult();
+		SimulationBatchSourceEvidence? source = null;
+		var evaluator = new TerminalLobbyEvaluator((_, _, count, _) =>
+		{
+			count.Should().Be(3_000);
+			var records = Enumerable.Range(0, count).Select(run =>
+			{
+				var branchIndex = run % 3;
+				var seed = new RunSeedMaterial(
+					identity, capability.HeadlessResponsePolicy.StrategyIdentity, run);
+				if (branchIndex < firstProvingBranch && run < 3)
+				{
+					return (SimulationRun)new IncompleteSimulationRun(seed);
+				}
+				var villagerCount = branchIndex switch { 0 => 750, 1 => 250, _ => 0 };
+				var result = run / 3 < villagerCount ? villager : werewolf;
+				return new CompletedSimulationRun(
+					seed,
+					result,
+					branchIndex >= firstProvingBranch ? 1 : 2,
+					result == villager ? VictoryCheckWindow.Dawn : VictoryCheckWindow.PreNight);
+			});
+			source = new SimulationBatchSourceEvidence(
+				identity.Scenario, identity.Profile, capability.HeadlessResponsePolicy.StrategyIdentity, records);
+			return source;
+		});
+
+		var evaluation = evaluator.Evaluate(
+			scenario, capability, LobbyEvaluationDepth.DegenerateScreeningOnly)
+			.Should().BeOfType<DegenerateTerminalEvaluation>().Subject;
+		var evidence = evaluation.ScreeningEvidence;
+		evidence.Records.Should().BeSameAs(source!.Records);
+		evidence.Records.Select(record => record.RunSeedMaterial).Should().Equal(
+			Enumerable.Range(0, 3_000).Select(run => new RunSeedMaterial(
+				identity, capability.HeadlessResponsePolicy.StrategyIdentity, run)));
+		evidence.CompletedRunCount.Should().Be(3_000 - firstProvingBranch);
+		evidence.IncompleteRunCount.Should().Be(firstProvingBranch);
+		if (firstProvingBranch > 0)
+		{
+			Action frequencies = () => _ = evidence.GameResultFrequencies;
+			Action cells = () => _ = evidence.GameResultFrequencyByTurn;
+			Action endedByTurn = () => evidence.GetEndedByTurnFrequency(1);
+			frequencies.Should().Throw<InvalidOperationException>();
+			cells.Should().Throw<InvalidOperationException>();
+			endedByTurn.Should().Throw<InvalidOperationException>();
+		}
+
+		var aggregate = evaluation.SupportingAggregate;
+		aggregate.GameResultFrequencies.Select(row => row.GameResult)
+			.Should().Equal(evidence.PossibleGameResults);
+		aggregate.GameResultFrequencies.Select(row => row.Numerator)
+			.Should().Equal(expectedVillagerCount, 1_000 - expectedVillagerCount, 0);
+		aggregate.GameResultFrequencies.Should().OnlyContain(row => row.Denominator == 1_000);
+		var expectedCells = new List<TerminalCacheTurnWindowFrequency>();
+		if (expectedVillagerCount > 0)
+		{
+			expectedCells.Add(new(villager, 1, VictoryCheckWindow.Dawn, expectedVillagerCount, 1_000));
+		}
+		expectedCells.Add(new(werewolf, 1, VictoryCheckWindow.PreNight, 1_000 - expectedVillagerCount, 1_000));
+		var expected = new DegenerateTerminalCacheRecord(
+			identity,
+			[
+				new(villager, expectedVillagerCount, 1_000),
+				new(werewolf, 1_000 - expectedVillagerCount, 1_000),
+				new(noWinner, 0, 1_000)
+			],
+			expectedCells,
+			capability);
+		var encoded = TerminalLobbyCache.Write(TerminalLobbyCache.Capture(scenario, capability, evaluation));
+		encoded.Should().Equal(TerminalLobbyCache.Write(expected));
+
+		Action replaceRow = () => ((IList<GameResultFrequency>)aggregate.GameResultFrequencies)[0] =
+			new GameResultFrequency(noWinner, 1_000, 1_000);
+		Action clearCells = () => ((IList<GameResultTurnWindowFrequency>)aggregate.GameResultFrequencyByTurn).Clear();
+		Action clearRecords = () => ((IList<SimulationRun>)evidence.Records).Clear();
+		Action clearInventory = () => ((IList<GameResult>)evidence.PossibleGameResults).Clear();
+		replaceRow.Should().Throw<NotSupportedException>();
+		clearCells.Should().Throw<NotSupportedException>();
+		clearRecords.Should().Throw<NotSupportedException>();
+		clearInventory.Should().Throw<NotSupportedException>();
+		TerminalLobbyCache.Write(TerminalLobbyCache.Capture(scenario, capability, evaluation))
+			.Should().Equal(encoded);
+		TerminalLobbyCache.Read(encoded, scenario, capability).Record.Should().BeEquivalentTo(expected);
+		MarkTestCompleted();
+	}
+
+	[Theory]
+	[InlineData(ScreeningEvidenceMismatch.Missing)]
+	[InlineData(ScreeningEvidenceMismatch.Short)]
+	[InlineData(ScreeningEvidenceMismatch.Scenario)]
+	[InlineData(ScreeningEvidenceMismatch.Profile)]
+	[InlineData(ScreeningEvidenceMismatch.Strategy)]
+	[InlineData(ScreeningEvidenceMismatch.ResultInventory)]
+	public void Evaluate_InvalidThiefScreeningEvidence_CannotEstablishDegenerateResult(
+		ScreeningEvidenceMismatch mismatch)
+	{
+		var evaluator = new TerminalLobbyEvaluator((scenario, identity, count, _) =>
+		{
+			var batchScenario = mismatch == ScreeningEvidenceMismatch.Scenario
+				? ThiefScenario(MainRoleType.Defender, MainRoleType.Seer) : scenario;
+			var batchIdentity = new SimulationCompatibilityIdentity(
+				batchScenario.ToCanonical(),
+				mismatch == ScreeningEvidenceMismatch.Profile
+					? SimulatorCapability.FullProbability.Identity : identity.Profile);
+			var strategy = mismatch == ScreeningEvidenceMismatch.Strategy
+				? BaselineRandomDecisionStrategy.Identity : BaselineRandomDecisionStrategy.SafetyScreeningIdentity;
+			var batchCount = mismatch switch
+			{
+				ScreeningEvidenceMismatch.Missing => 0,
+				ScreeningEvidenceMismatch.Short => count - 1,
+				_ => count
+			};
+			var records = Enumerable.Range(0, batchCount).Select(run => new CompletedSimulationRun(
+				new RunSeedMaterial(batchIdentity, strategy, run),
+				new SingleFactionGameResult(mismatch == ScreeningEvidenceMismatch.ResultInventory
+					? Faction.Piper : Faction.Villager),
+				1,
+				VictoryCheckWindow.Dawn));
+			return new SimulationBatchSourceEvidence(
+				batchIdentity.Scenario, batchIdentity.Profile, strategy, records);
+		});
+
+		evaluator.Evaluate(
+			ThiefScenario(), SimulatorCapability.SafetyScreening, LobbyEvaluationDepth.DegenerateScreeningOnly)
+			.Should().BeOfType<CouldNotEvaluateLobbyEvaluation>();
 		MarkTestCompleted();
 	}
 
@@ -1049,6 +1207,16 @@ public class TerminalLobbyEvaluatorTests : DiagnosticTestBase
 		});
 		return new SimulationBatchSourceEvidence(
 			scenario.ToCanonical(), identity.Profile, strategyIdentity, records);
+	}
+
+	public enum ScreeningEvidenceMismatch
+	{
+		Missing,
+		Short,
+		Scenario,
+		Profile,
+		Strategy,
+		ResultInventory
 	}
 
 	public enum ActorReachability
