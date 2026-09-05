@@ -28,9 +28,6 @@ public sealed record AlreadyDecidedTerminalEvaluation(
 	GameResult GameResult,
 	AlreadyDecidedReason Reason) : TerminalLobbyEvaluation;
 
-public sealed record DegenerateTerminalEvaluation(
-	SimulationResultEvidence ScreeningEvidence) : TerminalLobbyEvaluation;
-
 public sealed record ScreeningPassedLobbyEvaluation : LobbyEvaluationResult;
 
 public sealed record ProbabilityTerminalEvaluation(
@@ -179,25 +176,13 @@ public sealed class TerminalLobbyEvaluator
 		{
 			return new CouldNotEvaluateLobbyEvaluation();
 		}
-		var thiefBranchPolicy = identity.Scenario.ThiefOfferBranchPolicy;
-		if (thiefBranchPolicy != null &&
-			    TrySelectDegenerateThiefBranch(
-				    screening.Records,
-				    thiefBranchPolicy,
-				    ScreeningAttemptCount,
-				    out _))
+		if (DegenerateTerminalEvaluation.TryCreate(screeningEvidence) is { } degenerate)
 		{
-			return new DegenerateTerminalEvaluation(screeningEvidence);
+			return degenerate;
 		}
 		if (screening.IncompleteRunCount > 0)
 		{
 			return new CouldNotEvaluateLobbyEvaluation();
-		}
-		if (thiefBranchPolicy == null &&
-		    screening.Records.Cast<CompletedSimulationRun>()
-			    .All(run => run.EndingTurn == 1))
-		{
-			return new DegenerateTerminalEvaluation(screeningEvidence);
 		}
 		if (depth == LobbyEvaluationDepth.DegenerateScreeningOnly)
 		{
@@ -296,35 +281,5 @@ public sealed class TerminalLobbyEvaluator
 		&& evidence.SimulatorProfile.Equals(identity.Profile)
 		&& evidence.DecisionStrategy.Equals(decisionStrategyIdentity)
 		&& evidence.Records.Count == expectedCount;
-
-	internal static bool TrySelectDegenerateThiefBranch(
-		IReadOnlyList<SimulationRun> records,
-		ThiefOfferBranchPolicy policy,
-		int expectedBranchRecordCount,
-		out CompletedSimulationRun[] witness)
-	{
-		ArgumentNullException.ThrowIfNull(records);
-		ArgumentNullException.ThrowIfNull(policy);
-		foreach (var branch in policy.Branches)
-		{
-			var branchRecords = records
-				.Where(record =>
-					policy.GetBranch(record.RunSeedMaterial.RunNumber) == branch)
-				.ToArray();
-			if (branchRecords.Length == 0
-				|| branchRecords.Length != expectedBranchRecordCount
-				|| branchRecords.Any(record =>
-					record is not CompletedSimulationRun { EndingTurn: 1 }))
-			{
-				continue;
-			}
-
-			witness = branchRecords.Cast<CompletedSimulationRun>().ToArray();
-			return true;
-		}
-
-		witness = [];
-		return false;
-	}
 
 }
