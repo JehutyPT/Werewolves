@@ -1,6 +1,7 @@
 using Bunit;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using Werewolves.Client.Fixtures;
 using Werewolves.Client.Components.Game.Views;
 using Werewolves.Client.Components.Pages;
 using Werewolves.Client.Resources;
@@ -222,7 +223,7 @@ public sealed class FoxFlowBunitTests
 
 	private static IPlayer[] AdvanceToFoxWake(GameClientManager manager)
 	{
-		var start = manager.StartGame(
+		var start = manager.StartPreparedGame(
 			PlayerNames.DefaultFive,
 			[
 				MainRoleType.SimpleWerewolf,

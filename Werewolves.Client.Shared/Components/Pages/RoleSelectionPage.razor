@@ -152,6 +152,10 @@
 				}
 			</ul>
 		}
+		@if (_activeRecoveryWriteFailed)
+		{
+			<p class="ww-validation ww-validation--role" role="alert">@ClientStrings.RoleSelection_ActiveRecoveryWriteFailed</p>
+		}
 		@if (!string.IsNullOrEmpty(_blockAnnouncement))
 		{
 			<p class="ww-lobby-evaluation__status"
@@ -161,7 +165,7 @@
 		}
 		<div class="ww-action-pair">
 			<button type="button" class="ww-secondary-button" @onclick="Back">@ClientStrings.Common_Back</button>
-			@if (Lobby.RequiresRoleLockIn)
+			@if (Lobby.RequiresRoleLockIn && Lobby.GetRoleCount(MainRoleType.Thief) > 0)
 			{
 				<button type="button"
 						class="ww-btn-primary"
@@ -193,7 +197,7 @@
 	public EventCallback OnBack { get; set; }
 
 	[Parameter]
-	public EventCallback OnStartGame { get; set; }
+	public EventCallback<LobbyExitOutcome> OnLobbyExitAttempted { get; set; }
 
 	[Parameter]
 	public EventCallback OnConfigureRoleLockIn { get; set; }
@@ -209,21 +213,18 @@
 	private SimulationCompatibilityIdentity? _pendingBlockIdentity;
 	private string _blockAnnouncement = string.Empty;
 	private int _resetHoldVersion;
+	private bool _activeRecoveryWriteFailed;
 
 	protected override void OnInitialized()
 	{
 		Evaluation.StateChanged += HandleEvaluationStateChanged;
+		Lobby.SimulationScenarioChanged += HandleSimulationScenarioChanged;
 		_evaluationState = Evaluation.State;
 		RefreshValidation();
 	}
 
 	private bool IsCountMatching => Lobby.TotalSelectedRoleCount == Lobby.ExpectedRoleCount;
 	private bool IsRoleSelectionValid => !Lobby.HasRoleConfigIssues(out _);
-	private bool HasPendingConditionalSetup =>
-		Lobby.RequiresActorSetupCards ||
-		Lobby.RequiresPublicGroupPartition ||
-		(Lobby.AcceptedRoleLockIn is null && Lobby.GetSelectedRoles().Any(role =>
-			role is MainRoleType.Actor or MainRoleType.PrejudicedManipulator));
 	private RoleLockIn? CurrentThiefRoleLockIn =>
 		!Lobby.RequiresRoleLockIn &&
 		Lobby.AcceptedRoleLockIn is { Offer1: not null, Offer2: not null } accepted
@@ -308,63 +309,72 @@
 
 	private Task StartGame()
 	{
-		if (Lobby.HasRoleConfigIssues(out var issues))
-		{
-			_validationErrors = issues.Select(GameConfigValidationExtensions.GetDisplayMessage).ToList();
-			return Task.CompletedTask;
-		}
-
-		_validationErrors.Clear();
-		if (HasPendingConditionalSetup)
-		{
-			return OnStartGame.InvokeAsync();
-		}
-
-		var attemptedState = Evaluation.State;
-		if (!Evaluation.TryRequestLobbyExit())
-		{
-			_evaluationState = Evaluation.State;
-			if (attemptedState.Kind == LobbyEvaluationStateKind.Pending
-				&& attemptedState.Identity is { } attemptedIdentity
-				&& attemptedIdentity.Equals(_evaluationState.Identity))
-			{
-				_pendingBlockIdentity = attemptedIdentity;
-				_blockAnnouncement = AnnouncementAfterPendingAttempt(_evaluationState.Kind);
-			}
-			else
-			{
-				_pendingBlockIdentity = null;
-				_blockAnnouncement = BlockAnnouncement(_evaluationState.Kind);
-			}
-			return Task.CompletedTask;
-		}
-
+		_activeRecoveryWriteFailed = false;
 		_pendingBlockIdentity = null;
 		_blockAnnouncement = string.Empty;
-		return OnStartGame.InvokeAsync();
+		_validationErrors.Clear();
+
+		var outcome = Game.AttemptLobbyExit();
+		switch (outcome)
+		{
+			case LobbyExitOutcome.InvalidSetup invalid:
+				_validationErrors = invalid.Issues
+					.Select(issue => new GameConfigValidationError(issue, string.Empty).GetDisplayMessage())
+					.ToList();
+				break;
+			case LobbyExitOutcome.ActiveRecoveryWriteFailed:
+				_activeRecoveryWriteFailed = true;
+				break;
+			case LobbyExitOutcome.EvaluationBlocked blocked:
+				_evaluationState = blocked.Evaluation;
+				_blockAnnouncement = BlockAnnouncement(blocked.Evaluation.Kind);
+				if (blocked.Evaluation.Kind == LobbyEvaluationStateKind.Pending)
+				{
+					_pendingBlockIdentity = blocked.Evaluation.Identity;
+					UpdateEvaluationPresentation();
+				}
+				break;
+		}
+
+		return OnLobbyExitAttempted.InvokeAsync(outcome);
 	}
 
 	private void RetryEvaluation() => Evaluation.RetryCurrent();
+
+	private void HandleSimulationScenarioChanged(object? sender, EventArgs args)
+	{
+		_ = InvokeAsync(() =>
+		{
+			_activeRecoveryWriteFailed = false;
+			RefreshValidation();
+			StateHasChanged();
+		});
+	}
 
 	private void HandleEvaluationStateChanged(object? sender, EventArgs args)
 	{
 		_ = InvokeAsync(() =>
 		{
-			var nextState = Evaluation.State;
-			if (_pendingBlockIdentity is { } pendingIdentity
-				&& nextState.Identity is { } nextIdentity
-				&& pendingIdentity.Equals(nextIdentity))
-			{
-				_blockAnnouncement = AnnouncementAfterPendingAttempt(nextState.Kind);
-			}
-			else
-			{
-				_pendingBlockIdentity = null;
-				_blockAnnouncement = string.Empty;
-			}
-			_evaluationState = nextState;
+			UpdateEvaluationPresentation();
 			StateHasChanged();
 		});
+	}
+
+	private void UpdateEvaluationPresentation()
+	{
+		var nextState = Evaluation.State;
+		if (_pendingBlockIdentity is { } pendingIdentity
+			&& nextState.Identity is { } nextIdentity
+			&& pendingIdentity.Equals(nextIdentity))
+		{
+			_blockAnnouncement = AnnouncementAfterPendingAttempt(nextState.Kind);
+		}
+		else
+		{
+			_pendingBlockIdentity = null;
+			_blockAnnouncement = string.Empty;
+		}
+		_evaluationState = nextState;
 	}
 
 	private static string AnnouncementAfterPendingAttempt(LobbyEvaluationStateKind kind) => kind switch
@@ -386,7 +396,12 @@
 		_ => ClientStrings.LobbyEvaluation_Blocked
 	};
 
-	public void Dispose() => Evaluation.StateChanged -= HandleEvaluationStateChanged;
+	public void Dispose()
+	{
+		Evaluation.StateChanged -= HandleEvaluationStateChanged;
+		Lobby.SimulationScenarioChanged -= HandleSimulationScenarioChanged;
+		_activeRecoveryWriteFailed = false;
+	}
 
 	private static string GroupCssVar(RoleGroup group) => group switch
 	{

@@ -166,6 +166,9 @@
   <data name="RoleSelection_SelectedCountFormat" xml:space="preserve">
     <value>{0} de {1} papéis selecionados</value>
   </data>
+  <data name="RoleSelection_ActiveRecoveryWriteFailed" xml:space="preserve">
+    <value>Não foi possível guardar o jogo. Volte a selecionar Iniciar para tentar novamente.</value>
+  </data>
   <data name="RoleSelection_StartGameButton" xml:space="preserve">
     <value>Iniciar jogo</value>
   </data>

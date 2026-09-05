@@ -166,6 +166,9 @@
   <data name="RoleSelection_SelectedCountFormat" xml:space="preserve">
     <value>{0} of {1} roles selected</value>
   </data>
+  <data name="RoleSelection_ActiveRecoveryWriteFailed" xml:space="preserve">
+    <value>The game could not be saved. Select Start again to try once more.</value>
+  </data>
   <data name="RoleSelection_StartGameButton" xml:space="preserve">
     <value>Start game</value>
   </data>

@@ -97,6 +97,7 @@ public class ClientStringsTests
 		nameof(ClientStrings.Validation_EmptyPlayerName),
 		nameof(ClientStrings.RoleSelection_Title),
 		nameof(ClientStrings.RoleSelection_StartGameButton),
+		nameof(ClientStrings.RoleSelection_ActiveRecoveryWriteFailed),
 		nameof(ClientStrings.RoleSelection_ResetButton),
 		nameof(ClientStrings.LobbyEvaluation_Title),
 		nameof(ClientStrings.LobbyEvaluation_Pending),

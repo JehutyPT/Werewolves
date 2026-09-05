@@ -2,6 +2,8 @@ using FluentAssertions;
 using Werewolves.Client.Services;
 using Werewolves.Client.Tests.Helpers;
 using Werewolves.Core.GameLogic.Models;
+using Werewolves.Core.GameLogic.Services;
+using Werewolves.Core.GameLogic.Simulation;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Models;
@@ -691,7 +693,19 @@ public class LobbySetupStateTests
 			MainRoleType.SimpleVillager,
 			MainRoleType.SimpleVillager,
 			MainRoleType.Actor);
-		var manager = new GameClientManager();
+		using var evaluation = new LobbyEvaluationCoordinator(
+			state,
+			new InMemoryTerminalLobbyCacheStore(),
+			DisabledLobbyTerminalEvaluator.Instance,
+			new LobbyEvaluationSettings(
+				SimulatorCapability.SafetyScreening,
+				LobbyEvaluationDepth.DegenerateScreeningOnly),
+			timeProvider: null,
+			(_, _) => new LobbyScenarioSupport(true, true, false));
+		var manager = new GameClientManager(
+			new GameService(),
+			lobbySetupState: state,
+			lobbyEvaluation: evaluation);
 		manager.TryReplaceStagedActorSetupCards(
 			state,
 			expectedCurrentVersion: 0,
@@ -712,7 +726,7 @@ public class LobbySetupStateTests
 			.Should().BeFalse();
 		state.AcceptedActorSetupCards.Should().BeSameAs(accepted);
 
-		manager.StartGame(state);
+		manager.AttemptLobbyExit().Should().BeOfType<LobbyExitOutcome.Started>();
 
 		manager.TryReplaceStagedActorSetupCards(state, 1, next)
 			.Should().BeFalse();
@@ -837,7 +851,19 @@ public class LobbySetupStateTests
 		var scenarioChanged = false;
 		state.SimulationScenarioChanged += (_, _) => scenarioChanged = true;
 		var acceptedScenario = state.CreateSimulationScenario();
-		var manager = new GameClientManager();
+		using var evaluation = new LobbyEvaluationCoordinator(
+			state,
+			new InMemoryTerminalLobbyCacheStore(),
+			DisabledLobbyTerminalEvaluator.Instance,
+			new LobbyEvaluationSettings(
+				SimulatorCapability.SafetyScreening,
+				LobbyEvaluationDepth.DegenerateScreeningOnly),
+			timeProvider: null,
+			(_, _) => new LobbyScenarioSupport(true, true, false));
+		var manager = new GameClientManager(
+			new GameService(),
+			lobbySetupState: state,
+			lobbyEvaluation: evaluation);
 
 		manager.TryReplaceStagedPublicGroupPartition(state, equivalent)
 			.Should().BeTrue();
@@ -851,7 +877,7 @@ public class LobbySetupStateTests
 		state.CreateSimulationScenario().Should().NotBe(acceptedScenario);
 		scenarioChanged.Should().BeTrue();
 
-		manager.StartGame(state);
+		manager.AttemptLobbyExit().Should().BeOfType<LobbyExitOutcome.Started>();
 		manager.TryReplaceStagedPublicGroupPartition(state, accepted)
 			.Should().BeFalse();
 	}
