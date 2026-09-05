@@ -85,6 +85,44 @@ public sealed class ActorBorrowedDefenderFoxTests
 	}
 
 	[Fact]
+	public void BorrowedDefender_DeniedAvailabilityDoesNotFallThroughToNativeHolder()
+	{
+		var (session, start, actorId, _) = CreateActorSession();
+		var nativeDefenderId = session.GetPlayers().Single(player =>
+			player.Name == "Villager 1").Id;
+		session.AssignRole(nativeDefenderId, MainRoleType.Defender);
+		session.IdentifyRole([nativeDefenderId], MainRoleType.Defender);
+		var (_, actorSleep) = PerformSpendOpening(
+			CreateActorRole(),
+			session,
+			start,
+			DefenderCard.Id);
+		var policy = new RecordingPolicy(RolePowerAvailabilityResult.Denied);
+		IGameHookListener listener = new DefenderRole(
+			new RolePowerAvailabilityGateway(policy));
+
+		var wake = Advance(listener, session, actorSleep.CreateResponse())
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		wake.Semantic.Should().Be(ModeratorInstructionSemantic.WakeRole);
+		wake.AffectedPlayerIds.Should().Equal(actorId);
+		wake.AffectedPlayerIds.Should().NotContain(nativeDefenderId);
+		var sleep = Advance(listener, session, wake.CreateResponse())
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+
+		sleep.Semantic.Should().Be(ModeratorInstructionSemantic.PutRoleToSleep);
+		sleep.AffectedPlayerIds.Should().Equal(actorId);
+		sleep.AffectedPlayerIds.Should().NotContain(nativeDefenderId);
+		var attempt = policy.ObservedAttempts.Should().ContainSingle().Subject;
+		attempt.ActingPlayer.Id.Should().Be(actorId);
+		attempt.SourceRole.Should().Be(MainRoleType.Defender);
+		attempt.PowerInstance.Origin.Should().Be(
+			RolePowerInstanceOrigin.Borrowed);
+		session.GetActorBorrowedDefenderProtectionCommits().Should().BeEmpty();
+		session.GameHistoryLog.OfType<RecurringRolePowerCommittedLogEntry>()
+			.Should().BeEmpty();
+	}
+
+	[Fact]
 	public void BorrowedDefender_MalformedSelectionUsesGenericErrorWithoutMutation()
 	{
 		var (session, start, actorId, _) = CreateActorSession();
@@ -958,12 +996,18 @@ public sealed class ActorBorrowedDefenderFoxTests
 
 	private sealed class RecordingPolicy : IRolePowerAvailabilityPolicy
 	{
+		private readonly RolePowerAvailabilityResult _result;
+
+		internal RecordingPolicy(
+			RolePowerAvailabilityResult? result = null) =>
+			_result = result ?? RolePowerAvailabilityResult.Allowed;
+
 		internal List<RolePowerAttempt> ObservedAttempts { get; } = [];
 
 		public RolePowerAvailabilityResult Evaluate(RolePowerAttempt attempt)
 		{
 			ObservedAttempts.Add(attempt);
-			return RolePowerAvailabilityResult.Allowed;
+			return _result;
 		}
 	}
 

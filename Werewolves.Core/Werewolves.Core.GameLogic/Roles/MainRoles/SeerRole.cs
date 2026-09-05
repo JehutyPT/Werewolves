@@ -33,7 +33,10 @@ internal sealed class SeerRole
 	private sealed record ExecutionContext(
 		IPlayer ActingPlayer,
 		RolePowerInstance PowerInstance,
-		bool IsBorrowed);
+		ActorBorrowedRolePowers.ActorBorrowedRolePowerUse? BorrowedUse)
+	{
+		internal bool IsBorrowed => BorrowedUse is not null;
+	}
 
 	private readonly RolePowerAvailabilityGateway _availabilityGateway;
 	private readonly RoleWorkflowRuntime _workflowRuntime;
@@ -41,6 +44,9 @@ internal sealed class SeerRole
 	private static readonly RolePowerDefinition WerewolfDetectionPower = new(
 		new RolePowerIdentifier("seer-werewolf-detection"),
 		RolePowerCategory.Chosen);
+	private static readonly ActorBorrowedRolePowerSpec BorrowedPowerSpec = new(
+		MainRoleType.Seer,
+		WerewolfDetectionPower);
 
 	internal SeerRole(RolePowerAvailabilityGateway availabilityGateway)
 	{
@@ -286,8 +292,7 @@ internal sealed class SeerRole
 		ArgumentNullException.ThrowIfNull(cursor);
 		var execution = ResolveBorrowedExecution(session);
 		var commit = GetBorrowedCommit(session, execution);
-		var activation =
-			session.GetModeratorActiveActorBorrowedRolePowerActivation()!;
+		var borrowedUse = execution.BorrowedUse!;
 		if (cursor.Kind !=
 				DomainRecoveryCursorKind.TargetPrivateRolePowerCommit ||
 			cursor.SourceRole != MainRoleType.Seer ||
@@ -295,10 +300,11 @@ internal sealed class SeerRole
 			!StringComparer.Ordinal.Equals(
 				cursor.SourcePowerIdentifier,
 				WerewolfDetectionPower.Identifier.Value) ||
-			cursor.PowerIdentity != CreatePowerIdentity(execution) ||
+			cursor.PowerIdentity != borrowedUse.PowerIdentity ||
 			cursor.OneUseResourceId != Guid.Empty ||
-			cursor.ActorSetupCardId != activation.SelectedCardId ||
-			cursor.ActorBorrowedActivationId != activation.ActivationId ||
+			cursor.ActorSetupCardId != borrowedUse.ActorSetupCardId ||
+			cursor.ActorBorrowedActivationId !=
+				borrowedUse.PowerInstance.Id ||
 			cursor.CommittedTargetIds is not { Count: 1 } targetIds ||
 			targetIds.Single() != commit.TargetPlayerId ||
 			cursor.NextInstructionSemantic !=
@@ -340,13 +346,14 @@ internal sealed class SeerRole
 		}
 
 		var execution = ResolveExecution(session);
-		var availability = _availabilityGateway.Evaluate(
+		var attempt = execution.BorrowedUse?.CreateAttempt() ??
 			new RolePowerAttempt(
 				session,
 				execution.ActingPlayer,
 				MainRoleType.Seer,
 				WerewolfDetectionPower,
-				execution.PowerInstance));
+				execution.PowerInstance);
+		var availability = _availabilityGateway.Evaluate(attempt);
 		if (!availability.AvailabilityResult.IsAvailable)
 		{
 			return sleepWait.Execute(session, input);
@@ -399,7 +406,7 @@ internal sealed class SeerRole
 		}
 
 		session.CommitActorBorrowedSeerCheck(
-			CreatePowerIdentity(execution),
+			execution.BorrowedUse!.PowerIdentity,
 			targetId,
 			targetKnowledge);
 	}
@@ -811,54 +818,41 @@ internal sealed class SeerRole
 				seer,
 				MainRoleType.Seer,
 				WerewolfDetectionPower),
-			IsBorrowed: false);
+			BorrowedUse: null);
 	}
 
 	private static bool TryResolveBorrowedExecution(
 		GameSession session,
 		out ExecutionContext execution)
 	{
-		var activation =
-			session.GetModeratorActiveActorBorrowedRolePowerActivation();
-		if (activation?.SourceRole != MainRoleType.Seer)
+		var borrowedUse = ActorBorrowedRolePowers.ResolveActive(
+			session,
+			BorrowedPowerSpec);
+		if (borrowedUse is null)
 		{
 			execution = null!;
 			return false;
 		}
 
-		execution = ResolveBorrowedExecution(session);
+		execution = new ExecutionContext(
+			borrowedUse.Actor,
+			borrowedUse.PowerInstance,
+			borrowedUse);
 		return true;
 	}
 
 	private static ExecutionContext ResolveBorrowedExecution(
 		GameSession session)
 	{
-		var activation =
-			session.GetModeratorActiveActorBorrowedRolePowerActivation();
-		if (activation?.SourceRole != MainRoleType.Seer)
-		{
-			throw new InvalidOperationException(
+		var borrowedUse = ActorBorrowedRolePowers.ResolveActive(
+			session,
+			BorrowedPowerSpec) ?? throw new InvalidOperationException(
 				"No active Actor borrowed Seer Role Power is available.");
-		}
-
-		var actor = session.GetPlayer(activation.ActingPlayerId);
 		return new ExecutionContext(
-			actor,
-			RolePowerInstance.CreateBorrowed(
-				session,
-				actor,
-				MainRoleType.Seer,
-				WerewolfDetectionPower),
-			IsBorrowed: true);
+			borrowedUse.Actor,
+			borrowedUse.PowerInstance,
+			borrowedUse);
 	}
-
-	private static RolePowerInstanceIdentity CreatePowerIdentity(
-		ExecutionContext execution) => new(
-		execution.ActingPlayer.Id,
-		MainRoleType.Seer,
-		WerewolfDetectionPower.Identifier.Value,
-		execution.PowerInstance.Id,
-		execution.PowerInstance.Origin);
 
 	private static HashSet<Guid> GetBorrowedPotentialTargets(
 		GameSession session,
@@ -873,12 +867,11 @@ internal sealed class SeerRole
 			GameSession session,
 			ExecutionContext execution)
 	{
-		var identity = CreatePowerIdentity(execution);
+		var borrowedUse = execution.BorrowedUse ??
+			throw new InvalidOperationException(
+				"No active Actor borrowed Seer Role Power is available.");
 		return session.GetActorBorrowedSeerCheckCommits()
-			.Where(commit =>
-				commit.PowerIdentity == identity &&
-				commit.TurnNumber == session.TurnNumber &&
-				commit.CurrentPhase == GamePhase.Night);
+			.Where(borrowedUse.Correlates);
 	}
 
 	private static ActorBorrowedSeerCheckCommit GetBorrowedCommit(
@@ -901,15 +894,14 @@ internal sealed class SeerRole
 		ActorBorrowedSeerCheckCommit commit,
 		TargetPrivateRolePowerRecoveryBoundary boundary)
 	{
-		var activation =
-			session.GetModeratorActiveActorBorrowedRolePowerActivation()!;
+		var borrowedUse = execution.BorrowedUse!;
 		if (boundary.CurrentPhase != GamePhase.Night ||
 			boundary.TurnNumber != session.TurnNumber ||
 			boundary.ActionType != NightActionType.SeerCheck ||
-			boundary.PowerIdentity != CreatePowerIdentity(execution) ||
+			boundary.PowerIdentity != borrowedUse.PowerIdentity ||
 			boundary.PowerIdentity != commit.PowerIdentity ||
 			boundary.SpentResourceIdentity is not null ||
-			commit.ActorSetupCardId != activation.SelectedCardId)
+			!borrowedUse.Correlates(commit))
 		{
 			throw new InvalidOperationException(
 				"The Actor borrowed Seer target-private commit has an invalid Role Power identity.");

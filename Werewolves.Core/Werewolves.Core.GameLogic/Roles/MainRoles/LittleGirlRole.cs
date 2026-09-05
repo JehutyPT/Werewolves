@@ -13,6 +13,9 @@ internal sealed class LittleGirlRole : DeclaredRoleIdentificationOnlyHookListene
 	internal static readonly RolePowerDefinition SpyingPower = new(
 		new RolePowerIdentifier("little-girl-spying"),
 		RolePowerCategory.Passive);
+	private static readonly ActorBorrowedRolePowerSpec BorrowedPowerSpec = new(
+		MainRoleType.LittleGirl,
+		SpyingPower);
 
 	internal static bool TryCreateSpyingAttempt(
 		GameSession session,
@@ -24,10 +27,10 @@ internal sealed class LittleGirlRole : DeclaredRoleIdentificationOnlyHookListene
 				player.State.Health == PlayerHealth.Alive &&
 				player.State.CurrentRole == MainRoleType.LittleGirl)
 			.ToArray();
-		var activation =
-			session.GetModeratorActiveActorBorrowedRolePowerActivation();
-		var hasBorrowedPower =
-			activation?.SourceRole == MainRoleType.LittleGirl;
+		var borrowedUse = ActorBorrowedRolePowers.ResolveActive(
+			session,
+			BorrowedPowerSpec);
+		var hasBorrowedPower = borrowedUse is not null;
 		var executionCount =
 			livingHolders.Length + (hasBorrowedPower ? 1 : 0);
 		if (executionCount == 0)
@@ -42,16 +45,14 @@ internal sealed class LittleGirlRole : DeclaredRoleIdentificationOnlyHookListene
 				"Little Girl spying requires exactly one active execution.");
 		}
 
-		var actingPlayer = hasBorrowedPower
-			? session.GetPlayer(activation!.ActingPlayerId)
-			: livingHolders.Single();
-		var instance = hasBorrowedPower
-			? RolePowerInstance.CreateBorrowed(
-				session,
-				actingPlayer,
-				MainRoleType.LittleGirl,
-				SpyingPower)
-			: RolePowerInstance.CreateCurrent(
+		if (borrowedUse is not null)
+		{
+			attempt = borrowedUse.CreateAttempt();
+			return true;
+		}
+
+		var actingPlayer = livingHolders.Single();
+		var instance = RolePowerInstance.CreateCurrent(
 				session,
 				actingPlayer,
 				MainRoleType.LittleGirl,

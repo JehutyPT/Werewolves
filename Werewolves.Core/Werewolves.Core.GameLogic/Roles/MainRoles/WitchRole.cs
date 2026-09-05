@@ -31,7 +31,10 @@ internal sealed class WitchRole
 	private sealed record ExecutionContext(
 		IPlayer ActingPlayer,
 		RolePowerInstance PowerInstance,
-		bool IsBorrowed);
+		ActorBorrowedRolePowers.ActorBorrowedRolePowerUse? BorrowedUse)
+	{
+		internal bool IsBorrowed => BorrowedUse is not null;
+	}
 
 	private readonly RolePowerAvailabilityGateway _availabilityGateway;
 	private readonly RoleWorkflowRuntime _workflowRuntime;
@@ -39,6 +42,9 @@ internal sealed class WitchRole
 	private static readonly RolePowerDefinition PotionsPower = new(
 		new RolePowerIdentifier("witch-potions"),
 		RolePowerCategory.Chosen);
+	private static readonly ActorBorrowedRolePowerSpec BorrowedPowerSpec = new(
+		MainRoleType.Witch,
+		PotionsPower);
 
 	internal static readonly Guid HealingResourceId =
 		Guid.Parse("a9b9d885-3edc-4671-bec8-1ddabbe4de3e");
@@ -320,7 +326,7 @@ internal sealed class WitchRole
 				execution = new ExecutionContext(
 					witch,
 					CreatePowerInstance(session, witch),
-					IsBorrowed: false);
+					BorrowedUse: null);
 			}
 
 			if (execution is not null &&
@@ -437,6 +443,7 @@ internal sealed class WitchRole
 				"The Witch recovery cursor has an invalid One-Use Role Power identity.");
 		}
 
+		var borrowedUse = execution.BorrowedUse;
 		var matchesCommittedDecision = cursor.Kind switch
 		{
 			DomainRecoveryCursorKind.OneUseRolePowerCommit =>
@@ -450,14 +457,20 @@ internal sealed class WitchRole
 					entry.TargetIds is [var targetId] &&
 					targetId == committedTargetId),
 			DomainRecoveryCursorKind.ActorBorrowedWitchPotionUseCommit =>
-				execution.IsBorrowed &&
+				borrowedUse is not null &&
+				cursor.ActorSetupCardId == borrowedUse.ActorSetupCardId &&
+				cursor.ActorBorrowedActivationId ==
+				borrowedUse.PowerIdentity.PowerInstanceId &&
 				cursor.CommittedTargetIds is [var borrowedTargetId] &&
 				GetBorrowedPotionUseCommitsThisNight(session, execution).Any(
 					commit =>
 						commit.SpentResourceIdentity == resourceIdentity &&
 						commit.TargetPlayerId == borrowedTargetId),
 			DomainRecoveryCursorKind.ActorBorrowedWitchPotionDeclineCommit =>
-				execution.IsBorrowed &&
+				borrowedUse is not null &&
+				cursor.ActorSetupCardId == borrowedUse.ActorSetupCardId &&
+				cursor.ActorBorrowedActivationId ==
+				borrowedUse.PowerIdentity.PowerInstanceId &&
 				cursor.CommittedTargetIds.Count == 0 &&
 				GetBorrowedPotionDeclineCommitsThisNight(session, execution)
 					.Any(commit =>
@@ -505,8 +518,7 @@ internal sealed class WitchRole
 		if (attackTargets.Count > 0 &&
 		    TryEvaluateAvailableResource(
 			    session,
-			    execution.ActingPlayer,
-			    execution.PowerInstance,
+			    execution,
 			    HealingResourceId))
 		{
 			return healingWait.Execute(session, input);
@@ -568,6 +580,10 @@ internal sealed class WitchRole
 		else if (execution.IsBorrowed)
 		{
 			CommitPotionDecline(session, execution, HealingResourceId);
+		}
+		if (hasCommittedDecision)
+		{
+			execution = ResolveExecution(session);
 		}
 
 		if (IsPoisonSelectionOffered(session, execution, healedTargetId))
@@ -995,8 +1011,7 @@ internal sealed class WitchRole
 		GetPoisonCandidates(session, execution, healedTargetId).Count > 0 &&
 		TryEvaluateAvailableResource(
 			session,
-			execution.ActingPlayer,
-			execution.PowerInstance,
+			execution,
 			PoisonResourceId);
 
 	private static HashSet<Guid> GetPoisonCandidates(
@@ -1079,12 +1094,12 @@ internal sealed class WitchRole
 			GameSession session,
 			ExecutionContext execution)
 	{
-		var powerIdentity = CreatePowerIdentity(execution);
-		return session.GetActorBorrowedWitchPotionUseCommits()
-			.Where(commit =>
-				commit.PowerIdentity == powerIdentity &&
-				commit.TurnNumber == session.TurnNumber &&
-				commit.CurrentPhase == GamePhase.Night);
+		var borrowedUse = execution.BorrowedUse
+			?? throw new InvalidOperationException(
+				GameStrings.ActorBorrowedRolePowerInvalidResponse);
+		return GameSessionQueries.GetCorrelatedActorBorrowedWitchPotionUseCommits(
+			session,
+			borrowedUse);
 	}
 
 	private static IEnumerable<ActorBorrowedWitchPotionDeclineCommit>
@@ -1092,38 +1107,41 @@ internal sealed class WitchRole
 			GameSession session,
 			ExecutionContext execution)
 	{
-		var powerIdentity = CreatePowerIdentity(execution);
-		return session.GetActorBorrowedWitchPotionDeclineCommits()
-			.Where(commit =>
-				commit.PowerIdentity == powerIdentity &&
-				commit.TurnNumber == session.TurnNumber &&
-				commit.CurrentPhase == GamePhase.Night);
+		var borrowedUse = execution.BorrowedUse
+			?? throw new InvalidOperationException(
+				GameStrings.ActorBorrowedRolePowerInvalidResponse);
+		return GameSessionQueries
+			.GetCorrelatedActorBorrowedWitchPotionDeclineCommits(
+				session,
+				borrowedUse);
 	}
 
 	private bool TryEvaluateAvailableResource(
 		GameSession session,
-		IPlayer witch,
-		RolePowerInstance instance,
+		ExecutionContext execution,
 		Guid resourceId)
 	{
 		var resourceIdentity = CreateResourceIdentity(
-			witch,
-			instance,
+			execution.ActingPlayer,
+			execution.PowerInstance,
 			resourceId);
 		if (IsSpent(session, resourceIdentity))
 		{
 			return false;
 		}
 
-		var resource = new OneUseRolePowerResource(resourceId, instance);
+		var attempt = execution.BorrowedUse?.CreateAttempt(resourceId) ??
+			new RolePowerAttempt(
+				session,
+				execution.ActingPlayer,
+				MainRoleType.Witch,
+				PotionsPower,
+				execution.PowerInstance,
+				new OneUseRolePowerResource(
+					resourceId,
+					execution.PowerInstance));
 		return _availabilityGateway.Evaluate(
-				new RolePowerAttempt(
-					session,
-					witch,
-					MainRoleType.Witch,
-					PotionsPower,
-					instance,
-					resource))
+				attempt)
 			.AvailabilityResult.IsAvailable;
 	}
 
@@ -1157,7 +1175,7 @@ internal sealed class WitchRole
 		execution = new ExecutionContext(
 			witch,
 			CreatePowerInstance(session, witch),
-			IsBorrowed: false);
+			BorrowedUse: null);
 		return true;
 	}
 
@@ -1167,30 +1185,26 @@ internal sealed class WitchRole
 		return new ExecutionContext(
 			witch,
 			CreatePowerInstance(session, witch),
-			IsBorrowed: false);
+			BorrowedUse: null);
 	}
 
 	private static bool TryResolveBorrowedExecution(
 		GameSession session,
 		out ExecutionContext execution)
 	{
-		var activation =
-			session.GetModeratorActiveActorBorrowedRolePowerActivation();
-		if (activation?.SourceRole != MainRoleType.Witch)
+		var borrowedUse = ActorBorrowedRolePowers.ResolveActive(
+			session,
+			BorrowedPowerSpec);
+		if (borrowedUse is null)
 		{
 			execution = null!;
 			return false;
 		}
 
-		var actor = session.GetPlayer(activation.ActingPlayerId);
 		execution = new ExecutionContext(
-			actor,
-			RolePowerInstance.CreateBorrowed(
-				session,
-				actor,
-				MainRoleType.Witch,
-				PotionsPower),
-			IsBorrowed: true);
+			borrowedUse.Actor,
+			borrowedUse.PowerInstance,
+			borrowedUse);
 		return true;
 	}
 
@@ -1202,14 +1216,6 @@ internal sealed class WitchRole
 			witch,
 			MainRoleType.Witch,
 			PotionsPower);
-
-	private static RolePowerInstanceIdentity CreatePowerIdentity(
-		ExecutionContext execution) => new(
-			execution.ActingPlayer.Id,
-			MainRoleType.Witch,
-			PotionsPower.Identifier.Value,
-			execution.PowerInstance.Id,
-			execution.PowerInstance.Origin);
 
 	private static void ValidateBorrowedWake(
 		ExecutionContext execution,
@@ -1340,17 +1346,12 @@ internal sealed class WitchRole
 		ExecutionContext execution,
 		params Guid[] resourceIds)
 	{
-		var powerIdentity = CreatePowerIdentity(execution);
-		return session.GetActorBorrowedWitchPotionUseCommits().Any(commit =>
-				commit.PowerIdentity == powerIdentity &&
-				commit.TurnNumber == session.TurnNumber &&
-				commit.CurrentPhase == GamePhase.Night &&
+		return GetBorrowedPotionUseCommitsThisNight(session, execution).Any(
+			commit =>
 				resourceIds.Contains(
 					commit.SpentResourceIdentity.OneUseResourceId)) ||
-		       session.GetActorBorrowedWitchPotionDeclineCommits().Any(commit =>
-				       commit.PowerIdentity == powerIdentity &&
-				       commit.TurnNumber == session.TurnNumber &&
-				       commit.CurrentPhase == GamePhase.Night &&
+		       GetBorrowedPotionDeclineCommitsThisNight(session, execution).Any(
+			       commit =>
 				       resourceIds.Contains(
 					       commit.OfferedResourceIdentity.OneUseResourceId));
 	}
@@ -1360,11 +1361,6 @@ internal sealed class WitchRole
 			GameSession session,
 			ExecutionContext execution)
 	{
-		var activation =
-			session.GetModeratorActiveActorBorrowedRolePowerActivation()
-			?? throw new RoleWorkflowInputRejectionException(
-				GameStrings.ActorBorrowedRolePowerInvalidResponse);
-		var powerIdentity = CreatePowerIdentity(execution);
 		var healingIdentity = CreateResourceIdentity(
 			execution.ActingPlayer,
 			execution.PowerInstance,
@@ -1373,18 +1369,13 @@ internal sealed class WitchRole
 			execution.ActingPlayer,
 			execution.PowerInstance,
 			PoisonResourceId);
-		var commits = session.GetActorBorrowedWitchPotionUseCommits()
-			.Where(commit =>
-				commit.PowerIdentity == powerIdentity &&
-				commit.TurnNumber == session.TurnNumber &&
-				commit.CurrentPhase == GamePhase.Night)
+		var commits = GetBorrowedPotionUseCommitsThisNight(session, execution)
 			.ToArray();
 		Guid? healedTargetId = null;
 		Guid? poisonedTargetId = null;
 		foreach (var commit in commits)
 		{
-			if (commit.ActorSetupCardId != activation.SelectedCardId ||
-			    commit.TargetPlayerId == Guid.Empty)
+			if (commit.TargetPlayerId == Guid.Empty)
 			{
 				throw new RoleWorkflowInputRejectionException(
 					GameStrings.ActorBorrowedRolePowerInvalidResponse);
@@ -1462,11 +1453,9 @@ internal sealed class WitchRole
 			execution.ActingPlayer,
 			execution.PowerInstance,
 			resourceId);
-		var powerIdentity = CreatePowerIdentity(execution);
-		var isSpent = execution.IsBorrowed
-			? session.GetActorBorrowedWitchPotionUseCommits().Any(commit =>
-				commit.PowerIdentity == powerIdentity &&
-				commit.SpentResourceIdentity == resourceIdentity)
+		var isSpent = execution.BorrowedUse is not null
+			? GetBorrowedPotionUseCommitsThisNight(session, execution).Any(
+				commit => commit.SpentResourceIdentity == resourceIdentity)
 			: IsSpent(session, resourceIdentity);
 		if (isSpent)
 		{
@@ -1476,10 +1465,10 @@ internal sealed class WitchRole
 					: "The selected Witch potion resource is already spent.");
 		}
 
-		if (execution.IsBorrowed)
+		if (execution.BorrowedUse is { } borrowedUse)
 		{
 			session.CommitActorBorrowedWitchPotionUse(
-				powerIdentity,
+				borrowedUse.PowerIdentity,
 				resourceIdentity,
 				targetId);
 		}
@@ -1497,12 +1486,15 @@ internal sealed class WitchRole
 		ExecutionContext execution,
 		Guid resourceId)
 	{
+		var borrowedUse = execution.BorrowedUse
+			?? throw new InvalidOperationException(
+				GameStrings.ActorBorrowedRolePowerInvalidResponse);
 		var resourceIdentity = CreateResourceIdentity(
 			execution.ActingPlayer,
 			execution.PowerInstance,
 			resourceId);
 		session.CommitActorBorrowedWitchPotionDecline(
-			CreatePowerIdentity(execution),
+			borrowedUse.PowerIdentity,
 			resourceIdentity);
 	}
 

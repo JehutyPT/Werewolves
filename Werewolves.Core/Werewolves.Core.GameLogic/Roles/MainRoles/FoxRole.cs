@@ -31,7 +31,10 @@ internal sealed class FoxRole
 	private sealed record ExecutionContext(
 		IPlayer ActingPlayer,
 		RolePowerInstance PowerInstance,
-		bool IsBorrowed);
+		ActorBorrowedRolePowers.ActorBorrowedRolePowerUse? BorrowedUse)
+	{
+		internal bool IsBorrowed => BorrowedUse is not null;
+	}
 
 	private readonly RolePowerAvailabilityGateway _availabilityGateway;
 	private readonly RoleWorkflowRuntime _workflowRuntime;
@@ -40,6 +43,9 @@ internal sealed class FoxRole
 	private static readonly RolePowerDefinition NeighborhoodCheckPower = new(
 		new RolePowerIdentifier("fox-neighborhood-check"),
 		RolePowerCategory.Chosen);
+	private static readonly ActorBorrowedRolePowerSpec BorrowedPowerSpec = new(
+		MainRoleType.Fox,
+		NeighborhoodCheckPower);
 
 	private static readonly Guid NeighborhoodCheckResourceId =
 		Guid.Parse("dadbf4d0-fcb8-4e1b-857d-326634230227");
@@ -556,16 +562,15 @@ internal sealed class FoxRole
 		var isAffirmative = checkedPlayerIds.Any(playerId =>
 			session.GetFactionAgentKnowledge(playerId, Faction.Werewolf) ==
 			FactionAgentKnowledge.KnownAgent);
-		var powerIdentity = CreatePowerIdentity(execution);
 		var spentResourceIdentity = isAffirmative
 			? (OneUseRolePowerResourceIdentity?)null
 			: CreateResourceIdentity(
 				execution.ActingPlayer,
 				execution.PowerInstance);
-		if (execution.IsBorrowed)
+		if (execution.BorrowedUse is { } borrowedUse)
 		{
 			session.CommitActorBorrowedFoxCheck(
-				powerIdentity,
+				borrowedUse.PowerIdentity,
 				center.Id,
 				isAffirmative
 					? FactionAgentKnowledge.KnownAgent
@@ -576,7 +581,9 @@ internal sealed class FoxRole
 		{
 			session.CommitTargetPrivateRolePowerNightAction(
 				NightActionType.FoxCheck,
-				powerIdentity,
+				CreatePowerIdentity(
+					execution.ActingPlayer,
+					execution.PowerInstance),
 				spentResourceIdentity);
 		}
 	}
@@ -633,7 +640,8 @@ internal sealed class FoxRole
 			return false;
 		}
 
-		var executionContext = _availabilityGateway.Evaluate(
+		var attempt = execution.BorrowedUse?.CreateAttempt(
+			NeighborhoodCheckResourceId) ??
 			new RolePowerAttempt(
 				session,
 				execution.ActingPlayer,
@@ -642,7 +650,8 @@ internal sealed class FoxRole
 				execution.PowerInstance,
 				new OneUseRolePowerResource(
 					NeighborhoodCheckResourceId,
-					execution.PowerInstance)));
+					execution.PowerInstance));
+		var executionContext = _availabilityGateway.Evaluate(attempt);
 		_powerIsAvailable =
 			executionContext.AvailabilityResult.IsAvailable;
 		return _powerIsAvailable.Value;
@@ -836,12 +845,15 @@ internal sealed class FoxRole
 			return false;
 		}
 
-		return GetFoxCheckCommitsThisNight(session).Any(commit =>
-			       commit.ActingPlayerId == affectedPlayerId) ||
-		       session.GetActorBorrowedFoxCheckCommits().Any(commit =>
-			       commit.TurnNumber == session.TurnNumber &&
-			       commit.CurrentPhase == GamePhase.Night &&
-			       commit.PowerIdentity.ActingPlayerId == affectedPlayerId);
+		if (GetFoxCheckCommitsThisNight(session).Any(commit =>
+				commit.ActingPlayerId == affectedPlayerId))
+		{
+			return true;
+		}
+
+		return TryResolveBorrowedExecution(session, out var execution) &&
+		       execution.ActingPlayer.Id == affectedPlayerId &&
+		       GetBorrowedFoxCheckCommitsThisNight(session, execution).Any();
 	}
 
 	private void ValidateSleepInstruction(
@@ -853,7 +865,7 @@ internal sealed class FoxRole
 		{
 			var commits = GetBorrowedFoxCheckCommitsThisNight(
 					session,
-					CreatePowerIdentity(execution))
+					execution)
 				.ToArray();
 			if (commits.Length > 1)
 			{
@@ -918,30 +930,26 @@ internal sealed class FoxRole
 		return new ExecutionContext(
 			fox,
 			CreatePowerInstance(session, fox),
-			IsBorrowed: false);
+			BorrowedUse: null);
 	}
 
 	private static bool TryResolveBorrowedExecution(
 		GameSession session,
 		out ExecutionContext execution)
 	{
-		var activation =
-			session.GetModeratorActiveActorBorrowedRolePowerActivation();
-		if (activation?.SourceRole != MainRoleType.Fox)
+		var borrowedUse = ActorBorrowedRolePowers.ResolveActive(
+			session,
+			BorrowedPowerSpec);
+		if (borrowedUse is null)
 		{
 			execution = null!;
 			return false;
 		}
 
-		var actor = session.GetPlayer(activation.ActingPlayerId);
 		execution = new ExecutionContext(
-			actor,
-			RolePowerInstance.CreateBorrowed(
-				session,
-				actor,
-				MainRoleType.Fox,
-				NeighborhoodCheckPower),
-			IsBorrowed: true);
+			borrowedUse.Actor,
+			borrowedUse.PowerInstance,
+			borrowedUse);
 		return true;
 	}
 
@@ -964,12 +972,6 @@ internal sealed class FoxRole
 			powerInstance.Id,
 			powerInstance.Origin);
 
-	private static RolePowerInstanceIdentity CreatePowerIdentity(
-		ExecutionContext execution) =>
-		CreatePowerIdentity(
-			execution.ActingPlayer,
-			execution.PowerInstance);
-
 	private static OneUseRolePowerResourceIdentity CreateResourceIdentity(
 		IPlayer fox,
 		RolePowerInstance powerInstance) =>
@@ -984,12 +986,14 @@ internal sealed class FoxRole
 	private static IEnumerable<ActorBorrowedFoxCheckCommit>
 		GetBorrowedFoxCheckCommitsThisNight(
 			GameSession session,
-			RolePowerInstanceIdentity powerIdentity) =>
-		session.GetActorBorrowedFoxCheckCommits()
-			.Where(commit =>
-				commit.PowerIdentity == powerIdentity &&
-				commit.TurnNumber == session.TurnNumber &&
-				commit.CurrentPhase == GamePhase.Night);
+			ExecutionContext execution)
+	{
+		var borrowedUse = execution.BorrowedUse ??
+			throw new InvalidOperationException(
+				"No active Actor borrowed Fox Role Power is available.");
+		return session.GetActorBorrowedFoxCheckCommits()
+			.Where(borrowedUse.Correlates);
+	}
 
 	private static ActorBorrowedFoxCheckCommit GetBorrowedFoxCheckCommit(
 		GameSession session,
@@ -997,7 +1001,7 @@ internal sealed class FoxRole
 	{
 		var commits = GetBorrowedFoxCheckCommitsThisNight(
 				session,
-				CreatePowerIdentity(execution))
+				execution)
 			.ToArray();
 		if (commits is not [var commit])
 		{
@@ -1015,10 +1019,11 @@ internal sealed class FoxRole
 		TargetPrivateRolePowerRecoveryBoundary boundary)
 	{
 		ValidateBorrowedCommit(session, execution, commit);
+		var borrowedUse = execution.BorrowedUse!;
 		if (boundary.CurrentPhase != GamePhase.Night ||
 			boundary.TurnNumber != session.TurnNumber ||
 			boundary.ActionType != NightActionType.FoxCheck ||
-			boundary.PowerIdentity != CreatePowerIdentity(execution) ||
+			boundary.PowerIdentity != borrowedUse.PowerIdentity ||
 			boundary.PowerIdentity != commit.PowerIdentity ||
 			boundary.SpentResourceIdentity != commit.SpentResourceIdentity)
 		{
@@ -1035,8 +1040,7 @@ internal sealed class FoxRole
 		ArgumentNullException.ThrowIfNull(cursor);
 		var commit = GetBorrowedFoxCheckCommit(session, execution);
 		ValidateBorrowedCommit(session, execution, commit);
-		var activation =
-			session.GetModeratorActiveActorBorrowedRolePowerActivation()!;
+		var borrowedUse = execution.BorrowedUse!;
 		var expectedResourceId =
 			commit.SpentResourceIdentity?.OneUseResourceId ?? Guid.Empty;
 		if (cursor.Kind != DomainRecoveryCursorKind.TargetPrivateRolePowerCommit ||
@@ -1045,10 +1049,10 @@ internal sealed class FoxRole
 			!StringComparer.Ordinal.Equals(
 				cursor.SourcePowerIdentifier,
 				NeighborhoodCheckPower.Identifier.Value) ||
-			cursor.PowerIdentity != CreatePowerIdentity(execution) ||
+			cursor.PowerIdentity != borrowedUse.PowerIdentity ||
 			cursor.OneUseResourceId != expectedResourceId ||
-			cursor.ActorSetupCardId != activation.SelectedCardId ||
-			cursor.ActorBorrowedActivationId != activation.ActivationId ||
+			cursor.ActorSetupCardId != borrowedUse.ActorSetupCardId ||
+			cursor.ActorBorrowedActivationId != borrowedUse.PowerInstance.Id ||
 			cursor.CommittedTargetIds is not { Count: 1 } centerIds ||
 			centerIds.Single() != commit.CenterPlayerId ||
 			cursor.NextInstructionSemantic !=
@@ -1064,9 +1068,9 @@ internal sealed class FoxRole
 		ExecutionContext execution,
 		ActorBorrowedFoxCheckCommit commit)
 	{
-		var activation =
-			session.GetModeratorActiveActorBorrowedRolePowerActivation();
-		var expectedPowerIdentity = CreatePowerIdentity(execution);
+		var borrowedUse = execution.BorrowedUse ??
+			throw new InvalidOperationException(
+				"No active Actor borrowed Fox Role Power is available.");
 		var expectedSpentResource = commit.NeighborhoodAgentKnowledge ==
 			FactionAgentKnowledge.KnownNonAgent
 				? CreateResourceIdentity(
@@ -1077,18 +1081,12 @@ internal sealed class FoxRole
 			? session.GameHistoryLog.ElementAtOrDefault(
 				commit.PublicMarkerLogIndex)
 			: null;
-		if (!execution.IsBorrowed ||
-			activation?.SourceRole != MainRoleType.Fox ||
-			activation.ActingPlayerId != execution.ActingPlayer.Id ||
-			commit.PowerIdentity != expectedPowerIdentity ||
-			commit.ActorSetupCardId != activation.SelectedCardId ||
+		if (!borrowedUse.Correlates(commit) ||
 			commit.CenterPlayerId == Guid.Empty ||
 			commit.NeighborhoodAgentKnowledge is not
 				(FactionAgentKnowledge.KnownAgent or
 				 FactionAgentKnowledge.KnownNonAgent) ||
 			commit.SpentResourceIdentity != expectedSpentResource ||
-			commit.TurnNumber != session.TurnNumber ||
-			commit.CurrentPhase != GamePhase.Night ||
 			publicMarker is not ActorBorrowedRolePowerCommittedLogEntry marker ||
 			marker.Timestamp != commit.Timestamp ||
 			marker.TurnNumber != commit.TurnNumber ||
