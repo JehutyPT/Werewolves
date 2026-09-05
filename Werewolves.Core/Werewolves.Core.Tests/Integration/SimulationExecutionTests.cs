@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Werewolves.Core.GameLogic;
 using Werewolves.Core.GameLogic.Interfaces;
 using Werewolves.Core.GameLogic.Queries;
 using Werewolves.Core.GameLogic.Services;
@@ -2485,11 +2486,11 @@ public class SimulationExecutionTests : DiagnosticTestBase
 	{
 		foreach (var player in session.GetPlayers().Where(player =>
 			player.State.CurrentRole is { } role &&
-			!role.EstablishesInitialWerewolfAgency() &&
+			!RoleKnowledgeExpectedValues.EstablishesInitialWerewolfAgency(role) &&
 				session.GetFactionAgentKnowledge(player.Id, Faction.Werewolf) ==
 					FactionAgentKnowledge.KnownAgent))
 		{
-			var provenance = GameSessionQueries.GetEarliestWerewolfAgencyFact(
+			var provenance = RoleFactionKnowledge.GetEarliestWerewolfAgencyFact(
 				session,
 				player.Id);
 			provenance.Should().NotBeNull();

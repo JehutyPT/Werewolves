@@ -241,7 +241,7 @@ internal sealed class ThiefRole : RoleHookListener, IDeclaredRoleWorkflow
 		if (holder.State.CurrentRole != MainRoleType.Thief &&
 		    holder.State.ModeratorKnownRole != MainRoleType.Thief &&
 		    holder.State.PhysicalCharacterCardRole != MainRoleType.Thief &&
-		    !GameSessionQueries.GetPossibleRoles(session, holderId)
+		    !RoleFactionKnowledge.GetPossibleRoles(session, holderId)
 			    .Contains(MainRoleType.Thief))
 		{
 			throw new InvalidOperationException(
@@ -389,14 +389,9 @@ internal sealed class ThiefRole : RoleHookListener, IDeclaredRoleWorkflow
 		ValidateThiefCursor(
 			cursor,
 			ModeratorInstructionSemantic.IdentifyRoleHolders);
-		var livingHolderIds = GetLivingHolderIds(session);
-		if (livingHolderIds.Count == 0 ||
-		    !session.GameHistoryLog.OfType<RoleIdentificationLogEntry>().Any(
-			    entry =>
-				    entry.TurnNumber == session.TurnNumber &&
-				    entry.CurrentPhase == GamePhase.Night &&
-				    entry.Role == MainRoleType.Thief &&
-				    entry.PlayerIds.SetEquals(livingHolderIds)))
+		if (!RoleFactionKnowledge.HasAcceptedRoleIdentification(
+			    session,
+			    MainRoleType.Thief))
 		{
 			throw new InvalidOperationException(
 				"The Thief offer wait has no committed identification.");
@@ -453,7 +448,7 @@ internal sealed class ThiefRole : RoleHookListener, IDeclaredRoleWorkflow
 				(player.State.CurrentRole == null &&
 				 (player.State.ModeratorKnownRole == MainRoleType.Thief ||
 				  player.State.ModeratorKnownRole == null &&
-				  GameSessionQueries.GetPossibleRoles(session, player.Id)
+				  RoleFactionKnowledge.GetPossibleRoles(session, player.Id)
 					  .Contains(MainRoleType.Thief))))
 			.ToIdSet();
 

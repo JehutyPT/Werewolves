@@ -27,6 +27,9 @@ internal sealed class BearTamerRole
 	private static readonly RolePowerDefinition GrowlPower = new(
 		new RolePowerIdentifier("bear-tamer-growl"),
 		RolePowerCategory.Automatic);
+	private static readonly ActorBorrowedRolePowerSpec BorrowedPowerSpec = new(
+		MainRoleType.BearTamer,
+		GrowlPower);
 
 	private readonly RolePowerAvailabilityGateway _availabilityGateway;
 	private readonly RoleWorkflowRuntime _dawnWorkflowRuntime;
@@ -148,13 +151,14 @@ internal sealed class BearTamerRole
 		}
 
 		var execution = ResolveExecution(session);
-		var availability = _availabilityGateway.Evaluate(
+		var attempt = execution.BorrowedUse?.CreateAttempt() ??
 			new RolePowerAttempt(
 				session,
 				execution.ActingPlayer,
 				MainRoleType.BearTamer,
 				GrowlPower,
-				execution.PowerInstance));
+				execution.PowerInstance);
+		var availability = _availabilityGateway.Evaluate(attempt);
 		if (!availability.AvailabilityResult.IsAvailable ||
 		    !HasLivingWerewolfAgentNeighbor(session, execution))
 		{
@@ -270,43 +274,47 @@ internal sealed class BearTamerRole
 			card.PrintedRole == MainRoleType.BearTamer);
 
 	private static ExecutionContext ResolveExecution(GameSession session)
-	{
-		var activation =
-			session.GetModeratorActiveActorBorrowedRolePowerActivation();
-		return activation?.SourceRole == MainRoleType.BearTamer &&
-		       !IsBorrowedExecutionInactive(session, activation)
-			? ResolveBorrowedExecution(session, activation)
+		=> TryResolveBorrowedExecution(session, out var borrowedExecution)
+			? borrowedExecution
 			: ResolveNativeExecution(session);
-	}
 
 	private static bool TryResolveBorrowedExecution(
 		GameSession session,
 		out ExecutionContext execution)
 	{
-		var activation =
-			session.GetModeratorActiveActorBorrowedRolePowerActivation();
-		if (activation?.SourceRole != MainRoleType.BearTamer ||
-		    IsBorrowedExecutionInactive(session, activation))
+		if (!session.GetPlayers().Any(player =>
+			    player.State.Health == PlayerHealth.Alive &&
+			    player.State.CurrentRole == MainRoleType.Actor))
 		{
 			execution = null!;
 			return false;
 		}
 
-		execution = ResolveBorrowedExecution(session, activation);
-		return true;
-	}
+		var borrowedUse = ActorBorrowedRolePowers.ResolveActive(
+			session,
+			BorrowedPowerSpec);
+		if (borrowedUse is null)
+		{
+			execution = null!;
+			return false;
+		}
 
-	private static bool IsBorrowedExecutionInactive(
-		GameSession session,
-		ActorBorrowedRolePowerActivation activation)
-	{
-		var actor = session.GetPlayer(activation.ActingPlayerId);
-		return actor.State.Health != PlayerHealth.Alive ||
-		       actor.State.CurrentRole != MainRoleType.Actor ||
-		       session.GetActorBorrowedBearTamerGrowlCommits().Any(commit =>
-			       commit.PowerIdentity.ActingPlayerId == activation.ActingPlayerId &&
-			       commit.PowerIdentity.PowerInstanceId == activation.ActivationId &&
-			       commit.ActorSetupCardId == activation.SelectedCardId);
+		if (GameSessionQueries.HasCorrelatedActorBorrowedBearTamerGrowl(
+				session,
+				borrowedUse) ||
+			GameSessionQueries.HasActorBorrowedBearTamerGrowlForActivation(
+				session,
+				borrowedUse))
+		{
+			execution = null!;
+			return false;
+		}
+
+		execution = new ExecutionContext(
+			borrowedUse.Actor,
+			borrowedUse.PowerInstance,
+			borrowedUse);
+		return true;
 	}
 
 	private static ExecutionContext ResolveNativeExecution(GameSession session)
@@ -325,41 +333,7 @@ internal sealed class BearTamerRole
 				holder,
 				MainRoleType.BearTamer,
 				GrowlPower),
-			IsBorrowed: false);
-	}
-
-	private static ExecutionContext ResolveBorrowedExecution(
-		GameSession session,
-		ActorBorrowedRolePowerActivation activation)
-	{
-		var actor = session.GetPlayer(activation.ActingPlayerId);
-		var selectedCard = session.GetModeratorActorSetupCards().Cards
-			.SingleOrDefault(card => card.Id == activation.SelectedCardId);
-		var hasCorrelatedCommit = session
-			.GetActorBorrowedBearTamerGrowlCommits()
-			.Any(commit =>
-				commit.PowerIdentity.ActingPlayerId == activation.ActingPlayerId &&
-				commit.PowerIdentity.PowerInstanceId == activation.ActivationId &&
-				commit.ActorSetupCardId == activation.SelectedCardId);
-		if (activation.ActingRole != MainRoleType.Actor ||
-		    activation.SourceRole != MainRoleType.BearTamer ||
-		    selectedCard?.PrintedRole != MainRoleType.BearTamer ||
-		    actor.State.Health != PlayerHealth.Alive ||
-		    actor.State.CurrentRole != MainRoleType.Actor ||
-		    hasCorrelatedCommit)
-		{
-			throw new InvalidOperationException(
-				"The Actor borrowed Bear Tamer execution is invalid.");
-		}
-
-		return new ExecutionContext(
-			actor,
-			RolePowerInstance.CreateBorrowed(
-				session,
-				actor,
-				MainRoleType.BearTamer,
-				GrowlPower),
-			IsBorrowed: true);
+			BorrowedUse: null);
 	}
 
 	private static HookListenerActionResult CommitGrowl(
@@ -367,10 +341,18 @@ internal sealed class BearTamerRole
 		ModeratorResponse input)
 	{
 		var execution = ResolveExecution(session);
-		if (execution.IsBorrowed)
+		if (execution.BorrowedUse is { } borrowedUse)
 		{
+			if (GameSessionQueries.HasCorrelatedActorBorrowedBearTamerGrowl(
+					session,
+					borrowedUse))
+			{
+				throw new InvalidOperationException(
+					"The Actor borrowed Bear Tamer growl is already committed for this Dawn.");
+			}
+
 			session.CommitActorBorrowedBearTamerGrowl(
-				CreatePowerIdentity(execution));
+				borrowedUse.PowerIdentity);
 		}
 		session.CommitGameFact(context =>
 			new BearTamerGrowlOccurredLogEntry
@@ -383,16 +365,11 @@ internal sealed class BearTamerRole
 			BearTamerDawnState.Complete);
 	}
 
-	private static RolePowerInstanceIdentity CreatePowerIdentity(
-		ExecutionContext execution) => new(
-		execution.ActingPlayer.Id,
-		MainRoleType.BearTamer,
-		GrowlPower.Identifier.Value,
-		execution.PowerInstance.Id,
-		execution.PowerInstance.Origin);
-
 	private sealed record ExecutionContext(
 		IPlayer ActingPlayer,
 		RolePowerInstance PowerInstance,
-		bool IsBorrowed);
+		ActorBorrowedRolePowers.ActorBorrowedRolePowerUse? BorrowedUse)
+	{
+		internal bool IsBorrowed => BorrowedUse is not null;
+	}
 }

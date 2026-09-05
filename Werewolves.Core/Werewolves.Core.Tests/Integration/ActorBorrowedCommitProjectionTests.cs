@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Werewolves.Core.GameLogic;
 using Werewolves.Core.GameLogic.Roles.MainRoles;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Core;
@@ -471,8 +472,14 @@ public sealed class ActorBorrowedCommitProjectionTests
 			source.RoleLockIn.Version,
 			actorId,
 			actorCard.Card.Id).Should().BeTrue();
-		source.IdentifyRole([actorId], MainRoleType.Actor);
-		source.IdentifyRole([wolfFatherId], MainRoleType.AccursedWolfFather);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			source,
+			new HashSet<Guid> { actorId },
+			MainRoleType.Actor);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			source,
+			new HashSet<Guid> { wolfFatherId },
+			MainRoleType.AccursedWolfFather);
 		source.PerformNightAction(NightActionType.DefenderProtect, actorId);
 		var serializedSource = RecoveryPayloadTestDriver.Capture(source)
 			.WithPendingInstruction(start)

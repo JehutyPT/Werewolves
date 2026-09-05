@@ -205,9 +205,7 @@ internal sealed class DevotedServantRole
 		DevotedServantPublicSelfRevealCommittedLogEntry committed)
 	{
 		var target = session.GetPlayer(committed.VoteTargetId);
-		var knownPrintedRole = target.State.PhysicalCharacterCardRole ??
-			target.State.ModeratorKnownRole ??
-			target.State.CurrentRole;
+		var knownPrintedRole = RoleFactionKnowledge.GetEstablishedRole(target);
 		IReadOnlyList<MainRoleType> roles =
 			knownPrintedRole is { } knownRole
 			? new[] { knownRole }

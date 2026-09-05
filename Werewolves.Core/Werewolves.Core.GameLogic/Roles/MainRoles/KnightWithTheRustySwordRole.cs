@@ -25,6 +25,9 @@ internal sealed class KnightWithTheRustySwordRole
 	private static readonly RolePowerDefinition DiseasePower = new(
 		new RolePowerIdentifier("knight-rusty-sword-disease"),
 		RolePowerCategory.Automatic);
+	private static readonly ActorBorrowedRolePowerSpec BorrowedDiseaseSpec = new(
+		MainRoleType.KnightWithRustySword,
+		DiseasePower);
 
 	private readonly RolePowerAvailabilityGateway _availabilityGateway;
 
@@ -186,23 +189,12 @@ internal sealed class KnightWithTheRustySwordRole
 			return false;
 		}
 
-		var selectedCard = session.GetModeratorActorSetupCards().Cards
-			.SingleOrDefault(card => card.Id == schedule.ActorSetupCardId);
 		return schedule.TargetPlayerId == rustySwordVictim.Player.Id &&
 			schedule.TurnNumber == session.TurnNumber - 1 &&
 			schedule.CurrentPhase == GamePhase.Dawn &&
 			StringComparer.Ordinal.Equals(
 				schedule.CascadeScopeId,
-				$"Dawn:{schedule.TurnNumber}") &&
-			schedule.PowerIdentity.SourceRole ==
-				MainRoleType.KnightWithRustySword &&
-			StringComparer.Ordinal.Equals(
-				schedule.PowerIdentity.SourcePowerIdentifier,
-				ActorBorrowedKnightRustySwordScheduleCommit
-					.ExpectedSourcePowerIdentifier) &&
-			schedule.PowerIdentity.PowerInstanceOrigin ==
-				RolePowerInstanceOrigin.Borrowed &&
-			selectedCard?.PrintedRole == MainRoleType.KnightWithRustySword;
+				$"Dawn:{schedule.TurnNumber}");
 	}
 
 	private static ConfirmationInstruction CreateRustySwordDawnAnnouncement(
@@ -419,6 +411,7 @@ internal sealed class KnightWithTheRustySwordRole
 			session,
 			directWerewolfAttackVictims,
 			cascadeScopeId,
+			out var borrowedUse,
 			out var borrowedEliminationLogIndex);
 		if (execution is null ||
 			!execution.AvailabilityResult.IsAvailable)
@@ -434,10 +427,10 @@ internal sealed class KnightWithTheRustySwordRole
 			return Complete();
 		}
 
-		if (execution.PowerInstance.Origin == RolePowerInstanceOrigin.Borrowed)
+		if (borrowedUse is not null)
 		{
 			session.CommitActorBorrowedKnightRustySwordSchedule(
-				CreatePowerIdentity(execution),
+				borrowedUse.PowerIdentity,
 				target.Id,
 				borrowedEliminationLogIndex ??
 					throw new InvalidOperationException(
@@ -457,8 +450,10 @@ internal sealed class KnightWithTheRustySwordRole
 		GameSession session,
 		IReadOnlySet<Guid> directWerewolfAttackVictimIds,
 		string cascadeScopeId,
+		out ActorBorrowedRolePowers.ActorBorrowedRolePowerUse? borrowedUse,
 		out int? borrowedEliminationLogIndex)
 	{
+		borrowedUse = null;
 		borrowedEliminationLogIndex = null;
 		var nativeKnight = session.GetPlayers()
 			.SingleOrDefault(player =>
@@ -477,26 +472,6 @@ internal sealed class KnightWithTheRustySwordRole
 					DiseasePower));
 		}
 
-		var activation =
-			session.GetModeratorActiveActorBorrowedRolePowerActivation();
-		if (activation is not
-			{
-				SourceRole: MainRoleType.KnightWithRustySword
-			})
-		{
-			return null;
-		}
-
-		var actor = session.GetPlayers().SingleOrDefault(player =>
-			player.Id == activation.ActingPlayerId &&
-			player.State.CurrentRole == MainRoleType.Actor &&
-			player.State.Health == PlayerHealth.Dead &&
-			directWerewolfAttackVictimIds.Contains(player.Id));
-		if (actor == null)
-		{
-			return null;
-		}
-
 		var history = session.GameHistoryLog.ToArray();
 		var eliminationLogIndex = Array.FindLastIndex(
 			history,
@@ -507,23 +482,28 @@ internal sealed class KnightWithTheRustySwordRole
 				Reason: EliminationReason.WerewolfAttack
 			} eliminated &&
 			eliminated.TurnNumber == session.TurnNumber &&
-			eliminatedPlayerId == actor.Id);
+			directWerewolfAttackVictimIds.Contains(eliminatedPlayerId) &&
+			session.GetPlayer(eliminatedPlayerId).State.CurrentRole ==
+				MainRoleType.Actor);
 		if (eliminationLogIndex < 0)
 		{
 			return null;
 		}
-		borrowedEliminationLogIndex = eliminationLogIndex;
 
-		var powerInstance = RolePowerInstance.CreateBorrowedAfterElimination(
+		borrowedUse = ActorBorrowedRolePowers.ResolveAfterElimination(
 			session,
-			actor,
-			MainRoleType.KnightWithRustySword,
-			DiseasePower,
+			BorrowedDiseaseSpec,
 			new BorrowedPostEliminationRolePowerContext
 				.KnightRustySwordSchedule(
 					eliminationLogIndex,
 					cascadeScopeId));
-		return Evaluate(actor, powerInstance);
+		if (borrowedUse is null)
+		{
+			return null;
+		}
+
+		borrowedEliminationLogIndex = eliminationLogIndex;
+		return _availabilityGateway.Evaluate(borrowedUse.CreateAttempt());
 
 		RolePowerExecutionContext Evaluate(
 			IPlayer actingPlayer,
@@ -536,14 +516,6 @@ internal sealed class KnightWithTheRustySwordRole
 					DiseasePower,
 					instance));
 	}
-
-	private static RolePowerInstanceIdentity CreatePowerIdentity(
-		RolePowerExecutionContext execution) => new(
-			execution.ActingPlayer.Id,
-			execution.SourceRole,
-			execution.SourcePower.Identifier.Value,
-			execution.PowerInstance.Id,
-			execution.PowerInstance.Origin);
 
 	private static IPlayer? FindFirstEligibleClockwiseAgent(
 		GameSession session,

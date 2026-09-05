@@ -20,11 +20,17 @@ internal sealed class HunterRole :
 	private sealed record ExecutionContext(
 		IPlayer ActingPlayer,
 		RolePowerInstance PowerInstance,
-		bool IsBorrowed);
+		ActorBorrowedRolePowers.ActorBorrowedRolePowerUse? BorrowedUse)
+	{
+		internal bool IsBorrowed => BorrowedUse is not null;
+	}
 
 	private static readonly RolePowerDefinition FinalShotPower = new(
 		new RolePowerIdentifier(EliminationCascadeReactionIds.HunterFinalShot),
 		RolePowerCategory.Reactive);
+	private static readonly ActorBorrowedRolePowerSpec BorrowedFinalShotSpec = new(
+		MainRoleType.Hunter,
+		FinalShotPower);
 
 	private readonly RolePowerAvailabilityGateway _availabilityGateway;
 
@@ -140,18 +146,13 @@ internal sealed class HunterRole :
 					"Hunter final shot must target one other living Player.");
 			}
 
-			if (execution.IsBorrowed)
-			{
-				session.CommitActorBorrowedHunterFinalShot(
-					new RolePowerInstanceIdentity(
-						actingPlayer.Id,
-						execution.PowerInstance.SourceRole,
-						execution.PowerInstance.SourcePower.Identifier.Value,
-						execution.PowerInstance.Id,
-						execution.PowerInstance.Origin),
-					cascadeScopeId,
-					triggeringPlayerIds,
-					targetId);
+				if (execution.IsBorrowed)
+				{
+					session.CommitActorBorrowedHunterFinalShot(
+						execution.BorrowedUse!.PowerIdentity,
+						cascadeScopeId,
+						triggeringPlayerIds,
+						targetId);
 			}
 
 			var finalShotEliminations = new EliminationRequest[]
@@ -169,13 +170,14 @@ internal sealed class HunterRole :
 					finalShotEliminations);
 		}
 
-		var availability = _availabilityGateway.Evaluate(
+		var attempt = execution.BorrowedUse?.CreateAttempt() ??
 			new RolePowerAttempt(
 				session,
 				actingPlayer,
 				MainRoleType.Hunter,
 				FinalShotPower,
-				execution.PowerInstance));
+				execution.PowerInstance);
+		var availability = _availabilityGateway.Evaluate(attempt);
 		if (!availability.AvailabilityResult.IsAvailable ||
 			legalTargetIds.Count == 0)
 		{
@@ -203,19 +205,13 @@ internal sealed class HunterRole :
 			return;
 		}
 
-		var activation =
-			session.GetModeratorActiveActorBorrowedRolePowerActivation();
-		if (activation is not
-			{
-				ActingRole: MainRoleType.Actor,
-				SourceRole: MainRoleType.Hunter
-			})
+		if (pendingInstruction.AffectedPlayerIds is not [var actingPlayerId])
 		{
 			throw new InvalidOperationException(
 				"The pending Actor borrowed Role Power instruction does not match its recovery context.");
 		}
 
-		var actingPlayer = session.GetPlayer(activation.ActingPlayerId);
+		var actingPlayer = session.GetPlayer(actingPlayerId);
 		var legalTargetIds = session.GetPlayers()
 			.Where(player =>
 				player.Id != actingPlayer.Id &&
@@ -302,42 +298,39 @@ internal sealed class HunterRole :
 
 		if (eliminatedPlayer.State.CurrentRole == MainRoleType.Hunter)
 		{
-			execution = new ExecutionContext(
-				eliminatedPlayer,
-				RolePowerInstance.CreateCurrent(
-					session,
+				execution = new ExecutionContext(
 					eliminatedPlayer,
-					MainRoleType.Hunter,
-					FinalShotPower),
-				IsBorrowed: false);
-			return true;
+					RolePowerInstance.CreateCurrent(
+						session,
+						eliminatedPlayer,
+						MainRoleType.Hunter,
+						FinalShotPower),
+					BorrowedUse: null);
+				return true;
+			}
+
+		if (eliminatedPlayer.State.CurrentRole != MainRoleType.Actor)
+		{
+			execution = null!;
+			return false;
 		}
 
-		var activation =
-			session.GetModeratorActiveActorBorrowedRolePowerActivation();
-		if (eliminatedPlayer.State.CurrentRole != MainRoleType.Actor ||
-			activation is not
-			{
-				ActingPlayerId: var actingPlayerId,
-				SourceRole: MainRoleType.Hunter
-			} ||
-			actingPlayerId != eliminatedPlayer.Id)
+		var borrowedUse = ActorBorrowedRolePowers.ResolveAfterElimination(
+			session,
+			BorrowedFinalShotSpec,
+			new BorrowedPostEliminationRolePowerContext.HunterFinalShot(
+				cascadeScopeId,
+				triggeringPlayerIds));
+		if (borrowedUse is null || borrowedUse.Actor.Id != eliminatedPlayer.Id)
 		{
 			execution = null!;
 			return false;
 		}
 
 		execution = new ExecutionContext(
-			eliminatedPlayer,
-			RolePowerInstance.CreateBorrowedAfterElimination(
-				session,
-				eliminatedPlayer,
-				MainRoleType.Hunter,
-				FinalShotPower,
-				new BorrowedPostEliminationRolePowerContext.HunterFinalShot(
-					cascadeScopeId,
-					triggeringPlayerIds)),
-			IsBorrowed: true);
+			borrowedUse.Actor,
+			borrowedUse.PowerInstance,
+			borrowedUse);
 		return true;
 	}
 }
