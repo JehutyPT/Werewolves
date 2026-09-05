@@ -290,14 +290,9 @@ internal sealed class WolfHoundRole : RoleHookListener, IDeclaredRoleWorkflow
 		ValidateWolfHoundCursor(
 			cursor,
 			ModeratorInstructionSemantic.IdentifyRoleHolders);
-		var livingHolderIds = GetLivingHolderIds(session);
-		if (livingHolderIds.Count == 0 ||
-		    !session.GameHistoryLog.OfType<RoleIdentificationLogEntry>().Any(
-			    entry =>
-				    entry.TurnNumber == session.TurnNumber &&
-				    entry.CurrentPhase == GamePhase.Night &&
-				    entry.Role == MainRoleType.WolfHound &&
-				    entry.PlayerIds.SetEquals(livingHolderIds)))
+		if (!RoleFactionKnowledge.HasAcceptedRoleIdentification(
+			    session,
+			    MainRoleType.WolfHound))
 		{
 			throw new InvalidOperationException(
 				"The Wolf Hound alignment wait has no committed identification.");
@@ -398,7 +393,7 @@ internal sealed class WolfHoundRole : RoleHookListener, IDeclaredRoleWorkflow
 				(player.State.CurrentRole == null &&
 				 (player.State.ModeratorKnownRole == MainRoleType.WolfHound ||
 				  player.State.ModeratorKnownRole == null &&
-				  GameSessionQueries.GetPossibleRoles(session, player.Id)
+				  RoleFactionKnowledge.GetPossibleRoles(session, player.Id)
 					  .Contains(MainRoleType.WolfHound))))
 			.ToIdSet();
 

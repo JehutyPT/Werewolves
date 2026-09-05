@@ -289,13 +289,9 @@ internal class WildChildRole :
         ValidateWildChildCursor(
             cursor,
             ModeratorInstructionSemantic.IdentifyRoleHolders);
-        var livingHolderIds = GetLivingHolderIds(session);
-        if (livingHolderIds.Count == 0 ||
-            !session.GameHistoryLog.OfType<RoleIdentificationLogEntry>().Any(entry =>
-                entry.TurnNumber == session.TurnNumber &&
-                entry.CurrentPhase == GamePhase.Night &&
-                entry.Role == MainRoleType.WildChild &&
-                entry.PlayerIds.SetEquals(livingHolderIds)))
+        if (!RoleFactionKnowledge.HasAcceptedRoleIdentification(
+                session,
+                MainRoleType.WildChild))
         {
             throw new InvalidOperationException(
                 "The Wild Child model wait has no committed identification.");
@@ -351,7 +347,7 @@ internal class WildChildRole :
                 (player.State.CurrentRole == null &&
                  (player.State.ModeratorKnownRole == MainRoleType.WildChild ||
                   player.State.ModeratorKnownRole == null &&
-                  GameSessionQueries.GetPossibleRoles(session, player.Id)
+                  RoleFactionKnowledge.GetPossibleRoles(session, player.Id)
                       .Contains(MainRoleType.WildChild))))
             .ToIdSet();
 

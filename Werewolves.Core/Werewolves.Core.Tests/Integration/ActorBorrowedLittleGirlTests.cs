@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Werewolves.Core.GameLogic;
 using Werewolves.Core.GameLogic.Interfaces;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
 using Werewolves.Core.GameLogic.Models.StateMachine;
@@ -112,12 +113,16 @@ public sealed class ActorBorrowedLittleGirlTests
 	[Fact]
 	public void BorrowedLittleGirl_InvalidObservationResponsesUseGenericErrorWithoutMutation()
 	{
-		var (session, start, actorId, _) = CreateActorSession();
+		var (session, start, actorId, werewolfId) = CreateActorSession();
 		var (activation, actorSleep) = PerformSpendOpening(
 			CreateActorRole(),
 			session,
 			start,
 			LittleGirlCard.Id);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { werewolfId },
+			MainRoleType.SimpleWerewolf);
 		IGameHookListener listener = new SimpleWerewolfRole(
 			new RolePowerAvailabilityGateway(
 				AllowAllRolePowerAvailabilityPolicy.Instance));
@@ -145,6 +150,15 @@ public sealed class ActorBorrowedLittleGirlTests
 				InstructionId = observation.InstructionId,
 				Type = ExpectedInputType.PlayerSelection,
 				SelectedPlayerIds = new HashSet<Guid> { Guid.NewGuid() }
+			},
+			new ModeratorResponse
+			{
+				InstructionId = observation.InstructionId,
+				Type = ExpectedInputType.PlayerSelection,
+				SelectedPlayerIds = new HashSet<Guid>
+				{
+					observation.SelectablePlayerIds.First(id => id != werewolfId)
+				}
 			}
 		};
 
@@ -517,7 +531,10 @@ public sealed class ActorBorrowedLittleGirlTests
 		var actorId = players[0].Id;
 		var werewolfId = players[1].Id;
 		session.AssignRole(actorId, MainRoleType.Actor);
-		session.IdentifyRole([actorId], MainRoleType.Actor);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { actorId },
+			MainRoleType.Actor);
 		return (session, start, actorId, werewolfId);
 	}
 

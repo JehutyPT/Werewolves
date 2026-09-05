@@ -2,7 +2,6 @@ using System.Collections.Immutable;
 using Werewolves.Core.GameLogic.Queries;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
-using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 
@@ -707,7 +706,8 @@ internal static class InitialBeneficiaryClosureRules
 			Faction? exclusiveRoleFaction = currentRole switch
 				{
 					MainRoleType.WhiteWerewolf => Faction.WhiteWerewolf,
-					_ when currentRole?.EstablishesInitialWerewolfAgency() == true =>
+					_ when currentRole is { } role &&
+						RoleFactionKnowledge.EstablishesInitialWerewolfAgency(role) =>
 						Faction.Werewolf,
 					MainRoleType.WolfHound => Faction.Villager,
 					MainRoleType.Piper => Faction.Piper,

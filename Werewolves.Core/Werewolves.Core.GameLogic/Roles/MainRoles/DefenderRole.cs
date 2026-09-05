@@ -754,14 +754,9 @@ internal sealed class DefenderRole
 				"The Defender continuation has invalid accepted-observation handoff context.");
 		}
 
-		var livingHolderIds = GetLivingHolderIds(session);
-		if (livingHolderIds.Count == 0 ||
-		    !session.GameHistoryLog.OfType<RoleIdentificationLogEntry>()
-			    .Any(entry =>
-				    entry.TurnNumber == session.TurnNumber &&
-				    entry.CurrentPhase == GamePhase.Night &&
-				    entry.Role == MainRoleType.Defender &&
-				    entry.PlayerIds.SetEquals(livingHolderIds)))
+		if (!RoleFactionKnowledge.HasAcceptedRoleIdentification(
+			    session,
+			    MainRoleType.Defender))
 		{
 			throw new InvalidOperationException(
 				"The Defender identification continuation has invalid durable context.");
@@ -781,7 +776,7 @@ internal sealed class DefenderRole
 				(player.State.CurrentRole == null &&
 				 (player.State.ModeratorKnownRole == MainRoleType.Defender ||
 				  player.State.ModeratorKnownRole == null &&
-				  GameSessionQueries.GetPossibleRoles(session, player.Id)
+				  RoleFactionKnowledge.GetPossibleRoles(session, player.Id)
 					  .Contains(MainRoleType.Defender))))
 			.ToIdSet();
 

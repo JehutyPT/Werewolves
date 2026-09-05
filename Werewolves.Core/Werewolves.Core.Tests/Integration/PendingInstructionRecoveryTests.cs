@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using FluentAssertions;
 using FluentAssertions.Execution;
 using Werewolves.Core.GameLogic.Services;
@@ -7,6 +8,7 @@ using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Instructions;
 using Werewolves.Core.StateModels.Resources;
+using Werewolves.Core.StateModels.Serialization;
 using Werewolves.Core.Tests.Helpers;
 using Xunit;
 
@@ -202,14 +204,18 @@ public sealed class PendingInstructionRecoveryTests
         var acceptedObservation = observation.CreateResponse([observedAgent.Id]);
         var expectedNext = builder.Process(acceptedObservation).ModeratorInstruction
             .Should().BeOfType<SelectPlayersInstruction>().Subject;
+        AssertSingleInitialBeneficiaryClosure(
+            builder.GetGameState()!.GameHistoryLog);
 
         var firstService = new GameService();
         var firstGameId = firstService.RehydrateSession(
             builder.GetGameState()!.Serialize());
         var firstRecovered = firstService.GetGameStateView(firstGameId)!;
+        AssertSingleInitialBeneficiaryClosure(firstRecovered.GameHistoryLog);
         var secondService = new GameService();
         var secondGameId = secondService.RehydrateSession(firstRecovered.Serialize());
         var secondRecovered = secondService.GetGameStateView(secondGameId)!;
+        AssertSingleInitialBeneficiaryClosure(secondRecovered.GameHistoryLog);
         var secondNext = secondService.GetCurrentInstruction(secondGameId)
             .Should().BeOfType<SelectPlayersInstruction>().Subject;
 
@@ -256,6 +262,7 @@ public sealed class PendingInstructionRecoveryTests
         Action replayAcceptedObservation = () =>
             secondService.ProcessInstruction(secondGameId, acceptedObservation);
         replayAcceptedObservation.Should().Throw<InvalidOperationException>();
+        AssertSingleInitialBeneficiaryClosure(secondRecovered.GameHistoryLog);
         secondRecovered.GameHistoryLog.OfType<FactionFactsCommittedLogEntry>()
             .Count(entry =>
                 entry.Source.Kind ==
@@ -268,6 +275,7 @@ public sealed class PendingInstructionRecoveryTests
 
         continued.IsSuccess.Should().BeTrue();
         continued.ModeratorInstruction.Should().BeOfType<ConfirmationInstruction>();
+        AssertSingleInitialBeneficiaryClosure(secondRecovered.GameHistoryLog);
         secondRecovered.GameHistoryLog.OfType<FactionFactsCommittedLogEntry>()
             .Count(entry =>
                 entry.Source.Kind ==
@@ -1238,6 +1246,14 @@ public sealed class PendingInstructionRecoveryTests
         PublicGameSessionSnapshot.Capture(service, gameId).Should().BeEquivalentTo(
             beforeReplay,
             options => options.WithStrictOrdering());
+    }
+
+    private static void AssertSingleInitialBeneficiaryClosure(
+        IEnumerable<GameLogEntryBase> gameHistoryLog)
+    {
+        gameHistoryLog.OfType<FactionFactsCommittedLogEntry>().Should()
+            .ContainSingle(entry => entry.Source.Kind ==
+                FactionFactSourceKind.InitialBeneficiaryClosure);
     }
 
     private static void AdvanceToNextNight(GameTestBuilder builder)

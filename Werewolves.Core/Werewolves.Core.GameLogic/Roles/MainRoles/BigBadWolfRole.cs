@@ -516,19 +516,9 @@ internal sealed class BigBadWolfRole
                 "The Big Bad Wolf continuation has invalid accepted-observation handoff context.");
         }
 
-        var livingHolderIds = session.GetPlayers()
-            .WithHealth(PlayerHealth.Alive)
-            .Where(player =>
-                player.State.CurrentRole == MainRoleType.BigBadWolf)
-            .Select(player => player.Id)
-            .ToHashSet();
-        if (livingHolderIds.Count == 0 ||
-            !session.GameHistoryLog.OfType<RoleIdentificationLogEntry>()
-                .Any(entry =>
-                    entry.TurnNumber == session.TurnNumber &&
-                    entry.CurrentPhase == GamePhase.Night &&
-                    entry.Role == MainRoleType.BigBadWolf &&
-                    entry.PlayerIds.SetEquals(livingHolderIds)))
+        if (!RoleFactionKnowledge.HasAcceptedRoleIdentification(
+                session,
+                MainRoleType.BigBadWolf))
         {
             throw new InvalidOperationException(
                 "The Big Bad Wolf identification continuation has invalid durable context.");
@@ -648,7 +638,7 @@ internal sealed class BigBadWolfRole
                 (player.State.CurrentRole == null &&
                  (player.State.ModeratorKnownRole == MainRoleType.BigBadWolf ||
                   player.State.ModeratorKnownRole == null &&
-                  GameSessionQueries.GetPossibleRoles(session, player.Id)
+                  RoleFactionKnowledge.GetPossibleRoles(session, player.Id)
                       .Contains(MainRoleType.BigBadWolf))))
             .ToIdSet();
 

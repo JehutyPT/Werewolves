@@ -717,14 +717,9 @@ internal sealed class SeerRole
 				"The Seer continuation has invalid accepted-observation handoff context.");
 		}
 
-		var livingHolderIds = GetLivingHolderIds(session);
-		if (livingHolderIds.Count == 0 ||
-		    !session.GameHistoryLog.OfType<RoleIdentificationLogEntry>()
-			    .Any(entry =>
-				    entry.TurnNumber == session.TurnNumber &&
-				    entry.CurrentPhase == GamePhase.Night &&
-				    entry.Role == MainRoleType.Seer &&
-				    entry.PlayerIds.SetEquals(livingHolderIds)))
+		if (!RoleFactionKnowledge.HasAcceptedRoleIdentification(
+			    session,
+			    MainRoleType.Seer))
 		{
 			throw new InvalidOperationException(
 				"The Seer identification continuation has invalid durable context.");
@@ -744,7 +739,7 @@ internal sealed class SeerRole
 				(player.State.CurrentRole == null &&
 				 (player.State.ModeratorKnownRole == MainRoleType.Seer ||
 				  player.State.ModeratorKnownRole == null &&
-				  GameSessionQueries.GetPossibleRoles(session, player.Id)
+				  RoleFactionKnowledge.GetPossibleRoles(session, player.Id)
 					  .Contains(MainRoleType.Seer))))
 			.ToIdSet();
 

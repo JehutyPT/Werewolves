@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using FluentAssertions;
+using Werewolves.Core.GameLogic;
 using Werewolves.Core.GameLogic.Models.EliminationCascades;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
 using Werewolves.Core.GameLogic.RolePowers;
@@ -992,7 +993,10 @@ public sealed class ActorBorrowedScapegoatVillageIdiotTests
 			session.RoleLockIn.Version,
 			actorId,
 			actorCard.Card.Id).Should().BeTrue();
-		session.IdentifyRole([actorId], MainRoleType.Actor);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { actorId },
+			MainRoleType.Actor);
 		session.TrySpendActorSetupCard(
 			actorId,
 			ScapegoatCard.Id,
@@ -1200,7 +1204,10 @@ public sealed class ActorBorrowedScapegoatVillageIdiotTests
 			session.RoleLockIn.Version,
 			actorId,
 			actorCard.Card.Id).Should().BeTrue();
-		session.IdentifyRole([actorId], MainRoleType.Actor);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { actorId },
+			MainRoleType.Actor);
 		session.TrySpendActorSetupCard(
 			actorId,
 			VillageIdiotCard.Id,

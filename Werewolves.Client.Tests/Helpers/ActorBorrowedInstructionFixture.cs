@@ -1,4 +1,5 @@
 using Werewolves.Client.Services;
+using Werewolves.Core.GameLogic;
 using Werewolves.Core.GameLogic.Interfaces;
 using Werewolves.Core.GameLogic.Models.EliminationCascades;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
@@ -168,7 +169,10 @@ internal static class ActorBorrowedInstructionFixture
 			throw new InvalidOperationException(
 				"The Actor UI fixture could not record Actor's physical Character Card.");
 		}
-		session.IdentifyRole([actorId], MainRoleType.Actor);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { actorId },
+			MainRoleType.Actor);
 		SeedKnownActorBeneficiary(session, actorId);
 		if (sourceRole != MainRoleType.LittleGirl)
 		{
