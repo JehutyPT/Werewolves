@@ -57,10 +57,14 @@ public sealed class LobbyEvaluationCoordinator : IDisposable
 	public LobbyEvaluationDepth Depth => _depth;
 	public bool EvaluationBlocksLobbyExit => State.BlocksLobbyExit;
 
-	public bool TryRequestLobbyExit()
+	public bool TryRequestLobbyExit() => TryRequestLobbyExit(out _);
+
+	internal bool TryRequestLobbyExit(out LobbyEvaluationState state)
 	{
+		RestartForCurrentScenario();
 		lock (_sync)
 		{
+			state = State;
 			if (_disposed)
 			{
 				return false;

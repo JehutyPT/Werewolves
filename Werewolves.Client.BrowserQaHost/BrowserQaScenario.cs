@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.WebUtilities;
+using Werewolves.Client.Fixtures;
 using Werewolves.Client.Services;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Models.Instructions;
@@ -55,7 +56,7 @@ public static class BrowserQaScenarioSeeder
 		ResetToDefaultLobby(lobby);
 		game.ClearSession();
 
-		var startInstruction = game.StartGame(
+		var startInstruction = game.StartPreparedGame(
 			lobby.PlayerNames,
 			lobby.GetSelectedRoles());
 		game.ProcessInput(startInstruction.CreateResponse());
@@ -66,7 +67,7 @@ public static class BrowserQaScenarioSeeder
 		ResetToDefaultLobby(lobby);
 		game.ClearSession();
 
-		var startInstruction = game.StartGame(
+		var startInstruction = game.StartPreparedGame(
 			lobby.PlayerNames,
 			lobby.GetSelectedRoles());
 		game.ProcessInput(startInstruction.CreateResponse());

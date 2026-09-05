@@ -46,7 +46,8 @@ public static class ModeratorSessionAndLobbyServiceCollectionExtensions
 				provider.GetRequiredService<IGameSessionSaveStore>(),
 				provider.GetRequiredService<TimeProvider>(),
 				provider.GetRequiredService<LobbySetupState>(),
-				provider.GetRequiredService<IRecentSetupStore>()),
+				provider.GetRequiredService<IRecentSetupStore>(),
+				provider.GetRequiredService<LobbyEvaluationCoordinator>()),
 			serviceLifetime));
 
 		return services;

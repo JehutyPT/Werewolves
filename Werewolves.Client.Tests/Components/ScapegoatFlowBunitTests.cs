@@ -3,6 +3,7 @@ using Bunit;
 using FluentAssertions;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
+using Werewolves.Client.Fixtures;
 using Werewolves.Client.Components.Game.Views;
 using Werewolves.Client.Resources;
 using Werewolves.Client.Services;
@@ -63,7 +64,7 @@ public sealed class ScapegoatFlowBunitTests
 			MainRoleType.SimpleVillager,
 			MainRoleType.SimpleVillager
 		};
-		var start = manager.StartGame(playerNames, roles);
+		var start = manager.StartPreparedGame(playerNames, roles);
 		manager.ProcessInput(start.CreateResponse()).IsSuccess.Should().BeTrue();
 		var players = manager.CurrentSession!.GetPlayers().ToArray();
 		var rolesByPlayerId = players

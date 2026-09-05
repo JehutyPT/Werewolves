@@ -2,6 +2,7 @@ using Bunit;
 using FluentAssertions;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
+using Werewolves.Client.Fixtures;
 using Werewolves.Client.Components.Game.Views;
 using Werewolves.Client.Resources;
 using Werewolves.Client.Services;
@@ -89,7 +90,7 @@ public sealed class ElderFlowBunitTests
 	private static ConfirmationInstruction AdvanceToSuppressionAnnouncement(
 		GameClientManager manager)
 	{
-		var start = manager.StartGame(
+		var start = manager.StartPreparedGame(
 			PlayerNames.DefaultFive,
 			[
 				MainRoleType.SimpleWerewolf,

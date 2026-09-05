@@ -9,6 +9,7 @@ using Werewolves.Client.Testing;
 using Werewolves.Client.Tests.Helpers;
 using Werewolves.Core.GameLogic.Models;
 using Werewolves.Core.GameLogic.Services;
+using Werewolves.Core.GameLogic.Simulation;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Models.Instructions;
@@ -786,13 +787,14 @@ public sealed class LandingNavigationBunitTests
 	{
 		var recentStore = new InMemoryRecentSetupStore();
 		using var context = new ModeratorComponentTestContext();
+		RegisterPersistenceEvaluation(context);
 		context.Services.AddSingleton<IRecentSetupStore>(recentStore);
 		var cut = context.RenderModeratorComponent<Routes>();
 		cut.Find(TestId(ModeratorUiTestIds.LandingNewGameButton)).Click();
 		var lobby = context.Services.GetRequiredService<LobbySetupState>();
 		SeedLobby(lobby);
 		var manager = context.Services.GetRequiredService<GameClientManager>();
-		manager.StartGame(lobby);
+		manager.AttemptLobbyExit().Should().BeOfType<LobbyExitOutcome.Started>();
 		manager.ClearSession();
 
 		cut.Find(TestId(ModeratorUiTestIds.LobbyRosterBack)).Click();
@@ -819,8 +821,20 @@ public sealed class LandingNavigationBunitTests
 	{
 		var context = new ModeratorComponentTestContext();
 		context.Services.AddSingleton<IGameSessionSaveStore>(store);
+		RegisterPersistenceEvaluation(context);
 		return context;
 	}
+
+	// Navigation and recent-setup tests use controlled simulator unavailability
+	// while retaining the complete durable Lobby Exit attempt.
+	private static void RegisterPersistenceEvaluation(ModeratorComponentTestContext context) =>
+		context.Services.AddSingleton(services => new LobbyEvaluationCoordinator(
+			services.GetRequiredService<LobbySetupState>(),
+			services.GetRequiredService<ILocalTerminalLobbyCacheStore>(),
+			DisabledLobbyTerminalEvaluator.Instance,
+			services.GetRequiredService<LobbyEvaluationSettings>(),
+			timeProvider: null,
+			(_, _) => new LobbyScenarioSupport(true, true, false)));
 
 	private static StartGameConfirmationInstruction StartRecoverableSession(
 		ModeratorComponentTestContext context)
@@ -828,7 +842,10 @@ public sealed class LandingNavigationBunitTests
 		var lobby = context.Services.GetRequiredService<LobbySetupState>();
 		SeedLobby(lobby);
 
-		return context.Services.GetRequiredService<GameClientManager>().StartGame(lobby);
+		var manager = context.Services.GetRequiredService<GameClientManager>();
+		manager.AttemptLobbyExit().Should().BeOfType<LobbyExitOutcome.Started>();
+		return manager.CurrentInstruction.Should()
+			.BeOfType<StartGameConfirmationInstruction>().Subject;
 	}
 
 	private static void StageRecoverableLobby(ModeratorComponentTestContext context)

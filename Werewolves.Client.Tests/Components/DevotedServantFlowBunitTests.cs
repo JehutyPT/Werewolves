@@ -3,6 +3,7 @@ using Bunit;
 using FluentAssertions;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
+using Werewolves.Client.Fixtures;
 using Werewolves.Client.Components.Game.Views;
 using Werewolves.Client.Resources;
 using Werewolves.Client.Services;
@@ -262,7 +263,7 @@ public sealed class DevotedServantFlowBunitTests
 	private static VoteWindowScenario AdvanceToVoteWindow(
 		GameClientManager manager)
 	{
-		var start = manager.StartGame(
+		var start = manager.StartPreparedGame(
 			[
 				PlayerNames.Ana,
 				PlayerNames.Bruno,

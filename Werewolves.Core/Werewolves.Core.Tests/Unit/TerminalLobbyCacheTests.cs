@@ -774,7 +774,7 @@ public class TerminalLobbyCacheTests
 			Scenario(identity),
 			capability,
 			degenerate
-				? new DegenerateTerminalEvaluation(evidence)
+				? EvaluateDegenerate(evidence, capability)
 				: new ProbabilityTerminalEvaluation(evidence));
 
 		var aggregate = record.Should().BeAssignableTo<AggregateTerminalCacheRecord>().Subject;
@@ -801,8 +801,9 @@ public class TerminalLobbyCacheTests
 		var record = TerminalLobbyCache.Capture(
 			scenario,
 			SimulatorCapability.SafetyScreening,
-			new DegenerateTerminalEvaluation(evidence));
+			EvaluateDegenerate(evidence, SimulatorCapability.SafetyScreening));
 		var encoded = TerminalLobbyCache.Write(record);
+		encoded.Should().Equal(Utf8(DegenerateGolden));
 		var read = TerminalLobbyCache.Read(
 			encoded,
 			scenario,
@@ -840,7 +841,7 @@ public class TerminalLobbyCacheTests
 		var record = TerminalLobbyCache.Capture(
 			scenario,
 			SimulatorCapability.SafetyScreening,
-			new DegenerateTerminalEvaluation(evidence));
+			EvaluateDegenerate(evidence, SimulatorCapability.SafetyScreening));
 		var encoded = TerminalLobbyCache.Write(TerminalLobbyCache.CreateDocument([record]));
 		var read = TerminalLobbyCache.ReadDocument(
 			encoded,
@@ -880,11 +881,12 @@ public class TerminalLobbyCacheTests
 		var identity = ActorThiefIdentity(offer1, offer2);
 		var scenario = Scenario(identity);
 		var evidence = MixedThiefDegenerateEvidence(identity, incompleteSibling);
+		var evaluation = EvaluateDegenerate(evidence, SimulatorCapability.SafetyScreening);
 
 		var record = TerminalLobbyCache.Capture(
 			scenario,
 			SimulatorCapability.SafetyScreening,
-			new DegenerateTerminalEvaluation(evidence));
+			evaluation);
 		var encoded = TerminalLobbyCache.Write(TerminalLobbyCache.CreateDocument([record]));
 		var read = TerminalLobbyCache.ReadDocument(
 			encoded,
@@ -892,6 +894,7 @@ public class TerminalLobbyCacheTests
 
 		evidence.AttemptedRunCount.Should().Be(expectedAttemptCount);
 		evidence.IncompleteRunCount.Should().Be(incompleteSibling ? 1 : 0);
+		evaluation.ScreeningEvidence.Records.Should().Equal(evidence.Records);
 		read.IsUsable.Should().BeTrue();
 		TerminalLobbyCache.TryGet(
 			read.Document!,
@@ -922,11 +925,12 @@ public class TerminalLobbyCacheTests
 		var identity = NonActorThiefIdentity();
 		var scenario = SimulationScenario.FromCanonical(identity.Scenario);
 		var evidence = MixedThiefDegenerateEvidence(identity, incompleteSibling);
+		var evaluation = EvaluateDegenerate(evidence, SimulatorCapability.SafetyScreening);
 
 		var record = TerminalLobbyCache.Capture(
 			scenario,
 			SimulatorCapability.SafetyScreening,
-			new DegenerateTerminalEvaluation(evidence));
+			evaluation);
 		var encoded = TerminalLobbyCache.Write(TerminalLobbyCache.CreateDocument([record]));
 		var read = TerminalLobbyCache.ReadDocument(
 			encoded,
@@ -936,6 +940,7 @@ public class TerminalLobbyCacheTests
 		identity.Scenario.ThiefOfferBranchPolicy.Should().NotBeNull();
 		evidence.AttemptedRunCount.Should().Be(3_000);
 		evidence.IncompleteRunCount.Should().Be(incompleteSibling ? 1 : 0);
+		evaluation.ScreeningEvidence.Records.Should().Equal(evidence.Records);
 		read.IsUsable.Should().BeTrue();
 		TerminalLobbyCache.TryGet(
 			read.Document!,
@@ -969,7 +974,7 @@ public class TerminalLobbyCacheTests
 			scenario,
 			SimulatorCapability.FullProbability,
 			degenerate
-				? new DegenerateTerminalEvaluation(evidence)
+				? EvaluateDegenerate(evidence, SimulatorCapability.FullProbability)
 				: new ProbabilityTerminalEvaluation(evidence));
 
 		record.Should().BeAssignableTo<AggregateTerminalCacheRecord>()
@@ -983,7 +988,7 @@ public class TerminalLobbyCacheTests
 
 	[Theory]
 	[MemberData(nameof(AggregateProducerStrategyMismatches))]
-	public void Capture_RejectsDecisionStrategyFromAnotherProducer(
+	public void Evaluate_RejectsDecisionStrategyFromAnotherProducerBeforeCapture(
 		SimulatorProfileIdentity producerProfile,
 		DecisionStrategyIdentity wrongStrategy)
 	{
@@ -1003,10 +1008,43 @@ public class TerminalLobbyCacheTests
 			producerProfile,
 			out var capability).Should().BeTrue();
 
+		var evaluation = EvaluateScreening(evidence, capability);
+
+		evaluation.Should().BeOfType<CouldNotEvaluateLobbyEvaluation>();
+	}
+
+	[Theory]
+	[MemberData(nameof(AggregateProducerStrategyMismatches))]
+	public void Capture_RejectsValidEvaluationWhenSelectedCapabilityRequiresAnotherStrategy(
+		SimulatorProfileIdentity producerProfile,
+		DecisionStrategyIdentity wrongStrategy)
+	{
+		SimulatorCapabilityRegistry.Production.TryGet(
+			producerProfile,
+			out var producer).Should().BeTrue();
+		var identity = producerProfile.Equals(SimulatorCapability.SafetyScreening.Identity)
+			? AggregateIdentity()
+			: FullProbabilityDegenerateIdentity();
+		var evidence = Evidence(identity, TerminalLobbyEvaluator.ScreeningAttemptCount, degenerate: true);
+		var evaluation = EvaluateDegenerate(evidence, producer);
+		var selectedCapability = new SimulatorCapability(
+			producer.Identity,
+			producer.SupportedRoles.Select(role =>
+			{
+				producer.TryGetBeneficiaryFaction(role, out var beneficiary).Should().BeTrue();
+				return (role, beneficiary, Enum.GetValues<Faction>()
+					.Where(faction => producer.IsFactionAgent(role, faction)).ToArray());
+			}),
+			producer.SharedVictoryCapabilities,
+			new HeadlessResponsePolicy(wrongStrategy, producer.HeadlessResponsePolicy.AdmittedSemantics),
+			producer.SupportsActorSetupCards,
+			producer.SupportedRuleStates,
+			producer.SupportedEvaluationDepths);
+
 		Action capture = () => TerminalLobbyCache.Capture(
 			Scenario(identity),
-			capability,
-			new DegenerateTerminalEvaluation(evidence));
+			selectedCapability,
+			evaluation);
 
 		capture.Should().Throw<ArgumentException>()
 			.WithParameterName("evidence");
@@ -1034,8 +1072,7 @@ public class TerminalLobbyCacheTests
 	[Theory]
 	[InlineData(AggregateEvidenceMismatch.Scenario)]
 	[InlineData(AggregateEvidenceMismatch.Profile)]
-	[InlineData(AggregateEvidenceMismatch.Incomplete)]
-	public void Capture_RejectsExactlyOneScenarioProfileOrIncompleteEvidenceMismatch(
+	public void Capture_RejectsExactlyOneScenarioOrProfileMismatchForValidEvaluation(
 		AggregateEvidenceMismatch mismatch)
 	{
 		var identity = AggregateIdentity();
@@ -1047,15 +1084,13 @@ public class TerminalLobbyCacheTests
 			AggregateEvidenceMismatch.Profile => new SimulationCompatibilityIdentity(
 				identity.Scenario,
 				SimulatorCapability.FullProbability.Identity),
-			AggregateEvidenceMismatch.Incomplete => identity,
 			_ => throw new ArgumentOutOfRangeException(nameof(mismatch))
 		};
-		var evidence = mismatch == AggregateEvidenceMismatch.Incomplete
-			? IncompleteEvidence(identity)
-			: Evidence(
-				identity,
-				TerminalLobbyEvaluator.ScreeningAttemptCount,
-				degenerate: true);
+		var evidence = Evidence(
+			identity,
+			TerminalLobbyEvaluator.ScreeningAttemptCount,
+			degenerate: true);
+		var evaluation = EvaluateDegenerate(evidence, SimulatorCapability.SafetyScreening);
 		SimulatorCapabilityRegistry.Production.TryGet(
 			expectedIdentity.Profile,
 			out var capability).Should().BeTrue();
@@ -1063,34 +1098,59 @@ public class TerminalLobbyCacheTests
 		Action capture = () => TerminalLobbyCache.Capture(
 			Scenario(expectedIdentity),
 			capability,
-			new DegenerateTerminalEvaluation(evidence));
+			evaluation);
 
 		capture.Should().Throw<ArgumentException>()
 			.WithParameterName("evidence");
 	}
 
 	[Fact]
-	public void Capture_AggregateRejectsIdentityMismatchIncompleteEvidenceAndWrongAttemptPolicy()
+	public void Capture_ProbabilityRejectsIdentityMismatch()
 	{
 		var probabilityEvidence = Evidence(ProbabilityIdentity(), 10_000, degenerate: false);
 		Action identityMismatch = () => TerminalLobbyCache.Capture(
 			Scenario(AggregateIdentity()),
 			SimulatorCapability.SafetyScreening,
 			new ProbabilityTerminalEvaluation(probabilityEvidence));
-		var incomplete = IncompleteEvidence(AggregateIdentity());
-		Action incompleteCapture = () => TerminalLobbyCache.Capture(
-			Scenario(AggregateIdentity()),
-			SimulatorCapability.SafetyScreening,
-			new DegenerateTerminalEvaluation(incomplete));
-		var wrongCount = Evidence(AggregateIdentity(), 999, degenerate: true);
-		Action wrongPolicy = () => TerminalLobbyCache.Capture(
-			Scenario(AggregateIdentity()),
-			SimulatorCapability.SafetyScreening,
-			new DegenerateTerminalEvaluation(wrongCount));
 
 		identityMismatch.Should().Throw<ArgumentException>();
-		incompleteCapture.Should().Throw<ArgumentException>();
-		wrongPolicy.Should().Throw<ArgumentException>();
+	}
+
+	[Theory]
+	[InlineData(true)]
+	[InlineData(false)]
+	public void Evaluate_RejectsIncompleteEvidenceAndWrongScreeningAttemptPolicyBeforeCapture(
+		bool incomplete)
+	{
+		var evidence = incomplete
+			? IncompleteEvidence(AggregateIdentity())
+			: Evidence(AggregateIdentity(), 999, degenerate: true);
+
+		var evaluation = EvaluateScreening(evidence, SimulatorCapability.SafetyScreening);
+
+		evaluation.Should().BeOfType<CouldNotEvaluateLobbyEvaluation>();
+	}
+
+	private static DegenerateTerminalEvaluation EvaluateDegenerate(
+		SimulationResultEvidence evidence,
+		SimulatorCapability capability) =>
+		EvaluateScreening(evidence, capability)
+			.Should().BeOfType<DegenerateTerminalEvaluation>().Subject;
+
+	private static LobbyEvaluationResult EvaluateScreening(
+		SimulationResultEvidence evidence,
+		SimulatorCapability capability)
+	{
+		var source = new SimulationBatchSourceEvidence(
+			evidence.CanonicalScenario,
+			evidence.SimulatorProfile,
+			evidence.DecisionStrategy,
+			evidence.Records);
+		var evaluator = new TerminalLobbyEvaluator((_, _, _, _, _) => source);
+		return evaluator.Evaluate(
+			SimulationScenario.FromCanonical(evidence.CanonicalScenario),
+			capability,
+			LobbyEvaluationDepth.DegenerateScreeningOnly);
 	}
 
 	private static DegenerateTerminalCacheRecord DegenerateRecord() => new(
@@ -1350,8 +1410,7 @@ public class TerminalLobbyCacheTests
 	public enum AggregateEvidenceMismatch
 	{
 		Scenario,
-		Profile,
-		Incomplete
+		Profile
 	}
 
 	private static IEnumerable<JsonElement> Descendants(JsonElement element)
