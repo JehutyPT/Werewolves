@@ -20,13 +20,19 @@ internal sealed class VillageIdiotRole
 	private sealed record ExecutionContext(
 		IPlayer ActingPlayer,
 		RolePowerInstance PowerInstance,
-		bool IsBorrowed);
+		ActorBorrowedRolePowers.ActorBorrowedRolePowerUse? BorrowedUse)
+	{
+		internal bool IsBorrowed => BorrowedUse is not null;
+	}
 
 	private static readonly RolePowerDefinition PardonPower = new(
 		new RolePowerIdentifier(
 			ActorBorrowedVillageIdiotPardonCommit
 				.ExpectedSourcePowerIdentifier),
 		RolePowerCategory.Automatic);
+	private static readonly ActorBorrowedRolePowerSpec BorrowedPowerSpec = new(
+		MainRoleType.VillageIdiot,
+		PardonPower);
 
 	private static readonly Guid PardonResourceId =
 		ActorBorrowedVillageIdiotPardonCommit.ExpectedResourceId;
@@ -72,9 +78,12 @@ internal sealed class VillageIdiotRole
 			resolved.PowerInstance.Id,
 			resolved.PowerInstance.Origin,
 			PardonResourceId);
-		var resourceIsCommitted = resolved.IsBorrowed
-			? session.GetActorBorrowedVillageIdiotPardonCommits()
-				.Any(commit => commit.SpentResourceIdentity == identity)
+		var resourceIsCommitted = resolved.BorrowedUse is { } borrowedUse
+			? GameSessionQueries
+				.IsCorrelatedActorBorrowedVillageIdiotPardonCommitted(
+					session,
+					borrowedUse,
+					identity)
 			: GameSessionQueries.IsOneUseRolePowerResourceCommitted(
 				session,
 				identity);
@@ -83,7 +92,7 @@ internal sealed class VillageIdiotRole
 			return false;
 		}
 
-		var execution = _availabilityGateway.Evaluate(
+		var attempt = resolved.BorrowedUse?.CreateAttempt(PardonResourceId) ??
 			new RolePowerAttempt(
 				session,
 				resolved.ActingPlayer,
@@ -92,21 +101,17 @@ internal sealed class VillageIdiotRole
 				resolved.PowerInstance,
 				new OneUseRolePowerResource(
 					PardonResourceId,
-					resolved.PowerInstance)));
+					resolved.PowerInstance));
+		var execution = _availabilityGateway.Evaluate(attempt);
 		if (!execution.AvailabilityResult.IsAvailable)
 		{
 			return false;
 		}
 
-		if (resolved.IsBorrowed)
+		if (resolved.BorrowedUse is { } committingBorrowedUse)
 		{
 			session.CommitActorBorrowedVillageIdiotPardon(
-				new RolePowerInstanceIdentity(
-					identity.ActingPlayerId,
-					identity.SourceRole,
-					identity.SourcePowerIdentifier,
-					identity.PowerInstanceId,
-					identity.PowerInstanceOrigin),
+				committingBorrowedUse.PowerIdentity,
 				identity);
 			session.CommitGameFact(context =>
 				new VotingRightChangedLogEntry
@@ -239,32 +244,25 @@ internal sealed class VillageIdiotRole
 					target,
 					MainRoleType.VillageIdiot,
 					PardonPower),
-				IsBorrowed: false);
+				BorrowedUse: null);
 			return true;
 		}
 
-		var activation =
-			session.GetModeratorActiveActorBorrowedRolePowerActivation();
+		var borrowedUse = ActorBorrowedRolePowers.ResolveActive(
+			session,
+			BorrowedPowerSpec);
 		if (target.State.CurrentRole != MainRoleType.Actor ||
-			activation is not
-			{
-				ActingPlayerId: var actingPlayerId,
-				SourceRole: MainRoleType.VillageIdiot
-			} ||
-			actingPlayerId != target.Id)
+			borrowedUse is null ||
+			borrowedUse.Actor.Id != target.Id)
 		{
 			execution = null!;
 			return false;
 		}
 
 		execution = new ExecutionContext(
-			target,
-			RolePowerInstance.CreateBorrowed(
-				session,
-				target,
-				MainRoleType.VillageIdiot,
-				PardonPower),
-			IsBorrowed: true);
+			borrowedUse.Actor,
+			borrowedUse.PowerInstance,
+			borrowedUse);
 		return true;
 	}
 

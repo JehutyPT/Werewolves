@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using FluentAssertions;
+using Werewolves.Core.GameLogic;
 using Werewolves.Core.GameLogic.Queries;
 using Werewolves.Core.GameLogic.RolePowers;
 using Werewolves.Core.GameLogic.Roles.MainRoles;
@@ -55,7 +56,10 @@ public class PermanentRoleSwapTests
 			player.Id,
 			cards[0].Id).Should().BeTrue();
 		mutableSession.AssignRole(player.Id, MainRoleType.Thief);
-		mutableSession.IdentifyRole([player.Id], MainRoleType.Thief);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			mutableSession,
+			new HashSet<Guid> { player.Id },
+			MainRoleType.Thief);
 		var compositionIds = lockIn.RoleComposition.Select(card => card.Id).ToArray();
 		var movement = new PermanentRoleSwapCardMovement(
 			cards[0].Id,

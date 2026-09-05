@@ -1,3 +1,4 @@
+using Werewolves.Core.GameLogic;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
 using Werewolves.Core.GameLogic.Models.EliminationCascades;
 using Werewolves.Core.GameLogic.RolePowers;
@@ -263,7 +264,10 @@ public class GameTestBuilder
 		EnsureGameStarted();
 		var session = GetMutableSessionForArrangement();
 		session.AssignRole(committedBrotherId, MainRoleType.ThreeBrothers);
-		session.IdentifyRole([committedBrotherId], MainRoleType.ThreeBrothers);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { committedBrotherId },
+			MainRoleType.ThreeBrothers);
 		return this;
 	}
 
@@ -274,7 +278,10 @@ public class GameTestBuilder
 		var session = GetMutableSessionForArrangement();
 		var committedBrotherIds = brotherIds.ToHashSet();
 		session.AssignRole(committedBrotherIds, MainRoleType.ThreeBrothers);
-		session.IdentifyRole(committedBrotherIds, MainRoleType.ThreeBrothers);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			committedBrotherIds,
+			MainRoleType.ThreeBrothers);
 		return this;
 	}
 
@@ -294,7 +301,10 @@ public class GameTestBuilder
 		EnsureGameStarted();
 		var session = GetMutableSessionForArrangement();
 		session.AssignRole(playerId, role);
-		session.IdentifyRole([playerId], role);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { playerId },
+			role);
 		return this;
 	}
 

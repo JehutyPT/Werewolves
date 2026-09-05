@@ -7,7 +7,6 @@ public sealed class FileRecentSetupStore : IRecentSetupStore
 {
 	public const string StoreFileName = "recent-setups.json";
 	private const int CurrentSchemaVersion = 1;
-	private const int MaximumSetupCount = 10;
 	private const string TemporaryFileSearchPattern = StoreFileName + ".*.tmp";
 	private static readonly JsonSerializerOptions JsonOptions = new()
 	{
@@ -66,54 +65,34 @@ public sealed class FileRecentSetupStore : IRecentSetupStore
 		ArgumentNullException.ThrowIfNull(playerNames);
 		ArgumentNullException.ThrowIfNull(roleCounts);
 
-		var normalizedRoleCounts = roleCounts
-			.Where(entry => entry.Value > 0)
-			.OrderBy(entry => entry.Key)
-			.ToDictionary(entry => entry.Key, entry => entry.Value);
-		List<RecentSetup> setups;
+		IReadOnlyList<RecentSetup> setups;
 		try
 		{
-			setups = ReadStrict().ToList();
+			setups = ReadStrict();
 		}
 		catch (InvalidDataException)
 		{
 			setups = [];
 		}
-		var existingIndex = setups.FindIndex(setup =>
-			HasSameContent(setup, playerNames, normalizedRoleCounts));
-		if (existingIndex >= 0)
-		{
-			setups.RemoveAt(existingIndex);
-		}
 
-		setups.Insert(
-			0,
-			new RecentSetup(
-				playerNames,
-				normalizedRoleCounts,
-				_timeProvider.GetUtcNow()));
-		if (setups.Count > MaximumSetupCount)
-		{
-			setups.RemoveAt(MaximumSetupCount);
-		}
-
-		Write(setups);
+		Write(RecentSetupCollectionPolicy.Capture(
+			setups,
+			playerNames,
+			roleCounts,
+			_timeProvider.GetUtcNow()));
 	}
 
 	public void Delete(RecentSetup setup)
 	{
 		ArgumentNullException.ThrowIfNull(setup);
-		var setups = ReadStrict().ToList();
-		var index = setups.FindIndex(candidate =>
-			candidate.CapturedAtUtc == setup.CapturedAtUtc &&
-			HasSameContent(candidate, setup.PlayerNames, setup.RoleCounts));
-		if (index < 0)
+		var setups = ReadStrict();
+		var updatedSetups = RecentSetupCollectionPolicy.Delete(setups, setup);
+		if (updatedSetups.Count == setups.Count)
 		{
 			return;
 		}
 
-		setups.RemoveAt(index);
-		Write(setups);
+		Write(updatedSetups);
 	}
 
 	private IReadOnlyList<RecentSetup> ReadStrict()
@@ -140,7 +119,7 @@ public sealed class FileRecentSetupStore : IRecentSetupStore
 				SchemaVersion: CurrentSchemaVersion,
 				Setups: not null
 			} ||
-			envelope.Setups.Count > MaximumSetupCount)
+			envelope.Setups.Count > RecentSetupCollectionPolicy.MaximumSetupCount)
 		{
 			throw new InvalidDataException("The recent setup payload is malformed.");
 		}
@@ -266,18 +245,6 @@ public sealed class FileRecentSetupStore : IRecentSetupStore
 		{
 		}
 	}
-
-	private static bool HasSameContent(
-		RecentSetup setup,
-		IReadOnlyList<string> playerNames,
-		IReadOnlyDictionary<MainRoleType, int> roleCounts) =>
-		setup.PlayerNames.Count == playerNames.Count &&
-		setup.PlayerNames.Zip(playerNames).All(pair =>
-			string.Equals(pair.First, pair.Second, StringComparison.Ordinal)) &&
-		setup.RoleCounts.Count == roleCounts.Count &&
-		setup.RoleCounts.All(entry =>
-			roleCounts.TryGetValue(entry.Key, out var count) &&
-			count == entry.Value);
 
 	private sealed record RecentSetupsEnvelopeDto(
 		int SchemaVersion,

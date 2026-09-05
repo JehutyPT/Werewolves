@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Werewolves.Core.GameLogic;
 using Werewolves.Core.GameLogic.Interfaces;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
 using Werewolves.Core.GameLogic.Models.StateMachine;
@@ -964,7 +965,10 @@ public sealed class ActorRoleTests
 		session.AssignRole(actorId, MainRoleType.Actor);
 		if (holderKnown)
 		{
-			session.IdentifyRole([actorId], MainRoleType.Actor);
+			RoleFactionKnowledge.CommitRoleIdentification(
+				session,
+				new HashSet<Guid> { actorId },
+				MainRoleType.Actor);
 		}
 		if (suppressionActive)
 		{
@@ -1001,6 +1005,9 @@ public sealed class ActorRoleTests
 		GameSession session,
 		Guid werewolfId)
 	{
+		var hadCompleteAgentKnowledge = session.GetPlayers().All(player =>
+			session.GetFactionAgentKnowledge(player.Id, Faction.Werewolf) !=
+			FactionAgentKnowledge.Unknown);
 		var boundary = new FactionFactEffectiveBoundary(
 			session.TurnNumber,
 			session.GetCurrentPhase(),
@@ -1011,10 +1018,14 @@ public sealed class ActorRoleTests
 				Timestamp = context.Timestamp,
 				TurnNumber = context.TurnNumber,
 				CurrentPhase = context.CurrentPhase,
-				Source = new FactionFactSource(
-					FactionFactSourceKind.ScheduledObservation,
-					FactionFactSource
-						.WerewolfFactionAgentGroupObservationIdentifier),
+				Source = hadCompleteAgentKnowledge
+					? new FactionFactSource(
+						FactionFactSourceKind.ExplicitTransition,
+						"test-actor-role-werewolf-agent-group-update")
+					: new FactionFactSource(
+						FactionFactSourceKind.ScheduledObservation,
+						FactionFactSource
+							.WerewolfFactionAgentGroupObservationIdentifier),
 				Facts =
 				[
 					.. session.GetPlayers().Select(player => FactionFact.Agent(

@@ -52,7 +52,7 @@ Most transient execution updates do not go through `GameLogEntryBase`, because r
 *   **The Kernel (Core):** The `GameSessionKernel` is the **sole owner of mutable memory**. It encapsulates the `GameHistoryLog`, its private execution-cursor storage, `Players`, `SeatingOrder` and `RolesInPlay`. It is an internal, hermetically sealed component.
 *   **The Facade (Read-Only Projection & Mutation Gatekeeper):** The `GameSession` class acts as a **read-only projection** of the Kernel for the public API (via `IGameSession`). GameLogic receives a coherent immutable `ExecutionView` for internal execution reads and uses keyed facade methods to submit reducer requests; it never receives the mutable phase cache.
 *   **Transactional Mutation:** Persistent state mutation follows a strict transactional flow:
-    1.  **Command Dispatch:** The Facade constructs a `GameLogEntryBase` (the command) and passes it to the Kernel.
+    1.  **Command Dispatch:** The Facade constructs a `GameLogEntryBase` directly or invokes a caller-supplied typed entry factory, then passes the resulting command to the Kernel.
     2.  **Proxy Mutator:** The Kernel creates a temporary `SessionMutator` (a private nested class implementing `ISessionMutator`) that has privileged access to the internal mutable state.
     3.  **Apply:** The `GameLogEntryBase.Apply(ISessionMutator)` method is called, allowing the entry to modify the state via the proxy.
     4.  **Commit:** If successful, the entry is appended to the `GameHistoryLog`. 
@@ -150,6 +150,14 @@ Rule-specific questions over the event log live in `Werewolves.Core.GameLogic.Qu
 *   **Boundary:** `GameSession` retains structural queries (`GetPlayers`, `GetPlayer`, `GetPlayerState`, `GameHistoryLog`, `RoleInPlayCount`) plus mutation methods. Rule concepts such as "last night", "this dawn", and "current vote target" belong in `GameSessionQueries`.
 *   **Consumers:** Phase handlers and resolvers call `GameSessionQueries` instead of duplicating log scans or adding new rule-specific methods to `GameSession`.
 
+## `RoleFactionKnowledge` (Rules-Layer Role/Faction Knowledge)
+
+`Werewolves.Core.GameLogic.RoleFactionKnowledge` is the internal concrete static owner of Role Identification orchestration and the closed `MainRoleType` profile shared by Role-Identification Werewolf Faction Agent entailment and initial-agency rules consumers. It exposes `EstablishesInitialWerewolfAgency(MainRoleType)` for those consumers and `CommitRoleIdentification(GameSession, IReadOnlySet<Guid>, MainRoleType)` for caller-validated complete holder sets. It also owns the semantic recovery reads for accepted Role Identification and the initial Werewolf Agent-group observation, so recovery and handoff consumers do not reinterpret their raw records or reserved sources. It additionally owns the diagnostic Role-knowledge reads: established Role precedence (`PhysicalCharacterCardRole`, then `ModeratorKnownRole`, then `CurrentRole`), duplicate-preserving possible-Role and unclaimed-Role multiplicity with provenance-sensitive Werewolf-agency narrowing, and earliest Werewolf-agency fact provenance. The public `GameService.GetPossibleRoles(...)` and `GameService.GetEarliestWerewolfAgencyFact(...)` methods remain thin session-lookup adapters to that owner; `GameSessionQueries` retains unrelated raw log queries.
+
+The command constructs the standalone private Role Identification record and, when the profile entails a still-unknown Werewolf Faction Agent fact, appends the separate Faction fact batch immediately afterward with the stable Role-Identification source and the identification's effective boundary. It does not replace an existing Agent fact. For the initial Werewolf Agent-group observation, `RoleFactionKnowledge` derives the opportunity, validates its exact candidates, cardinality, and current boundary, commits the exhaustive living partition, and supplies the stable source and returned boundary. During rehydration, its focused history validator checks only those two owned record families before listener seeding and continuation restoration; it does not replay history, infer or backfill facts, run Beneficiary Closure, or introduce a generalized recovery validator. `SimpleWerewolfRole` retains the Moderator interaction workflow, correlation, privacy, and closure handoff.
+
+`GameSession` retains the low-level `CommitRoleIdentificationEntry(...)` and `CommitFactionFactBatch(...)` append gates needed by GameLogic. At those gates it invokes the caller-supplied typed entry factory and validates the resulting record; it does not define the Role Identification payload or own Role-to-agency rules. `Werewolves.Core.StateModels` therefore keeps its one-way assembly boundary and does not reference GameLogic. ADR-0010 and the domain invariants remain normative for Role entailment, while the Moderator interaction contract remains normative for the exchange.
+
 ## `NightInteractionResolver` (Rule Engine)
 
 A static helper class that serves as the "Rule Engine" for the Dawn phase, resolving complex interactions between conflicting night actions.
@@ -182,6 +190,30 @@ The authoritative interaction semantics remain in the [game-rule clarifications]
 *   `VillagerRolePowerSuppressionPolicy` decorates the next policy and reads the session-wide suppression fact through `GameSessionQueries.IsVillagerRolePowerSuppressionActive(...)`.
 *   Suppression is decided from `RolePowerAttempt.SourceRole.GetRoleGroup()`, so it follows the Role supplying the power rather than the acting Player's Faction or the power category. The policy denies a new Villager Role Power attempt and otherwise delegates unchanged.
 *   The policy remains derived from the append-only session log; Roles do not own independent suppression flags. Detailed scope and already-committed-effect semantics live in the [Role Powers and New Moon Assignments clarification](../../docs/domain/game-rules-clarifications.md#role-powers-and-new-moon-assignments).
+
+## Actor-Borrowed Role Power Resolution
+
+`ActorBorrowedRolePowers` is the Game Logic boundary for resolving an Actor's
+borrowed power. Source Role implementations depend on this module instead of
+reading the active Actor activation or spent Actor Setup Card, constructing a
+borrowed `RolePowerInstance` or owner-qualified identity, or correlating common
+commit coordinates themselves.
+
+*   `ResolveActive(GameSession, ActorBorrowedRolePowerSpec)` handles a living Actor use.
+*   `ResolveAfterElimination(GameSession, ActorBorrowedRolePowerSpec, BorrowedPostEliminationRolePowerContext)` handles only the closed Hunter final-shot, Elder village-vote-suppression, Knight Rusty Sword schedule, and Scapegoat voter-restriction contexts. It derives the eliminated Actor and authenticates the source-specific trigger against the active borrowed lineage.
+*   The post-elimination resolver dispatches those four closed contexts to narrowly named `GameSessionQueries` methods for rule-specific history and commitment authentication; the resolver does not scan `GameHistoryLog` or commitment projections itself.
+*   Both resolvers return the same immutable `ActorBorrowedRolePowerUse`, which exposes the authenticated Actor, concrete power instance, owner-qualified identity, Actor Setup Card identity, and ordinary `RolePowerAttempt` construction.
+
+This resolution boundary does not own adjacent lifecycle work.
+`RolePowerAvailabilityGateway` still evaluates each new Hunter, Elder, or
+Knight attempt from `ActorBorrowedRolePowerUse.CreateAttempt()`; the Scapegoat
+voter restriction continues an already available and committed tie replacement
+and does not re-evaluate availability. `ActorRole` alone creates and expires
+Actor activations. The existing typed `GameSession.CommitActorBorrowed*`
+methods own mutation, while `GameSessionKernel` owns serialization, private
+commitment integrity, and Rehydration validation without invoking the resolver
+or replaying a commitment. No generic Role Power ledger or adapter layer sits
+between these owners.
 
 The chosen architecture utilizes a dedicated `PlayerState` wrapper class. This class contains individual properties (e.g., `HasVotingRight`, `DurableVotingPower`) for all dynamic boolean and data-carrying states, typically using `internal set` for controlled modification. The `Player` class then holds a single instance of `PlayerState`. This approach provides a balance of organization (grouping all volatile states together), strong typing, clear separation of concerns (keeping `Player` focused on identity/role), and strict encapsulation.
 
@@ -577,6 +609,7 @@ Located in `Werewolves.Core.StateModels/Extensions/MainRoleTypeExtensions.cs`. P
 *   **`IsHardAlignedVillager` / `IsHardAlignedWerewolf`:** Classify stable setup allegiance independently of UI Role Group. White Werewolf is grouped with Loners for its solo win condition; its holder remains a Werewolf Faction Agent and White Werewolf Faction Beneficiary, and the Role is not hard-aligned Werewolf. Actor is hard-aligned Villager.
 *   **`IsEligibleActorSetupCard`:** Identifies hard-aligned Villager Roles whose individual powers can be used as Actor Setup Cards.
 *   **Usage:** `GetRoleGroup` supports UI grouping and role selection; the explicit hard-alignment predicates support setup validity.
+*   **Initial Werewolf Agency:** The former public StateModels `EstablishesInitialWerewolfAgency` extension has been removed. Production rules consumers use the single closed profile owned by `Werewolves.Core.GameLogic.RoleFactionKnowledge`.
 
 # Game Loop Outline (Declarative Sub-Phase Architecture)
 

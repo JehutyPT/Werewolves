@@ -1,7 +1,8 @@
+using Werewolves.Core.GameLogic.Models.StateMachine;
 using Werewolves.Core.GameLogic.Roles.MainRoles;
+using Werewolves.Core.GameLogic.RolePowers;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
-using Werewolves.Core.StateModels.Extensions;
 using Werewolves.Core.StateModels.Log;
 using Werewolves.Core.StateModels.Models;
 using Werewolves.Core.StateModels.Models.Simulation;
@@ -28,11 +29,6 @@ internal readonly record struct IndexedAngelVictory(
 
 internal static class GameSessionQueries
 {
-	private readonly record struct IndexedFactionAgentFact(
-		FactionFact Fact,
-		FactionFactSource Source,
-		int BatchIndex);
-
     internal static IEnumerable<TLogEntry> FindLogEntries<TLogEntry>(
         IGameSession session,
         NumberRangeConstraint? turnRange = null,
@@ -783,67 +779,6 @@ internal static class GameSessionQueries
                unaccountedCompositionHolderCount;
     }
 
-	internal static bool TryGetExactInitialLivingWerewolfAgentCapacity(
-		IGameSession session,
-		out int capacity)
-	{
-		ArgumentNullException.ThrowIfNull(session);
-		capacity = 0;
-		var players = session.GetPlayers().ToArray();
-		if (session.TurnNumber != 1 ||
-		    session.GetCurrentPhase() != GamePhase.Night ||
-		    players.Any(player => player.State.Health != PlayerHealth.Alive))
-		{
-			return false;
-		}
-
-		var knownAgents = players
-			.Where(player =>
-				session.GetFactionAgentKnowledge(
-					player.Id,
-					Faction.Werewolf) == FactionAgentKnowledge.KnownAgent)
-			.ToArray();
-		var establishedAgentRoles = knownAgents
-			.Select(GetEstablishedRole)
-			.ToArray();
-		if (establishedAgentRoles.Any(role => role is null))
-		{
-			return false;
-		}
-		var establishedAgentRoleValues = establishedAgentRoles
-			.Select(role => role!.Value)
-			.ToArray();
-
-		var activeAgencyCardCounts = session
-			.GetModeratorPhysicalCharacterCards()
-			.Where(cardState =>
-				(cardState.Zone is PhysicalCharacterCardZone.DealPool or
-					PhysicalCharacterCardZone.PlayerOwned) &&
-				cardState.Card.PrintedRole.EstablishesInitialWerewolfAgency())
-			.GroupBy(cardState => cardState.Card.PrintedRole)
-			.ToDictionary(group => group.Key, group => group.Count());
-		var establishedAgencyAgentCounts = establishedAgentRoleValues
-			.Where(role => role.EstablishesInitialWerewolfAgency())
-			.GroupBy(role => role)
-			.ToDictionary(group => group.Key, group => group.Count());
-		if (establishedAgencyAgentCounts.Any(pair =>
-			!activeAgencyCardCounts.TryGetValue(pair.Key, out var cardCount) ||
-			pair.Value > cardCount))
-		{
-			return false;
-		}
-
-		var agencyRoleCapacity = activeAgencyCardCounts.Values.Sum();
-		var establishedNonCardAgentCount = establishedAgentRoleValues
-			.Count(role => !role.EstablishesInitialWerewolfAgency());
-		capacity = agencyRoleCapacity + establishedNonCardAgentCount;
-		var candidateCount = players.Count(player =>
-			session.GetFactionAgentKnowledge(
-				player.Id,
-				Faction.Werewolf) != FactionAgentKnowledge.KnownNonAgent);
-		return capacity > 0 && capacity <= candidateCount;
-	}
-
     internal static bool IsCompleteLivingRoleHolderSetKnown(
         IGameSession session,
         MainRoleType role)
@@ -917,79 +852,622 @@ internal static class GameSessionQueries
                 filter: entry => entry.JudgePlayerId == judgePlayerId)
             .Any();
 
-    internal static bool HasStutteringJudgeSignalBeenEstablished(
-        IGameSession session,
-        RolePowerInstanceIdentity powerIdentity)
-    {
-        const string consecutiveVotePowerIdentifier =
-            "stuttering-judge-consecutive-vote";
-        if (!powerIdentity.IsValid ||
+	internal static bool IsValidActorBorrowedHunterFinalShotContext(
+		GameSession session,
+		ActorBorrowedRolePowers.ActorBorrowedRolePowerUse use,
+		BorrowedPostEliminationRolePowerContext.HunterFinalShot context)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		ArgumentNullException.ThrowIfNull(use);
+		ArgumentNullException.ThrowIfNull(context);
+		IReadOnlyList<GameLogEntryBase> history =
+			session.GameHistoryLog.ToArray();
+		var commits = session.GetActorBorrowedHunterFinalShotCommits();
+		foreach (var commit in commits)
+		{
+			commit.EnforceValidity();
+		}
+
+		return use.PowerInstance.SourceRole == MainRoleType.Hunter &&
+			use.PowerInstance.SourcePower.Category == RolePowerCategory.Reactive &&
+			StringComparer.Ordinal.Equals(
+				use.PowerInstance.SourcePower.Identifier.Value,
+				ActorBorrowedHunterFinalShotCommit
+					.ExpectedSourcePowerIdentifier) &&
+			!string.IsNullOrWhiteSpace(context.CascadeScopeId) &&
+			context.TriggeringPlayerIds is { Count: > 0 } &&
+			context.TriggeringPlayerIds.Contains(use.Actor.Id) &&
+			context.TriggeringPlayerIds.All(playerId => playerId != Guid.Empty) &&
+			context.TriggeringPlayerIds.Distinct().Count() ==
+				context.TriggeringPlayerIds.Count &&
+			EliminationCascadeStage.IsActiveInteractiveReactionBatch(
+				session,
+				context.CascadeScopeId,
+				context.TriggeringPlayerIds) &&
+			history.OfType<EliminationCascadeBatchResolvedLogEntry>()
+				.Any(batch =>
+					StringComparer.Ordinal.Equals(
+						batch.ScopeId,
+						context.CascadeScopeId) &&
+					batch.CommittedEliminations
+						.Select(elimination => elimination.PlayerId)
+						.SequenceEqual(context.TriggeringPlayerIds)) &&
+			!IsEliminationCascadeComplete(
+				session,
+				context.CascadeScopeId) &&
+			!commits.Any(commit =>
+				use.Correlates(commit) ||
+				StringComparer.Ordinal.Equals(
+					commit.CascadeScopeId,
+					context.CascadeScopeId) &&
+				commit.TriggeringPlayerIds.SequenceEqual(
+					context.TriggeringPlayerIds));
+	}
+
+	internal static bool IsValidActorBorrowedElderVillageVoteSuppressionContext(
+		GameSession session,
+		ActorBorrowedRolePowers.ActorBorrowedRolePowerUse use,
+		BorrowedPostEliminationRolePowerContext.ElderVillageVoteSuppression
+			context)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		ArgumentNullException.ThrowIfNull(use);
+		ArgumentNullException.ThrowIfNull(context);
+		IReadOnlyList<GameLogEntryBase> history =
+			session.GameHistoryLog.ToArray();
+		var vote = GetCurrentDayVoteOutcome(session);
+		var commits = session.GetActorBorrowedElderSuppressionCommits();
+		foreach (var commit in commits)
+		{
+			commit.EnforceValidity();
+		}
+
+		if (use.PowerInstance.SourceRole != MainRoleType.Elder ||
+			use.PowerInstance.SourcePower.Category != RolePowerCategory.Reactive ||
+			!StringComparer.Ordinal.Equals(
+				use.PowerInstance.SourcePower.Identifier.Value,
+				ActorBorrowedElderSuppressionCommit
+					.ExpectedSourcePowerIdentifier) ||
+			session.Execution.CurrentPhase != GamePhase.Day ||
+			use.Actor.State.PubliclyRevealedRole != MainRoleType.Actor ||
+			vote is not { } currentVote ||
+			currentVote.LogIndex != context.VoteOutcomeLogIndex ||
+			currentVote.PlayerId != use.Actor.Id ||
+			context.VoteOutcomeLogIndex < 0 ||
+			context.VoteOutcomeLogIndex >= history.Count ||
+			history[context.VoteOutcomeLogIndex] is not
+				VoteOutcomeReportedLogEntry
+				{
+					CurrentPhase: GamePhase.Day,
+					ReportedOutcomePlayerId: var votedPlayerId
+				} reportedVote ||
+			reportedVote.TurnNumber != session.TurnNumber ||
+			votedPlayerId != use.Actor.Id ||
+			!StringComparer.Ordinal.Equals(
+				context.CascadeScopeId,
+				$"Day:{session.TurnNumber}:Vote:{currentVote.VoteOrdinal}") ||
+			GetVillagerRolePowerSuppression(session) != null ||
+			commits.Any(commit =>
+				use.Correlates(commit) ||
+				commit.TriggeringVoteOutcomeLogIndex ==
+					context.VoteOutcomeLogIndex ||
+				StringComparer.Ordinal.Equals(
+					commit.CascadeScopeId,
+					context.CascadeScopeId)))
+		{
+			return false;
+		}
+
+		var correlatedHistory = history
+			.Skip(currentVote.LogIndex + 1)
+			.ToArray();
+		if (correlatedHistory.Any(entry =>
+				entry is VoteOutcomeReportedLogEntry laterVote &&
+				laterVote.CurrentPhase == GamePhase.Day &&
+				laterVote.TurnNumber == session.TurnNumber))
+		{
+			return false;
+		}
+
+		var revealIndex = Array.FindIndex(
+			correlatedHistory,
+			entry => entry is RoleRevealLogEntry reveal &&
+				reveal.CurrentPhase == GamePhase.Day &&
+				reveal.TurnNumber == session.TurnNumber &&
+				reveal.RevealedRoles.TryGetValue(
+					use.Actor.Id,
+					out var revealedRole) &&
+				revealedRole == MainRoleType.Actor);
+		var eliminationIndex = Array.FindIndex(
+			correlatedHistory,
+			entry => entry is PlayerEliminatedLogEntry
+			{
+				CurrentPhase: GamePhase.Day,
+				PlayerId: var eliminatedPlayerId,
+				Reason: EliminationReason.DayVote
+			} eliminated &&
+			eliminated.TurnNumber == session.TurnNumber &&
+			eliminatedPlayerId == use.Actor.Id);
+		var expectedElimination = new EliminationCascadeElimination(
+			use.Actor.Id,
+			EliminationReason.DayVote);
+		var batchIndex = Array.FindIndex(
+			correlatedHistory,
+			entry => entry is EliminationCascadeBatchResolvedLogEntry batch &&
+				batch.CurrentPhase == GamePhase.Day &&
+				batch.TurnNumber == session.TurnNumber &&
+				StringComparer.Ordinal.Equals(
+					batch.ScopeId,
+					context.CascadeScopeId) &&
+				batch.RequestedEliminations is [var requested] &&
+				requested == expectedElimination &&
+				batch.CommittedEliminations is [var committed] &&
+				committed == expectedElimination);
+		var completionIndex = Array.FindIndex(
+			correlatedHistory,
+			entry => entry is EliminationCascadeCompletedLogEntry
+			{
+				CurrentPhase: GamePhase.Day,
+				ScopeId: var completedScopeId
+			} completion &&
+			completion.TurnNumber == session.TurnNumber &&
+			StringComparer.Ordinal.Equals(
+				completedScopeId,
+				context.CascadeScopeId));
+		return revealIndex >= 0 &&
+			eliminationIndex > revealIndex &&
+			batchIndex > eliminationIndex &&
+			completionIndex > batchIndex;
+	}
+
+	internal static bool IsValidActorBorrowedKnightRustySwordScheduleContext(
+		GameSession session,
+		ActorBorrowedRolePowers.ActorBorrowedRolePowerUse use,
+		BorrowedPostEliminationRolePowerContext.KnightRustySwordSchedule
+			context)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		ArgumentNullException.ThrowIfNull(use);
+		ArgumentNullException.ThrowIfNull(context);
+		IReadOnlyList<GameLogEntryBase> history =
+			session.GameHistoryLog.ToArray();
+		var commits = session.GetActorBorrowedKnightRustySwordScheduleCommits();
+		foreach (var commit in commits)
+		{
+			commit.EnforceValidity();
+		}
+
+		if (use.PowerInstance.SourceRole !=
+				MainRoleType.KnightWithRustySword ||
+			use.PowerInstance.SourcePower.Category != RolePowerCategory.Automatic ||
+			!StringComparer.Ordinal.Equals(
+				use.PowerInstance.SourcePower.Identifier.Value,
+				ActorBorrowedKnightRustySwordScheduleCommit
+					.ExpectedSourcePowerIdentifier) ||
+			session.Execution.CurrentPhase != GamePhase.Dawn ||
+			!StringComparer.Ordinal.Equals(
+				context.CascadeScopeId,
+				$"Dawn:{session.TurnNumber}") ||
+			context.WerewolfAttackEliminationLogIndex < 0 ||
+			context.WerewolfAttackEliminationLogIndex >= history.Count ||
+			history[context.WerewolfAttackEliminationLogIndex] is not
+				PlayerEliminatedLogEntry
+				{
+					CurrentPhase: GamePhase.Dawn,
+					PlayerId: var eliminatedPlayerId,
+					Reason: EliminationReason.WerewolfAttack
+				} eliminated ||
+			eliminated.TurnNumber != session.TurnNumber ||
+			eliminatedPlayerId != use.Actor.Id ||
+			commits.Any(commit =>
+				use.Correlates(commit) ||
+				commit.WerewolfAttackEliminationLogIndex ==
+					context.WerewolfAttackEliminationLogIndex ||
+				StringComparer.Ordinal.Equals(
+					commit.CascadeScopeId,
+					context.CascadeScopeId)))
+		{
+			return false;
+		}
+
+		var determinationIndex = -1;
+		for (var index = 0;
+			index < context.WerewolfAttackEliminationLogIndex;
+			index++)
+		{
+			if (history[index] is DawnVictimDeterminedLogEntry
+			{
+				CurrentPhase: GamePhase.Dawn,
+				PlayerId: var determinedPlayerId,
+				Reason: EliminationReason.WerewolfAttack
+			} determination &&
+				determination.TurnNumber == session.TurnNumber &&
+				determinedPlayerId == use.Actor.Id)
+			{
+				determinationIndex = index;
+			}
+		}
+
+		var expectedElimination = new EliminationCascadeElimination(
+			use.Actor.Id,
+			EliminationReason.WerewolfAttack);
+		var batchIndex = -1;
+		var completionIndex = -1;
+		for (var index = context.WerewolfAttackEliminationLogIndex + 1;
+			index < history.Count;
+			index++)
+		{
+			if (batchIndex < 0 &&
+				history[index] is EliminationCascadeBatchResolvedLogEntry batch &&
+				batch.CurrentPhase == GamePhase.Dawn &&
+				batch.TurnNumber == session.TurnNumber &&
+				StringComparer.Ordinal.Equals(
+					batch.ScopeId,
+					context.CascadeScopeId) &&
+				batch.RequestedEliminations.Contains(expectedElimination) &&
+				batch.CommittedEliminations.Contains(expectedElimination))
+			{
+				batchIndex = index;
+				continue;
+			}
+
+			if (batchIndex >= 0 &&
+				history[index] is EliminationCascadeCompletedLogEntry
+				{
+					CurrentPhase: GamePhase.Dawn,
+					ScopeId: var completedScopeId
+				} completion &&
+				completion.TurnNumber == session.TurnNumber &&
+				StringComparer.Ordinal.Equals(
+					completedScopeId,
+					context.CascadeScopeId))
+			{
+				completionIndex = index;
+				break;
+			}
+		}
+
+		return determinationIndex >= 0 &&
+			batchIndex > context.WerewolfAttackEliminationLogIndex &&
+			completionIndex > batchIndex;
+	}
+
+	internal static bool IsValidActorBorrowedScapegoatVoterRestrictionContext(
+		GameSession session,
+		ActorBorrowedRolePowers.ActorBorrowedRolePowerUse use,
+		BorrowedPostEliminationRolePowerContext.ScapegoatVoterRestriction
+			context)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		ArgumentNullException.ThrowIfNull(use);
+		ArgumentNullException.ThrowIfNull(context);
+		IReadOnlyList<GameLogEntryBase> history =
+			session.GameHistoryLog.ToArray();
+		var vote = GetCurrentDayVoteOutcome(session);
+		var parents = session.GetActorBorrowedScapegoatTieReplacementCommits()
+			.Where(commit =>
+				commit.PublicMarkerLogIndex ==
+					context.TieReplacementPublicMarkerLogIndex &&
+				StringComparer.Ordinal.Equals(
+					commit.CascadeScopeId,
+					context.SacrificeCascadeScopeId))
+			.ToArray();
+		if (use.PowerInstance.SourceRole != MainRoleType.Scapegoat ||
+			use.PowerInstance.SourcePower.Category != RolePowerCategory.Automatic ||
+			!StringComparer.Ordinal.Equals(
+				use.PowerInstance.SourcePower.Identifier.Value,
+				ActorBorrowedScapegoatTieReplacementCommit
+					.ExpectedSourcePowerIdentifier) ||
+			session.Execution.CurrentPhase != GamePhase.Day ||
+			use.Actor.State.PubliclyRevealedRole != MainRoleType.Actor ||
+			context.TieReplacementPublicMarkerLogIndex < 0 ||
+			context.TieReplacementPublicMarkerLogIndex >= history.Count ||
+			history[context.TieReplacementPublicMarkerLogIndex] is not
+				ActorBorrowedRolePowerCommittedLogEntry ||
+			string.IsNullOrWhiteSpace(context.SacrificeCascadeScopeId) ||
+			vote is not { PlayerId: var votedPlayerId } currentVote ||
+			votedPlayerId != Guid.Empty ||
+			parents is not [var parent] ||
+			parent.TriggeringVoteOutcomeLogIndex != currentVote.LogIndex ||
+			parent.VoteOrdinal != currentVote.VoteOrdinal ||
+			!StringComparer.Ordinal.Equals(
+				parent.CascadeScopeId,
+				context.SacrificeCascadeScopeId) ||
+			parent.PowerIdentity.ActingPlayerId != use.Actor.Id ||
+			parent.TurnNumber != session.TurnNumber ||
+			parent.CurrentPhase != GamePhase.Day ||
+			GetCurrentScapegoatTieReplacement(session) != null ||
+			IsEliminationCascadeComplete(
+				session,
+				context.SacrificeCascadeScopeId))
+		{
+			return false;
+		}
+
+		parent.EnforceValidity();
+		if (!use.Correlates(parent))
+		{
+			return false;
+		}
+
+		var revealIndex = -1;
+		for (var index = currentVote.LogIndex + 1;
+			index < parent.PublicMarkerLogIndex;
+			index++)
+		{
+			if (history[index] is RoleRevealLogEntry reveal &&
+				reveal.CurrentPhase == GamePhase.Day &&
+				reveal.TurnNumber == session.TurnNumber &&
+				reveal.RevealedRoles.TryGetValue(
+					use.Actor.Id,
+					out var revealedRole) &&
+				revealedRole == MainRoleType.Actor)
+			{
+				revealIndex = index;
+			}
+		}
+
+		var expectedElimination = new EliminationCascadeElimination(
+			use.Actor.Id,
+			EliminationReason.EventElimination);
+		var eliminationIndex = -1;
+		var batchIndex = -1;
+		for (var index = parent.PublicMarkerLogIndex + 1;
+			index < history.Count;
+			index++)
+		{
+			if (eliminationIndex < 0 &&
+				history[index] is PlayerEliminatedLogEntry
+				{
+					CurrentPhase: GamePhase.Day,
+					PlayerId: var eliminatedPlayerId,
+					Reason: EliminationReason.EventElimination
+				} eliminated &&
+				eliminated.TurnNumber == session.TurnNumber &&
+				eliminatedPlayerId == use.Actor.Id)
+			{
+				eliminationIndex = index;
+				continue;
+			}
+
+			if (eliminationIndex >= 0 &&
+				history[index] is EliminationCascadeBatchResolvedLogEntry batch &&
+				batch.CurrentPhase == GamePhase.Day &&
+				batch.TurnNumber == session.TurnNumber &&
+				StringComparer.Ordinal.Equals(
+					batch.ScopeId,
+					context.SacrificeCascadeScopeId) &&
+				batch.RequestedEliminations is [var requested] &&
+				requested == expectedElimination &&
+				batch.CommittedEliminations is [var committed] &&
+				committed == expectedElimination)
+			{
+				batchIndex = index;
+				break;
+			}
+		}
+		if (revealIndex < 0 ||
+			eliminationIndex < 0 ||
+			batchIndex <= eliminationIndex)
+		{
+			return false;
+		}
+
+		var restrictions = session
+			.GetActorBorrowedScapegoatVoterRestrictionCommits()
+			.Where(commit =>
+				commit.TieReplacementPublicMarkerLogIndex ==
+					parent.PublicMarkerLogIndex ||
+				StringComparer.Ordinal.Equals(
+					commit.CascadeScopeId,
+					parent.CascadeScopeId) ||
+				use.Correlates(commit))
+			.ToArray();
+		if (restrictions.Length > 1)
+		{
+			return false;
+		}
+		if (restrictions is [var restriction])
+		{
+			restriction.EnforceValidity();
+			return use.Correlates(restriction) &&
+				restriction.TieReplacementPublicMarkerLogIndex ==
+					parent.PublicMarkerLogIndex &&
+				StringComparer.Ordinal.Equals(
+					restriction.CascadeScopeId,
+					parent.CascadeScopeId) &&
+				restriction.PublicMarkerLogIndex < history.Count &&
+				history[restriction.PublicMarkerLogIndex] is
+					ActorBorrowedRolePowerCommittedLogEntry;
+		}
+
+		return true;
+	}
+
+	internal static ActorBorrowedElderResistanceCommit?
+		GetLatestActorBorrowedElderResistanceForActiveUse(
+			GameSession session,
+			ActorBorrowedRolePowers.ActorBorrowedRolePowerUse borrowedUse)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		ArgumentNullException.ThrowIfNull(borrowedUse);
+		var commits = session.GetActorBorrowedElderResistanceCommits();
+		var correlated = commits
+			.Where(borrowedUse.Correlates)
+			.MaxBy(commit => commit.PublicMarkerLogIndex);
+		// Elder's spent/restored state is source-specific and remains durable for
+		// the activation even across test-owned or recovery Phase boundaries.
+		return correlated ?? commits
+			.Where(commit =>
+				commit.PowerIdentity == borrowedUse.PowerIdentity)
+			.MaxBy(commit => commit.PublicMarkerLogIndex);
+	}
+
+	internal static IReadOnlyList<ActorBorrowedCupidLoversCommit>
+		GetCorrelatedActorBorrowedCupidLoversCommits(
+			GameSession session,
+			ActorBorrowedRolePowers.ActorBorrowedRolePowerUse borrowedUse)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		ArgumentNullException.ThrowIfNull(borrowedUse);
+		return session.GetActorBorrowedCupidLoversCommits()
+			.Where(borrowedUse.Correlates)
+			.ToArray();
+	}
+
+	internal static IReadOnlyList<ActorBorrowedWitchPotionUseCommit>
+		GetCorrelatedActorBorrowedWitchPotionUseCommits(
+			GameSession session,
+			ActorBorrowedRolePowers.ActorBorrowedRolePowerUse borrowedUse)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		ArgumentNullException.ThrowIfNull(borrowedUse);
+		return session.GetActorBorrowedWitchPotionUseCommits()
+			.Where(borrowedUse.Correlates)
+			.ToArray();
+	}
+
+	internal static IReadOnlyList<ActorBorrowedWitchPotionDeclineCommit>
+		GetCorrelatedActorBorrowedWitchPotionDeclineCommits(
+			GameSession session,
+			ActorBorrowedRolePowers.ActorBorrowedRolePowerUse borrowedUse)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		ArgumentNullException.ThrowIfNull(borrowedUse);
+		return session.GetActorBorrowedWitchPotionDeclineCommits()
+			.Where(borrowedUse.Correlates)
+			.ToArray();
+	}
+
+	internal static bool IsCorrelatedActorBorrowedVillageIdiotPardonCommitted(
+		GameSession session,
+		ActorBorrowedRolePowers.ActorBorrowedRolePowerUse borrowedUse,
+		OneUseRolePowerResourceIdentity resourceIdentity)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		ArgumentNullException.ThrowIfNull(borrowedUse);
+		return session.GetActorBorrowedVillageIdiotPardonCommits()
+			.Where(borrowedUse.Correlates)
+			.Any(commit => commit.SpentResourceIdentity == resourceIdentity);
+	}
+
+	internal static bool HasActorBorrowedBearTamerGrowlForActivation(
+		GameSession session,
+		ActorBorrowedRolePowers.ActorBorrowedRolePowerUse borrowedUse)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		ArgumentNullException.ThrowIfNull(borrowedUse);
+		return session.GetActorBorrowedBearTamerGrowlCommits()
+			.Any(commit => commit.PowerIdentity == borrowedUse.PowerIdentity);
+	}
+
+	internal static bool HasCorrelatedActorBorrowedBearTamerGrowl(
+		GameSession session,
+		ActorBorrowedRolePowers.ActorBorrowedRolePowerUse borrowedUse)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		ArgumentNullException.ThrowIfNull(borrowedUse);
+		return session.GetActorBorrowedBearTamerGrowlCommits()
+			.Any(borrowedUse.Correlates);
+	}
+
+	internal static bool HasCorrelatedActorBorrowedScapegoatTieReplacement(
+		GameSession session,
+		ActorBorrowedRolePowers.ActorBorrowedRolePowerUse borrowedUse)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		ArgumentNullException.ThrowIfNull(borrowedUse);
+		return session.GetActorBorrowedScapegoatTieReplacementCommits()
+			.Any(borrowedUse.Correlates);
+	}
+
+	internal static bool HasCorrelatedActorBorrowedStutteringJudgeSignalSetup(
+		GameSession session,
+		ActorBorrowedRolePowers.ActorBorrowedRolePowerUse borrowedUse)
+		=> GetCorrelatedActorBorrowedStutteringJudgeSignalSetupCommits(
+			session,
+			borrowedUse).Count > 0;
+
+	internal static IReadOnlyList<
+		ActorBorrowedStutteringJudgeSignalSetupCommit>
+		GetCorrelatedActorBorrowedStutteringJudgeSignalSetupCommits(
+			GameSession session,
+			ActorBorrowedRolePowers.ActorBorrowedRolePowerUse borrowedUse)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		ArgumentNullException.ThrowIfNull(borrowedUse);
+		return session.GetActorBorrowedStutteringJudgeSignalSetupCommits()
+			.Where(borrowedUse.Correlates)
+			.ToArray();
+	}
+
+	internal static bool
+		HasCorrelatedActorBorrowedStutteringJudgeSignalObservation(
+			GameSession session,
+			ActorBorrowedRolePowers.ActorBorrowedRolePowerUse borrowedUse)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		ArgumentNullException.ThrowIfNull(borrowedUse);
+		return session.GetActorBorrowedStutteringJudgeSignalObservationCommits()
+			.Any(borrowedUse.Correlates);
+	}
+
+	internal static bool HasStutteringJudgeSignalBeenEstablished(
+		IGameSession session,
+		RolePowerInstanceIdentity powerIdentity)
+	{
+		if (!powerIdentity.IsValid ||
+			powerIdentity.SourceRole != MainRoleType.StutteringJudge ||
+			powerIdentity.PowerInstanceOrigin !=
+				RolePowerInstanceOrigin.Borrowed ||
+			!StringComparer.Ordinal.Equals(
+				powerIdentity.SourcePowerIdentifier,
+				StutteringJudgeRole.ConsecutiveVotePowerIdentifier.Value) ||
+			session is not GameSession concreteSession)
+		{
+			return false;
+		}
+
+		return concreteSession
+			.GetActorBorrowedStutteringJudgeSignalSetupCommits()
+			.Any(commit =>
+				commit.PowerIdentity == powerIdentity &&
+				commit.TurnNumber == session.TurnNumber &&
+				commit.CurrentPhase == GamePhase.Night);
+	}
+
+	internal static bool HasStutteringJudgeSignalBeenEstablished(
+		GameSession session,
+		ActorBorrowedRolePowers.ActorBorrowedRolePowerUse borrowedUse)
+	{
+		ArgumentNullException.ThrowIfNull(session);
+		ArgumentNullException.ThrowIfNull(borrowedUse);
+		var powerIdentity = borrowedUse.PowerIdentity;
+		if (!powerIdentity.IsValid ||
             powerIdentity.SourceRole != MainRoleType.StutteringJudge ||
-            powerIdentity.PowerInstanceOrigin !=
-                RolePowerInstanceOrigin.Borrowed ||
-            !StringComparer.Ordinal.Equals(
-                powerIdentity.SourcePowerIdentifier,
-                consecutiveVotePowerIdentifier) ||
-            session is not GameSession concreteSession)
-        {
-            return false;
-        }
+			powerIdentity.PowerInstanceOrigin !=
+				RolePowerInstanceOrigin.Borrowed ||
+			!StringComparer.Ordinal.Equals(
+				powerIdentity.SourcePowerIdentifier,
+				StutteringJudgeRole.ConsecutiveVotePowerIdentifier.Value))
+		{
+			return false;
+		}
 
-        var activation =
-            concreteSession.GetModeratorActiveActorBorrowedRolePowerActivation();
-        if (activation is null ||
-            activation.ActingPlayerId != powerIdentity.ActingPlayerId ||
-            activation.SourceRole != powerIdentity.SourceRole ||
-            activation.ActivationId != powerIdentity.PowerInstanceId ||
-            activation.Origin != powerIdentity.PowerInstanceOrigin)
-        {
-            return false;
-        }
+		return session.GetActorBorrowedStutteringJudgeSignalSetupCommits()
+			.Any(commit =>
+				commit.PowerIdentity == powerIdentity &&
+				commit.ActorSetupCardId == borrowedUse.ActorSetupCardId &&
+				commit.TurnNumber == session.TurnNumber &&
+				commit.CurrentPhase == GamePhase.Night);
+	}
 
-        return concreteSession
-            .GetActorBorrowedStutteringJudgeSignalSetupCommits()
-            .Any(commit =>
-                commit.PowerIdentity == powerIdentity &&
-                commit.TurnNumber == session.TurnNumber &&
-                commit.CurrentPhase == GamePhase.Night);
-    }
-
-    internal static bool HasStutteringJudgeSignalBeenObserved(
-        IGameSession session,
-        RolePowerInstanceIdentity powerIdentity)
-    {
-        const string consecutiveVotePowerIdentifier =
-            "stuttering-judge-consecutive-vote";
-        if (!powerIdentity.IsValid ||
-            powerIdentity.SourceRole != MainRoleType.StutteringJudge ||
-            powerIdentity.PowerInstanceOrigin !=
-                RolePowerInstanceOrigin.Borrowed ||
-            !StringComparer.Ordinal.Equals(
-                powerIdentity.SourcePowerIdentifier,
-                consecutiveVotePowerIdentifier) ||
-            session is not GameSession concreteSession)
-        {
-            return false;
-        }
-
-        var activation =
-            concreteSession.GetModeratorActiveActorBorrowedRolePowerActivation();
-        if (activation is null ||
-            activation.ActingPlayerId != powerIdentity.ActingPlayerId ||
-            activation.SourceRole != powerIdentity.SourceRole ||
-            activation.ActivationId != powerIdentity.PowerInstanceId ||
-            activation.Origin != powerIdentity.PowerInstanceOrigin)
-        {
-            return false;
-        }
-
-        return concreteSession
-            .GetActorBorrowedStutteringJudgeSignalObservationCommits()
-            .Any(commit =>
-                commit.PowerIdentity == powerIdentity &&
-                commit.TurnNumber == session.TurnNumber &&
-                commit.CurrentPhase == GamePhase.Day);
-    }
+	internal static bool HasStutteringJudgeSignalBeenObserved(
+		GameSession session,
+		ActorBorrowedRolePowers.ActorBorrowedRolePowerUse borrowedUse) =>
+		HasCorrelatedActorBorrowedStutteringJudgeSignalObservation(
+			session,
+			borrowedUse);
 
     internal static bool HasUnreportedStutteringJudgeSignalObservation(
         IGameSession session)
@@ -1140,103 +1618,6 @@ internal static class GameSessionQueries
 				cardState.Zone == PhysicalCharacterCardZone.DealPool)
 				.Select(cardState => cardState.Card.PrintedRole)
 				.ToList();
-
-	internal static MainRoleType? GetEstablishedRole(IPlayer player) =>
-		player.State.PhysicalCharacterCardRole ??
-		player.State.ModeratorKnownRole ??
-		player.State.CurrentRole;
-
-	internal static List<MainRoleType> GetUnclaimedRoles(IGameSession session)
-	{
-		ArgumentNullException.ThrowIfNull(session);
-		var unclaimedRoles = GetUnassignedRoles(session);
-		foreach (var player in session.GetPlayers())
-		{
-			if (player.State.PhysicalCharacterCardId is null &&
-				GetEstablishedRole(player) is { } establishedRole)
-			{
-				unclaimedRoles.Remove(establishedRole);
-			}
-		}
-
-		return unclaimedRoles;
-	}
-
-	internal static IReadOnlyList<MainRoleType> GetPossibleRoles(
-		IGameSession session,
-		Guid playerId)
-	{
-		ArgumentNullException.ThrowIfNull(session);
-		session.GetPlayer(playerId);
-		var possibleRoles = GetUnclaimedRoles(session);
-		var agencyKnowledge = session.GetFactionAgentKnowledge(
-			playerId,
-			Faction.Werewolf);
-		if (agencyKnowledge == FactionAgentKnowledge.KnownNonAgent)
-		{
-			return Array.AsReadOnly(possibleRoles
-				.Where(role => !role.EstablishesInitialWerewolfAgency())
-				.ToArray());
-		}
-
-		var earliestAgencyFact = FindEarliestWerewolfAgencyFact(
-			session,
-			playerId);
-		if (agencyKnowledge == FactionAgentKnowledge.KnownAgent &&
-			earliestAgencyFact is { } earliest &&
-			IsInitialWerewolfAgencyProvenance(earliest.Source))
-		{
-			return Array.AsReadOnly(possibleRoles
-				.Where(role => role.EstablishesInitialWerewolfAgency())
-				.ToArray());
-		}
-
-		return Array.AsReadOnly(possibleRoles.ToArray());
-	}
-
-	internal static FactionAgentFactProvenance?
-		GetEarliestWerewolfAgencyFact(
-			IGameSession session,
-			Guid playerId)
-	{
-		ArgumentNullException.ThrowIfNull(session);
-		session.GetPlayer(playerId);
-		return FindEarliestWerewolfAgencyFact(session, playerId) is { } earliest
-			? new FactionAgentFactProvenance(earliest.Fact, earliest.Source)
-			: null;
-	}
-
-	private static IndexedFactionAgentFact? FindEarliestWerewolfAgencyFact(
-		IGameSession session,
-		Guid playerId) =>
-		session.GameHistoryLog
-			.OfType<IFactionFactBatchLogEntry>()
-			.SelectMany((entry, batchIndex) => entry.Facts
-				.Where(fact =>
-					fact.PlayerId == playerId &&
-					fact.Type == FactionFactType.Agent &&
-					fact.Faction == Faction.Werewolf &&
-					fact.AgentKnowledge == FactionAgentKnowledge.KnownAgent)
-				.Select(fact => new IndexedFactionAgentFact(
-					fact,
-					entry.Source,
-					batchIndex)))
-			.OrderBy(
-				item => item.Fact.EffectiveBoundary,
-				Comparer<FactionFactEffectiveBoundary>.Create(
-					FactionFactProjection.CompareBoundaries))
-			.ThenBy(item => item.BatchIndex)
-			.Cast<IndexedFactionAgentFact?>()
-			.FirstOrDefault();
-
-	private static bool IsInitialWerewolfAgencyProvenance(
-		FactionFactSource source) =>
-		source.Kind == FactionFactSourceKind.SimulationStartState ||
-		source.Kind == FactionFactSourceKind.ScheduledObservation &&
-		StringComparer.Ordinal.Equals(
-			source.Identifier,
-			FactionFactSource
-				.WerewolfFactionAgentGroupObservationIdentifier);
 
     internal static bool TryGetOnlyPossibleUnassignedRole(
         IGameSession session,

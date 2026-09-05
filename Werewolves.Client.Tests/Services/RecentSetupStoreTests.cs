@@ -9,12 +9,16 @@ namespace Werewolves.Client.Tests.Services;
 
 public sealed class RecentSetupStoreTests
 {
-	[Fact]
-	public void Capture_EquivalentContentBumpsTheExistingSetupWithANewTimestamp()
+	[Theory]
+	[InlineData(StoreKind.InMemory)]
+	[InlineData(StoreKind.File)]
+	public void Capture_EquivalentContentBumpsTheExistingSetupWithANewTimestamp(
+		StoreKind storeKind)
 	{
 		var clock = new ManualTimeProvider(
 			new DateTimeOffset(2026, 8, 23, 10, 0, 0, TimeSpan.Zero));
-		var store = new InMemoryRecentSetupStore(clock);
+		using var fixture = new StoreAdapterFixture(storeKind, clock);
+		var store = fixture.Store;
 
 		store.Capture(
 			["Ana", "Bruno"],
@@ -40,7 +44,7 @@ public sealed class RecentSetupStoreTests
 				[MainRoleType.SimpleVillager] = 2
 			});
 
-		store.Load().Should().SatisfyRespectively(
+		fixture.Reopen().Load().Should().SatisfyRespectively(
 			mostRecent =>
 			{
 				mostRecent.PlayerNames.Should().Equal("Ana", "Bruno");
@@ -54,12 +58,16 @@ public sealed class RecentSetupStoreTests
 			older => older.PlayerNames.Should().Equal("Carla", "Diogo"));
 	}
 
-	[Fact]
-	public void Capture_EvictsTheOldestSetupAfterTenDistinctEntries()
+	[Theory]
+	[InlineData(StoreKind.InMemory)]
+	[InlineData(StoreKind.File)]
+	public void Capture_EvictsTheOldestSetupAfterTenDistinctEntries(
+		StoreKind storeKind)
 	{
 		var clock = new ManualTimeProvider(
 			new DateTimeOffset(2026, 8, 23, 10, 0, 0, TimeSpan.Zero));
-		var store = new InMemoryRecentSetupStore(clock);
+		using var fixture = new StoreAdapterFixture(storeKind, clock);
+		var store = fixture.Store;
 		var roleCounts = new Dictionary<MainRoleType, int>
 		{
 			[MainRoleType.SimpleWerewolf] = 1,
@@ -72,14 +80,20 @@ public sealed class RecentSetupStoreTests
 			clock.Advance(TimeSpan.FromMinutes(1));
 		}
 
-		store.Load().Select(setup => setup.PlayerNames.Single())
+		fixture.Reopen().Load().Select(setup => setup.PlayerNames.Single())
 			.Should().Equal(Enumerable.Range(1, 10).Reverse().Select(index => $"Player {index}"));
 	}
 
-	[Fact]
-	public void Capture_TreatsOrdinalSpellingAndSeatOrderAsDistinctContent()
+	[Theory]
+	[InlineData(StoreKind.InMemory)]
+	[InlineData(StoreKind.File)]
+	public void Capture_TreatsOrdinalSpellingAndSeatOrderAsDistinctContent(
+		StoreKind storeKind)
 	{
-		var store = new InMemoryRecentSetupStore();
+		var clock = new ManualTimeProvider(
+			new DateTimeOffset(2026, 8, 23, 10, 0, 0, TimeSpan.Zero));
+		using var fixture = new StoreAdapterFixture(storeKind, clock);
+		var store = fixture.Store;
 		var roleCounts = new Dictionary<MainRoleType, int>
 		{
 			[MainRoleType.SimpleWerewolf] = 1,
@@ -87,13 +101,57 @@ public sealed class RecentSetupStoreTests
 		};
 
 		store.Capture(["Ana", "Bruno"], roleCounts);
+		clock.Advance(TimeSpan.FromMinutes(1));
 		store.Capture(["ana", "Bruno"], roleCounts);
+		clock.Advance(TimeSpan.FromMinutes(1));
 		store.Capture(["Bruno", "Ana"], roleCounts);
 
-		store.Load().Select(setup => string.Join("|", setup.PlayerNames)).Should().Equal(
+		fixture.Reopen().Load()
+			.Select(setup => string.Join("|", setup.PlayerNames)).Should().Equal(
 			"Bruno|Ana",
 			"ana|Bruno",
 			"Ana|Bruno");
+	}
+
+	[Theory]
+	[InlineData(StoreKind.InMemory)]
+	[InlineData(StoreKind.File)]
+	public void Delete_RequiresACompleteReconstructedValueMatch(StoreKind storeKind)
+	{
+		var clock = new ManualTimeProvider(
+			new DateTimeOffset(2026, 8, 23, 10, 0, 0, TimeSpan.Zero));
+		using var fixture = new StoreAdapterFixture(storeKind, clock);
+		var store = fixture.Store;
+		var roleCounts = new Dictionary<MainRoleType, int>
+		{
+			[MainRoleType.SimpleWerewolf] = 1,
+			[MainRoleType.SimpleVillager] = 1
+		};
+		store.Capture(["Ana", "Bruno"], roleCounts);
+		clock.Advance(TimeSpan.FromMinutes(1));
+		store.Capture(["Carla", "Diogo"], roleCounts);
+		var selected = fixture.Reopen().Load()
+			.Single(setup => setup.PlayerNames[0] == "Ana");
+
+		store.Delete(new RecentSetup(
+			selected.PlayerNames,
+			selected.RoleCounts,
+			selected.CapturedAtUtc.AddMinutes(1)));
+		store.Delete(new RecentSetup(
+			["Different"],
+			selected.RoleCounts,
+			selected.CapturedAtUtc));
+		store.Delete(new RecentSetup(
+			selected.PlayerNames,
+			new Dictionary<MainRoleType, int>
+			{
+				[MainRoleType.SimpleVillager] = 1,
+				[MainRoleType.SimpleWerewolf] = 1
+			},
+			selected.CapturedAtUtc));
+
+		fixture.Reopen().Load().Should().ContainSingle()
+			.Which.PlayerNames.Should().Equal("Carla", "Diogo");
 	}
 
 	[Fact]
@@ -352,5 +410,40 @@ public sealed class RecentSetupStoreTests
 				Directory.Delete(Path, recursive: true);
 			}
 		}
+	}
+
+	public enum StoreKind
+	{
+		InMemory,
+		File
+	}
+
+	private sealed class StoreAdapterFixture : IDisposable
+	{
+		private readonly TemporaryDirectory? _directory;
+		private readonly TimeProvider _timeProvider;
+
+		public StoreAdapterFixture(StoreKind storeKind, TimeProvider timeProvider)
+		{
+			_timeProvider = timeProvider;
+			if (storeKind == StoreKind.File)
+			{
+				_directory = new TemporaryDirectory();
+				Store = new FileRecentSetupStore(_directory.Path, timeProvider);
+			}
+			else
+			{
+				Store = new InMemoryRecentSetupStore(timeProvider);
+			}
+		}
+
+		public IRecentSetupStore Store { get; }
+
+		public IRecentSetupStore Reopen() =>
+			_directory is null
+				? Store
+				: new FileRecentSetupStore(_directory.Path, _timeProvider);
+
+		public void Dispose() => _directory?.Dispose();
 	}
 }

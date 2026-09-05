@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using Werewolves.Core.StateModels.Enums;
 using Werewolves.Core.StateModels.Log;
@@ -538,6 +537,10 @@ internal class GameSession : IGameSession
 		Func<GameFactContext, FactionFactsCommittedLogEntry> entryFactory) =>
 		CommitSessionEntry(entryFactory, "Faction fact batch");
 
+	internal void CommitRoleIdentificationEntry(
+		Func<GameFactContext, RoleIdentificationLogEntry> entryFactory) =>
+		CommitSessionEntry(entryFactory, "Role Identification");
+
 	internal void CommitActorBorrowedCupidInitialBeneficiaryClosure(
 		Func<GameFactContext, FactionFactsCommittedLogEntry> entryFactory,
 		ActorBorrowedCupidLoversCommit expectedDeferredCommit,
@@ -807,6 +810,8 @@ internal class GameSession : IGameSession
 			!Enum.IsDefined(request.NewCurrentRole) ||
 			(request.ExpectedTargetCurrentRole is { } expectedTargetRole &&
 				!Enum.IsDefined(expectedTargetRole)) ||
+			(request.ExpectedTargetEstablishedRole is { } expectedEstablishedRole &&
+				!Enum.IsDefined(expectedEstablishedRole)) ||
 			(request.ObservedPrintedRole != request.NewCurrentRole &&
 				(request.ObservedPrintedRole != MainRoleType.Angel ||
 				 request.NewCurrentRole != MainRoleType.SimpleVillager)) ||
@@ -830,9 +835,6 @@ internal class GameSession : IGameSession
 			player.Id == request.ActingPlayerId);
 		var target = GetPlayers().SingleOrDefault(player =>
 			player.Id == request.VoteTargetId);
-		var knownTargetPrintedRole = target?.State.PhysicalCharacterCardRole ??
-			target?.State.ModeratorKnownRole ??
-			target?.State.CurrentRole;
 		if (actor?.State is not
 			{
 				Health: PlayerHealth.Alive,
@@ -844,8 +846,11 @@ internal class GameSession : IGameSession
 			target.State.Health != PlayerHealth.Alive ||
 			target.State.CurrentRole != request.ExpectedTargetCurrentRole ||
 			target.State.PubliclyRevealedRole is not null ||
-			(knownTargetPrintedRole is { } knownRole &&
-				knownRole != request.ObservedPrintedRole) ||
+			(request.PhysicalCards.ExpectedAcquiredCardOwnerPlayerId is null &&
+				target.State.ModeratorKnownRole is { } moderatorKnownRole &&
+				moderatorKnownRole != request.ObservedPrintedRole) ||
+			(request.ExpectedTargetEstablishedRole is { } establishedRole &&
+				establishedRole != request.ObservedPrintedRole) ||
 			actor.State.PhysicalCharacterCardId !=
 				request.PhysicalCards.OutgoingOwnedCardId ||
 			!GameHistoryLog.OfType<DevotedServantPublicSelfRevealCommittedLogEntry>()
@@ -1310,97 +1315,7 @@ internal class GameSession : IGameSession
         _gameSessionKernel.AddEntryAndUpdateState(entry);
     }
 
-    internal void IdentifyRole(HashSet<Guid> playerIds, MainRoleType role)
-    {
-        var entry = new RoleIdentificationLogEntry
-        {
-            Timestamp = DateTimeOffset.UtcNow,
-            TurnNumber = TurnNumber,
-            CurrentPhase = _gameSessionKernel.CurrentPhase,
-            PlayerIds = playerIds,
-            Role = role
-        };
-
-        _gameSessionKernel.AddEntryAndUpdateState(entry);
-
-		var entailedWerewolfFactionAgentKnowledge =
-			GetRoleIdentificationWerewolfFactionAgentKnowledge(role);
-		if (entailedWerewolfFactionAgentKnowledge is null)
-		{
-			return;
-		}
-
-		var boundary = new FactionFactEffectiveBoundary(
-			TurnNumber,
-			GetCurrentPhase(),
-			GameHistoryLog.Count());
-		var facts = GetPlayers()
-			.Where(player => playerIds.Contains(player.Id))
-			.Where(player => GetFactionAgentKnowledge(
-				player.Id,
-				Faction.Werewolf) == FactionAgentKnowledge.Unknown)
-			.Select(player => FactionFact.Agent(
-				player.Id,
-				Faction.Werewolf,
-				entailedWerewolfFactionAgentKnowledge.Value,
-				boundary))
-			.ToImmutableArray();
-		if (facts.IsEmpty)
-		{
-			return;
-		}
-
-		CommitFactionFactBatch(context => new FactionFactsCommittedLogEntry
-		{
-			Timestamp = context.Timestamp,
-			TurnNumber = context.TurnNumber,
-			CurrentPhase = context.CurrentPhase,
-			Source = new FactionFactSource(
-				FactionFactSourceKind.ScheduledObservation,
-				FactionFactSource
-					.RoleIdentificationWerewolfFactionAgencyEntailmentIdentifier),
-			Facts = facts
-		});
-    }
-
-	private static FactionAgentKnowledge?
-		GetRoleIdentificationWerewolfFactionAgentKnowledge(
-			MainRoleType role) => role switch
-		{
-			MainRoleType.SimpleWerewolf or
-			MainRoleType.BigBadWolf or
-			MainRoleType.AccursedWolfFather or
-			MainRoleType.WhiteWerewolf => FactionAgentKnowledge.KnownAgent,
-			MainRoleType.SimpleVillager or
-			MainRoleType.VillagerVillager or
-			MainRoleType.Seer or
-			MainRoleType.Cupid or
-			MainRoleType.Witch or
-			MainRoleType.Hunter or
-			MainRoleType.LittleGirl or
-			MainRoleType.Defender or
-			MainRoleType.Elder or
-			MainRoleType.Scapegoat or
-			MainRoleType.VillageIdiot or
-			MainRoleType.TwoSisters or
-			MainRoleType.ThreeBrothers or
-			MainRoleType.Fox or
-			MainRoleType.BearTamer or
-			MainRoleType.StutteringJudge or
-			MainRoleType.KnightWithRustySword or
-			MainRoleType.Actor or
-			MainRoleType.Piper or
-			MainRoleType.Angel or
-			MainRoleType.PrejudicedManipulator or
-			MainRoleType.Gypsy or
-			MainRoleType.WildChild => FactionAgentKnowledge.KnownNonAgent,
-			MainRoleType.WolfHound or
-			MainRoleType.Thief or
-			MainRoleType.DevotedServant => null,
-			_ => throw new ArgumentOutOfRangeException(nameof(role), role, null)
-		};
-
-    internal void ObserveVillagerVillagerFromDeal(Guid playerId)
+	internal void ObserveVillagerVillagerFromDeal(Guid playerId)
     {
 		var player = GetPlayer(playerId);
 		var cards = GetModeratorPhysicalCharacterCards();

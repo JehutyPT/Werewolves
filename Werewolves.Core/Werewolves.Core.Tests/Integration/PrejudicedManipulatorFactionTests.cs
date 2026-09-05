@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using System.Text.Json.Nodes;
 using FluentAssertions;
+using Werewolves.Core.GameLogic;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
@@ -58,7 +59,10 @@ public sealed class PrejudicedManipulatorFactionTests
 			roster[0].Id,
 			cards[0].Id).Should().BeTrue();
 		session.AssignRole(roster[0].Id, MainRoleType.Thief);
-		session.IdentifyRole([roster[0].Id], MainRoleType.Thief);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { roster[0].Id },
+			MainRoleType.Thief);
 		session.CommitFactionFactBatch(context =>
 		{
 			var boundary = new FactionFactEffectiveBoundary(

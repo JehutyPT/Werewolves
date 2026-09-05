@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
@@ -24,6 +25,29 @@ namespace Werewolves.Core.Tests.Integration;
 public class SerializationTests : DiagnosticTestBase
 {
     public SerializationTests(ITestOutputHelper output) : base(output) { }
+
+	public enum RoleIdentificationEntailmentMalformation
+	{
+		NonAdjacent,
+		WrongSourceKind,
+		WrongTurnOrPhase,
+		MissingExpectedFact,
+		ExtraNonIdentifiedFact,
+		DuplicatePlayerFacts,
+		NonCoordinateBoundary
+	}
+
+	public enum InitialWerewolfAgentGroupMalformation
+	{
+		SecondReservedBatch,
+		WrongSourceKind,
+		WrongTurn,
+		WrongPhase,
+		MissingPlayer,
+		ForeignPlayer,
+		DuplicatePlayerFacts,
+		NonCoordinateBoundary
+	}
 
     private static readonly JsonSerializerOptions RecoverySerializationOptions = new()
     {
@@ -249,6 +273,286 @@ public class SerializationTests : DiagnosticTestBase
 			recoveredNext.CreateResponse());
 		continued.IsSuccess.Should().BeTrue();
 		continued.ModeratorInstruction.Should().BeOfType<SelectPlayersInstruction>();
+		MarkTestCompleted();
+	}
+
+	[Theory]
+	[InlineData(RoleIdentificationEntailmentMalformation.NonAdjacent)]
+	[InlineData(RoleIdentificationEntailmentMalformation.WrongSourceKind)]
+	[InlineData(RoleIdentificationEntailmentMalformation.WrongTurnOrPhase)]
+	[InlineData(RoleIdentificationEntailmentMalformation.MissingExpectedFact)]
+	[InlineData(RoleIdentificationEntailmentMalformation.ExtraNonIdentifiedFact)]
+	[InlineData(RoleIdentificationEntailmentMalformation.DuplicatePlayerFacts)]
+	[InlineData(RoleIdentificationEntailmentMalformation.NonCoordinateBoundary)]
+	public void RehydrateSession_RoleIdentificationEntailmentWithMalformedCorrelation_IsRejected(
+		RoleIdentificationEntailmentMalformation malformation)
+	{
+		var builder = CreateBuilder()
+			.WithPlayers(7)
+			.WithRoles(
+				MainRoleType.SimpleWerewolf,
+				MainRoleType.Cupid,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager,
+				MainRoleType.SimpleVillager);
+		builder.StartGame();
+		builder.ConfirmGameStart();
+		builder.ConfirmNightStart();
+		var holder = builder.GetGameState()!.GetPlayers().ElementAt(1);
+		var identificationInstruction = builder.GetCurrentInstruction()
+			.Should().BeOfType<SelectPlayersInstruction>().Subject;
+		builder.Process(identificationInstruction.CreateResponse([holder.Id]));
+		var payload = JsonSerializer.Deserialize<GameSessionDto>(
+			builder.SerializeSession(),
+			RecoverySerializationOptions)!;
+		var batchIndex = payload.GameHistoryLog.FindIndex(entry =>
+			entry is FactionFactsCommittedLogEntry facts &&
+			facts.Source.Identifier == FactionFactSource
+				.RoleIdentificationWerewolfFactionAgencyEntailmentIdentifier);
+		batchIndex.Should().BePositive();
+		var identification = payload.GameHistoryLog[batchIndex - 1]
+			.Should().BeOfType<RoleIdentificationLogEntry>().Subject;
+		var batch = payload.GameHistoryLog[batchIndex]
+			.Should().BeOfType<FactionFactsCommittedLogEntry>().Subject;
+		var otherPlayerId = payload.Players
+			.Select(player => player.Id)
+			.First(playerId => playerId != holder.Id);
+
+		switch (malformation)
+		{
+			case RoleIdentificationEntailmentMalformation.NonAdjacent:
+				payload.GameHistoryLog.Insert(
+					batchIndex,
+					identification with
+					{
+						Role = MainRoleType.WolfHound,
+						PlayerIds = [.. identification.PlayerIds]
+					});
+				batchIndex++;
+				payload.GameHistoryLog[batchIndex] = batch with
+				{
+					Facts = batch.Facts
+						.Select(fact => FactionFact.Agent(
+							fact.PlayerId,
+							fact.Faction,
+							fact.AgentKnowledge!.Value,
+							new FactionFactEffectiveBoundary(
+								batch.TurnNumber,
+								batch.CurrentPhase,
+								batchIndex)))
+						.ToImmutableArray()
+				};
+				break;
+			case RoleIdentificationEntailmentMalformation.WrongSourceKind:
+				payload.GameHistoryLog[batchIndex] = batch with
+				{
+					Source = new FactionFactSource(
+						FactionFactSourceKind.ExplicitTransition,
+						FactionFactSource
+							.RoleIdentificationWerewolfFactionAgencyEntailmentIdentifier)
+				};
+				break;
+			case RoleIdentificationEntailmentMalformation.WrongTurnOrPhase:
+				payload.GameHistoryLog[batchIndex - 1] = identification with
+				{
+					TurnNumber = identification.TurnNumber + 1
+				};
+				break;
+			case RoleIdentificationEntailmentMalformation.MissingExpectedFact:
+				payload.GameHistoryLog[batchIndex - 1] = identification with
+				{
+					PlayerIds = [.. identification.PlayerIds, otherPlayerId]
+				};
+				break;
+			case RoleIdentificationEntailmentMalformation.ExtraNonIdentifiedFact:
+				payload.GameHistoryLog[batchIndex] = batch with
+				{
+					Facts = batch.Facts.Add(FactionFact.Agent(
+						otherPlayerId,
+						Faction.Werewolf,
+						FactionAgentKnowledge.KnownNonAgent,
+						new FactionFactEffectiveBoundary(
+							batch.TurnNumber,
+							batch.CurrentPhase,
+							batchIndex)))
+				};
+				payload.Players.Single(player => player.Id == otherPlayerId)
+					.FactionAgentKnowledge![Faction.Werewolf] =
+						FactionAgentKnowledge.KnownNonAgent;
+				break;
+			case RoleIdentificationEntailmentMalformation.DuplicatePlayerFacts:
+				var fact = batch.Facts.Should().ContainSingle().Subject;
+				payload.GameHistoryLog[batchIndex] = batch with
+				{
+					Facts = batch.Facts.Add(FactionFact.Agent(
+						fact.PlayerId,
+						fact.Faction,
+						fact.AgentKnowledge!.Value,
+						new FactionFactEffectiveBoundary(
+							batch.TurnNumber,
+							batch.CurrentPhase,
+							batchIndex - 1)))
+				};
+				break;
+			case RoleIdentificationEntailmentMalformation.NonCoordinateBoundary:
+				payload.GameHistoryLog[batchIndex] = batch with
+				{
+					Facts = batch.Facts
+						.Select(fact => FactionFact.Agent(
+							fact.PlayerId,
+							fact.Faction,
+							fact.AgentKnowledge!.Value,
+							new FactionFactEffectiveBoundary(
+								batch.TurnNumber,
+								batch.CurrentPhase,
+								batchIndex - 1)))
+						.ToImmutableArray()
+				};
+				break;
+			default:
+				throw new ArgumentOutOfRangeException(nameof(malformation));
+		}
+
+		var tampered = JsonSerializer.Serialize(
+			payload,
+			RecoverySerializationOptions);
+		Action rehydrate = () => new GameService().RehydrateSession(tampered);
+
+		rehydrate.Should().Throw<InvalidOperationException>();
+		MarkTestCompleted();
+	}
+
+	[Theory]
+	[InlineData(InitialWerewolfAgentGroupMalformation.SecondReservedBatch)]
+	[InlineData(InitialWerewolfAgentGroupMalformation.WrongSourceKind)]
+	[InlineData(InitialWerewolfAgentGroupMalformation.WrongTurn)]
+	[InlineData(InitialWerewolfAgentGroupMalformation.WrongPhase)]
+	[InlineData(InitialWerewolfAgentGroupMalformation.MissingPlayer)]
+	[InlineData(InitialWerewolfAgentGroupMalformation.ForeignPlayer)]
+	[InlineData(InitialWerewolfAgentGroupMalformation.DuplicatePlayerFacts)]
+	[InlineData(InitialWerewolfAgentGroupMalformation.NonCoordinateBoundary)]
+	public void RehydrateSession_InitialWerewolfAgentGroupWithMalformedPartition_IsRejected(
+		InitialWerewolfAgentGroupMalformation malformation)
+	{
+		var builder = CreateBuilder()
+			.WithSimpleGame(playerCount: 5, werewolfCount: 1, includeSeer: true);
+		builder.StartGame();
+		builder.ConfirmGameStart();
+		builder.ConfirmNightStart();
+		var players = builder.GetGameState()!.GetPlayers().ToArray();
+		builder.CompleteWerewolfNightAction(
+			[players[0].Id],
+			players[^1].Id);
+		var payload = JsonSerializer.Deserialize<GameSessionDto>(
+			builder.SerializeSession(),
+			RecoverySerializationOptions)!;
+		var batchIndex = payload.GameHistoryLog.FindIndex(entry =>
+			entry is FactionFactsCommittedLogEntry facts &&
+			facts.Source.Identifier == FactionFactSource
+				.WerewolfFactionAgentGroupObservationIdentifier);
+		batchIndex.Should().BeGreaterThanOrEqualTo(0);
+		var batch = payload.GameHistoryLog[batchIndex]
+			.Should().BeOfType<FactionFactsCommittedLogEntry>().Subject;
+
+		switch (malformation)
+		{
+			case InitialWerewolfAgentGroupMalformation.SecondReservedBatch:
+				var secondBatchIndex = payload.GameHistoryLog.Count;
+				payload.GameHistoryLog.Add(batch with
+				{
+					Timestamp = batch.Timestamp.AddTicks(1),
+					Facts = batch.Facts
+						.Select(fact => FactionFact.Agent(
+							fact.PlayerId,
+							fact.Faction,
+							fact.AgentKnowledge!.Value,
+							new FactionFactEffectiveBoundary(
+								batch.TurnNumber,
+								batch.CurrentPhase,
+								secondBatchIndex)))
+						.ToImmutableArray()
+				});
+				break;
+			case InitialWerewolfAgentGroupMalformation.WrongSourceKind:
+				payload.GameHistoryLog[batchIndex] = batch with
+				{
+					Source = new FactionFactSource(
+						FactionFactSourceKind.ExplicitTransition,
+						FactionFactSource
+							.WerewolfFactionAgentGroupObservationIdentifier)
+				};
+				break;
+			case InitialWerewolfAgentGroupMalformation.WrongTurn:
+				payload.GameHistoryLog[batchIndex] = batch with
+				{
+					TurnNumber = batch.TurnNumber + 1
+				};
+				break;
+			case InitialWerewolfAgentGroupMalformation.WrongPhase:
+				payload.GameHistoryLog[batchIndex] = batch with
+				{
+					CurrentPhase = GamePhase.Day
+				};
+				break;
+			case InitialWerewolfAgentGroupMalformation.MissingPlayer:
+				var omitted = batch.Facts[^1];
+				payload.GameHistoryLog[batchIndex] = batch with
+				{
+					Facts = batch.Facts.Remove(omitted)
+				};
+				payload.Players.Single(player => player.Id == omitted.PlayerId)
+					.FactionAgentKnowledge![Faction.Werewolf] =
+						FactionAgentKnowledge.Unknown;
+				break;
+			case InitialWerewolfAgentGroupMalformation.ForeignPlayer:
+				var replaced = batch.Facts[0];
+				payload.GameHistoryLog[batchIndex] = batch with
+				{
+					Facts = batch.Facts.SetItem(0, FactionFact.Agent(
+						Guid.NewGuid(),
+						replaced.Faction,
+						replaced.AgentKnowledge!.Value,
+						replaced.EffectiveBoundary))
+				};
+				break;
+			case InitialWerewolfAgentGroupMalformation.DuplicatePlayerFacts:
+				var duplicate = batch.Facts[0];
+				var displaced = batch.Facts[1];
+				payload.GameHistoryLog[batchIndex] = batch with
+				{
+					Facts = batch.Facts.SetItem(1, duplicate)
+				};
+				payload.Players.Single(player => player.Id == displaced.PlayerId)
+					.FactionAgentKnowledge![Faction.Werewolf] =
+						FactionAgentKnowledge.Unknown;
+				break;
+			case InitialWerewolfAgentGroupMalformation.NonCoordinateBoundary:
+				payload.GameHistoryLog[batchIndex] = batch with
+				{
+					Facts = batch.Facts
+						.Select(fact => FactionFact.Agent(
+							fact.PlayerId,
+							fact.Faction,
+							fact.AgentKnowledge!.Value,
+							new FactionFactEffectiveBoundary(
+								batch.TurnNumber,
+								batch.CurrentPhase,
+								batchIndex + 1)))
+						.ToImmutableArray()
+				};
+				break;
+			default:
+				throw new ArgumentOutOfRangeException(nameof(malformation));
+		}
+
+		var tampered = JsonSerializer.Serialize(
+			payload,
+			RecoverySerializationOptions);
+		Action rehydrate = () => new GameService().RehydrateSession(tampered);
+
+		rehydrate.Should().Throw<InvalidOperationException>();
 		MarkTestCompleted();
 	}
 

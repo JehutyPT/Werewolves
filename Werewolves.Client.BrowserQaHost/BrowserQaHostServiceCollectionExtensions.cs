@@ -1,7 +1,6 @@
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Werewolves.Client.Services;
 using Werewolves.Core.GameLogic.Models;
-using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.GameLogic.Simulation;
 using Werewolves.Core.StateModels.Enums;
 
@@ -11,11 +10,6 @@ public static class BrowserQaHostServiceCollectionExtensions
 {
 	public static IServiceCollection AddBrowserQaHostModeratorServices(this IServiceCollection services)
 	{
-		services.TryAddScoped<GameService>();
-		services.TryAddScoped<LobbySetupMetadata>(sp =>
-			sp.GetRequiredService<GameService>().GetLobbySetupMetadata());
-		services.TryAddScoped<LobbySetupState>(sp =>
-			CreateSeededLobby(sp.GetRequiredService<LobbySetupMetadata>()));
 		services.TryAddScoped<IAudioMap, AudioMap>();
 		services.TryAddScoped<IAudioAssetLoader, BrowserSafeAudioAssetLoader>();
 		services.TryAddScoped<IAudioPlayerFactory, BrowserSafeAudioPlayerFactory>();
@@ -31,13 +25,9 @@ public static class BrowserQaHostServiceCollectionExtensions
 		services.TryAddSingleton<TimeProvider>(_ => TimeProvider.System);
 		services.TryAddScoped<ILocalTerminalLobbyCacheStore, BrowserQaScenarioTerminalLobbyCacheStore>();
 		services.TryAddScoped<ILobbyTerminalEvaluator, BrowserQaScreeningPassedLobbyTerminalEvaluator>();
-		services.TryAddScoped<LobbyEvaluationCoordinator>(sp => new LobbyEvaluationCoordinator(
-			sp.GetRequiredService<LobbySetupState>(),
-			sp.GetRequiredService<ILocalTerminalLobbyCacheStore>(),
-			sp.GetRequiredService<ILobbyTerminalEvaluator>(),
-			sp.GetRequiredService<LobbyEvaluationSettings>(),
-			sp.GetRequiredService<TimeProvider>()));
-		services.TryAddScoped<GameClientManager>();
+		services.AddModeratorSessionAndLobbyServices(
+			ServiceLifetime.Scoped,
+			CreateSeededLobby);
 		services.TryAddScoped<GameplayWakeLockController>();
 		services.TryAddScoped<BenchmarkClientManager>();
 

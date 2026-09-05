@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Werewolves.Core.GameLogic;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Core;
 using Werewolves.Core.StateModels.Enums;
@@ -761,7 +762,10 @@ public sealed class ThiefRoleTests
 			holder.Id,
 			cards[0].Id).Should().BeTrue();
 		mutableSession.AssignRole(holder.Id, MainRoleType.Thief);
-		mutableSession.IdentifyRole([holder.Id], MainRoleType.Thief);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			mutableSession,
+			new HashSet<Guid> { holder.Id },
+			MainRoleType.Thief);
 		mutableSession.CommitFactionFactBatch(context =>
 		{
 			var boundary = new FactionFactEffectiveBoundary(

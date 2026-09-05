@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Werewolves.Core.GameLogic;
 using Werewolves.Core.GameLogic.Interfaces;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
 using Werewolves.Core.GameLogic.Models.StateMachine;
@@ -81,6 +82,47 @@ public sealed class ActorBorrowedDefenderFoxTests
 		session.GetPlayerState(actorId).CurrentRole.Should().Be(MainRoleType.Actor);
 		session.GameHistoryLog.OfType<RoleIdentificationLogEntry>().Should()
 			.NotContain(entry => entry.Role == MainRoleType.Defender);
+	}
+
+	[Fact]
+	public void BorrowedDefender_DeniedAvailabilityDoesNotFallThroughToNativeHolder()
+	{
+		var (session, start, actorId, _) = CreateActorSession();
+		var nativeDefenderId = session.GetPlayers().Single(player =>
+			player.Name == "Villager 1").Id;
+		session.AssignRole(nativeDefenderId, MainRoleType.Defender);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { nativeDefenderId },
+			MainRoleType.Defender);
+		var (_, actorSleep) = PerformSpendOpening(
+			CreateActorRole(),
+			session,
+			start,
+			DefenderCard.Id);
+		var policy = new RecordingPolicy(RolePowerAvailabilityResult.Denied);
+		IGameHookListener listener = new DefenderRole(
+			new RolePowerAvailabilityGateway(policy));
+
+		var wake = Advance(listener, session, actorSleep.CreateResponse())
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+		wake.Semantic.Should().Be(ModeratorInstructionSemantic.WakeRole);
+		wake.AffectedPlayerIds.Should().Equal(actorId);
+		wake.AffectedPlayerIds.Should().NotContain(nativeDefenderId);
+		var sleep = Advance(listener, session, wake.CreateResponse())
+			.Should().BeOfType<ConfirmationInstruction>().Subject;
+
+		sleep.Semantic.Should().Be(ModeratorInstructionSemantic.PutRoleToSleep);
+		sleep.AffectedPlayerIds.Should().Equal(actorId);
+		sleep.AffectedPlayerIds.Should().NotContain(nativeDefenderId);
+		var attempt = policy.ObservedAttempts.Should().ContainSingle().Subject;
+		attempt.ActingPlayer.Id.Should().Be(actorId);
+		attempt.SourceRole.Should().Be(MainRoleType.Defender);
+		attempt.PowerInstance.Origin.Should().Be(
+			RolePowerInstanceOrigin.Borrowed);
+		session.GetActorBorrowedDefenderProtectionCommits().Should().BeEmpty();
+		session.GameHistoryLog.OfType<RecurringRolePowerCommittedLogEntry>()
+			.Should().BeEmpty();
 	}
 
 	[Fact]
@@ -887,8 +929,14 @@ public sealed class ActorBorrowedDefenderFoxTests
 		var littleGirlId = players[1].Id;
 		session.AssignRole(actorId, MainRoleType.Actor);
 		session.AssignRole(littleGirlId, MainRoleType.LittleGirl);
-		session.IdentifyRole([actorId], MainRoleType.Actor);
-		session.IdentifyRole([littleGirlId], MainRoleType.LittleGirl);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { actorId },
+			MainRoleType.Actor);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { littleGirlId },
+			MainRoleType.LittleGirl);
 		return (session, start, actorId, littleGirlId);
 	}
 
@@ -951,12 +999,18 @@ public sealed class ActorBorrowedDefenderFoxTests
 
 	private sealed class RecordingPolicy : IRolePowerAvailabilityPolicy
 	{
+		private readonly RolePowerAvailabilityResult _result;
+
+		internal RecordingPolicy(
+			RolePowerAvailabilityResult? result = null) =>
+			_result = result ?? RolePowerAvailabilityResult.Allowed;
+
 		internal List<RolePowerAttempt> ObservedAttempts { get; } = [];
 
 		public RolePowerAvailabilityResult Evaluate(RolePowerAttempt attempt)
 		{
 			ObservedAttempts.Add(attempt);
-			return RolePowerAvailabilityResult.Allowed;
+			return _result;
 		}
 	}
 

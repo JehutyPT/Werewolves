@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using FluentAssertions;
+using Werewolves.Core.GameLogic;
 using Werewolves.Core.GameLogic.Interfaces;
 using Werewolves.Core.GameLogic.Models.EliminationCascades;
 using Werewolves.Core.GameLogic.Models.InternalMessages;
@@ -1309,7 +1310,10 @@ public sealed class ActorBorrowedBearTamerKnightTests
 			session.RoleLockIn.Version,
 			actorId,
 			actorCard.Card.Id).Should().BeTrue();
-		session.IdentifyRole([actorId], MainRoleType.Actor);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { actorId },
+			MainRoleType.Actor);
 		ActorBorrowedRolePowerActivation? activation = null;
 		if (scenario != BorrowedBearTamerScenario.NoActivation)
 		{
@@ -1497,7 +1501,10 @@ public sealed class ActorBorrowedBearTamerKnightTests
 			session.RoleLockIn.Version,
 			actorId,
 			actorCard.Card.Id).Should().BeTrue();
-		session.IdentifyRole([actorId], MainRoleType.Actor);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { actorId },
+			MainRoleType.Actor);
 		session.TrySpendActorSetupCard(
 			actorId,
 			KnightCard.Id,

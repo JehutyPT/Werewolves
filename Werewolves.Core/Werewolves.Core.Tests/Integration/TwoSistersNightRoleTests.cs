@@ -1,4 +1,5 @@
 using FluentAssertions;
+using Werewolves.Core.GameLogic;
 using Werewolves.Core.GameLogic.RolePowers;
 using Werewolves.Core.GameLogic.Services;
 using Werewolves.Core.StateModels.Core;
@@ -115,7 +116,10 @@ public sealed class TwoSistersNightRoleTests : DiagnosticTestBase
 		var committedSister = players[0];
 		var otherSister = players[1];
 		session.AssignRole(committedSister.Id, MainRoleType.TwoSisters);
-		session.IdentifyRole([committedSister.Id], MainRoleType.TwoSisters);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			new HashSet<Guid> { committedSister.Id },
+			MainRoleType.TwoSisters);
 		builder.ConfirmGameStart();
 		var identification =
 			InstructionAssert.ExpectSuccessWithType<SelectPlayersInstruction>(
@@ -409,7 +413,10 @@ public sealed class TwoSistersNightRoleTests : DiagnosticTestBase
 		var sisters = session.GetPlayers().Take(2).ToArray();
 		var sisterIds = sisters.Select(player => player.Id).ToHashSet();
 		session.AssignRole(sisterIds, MainRoleType.TwoSisters);
-		session.IdentifyRole(sisterIds, MainRoleType.TwoSisters);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			sisterIds,
+			MainRoleType.TwoSisters);
 		builder.ConfirmGameStart();
 
 		var afterNightStart = builder.ConfirmNightStart();
@@ -435,7 +442,10 @@ public sealed class TwoSistersNightRoleTests : DiagnosticTestBase
 		var sisters = session.GetPlayers().Take(2).ToArray();
 		var sisterIds = sisters.Select(player => player.Id).ToHashSet();
 		session.AssignRole(sisterIds, MainRoleType.TwoSisters);
-		session.IdentifyRole(sisterIds, MainRoleType.TwoSisters);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			sisterIds,
+			MainRoleType.TwoSisters);
 		builder.ConfirmGameStart();
 
 		var afterNightStart = builder.ConfirmNightStart();
@@ -465,7 +475,10 @@ public sealed class TwoSistersNightRoleTests : DiagnosticTestBase
 			.Select(player => player.Id)
 			.ToHashSet();
 		session.AssignRole(sisterIds, MainRoleType.TwoSisters);
-		session.IdentifyRole(sisterIds, MainRoleType.TwoSisters);
+		RoleFactionKnowledge.CommitRoleIdentification(
+			session,
+			sisterIds,
+			MainRoleType.TwoSisters);
 		builder.ConfirmGameStart();
 		var expectedRecognition =
 			InstructionAssert.ExpectSuccessWithType<ConfirmationInstruction>(
